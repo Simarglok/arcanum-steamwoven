@@ -100,6 +100,12 @@ public sealed class ObjectLightFieldTests
         Assert.AreEqual(new AmbientColor(90 * 10 / 255, 0, 0), field.Point(40, 20, default, AmbientPair.Neutral, poses: poses), "only the still light is left there");
         Assert.AreEqual(new AmbientColor(90 * 10 / 255 * 2, 0, 0), field.Point(40, 20, default, AmbientPair.Neutral), "unposed: both at frame 0");
         Assert.AreEqual(new AmbientColor(90 * 10 / 255 * 2, 0, 0), field.Point(40, 20, default, AmbientPair.Neutral, poses: field.PosesAt(0)));
+        // ARC-RENDER-2207: the posed placements move only the animated light (index 0); the still one (0x20) keeps its loaded rectangle; unposed is the loaded list.
+        Assert.AreSame(field.Placements, field.PlacementsAt(null));
+        var posed = field.PlacementsAt(poses);
+        Assert.AreEqual(field.Placements[0].Rect.X + 4, posed[0].Rect.X);
+        Assert.AreEqual(field.Placements[1].Rect, posed[1].Rect);
+        Assert.AreEqual(field.Placements.Count, posed.Count);
         // The lattice follows the pose too: the node (40, 20) loses the moved light.
         var still = field.Lattice(AmbientPair.Neutral)!; var moved = field.Lattice(AmbientPair.Neutral, poses)!;
         Assert.AreEqual(new AmbientColor(90 * 10 / 255 * 2, 0, 0), still.At(1, 1).Lighter);

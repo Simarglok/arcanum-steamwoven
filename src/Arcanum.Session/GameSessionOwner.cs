@@ -1758,7 +1758,8 @@ public sealed partial class GameSessionOwner : IDisposable
                     (_, after) => after.PoisonLevel > 0 ? [LifeTimer.PoisonRecovery] : [], map, recoveryCopies: 2);
                 break;
             case LifeTimer.Resting:
-                if (hero || dead || _party.Get(target.Entity!).LedByPc) return GameEventHandlerOutcome.Completed;
+                // ARC-COMBAT-1927 (VC21): the original's gate walks the whole leader chain (0x45DDA0), so an NPC that follows a follower of the hero is not healed here either.
+                if (hero || dead || PcLeads(target.Entity!)) return GameEventHandlerOutcome.Completed;
                 result = Life(Version, target, scheduledAt <= now,
                     (s, f, _) => LifeRules.RestHeal(s, f, LifeRules.RestingHours(scheduledAt, now)),
                     (before, after) => RestingWrites(before, after), map);

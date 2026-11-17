@@ -8,8 +8,91 @@ namespace Arcanum.Simulation.Tests.Goals;
 public sealed class HeroClickRulesTests
 {
     private static HeroClickFacts Facts(HeroClickTarget kind, bool combat = false, bool dead = false, bool alt = false, bool shift = false,
-        bool pc = false, bool talksDead = false, bool attacksHero = false) =>
-        new(true, false, false, false, combat, kind, dead, pc, talksDead, attacksHero, alt, shift);
+        bool pc = false, bool talksDead = false, bool attacksHero = false, bool air = false, bool poly = false) =>
+        new(true, false, false, false, combat, kind, dead, pc, talksDead, attacksHero, alt, shift, air, poly);
+
+    /// <summary>ARC-COMBAT-1943 (0x54ED30): Body of Air builds no attack goal and asks for line 25; it is read in combat mode only, where the tables build attacks.</summary>
+    [TestMethod]
+    public void BodyOfAirRefusesEveryAttackGoalWithTheMessage()
+    {
+        foreach (var kind in new[] { HeroClickTarget.Critter })
+        {
+            var plain = HeroClickRules.Decide(Facts(kind, combat: true, air: true));
+            Assert.AreEqual(HeroClickGoal.None, plain.Goal); Assert.IsTrue(plain.BodyOfAirMessage);
+            var attempt = HeroClickRules.Decide(Facts(kind, combat: true, shift: true, air: true));
+            Assert.AreEqual(HeroClickGoal.None, attempt.Goal); Assert.IsTrue(attempt.BodyOfAirMessage, "Shift only changes the goal number");
+        }
+        foreach (var kind in new[] { HeroClickTarget.Wall, HeroClickTarget.Portal, HeroClickTarget.Scenery, HeroClickTarget.Container })
+        {
+            var alt = HeroClickRules.Decide(Facts(kind, combat: true, alt: true, air: true));
+            Assert.AreEqual(HeroClickGoal.None, alt.Goal, $"{kind}: the Alt attack"); Assert.IsTrue(alt.BodyOfAirMessage, $"{kind}: line 25");
+        }
+        // The use clicks, the item pick up and the loot are no attacks: they go on as without the flag.
+        var use = HeroClickRules.Decide(Facts(HeroClickTarget.Portal, combat: true, air: true));
+        Assert.AreEqual(HeroClickGoal.UseObject, use.Goal); Assert.IsFalse(use.BodyOfAirMessage);
+        Assert.AreEqual(HeroClickGoal.Pickup, HeroClickRules.Decide(Facts(HeroClickTarget.Item, combat: true, air: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.UseContainer, HeroClickRules.Decide(Facts(HeroClickTarget.Critter, combat: true, dead: true, alt: true, air: true)).Goal);
+        // Out of combat mode no table case builds an attack: the talk and the rest are unchanged, with no message.
+        var talk = HeroClickRules.Decide(Facts(HeroClickTarget.Critter, air: true));
+        Assert.AreEqual(HeroClickGoal.Talk, talk.Goal); Assert.IsFalse(talk.BodyOfAirMessage);
+        Assert.AreEqual(HeroClickGoal.UseContainer, HeroClickRules.Decide(Facts(HeroClickTarget.Container, air: true)).Goal);
+    }
+
+    /// <summary>The entering of combat mode runs before the type switch and so before the Body of Air test.</summary>
+    [TestMethod]
+    public void BodyOfAirStillEntersCombatModeForAnAttacker()
+    {
+        var decision = HeroClickRules.Decide(Facts(HeroClickTarget.Critter, attacksHero: true, air: true));
+        Assert.IsTrue(decision.EntersCombatMode); Assert.AreEqual(HeroClickGoal.None, decision.Goal); Assert.IsTrue(decision.BodyOfAirMessage);
+    }
+
+    /// <summary>ARC-COMBAT-1943: polymorph refuses silently out of combat mode a portal, a container, an item and a dead body's loot (before the Alt action), not scenery, a talk or a trap.</summary>
+    [TestMethod]
+    public void PolymorphRefusesTheOutOfCombatTargetsItListsOnly()
+    {
+        foreach (var (kind, dead) in new[] { (HeroClickTarget.Portal, false), (HeroClickTarget.Container, false), (HeroClickTarget.Item, false), (HeroClickTarget.Critter, true) })
+        {
+            Assert.AreEqual(HeroClickGoal.None, HeroClickRules.Decide(Facts(kind, dead: dead, poly: true)).Goal, $"{kind} dead={dead}");
+            Assert.AreEqual(HeroClickGoal.None, HeroClickRules.Decide(Facts(kind, dead: dead, alt: true, poly: true)).Goal, $"{kind} dead={dead} Alt: before the immediate action");
+            Assert.IsFalse(HeroClickRules.Decide(Facts(kind, dead: dead, poly: true)).BodyOfAirMessage);
+        }
+        Assert.AreEqual(HeroClickGoal.UseObject, HeroClickRules.Decide(Facts(HeroClickTarget.Scenery, poly: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.Talk, HeroClickRules.Decide(Facts(HeroClickTarget.Critter, poly: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.Talk, HeroClickRules.Decide(Facts(HeroClickTarget.Critter, dead: true, talksDead: true, poly: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.WalkToTrap, HeroClickRules.Decide(Facts(HeroClickTarget.Trap, poly: true)).Goal);
+    }
+
+    /// <summary>ARC-COMBAT-1943: in combat mode polymorph refuses a container (Alt too), an item, and the use of a wall, portal and scenery; the Alt attacks, a living target and a dead body's loot go on.</summary>
+    [TestMethod]
+    public void PolymorphRefusesTheCombatModeTargetsItListsOnly()
+    {
+        Assert.AreEqual(HeroClickGoal.None, HeroClickRules.Decide(Facts(HeroClickTarget.Container, combat: true, poly: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.None, HeroClickRules.Decide(Facts(HeroClickTarget.Container, combat: true, alt: true, poly: true)).Goal, "refused before the Alt attack");
+        Assert.AreEqual(HeroClickGoal.None, HeroClickRules.Decide(Facts(HeroClickTarget.Item, combat: true, poly: true)).Goal);
+        foreach (var kind in new[] { HeroClickTarget.Wall, HeroClickTarget.Portal, HeroClickTarget.Scenery })
+        {
+            Assert.AreEqual(HeroClickGoal.None, HeroClickRules.Decide(Facts(kind, combat: true, poly: true)).Goal, $"{kind} use");
+            Assert.AreEqual(HeroClickGoal.Attack, HeroClickRules.Decide(Facts(kind, combat: true, alt: true, poly: true)).Goal, $"{kind} Alt attack");
+        }
+        Assert.AreEqual(HeroClickGoal.Attack, HeroClickRules.Decide(Facts(HeroClickTarget.Critter, combat: true, poly: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.UseContainer, HeroClickRules.Decide(Facts(HeroClickTarget.Critter, combat: true, dead: true, alt: true, poly: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.WalkToTrap, HeroClickRules.Decide(Facts(HeroClickTarget.Trap, combat: true, poly: true)).Goal);
+    }
+
+    /// <summary>Polymorph plus Body of Air: a container with Alt is refused silently first, so the message does not show.</summary>
+    [TestMethod]
+    public void PolymorphRefusesAContainerBeforeBodyOfAirReadsTheAttack()
+    {
+        var decision = HeroClickRules.Decide(Facts(HeroClickTarget.Container, combat: true, alt: true, air: true, poly: true));
+        Assert.AreEqual(HeroClickGoal.None, decision.Goal); Assert.IsFalse(decision.BodyOfAirMessage);
+    }
+
+    [TestMethod]
+    public void PolymorphRefusesTheCursorItemThrow()
+    {
+        Assert.IsTrue(HeroClickRules.ThrowRefused(true));
+        Assert.IsFalse(HeroClickRules.ThrowRefused(false));
+    }
 
     [TestMethod]
     public void AClickRefusedByTheHerosStateDoesNothing()
