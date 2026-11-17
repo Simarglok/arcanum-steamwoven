@@ -608,7 +608,7 @@ public sealed class AreaInventoryHost
         var player = session.QueryHero()?.Portrait;
         // The catalogue is asked for only when a clash is possible (a cold start reads it from the game folder).
         var catalogue = AreaLootArtLayout.StoredPortrait(row) is { } stored && stored == player ? PortraitCatalogueSource?.Invoke() : null;
-        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.ShownPortrait(row, catalogue, player));
+        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.ShownPortrait(row, catalogue, player, session));
     }
 
     private AreaObjectRecord? HolderRow(int runtimeMap, string holder)
