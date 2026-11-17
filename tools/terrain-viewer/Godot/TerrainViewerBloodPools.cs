@@ -28,8 +28,8 @@ public partial class TerrainViewerApp
     /// ARC-RENDER-041: a death the view sees recorded on the shown map leaves a pool of blood (0x42FED0 → 0x432D90, ledger BP1–BP7):
     /// an NPC of the map's seed lies at the cell its body is drawn on (a companion's or an AI walker's cell, with no pixel offset; else its
     /// map cell and offsets), the hero at its committed cell. The deaths recorded when the map and session were first seen leave none
-    /// (they were before this view, or a save that predates pools). The NPC's flags come from its map data (an NPC the session stoned is
-    /// not seen as stoned: Not ready); the hero's flags are none. As the original (0x42FED0 runs when the dying goal has played its
+    /// (they were before this view, or a save that predates pools). The NPC's flags come from its map data and the hero's are none; the session lays the
+    /// flags it wrote on the critter (stoned, undead, elemental) over them when it leaves the pool (ARC-COMBAT-1928). As the original (0x42FED0 runs when the dying goal has played its
     /// frames), a death leaves its pool when its dying animation has played (ARC-RENDER-040, <see cref="DyingPending"/>; the hero's is
     /// its fall). A refusal or failure is said once.
     /// </summary>
