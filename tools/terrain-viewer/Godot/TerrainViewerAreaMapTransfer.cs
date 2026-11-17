@@ -325,7 +325,9 @@ public partial class TerrainViewerApp
                 if (AreaAiHostNow() is not { } ai) return;
                 var (flags, seconds) = AreaChangeOfPlace.Flags(teleport.Fade);
                 GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y), flags, seconds)}");
-            });
+            },
+            // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
+            ObjectDestroyed: EndDestroyedObjectRuns);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

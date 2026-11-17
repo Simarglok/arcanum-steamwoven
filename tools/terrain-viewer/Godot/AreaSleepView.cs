@@ -78,12 +78,17 @@ public partial class AreaSleepView : Control
         AreaArtTextDraw.Prepare(this);
     }
 
+    // ARC-UI-2510: the window keeps its own whole scale; where the strips put the screen is what moves it. Subscribed on entering the tree, as _ExitTree lets go.
+    public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += Place;
+
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font)
     {
         Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _font = font ?? throw new ArgumentNullException(nameof(font));
         if (_art.TryGetValue(AreaSleepLayout.BackgroundArt, out var window) && window.Length > 0) Size = new Vector2(window[0].GetWidth(), window[0].GetHeight());
+        // ARC-UI-2510: the textures are the window's own from the moment they are handed over, so none of them ever paints at the strips' fractional scale (the draw claims them again).
+        Claim.Claim(_art, AreaSleepLayout.BackgroundArt, AreaSleepLayout.ButtonArt);
         QueueRedraw();
     }
 
@@ -111,13 +116,12 @@ public partial class AreaSleepView : Control
         Visible = false;
     }
 
-    /// <summary>The window at (573, 42) of the original's screen at the bars' whole factor.</summary>
+    /// <summary>The window at (573, 42) of the original's screen at the whole factor (ARC-UI-2510: the screen is where the strips put it in the Steamwoven layout; the scale stays the window's own).</summary>
     public void Place()
     {
-        var size = GetViewportRect().Size;
-        var factor = AreaGameBarPanel.ScreenFactor(size);
-        Scale = new Vector2(factor, factor);
-        Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor) + AreaSleepLayout.ScreenX * factor, AreaSleepLayout.ScreenY * factor);
+        var (position, scale) = AreaGameBarPanel.OwnScaleWindow(GetViewportRect().Size, AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY);
+        Scale = new Vector2(scale, scale);
+        Position = position;
     }
 
     /// <summary>The controller's focus row (PROJECT; drawn lit); null none.</summary>
@@ -165,7 +169,11 @@ public partial class AreaSleepView : Control
         }
     }
 
-    public override void _ExitTree() => _claim?.Release();
+    public override void _ExitTree()
+    {
+        AreaGameBarPanel.TopScreenChanged -= Place;
+        _claim?.Release();
+    }
 
     public override void _Notification(int what)
     {
