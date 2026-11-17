@@ -205,6 +205,26 @@ public sealed class LineOfFireRulesTests
         Assert.IsNull(LineOfFireRules.StepCost(new(2, 2), 4, true, map, CombatAnomalyProfile.Original).Blocker);
     }
 
+    // ARC-COMBAT-1725 (0x43FDC0 flags 0x0D, the projectile as the mover): flag 0x1 stops at a closed, unbroken portal before its cover
+    // test, so a portal that shoots through (a grate) still stops a missed shot; the line of fire's flags 0x0C leave it to the cover test.
+    [TestMethod]
+    public void AProjectileStepIsStoppedByAClosedPortalThatShootsThrough()
+    {
+        var grate = new Map(8).WithPiece(3, 1, 5, "grate", LineOfFirePieceKind.ClosedPortal, ShootThrough);
+        // Edge step 5 (the source tile's piece) and the neighbour's opposite edge both stop it.
+        Assert.AreEqual(new LineOfFireCost<string>(LineOfFireRules.OpaqueCover, null), LineOfFireRules.StepCost(new(3, 1), 5, false, grate, CombatAnomalyProfile.Original));
+        Assert.AreEqual(new LineOfFireCost<string>(0, "grate"), LineOfFireRules.StepCost(new(3, 1), 5, false, grate, CombatAnomalyProfile.Original, portalsBlock: true));
+        var far = new Map(8).WithPiece(1, 2, 7, "grate", LineOfFirePieceKind.ClosedPortal, ShootThrough);
+        Assert.AreEqual("grate", LineOfFireRules.StepCost(new(1, 1), 3, false, far, CombatAnomalyProfile.Original, portalsBlock: true).Blocker);
+        // A corner step meets it on one of its four legs; a step with no portal on a crossed edge is unchanged.
+        Assert.AreEqual("grate", LineOfFireRules.StepCost(new(2, 1), 4, false, new Map(8).WithPiece(2, 1, 5, "grate", LineOfFirePieceKind.ClosedPortal, ShootThrough), CombatAnomalyProfile.Original, portalsBlock: true).Blocker);
+        Assert.AreEqual(LineOfFireRules.StepCost(new(1, 1), 3, false, new Map(8), CombatAnomalyProfile.Original),
+            LineOfFireRules.StepCost(new(1, 1), 3, false, new Map(8), CombatAnomalyProfile.Original, portalsBlock: true));
+        // An open portal or a doorway stays passable, and the flag does not turn a pass-walled wall into a blocker.
+        Assert.IsNull(LineOfFireRules.StepCost(new(3, 1), 5, false, new Map(8).WithPiece(3, 1, 5, "open", LineOfFirePieceKind.OpenPortal), CombatAnomalyProfile.Original, portalsBlock: true).Blocker);
+        Assert.IsNull(LineOfFireRules.StepCost(new(3, 1), 5, false, new Map(8).WithPiece(3, 1, 5, "ghost", LineOfFirePieceKind.PassWalled, Glass), CombatAnomalyProfile.Original, portalsBlock: true).Blocker);
+    }
+
     [TestMethod]
     public void AStepOffTheMapCostsOneAndDropsItsSum()
     {
