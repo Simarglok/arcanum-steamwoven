@@ -156,6 +156,12 @@ public sealed class SteamwovenHudTests
             [SteamwovenControlId.FatigueVial] = AreaGameBarLayout.FatigueGauge.X,
             [SteamwovenControlId.MessageWindow] = AreaMessageLayout.Window.X,
         };
+        // The unit sizes the model's rule starts from (the buttons' come from art): clock 128 x 30, vials 28 x 88, message window 383 x 82, experience strip 384 x 14.
+        Assert.AreEqual((128, 30), (AreaClockLayout.WindowWidth, AreaClockLayout.WindowHeight));
+        Assert.AreEqual((28, 88), (AreaGameBarLayout.HealthGauge.Width, AreaGameBarLayout.HealthGauge.Height));
+        Assert.AreEqual((28, 88), (AreaGameBarLayout.FatigueGauge.Width, AreaGameBarLayout.FatigueGauge.Height));
+        Assert.AreEqual((383, 82), (AreaMessageLayout.Window.Width, AreaMessageLayout.Window.Height));
+        Assert.AreEqual((384, 14), (AreaExperienceStripLayout.ClearWidth, AreaExperienceStripLayout.ClearHeight));
         Assert.AreEqual(expected.Count, SteamwovenControls.OriginalX.Count);
         foreach (var (id, x) in SteamwovenControls.OriginalX) Assert.AreEqual(expected[id], x, id.ToString());
     }

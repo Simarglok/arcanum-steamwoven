@@ -43,7 +43,7 @@ public sealed class SteamwovenControlList(IReadOnlyList<SteamwovenControl> items
 /// Rule per band (G = 6 px grid, "centred" = <c>floor((band − height) / 2)</c> snapped down to G, a shift of at most 3 px):
 /// top band: a button is a square of <c>min(120, T − 24)</c> (margin 12 px above and below), fate points and sleep <c>min(84, T − 48)</c>, the clock window 462 wide and <c>min(108, T − 36)</c> high, all centred;
 /// bottom band: the three right-hand buttons are squares of <c>min(138, floor_G((B − 96) / 3))</c> at tops 18, 18 + side + 30 and 18 + 2 · (side + 30) (the original's stagger of x kept), the combat button the same square centred,
-/// the vials 102 × 318 and the message window 1380 × 294 centred, the hover image 228 square at (24, 24) in the message window; the experience strip hangs 12 px above the top band's lower edge, 1380 × 48.
+/// the vials 102 wide and `min(318, floor_G(B − 36))` high and the message window 1380 wide and `min(294, floor_G(B − 36))` high, centred, the hover image `min(228, message height − 48)` square at (24, 24) in the message window; the experience strip hangs 12 px above the top band's lower edge, 1380 × 48.
 /// </remarks>
 public static class SteamwovenControls
 {
@@ -68,8 +68,8 @@ public static class SteamwovenControls
         var vialW = Units(28);
         var vialH = Fit(Units(88), bottomPanel - 2 * BottomMargin);
         var messageW = Units(383);
-        var messageH = Units(82);
-        var hover = Units(64);
+        var messageH = Fit(Units(82), bottomPanel - 2 * BottomMargin);
+        var hover = Fit(Units(64), messageH - 2 * Units(7));
 
         SteamwovenControlSpec Top(SteamwovenControlId id, int w, int h) => new(id, SteamwovenHudBand.Top, X(id), Centred(topPanel, h), w, h);
         SteamwovenControlSpec Bottom(SteamwovenControlId id, int w, int h, int? y = null) => new(id, SteamwovenHudBand.Bottom, X(id), y ?? Centred(bottomPanel, h), w, h);
@@ -83,7 +83,7 @@ public static class SteamwovenControls
             Top(SteamwovenControlId.FatePoints, small, small),
             Top(SteamwovenControlId.Sleep, small, small),
             Top(SteamwovenControlId.Clock, Units(128), clockH),
-            new(SteamwovenControlId.ExperienceStrip, SteamwovenHudBand.Top, X(SteamwovenControlId.ExperienceStrip), topPanel - Units(4), Units(384), Units(14)),
+            new(SteamwovenControlId.ExperienceStrip, SteamwovenHudBand.Top, X(SteamwovenControlId.ExperienceStrip), Math.Max(0, topPanel - Units(4)), Units(384), Units(14)),
             Bottom(SteamwovenControlId.Combat, side, side),
             Bottom(SteamwovenControlId.Skills, side, side, BottomMargin),
             Bottom(SteamwovenControlId.Spells, side, side, BottomMargin + side + BottomGap),
@@ -105,5 +105,5 @@ public static class SteamwovenControls
 
     private static int Down(int value) => value / SteamwovenGrid.GridPx * SteamwovenGrid.GridPx;
 
-    private static int Centred(int band, int height) => Down((band - height) / 2);
+    private static int Centred(int band, int height) => Down(Math.Max(0, band - height) / 2);
 }
