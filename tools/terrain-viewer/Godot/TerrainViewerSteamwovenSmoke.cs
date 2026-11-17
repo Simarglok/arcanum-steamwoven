@@ -97,9 +97,25 @@ public partial class TerrainViewerApp
                         && panel.StripRectForSelfTest(AreaBarStrip.Bottom).Position == new Vector2(plan.StripLeft, plan.BottomStripY), $"[{tag}] the strips stand where the plan says");
                     Require(AreaGameBarPanel.TopInset == layout.Middle.Band.Y && AreaGameBarPanel.BottomInset == size.Y - layout.Middle.Band.Bottom
                         && AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y)).Size.Y == layout.Middle.Band.Height, $"[{tag}] the free area is the middle band {layout.Middle.Band}");
-                    // The top band's art ends on the board's edge and the bottom band's starts on it: each strip lies inside its own band (the bottom one may hang over the frame's bottom edge by under 3 px · f).
-                    Require(plan.TopStripY >= layout.Top.Band.Y && plan.TopStripY + (int)Math.Round(41 * plan.StripScale) == layout.Top.Band.Bottom, $"[{tag}] the top strip stands on its band's lower edge");
-                    Require(plan.BottomStripY == layout.Bottom.Band.Y, $"[{tag}] the bottom strip hangs from its band's upper edge");
+                    // ARC-UI-2608 (SWI-LAY-11, variant B): each control of the HUD draws and hits in the rectangle of layout.Control(id): the node's rectangle after every scale is the layout's, and a
+                    // full-width hit area stands over each band. The vials are the hero gauges' (placed when they show).
+                    foreach (var control in layout.Controls)
+                    {
+                        var drawn = panel.ControlRectForSelfTest(control.Id);
+                        if (control.Id is SteamwovenControlId.HealthVial or SteamwovenControlId.FatigueVial)
+                        {
+                            if (HeroGaugesForSelfTest is not { ShownForSelfTest: true } gauges) continue;
+                            var placement = gauges.PlacementForSelfTest;
+                            if (!placement.InBars) continue;
+                            drawn = control.Id == SteamwovenControlId.HealthVial ? placement.Health : placement.Fatigue;
+                        }
+                        var want = control.Device;
+                        Require(drawn is { } rect && Math.Abs(rect.Position.X - want.X) < 0.6f && Math.Abs(rect.Position.Y - want.Y) < 0.6f
+                            && Math.Abs(rect.Size.X - want.Width) < 0.6f && Math.Abs(rect.Size.Y - want.Height) < 0.6f, $"[{tag}] {control.Id} is drawn in the layout's rectangle {want} (got {drawn})");
+                    }
+                    Require(panel.BandHitsForSelfTest.Select(hit => new Rect2I((int)hit.Position.X, (int)hit.Position.Y, (int)hit.Size.X, (int)hit.Size.Y)).SequenceEqual(
+                        [new Rect2I(layout.Top.Band.X, layout.Top.Band.Y, layout.Top.Band.Width, layout.Top.Band.Height), new Rect2I(layout.Bottom.Band.X, layout.Bottom.Band.Y, layout.Bottom.Band.Width, layout.Bottom.Band.Height)])
+                        && panel.BandHitsForSelfTest.All(hit => hit.Visible && hit.MouseFilter == Control.MouseFilterEnum.Stop), $"[{tag}] each band has a full-width hit area");
                     // The boards fill each band over the whole frame width in the strips' own device pixels, one texel per pixel.
                     var (topBoard, bottomBoard, backdrop, backdropShown) = panel.BoardsForSelfTest;
                     Require(panel.BoardsShownForSelfTest && !backdropShown, $"[{tag}] the boards show and no backdrop shows with no menu");
@@ -166,8 +182,8 @@ public partial class TerrainViewerApp
         var (freeTop, free) = AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y));
         require(free.X == frame.Width && AreaGameBarPanel.FreeLeft == frame.X && freeTop == plan.TopInset, $"[{tag}] the free width is the frame's {frame.Width} at x {frame.X} (got {free.X} at {AreaGameBarPanel.FreeLeft})");
         var scale = (float)plan.StripScale;
-        require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.TopStripY) && Math.Abs(screen.Scale - scale) < 1e-4f
-            && Math.Abs(screen.BottomEdge - (plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale)) < 1e-2f, $"[{tag}] the screen hangs from the top strip at the strips' scale ({AreaGameBarPanel.TopScreen})");
+        require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * plan.StripScale, MidpointRounding.AwayFromZero)) && Math.Abs(screen.Scale - scale) < 1e-4f
+            && Math.Abs(screen.BottomEdge - plan.Layout.Bottom.Band.Bottom) < 1e-2f, $"[{tag}] the screen hangs from the top frame at the HUD's unit scale and ends at the bottom band's lower edge ({AreaGameBarPanel.TopScreen})");
         var origin = AreaGameBarPanel.TopScreen!.Value.Origin;
         var floaters = new AreaFloaterLayer(); var portraits = new AreaFollowerPortraits(); var sleep = new AreaSleepView(); var fate = new AreaFateView();
         try
@@ -200,7 +216,7 @@ public partial class TerrainViewerApp
                     _gameBarPanel!.Relayout();
                     await frames(2);
                     var otherScale = (float)other.StripScale;
-                    var otherOrigin = new Vector2(other.StripLeft, other.TopStripY);
+                    var otherOrigin = new Vector2(other.StripLeft, other.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * other.StripScale, MidpointRounding.AwayFromZero));
                     require(Math.Abs(floaters.DrawScale - otherScale) < 1e-4f && portraits.OriginForSelfTest == otherOrigin && Math.Abs(portraits.ScaleForSelfTest - otherScale) < 1e-4f,
                         $"[{tag}] the floaters and the portraits follow a new layout by themselves: scale {otherScale}, origin {otherOrigin} (got {floaters.DrawScale}, {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
                     require((sleep.Position - (otherOrigin + new Vector2(AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY) * otherScale)).Length() <= 1e-2f

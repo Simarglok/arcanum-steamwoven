@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Presentation.Hud;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -220,6 +221,7 @@ public partial class AreaHeroGauges : CanvasLayer
         _root.AddChild(_healthNumber); _root.AddChild(_fatigueNumber); _root.AddChild(_poison);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
+        AreaGameBarPanel.Placed += Place;
         Hide();
     }
 
@@ -227,6 +229,7 @@ public partial class AreaHeroGauges : CanvasLayer
     {
         GetViewport().SizeChanged -= Place;
         AreaGameBarPanel.InsetsChanged -= Place;
+        AreaGameBarPanel.Placed -= Place;
     }
 
     private static AreaBarNumber Number(string name, int slot)
@@ -288,7 +291,25 @@ public partial class AreaHeroGauges : CanvasLayer
             return;
         }
         var (hx, hy, hw, hh) = AreaGameBarLayout.HealthGauge; var (fx, fy, fw, fh) = AreaGameBarLayout.FatigueGauge;
-        Put(_health, new Rect2(hx, hy, hw, hh)); Put(_fatigue, new Rect2(fx, fy, fw, fh));
+        // ARC-UI-2608: in the Steamwoven layout each vial is the layout's rectangle (the gauge's own drawing scaled to it) and its numbers keep their original offsets from it.
+        PlaceVial(_health, new Rect2(hx, hy, hw, hh), _bars!.ScreenRect(SteamwovenControlId.HealthVial), [(_healthNumber, BarNumberRules.Health), (_poison, BarNumberRules.Poison)]);
+        PlaceVial(_fatigue, new Rect2(fx, fy, fw, fh), _bars.ScreenRect(SteamwovenControlId.FatigueVial), [(_fatigueNumber, BarNumberRules.Fatigue)]);
+    }
+
+    private void PlaceVial(AreaVialGauge gauge, Rect2 original, Rect2? placed, (AreaBarNumber Number, int Slot)[] numbers)
+    {
+        var target = placed ?? original;
+        var scale = target.Size / original.Size;
+        gauge.Position = target.Position; gauge.Size = original.Size; gauge.Scale = scale;
+        // A number below the vial may not leave the bottom band (the band's lower edge, in the screen frame's units).
+        var limit = _bars!.ScreenBandEnd;
+        foreach (var (number, slot) in numbers)
+        {
+            var (x, y, width, height) = BarNumberRules.Slot(slot);
+            var at = placed is null ? new Vector2(x, y) : target.Position + new Vector2((x - original.Position.X) * scale.X, (y - original.Position.Y) * scale.Y);
+            if (placed is not null && limit is { } end) at.Y = Math.Min(at.Y, end - height - BarNumberRules.ShadowOffset);
+            number.Position = at; number.Size = new Vector2(width, height);
+        }
     }
 }
 
