@@ -60,6 +60,14 @@ public enum AreaConversationStartStatus
     DialogRefused,
 }
 
+/// <summary>
+/// ARC-AI-1640: a line the host floated over a speaker (a follower comment or an order line) with the voice the original starts with it (0x568540 → 0x5688D0).
+/// </summary>
+/// <param name="Text">The floated text.</param>
+/// <param name="Voice">The voice identity (the override record's, see <see cref="AreaGreeting.OverrideVoice"/>), or -1 for a line without a voice (the viewer then leaves a playing voice alone).</param>
+/// <param name="ListenerGender">The gender of the line's listener, whose stat 26 picks the voice file (0x5688D0: a female voice first, the male file when it is missing); null when the line has no listener.</param>
+public sealed record AreaSaidLine(string Text, int Voice, DialogPcGender? ListenerGender);
+
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
 /// <see cref="SessionDialogPartyPort.LastRefusal"/> names a refused JO/UW), else null.</param>
 /// <param name="Document">ARC-UI-043: the DLG the conversation runs on (its NPC lines' condition fields name their voices).</param>
@@ -75,9 +83,7 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
     public int VoiceIdentity(DialogNpcLine? line) => line?.Origin switch
     {
         // ARC-WORLD-058: an override line speaks with its own record's voice (0x418870); generated and reputation lines have none.
-        { Kind: DialogLineOriginKind.Override } origin => Greeting?.Overrides is { } overrides && Greeting.OverrideScriptNumber is { } script
-            && overrides.TryGetRecord(origin.Number, out var own) && own is not null
-            ? SoundCatalog.SpeechIdentity(script, SoundCatalog.SpeechConditionField(own.Condition.Bytes)) : -1,
+        { Kind: DialogLineOriginKind.Override } origin => Greeting?.OverrideVoice(origin) ?? -1,
         not null => -1,
         _ => Document is null || line is null || !Document.TryGetRecord(line.Node.Value, out var record) || record is null ? -1
             : SoundCatalog.SpeechIdentity(DialogScript, SoundCatalog.SpeechConditionField(record.Condition.Bytes)),
@@ -555,15 +561,16 @@ public sealed class AreaConversationHost
     /// ARC-AI-1527 (FR-DIALOG-003, VB4-1, VB4-2, VB4-4): a follower's comment line (the combat taunt 0x413F50, the upset line 0x414370, the near-death line 0x414490): a random line of <paramref name="lines"/> of the plain NPC files,
     /// the speaker's own override line first (<see cref="DialogFollowerComment.Say"/>), floated over the speaker as a script's float line (<see cref="AreaScriptHost.TakeFloats"/>, the original's callback 0x5F8488). The
     /// text is read from the player's generated files and never stored. Returns the line said, or null when nothing was said (a speaker this host does not hold, texts that did not load, a range without an entry, a refused roll).
-    /// No voice is played. The can-speak test is the caller's. ARC-UI-2079 (ledger TB28): <paramref name="listener"/> is the object the speech display turns the speaker to (an entity code; the PC by default, as for a follower's comment;
+    /// The line's voice rides with it (<see cref="AreaSaidLine.Voice"/>, the override record's, else -1); the viewer plays it. The can-speak test is the caller's. ARC-UI-2079 (ledger TB28): <paramref name="listener"/> is the object the speech display turns the speaker to (an entity code; the PC by default, as for a follower's comment;
     /// null: none).
     /// </summary>
-    public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines, string? listener = AreaScriptHost.PcCode)
+    public AreaSaidLine? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines, string? listener = AreaScriptHost.PcCode)
     {
-        var text = SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
-            DialogConversationOptions.HardMaxTextBytes, null), ListenerFacts(listener));
-        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
-        return text;
+        var facts = ListenerFacts(listener);
+        var said = SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
+            DialogConversationOptions.HardMaxTextBytes, null), facts, listener is null ? null : facts.Gender);
+        if (said is not null) Scripts.Float(Scripts.Object(speaker), said.Text, listener is null ? null : Scripts.Entity(listener));
+        return said;
     }
 
     /// <summary>
@@ -574,14 +581,14 @@ public sealed class AreaConversationHost
     /// </summary>
     public string? PickLine(AreaSpeaker speaker, LoyaltyLines lines, int? price = null) =>
         SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
-            DialogConversationOptions.HardMaxTextBytes, price));
+            DialogConversationOptions.HardMaxTextBytes, price))?.Text;
 
     /// <summary>
     /// ARC-UI-1765 (0x413910 → 0x418480): the speaker's class line of <paramref name="group"/> (the item identify and repair windows' "no money" line is group 2000), its own override line first
     /// (<see cref="DialogFollowerComment.SayClass"/>), not floated; same rules and failures as <see cref="PickLine"/>.
     /// </summary>
     public string? PickClassLine(AreaSpeaker speaker, int group) =>
-        SayLine(speaker, (greeting, query) => DialogFollowerComment.SayClass(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
+        SayLine(speaker, (greeting, query) => DialogFollowerComment.SayClass(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes))?.Text;
 
     /// <summary>
     /// ARC-UI-2085: the speaker's race line of <paramref name="group"/> (the curse order's insult is group 1000, the builder 0x413D40 over the race generator), its own override line first (<see cref="DialogFollowerComment.SayRace"/>),
@@ -589,11 +596,13 @@ public sealed class AreaConversationHost
     /// a refused roll). The can-speak test is the caller's.
     /// </summary>
     [OriginalFunction(0x413D40, OriginalFunctionScope.Partial)]
-    public string? SayRaceLine(AreaSpeaker speaker, int group, string? listener = AreaScriptHost.PcCode)
+    public AreaSaidLine? SayRaceLine(AreaSpeaker speaker, int group, string? listener = AreaScriptHost.PcCode)
     {
-        var text = SayLine(speaker, (greeting, query) => DialogFollowerComment.SayRace(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
-        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
-        return text;
+        var facts = ListenerFacts(listener);
+        var said = SayLine(speaker, (greeting, query) => DialogFollowerComment.SayRace(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes),
+            facts, listener is null ? null : facts.Gender);
+        if (said is not null) Scripts.Float(Scripts.Object(speaker), said.Text, listener is null ? null : Scripts.Entity(listener));
+        return said;
     }
 
     // ARC-AI-2114 (0x418780): the line's listener facts when the listener is an NPC speaker of this host (its gender and race, from its written fields), else the PC's.
@@ -607,23 +616,25 @@ public sealed class AreaConversationHost
         return listener is null || listener == AreaScriptHost.PcCode ? pc : AreaGreeting.ListenerFacts(fieldsOf(listener)) ?? pc;
     }
 
-    private string? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say, DialogPcFacts? listener = null)
+    private AreaSaidLine? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say, DialogPcFacts? listener = null, DialogPcGender? gender = null)
     {
         ArgumentNullException.ThrowIfNull(speaker);
         if (!Speakers.Contains(speaker)) return null;
         DialogGenericGreetingResult said;
+        var voice = -1;
         try
         {
             var greeting = Greeting(speaker, listener);
             if (greeting is null) return null;
             said = say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant));
+            voice = greeting.OverrideVoice(said.Origin);
         }
         // A comment is a courtesy of the fight, not its gate: a texts, facts or session failure says nothing and never escapes the host (typed failure at the boundary).
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return null;
         }
-        return said.Status == DialogGenericGreetingStatus.Said ? said.Text : null;
+        return said.Status == DialogGenericGreetingStatus.Said ? new AreaSaidLine(said.Text, voice, gender) : null;
     }
 
     /// <summary>

@@ -133,6 +133,34 @@ public sealed class AreaGreetingTests
         Assert.AreEqual(-1, (start with { Greeting = null }).VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10009))));
     }
 
+    // ARC-AI-1640 (VB4-1, VB4-2, VB4-4): the follower comment lines and the order lines carry the voice of their override record, as the builders write the voice id beside the text.
+    [TestMethod]
+    public void A_floated_comment_line_carries_the_voice_of_its_override_record_and_generated_lines_none()
+    {
+        using var source = new AreaOwnerFixture(motionBodies: true);
+        var area = source.Owner.LoadStrict();
+        using var session = ConversationSessionFixture.Create(area.RuntimeMap);
+        var row = area.Objects.First() with
+        {
+            Type = 16,
+            EffectiveFields = [new(31, AreaPresence.Value, AreaValueOrigin.Instance, null, [new AreaSparseElement(31, [0, 0, 0x18007])], null)],
+        };
+        var speaker = new AreaSpeaker(0, row, 1, 0, 0);
+        var state = new AreaConversationState(session, new(area.RuntimeMap), [AreaConversationState.EntityId(row)], 50);
+        var texts = new AreaGreetingTexts(AreaGreetingTextsStatus.Ready, GeneratedDialogFiles.Create(new MesFile?[GeneratedDialogFiles.Count]), new MesFile?[4], "synthetic");
+        // The taunt record 12023 (kind 0), the near-death record 12055 (range 5500, 11999 + 55) with an empty and a text-only voice field.
+        var overrides = Arcanum.Data.DlgReader.Read(Encoding.ASCII.GetBytes("{12023}{Ha}{Ha}{}{ 42}{}{}{12055}{Ow}{Ow}{}{}{}{}"), new() { Mode = Arcanum.Data.DlgReadMode.Original });
+        var greeting = new AreaGreeting(session, speaker, state, new DialogPcFacts(DialogPcGender.Male, 8, false, 0), texts, overrides);
+        Assert.AreEqual((7 << 16) | 42, greeting.OverrideVoice(new(DialogLineOriginKind.Override, 12023)), "the taunt override record's voice");
+        Assert.AreEqual(-1, greeting.OverrideVoice(new(DialogLineOriginKind.Override, 12055)), "an override record with an empty voice field: none");
+        Assert.AreEqual(-1, greeting.OverrideVoice(new(DialogLineOriginKind.Override, 12024)), "no such override record");
+        foreach (var kind in new[] { DialogLineOriginKind.Generated, DialogLineOriginKind.Reputation, DialogLineOriginKind.MissingLine, DialogLineOriginKind.Empty, DialogLineOriginKind.Rumor })
+            Assert.AreEqual(-1, greeting.OverrideVoice(new(kind, 12023)), kind.ToString());
+        Assert.AreEqual(-1, greeting.OverrideVoice(null), "no origin: none");
+        var plain = new AreaGreeting(session, speaker, state, new DialogPcFacts(DialogPcGender.Male, 8, false, 0), texts, null);
+        Assert.AreEqual(-1, plain.OverrideVoice(new(DialogLineOriginKind.Override, 12023)), "no override dialog: none");
+    }
+
     [TestMethod]
     public void The_texts_load_through_the_content_stack()
     {
