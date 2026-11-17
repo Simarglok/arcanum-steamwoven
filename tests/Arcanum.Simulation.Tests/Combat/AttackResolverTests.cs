@@ -53,6 +53,25 @@ public sealed class AttackResolverTests
     }
 
     [TestMethod]
+    public void AThrowAtALocationRollsHitAndCriticalWithNoDefenderTermsAndNoDodge()
+    {
+        // ARC-COMBAT-2435 (ledger TW11, 0x4C7160 with no defender): technology failure, magick cancel, hit, critical, and no dodge; the defender's armour class counts for nothing.
+        var request = Melee() with { Skill = CombatSkill.Throwing, Distance = 1, DeferHit = true, NoDefender = true };
+        var armoured = request with { Target = request.Target with { ArmorClass = 90 } };
+        var hit = Run(request, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) }));
+        var againstArmour = Run(armoured, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) }));
+        Assert.AreEqual((AttackOutcome.Hit, (AttackDamage?)null, (SkillCheck?)null), (hit.Outcome, hit.Damage, hit.DodgeCheck), "a hit carries no damage and rolls no dodge");
+        Assert.AreEqual(hit.AttackCheck!.Difficulty, againstArmour.AttackCheck!.Difficulty, "no armour class term");
+        Assert.AreEqual(hit.AttackCheck.Difficulty, Run(Melee() with { Skill = CombatSkill.Throwing, Distance = 1, DeferHit = true, NoDefender = true, Target = Npc() with { Conditions = CombatantConditions.Unconscious } },
+            Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) })).AttackCheck!.Difficulty, "no awareness term");
+        // A miss: the critical roll is made too (a critical failure turns the throw on the thrower), still no dodge.
+        var miss = Run(request, Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 100) }));
+        Assert.AreEqual((AttackOutcome.Miss, AttackMissCause.SkillCheck, (SkillCheck?)null), (miss.Outcome, miss.MissCause, miss.DodgeCheck));
+        // Without the flag the same request still hits unrolled at a non-critter and meets a dodge at a critter.
+        Assert.IsNotNull(Run(request with { NoDefender = false }, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100), (DodgeCheck, 100), (DodgeCritical, 100) })).DodgeCheck);
+    }
+
+    [TestMethod]
     public void AProjectileCarriesTheHitAndItsDamageIsRolledOnArrival()
     {
         // ARC-COMBAT-016 (ledger PF1, PF5): the shot rolls its check only; the strike rolls the damage on the target as it is then.
