@@ -109,6 +109,13 @@ public partial class TerrainViewerApp
         // ARC-DEV-169: the click decision's facts for a press on a dialog NPC (the viewer's other object clicks are not requests yet).
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift)
         {
+            // ARC-COMBAT-1943: the hero's Body of Air and polymorph spell flags go with every click's facts.
+            var (air, polymorphed) = app.HeroClickSpells();
+            return ClickFactsOf(target, alt, shift) with { HeroBodyOfAir = air, HeroPolymorphed = polymorphed };
+        }
+
+        private HeroClickFacts ClickFactsOf(string target, bool alt, bool shift)
+        {
             var session = app._areaSession;
             // ARC-DEV-176: a door or window is a portal for the click rules (a use out of combat mode and in it).
             if (app._areaDoors?.PortalOf(target) is not null)
