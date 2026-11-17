@@ -160,7 +160,15 @@ public partial class TerrainViewerApp
         var pool = session.QueryBloodPools(new SessionMapId(runtimeMap)).FirstOrDefault(p => p.Critter == npc);
         var facts = NpcPoolPlace(_inventoryHost!.Maps.First(m => m.RuntimeMap == runtimeMap), npc);
         Require(facts is not null, "the dead NPC's place and flags read");
-        var refusal = BloodPoolRules.Leaves(facts!.Value.Facts);
+        // ARC-COMBAT-1928: the session lays the flags it wrote over the map data's, so the expected refusal does too.
+        var written = session.QueryObjectFlags(npc);
+        var expected = facts!.Value.Facts with
+        {
+            CritterFlags = unchecked((uint)written.Critter(unchecked((int)facts.Value.Facts.CritterFlags))),
+            CritterFlags2 = unchecked((uint)written.Critter2(unchecked((int)facts.Value.Facts.CritterFlags2))),
+            SpellFlags = unchecked((uint)written.Spell(unchecked((int)facts.Value.Facts.SpellFlags))),
+        };
+        var refusal = BloodPoolRules.Leaves(expected);
         GD.Print($"ARC-RENDER-041 smoke blood-pool npc={npc} refusal={refusal} pool={pool?.Entity} cell={pool?.Cell.X},{pool?.Cell.Y}");
         if (refusal != BloodPoolRefusal.None) { Require(pool is null, "a refused death leaves no pool"); return; }
         Require(pool is not null && pool.Cell == facts.Value.Cell && pool.DeathTimeMs == session.QueryLifeRecord(npc)!.Value.DeathTimeMs, "the death left its pool at the body's cell");

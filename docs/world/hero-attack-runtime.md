@@ -508,11 +508,11 @@ A critter that dies leaves a pool of blood, as the original does (read in the ex
 - **Viewer (AREA)**: when a recorded death on the shown map that it did not see when the map and session were first shown has
   played its dying animation (ARC-RENDER-040: its dying goal has ended; at once for an NPC whose pose cannot be drawn or who lay in
   its fall; the hero's dying is its fall, ARC-COMBAT-021), it leaves the pool: an NPC at the cell its body is drawn on (a companion's or AI walker's cell with no offset, else its
-  map cell and offsets) with its map data's flags, the hero at its committed cell. The tile blocks when the step evidence settles it
+  map cell and offsets) with its map data's flags, the hero at its committed cell; the session lays the flags it wrote on the critter (stoned, undead, elemental, ARC-COMBAT-1928) over them, hero included. The tile blocks when the step evidence settles it
   as not open. Each pool is drawn flat from prototype 4048's art (`art\scenery\blood.ART`, 4 frames at 8 a second), offset by
   its critter's pixels, never hovered or picked; a pool this view left plays its frames, any other shows its last frame. The
   log says `ARC-RENDER-041 blood-pool critter=… disposition=… refusal=…` for each death and `blood-pool-art 0x…` once.
-- **Not ready**: an NPC stoned by the session is not seen as stoned (its map data's spell flags are read); the violence filter (no such
+- **Not ready**: the violence filter (no such
   setting); the weapon's own effect of the projectile speed (0x4377C0 kind 2) and the hit's second add (the hit's own effect and its veto of the blood are built, ARC-RENDER-1990; the begin and the swing effects of the weapon, ARC-RENDER-2011); the dead critter's own one-day decay; a visiting companion from another
   map's seed (such as Virgil in the cave) that dies on the shown map leaves no pool (the view reads the shown map's seed holders
   only); the multiplayer and editor cases.
