@@ -82,7 +82,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-WORLD-2503 (0x43CCA0 → 0x4639E0, DD1–DD8): the destroy of created critters (a summon's expiry or dispel, a script's undo) as planned before anything changes: for each critter of <paramref name="critters"/> the walk of
+    /// ARC-WORLD-2503 (the inventory-on-destroy, DD1–DD8): the destroy of created critters (a summon's expiry or dispel, a script's undo) as planned before anything changes: for each critter of <paramref name="critters"/> the walk of
     /// <see cref="PlanHolderDestroyDrop"/> over its list on its map at <paramref name="cell"/> (the live cell the caller knows, used when there is one critter; else the cell it was created on), and the first refusal of the drops
     /// (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>), the budgets counted over all the critters' drops together.
     /// </summary>

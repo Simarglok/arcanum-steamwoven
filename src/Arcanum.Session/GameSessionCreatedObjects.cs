@@ -191,7 +191,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-DEV-347 (E1-a, TM4): destroys a created scenery or eye-candy object (the one destroy path, <see cref="DestroyObject"/>; the number stays used). NoChange for an entity the
-    /// session holds no such object under; Rejected for a stale version. One revision. The run that created it (a spell's END, a dispel) calls this. ARC-WORLD-2503 (0x4639E0, DD10): a critter's items with object flag 0x400000 are taken out and dropped first
+    /// session holds no such object under; Rejected for a stale version. One revision. The run that created it (a spell's END, a dispel) calls this. ARC-WORLD-2503 (the inventory-on-destroy, ledger DD10): a critter's items with object flag 0x400000 are taken out and dropped first
     /// on <paramref name="cell"/> (the cell it stands on now, when the caller knows it; else the cell it was made on) with their decay, planned before anything changes: a refused drop (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>) destroys nothing.
     /// </summary>
     public SessionCreatedObjectResult DestroyCreatedObject(GameSessionVersion expected, string entity, CellCoord? cell = null)
