@@ -143,6 +143,8 @@ public partial class TerrainViewerApp
         Require(panel.PlanForSelfTest is null && !panel.BoardsShownForSelfTest && Math.Abs(panel.StripScale - panel.Factor) < 1e-4f && InterfaceHd.FractionalScale is null
             && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * panel.Factor && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * panel.Factor,
             "without the generated interface the whole-factor layout stands");
+        Require(AreaGameBarPanel.TopScreen is null && AreaGameBarPanel.FreeLeft == 0 && AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size).Size.X == GetViewport().GetVisibleRect().Size.X,
+            "without the layout the screen is the whole-factor one and the free width is the whole window's (ARC-UI-2510)");
         _gameSettings = _gameSettings with { GeneratedInterface = true };
         SyncInterfaceHd();
         SteamwovenHud.Suspended = true; panel.Relayout();
@@ -182,6 +184,24 @@ public partial class TerrainViewerApp
             {
                 var expected = origin + new Vector2(x, y) * scale;
                 require(view.Scale.X == whole && view.Scale.Y == whole && (view.Position - expected).Length() <= 1e-2f, $"[{tag}] the {name} view keeps its own whole scale {whole} at {expected} (got {view.Scale.X} at {view.Position})");
+            }
+            // The parts follow the layout while they stand in the tree (the event wiring, not a placement by hand): the original strips' heights give another strip scale.
+            if (SteamwovenHud.Plan(size.X, size.Y, SteamwovenHud.Original) is { } other && Math.Abs(other.StripScale - plan.StripScale) > 1e-6)
+            {
+                var saved = SteamwovenHud.Options;
+                try
+                {
+                    SteamwovenHud.Options = SteamwovenHud.Original;
+                    _gameBarPanel!.Relayout();
+                    await frames(2);
+                    var otherScale = (float)other.StripScale;
+                    var otherOrigin = new Vector2(other.StripLeft, other.TopStripY);
+                    require(Math.Abs(floaters.DrawScale - otherScale) < 1e-4f && portraits.OriginForSelfTest == otherOrigin && Math.Abs(portraits.ScaleForSelfTest - otherScale) < 1e-4f,
+                        $"[{tag}] the floaters and the portraits follow a new layout by themselves: scale {otherScale}, origin {otherOrigin} (got {floaters.DrawScale}, {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
+                    require((sleep.Position - (otherOrigin + new Vector2(AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY) * otherScale)).Length() <= 1e-2f
+                        && (fate.Position - (otherOrigin + new Vector2(AreaFateLayout.ScreenX, AreaFateLayout.ScreenY) * otherScale)).Length() <= 1e-2f, $"[{tag}] the sleep and fate views follow a new layout by themselves");
+                }
+                finally { SteamwovenHud.Options = saved; _gameBarPanel!.Relayout(); await frames(2); }
             }
         }
         finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate }) { RemoveChild(node); node.QueueFree(); } }

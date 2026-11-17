@@ -53,9 +53,10 @@ public partial class AreaFateView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
-        // ARC-UI-2510: the window keeps its own whole scale; where the strips put the screen is what moves it.
-        AreaGameBarPanel.TopScreenChanged += Place;
     }
+
+    // ARC-UI-2510: the window keeps its own whole scale; where the strips put the screen is what moves it. Subscribed on entering the tree, as _ExitTree lets go.
+    public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += Place;
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font, AreaFateTexts texts)
     {

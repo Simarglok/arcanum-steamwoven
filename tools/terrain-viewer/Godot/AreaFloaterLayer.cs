@@ -79,9 +79,10 @@ public partial class AreaFloaterLayer : CanvasLayer
         _surface.Draw += DrawLines;
         if (_face is not null) AreaArtTextDraw.Prepare(_surface);
         AddChild(_surface);
-        // ARC-UI-2510: the strips' scale changed (the layout turned on or off, a new window size): the lines and bubbles are laid out again.
-        AreaGameBarPanel.TopScreenChanged += Redraw;
     }
+
+    // ARC-UI-2510: the strips' scale changed (the layout turned on or off, a new window size): the lines and bubbles are laid out again.
+    public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += Redraw;
 
     public override void _ExitTree() => AreaGameBarPanel.TopScreenChanged -= Redraw;
 
@@ -145,8 +146,8 @@ public partial class AreaFloaterLayer : CanvasLayer
                 if (_face is { } face)
                 {
                     // The shadow first at +1,+1 (font flag 0x08), then the line.
-                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)position.X + TextBubbleRules.ShadowOffset, (int)position.Y + TextBubbleRules.ShadowOffset, (sr, sg, sb));
-                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)position.X, (int)position.Y, (r, g, b));
+                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X) + TextBubbleRules.ShadowOffset, (int)MathF.Round(position.Y) + TextBubbleRules.ShadowOffset, (sr, sg, sb));
+                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b));
                     continue;
                 }
                 var baseline = position + new Vector2(0, ascent);
@@ -190,7 +191,7 @@ public partial class AreaFloaterLayer : CanvasLayer
             var (r, g, b) = FloaterRules.Rgb(color);
             if (_face is { } face)
             {
-                AreaArtTextDraw.Text(_surface, face, text, (int)position.X, (int)position.Y, (r, g, b), alpha: (byte)alpha);
+                AreaArtTextDraw.Text(_surface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), alpha: (byte)alpha);
                 continue;
             }
             var tint = Color.Color8(r, g, b, (byte)alpha);

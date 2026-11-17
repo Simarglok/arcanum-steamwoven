@@ -202,6 +202,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     private string LabelOf(string entity) => _followers.FirstOrDefault(f => f.Entity == entity).Label ?? "";
 
+    public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += ScreenMoved;
+
     public override void _Ready()
     {
         Layer = 3;
@@ -215,7 +217,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _menu.GuiInput += input => { if (input is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left or MouseButton.Right }) CloseMenu(); };
         GetViewport().SizeChanged += Resized;
         AreaGameBarPanel.InsetsChanged += PlaceChrome;
-        AreaGameBarPanel.TopScreenChanged += ScreenMoved;
         Place();
         Hide();
     }
