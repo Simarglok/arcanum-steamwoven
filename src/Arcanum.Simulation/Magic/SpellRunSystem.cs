@@ -408,7 +408,7 @@ public sealed class SpellRunSystem
         var run = Table[id]!;
         if (target.Object is not { } obj || obj.Id == run.Parent?.Id) return true;
         var flags = _host.SpellFlags(obj);
-        var caster = (flags & SpellTargetStage.FullReflection) != 0 ? SpellTargetStage.FlagCaster(Table, obj, flags, SpellTargetStage.FullReflection) : null;
+        var caster = (flags & SpellTargetStage.FullReflection) != 0 ? SpellTargetStage.FlagCaster(Table, r => r.Target?.Id == obj.Id || r.ObjectList.Holds(obj.Id) || _host.SummonedListHolds(r, obj.Id), r => r.SetSpellFlags, flags, SpellTargetStage.FullReflection) : null;
         var decision = SpellTargetStage.Decide(run, record, target, new(flags, _sourceFlags, _host.IsLocalPlayer(run.Parent), caster, LastCostCharged,
             pass.StageCost), _profile);
         Set(decision.Run);

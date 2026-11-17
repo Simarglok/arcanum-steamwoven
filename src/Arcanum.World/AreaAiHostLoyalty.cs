@@ -34,7 +34,7 @@ public sealed partial class AreaAiHost
 
     /// <summary>
     /// The step itself: the follow check of <paramref name="npc"/> against the NPC <paramref name="leader"/> (<see cref="NpcLedConsent"/>); a refusal gives the unforced leave
-    /// (<see cref="LeaveUnforced"/>: an extraordinary-charisma leader refuses it, and so would a mind-control controller record, which the host holds none of yet, and the step goes on as if accepted); a leave that went through sets JILTED
+    /// (<see cref="LeaveUnforced"/>: an extraordinary-charisma leader refuses it, and so does a mind-control controller record, <see cref="MindController"/>: any controller refuses, whoever it is, 0x45DFC0 via 0x459040; the step goes on as if accepted); a leave that went through sets JILTED
     /// (the session's) and, when the NPC is active and a line callback exists, says the refusal line of its reason (<see cref="CompanionLoyaltyRules.RefusalLines"/>, 0x413A90). Returns the consent, or
     /// null when the leader or the NPC could not be read here (nothing ran).
     /// </summary>
@@ -50,7 +50,7 @@ public sealed partial class AreaAiHost
 
     /// <summary>
     /// The follow check (0x4AD950, <see cref="FollowConsentRules.Evaluate"/>) of <paramref name="npc"/> against its NPC <paramref name="leader"/>, the limit ignored: mind control accepts when the controller is the leader
-    /// or, with no controller record (the host holds none yet: <see cref="MindController"/> answers null), a PC leads the NPC up its chain (0x45DDA0); the leader's Persuasion training, alignment and level are its own; the reaction is <see cref="NpcLeaderReaction"/> (0 for a
+    /// or, with no controller record (<see cref="MindController"/> answers null: the spell run that sets the flag holds the NPC, ARC-WORLD-2144), a PC leads the NPC up its chain (0x45DDA0); the leader's Persuasion training, alignment and level are its own; the reaction is <see cref="NpcLeaderReaction"/> (0 for a
     /// leader in the NPC's enemy list); the follow thresholds are the NPC's AI row fields 5 to 8; the forced bit is the link's. The alignment is the stat getter's value (<see cref="AlignmentOf"/>: the stored base with TraitIdx writes laid over it, then the effect list's changes of the stat); the level is the stored one (TraitIdx writes laid over), without the effect list's modifiers (NOT READY, as the hostility facts, #2155). Never "already in group" (the leader is the NPC's own). Null when the leader's or the NPC's stats
     /// or AI row are not readable here.
     /// </summary>
