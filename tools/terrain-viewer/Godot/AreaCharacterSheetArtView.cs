@@ -151,7 +151,7 @@ public partial class AreaCharacterSheetArtView : Control
             if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
             {
                 Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
-                Position = new Vector2((float)zone.X, (float)(zone.Y + AreaShopArtLayout.Window.Y * zone.Scale));
+                Position = new Vector2((float)zone.X, (float)Math.Round(zone.Y + AreaShopArtLayout.Window.Y * zone.Scale));
                 RedrawOnScaleChange();
                 return;
             }

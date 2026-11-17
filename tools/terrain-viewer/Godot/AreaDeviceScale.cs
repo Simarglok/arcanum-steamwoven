@@ -55,7 +55,7 @@ internal sealed class AreaDeviceScale
     /// <summary>Stops watching (the art was taken back or the view left the tree).</summary>
     public void Release()
     {
-        foreach (var texture in _watched) texture.Changed -= _changed;
+        foreach (var texture in _watched) { texture.Changed -= _changed; if (texture.ScaleSource == _scale) texture.ScaleSource = null; }
         _watched.Clear();
     }
 }

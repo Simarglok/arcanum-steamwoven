@@ -23,6 +23,7 @@ public partial class AreaSaveListArtView : Control
     // ARC-UI-2575: the generated frames are painted at this view's own device scale (the unit scale of the Steamwoven layout).
     private AreaDeviceScale? _claim;
     private AreaDeviceScale Claim => _claim ??= new(this);
+    private bool _zoned;
     private AreaArtFont? _font;
     private AreaArtFontFace? _face;
     private IReadOnlyList<string> _rows = [];
@@ -74,7 +75,6 @@ public partial class AreaSaveListArtView : Control
     {
         Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
-        Claim.Claim(_art.Values.SelectMany(frames => frames));
         _face = font ?? throw new ArgumentNullException(nameof(font));
         _font = font.Font;
         _messages = messages ?? throw new ArgumentNullException(nameof(messages));
@@ -124,9 +124,11 @@ public partial class AreaSaveListArtView : Control
         {
             Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
             Position = new Vector2((float)zone.X, (float)zone.Y);
+            _zoned = true;
             Claim.RedrawIfScaleChanged();
             return;
         }
+        if (_zoned) { _zoned = false; Claim.Release(); QueueRedraw(); }
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), MathF.Round((size.Y - AreaSaveListArtLayout.ScreenHeight * factor) / 2));
@@ -168,6 +170,8 @@ public partial class AreaSaveListArtView : Control
 
     public override void _Draw()
     {
+        // ARC-UI-2575: the art is shared among the screens of the pre-made family, so the view on screen claims its frames at every draw (only while the Steamwoven layout places it).
+        if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
         if (_font is null || _face is null) return;
         DrawRect(new Rect2(0, 0, AreaSaveListArtLayout.ScreenWidth, AreaSaveListArtLayout.ScreenHeight), Colors.Black);
         if (Art(AreaSaveListArtLayout.TopStripArt) is { } top) DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false);

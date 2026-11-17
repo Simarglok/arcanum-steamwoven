@@ -279,7 +279,7 @@ public partial class AreaBarterPanel : CanvasLayer
                 var unit = (float)zone.Scale;
                 _area.FitScale(unit);
                 _panel.Size = new(AreaShopArtLayout.Window.Width * unit, AreaInventoryDrag.FrameHeight * unit);
-                _panel.Position = new((float)zone.X + AreaShopArtLayout.Window.X * unit, (float)zone.Y + AreaShopArtLayout.Window.Y * unit);
+                _panel.Position = new(MathF.Round((float)zone.X + AreaShopArtLayout.Window.X * unit), MathF.Round((float)zone.Y + AreaShopArtLayout.Window.Y * unit));
                 return;
             }
             var factor = AreaGameBarPanel.ScreenFactor(screen);

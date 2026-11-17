@@ -25,15 +25,29 @@ public static class SteamwovenWindowZone
     /// where the layout is not supported (the plan is null).
     /// </summary>
     public static SteamwovenWindowPlace? Body(int width, int height, int widthUnits, int heightUnits, SteamwovenLayoutOptions? options = null) =>
-        SteamwovenHud.Plan(width, height, options) is { } plan ? Body(plan, widthUnits, heightUnits) : null;
+        PlanFor(width, height, options) is { } plan ? Body(plan, widthUnits, heightUnits) : null;
+
+    // The windows ask every frame: the plan of the last size and options is kept (an immutable record swapped whole, so any thread reads a consistent one).
+    private sealed record Cached(int Width, int Height, SteamwovenLayoutOptions Options, SteamwovenHudPlan? Plan);
+    private static volatile Cached? _last;
+
+    private static SteamwovenHudPlan? PlanFor(int width, int height, SteamwovenLayoutOptions? options)
+    {
+        options ??= SteamwovenHud.Options;
+        var last = _last;
+        if (last is not null && last.Width == width && last.Height == height && Equals(last.Options, options)) return last.Plan;
+        var plan = SteamwovenHud.Plan(width, height, options);
+        _last = new Cached(width, height, options, plan);
+        return plan;
+    }
 
     /// <summary>The same for a plan already built.</summary>
     public static SteamwovenWindowPlace Body(SteamwovenHudPlan plan, int widthUnits, int heightUnits)
     {
         var zone = plan.Layout.WindowZone;
         var unit = UnitScale(plan);
-        var x = Math.Round(zone.X + (zone.Width - widthUnits * unit) / 2);
-        var y = Math.Round(zone.Y + (zone.Height - heightUnits * unit) / 2);
+        var x = Math.Round(zone.X + (zone.Width - widthUnits * unit) / 2, MidpointRounding.AwayFromZero);
+        var y = Math.Round(zone.Y + (zone.Height - heightUnits * unit) / 2, MidpointRounding.AwayFromZero);
         return new SteamwovenWindowPlace(unit, x, y);
     }
 
@@ -43,7 +57,7 @@ public static class SteamwovenWindowZone
     /// at 16:9 the body sits a little above the zone's place), and a frame shorter than the screen centres it. Null where the layout is not supported.
     /// </summary>
     public static SteamwovenWindowPlace? Screen(int width, int height, int bodyTopUnits, SteamwovenLayoutOptions? options = null) =>
-        SteamwovenHud.Plan(width, height, options) is { } plan ? Screen(plan, bodyTopUnits) : null;
+        PlanFor(width, height, options) is { } plan ? Screen(plan, bodyTopUnits) : null;
 
     /// <summary>The same for a plan already built.</summary>
     public static SteamwovenWindowPlace Screen(SteamwovenHudPlan plan, int bodyTopUnits)
@@ -52,11 +66,11 @@ public static class SteamwovenWindowZone
         var zone = plan.Layout.WindowZone;
         var unit = UnitScale(plan);
         var screenHeight = AreaGameBarLayout.ScreenHeight * unit;
-        var x = Math.Round(zone.X + (zone.Width - ScreenWidthUnits * unit) / 2);
+        var x = Math.Round(zone.X + (zone.Width - ScreenWidthUnits * unit) / 2, MidpointRounding.AwayFromZero);
         var wanted = zone.Y - bodyTopUnits * unit;
         var y = screenHeight >= frame.Height
             ? frame.Y + (frame.Height - screenHeight) / 2
             : Math.Clamp(wanted, frame.Y, frame.Bottom - screenHeight);
-        return new SteamwovenWindowPlace(unit, x, Math.Round(y));
+        return new SteamwovenWindowPlace(unit, x, Math.Round(y, MidpointRounding.AwayFromZero));
     }
 }

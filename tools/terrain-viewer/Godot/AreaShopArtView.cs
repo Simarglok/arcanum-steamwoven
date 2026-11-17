@@ -16,6 +16,7 @@ public partial class AreaShopArtView : Control
     // ARC-UI-2575: the generated frames are painted at this view's own device scale (the unit scale of the Steamwoven layout).
     private AreaDeviceScale? _claim;
     private AreaDeviceScale Claim => _claim ??= new(this);
+    private bool _zoned;
     private bool _artSet;
     private int _focus = -1;
     private bool _focusLit;
@@ -48,7 +49,6 @@ public partial class AreaShopArtView : Control
     {
         Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
-        Claim.Claim(_art.Values.SelectMany(frames => frames));
         _artSet = true;
     }
 
@@ -80,9 +80,11 @@ public partial class AreaShopArtView : Control
         {
             Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
             Position = new Vector2((float)zone.X, (float)zone.Y);
+            _zoned = true;
             Claim.RedrawIfScaleChanged();
             return;
         }
+        if (_zoned) { _zoned = false; Claim.Release(); QueueRedraw(); }
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), MathF.Round((size.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2));
@@ -97,6 +99,8 @@ public partial class AreaShopArtView : Control
 
     public override void _Draw()
     {
+        // ARC-UI-2575: the art is shared among the screens of the pre-made family, so the view on screen claims its frames at every draw (only while the Steamwoven layout places it).
+        if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
         if (!_artSet) return;
         // No background of its own (-1, MW1): the screen's black and the strips.
         AreaCharacterArtDraw.Window(this, _art, -1);
