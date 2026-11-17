@@ -1915,10 +1915,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiMoverFacts Mover(string id)
     {
         var status = Status(id);
+        var prowling = id != Pc && _session.IsConcealed(SessionCombatant.Critter(id));
         // ARC-AI-1653 (0x426E80): the goals' unconceal test reads the shown art (animation 5, the crouch), not the flag; the end nodes' standing art reads the flag (0x45EDE0).
         return new(Pc: id == Pc, KnockedDown: id != Pc && status is { IsDead: false, IsUnconscious: false } && ShownAnimation(id) == DyingAnimationRules.FallDown,
-            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)), Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
-            SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut);
+            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: prowling, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
+            SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut,
+            // ARC-AI-1711 (0x42EDC0, 0x4C60C0 with skill 6): a flagged critter runs only as a prowling master; no sheet reads as untrained.
+            ProwlingTraining: prowling ? NpcSkill(id, Skill.Prowling)?.Training ?? SkillTraining.None : SkillTraining.None);
     }
 
     /// <summary>The terrain step from the object's tile toward the other's: walls, doors and objects other than critters decide
