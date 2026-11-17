@@ -59,6 +59,43 @@ public sealed class DestroyDropStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyMapNpc(owner.Version, Exterior, "npc-1", Spot).Disposition);
         Assert.IsTrue(owner.QueryJunkPiles().Count > 0, "the drop rule (0x466E50) piles the second and later items");
         Assert.IsTrue(owner.QueryJunkPiles().All(pile => pile.Cell == Spot && pile.Map == Exterior));
+        // The walk runs last item first (DD3): c lies alone, then b gathers c into a new pile, then a joins it.
+        CollectionAssert.AreEqual(new[] { "c", "b", "a" }, owner.QueryJunkPiles().Single().Items.Select(item => item.Entity).ToArray());
+    }
+
+    [TestMethod]
+    public void ARefusedDropRefusesTheWholeDestroyAndTheRefusalIsAskedBeforehand()
+    {
+        using var owner = WithNpc(("relic", true, false));
+        var bad = new CellCoord(-1, 5);
+        Assert.AreEqual(GameSessionFailure.DropTileUnfit, owner.DestroyMapNpcRefusal(Exterior, "npc-1", bad));
+        Assert.IsNull(owner.DestroyMapNpcRefusal(Exterior, "npc-1", Spot));
+        Assert.IsNull(owner.DestroyMapNpcRefusal(Exterior, "npc-9", bad), "an NPC with nothing to drop has no cell to fit");
+        Assert.AreEqual(GameSessionDisposition.Rejected, owner.DestroyMapNpc(owner.Version, Exterior, "npc-1", bad).Disposition);
+        Assert.IsNull(Changed(owner, "relic", GameSessionOwner.ItemDroppedProperty));
+        Assert.IsNull(Changed(owner, "npc-1", GameSessionOwner.ObjectDestroyedProperty));
+    }
+
+    [TestMethod]
+    public void AnInvulnerableItemTheHeroGaveTheNpcIsTakenOutAsAPlacedItemAndTheSaveRestores()
+    {
+        var plain = InventoryStateTests.Facts(SessionItemType.Generic, 5600);
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        using var _ = owner;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new(
+            [new SessionSeedHolder("npc-1", SessionHolderKind.Npc, false, false, [], [])],
+            [new SessionSeedItem("gem", plain with { Invulnerable = true }, new CellCoord(101, 200)), new SessionSeedItem("dull", plain, new CellCoord(101, 200))])).Failure);
+        foreach (var entity in new[] { "gem", "dull" })
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition, entity);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "npc-1", entity, _ => SessionInsertVerdict.Accepted).Disposition, entity);
+        }
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyMapNpc(owner.Version, Exterior, "npc-1", Spot).Disposition);
+        var placed = owner.QueryPlacedItems().Single();
+        Assert.AreEqual(("gem", SessionPlacedSource.Pc, Exterior, Spot), (placed.Entity, placed.Source, placed.Map, placed.Cell));
+        Assert.IsFalse(owner.IsItemDestroyed("dull"), "the item without the flag is neither dropped nor destroyed");
+        using var back = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        CollectionAssert.AreEquivalent(owner.QueryPlacedItems().ToArray(), back.QueryPlacedItems().ToArray());
     }
 
     [TestMethod]
@@ -94,5 +131,8 @@ public sealed class DestroyDropStateTests
         using var back = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual(Changed(owner, "relic", GameSessionOwner.ItemDroppedProperty), Changed(back, "relic", GameSessionOwner.ItemDroppedProperty));
         CollectionAssert.AreEquivalent(owner.QueryItemDecays().ToArray(), back.QueryItemDecays().ToArray());
+        CollectionAssert.AreEquivalent(owner.QueryJunkPiles().Select(pile => (pile.Cell, string.Join(",", pile.Items.Select(item => item.Entity)))).ToArray(),
+            back.QueryJunkPiles().Select(pile => (pile.Cell, string.Join(",", pile.Items.Select(item => item.Entity)))).ToArray());
+        Assert.AreEqual(Changed(owner, "npc-1", GameSessionOwner.ObjectDestroyedProperty), Changed(back, "npc-1", GameSessionOwner.ObjectDestroyedProperty));
     }
 }
