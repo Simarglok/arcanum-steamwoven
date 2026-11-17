@@ -864,7 +864,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-COMBAT-015, ARC-COMBAT-1941: the hit on a wall, the one the line of fire struck instead of the target (<paramref name="byLine"/>) or the one the click's goal targets: the session's wall attack, which takes nothing from the wall (OD1)
-    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The wall's own hit scripts (RH5: the weapon's hit script and the wall's points 26 and 23) are not run on this path.
+    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The weapon's hit scripts and the wall's taking-damage script run as for any struck object (ARC-COMBAT-1973, RH5).
     /// </summary>
     private void StrikeWall(AttackGoal goal, AreaObjectRecord wall, int distance, bool byLine)
     {
@@ -878,6 +878,9 @@ public partial class TerrainViewerApp
             Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
             // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
+            // ARC-COMBAT-1973 (RH5): the weapon's hit scripts (7, 34) with the wall as the extra object and the wall's taking-damage script (23), as for any struck object.
+            TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(wall), SessionSpellCaster.Hero),
+            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
