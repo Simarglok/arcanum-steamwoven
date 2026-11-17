@@ -225,6 +225,7 @@ public sealed partial class GameSessionOwner
         private bool _raisedBeforeRun;
         // ARC-SCRIPT-2377 (IV44): the generator as the move's runs have drawn from it (a copy of the session's stream, taken at the first draw; the commit makes it the session's), and whether a draw ran past the end of the sequence (the move is refused).
         private SeededRandom? _trialRandom;
+        private long _randomStart;
         private bool _randomExhausted;
         // ARC-SCRIPT-2377 (IV46, SQ11): the fate points the runs grant the hero (one per request for a PC), raised by the commit.
         private int _fateGrants;
@@ -290,7 +291,7 @@ public sealed partial class GameSessionOwner
             || _storyRaised is { } raised && raised > _owner._story.StoryState || _rumors.Any(rumor => !_owner._story.Rumors.ContainsKey(rumor)) || RandomDrawn || FateChanges;
 
         /// <summary>ARC-SCRIPT-2377 (IV44): whether the runs drew from the generator (the commit moves the session's stream on).</summary>
-        private bool RandomDrawn => _trialRandom is { } trial && trial.Draws != _owner._random.Draws;
+        private bool RandomDrawn => _trialRandom is { } trial && trial.Draws != _randomStart;
 
         /// <summary>ARC-SCRIPT-2377 (IV46): whether the granted fate points change the hero (at 100 points a grant is lost, FT7; a session without a hero grants none).</summary>
         private bool FateChanges => _fateGrants > 0 && _owner._hero is { } hero && hero.State.Fate.Points < FateRules.MaxPoints;
@@ -301,7 +302,7 @@ public sealed partial class GameSessionOwner
         /// </summary>
         internal int Draw(int low, int high)
         {
-            _trialRandom ??= new SeededRandom(_owner._random.Seed, _owner._random.Draws);
+            if (_trialRandom is null) { _randomStart = _owner._random.Draws; _trialRandom = new SeededRandom(_owner._random.Seed, _randomStart); }
             if (_trialRandom.TryNext(low, high, out var value)) return value;
             _randomExhausted = true;
             return low;
@@ -701,7 +702,7 @@ public sealed partial class GameSessionOwner
         {
             if (Failure != GameSessionFailure.None) return;
             if (_writes.Count > 0 && _owner._flags.Version.Revision > GlobalFlagLimits.MaxRevision - _writes.Count) { Failure = GameSessionFailure.RevisionExhausted; return; }
-            if ((_questRecords.Count > 0 || _questGains.Count > 0 || GeneratorChanges || FateChanges) && _owner._revision == long.MaxValue) { Failure = GameSessionFailure.RevisionExhausted; return; }
+            if ((_questRecords.Count > 0 || _questGains.Count > 0 || GeneratorChanges || FateChanges || RandomDrawn) && _owner._revision == long.MaxValue) { Failure = GameSessionFailure.RevisionExhausted; return; }
             // The slots are planned once, here: the commit applies this plan and asks the host nothing more after the first flag write.
             _planned = Writes();
             if (_planned.Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
@@ -752,7 +753,13 @@ public sealed partial class GameSessionOwner
                 for (var i = 0; i < _fateGrants; i++) fate = FateRules.Grant(fate).After;
                 _owner._hero.Apply(_owner._hero.State.WithFate(fate));
             }
-            if (_trialRandom is not null) _owner._random = _trialRandom;
+            // The trial counts the draws this instance made from the position it began at; another instance of the same move (the hero's runs and a merchant's) may have committed since, so the draws are added to the session's position now (the two instances' runs may draw the same numbers: each began at the same position).
+            if (_trialRandom is not null)
+            {
+                var made = _trialRandom.Draws - _randomStart;
+                var at = _owner._random.Draws;
+                _owner._random = new SeededRandom(_owner._random.Seed, made > long.MaxValue - at ? long.MaxValue : at + made);
+            }
             foreach (var (slot, blocked) in _generatorBlocked) _owner._generators.SetBlocked(slot, blocked);
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
             if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)

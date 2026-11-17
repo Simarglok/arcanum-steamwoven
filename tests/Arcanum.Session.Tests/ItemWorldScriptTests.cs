@@ -20,7 +20,7 @@ public sealed class ItemWorldScriptTests
         SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843, SetCallRead = 844, GiveThenXp = 845, XpThenGive = 846, SetThenStop = 847, XpEffect = 60,
         ToggleGen = 860, ToggleGenTwice = 861, ToggleGenThenRead = 862, ToggleGenOutside = 863, ToggleGenThenSector = 864, ToggleTwoSlots = 865;
     private const int DistanceToHero = 870, DistanceItemToHero = 871;
-    private const int RandomRoll = 900, RandomTwice = 901, RandomThenRefuse = 902, SocialRead = 903, OriginRead = 904, SocialOfHero = 905, GrantFate = 906, GrantFateTwice = 907, GrantFateItem = 908;
+    private const int RandomRoll = 900, RandomTwice = 901, RandomThenRefuse = 902, SocialRead = 903, OriginRead = 904, SocialOfHero = 905, GrantFate = 906, GrantFateTwice = 907, GrantFateItem = 908, DeclineAfterDraw = 909, DeclineAfterFate = 910;
     private const byte PlayerKind = 21;
     private const int StoryRaise = 880, StoryReadBack = 881, RumorOfHero = 882, RumorOfItem = 883, RumorOutOfRange = 884, RenameSelf = 885, RenameSelfTwice = 886, RenameHero = 887, ChangeLooped = 888, ChangeHero = 889, ChangeThenRead = 890, ChangeUnkept = 891, ChangeLater = 892, CallDialogOfLooped = 893, ChangedTo = 1358, RumorNumber = 1500, RenamedTo = 2805, DataName = 3100;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
@@ -243,6 +243,8 @@ public sealed class ItemWorldScriptTests
             [ToggleGenOutside] = ToggleGenerators([300, -1]), [ToggleGenThenSector] = ToggleGenerators([GeneratorSlot], sector: true), [ToggleTwoSlots] = ToggleGenerators([GeneratorSlot, GeneratorSlot + 1, GeneratorSlot]),
             [RandomRoll] = RandomProgram(1), [RandomTwice] = RandomProgram(2), [RandomThenRefuse] = RandomProgram(1, thenRefuse: true), [SocialRead] = FieldProgram(ScrCatalogue.Action.GetSocialClass), [OriginRead] = FieldProgram(ScrCatalogue.Action.GetOrigin),
             [SocialOfHero] = FieldProgram(ScrCatalogue.Action.GetSocialClass, (Triggerer, 0)), [GrantFate] = FateProgram(Triggerer), [GrantFateTwice] = FateProgram(Triggerer, 2), [GrantFateItem] = FateProgram(Attachee),
+            [DeclineAfterDraw] = Program(Do(C(ScrCatalogue.Action.Random, N(1), N(1000), (LocalVariable, 0))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))),
+            [DeclineAfterFate] = Program(Do(C(ScrCatalogue.Action.GrantFatePoint, (Triggerer, 0))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))),
             [DistanceToHero] = Distance(Looped, PlayerKind), [DistanceItemToHero] = Distance(Attachee, Triggerer),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer),
             [StoryRaise] = StoryRaiseProgram(), [StoryReadBack] = StoryReadBackProgram(), [RumorOfHero] = RumorProgram(Triggerer), [RumorOfItem] = RumorProgram(Attachee), [RumorOutOfRange] = RumorProgram(Triggerer, 3000),
@@ -1240,6 +1242,22 @@ public sealed class ItemWorldScriptTests
         while (owner.QueryHeroFate()!.Value.Points < 100) Assert.AreEqual(GameSessionDisposition.Changed, owner.GrantHeroFatePoint(owner.Version).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(GrantFate)).Disposition);
         Assert.AreEqual(100, owner.QueryHeroFate()!.Value.Points);
+    }
+
+
+    // A script that answers skip default after a draw or a fate point: the declined move still keeps what the run did, in its one revision.
+    [TestMethod]
+    public void A_script_that_answers_skip_default_keeps_its_draw_and_its_fate_point()
+    {
+        using var owner = Owner();
+        var at = owner.QueryRandom();
+        var result = owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(DeclineAfterDraw));
+        Assert.AreEqual((GameSessionDisposition.Changed, at.Draws + 1), (result.Disposition, owner.QueryRandom().Draws));
+
+        using var fate = Owner();
+        var points = fate.QueryHeroFate()!.Value.Points;
+        var declined = fate.PickUpItem(fate.Version, "oid:tome", Accept, new Host(DeclineAfterFate));
+        Assert.AreEqual((GameSessionDisposition.Changed, points + 1), (declined.Disposition, fate.QueryHeroFate()!.Value.Points));
     }
 
     [TestMethod]
