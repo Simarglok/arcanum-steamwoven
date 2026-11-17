@@ -641,6 +641,8 @@ public partial class TerrainViewerApp
         ProcessHeroKnockdown();
         // ARC-DEV-145: the hero's rotate goal (53) steps on the world clock.
         ProcessHeroTurn();
+        // ARC-INPUT-1938: the polled mouse reposts a held left button's press every 250 ms (GT106).
+        PollHeldMouse();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
@@ -832,7 +834,10 @@ public partial class TerrainViewerApp
         if (!IsWorld || !_worldInitialized || _exiting || ReportModalOpen) return;
         TraceMousePress(@event, MousePressTrace.Stage.Unhandled);
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
+        {
+            NoteLeftPress(); // ARC-INPUT-1938: the held button's first record; the polled mouse reposts it every 250 ms.
             WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
+        }
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
         // press has no action of its own, so it is the original's Ctrl+LMB (its release is taken with it).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
@@ -860,7 +865,7 @@ public partial class TerrainViewerApp
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && GameViewModeOpen && !WorldUiFocus && _readyActorPlan is not null
         && _worldGate.IsOpen && _worldLifecycleSession is null;
-    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false)
+    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false, bool repeat = false)
     {
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
         if (!WorldClickInputOpen)
@@ -950,13 +955,19 @@ public partial class TerrainViewerApp
         }
         // ARC-INPUT-1937 (0x551F80, 0x4F28A0): the mode-0 press picks through the followers and the dead in combat mode without Alt.
         _pressSpared = PressPickSpared(alt);
-        try { WorldRouteClickMode0(screen, route, ctrl, alt, shift); }
+        try { WorldRouteClickMode0(screen, route, ctrl, alt, shift, repeat); }
         finally { _pressSpared = null; }
     }
 
     /// <summary>The mode-0 left press on the world once no armed cursor or skill took it: combat, talk, use, door, inventory, then the ground (ARC-INPUT-1937: the pick is <see cref="_pressSpared"/>'s).</summary>
-    private void WorldRouteClickMode0(Vector2 screen, RouteFollower route, bool ctrl, bool alt, bool shift)
+    private void WorldRouteClickMode0(Vector2 screen, RouteFollower route, bool ctrl, bool alt, bool shift, bool repeat = false)
     {
+        // ARC-INPUT-1938 (GT108, 0x54E05E): while the held flag is 1 (a tile walk press, the button still down) a press on an object is ignored: dragging over an object does nothing.
+        if (_heldWalkFlag && AreaObjectAtScreen(screen, spared: _pressSpared) is not null)
+        {
+            _worldRouteClick = "ignored (held walk over an object)";
+            return;
+        }
         // ARC-COMBAT-1944 (0x54ED30): out of combat mode, a press on an NPC about to attack the hero or a follower enters combat mode first, so the press below is an attack.
         // A round the entry started (turn-based) may open on another participant's subturn: the press waits as the guard above makes it wait.
         if (EnterCombatModeForAttacker(screen, alt, shift) && _areaSession?.QueryCombatRound() is { } entered && !entered.Actor.IsHero)
@@ -979,11 +990,13 @@ public partial class TerrainViewerApp
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
         // ARC-INPUT-1936 (GT107): with a Shift key held the tile press does nothing; the host answers Ignored and the hero stays as it was.
-        var walk = HeroRequests.Apply(new WalkRequest(cell, ctrl, Shift: shift));
+        // ARC-INPUT-1938 (GT109): the first press does not mark the run 0x400, every repeat (a press while the held flag is 1) does; the tail sets the flag whether the starter succeeded or not.
+        var walk = HeroRequests.Apply(new WalkRequest(cell, ctrl, Held: _heldWalkFlag, Shift: shift));
+        if (!shift && _leftStampMs is not null) _heldWalkFlag = true;
         var accepted = walk.Outcome == HeroRequestOutcome.Done;
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : walk.Outcome == HeroRequestOutcome.Ignored ? "ignored (Shift held)" : "same goal kept")}";
-        GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
+        if (!repeat) GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
         RefreshReadyStatus();
     }
     private static WorldKeyModifiers KeyModifiers(InputEventKey key)

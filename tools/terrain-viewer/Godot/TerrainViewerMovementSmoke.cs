@@ -99,6 +99,41 @@ public partial class TerrainViewerApp
             // ARC-INPUT-1936: a Shift press on the ground elsewhere changes nothing of the walk under way (the original returns before any cancel or retarget).
             WorldRouteClick(Screen(start), shift: true);
             Require(HeroRunsHost()?.WalkRun is not null && HeroWalkGoal == far, $"a Shift press leaves the walk toward {far} as it was: {_worldRouteClick}");
+            // ---- ARC-INPUT-1938 (GT106–GT111): a held left button's polled repeats retarget the walk to the tile under the pointer and mark its run 0x400 ----
+            // The first press never marks; the held flag is set at its tail; a repeat is due only once more than 250 ms have passed since the stamp; a press on an object while the flag is 1 does nothing; a release clears the flag.
+            // The repeats' first target: an open neighbour of the far cell (another tile the walk can reach).
+            var heldRoutes = new AreaRouteSource(map.Steps, map.Chart);
+            var heldTile = Enum.GetValues<NeighborDirection>().Select(d => (Cell: RoutePlanner.Neighbor(far.Value, d), Direction: d))
+                .First(n => heldRoutes.Contains(n.Cell) && heldRoutes.Assess(far.Value, n.Direction) == RouteStepVerdict.Open).Cell;
+            try
+            {
+                _pointerInWindow = true;
+                HeldMouseForSelfTest(true, 10_000, (Screen(far.Value), false));
+                NoteLeftPress();
+                WorldRouteClick(Screen(far.Value));
+                Require(_heldWalkFlag, "a held tile press sets the held flag: " + _worldRouteClick);
+                Require((HeroRunsHost()?.WalkRun?.Flags & Arcanum.Simulation.Goals.GoalRunFlags.Flight) == 0, "the first press does not mark the run 0x400");
+                HeldMouseForSelfTest(true, 10_250, (Screen(heldTile), false));
+                PollHeldMouse();
+                Require(HeldMouseRepeats == 0, "250 ms after the stamp no repeat is due (the rule is more than 250 ms)");
+                HeldMouseForSelfTest(true, 10_251, (Screen(heldTile), false));
+                PollHeldMouse();
+                Require(HeldMouseRepeats == 1 && HeroWalkGoal == heldTile && (HeroRunsHost()?.WalkRun?.Flags & Arcanum.Simulation.Goals.GoalRunFlags.Flight) != 0,
+                    $"the repeat walks to the tile under the pointer now ({HeroWalkGoal}) and marks the run 0x400 ({HeroRunsHost()?.WalkRun?.Flags}): {_worldRouteClick}");
+                HeldMouseForSelfTest(true, 10_400, (Screen(far.Value), false));
+                PollHeldMouse();
+                Require(HeldMouseRepeats == 1 && HeroWalkGoal == heldTile, "the stamp was reset by the repeat: 149 ms later none is due");
+                HeldMouseForSelfTest(true, 10_502, (Screen(far.Value), true)); // 251 ms after the repeat: due, but the pointer is over a control (the stamp still resets)
+                PollHeldMouse();
+                Require(HeldMouseRepeats == 1 && HeroWalkGoal == heldTile && _heldWalkFlag, "a pointer over a control posts nothing and keeps the flag");
+                HeldMouseForSelfTest(true, 10_753, (Screen(far.Value), false));
+                PollHeldMouse();
+                Require(HeldMouseRepeats == 2 && HeroWalkGoal == far, $"the next repeat retargets in place to {far}: {HeroWalkGoal}");
+                HeldMouseForSelfTest(false, 10_754, null);
+                PollHeldMouse();
+                Require(!_heldWalkFlag && HeroRunsHost()?.WalkRun is not null && HeroWalkGoal == far, "the release clears the flag and the hero keeps walking to the last target");
+            }
+            finally { HeldMouseForSelfTest(null, null, null); NoteLeftRelease(); }
             for (var i = 0; i < 40; i++) Frame();
             var walking = HeroWorld();
             Require(walking != startWorld && HeroRunsHost()?.WalkRun is not null, "the hero is on its way");
