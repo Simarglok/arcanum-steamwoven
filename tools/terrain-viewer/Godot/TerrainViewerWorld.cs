@@ -906,7 +906,7 @@ public partial class TerrainViewerApp
         if (TryPendingOrder(screen)) return;
         // ARC-INPUT-1936 (GT107): a press on bare ground with a Shift key held does nothing at all: it replaces no walk, door approach, attack or throw. A press on an object is the object click's (it takes Shift below),
         // and the open item cursor, lockpicks, pick pocket and disarm are other interface modes that take every press.
-        if (shift && _itemAiming is null && _lockpickArmed is null && !PickPocketArmed && !DisarmArmed && AreaObjectAtScreen(screen) is null)
+        if (shift && _itemAiming is null && _lockpickArmed is null && !PickPocketArmed && !DisarmArmed && AreaObjectAtScreen(screen, spared: PressPickSpared(alt)) is null)
         {
             _worldRouteClick = "ignored (Shift held on the ground)";
             RefreshReadyStatus(); return;
@@ -941,6 +941,15 @@ public partial class TerrainViewerApp
             DisarmPress(screen);
             return;
         }
+        // ARC-INPUT-1937 (0x551F80, 0x4F28A0): the mode-0 press picks through the followers and the dead in combat mode without Alt.
+        _pressSpared = PressPickSpared(alt);
+        try { WorldRouteClickMode0(screen, route, ctrl, alt, shift); }
+        finally { _pressSpared = null; }
+    }
+
+    /// <summary>The mode-0 left press on the world once no armed cursor or skill took it: combat, talk, use, door, inventory, then the ground (ARC-INPUT-1937: the pick is <see cref="_pressSpared"/>'s).</summary>
+    private void WorldRouteClickMode0(Vector2 screen, RouteFollower route, bool ctrl, bool alt, bool shift)
+    {
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");
@@ -952,7 +961,7 @@ public partial class TerrainViewerApp
         if (TryAreaPortalUse(screen, alt)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
         if (TryAreaInventoryClick(screen, alt)) { SetObjectApproachGait(); return; }
-        var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
+        var chart = _canvas!.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
         // ARC-INPUT-1936 (GT107): with a Shift key held the tile press does nothing; the host answers Ignored and the hero stays as it was.

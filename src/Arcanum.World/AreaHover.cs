@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Data.Area;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
@@ -77,6 +78,12 @@ public static class AreaHover
             return AreaHoverAction.NoRoute;
         return GoalEnterable(source, goal) ? AreaHoverAction.Walk : AreaHoverAction.NoRoute;
     }
+
+    /// <summary>ARC-INPUT-1937 (0x551F80, 0x4F28A0): whether the left-press pick sees through a creature. In combat mode with no Alt key held
+    /// the picker hides the PC's followers and every dead critter, so the press finds the object or the tile behind them; with an Alt key held
+    /// (or out of combat mode) only the PC is hidden. The hero itself is no pickable row here.</summary>
+    [OriginalFunction(0x551F80, OriginalFunctionScope.Partial)]
+    public static bool PickSeesThrough(bool combatMode, bool altHeld, bool dead, bool follower) => combatMode && !altHeld && (dead || follower);
 
     /// <summary>ARC-DEV-304 (GT115): the cursor over a dead critter out of combat mode, the way the click resolves it: a body that carries the spoken-with-dead spell flag is talked to
     /// (the hero talks from less than <paramref name="talkRange"/> cells), any other is looted from the next cell (<paramref name="lootReach"/>).</summary>

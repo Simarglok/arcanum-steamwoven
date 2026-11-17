@@ -105,6 +105,19 @@ public partial class TerrainViewerApp
         return _hoverIndex;
     }
 
+    // ARC-INPUT-1937: the pick's click-through set while a mode-0 left press is answered (WorldRouteClickMode0); null everywhere else.
+    private Func<AreaObjectKey, bool>? _pressSpared;
+
+    /// <summary>ARC-INPUT-1937 (0x551F80, 0x4F28A0): what the mode-0 left-press pick sees through: in combat mode with no Alt key held the PC's followers and
+    /// the dead critters (the click lands on the object or tile behind them), see <see cref="AreaHover.PickSeesThrough"/>; null when nothing is hidden. The hover pick
+    /// (0x551910) takes the same mask, with the Alt state at that moment, so the tooltip and the cursor name what the press would reach.</summary>
+    private Func<AreaObjectKey, bool>? PressPickSpared(bool altHeld)
+    {
+        // The armed cursors and skills are other interface modes (the open spell and item cursors, lockpicks, pick pocket, disarm): they keep their own mask.
+        if (altHeld || !AttackMapActive || !HeroInCombatMode || _spellTargeting is not null || _itemAiming is not null || _lockpickArmed is not null || PickPocketArmed || DisarmArmed) return null;
+        return key => IsAreaCompanion(key) || AreaTargetOf(key) is { } t && AreaHover.PickSeesThrough(true, false, t.Dead, t.Follower);
+    }
+
     /// <summary>The frontmost pickable object with an opaque drawn pixel under the screen point. A wall drawn faded
     /// (ARC-RENDER-011) is see-through for the pick, as the original skips walls with OWAF_TRANS_LEFT/RIGHT.</summary>
     /// <param name="roofs">False only for the roof smoke, to find a body under a roof.</param>
@@ -112,6 +125,7 @@ public partial class TerrainViewerApp
     private AreaObjectKey? AreaObjectAtScreen(Vector2 screen, bool roofs = true, Func<AreaObjectKey, bool>? spared = null)
     {
         if (_readyArea is not { } area || HoverIndex() is not { } index) return null;
+        spared ??= _pressSpared;
         // ARC-RENDER-022: a drawn roof pixel picks nothing (RF10's hit test); the pick does not test the roof cover.
         if (roofs && AreaRoofHit(screen)) return null;
         var transform = AreaDrawItem.RasterTransform(GetViewport());
@@ -156,7 +170,7 @@ public partial class TerrainViewerApp
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         // ARC-MAGIC-021: the open spell cursor names what its pick sees, through the objects it spares.
-        var key = visible ? AreaObjectAtScreen(screen, spared: SpellPickSpared()) : null;
+        var key = visible ? AreaObjectAtScreen(screen, spared: SpellPickSpared() ?? PressPickSpared(Godot.Input.IsKeyPressed(Key.Alt))) : null;
         var action = open ? HoverAction(screen, key) : AreaHoverAction.None;
         ShowAreaHover(key, action, screen);
     }

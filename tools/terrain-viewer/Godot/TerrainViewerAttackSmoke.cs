@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
     // Native observation (ARC-COMBAT-005) with --hero, after the combat-mode stage, on the exterior or a whole map: in combat mode
     // the hero clicks the living NPC with the fewest hit points from a few cells away, walks within reach, plays its attack
     // ART, and the auto-attack repeats until the NPC dies; the session then holds its death, the experience it paid and makes it
-    // lootable, its body is drawn fallen, and a click on the corpse in combat mode without Alt does nothing. A map without a
+    // lootable, its body is drawn fallen, and a click on the corpse in combat mode without Alt walks to the tile behind it (ARC-INPUT-1937). A map without a
     // living NPC that has combat values reports that and passes nothing.
     private async Task RunAreaAttackSmokeAsync(TerrainLoadResult? mapMode = null)
     {
@@ -150,14 +150,24 @@ public partial class TerrainViewerApp
             RequireDyingAnimation(session, map.RuntimeMap, target.Holder.Entity, key);
             await RequireBloodPoolAsync(session, map.RuntimeMap, target.Holder.Entity);
 
-            // A corpse clicked in combat mode without Alt does nothing.
+            // ARC-INPUT-1937 (0x551F80): a corpse in combat mode without Alt is clicked through: the press is the ground's (the hero walks to the tile under the pointer) and the hover shows
+            // the walk, not the corpse; with Alt the corpse is picked and looted.
             point = await HoverPointAsync(this, _fallenBodies[key]) ?? throw new InvalidOperationException("ARC-COMBAT-005 smoke: corpse not visible");
+            Require(AreaObjectAtScreen(point) is { } picked && picked == key, "the corpse is picked where it is drawn (Alt held)");
+            Require(AreaObjectAtScreen(point, spared: PressPickSpared(false)) != key, "the pick without Alt sees through the corpse");
             HoverAtForSelfTest(point);
             var corpseHover = HoverActionForSelfTest;
-            Require(corpseHover == AreaHoverAction.None, "corpse hover " + corpseHover);
-            var route = _worldRoute?.Target;
+            Require(corpseHover is AreaHoverAction.Walk or AreaHoverAction.NoRoute && HoverKeyForSelfTest != key, "corpse hover without Alt is the ground's: " + corpseHover);
             AreaSmokeClick(point);
-            Require(_attack is null && !InventoryOpen && _worldRoute?.Target == route, "a corpse click without Alt does nothing");
+            Require(_attack is null && !InventoryOpen && _worldRouteClick.Contains("goal set", StringComparison.Ordinal) && _attackNotice?.Contains("corpse", StringComparison.Ordinal) != true,
+                "a corpse click without Alt walks to the tile behind it: " + _worldRouteClick);
+            CancelAreaAttack(null);
+            HeroRequests.Apply(new Arcanum.World.StopRequest(null));
+            _worldRouteClick = "none";
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
+            Require(_attack is null && !_worldRouteClick.Contains("goal set", StringComparison.Ordinal), "a corpse click with Alt is the loot, not a walk: " + _worldRouteClick);
+            CancelInventoryApproach("smoke: the loot click is shown");
+            HeroRequests.Apply(new Arcanum.World.StopRequest(null));
             ToggleCombatMode();
             HoverReleaseForSelfTest();
             // Out of combat mode the hero shows no weapon again (WA1, WA3).
