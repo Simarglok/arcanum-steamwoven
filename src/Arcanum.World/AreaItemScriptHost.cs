@@ -115,6 +115,12 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// <summary>ARC-SCRIPT-2426 (IV36–IV39): the location field of an object as the shown map's use host places it (the hero's cell, a critter's live tile, a row's tile, an item's own stale tile); null for an object it has no row or place for.</summary>
     public (long X, long Y)? LocationOf(ScrObjectRef obj) => _shown?.Invoke()?.LocationOfObject(obj);
 
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ1): an NPC's social class from the shown map's rows (0 for the hero and any other object type, as the use host reads it); null for an object that host has no row for.</summary>
+    public int? SocialClassOf(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.SocialClassOf(obj) : null;
+
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ2): an NPC's origin as it is now from the shown map's use host (0 for the hero and any other object type); null for an object that host has no row for.</summary>
+    public int? OriginOf(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.OriginOf(obj) : null;
+
     /// <summary>ARC-SCRIPT-2432 (IV40): the use host's map changes for a change script of a critter of the shown map; null for any other object.</summary>
     public IReadOnlyList<MapChangeEdit>? PlanObjectSlot(ScrWriteback write) => _shown?.Invoke()?.PlanCritterSlot(write);
 

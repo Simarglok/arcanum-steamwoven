@@ -378,4 +378,76 @@ public sealed class SteamwovenLayoutTests
         Assert.AreEqual(new PixelRect(378, 37 + 95, 2268, 1436), Layout(3024, 1964).Middle.Centre);
         Assert.AreEqual(new PixelRect(0, 64 + 32, 1024, 486), Layout(1024, 768).Middle.Band);
     }
+
+    // ARC-UI-2526 (SWI-LAY-11): the centre block's controls for the 120 / 456 bands, in master px from the centre block's left edge and the band's top edge.
+    private static readonly (SteamwovenControlId Id, int X, int Y, int W, int H)[] DefaultControls =
+    [
+        (SteamwovenControlId.Character, 12, 12, 96, 96), (SteamwovenControlId.Logbook, 150, 12, 96, 96), (SteamwovenControlId.Map, 282, 12, 96, 96), (SteamwovenControlId.Inventory, 414, 12, 96, 96),
+        (SteamwovenControlId.FatePoints, 564, 24, 72, 72), (SteamwovenControlId.Sleep, 2178, 24, 72, 72), (SteamwovenControlId.Clock, 2334, 18, 462, 84), (SteamwovenControlId.ExperienceStrip, 762, 108, 1380, 48),
+        (SteamwovenControlId.Combat, 312, 168, 120, 120), (SteamwovenControlId.Skills, 2496, 18, 120, 120), (SteamwovenControlId.Spells, 2334, 168, 120, 120), (SteamwovenControlId.Schematics, 2496, 318, 120, 120),
+        (SteamwovenControlId.HealthVial, 48, 66, 102, 318), (SteamwovenControlId.FatigueVial, 2712, 66, 102, 318), (SteamwovenControlId.MessageWindow, 762, 78, 1380, 294), (SteamwovenControlId.HoverImage, 786, 102, 228, 228),
+    ];
+
+    [TestMethod]
+    public void TheControlsOfTheDefaultPanelsSitAtTheTrdMasterRectangles()
+    {
+        var l = Layout(3840, 2160);
+        Assert.AreEqual(DefaultControls.Length, l.Controls.Count);
+        foreach (var (id, x, y, w, h) in DefaultControls)
+        {
+            var control = l.Control(id);
+            var band = control.Spec.Band == SteamwovenHudBand.Top ? l.Top : l.Bottom;
+            Assert.AreEqual(new SteamwovenControlSpec(id, control.Spec.Band, x, y, w, h), control.Spec, id.ToString());
+            // At f = 1 the device rectangle is the master one from the centre block and the band.
+            Assert.AreEqual(new PixelRect(band.Centre.X + x, band.Band.Y + y, w, h), control.Device, id.ToString());
+            Assert.IsTrue(x % 6 == 0 && y % 6 == 0 && w % 6 == 0 && h % 6 == 0, id + " on the 6 px grid");
+        }
+    }
+
+    [TestMethod]
+    public void TheControlsStayInsideTheirBandAndTheCentreBlockAndDoNotOverlapInABand()
+    {
+        foreach (var options in new[] { SteamwovenLayoutOptions.Default, new SteamwovenLayoutOptions { TopPanelMaster = 150, BottomPanelMaster = 570 }, new SteamwovenLayoutOptions { TopPanelMaster = 90, BottomPanelMaster = 420 } })
+        {
+            var specs = SteamwovenControls.For(options.TopPanelMaster, options.BottomPanelMaster);
+            foreach (var spec in specs)
+            {
+                var band = spec.Band == SteamwovenHudBand.Top ? options.TopPanelMaster : options.BottomPanelMaster;
+                var tag = $"{options.TopPanelMaster}/{options.BottomPanelMaster} {spec.Id}";
+                Assert.IsTrue(spec.X >= 0 && spec.X + spec.Width <= SteamwovenGrid.CentreWidth, tag + " inside the centre block");
+                if (spec.Id != SteamwovenControlId.ExperienceStrip) Assert.IsTrue(spec.Y >= 0 && spec.Y + spec.Height <= band, tag + " inside the band");
+                Assert.IsTrue(spec.Width > 0 && spec.Height > 0, tag);
+            }
+            foreach (var a in specs.Where(s => s.Id != SteamwovenControlId.HoverImage && s.Id != SteamwovenControlId.ExperienceStrip))
+                foreach (var b in specs.Where(s => s.Id != SteamwovenControlId.HoverImage && s.Id != SteamwovenControlId.ExperienceStrip && s.Band == a.Band && s.Id > a.Id))
+                    Assert.IsFalse(a.X < b.X + b.Width && b.X < a.X + a.Width && a.Y < b.Y + b.Height && b.Y < a.Y + a.Height, $"{options.TopPanelMaster}/{options.BottomPanelMaster} {a.Id} overlaps {b.Id}");
+        }
+    }
+
+    [TestMethod]
+    public void TheOriginalStripHeightsGiveTheOriginalsSquareButtonSizesAndHorizontalOffsetsAreTheOriginalsTimesThreePointSix()
+    {
+        var specs = SteamwovenControls.For(150, 570).ToDictionary(s => s.Id);
+        Assert.AreEqual(120, specs[SteamwovenControlId.Inventory].Width, "34 units = 122.4 px, snapped to 120");
+        Assert.AreEqual(138, specs[SteamwovenControlId.Skills].Width, "39 units = 140.4 px, snapped to 138");
+        foreach (var (id, x) in SteamwovenControls.OriginalX)
+            Assert.AreEqual(SteamwovenGrid.UnitsToMaster(x), specs[id].X, id.ToString());
+        Assert.AreEqual(SteamwovenGrid.UnitsToMaster(649), specs[SteamwovenControlId.Spells].X, "the original's stagger of the right-hand column is kept");
+    }
+
+    [TestMethod]
+    public void TheControlsOfASmallerWindowAreTheMasterEdgesRoundedFromTheirOwnPosition()
+    {
+        var l = Layout(1920, 1080);
+        var skills = l.Control(SteamwovenControlId.Skills);
+        Assert.AreEqual(new PixelRect(240 + 1248, 852 + 9, 60, 60), skills.Device, "2496 / 2, 18 / 2 from the bottom band's top (852)");
+        var clock = l.Control(SteamwovenControlId.Clock);
+        Assert.AreEqual(new PixelRect(240 + 1167, 9, 231, 42), clock.Device);
+        // Every control keeps its shared edges when the scale is not a half: 1366 x 768, f = 0.3556.
+        var odd = Layout(1366, 768);
+        var map = odd.Control(SteamwovenControlId.Map);
+        var left = odd.Top.Centre.X + (odd.Scale * 282).RoundHalfUp();
+        Assert.AreEqual(left, map.Device.X);
+        Assert.AreEqual(odd.Top.Centre.X + (odd.Scale * (282 + 96)).RoundHalfUp(), map.Device.Right);
+    }
 }

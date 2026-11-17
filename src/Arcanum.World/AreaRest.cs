@@ -311,7 +311,7 @@ public readonly record struct AreaRestHealed(int Healed, bool SleeperDead, bool 
 /// <summary>
 /// ARC-WORLD-1160 (E3-a; 0x57B7F0 step (b), 0x441260 and 0x45E910, ledger SWB9 and SWB10): the heal of one step. The sleeper (the hero) first, then every follower the host runs, each through the
 /// session's life domain (<see cref="GameSessionOwner.RestHeal"/>, <see cref="LifeRules.RestHeal"/>): the hit-point damage drops by the healing rate times <paramref name="kind"/> and the fatigue damage by three
-/// times that. A dead critter is skipped by the rule itself. Followers the host does not run, and the followers of followers, are not reached (<see cref="AreaAiHost.FollowerLifeTargets"/>).
+/// times that. A dead critter is skipped by the rule itself. The followers are the hero's whole follower tree in the original's walk order, followers of followers included (ARC-WORLD-2596, <see cref="AreaAiHost.FollowerLifeTargets"/>); critters the host does not run are not reached.
 /// </summary>
 public static class AreaRestParty
 {
