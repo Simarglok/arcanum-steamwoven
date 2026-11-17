@@ -82,6 +82,20 @@ public sealed class HeroClickRulesTests
         Assert.IsFalse(HeroClickRules.Decide(Facts(HeroClickTarget.Critter)).EntersCombatMode);
     }
 
+    // ARC-COMBAT-1944 (0x54ED30): the combat mode is entered before the type switch, only by a living critter and only when the hero can act.
+    [TestMethod]
+    public void OnlyALivingAttackerEntersCombatModeAndAHeroThatCannotActDoesNot()
+    {
+        Assert.IsFalse(HeroClickRules.Decide(Facts(HeroClickTarget.Critter, dead: true, attacksHero: true)).EntersCombatMode, "a corpse");
+        Assert.IsFalse(HeroClickRules.Decide(Facts(HeroClickTarget.Scenery, attacksHero: true)).EntersCombatMode, "no critter");
+        Assert.IsFalse(HeroClickRules.Decide(new HeroClickFacts(false, false, false, false, false, HeroClickTarget.Critter, TargetAttacksHero: true)).EntersCombatMode, "the hero cannot act");
+        Assert.IsFalse(HeroClickRules.Decide(new HeroClickFacts(true, false, true, false, false, HeroClickTarget.Critter, TargetAttacksHero: true)).EntersCombatMode, "the hero is stoned");
+        // A player character that attacks the hero's side enters combat mode too and is attacked (the combat table has no player-character refusal).
+        var pc = HeroClickRules.Decide(Facts(HeroClickTarget.Critter, pc: true, attacksHero: true));
+        Assert.IsTrue(pc.EntersCombatMode);
+        Assert.AreEqual(HeroClickGoal.Attack, pc.Goal);
+    }
+
     [TestMethod]
     public void TheStartBranchFollowsGs27()
     {
