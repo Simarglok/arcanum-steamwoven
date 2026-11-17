@@ -111,6 +111,13 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map: the session's payload wrote nothing for the body, so the AI host stands it on the cell now (the object moves at the ping).
+        if (request.Caller == ChangeOfPlaceCaller.Script && request.DestinationMap != CurrentAreaMap)
+        {
+            // ARC-WORLD-2039 (FM1): the NPC left the shown scene; the session's payload recorded its place on the other map and its away change (the shown map's object conditions read it as gone).
+            GD.Print($"ARC-WORLD-2039 script-teleport-departed npc={request.Entity} map={request.DestinationMap} cell={request.Destination.X},{request.Destination.Y}");
+            RefreshAreaStatus();
+            return;
+        }
         if (request.Caller == ChangeOfPlaceCaller.Script)
         {
             GD.Print($"ARC-WORLD-1837 script-teleport-done npc={request.Entity} cell={request.Destination.X},{request.Destination.Y} placed={host.PlaceTeleported(request.Entity, request.Destination)}");
@@ -139,7 +146,10 @@ public partial class TerrainViewerApp
         public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
         {
             // ARC-WORLD-1837: a script's teleport of a free NPC to a cell of the shown map has no body edits for the session (the AI host places it once the change ran).
-            if (request.Caller == ChangeOfPlaceCaller.Script) return new(request.Destination, NeighborDirection.XPlus, []);
+            if (request.Caller == ChangeOfPlaceCaller.Script && request.DestinationMap == app.CurrentAreaMap) return new(request.Destination, NeighborDirection.XPlus, []);
+            // ARC-WORLD-2039 (FM1, FM3): a script's teleport of a free NPC to another map moves its record alone: the placement, away change and teleported mark the follower's trip writes; the NPC the host does not hold stops the change.
+            if (request.Caller == ChangeOfPlaceCaller.Script)
+                return new(request.Destination, NeighborDirection.XPlus, app.AreaAiHostNow()?.ScriptDepartureEdits(request.Entity, destination, request.Destination)?.ToArray()!);
             var companion = app._areaCompanions?.Companions.FirstOrDefault(c => c.Entity == request.Entity);
             // A mover the shown group does not hold has no body edits to write: the change stops (no placement is guessed).
             if (companion is null) return new(request.Destination, NeighborDirection.XPlus, null!);

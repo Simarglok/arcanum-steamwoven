@@ -362,13 +362,25 @@ public sealed partial class AreaAiHost
     /// ARC-WORLD-1837 (ledger TT20, FM1): why a script's teleport of <paramref name="npc"/> to <paramref name="cell"/> of the shown map cannot be requested, or null. The NPC must be one this host runs on its own: the hero's followers go with the party's transfer
     /// (the session refuses a party member as a mover, GR15), so they are not modelled here; the shown map must hold the cell (as a route's relocation requires, <see cref="Relocate"/>).
     /// </summary>
-    public string? ScriptTeleportRefusal(string npc, CellCoord cell)
+    public string? ScriptTeleportRefusal(string npc, CellCoord cell) => ScriptTeleportRefusal(npc, _scene.RuntimeMap, cell);
+
+    /// <summary>
+    /// ARC-WORLD-2039 (ledger TT20, FM1): <see cref="ScriptTeleportRefusal(string, CellCoord)"/> for a destination map that may be another one. The NPC leaves the shown scene when the map is another (the original moves its record alone, FM1: it opens no map), so the
+    /// destination must be one the viewer lists (<see cref="AreaAiScene.MapListed"/>) and the cell must fit the placement packing (<see cref="SessionNpcPlacement"/>); the shown map's own cell test (<see cref="PlaceHeld"/>) does not apply to a cell of a map the host does not hold.
+    /// A map of -1 is the shown map.
+    /// </summary>
+    public string? ScriptTeleportRefusal(string npc, int map, CellCoord cell)
     {
         ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (map == -1) map = _scene.RuntimeMap;
         if (!_npcs.ContainsKey(npc)) return _followers.ContainsKey(npc) ? $"{npc} follows the hero: a follower's teleport by a script is not modelled" : $"{npc} is not an NPC the AI host runs here";
         if (PcLeader(npc) is not null) return $"{npc} follows the hero: a follower's teleport by a script is not modelled";
         if (cell.X < 0 || cell.Y < 0) return $"target {cell.X},{cell.Y} outside the cell range";
-        return PlaceHeld(cell) ? null : $"target {cell.X},{cell.Y} not held by the shown map";
+        if (map == _scene.RuntimeMap) return PlaceHeld(cell) ? null : $"target {cell.X},{cell.Y} not held by the shown map";
+        // Another map: the NPC's record moves there; a created critter has no home map data to name (its edits are the session's own, not built for a script's departure).
+        if (_created.Contains(npc)) return $"{npc} is a created critter: its departure to another map by a script is not modelled";
+        if (cell.X >= SessionNpcPlacement.Axis || cell.Y >= SessionNpcPlacement.Axis) return $"target {cell.X},{cell.Y} outside the placement range";
+        return (_scene.MapListed ?? (m => m == _scene.RuntimeMap))(map) ? null : $"map {map} is not one the viewer lists";
     }
 
     /// <summary>
@@ -376,13 +388,30 @@ public sealed partial class AreaAiHost
     /// <see cref="GameSessionOwner.ProcessChangeOfPlace"/>, whose payload the viewer completes with <see cref="PlaceTeleported"/>). Original: made at once, the slot keeps the last request; Steamwoven: queued, one request per frame (the homecomings' rule, VA18).
     /// Returns what became of it, for the NPC's trace.
     /// </summary>
-    public string RequestScriptTeleport(string npc, CellCoord cell, ChangeOfPlaceFlags flags, int seconds)
+    public string RequestScriptTeleport(string npc, CellCoord cell, ChangeOfPlaceFlags flags, int seconds) => RequestScriptTeleport(npc, _scene.RuntimeMap, cell, flags, seconds);
+
+    /// <summary>ARC-WORLD-2039: <see cref="RequestScriptTeleport(string, CellCoord, ChangeOfPlaceFlags, int)"/> to a cell of a map that may be another one (-1 is the shown map; the ping carries the record to the other map, <see cref="ScriptDepartureEdits"/>).</summary>
+    public string RequestScriptTeleport(string npc, int map, CellCoord cell, ChangeOfPlaceFlags flags, int seconds)
     {
         ArgumentException.ThrowIfNullOrEmpty(npc);
-        if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, _scene.RuntimeMap, cell, ChangeOfPlaceCaller.Script, flags, seconds).Text;
+        if (map == -1) map = _scene.RuntimeMap;
+        if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, map, cell, ChangeOfPlaceCaller.Script, flags, seconds).Text;
         _scriptTeleports.RemoveAll(t => t.Npc == npc);
-        _scriptTeleports.Add((npc, _scene.RuntimeMap, cell, flags, seconds));
+        _scriptTeleports.Add((npc, map, cell, flags, seconds));
         return "queued";
+    }
+
+    /// <summary>
+    /// ARC-WORLD-2039 (ledger TT20, FM1, FM3): the session changes that record a free NPC of the shown map standing on <paramref name="destination"/> at <paramref name="arrival"/> after a script's teleport to another map: its placement on the shown map cleared, the
+    /// destination cell, its home map's stored cell and its away change (the shown map is its home), and the original's teleported mark on the destination cell (<see cref="AreaCompanionGroup.Arrive(string, SessionMapId, CellCoord, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/>,
+    /// as a former follower sent home alone or a follower that travels). Null for an NPC the host does not hold or one without a stored cell.
+    /// </summary>
+    public IReadOnlyList<MapChangeEdit>? ScriptDepartureEdits(string npc, SessionMapId destination, CellCoord arrival)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (!_npcs.TryGetValue(npc, out var row) || row.Row.WorldX is not { } x || row.Row.WorldY is not { } y || x is < 0 or >= SessionNpcPlacement.Axis || y is < 0 or >= SessionNpcPlacement.Axis) return null;
+        var home = new SessionMapId(_scene.RuntimeMap);
+        return AreaCompanionGroup.Arrive(npc, home, new((int)x, (int)y), home, destination, arrival, Movers.FacingOf(npc, NeighborDirection.XPlus));
     }
 
     /// <summary>ARC-WORLD-1837: the placement a processed script teleport leaves to the host (the session's payload wrote nothing for the NPC's body): the NPC's run ends and it stands on the cell, as a route's relocation does (<see cref="Relocate"/>).</summary>
