@@ -109,8 +109,10 @@ bars' captures are pixel-identical to `origin/main`; only the changing text of t
   window are black rectangles over it.
 - **Menus.** `AreaGameBarPanel.TopInset` and `BottomInset` are now the middle band's, so every window that docks between the strips docks in it (windows keep their own whole or fitted scale until
   [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) integrates each). While a menu window is open a generated dark-wood backdrop fills the whole middle band (layer 3, under the windows).
-- **Not yet laid out by the model** (follow-ups of the per-window integration): the full-screen menus (SWI-BDR-6), the two-part split backdrops (SWI-BDR-5), the barter and loot windows, which hide the bars, and the 800 × 600
-  windows' own scale (the inventory stays at its fitted scale on the generated backdrop).
+- **Not yet laid out by the model** (follow-ups of the per-window integration): the full-screen menus (SWI-BDR-6), the two-part split backdrops (SWI-BDR-5), the barter and loot windows, which hide the bars, the 800 × 600
+  windows' own scale (the inventory stays at its fitted scale on the generated backdrop), the follower portraits and the floaters (still placed on the whole-factor screen), and the sleep and fate views (their textures take the
+  strips' fractional scale while the bars show). The windows' free width is still the whole window (a window wider than the 16:9 frame can lie under a pillarbox bar). The strips are not snapped to the 6 px grid and are sampled
+  Linear; the boards are painted at the logical scale (the prototype assumes a content scale of 1). The backdrop is for the menu windows, not for the dialog or sleep.
 - **Smoke.** `./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_AREA_BAR_CAPTURE=<prefix>` checks the plan, the strips' places, the insets, the boards, the bars and the open-menu
   backdrop at the SWI-VER-6 sizes (`ARC_STEAMWOVEN_SIZES=WxH,...` to choose others) for the variants of `ARC_STEAMWOVEN_VARIANTS` (`trd`, `thin` = 120 and 456, `before` = the old layout, `TOP-BOTTOM` master px), without
   resizing the window (the root viewport takes the size as its logical render target), and saves `<prefix>-hud-steamwoven-VARIANT-WxH[-menu].png` (local, never in git). The older generated-interface smokes run with the layout

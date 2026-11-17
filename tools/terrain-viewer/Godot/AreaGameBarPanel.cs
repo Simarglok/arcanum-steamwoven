@@ -190,6 +190,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         _backdropLayer = new CanvasLayer { Name = "MenuBackdrop", Layer = 3, Visible = false };
         _backdrop = new SteamwovenBoardView { Name = "Backdrop", MouseFilter = Control.MouseFilterEnum.Ignore };
         _backdropLayer.AddChild(_backdrop);
+        _backdrop.Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
         AddChild(_backdropLayer);
         GetViewport().SizeChanged += Place;
         InterfaceHd.Changed += Place;
@@ -392,7 +393,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     private void Place()
     {
         var size = GetViewport().GetVisibleRect().Size;
-        var plan = SteamwovenOn ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
+        // Only while the bars show: windows that hide them (the full-screen views) keep the whole-factor scale for their own textures.
+        var plan = SteamwovenOn && Visible ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
         _plan = plan;
         if (plan is not null) { PlaceSteamwoven(size, plan); return; }
         // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
@@ -462,7 +464,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         SetBar(_barRects[1], width - bars.Right, 0, bars.Right, height);
         SetBar(_barRects[2], bars.Left, 0, width - bars.Left - bars.Right, bars.Top);
         SetBar(_barRects[3], bars.Left, height - bars.Bottom, width - bars.Left - bars.Right, bars.Bottom);
-        _backdropLayer.Visible = _menuOpen && Visible && middle.Height > 0;
+        // Shown once its first paint is in (an unpainted backdrop would show the world through for the paint time).
+        _backdropLayer.Visible = _menuOpen && Visible && middle.Height > 0 && _backdrop.Texture is not null;
         if (_menuOpen && middle.Height > 0)
             _backdrop.Request(new(ChromeMaterial.WoodDark, ChromeSides.None, Device(middle), scale, originX, 0, bottomRecipe, bottomLegacy, bottomW, bottomH));
     }
@@ -485,7 +488,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;
         InterfaceHd.Changed -= Place;
-        InterfaceHd.SetFractionalScale(null);
+        if (_plan is not null) InterfaceHd.SetFractionalScale(null);
         SetInsets(0, 0);
     }
 }

@@ -30,6 +30,9 @@ internal sealed partial class SteamwovenBoardView : TextureRect
         MouseFilter = MouseFilterEnum.Stop;
     }
 
+    /// <summary>Raised on the main thread after a paint was put in.</summary>
+    public event Action? Painted;
+
     /// <summary>True while a paint is on a worker (the texture shown, if any, is the previous one).</summary>
     public bool Pending => Volatile.Read(ref _pending) > 0;
 
@@ -55,15 +58,18 @@ internal sealed partial class SteamwovenBoardView : TextureRect
             {
                 GD.Print("ARC-UI-2452 board paint failed: " + exception.Message);
             }
-            Callable.From(() => Apply(generation, spec.Rect.Size, pixels)).CallDeferred();
+            Callable.From(() => { if (IsInstanceValid(this)) Apply(generation, spec.Rect.Size, pixels); }).CallDeferred();
         });
     }
 
     private void Apply(int generation, Vector2I size, byte[]? pixels)
     {
         Interlocked.Decrement(ref _pending);
-        if (generation != _generation || !IsInsideTree() || pixels is null) return;
+        if (generation != _generation || !IsInsideTree()) return;
+        // A failed paint is forgotten, so the next request paints again.
+        if (pixels is null) { _key = null; return; }
         using var image = Image.CreateFromData(size.X, size.Y, false, Image.Format.Rgba8, pixels);
         Texture = ImageTexture.CreateFromImage(image);
+        Painted?.Invoke();
     }
 }

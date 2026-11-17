@@ -607,6 +607,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGenerated }; SyncInterfaceHd(); SteamwovenHud.Suspended = false; _gameBarPanel?.Relayout(); }
+            if (verifySteamwoven && InventoryOpen) EndInventory(); // a failed steamwoven check leaves no menu open
             _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
