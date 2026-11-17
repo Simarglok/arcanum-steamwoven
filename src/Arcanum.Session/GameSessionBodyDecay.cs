@@ -177,7 +177,7 @@ public sealed partial class GameSessionOwner
     private BodyItem AddedBodyItem(SessionMadeItem item, SessionMapId map, CellCoord where)
     {
         var given = _inventory.Hero.GivenOf(item.Entity);
-        var facts = given is { Origin: { } origin } && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null;
+        var facts = AddedItemFacts(item);
         if (facts is { Summoned: true } or { NoDisplay: true }) return new(item.Entity, null, false, true);
         if (given is { } record)
         {
@@ -196,6 +196,10 @@ public sealed partial class GameSessionOwner
             ? new(item.Entity, new(item.Entity, item.Kind, SessionPlacedSource.Created, null, map, where, item.Complexity), false, false)
             : new(item.Entity, null, false, true);
     }
+
+    // The seed row's facts of an item the session added to an NPC when it is a given taken item (its origin seed attached), else null (a made or kit item's flags read as clear).
+    private SessionItemFacts? AddedItemFacts(SessionMadeItem item) =>
+        _inventory.Hero.GivenOf(item.Entity) is { Origin: { } origin } && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null;
 
     private const long ItemDecayRulesRetryMs = Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs;
 }

@@ -1999,8 +1999,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 }
                 // TD2: an NPC already destroyed is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
-                var destroyed = _session.ApplyChanges(_session.Version, null,
-                    [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
+                // ARC-WORLD-2493 (0x43CCA0 → 0x4639E0): the NPC's invulnerable items are dropped on its cell with the destroy; an NPC with no cell of its own is destroyed with its list.
+                var destroyed = Place(request.Object) is { } cell
+                    ? _session.DestroyMapNpc(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, cell)
+                    : _session.ApplyChanges(_session.Version, null,
+                        [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
                 if (destroyed.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }

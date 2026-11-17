@@ -1,0 +1,81 @@
+using Arcanum.Simulation;
+using Arcanum.Simulation.Movement;
+
+namespace Arcanum.Session;
+
+/// <summary>
+/// ARC-WORLD-2493 (ledger DD1–DD8): the original's inventory-on-destroy (0x4639E0, the one caller object destroy 0x43CCA0 with mode 1) for a map NPC the script destroy removes.
+/// </summary>
+public sealed partial class GameSessionOwner
+{
+    private const int InvulnerableItemFlag = 0x400000;
+
+    /// <summary>The item's object flag 0x400000 as the session knows it now: the data's flag (<see cref="SessionItemFacts.Invulnerable"/>) under the flag a script's toggle wrote (CQ4), as the damage step reads it.</summary>
+    private bool ItemInvulnerable(string entity, bool inData)
+    {
+        var stored = inData ? InvulnerableItemFlag : 0;
+        var flags = QueryObjectFlags(entity) is { IsEmpty: false } written ? written.Object(stored) : stored;
+        return (flags & InvulnerableItemFlag) != 0;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-2493 (0x43CCA0 → 0x4639E0 with mode 1, DD1–DD8): the script destroy of a map NPC, alive or dead (the destroy does not test death). The NPC is destroyed (the map change <see cref="ObjectDestroyedProperty"/>) and
+    /// every item of its list whose object flag 0x400000 is set is taken out and dropped on the NPC's cell by the drop rule (<see cref="SettleDrop"/>: a junk pile with room, else loose) with its decay event two game days on
+    /// (0x466E50, 0x468090), the list walked from its last item to its first. No other item is touched: an item without the flag stays in the destroyed NPC's list, destroyed neither flagged (DD6), and a worn
+    /// invulnerable item is unequipped as every take-out does (0x467860). The take-out runs no remove check (a no-drop item goes too) and no drop script. An NPC with no inventory record, or none invulnerable
+    /// item, only gets the destroy. The budgets come first, so the destroy does all of it or is refused whole (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>).
+    /// A destroyed NPC is left as it is (TD2: <see cref="GameSessionDisposition.NoChange"/>). One revision for the destroy and one for the drops. Limits: the item's own remove-item script (point 28) is not run, a made item's
+    /// flags read as clear (its prototype is the host's), a given kit item's too, and an added item whose ground record only a hero's drop makes stays out of the walk in a session with no hero; the NPC's leave of its leader,
+    /// its destroy script and the host's runs of it are the caller's (the script host refuses such a destroy).
+    /// </summary>
+    [OriginalFunction(0x4639E0, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult DestroyMapNpc(GameSessionVersion expected, SessionMapId map, string entity, CellCoord cell)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidObject, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (_revision >= long.MaxValue - 2) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        if (_maps.Get(map, MapChangeKey.ForEntity(entity, ObjectDestroyedProperty)) == 1) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+
+        // The walk of 0x4639E0: the whole list from its last item (the added items, then the seed's) to its first, the items with the flag only.
+        var walk = new List<BodyItem>();
+        if (_inventory.Seeds.TryGetValue(map, out var seed) && seed.Holders.TryGetValue(entity, out var holder) && holder.Kind == SessionHolderKind.Npc)
+        {
+            foreach (var item in _inventory.Current(seed, holder, row => DroppedCell(map, seed, row), added: false))
+                if (seed.Items[item.Entity].Facts is { } facts && ItemInvulnerable(item.Entity, facts.Invulnerable)) walk.Add(new(item.Entity, null, true, false));
+            foreach (var made in _inventory.AddedTo(entity))
+                if (AddedItemFacts(made) is { } facts && ItemInvulnerable(made.Entity, facts.Invulnerable) && AddedBodyItem(made, map, cell) is { Destroy: false } placed) walk.Add(placed);
+        }
+        walk.Reverse();
+
+        var droppedCreated = walk.Count(item => item.Placed is { Source: SessionPlacedSource.Created });
+        var droppedHeld = walk.Count(item => item.Placed is { } placed && placed.Source != SessionPlacedSource.Created);
+        if (walk.Count > 0 && !DropCellFits(cell)) return new(GameSessionDisposition.Rejected, GameSessionFailure.DropTileUnfit, Version);
+        if ((long)_inventory.Created + droppedCreated > _limits.MaxCreatedItems || (long)_inventory.Held + droppedHeld > _limits.MaxPcItems)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+
+        // The seed's items lie where they dropped (the item.dropped map change), written with the destroy: one change, all refusals before the commit.
+        var edits = new List<MapChangeEdit> { new(map, MapChangeKey.ForEntity(entity, ObjectDestroyedProperty), 1) };
+        foreach (var item in walk.Where(item => item.Seed)) edits.Add(new(map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(cell)));
+        var written = ApplyChanges(Version, null, edits);
+        if (written.Disposition != GameSessionDisposition.Changed || walk.Count == 0) return written;
+
+        // Each item leaves its holder in the walk's order; each placement sees the items still to come as not yet dropped (as a container's spill does), and a drop schedules the item's decay (0x468090).
+        var later = walk.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        foreach (var (item, placed, _, _) in walk)
+        {
+            later.Remove(item);
+            if (placed is not null)
+            {
+                _inventory.RemoveFromNpc(item);
+                _inventory.Hero.TakeGiven(item);
+                _inventory.Hero.AddPlaced(placed);
+            }
+            else _inventory.Unwear(item);
+            SettleDrop(item, map, cell, later);
+            ScheduleDecay(item, map);
+        }
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+}
