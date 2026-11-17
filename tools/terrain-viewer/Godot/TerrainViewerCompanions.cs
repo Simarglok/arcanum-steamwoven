@@ -51,6 +51,9 @@ public partial class TerrainViewerApp
         _areaCompanions.Dead = AreaCritterDeadNow;
         // ARC-WORLD-115: a companion the AI host holds while it fights walks only the host's steps.
         _areaCompanions.HeldByAi = entity => _aiHost?.Holds(entity) == true;
+        // ARC-RENDER-2564 (0x42EDC0): a concealed follower the host does not hold steps the stealth walk below prowling expert; its training is its own sheet's, none reads as untrained.
+        _areaCompanions.ProwlingTraining = entity => AreaFollowerSheet(entity) is { } sheet
+            ? session.QueryNpcSkills(sheet.Loaded, sheet.Modifiers)[Arcanum.Simulation.Skills.Skill.Prowling].Training : Arcanum.Simulation.Combat.SkillTraining.None;
         _areaCompanions.Extra = AiMoversOverlay;
         // ARC-MAGIC-1189 (TT10, SP2): a companion on its own follow walk checks each next tile for a trap with its own spot attempt, as the AI host's walkers do.
         _areaCompanions.StepTrap = (entity, cell) => _aiHost?.TrapSpottedOn(entity, cell) == true;
