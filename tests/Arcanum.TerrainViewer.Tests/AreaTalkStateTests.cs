@@ -122,14 +122,14 @@ public sealed class AreaTalkStateTests
         public bool Flag => Host.GlobalFlag(AreaFlag);
     }
 
-    private static Talk Create(ScriptContent content, int dialog, bool useHost = true, Func<int, bool>? critter = null, Action<string>? made = null, Func<string, AreaScriptVitals?>? vitals = null, int destroyScript = 0, Func<string, string, string>? attack = null, long spellFlags = 0, Func<string, int, int, bool>? carry = null)
+    private static Talk Create(ScriptContent content, int dialog, bool useHost = true, Func<int, bool>? critter = null, Action<string>? made = null, Func<string, AreaScriptVitals?>? vitals = null, int destroyScript = 0, Func<string, string, string>? attack = null, long spellFlags = 0, Func<string, int, int, bool>? carry = null, Func<string, NeighborDirection?>? facing = null)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog, destroyScript, spellFlags);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
-        var use = new AreaUseScriptHost(session, Map, [row], [], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, Critter: critter, CritterMade: made, Vitals: vitals, ScriptAttack: attack, CarryVitals: carry));
+        var use = new AreaUseScriptHost(session, Map, [row], [], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, Critter: critter, CritterMade: made, Vitals: vitals, ScriptAttack: attack, CarryVitals: carry, NpcFacing: facing));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = useHost ? () => use : null };
         return new(session, speaker, host) { Use = use };
     }
@@ -202,6 +202,33 @@ public sealed class AreaTalkStateTests
             Assert.AreEqual(27368 + AreaPrototypeItems.PrototypeOffset, critter.Prototype, "the prototype file is the script's number + 20 (F1)");
             CollectionAssert.AreEqual(new[] { critter.Entity }, made, "the host is told of the made critter");
             Assert.IsTrue(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)), "the old NPC is destroyed");
+        });
+    }
+
+    [TestMethod]
+    public void A_transform_gives_the_made_critter_the_old_npcs_facing_as_its_recorded_place()
+    {
+        WithContent(content =>
+        {
+            var asked = new List<string>();
+            using var talk = Create(content, 801, critter: prototype => prototype == 27368, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0),
+                facing: entity => { asked.Add(entity); return NeighborDirection.XPlusYMinus; });
+            var run = talk.Run();
+            Assert.IsTrue(talk.Host.Apply(run.Effects), run.Refusal?.ToString());
+            var critter = talk.Use.LastTransformed ?? throw new AssertFailedException("no critter made");
+            CollectionAssert.AreEqual(new[] { AreaConversationState.EntityId(talk.Speaker.Row) }, asked, "the old NPC's facing is asked once (ARC-SCRIPT-2519, F2: its rotation goes to the new critter)");
+            Assert.AreEqual(new SessionNpcPlace(critter.Entity, new(Map), new(11, 20), NeighborDirection.XPlusYMinus), talk.Session.QueryNpcPlace(critter.Entity), "the critter stands on the old tile in the old facing, and a save keeps it");
+        });
+    }
+
+    [TestMethod]
+    public void A_transform_with_no_known_facing_records_no_place()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 801, critter: prototype => prototype == 27368, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0), facing: _ => null);
+            Assert.IsTrue(talk.Host.Apply(talk.Run().Effects));
+            Assert.IsNull(talk.Session.QueryNpcPlace(talk.Use.LastTransformed!.Entity), "the critter keeps its prototype's facing");
         });
     }
 
