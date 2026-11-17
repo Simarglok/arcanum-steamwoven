@@ -840,7 +840,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The shown map as a projectile crosses it: the shot's target where it stands (an NPC at its map cell, a companion at
     /// its live cell, an object at its cell), the living PCs and NPCs on a tile (the hero, the companions and the map's living NPCs in
-    /// row order), and the obstruction of a free flight's step (the line of fire's step cost, <see cref="LineOfFireRules.StepCost{T}"/>).</summary>
+    /// row order), and the obstruction of a free flight's step (the step cost with the projectile's flags 0x0D: the line of fire's step plus a closed portal stopping it, <see cref="LineOfFireRules.StepCost{T}"/>).</summary>
     private sealed class ProjectileMap(TerrainViewerApp app, GameSessionOwner owner, AreaProjectile projectile, AreaLineOfFire lineMap) : IProjectileMap<AreaObjectRecord>
     {
         public CellCoord? TargetTile => app.LiveCell(owner, projectile.Target);
@@ -868,7 +868,7 @@ public partial class TerrainViewerApp
         private AreaObjectRecord Same(AreaObjectRecord row) => row.Key == projectile.Target.Key ? projectile.Target : row;
 
         public AreaObjectRecord? Obstruction(CellCoord from, int rotation) =>
-            LineOfFireRules.StepCost(from, rotation, false, lineMap, owner.Rules.Combat).Blocker;
+            LineOfFireRules.StepCost(from, rotation, false, lineMap, owner.Rules.Combat, portalsBlock: true).Blocker;
     }
 
     private CellCoord HeroCellNow(AreaGridSession session)

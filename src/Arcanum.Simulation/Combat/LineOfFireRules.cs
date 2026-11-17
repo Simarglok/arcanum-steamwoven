@@ -257,7 +257,9 @@ public static class LineOfFireRules
     /// The step cost of one tile step with the projectile flags (0x43FDC0 → 0x43FE00, flags 0x0C, no mover): an edge step (odd
     /// rotation) prices the source tile's walls and portals on the crossed edge, then the neighbour (none: cost 1, the sum so far
     /// dropped), then the neighbour's walls and portals on the opposite edge and, unless <paramref name="intoTarget"/>, its other
-    /// objects; the first blocker ends the step. A corner step (even rotation) sums four edge steps around the corner: to the
+    /// objects; the first blocker ends the step. With <paramref name="portalsBlock"/> (the step cost flag 0x1 of the projectile's own
+    /// call, flags 0x0D, ARC-COMBAT-1725) a closed, unbroken portal on a crossed edge stops the step outright, before its cover test, so
+    /// a portal that shoots through still stops a missed shot flying free; the line of fire's flags 0x0C leave it to the cover test. A corner step (even rotation) sums four edge steps around the corner: to the
     /// counter-clockwise side tile and on to the corner tile, then to the clockwise side tile and on to the corner tile (a side tile
     /// off the map: cost 1). <see cref="CombatAnomalyProfile.CornerStepCountsBothRoutes"/> keeps the original's double count (AW13,
     /// AW14): the corner tile's objects count on both routes and <paramref name="intoTarget"/> skips the side tiles' objects too;
@@ -265,29 +267,29 @@ public static class LineOfFireRules
     /// </summary>
     [OriginalFunction(0x43FE00, OriginalFunctionScope.Partial)]
     public static LineOfFireCost<TObject> StepCost<TObject>(CellCoord from, int rotation, bool intoTarget, ILineOfFireMap<TObject> map,
-        CombatAnomalyProfile profile) where TObject : class
+        CombatAnomalyProfile profile, bool portalsBlock = false) where TObject : class
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(profile);
         if (rotation is < 0 or > 7) throw new ArgumentOutOfRangeException(nameof(rotation));
-        if ((rotation & 1) == 1) return EdgeStep(from, rotation, false, intoTarget ? Skip.Objects : Skip.None, map);
+        if ((rotation & 1) == 1) return EdgeStep(from, rotation, false, intoTarget ? Skip.Objects : Skip.None, map, portalsBlock);
         int ccw = (rotation + 7) % 8, cw = rotation + 1;
         var original = profile.CornerStepCountsBothRoutes;
         var side = original && intoTarget ? Skip.Objects : Skip.None;
         var corner = intoTarget ? Skip.Objects : Skip.None;
         var total = 0;
-        var leg = EdgeStep(from, ccw, true, side, map);
+        var leg = EdgeStep(from, ccw, true, side, map, portalsBlock);
         total += leg.Cost;
         if (leg.Blocker is not null) return new(total, leg.Blocker);
         if (map.Step(from, ccw) is not { } first) return new(1, null);
-        leg = EdgeStep(first, cw, true, corner, map);
+        leg = EdgeStep(first, cw, true, corner, map, portalsBlock);
         total += leg.Cost;
         if (leg.Blocker is not null) return new(total, leg.Blocker);
-        leg = EdgeStep(from, cw, true, side, map);
+        leg = EdgeStep(from, cw, true, side, map, portalsBlock);
         total += leg.Cost;
         if (leg.Blocker is not null) return new(total, leg.Blocker);
         if (map.Step(from, cw) is not { } second) return new(1, null);
-        leg = EdgeStep(second, ccw, true, original ? corner : Skip.Objects, map);
+        leg = EdgeStep(second, ccw, true, original ? corner : Skip.Objects, map, portalsBlock);
         return new(total + leg.Cost, leg.Blocker);
     }
 
@@ -295,20 +297,20 @@ public static class LineOfFireRules
 
     // One edge step: the source tile's pieces on the edge, the neighbour, the neighbour's pieces on the opposite edge and its objects.
     // Within the neighbour the pieces are taken before the other objects (the original takes the tile's one list in its order).
-    private static LineOfFireCost<TObject> EdgeStep<TObject>(CellCoord from, int edge, bool cornerLeg, Skip skip, ILineOfFireMap<TObject> map)
-        where TObject : class
+    private static LineOfFireCost<TObject> EdgeStep<TObject>(CellCoord from, int edge, bool cornerLeg, Skip skip, ILineOfFireMap<TObject> map,
+        bool portalsBlock) where TObject : class
     {
         var cost = 0;
         foreach (var piece in map.Edge(from, edge))
         {
-            var met = Piece(piece, cornerLeg);
+            var met = Piece(piece, cornerLeg, portalsBlock);
             cost += met.Cost;
             if (met.Blocker is not null) return new(cost, met.Blocker);
         }
         if (map.Step(from, edge) is not { } next) return new(1, null);
         foreach (var piece in map.Edge(next, (edge + 4) % 8))
         {
-            var met = Piece(piece, cornerLeg);
+            var met = Piece(piece, cornerLeg, portalsBlock);
             cost += met.Cost;
             if (met.Blocker is not null) return new(cost, met.Blocker);
         }
@@ -323,11 +325,12 @@ public static class LineOfFireRules
         return new(cost, null);
     }
 
-    private static LineOfFireCost<TObject> Piece<TObject>(LineOfFirePiece<TObject> piece, bool cornerLeg) where TObject : class => piece.Kind switch
+    private static LineOfFireCost<TObject> Piece<TObject>(LineOfFirePiece<TObject> piece, bool cornerLeg, bool portalsBlock) where TObject : class => piece.Kind switch
     {
         LineOfFirePieceKind.Solid => new(0, piece.Object),
         LineOfFirePieceKind.Window => cornerLeg ? new(0, piece.Object) : default,
         LineOfFirePieceKind.Doorway or LineOfFirePieceKind.OpenPortal => default,
+        LineOfFirePieceKind.ClosedPortal when portalsBlock => new(0, piece.Object),
         LineOfFirePieceKind.PassWalled or LineOfFirePieceKind.ClosedPortal => Cover(piece.Object, piece.ObjectFlags),
         _ => throw new ArgumentOutOfRangeException(nameof(piece)),
     };
