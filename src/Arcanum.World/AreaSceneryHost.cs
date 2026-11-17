@@ -116,6 +116,33 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         return true;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2514 (ledger BS3c, 0x43CCA0 → 0x423FF0): the object destroy kills every goal run of the object, with no rule and no interrupt level: the scenery's loop (goal 1 or 77), the eye-candy overlay runs (45–48, 58, 59, 75, 76) and
+    /// the hover (44) that belong to it, so a loop or an overlay hidden behind the destroyed flag never steps again. The loop is given up (the scenery keeps the frame and offset it shows; the viewer hides the destroyed object), its looping voice is
+    /// listed for <see cref="TakeKilledByArt"/> (the end node's stop of the run's sound, 0x42DED0). <paramref name="castId"/> is the object's id on the spell side when it differs from <paramref name="entity"/> (its overlay runs are owned by it). A kill the session refuses for a pass in progress is tried again by <see cref="TakeChanged"/>. True when the entity had a loop here or a run of any goal ended.
+    /// </summary>
+    public bool ObjectDestroyed(string entity, string? castId = null)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var had = KillRuns(entity);
+        // The spell side names an object by its cast id, which differs from the entity for a mobile row (the eye-candy overlays of a script or a spell are owned by it).
+        if (castId is not null && castId != entity) had |= KillRuns(castId);
+        var loop = false;
+        if (_byEntity.Remove(entity)) { _animation.Remove(entity); loop = true; }
+        if (loop) { _killedByArt.Add(entity); _changed = true; }
+        return had || loop;
+    }
+
+    // The session refuses a kill while a pass holds the table (spell-run rules under way): the owner is tried again at the next take.
+    private bool KillRuns(string owner)
+    {
+        if (!_session.QueryGoals().RunsOf(owner).Any(r => !r.Done)) return false;
+        if (_session.KillGoals(owner).Failure == SessionGoalFailure.PassInProgress) { _pendingKill.Add(owner); return false; }
+        return true;
+    }
+
+    private readonly HashSet<string> _pendingKill = new(StringComparer.Ordinal);
+
     /// <summary>ARC-DEV-352: true once after a created scenery's loop came, went or moved a frame: its body must be drawn again (the map's own loops are <see cref="TakeChanged"/>'s).</summary>
     public bool TakeCreatedChanged()
     {
@@ -157,6 +184,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>True once after a step moved a frame: the scenery's body must be drawn again.</summary>
     public bool TakeChanged()
     {
+        if (_pendingKill.Count > 0) foreach (var owner in _pendingKill.ToArray()) { _pendingKill.Remove(owner); KillRuns(owner); }
         var changed = _changed;
         _changed = false;
         return changed;

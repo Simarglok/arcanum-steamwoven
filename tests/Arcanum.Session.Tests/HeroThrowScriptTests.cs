@@ -19,7 +19,7 @@ namespace Arcanum.Session.Tests;
 public sealed class HeroThrowScriptTests
 {
     private const byte Triggerer = 0, Attachee = 1;
-    private const int WieldOffScript = 710, RemoveScript = 711, ThrowScript = 712;
+    private const int WieldOffScript = 710, RemoveScript = 711, ThrowScript = 712, InsertScript = 713;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly ScrProgram Runs = Program(C(ScrCatalogue.Action.ReturnRunDefault));
 
@@ -41,12 +41,13 @@ public sealed class HeroThrowScriptTests
     /// <summary>A host with the three scripts on kit:2; a printed line is the hero's.</summary>
     private sealed class Host : ISessionItemScriptHost
     {
-        public Dictionary<int, ScrProgram> Programs { get; } = new() { [WieldOffScript] = Runs, [RemoveScript] = Runs, [ThrowScript] = Runs };
+        public Dictionary<int, ScrProgram> Programs { get; } = new() { [WieldOffScript] = Runs, [RemoveScript] = Runs, [ThrowScript] = Runs, [InsertScript] = Runs };
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code != "kit:2" ? null : point switch
         {
             SessionScriptPoint.WieldOff => new ScrSlot(WieldOffScript, 0, 0),
             SessionScriptPoint.RemoveItem => new ScrSlot(RemoveScript, 0, 0),
             SessionScriptPoint.Throw => new ScrSlot(ThrowScript, 0, 0),
+            SessionScriptPoint.InsertItem => new ScrSlot(InsertScript, 0, 0),
             _ => null,
         };
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
@@ -84,13 +85,70 @@ public sealed class HeroThrowScriptTests
     }
 
     [TestMethod]
-    public void AThrowScriptWithAnInsertItemScriptIsStillRefusedWithAHost()
+    public void ADeclinedThrowRunsTheInsertItemScriptOfTheGiveBackAfterTheThrowScript()
+    {
+        // ARC-COMBAT-2183 (0x4617F0): the refusing throw script's give-back inserts the item into the hero's list, which runs its insert-item script.
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var revision = owner.Version.Revision;
+        var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (result.Disposition, result.Failure, result.ScriptDeclined), result.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.Throw, SessionScriptPoint.InsertItem }, result.Scripts.Select(run => run.Point).ToArray(), "the throw script, then the give-back's insertion");
+        Assert.IsTrue(result.Scripts.All(run => run.Attachee == "kit:2"));
+        Assert.AreEqual((true, true), (ReadFlag(owner, 7), ReadFlag(owner, 3)), "both runs' writes are kept");
+        Assert.AreEqual(1, result.Messages.Count, "the insert-item script's line is the host's to post");
+        Assert.AreEqual(0, result.Shots.Count, "nothing flies");
+        Assert.IsTrue(Holds(owner, "kit:2"), "the item is back in the hero's list");
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision for the runs");
+    }
+
+    [TestMethod]
+    public void AThrownItemThatTheScriptLetsFlyRunsNoInsertItemScript()
     {
         using var owner = Owner();
         var host = new Host();
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
         var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0L), (result.Disposition, result.Failure, owner.Version.Revision), "the give-back would run the insert-item script");
-        Assert.AreEqual(0, result.Scripts.Count, "no script is run for it");
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, false), (result.Disposition, result.Failure, result.ScriptDeclined));
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.Throw }, result.Scripts.Select(run => run.Point).ToArray(), "the item is not inserted back");
+        Assert.AreNotEqual(true, ReadFlag(owner, 3));
+        Assert.AreEqual(1, result.Shots.Count);
+    }
+
+    [TestMethod]
+    public void ADeclinedThrowOfAWornItemRunsWieldOffThenThrowThenInsertItem()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, Wearable(2, Coat, [SessionScriptPoint.WieldOff, SessionScriptPoint.InsertItem]), Drawn, Accept, host).Disposition);
+        // The wear's own insert-item run (the default program) wrote nothing; the program that writes flag 3 is set after it, so only the give-back can.
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        Assert.AreNotEqual(true, ReadFlag(owner, 3));
+        var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.WieldOff, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (result.Disposition, result.Failure, result.ScriptDeclined), result.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.WieldOff, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem }, result.Scripts.Select(run => run.Point).ToArray());
+        Assert.AreEqual(true, ReadFlag(owner, 3), "the give-back's insert-item run wrote it");
+        Assert.AreEqual(0, owner.QueryEquipment().Worn.Count, "worn no more");
+        Assert.IsTrue(Holds(owner, "kit:2"));
+    }
+
+    [TestMethod]
+    public void ADeclinedThrowWhoseInsertItemRunTheSessionCannotApplyRefusesBeforeAnyEffect()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        // A dialog is no command of an item event (SessionItemScripts.Admission).
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.Dialog, (Number, 1)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var revision = owner.Version.Revision;
+        var before = ReadFlag(owner, 7);
+        var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, revision), (result.Disposition, result.Failure, owner.Version.Revision), "the whole throw is refused");
+        Assert.AreEqual(before, ReadFlag(owner, 7), $"the throw script's write is not applied (flag was {before})");
+        Assert.IsTrue(Holds(owner, "kit:2"));
     }
 
     [TestMethod]
