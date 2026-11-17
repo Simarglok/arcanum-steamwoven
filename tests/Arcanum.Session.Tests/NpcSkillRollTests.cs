@@ -1,0 +1,149 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Skills;
+using Arcanum.Simulation.Traps;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.SessionFixtures;
+
+namespace Arcanum.Session.Tests;
+
+// ARC-AI-1854 (exe 0x4C7160, the goal-33 attempt of a skill with no case of its own): an NPC's plain skill roll. The NPC "virgil" is invented.
+[TestClass]
+public sealed class NpcSkillRollTests
+{
+    private const string Npc = "virgil";
+
+    // The NPC's sheet: every primary stat 20, the named basic skill with its points and training.
+    private static SessionNpcSkillUser User(Skill skill, int points, SkillTraining training, bool led = false, string entity = Npc)
+    {
+        var basic = new int[12];
+        var tech = new int[4];
+        if (SkillRules.IsTech(skill)) tech[SkillRules.FamilyIndex(skill)] = points | (int)training << 6;
+        else basic[(int)skill] = points | (int)training << 6;
+        var sheet = new SessionNpcAdvancement(entity, new(CharacterRace.Human, false, [20, 20, 20, 20, 20, 20, 20, 20], 0, 0, 1, 0,
+            [.. basic], [.. tech], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0), 0);
+        return new(SessionLifeTarget.Critter(entity, new LifeFacts { HitPointPoints = 10 }, new LifeState(0, 0, 0, LifeConditions.None, 0)), sheet, AdvancementModifiers.None, led);
+    }
+
+    private static GameSessionOwner Owner(ulong seed = 0)
+    {
+        var created = GameSessionOwner.Create(Descriptor() with { RandomSeed = seed, Hero = HalfElf(Defaults()) });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        return created.Owner!;
+    }
+
+    [TestMethod]
+    public void A_plain_skill_rolls_the_shared_check_in_one_revision_and_answers_its_success()
+    {
+        using var owner = Owner(3);
+        var (before, draws, hero) = (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryHero());
+        var result = owner.RollNpcSkill(owner.Version, User(Skill.Melee, 20, SkillTraining.Master), Skill.Melee);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.IsNotNull(result.Check);
+        Assert.AreEqual(result.Check.Success, result.Success, "a skill with no case of its own answers the check's success");
+        Assert.IsFalse(result.SecondRoll);
+        Assert.AreEqual((before + 1, draws + 2), (owner.Version.Revision, owner.QueryRandom().Draws));
+        Assert.AreEqual(hero, owner.QueryHero(), "the hero is untouched (no fate, no condition)");
+    }
+
+    [TestMethod]
+    public void A_highly_skilled_npc_always_succeeds_and_an_unskilled_one_mostly_fails()
+    {
+        var strong = 0;
+        var weak = 0;
+        for (ulong seed = 0; seed < 40; seed++)
+        {
+            using var owner = Owner(seed);
+            if (owner.RollNpcSkill(owner.Version, User(Skill.Bow, 20, SkillTraining.Master), Skill.Bow).Success) strong++;
+            if (owner.RollNpcSkill(owner.Version, User(Skill.Bow, 0, SkillTraining.None), Skill.Bow).Success) weak++;
+        }
+        Assert.IsTrue(strong > weak, $"strong {strong}, weak {weak}");
+        Assert.IsTrue(strong >= 30, $"strong {strong}");
+    }
+
+    [TestMethod]
+    public void A_dodge_of_an_incapable_actor_never_succeeds_where_a_capable_one_does_with_the_same_draws()
+    {
+        var found = false;
+        for (ulong seed = 0; seed < 40 && !found; seed++)
+        {
+            using var capable = Owner(seed);
+            var ok = capable.RollNpcSkill(capable.Version, User(Skill.Dodge, 20, SkillTraining.Master), Skill.Dodge);
+            if (!ok.Success) continue;
+            using var incapable = Owner(seed);
+            var refused = incapable.RollNpcSkill(incapable.Version, User(Skill.Dodge, 20, SkillTraining.Master), Skill.Dodge, incapable: true);
+            Assert.IsTrue(refused.Check!.Success, "the check itself still rolled the same");
+            Assert.IsFalse(refused.Success);
+            Assert.AreEqual(ok.Check!.Check.Roll, refused.Check.Check.Roll);
+            found = true;
+        }
+        Assert.IsTrue(found);
+    }
+
+    [TestMethod]
+    public void The_incapacity_gate_is_the_dodges_alone()
+    {
+        using var owner = Owner(1);
+        var result = owner.RollNpcSkill(owner.Version, User(Skill.Melee, 20, SkillTraining.Master), Skill.Melee, incapable: true);
+        Assert.AreEqual(result.Check!.Success, result.Success);
+    }
+
+    [TestMethod]
+    public void The_masters_second_spot_trap_roll_is_drawn_only_after_a_failure_that_is_no_critical()
+    {
+        var second = false;
+        for (ulong seed = 0; seed < 200; seed++)
+        {
+            using var owner = Owner(seed);
+            var draws = owner.QueryRandom().Draws;
+            var master = owner.RollNpcSkill(owner.Version, User(Skill.SpotTrap, 5, SkillTraining.Master), Skill.SpotTrap);
+            var expected = master.SecondRoll ? 3 : 2;
+            Assert.AreEqual(draws + expected, owner.QueryRandom().Draws);
+            if (master.SecondRoll) { second = true; Assert.IsFalse(master.Check!.Success); Assert.IsFalse(master.Check.Critical); }
+            using var apprentice = Owner(seed);
+            Assert.IsFalse(apprentice.RollNpcSkill(apprentice.Version, User(Skill.SpotTrap, 5, SkillTraining.Apprentice), Skill.SpotTrap).SecondRoll);
+        }
+        Assert.IsTrue(second, "some failed first roll of a master draws the second");
+    }
+
+    [TestMethod]
+    public void A_magical_trap_is_never_spotted_below_expert_whatever_the_roll()
+    {
+        for (ulong seed = 0; seed < 30; seed++)
+        {
+            using var owner = Owner(seed);
+            var result = owner.RollNpcSkill(owner.Version, User(Skill.SpotTrap, 20, SkillTraining.Apprentice), Skill.SpotTrap, trap: TrapClass.Magical);
+            Assert.IsFalse(result.Success);
+        }
+    }
+
+    [TestMethod]
+    public void Skills_with_their_own_handler_and_gambling_are_refused_before_anything_is_rolled()
+    {
+        using var owner = Owner(2);
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        foreach (var skill in new[] { Skill.Gambling, Skill.Heal, Skill.PickPocket, Skill.Repair, Skill.PickLocks })
+        {
+            Assert.IsFalse(GameSessionOwner.IsPlainNpcSkill(skill));
+            var result = owner.RollNpcSkill(owner.Version, User(skill, 20, SkillTraining.Master), skill);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.SkillsUnavailable), (result.Disposition, result.Failure), skill.ToString());
+        }
+        Assert.AreEqual((revision, draws), (owner.Version.Revision, owner.QueryRandom().Draws));
+    }
+
+    [TestMethod]
+    public void A_hero_user_a_foreign_sheet_and_a_stale_version_are_refused()
+    {
+        using var owner = Owner(2);
+        var user = User(Skill.Melee, 20, SkillTraining.Master);
+        var hero = user with { User = SessionLifeTarget.Hero };
+        Assert.AreEqual(GameSessionFailure.SkillsUnavailable, owner.RollNpcSkill(owner.Version, hero, Skill.Melee).Failure);
+        var foreign = user with { Loaded = User(Skill.Melee, 20, SkillTraining.Master, entity: "other").Loaded };
+        Assert.AreEqual(GameSessionFailure.SkillsUnavailable, owner.RollNpcSkill(owner.Version, foreign, Skill.Melee).Failure);
+        var stale = owner.Version;
+        owner.RollNpcSkill(owner.Version, user, Skill.Melee);
+        var late = owner.RollNpcSkill(stale, user, Skill.Melee);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion), (late.Disposition, late.Failure));
+    }
+}

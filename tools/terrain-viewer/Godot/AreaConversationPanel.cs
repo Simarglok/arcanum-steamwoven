@@ -570,12 +570,13 @@ public partial class AreaConversationPanel : CanvasLayer
         _band.Visible = _originalRows && _buttons.Count > 0;
         _panel.Visible = !_originalRows || new Control[] { _header, _headerArt, _outcome, _outcomeArt, _effects, _effectsArt, _hint, _hintArt, _leave }.Any(control => control.Visible);
         var size = GetViewport().GetVisibleRect().Size;
-        var width = Math.Max(1, Math.Min(960, size.X - 48));
+        // ARC-UI-2510: the panel lies in the frame's width (a window wider than the Steamwoven frame has pillarbox bars on its sides).
+        var (_, free) = AreaGameBarPanel.FreeArea(size);
+        var width = Math.Max(1, Math.Min(960, free.X - 48));
         var content = Math.Max(1, (int)width - 2 * ContentMargin);
         if (content != _contentWidth || _artDirty) { _contentWidth = content; _artDirty = false; LayoutArt(); }
         _panel.Size = new(width, 0);
         // ARC-UI-2024 (DB3): the panel lies in the part the bars leave free (the original's band is in the game view above the bottom bar).
-        var (_, free) = AreaGameBarPanel.FreeArea(size);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, free.Y - 48));
         _panel.Size = new(width, height);
         _panel.Position = PanelPosition(size, width, height);
@@ -592,7 +593,7 @@ public partial class AreaConversationPanel : CanvasLayer
         var (freeTop, free) = AreaGameBarPanel.FreeArea(window);
         // ARC-UI-2268: the band is drawn at the screen's whole factor, as the bars are; its geometry (and the view it sits in) is counted in the original's pixels.
         var factor = AreaGameBarPanel.ScreenFactor(window);
-        var left = DialogReplyBand.BoxLeft((int)(free.X / factor), _bandWidth) * factor;
+        var left = AreaGameBarPanel.FreeLeft + DialogReplyBand.BoxLeft((int)(free.X / factor), _bandWidth) * factor;
         var top = freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
         _band.Scale = new(factor, factor);
         _band.Position = new(left, top);
@@ -609,7 +610,7 @@ public partial class AreaConversationPanel : CanvasLayer
     internal static Vector2 PanelPosition(Vector2 viewSize, float width, float height)
     {
         var (freeTop, free) = AreaGameBarPanel.FreeArea(viewSize);
-        return new(Mathf.Round((viewSize.X - width) / 2), Mathf.Round(freeTop + Math.Max(24, free.Y - height - 24)));
+        return new(AreaGameBarPanel.FreeLeft + Mathf.Round((free.X - width) / 2), Mathf.Round(freeTop + Math.Max(24, free.Y - height - 24)));
     }
 
     public override void _Process(double delta)

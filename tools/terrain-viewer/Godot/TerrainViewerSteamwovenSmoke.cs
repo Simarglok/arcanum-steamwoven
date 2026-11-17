@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
                     // The bars and the frame cover the window exactly once.
                     long barArea = panel.BarsForSelfTest.Where(bar => bar.Visible).Sum(bar => (long)bar.Size.X * (long)bar.Size.Y);
                     Require(barArea + (long)layout.Frame.Width * layout.Frame.Height == (long)size.X * size.Y, $"[{tag}] the bars ({barArea}) and the frame {layout.Frame} fill the window");
+                    await CheckSteamwovenScreenPartsAsync(tag, plan, size, frames, Require);
+                    await CaptureSteamwovenPartsAsync(tag, frames);
                     await CaptureHudAsync("steamwoven-" + tag, frames);
                     await CheckSteamwovenPixelsAsync(tag, layout, Require);
                     // An open menu: the backdrop fills the whole middle band, the window docks in it.
@@ -146,12 +148,68 @@ public partial class TerrainViewerApp
         Require(panel.PlanForSelfTest is null && !panel.BoardsShownForSelfTest && Math.Abs(panel.StripScale - panel.Factor) < 1e-4f && InterfaceHd.FractionalScale is null
             && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * panel.Factor && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * panel.Factor,
             "without the generated interface the whole-factor layout stands");
+        Require(AreaGameBarPanel.TopScreen is null && AreaGameBarPanel.FreeLeft == 0 && AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size).Size.X == GetViewport().GetVisibleRect().Size.X,
+            "without the layout the screen is the whole-factor one and the free width is the whole window's (ARC-UI-2510)");
         _gameSettings = _gameSettings with { GeneratedInterface = true };
         SyncInterfaceHd();
         SteamwovenHud.Suspended = true; panel.Relayout();
         await frames(3);
         await WaitBarArtGeneratedAsync(panel, frames);
         GD.Print($"ARC-UI-2452 native steamwoven layout PASS sizes={checkedSizes}");
+    }
+
+    // ARC-UI-2510: the parts the layout model leaves to the screen's own units follow the strips: the free area is the frame's, the screen the follower portraits hang in and the floaters' scale are where the strips
+    // put them, the sleep and fate views keep their own whole scale (placed on that screen), and the generated textures of the views paint at the view's own scale, not the strips'.
+    private async Task CheckSteamwovenScreenPartsAsync(string tag, SteamwovenHudPlan plan, Vector2I size, Func<int, Task> frames, Action<bool, string> require)
+    {
+        var frame = plan.Layout.Frame;
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y));
+        require(free.X == frame.Width && AreaGameBarPanel.FreeLeft == frame.X && freeTop == plan.TopInset, $"[{tag}] the free width is the frame's {frame.Width} at x {frame.X} (got {free.X} at {AreaGameBarPanel.FreeLeft})");
+        var scale = (float)plan.StripScale;
+        require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.TopStripY) && Math.Abs(screen.Scale - scale) < 1e-4f
+            && Math.Abs(screen.BottomEdge - (plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale)) < 1e-2f, $"[{tag}] the screen hangs from the top strip at the strips' scale ({AreaGameBarPanel.TopScreen})");
+        var origin = AreaGameBarPanel.TopScreen!.Value.Origin;
+        var floaters = new AreaFloaterLayer(); var portraits = new AreaFollowerPortraits(); var sleep = new AreaSleepView(); var fate = new AreaFateView();
+        try
+        {
+            foreach (var node in new Node[] { floaters, portraits, sleep, fate }) AddChild(node);
+            await frames(2);
+            require(Math.Abs(floaters.DrawScale - scale) < 1e-4f, $"[{tag}] the floaters are laid out at the strips' scale {scale} (got {floaters.DrawScale})");
+            portraits.Show(Enumerable.Range(0, 2).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
+            await frames(2);
+            require(portraits.OriginForSelfTest == origin && Math.Abs(portraits.ScaleForSelfTest - scale) < 1e-4f, $"[{tag}] the follower portraits are drawn on the screen from {origin} at {scale} (got {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
+            var firstSlot = origin.Y + AreaFollowerFrameLayout.FirstY * scale;
+            require(Math.Abs(firstSlot - (plan.TopInset + (AreaFollowerFrameLayout.FirstY - AreaGameBarLayout.TopHeight) * scale)) <= 1f, $"[{tag}] the first portrait stands under the top strip ({firstSlot})");
+            var toggle = AreaFollowerPanelRules.ToggleRectFor(true);
+            var expectedY = AreaGameBarPanel.TopScreen!.Value.BottomEdge - (AreaGameBarLayout.ScreenHeight - (toggle.Y + toggle.Height / 2f)) * scale;
+            require(portraits.Visible && Math.Abs(portraits.ButtonCentreForSelfTest("toggle")!.Value.Y - expectedY) <= 1f, $"[{tag}] the toggle button hangs from the bottom strip's edge: y {portraits.ButtonCentreForSelfTest("toggle")!.Value.Y} expected {expectedY:F1}");
+            sleep.Place(); fate.Place();
+            var whole = AreaGameBarPanel.ScreenFactor(new Vector2(size.X, size.Y));
+            foreach (var (name, view, x, y) in new[] { ("sleep", (Control)sleep, AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY), ("fate", fate, AreaFateLayout.ScreenX, AreaFateLayout.ScreenY) })
+            {
+                var expected = origin + new Vector2(x, y) * scale;
+                require(view.Scale.X == whole && view.Scale.Y == whole && (view.Position - expected).Length() <= 1e-2f, $"[{tag}] the {name} view keeps its own whole scale {whole} at {expected} (got {view.Scale.X} at {view.Position})");
+            }
+            // The parts follow the layout while they stand in the tree (the event wiring, not a placement by hand): the original strips' heights give another strip scale.
+            if (SteamwovenHud.Plan(size.X, size.Y, SteamwovenHud.Original) is { } other && Math.Abs(other.StripScale - plan.StripScale) > 1e-6)
+            {
+                var saved = SteamwovenHud.Options;
+                try
+                {
+                    SteamwovenHud.Options = SteamwovenHud.Original;
+                    _gameBarPanel!.Relayout();
+                    await frames(2);
+                    var otherScale = (float)other.StripScale;
+                    var otherOrigin = new Vector2(other.StripLeft, other.TopStripY);
+                    require(Math.Abs(floaters.DrawScale - otherScale) < 1e-4f && portraits.OriginForSelfTest == otherOrigin && Math.Abs(portraits.ScaleForSelfTest - otherScale) < 1e-4f,
+                        $"[{tag}] the floaters and the portraits follow a new layout by themselves: scale {otherScale}, origin {otherOrigin} (got {floaters.DrawScale}, {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
+                    require((sleep.Position - (otherOrigin + new Vector2(AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY) * otherScale)).Length() <= 1e-2f
+                        && (fate.Position - (otherOrigin + new Vector2(AreaFateLayout.ScreenX, AreaFateLayout.ScreenY) * otherScale)).Length() <= 1e-2f, $"[{tag}] the sleep and fate views follow a new layout by themselves");
+                }
+                finally { SteamwovenHud.Options = saved; _gameBarPanel!.Relayout(); await frames(2); }
+            }
+        }
+        finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate }) { RemoveChild(node); node.QueueFree(); } }
     }
 
     // ARC-UI-2575 / ARC-UI-2614: every menu window the smoke can open (inventory, character sheet, logbook, world map, schematics, the save list, and since ARC-UI-2614 the loot window of a container, the
@@ -209,7 +267,6 @@ public partial class TerrainViewerApp
             MainMenuCommand(() => _mainMenu!.Activate(index));
         }
     }
-
     private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
         for (var wait = 0; wait < 1800 && (_barterData is null || _readingData is null); wait++) { AdoptBarterData(); AdoptReadingData(); await frames(1); }

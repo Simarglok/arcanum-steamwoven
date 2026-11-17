@@ -565,7 +565,7 @@ public partial class AreaInventoryPanel : CanvasLayer
             }
             _panel.Size = new(frameWidth, 0);
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, size.Y));
-            _panel.Position = new((size.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - frameWidth) / 2, top);
             return;
         }
         var width = Math.Max(1, Math.Min(960, size.X - 48));
@@ -574,7 +574,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta)

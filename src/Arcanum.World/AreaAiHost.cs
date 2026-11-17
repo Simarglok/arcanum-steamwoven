@@ -267,6 +267,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionHealResult? Heal { get; init; }
     /// <summary>ARC-DEV-246: what an NPC's pick pocket did (<see cref="AreaAiNoticeKind.Skill"/> with the pick pocket skill).</summary>
     public SessionNpcPickPocketResult? PickPocket { get; init; }
+    /// <summary>ARC-AI-1854: the session's plain roll of a skill with no handler of its own (the goal-33 attempt's remaining cases).</summary>
+    public SessionNpcSkillRoll? PlainRoll { get; init; }
     /// <summary>ARC-COMBAT-1776 (<see cref="AreaAiNoticeKind.Skill"/> with the pick-locks skill): the session's answer of an NPC's pick of a lock (<see cref="GameSessionOwner.PickLockByNpc"/>); null when the host did not ask it (no sheet or no lock target).</summary>
     public SessionPickLockResult? PickLock { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
@@ -2404,7 +2406,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (!TryNpc(id, out var npc) || Values(id) is not { } values) return new(1, 1);
         if (NpcCombatMode(id) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(id), true, context);
-        if (target == Pc || _session.QueryCompanion(target).LedByPc && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
+        // ARC-COMBAT-2597 (VC38): the NPC target's leader is followed up the chain to the PC (0x45DDA0), not only the direct leader.
+        if (target == Pc || PcLeader(target) is not null && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
         Face(id, target);
         // ARC-RENDER-038: the attack ART of the animation and the weapon the attacker's body shows (WA1, WA4), its frames, action frame
         // and the rate of its weapon slot; an ART the viewer cannot read plays with the fixed human attack ART's timing.
@@ -3137,24 +3140,44 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
     /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
     /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
-    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). NOT READY: every other skill (the other skills a script might start), which does nothing and
-    /// answers false.
+    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). ARC-AI-1854: the plain-roll skills are <see cref="PlainSkillAttempt"/>. NOT READY: gambling, repair and pick locks through this goal, which do nothing and
+    /// answer false.
     /// </summary>
     [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
         if (skill != AiPassChoice.HealSkill)
-        {
-            Trace(id).Skill = $"skill {skill} on {target}: not ready";
-            _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill });
-            return false;
-        }
+            return PlainSkillAttempt(id, target, skill);
         var heal = HealByNpc(id, target, item, out var refusal);
         Trace(id).Skill = heal is null ? $"heal {target}: {refusal}"
             : $"heal {target} {heal.Disposition} {heal.Failure} success={heal.Check?.Success} hp={heal.Heal?.HitPoints} uses={heal.UsesLeft?.ToString() ?? "-"}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, Heal = heal });
         return heal is { Disposition: GameSessionDisposition.Changed, Check.Success: true };
+    }
+
+    /// <summary>
+    /// ARC-AI-1854 (0x4C7160, the cases with no world write): the skills that have no case of their own in the attempt (bow, melee, throwing, backstab, prowling, haggle, persuasion, firearms), dodge (its incapacity gate), spot trap
+    /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is the
+    /// host's <see cref="CanAct"/> (object flag 0x10000, critter flags 0x60, the session's stun) or a dead NPC (the original's 0x45D800 is approximated by these). NOT READY: gambling (its stored roll 0x4C6560), repair and pick
+    /// locks through this goal (their own handlers: item damage, lock write), the spot trap's target test (0x4BBDD0: a target is non-magical here), and the other skills' UI callbacks (the local PC's messages); a skill
+    /// outside the 16 answers false.
+    /// </summary>
+    private bool PlainSkillAttempt(string id, string target, int skill)
+    {
+        string? refusal = null;
+        SessionNpcSkillRoll? roll = null;
+        if (skill is < 0 or > (int)Skill.DisarmTraps || !GameSessionOwner.IsPlainNpcSkill((Skill)skill)) refusal = "not ready";
+        else if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else
+        {
+            var incapable = !CanAct(id) || (Status(id)?.IsDead ?? false);
+            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable);
+        }
+        Trace(id).Skill = roll is null ? $"skill {skill} on {target}: {refusal}"
+            : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Check?.Critical} second={roll.SecondRoll}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, PlainRoll = roll });
+        return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
 
     /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>
