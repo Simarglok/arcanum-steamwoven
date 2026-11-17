@@ -81,6 +81,33 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
+    /// <summary>
+    /// ARC-WORLD-2503 (the inventory-on-destroy, DD1–DD8): the destroy of created critters (a summon's expiry or dispel, a script's undo) as planned before anything changes: for each critter of <paramref name="critters"/> the walk of
+    /// <see cref="PlanHolderDestroyDrop"/> over its list on its map at <paramref name="cell"/> (the live cell the caller knows, used when there is one critter; else the cell it was created on), and the first refusal of the drops
+    /// (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>), the budgets counted over all the critters' drops together.
+    /// </summary>
+    private (List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk)> Drops, GameSessionFailure Refusal) PlanCreatedCritterDrops(IReadOnlyList<SessionCreatedObject> critters, CellCoord? cell)
+    {
+        var drops = new List<(SessionMapId, CellCoord, List<BodyItem>)>();
+        foreach (var critter in critters)
+        {
+            if (critter.Kind != SessionCreatedKind.Critter) continue;
+            var at = critters.Count == 1 && cell is { } live ? live : critter.Cell;
+            var (walk, refusal) = PlanHolderDestroyDrop(critter.Map, critter.Entity, at, SessionHolderKind.Npc);
+            if (refusal != GameSessionFailure.None) return (drops, refusal);
+            if (walk.Count > 0) drops.Add((critter.Map, at, walk));
+        }
+        var created = drops.Sum(drop => drop.Item3.Count(item => item.Placed is { Source: SessionPlacedSource.Created }));
+        var held = drops.Sum(drop => drop.Item3.Count(item => item.Placed is { } placed && placed.Source != SessionPlacedSource.Created));
+        return (drops, (long)_inventory.Created + created > _limits.MaxCreatedItems || (long)_inventory.Held + held > _limits.MaxPcItems ? GameSessionFailure.BudgetExceeded : GameSessionFailure.None);
+    }
+
+    // The planned drops laid down, each critter's walk in its order (the critter's destroy follows and discards what is left of its list).
+    private void DropCreatedCritterItems((List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk)> Drops, GameSessionFailure Refusal) plan)
+    {
+        foreach (var (map, cell, walk) in plan.Drops) DropWalk(walk, map, cell, worn: true);
+    }
+
     // Each item leaves its holder in the walk's order; each placement sees the items still to come as not yet dropped (as a container's spill does), and a drop schedules the item's decay (0x468090). A worn item (an NPC's) is unequipped first.
     private void DropWalk(List<BodyItem> walk, SessionMapId map, CellCoord cell, bool worn)
     {
