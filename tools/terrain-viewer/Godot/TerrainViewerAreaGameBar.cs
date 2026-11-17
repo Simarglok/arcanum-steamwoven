@@ -37,8 +37,10 @@ public partial class TerrainViewerApp
     /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
+    // ARC-UI-2576: in the Steamwoven layout the barter, identify and repair and reading windows keep the bars (every menu window of the middle band has its family's backdrop between them, SWI-BDR-1; the original hides the
+    // bars for these three); the screens with their own strips (the main menu, the save list) and the palette still hide them.
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen;
+        && !MainMenuOpen && !SaveListOpen && !PaletteOpen && (AreaGameBarPanel.SteamwovenOn || !BarterOpen && !ItemServiceOpen && !ReadingOpen);
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -105,8 +107,9 @@ public partial class TerrainViewerApp
             _gameBarPanel.MessageLog.Render();
         }
         _gameBarPanel.Visible = true;
-        // ARC-UI-2452: the Steamwoven layout fills the middle band with a generated backdrop while a menu window is open (not a dialog, where the world stays in view, nor sleep; nothing otherwise).
-        _gameBarPanel.SetMenuBackdrop(AnyWindowOpen && !WindowOpen(InterfaceMode.Dialog) && !WindowOpen(InterfaceMode.Sleep));
+        // ARC-UI-2452, ARC-UI-2576: the Steamwoven layout fills the middle band with the generated backdrop of the family of the window on top of the interface mode stack while a menu window is open
+        // (SteamwovenBackdrops; the dialog and sleep views keep the world in view, so they have none; nothing otherwise).
+        _gameBarPanel.SetMenuBackdrop(AreaGameBarPanel.SteamwovenOn && AnyWindowOpen ? SteamwovenBackdrops.FamilyOf(_interfaceWindows.Stack.Modes) : null);
         _gameBarPanel.SetClock(_gameClock.Face);
         // ARC-UI-1365 (GB13): the experience strip follows the hero's progress toward the next level (null without a hero or experience data).
         _gameBarPanel.SetExperience(_areaSession?.QueryHeroExperience()?.Progress);

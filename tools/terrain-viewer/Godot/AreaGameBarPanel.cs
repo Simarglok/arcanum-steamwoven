@@ -33,10 +33,12 @@ public partial class AreaGameBarPanel : CanvasLayer
     // sides, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
     private SteamwovenHudPlan? _plan;
     private Control _boards = null!, _bars = null!;
-    private SteamwovenBoardView _topBoard = null!, _bottomBoard = null!, _backdrop = null!;
+    private SteamwovenBoardView _topBoard = null!, _bottomBoard = null!;
+    // ARC-UI-2576: the backdrop of the open menu window's family: one view per piece (two for a two-part window, SWI-BDR-5).
+    private readonly SteamwovenBoardView[] _backdrops = new SteamwovenBoardView[2];
     private CanvasLayer _backdropLayer = null!;
     private readonly ColorRect[] _barRects = [new() { Name = "BarLeft" }, new() { Name = "BarRight" }, new() { Name = "BarTop" }, new() { Name = "BarBottom" }];
-    private bool _menuOpen;
+    private SteamwovenBackdropFamily? _backdropFamily;
     // ARC-UI-2608: a full-width hit area for each band of the Steamwoven layout (the boards and the gaps between the controls take the pointer, as a panel does).
     private readonly Control[] _bandHits = [new() { Name = "TopHit" }, new() { Name = "BottomHit" }];
 
@@ -245,9 +247,12 @@ public partial class AreaGameBarPanel : CanvasLayer
         foreach (var bar in _barRects) { bar.Color = Colors.Black; bar.MouseFilter = Control.MouseFilterEnum.Stop; _bars.AddChild(bar); }
         AddChild(_bars);
         _backdropLayer = new CanvasLayer { Name = "MenuBackdrop", Layer = 3, Visible = false };
-        _backdrop = new SteamwovenBoardView { Name = "Backdrop", MouseFilter = Control.MouseFilterEnum.Ignore };
-        _backdropLayer.AddChild(_backdrop);
-        _backdrop.Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
+        for (var i = 0; i < _backdrops.Length; i++)
+        {
+            _backdrops[i] = new SteamwovenBoardView { Name = i == 0 ? "Backdrop" : "BackdropRight", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+            _backdropLayer.AddChild(_backdrops[i]);
+            _backdrops[i].Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
+        }
         AddChild(_backdropLayer);
         GetViewport().SizeChanged += Place;
         InterfaceHd.Changed += Place;
@@ -433,16 +438,19 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>The scale the strips are drawn at, the same in both strips (the whole <see cref="Factor"/> unless the Steamwoven layout is on).</summary>
     public float StripScale => _strips[AreaBarStrip.Top].Scale.X;
     /// <summary>True while a board of the Steamwoven layout is painted on a worker.</summary>
-    internal bool BoardsPendingForSelfTest => _topBoard.Pending || _bottomBoard.Pending || _backdrop.Pending;
-    internal (SteamwovenBoardView Top, SteamwovenBoardView Bottom, SteamwovenBoardView Backdrop, bool BackdropShown) BoardsForSelfTest => (_topBoard, _bottomBoard, _backdrop, _backdropLayer.Visible);
+    internal bool BoardsPendingForSelfTest => _topBoard.Pending || _bottomBoard.Pending || _backdrops.Any(backdrop => backdrop.Pending);
+    internal (SteamwovenBoardView Top, SteamwovenBoardView Bottom, bool BackdropShown) BoardsForSelfTest => (_topBoard, _bottomBoard, _backdropLayer.Visible);
+    /// <summary>ARC-UI-2576: the family the backdrop is for (null: none asked) and the views of its pieces that show now, with the pixel size of each one's painted texture.</summary>
+    internal (SteamwovenBackdropFamily? Family, IReadOnlyList<(Vector2 Position, Vector2I Pixels)> Shown) BackdropForSelfTest =>
+        (_backdropFamily, [.. _backdrops.Where(backdrop => backdrop.Visible).Select(backdrop => (backdrop.Position, backdrop.PixelSizeForSelfTest))]);
     internal IReadOnlyList<ColorRect> BarsForSelfTest => _barRects;
     internal bool BoardsShownForSelfTest => _boards.Visible;
 
-    /// <summary>ARC-UI-2452: an open menu window gets a generated backdrop over the whole middle band (layer 3, under the windows); the host says it every frame.</summary>
-    public void SetMenuBackdrop(bool open)
+    /// <summary>ARC-UI-2452, ARC-UI-2576: an open menu window gets the generated backdrop of its family over the whole middle band (layer 3, under the windows); null for no menu window. The host says it every frame.</summary>
+    public void SetMenuBackdrop(SteamwovenBackdropFamily? family)
     {
-        if (_menuOpen == open) return;
-        _menuOpen = open;
+        if (_backdropFamily == family) return;
+        _backdropFamily = family;
         if (_plan is { } plan) UpdateSteamwovenParts(plan); else _backdropLayer.Visible = false;
     }
 
@@ -653,10 +661,18 @@ public partial class AreaGameBarPanel : CanvasLayer
         SetBar(_barRects[1], width - bars.Right, 0, bars.Right, height);
         SetBar(_barRects[2], bars.Left, 0, width - bars.Left - bars.Right, bars.Top);
         SetBar(_barRects[3], bars.Left, height - bars.Bottom, width - bars.Left - bars.Right, bars.Bottom);
-        // Shown once its first paint is in (an unpainted backdrop would show the world through for the paint time).
-        _backdropLayer.Visible = _menuOpen && Visible && middle.Height > 0 && _backdrop.Texture is not null;
-        if (_menuOpen && middle.Height > 0)
-            _backdrop.Request(new(ChromeMaterial.WoodDark, ChromeSides.None, Device(middle), scale, originX, 0, bottomRecipe, bottomLegacy, bottomW, bottomH));
+        // ARC-UI-2576: the open menu's family backdrop: one piece, or the two parts of a two-part window that meet at the split (SWI-BDR-5). It is shown once every piece's first paint is in (an unpainted
+        // piece would show the world through for the paint time), and a piece the family does not use stays hidden.
+        var pieces = _backdropFamily is { } family && Visible && middle.Height > 0 ? SteamwovenBackdrops.Pieces(family, plan) : [];
+        var unit = SteamwovenWindowZone.UnitScale(plan);
+        for (var i = 0; i < _backdrops.Length; i++)
+        {
+            if (i >= pieces.Count) { _backdrops[i].Visible = false; continue; }
+            var piece = pieces[i];
+            _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, bottomRecipe, bottomLegacy, bottomW, bottomH));
+            _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
+        }
+        _backdropLayer.Visible = pieces.Count > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible);
     }
 
     private static void SetBar(ColorRect bar, int x, int y, int width, int height)
