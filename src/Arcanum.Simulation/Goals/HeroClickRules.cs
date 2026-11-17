@@ -92,7 +92,8 @@ public static class HeroClickRules
         var enters = !facts.CombatMode && facts.Kind == HeroClickTarget.Critter && !facts.TargetDead && facts.TargetAttacksHero;
         var combat = facts.CombatMode || enters;
         var goal = combat ? InCombat(facts) : OutOfCombat(facts);
-        return new(goal, enters && goal != HeroClickGoal.None);
+        // ARC-COMBAT-1944: the hero enters combat mode before the type switch, even when the combat table then builds nothing (a refused or silent decision).
+        return new(goal, enters);
     }
 
     // The combat-mode table (0x54FCA0): wall, portal, scenery and container use unless Alt attacks; items are picked up; a living critter is attacked (Shift: the attempt); a dead one is looted with Alt only.
