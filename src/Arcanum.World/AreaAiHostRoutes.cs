@@ -426,6 +426,20 @@ public sealed partial class AreaAiHost
         return PlaceAt(npc, row, cell);
     }
 
+    /// <summary>
+    /// ARC-INPUT-1946 (0x4445A0, the ordinary object move 0x43E770 with no offset): stands the body of the dead NPC <paramref name="npc"/> on <paramref name="cell"/>, the hero's own cell included (the hero's click pulls it there), and records the place in the session.
+    /// No tile script is told: a dead body is no walker, and the original's move notification for a corpse is not read (issue #2563). False for an NPC the host does not hold, one that is gone or not dead, or a cell the shown map does not hold.
+    /// </summary>
+    public bool PlaceBody(string npc, CellCoord cell)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (!_npcs.TryGetValue(npc, out var row) || Gone(npc) || Status(npc) is not { IsDead: true } || Tile(npc) is not { } from || !PlaceHeld(cell, heroCellHeld: true)) return false;
+        if (from == cell) return true;
+        Movers.Restore(npc, row.Row.Key, row.Origin, cell, Movers.FacingOf(npc, NeighborDirection.XPlus));
+        RecordPlace(npc);
+        return true;
+    }
+
     // A companion of the shown map is a route NPC: its row is its home map's, its teleport map the session's. Its relocation is its walk's jump.
     private string RelocateFollower(string npc, RouteLocation target, NpcRouteFacts facts)
     {
@@ -568,6 +582,7 @@ public sealed partial class AreaAiHost
 
     // Whether the shown map holds a resident on this world cell: it lies on the chart (a map with a loaded-sector chart, the main map's windows: anywhere on the map, ARC-DEV-119),
     // its tile is admitted and the hero is not on it.
-    private bool PlaceHeld(CellCoord world) =>
-        (_scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world))) && Admitted(new AreaStepCell(world.X, world.Y)) && _scene.HeroCell() != world;
+    // ARC-INPUT-1946: heroCellHeld = the hero's own cell counts as held (a body pulled onto it by the Alt click).
+    private bool PlaceHeld(CellCoord world, bool heroCellHeld = false) =>
+        (_scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world))) && Admitted(new AreaStepCell(world.X, world.Y)) && (heroCellHeld || _scene.HeroCell() != world);
 }

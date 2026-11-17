@@ -451,7 +451,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if ((only is not null && !only.Contains(place.Entity)) || !_npcs.TryGetValue(place.Entity, out var npc) || Gone(place.Entity)) continue;
             // A place the shown map cannot hold (outside the chart, not admitted: a window moved since, or a damaged value) or the hero's own cell is
             // not restored: the NPC stands on its map data's cell, as before the place was state.
-            if (!PlaceHeld(place.World))
+            // ARC-INPUT-1946: a body the hero pulled onto its own cell is restored there (only a dead NPC may lie on the hero's cell).
+            if (!PlaceHeld(place.World, Status(place.Entity) is { IsDead: true }))
             {
                 Trace(npc.Entity).Step = $"place {place.World.X},{place.World.Y} not restored";
                 continue;

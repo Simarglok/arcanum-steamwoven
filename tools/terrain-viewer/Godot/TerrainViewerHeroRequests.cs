@@ -142,6 +142,23 @@ public partial class TerrainViewerApp
                 present ? HeroClickTarget.Critter : HeroClickTarget.Other, TargetDead: talksDead, TargetTalksDead: talksDead, Alt: alt, Shift: shift);
         }
 
+        // ARC-INPUT-1946 (0x4445A0): the Alt click out of combat mode moves a loose item or a dead NPC's body within one tile onto the hero's tile (no goal, no action points).
+        public HeroImmediateResult ImmediateAction(string target)
+        {
+            if (app._areaSession is not { } session || !IsInventoryTarget(target) || !app.InventoryActive || app.UseKeyOf(target) is not { } key
+                || app.AreaInventoryTargetOf(key) is not { } found || app.ActorCell() is not { } hero) return HeroImmediateResult.None;
+            var heroCell = new CellCoord((int)hero.X, (int)hero.Y);
+            switch (found.Kind)
+            {
+                case AreaInventoryTargetKind.GroundItem:
+                    return AreaHeroPull.PullItem(session, found.Entity, heroCell);
+                case AreaInventoryTargetKind.DeadNpc:
+                    return AreaHeroPull.PullBody(app._aiHost, found.Entity, heroCell);
+                default:
+                    return HeroImmediateResult.None;
+            }
+        }
+
         public bool StartTalk(string target, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host) return false;
