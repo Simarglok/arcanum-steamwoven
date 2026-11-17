@@ -216,7 +216,7 @@ public partial class TerrainViewerApp
                 if (foe.Dead) return Godot.Input.IsKeyPressed(Key.Alt) && InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } corpse
                     ? Chebyshev(corpse.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot
                     : AreaHoverAction.None;
-                if (foe.Follower && !LeftAltHeld || IsAreaCompanion(hit) || foe.Build.Combat is null) return AreaHoverAction.None;
+                if (foe.Follower && !LeftAltHeld || foe.Build.Combat is null) return AreaHoverAction.None;
                 if (_areaSession!.QueryHeroAttack() is not { Supported: true } hero || _areaSession.QueryHeroLife() is not { Status.IsActive: true })
                     return AreaHoverAction.None;
                 var reach = hero.Range;
