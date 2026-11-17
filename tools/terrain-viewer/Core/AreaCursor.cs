@@ -100,3 +100,72 @@ public sealed record AreaCursorContent(IReadOnlyDictionary<int, AreaInterfaceArt
         return new(art, failed.Length == 0 ? $"{art.Count} cursor arts" : "failed: " + string.Join("; ", failed));
     }
 }
+
+/// <summary>ARC-UI-2489 (H13): one RGBA contact sheet of the cursor art, for the look checks: the framebuffer holds no cursors (the system draws
+/// them), so the sheet is composed from the art itself. One row for each art in <see cref="AreaCursorArt.ArtNumbers"/> order, its frames left to
+/// right on a grey ground (the art's transparent pixels show), each frame's hot point marked by a red cross over it. Godot-free; the viewer saves it
+/// as a PNG on <c>ARC_AREA_CURSOR_CAPTURE</c> (local, never committed).</summary>
+public static class AreaCursorSheet
+{
+    /// <summary>The gap between frames and rows, in pixels.</summary>
+    public const int Pad = 8;
+
+    private static readonly byte[] Ground = [0x58, 0x58, 0x58, 0xFF];
+    private static readonly byte[] Mark = [0xFF, 0x20, 0x20, 0xFF];
+
+    /// <summary>The sheet of <paramref name="content"/>'s arts that read (an art that did not read leaves no row); null when none did.</summary>
+    public static (int Width, int Height, byte[] Rgba)? Compose(AreaCursorContent content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        var rows = AreaCursorArt.ArtNumbers.Select(number => content.Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0
+            ? load.Frames : null).OfType<IReadOnlyList<AreaInterfaceFrame>>().ToArray();
+        if (rows.Length == 0) return null;
+        var width = Pad + rows.Max(row => row.Sum(f => f.Width + Pad));
+        var height = Pad + rows.Sum(row => row.Max(f => f.Height) + Pad);
+        var rgba = new byte[width * height * 4];
+        for (var i = 0; i < width * height; i++) Array.Copy(Ground, 0, rgba, i * 4, 4);
+        var y = Pad;
+        foreach (var row in rows)
+        {
+            var x = Pad;
+            foreach (var frame in row)
+            {
+                Blend(rgba, width, x, y, frame);
+                Cross(rgba, width, height, x + frame.HotX, y + frame.HotY);
+                x += frame.Width + Pad;
+            }
+            y += row.Max(f => f.Height) + Pad;
+        }
+        return (width, height, rgba);
+    }
+
+    private static void Blend(byte[] sheet, int sheetWidth, int x, int y, AreaInterfaceFrame frame)
+    {
+        for (var row = 0; row < frame.Height; row++)
+        for (var column = 0; column < frame.Width; column++)
+        {
+            var source = (row * frame.Width + column) * 4;
+            var alpha = frame.Rgba[source + 3];
+            if (alpha == 0) continue;
+            var target = ((y + row) * sheetWidth + x + column) * 4;
+            for (var channel = 0; channel < 3; channel++)
+                sheet[target + channel] = (byte)((frame.Rgba[source + channel] * alpha + sheet[target + channel] * (255 - alpha)) / 255);
+            sheet[target + 3] = 0xFF;
+        }
+    }
+
+    private static void Cross(byte[] sheet, int width, int height, int cx, int cy)
+    {
+        for (var d = -2; d <= 2; d++)
+        {
+            Put(sheet, width, height, cx + d, cy);
+            Put(sheet, width, height, cx, cy + d);
+        }
+    }
+
+    private static void Put(byte[] sheet, int width, int height, int x, int y)
+    {
+        if (x < 0 || y < 0 || x >= width || y >= height) return;
+        Array.Copy(Mark, 0, sheet, (y * width + x) * 4, 4);
+    }
+}

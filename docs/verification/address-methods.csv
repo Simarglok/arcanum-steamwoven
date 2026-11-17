@@ -981,6 +981,7 @@ tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerCanSpeak,exe
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerHurt,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SayFollowerLine,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SpeakerCanSpeakFacts,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerHeldMouse.cs,PollHeldMouse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,GameCursorPress,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroBeginThrow,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroThrowItem,pending,
