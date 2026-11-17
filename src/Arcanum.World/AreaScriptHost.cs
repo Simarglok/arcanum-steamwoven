@@ -203,9 +203,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int? MasteredCollege(ScrObjectRef obj) => Answering.MasteredCollege(obj);
 
     /// <summary>ARC-DEV-178 (B19, GR1): the standard effective reaction (0x4C0CC0) of one of this host's speakers toward the PC, read as the dialog's
-    /// reaction conditions read it (the session's reaction with the speaker's and the PC's facts, the enemy list included); null (the dispatch ends
-    /// as not modelled) for any other pair, whose facts this host does not hold.</summary>
-    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc) => IsPc(pc) && Speaker(npc) is { } speaker ? _state.Reaction(speaker.Index) : null;
+    /// reaction conditions read it (the session's reaction with the speaker's and the PC's facts, the enemy list included); ARC-SCRIPT-2505: any other NPC of the shown map toward the PC is the use host's answer
+    /// (<see cref="AreaUseScriptHost.ReactionOf"/>); null (the dispatch ends as not modelled) for any other pair.</summary>
+    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc) => IsPc(pc) && Speaker(npc) is { } speaker ? _state.Reaction(speaker.Index) : Queries?.ReactionOf(npc, pc);
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
