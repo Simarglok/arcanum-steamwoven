@@ -125,7 +125,7 @@ public sealed partial class AreaAiHost
     }
 
     // The insert check for an NPC (0x466510): the item's weight with the NPC as holder against its carry weight, then the room in its grid (ARC-AI-1654); the PC-only Technophobia does not apply to an NPC's list.
-    private SessionInsertVerdict NpcInsertVerdict(string npc, SessionMapInventory? view, SessionInventoryItem item)
+    private SessionInsertVerdict NpcInsertVerdict(string npc, SessionMapInventory? view, SessionInventoryItem item, bool room = true)
     {
         if (Build(npc) is not { } build || LifeState(npc) is not { } state) return SessionInsertVerdict.TooHeavy;
         var aptitude = Math.Clamp(build.EffectiveStat(CharacterStat.MagickTechAptitude, state), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
@@ -135,8 +135,15 @@ public sealed partial class AreaAiHost
         var total = CarryRules.TotalWeight(held.Select(CarriedBy), CarryHolder.Critter, aptitude);
         if (!CarryRules.Fits(total, CarryRules.ItemWeight(CarriedBy(item), CarryHolder.Critter, aptitude), carry)) return SessionInsertVerdict.TooHeavy;
         // ARC-AI-1654: then the room (code 2): a free place in the NPC's 10 x 12 grid, an ammunition stack of the same prototype needing none.
-        return _session.QueryHolderRoom(npc, item) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.NoRoom;
+        return !room || _session.QueryHolderRoom(npc, item) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.NoRoom;
     }
+
+    /// <summary>
+    /// ARC-UI-2159 (0x466510 for an item that goes onto a wear slot, executor 0x466640): the insert check of a barter sale onto a slot of the merchant's doll, which is the weight test alone (the item's weight with the merchant as holder against its effective carry weight,
+    /// code 1) and no grid room, as the NPC's wear takes none; null when the host holds no combat build or life state of the merchant (its carry weight is then unknown).
+    /// </summary>
+    public SessionInsertCheck? SlotInsertCheck(string npc) =>
+        Build(npc) is null || LifeState(npc) is null ? null : item => NpcInsertVerdict(npc, null, item, room: false);
 
     // An item as the weight reads it: the session's tracked weight facts first, else its listed facts; ammunition by its units.
     private CarriedItem CarriedBy(SessionInventoryItem item)

@@ -359,8 +359,11 @@ public sealed class AreaBarter
         if (test != EquipmentRefusal.None) return Refused("");
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
         var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
-        var result = _session.BarterSellWorn(_session.Version, Merchant.Entity, entity, slot, wearable, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
-            identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session));
+        // ARC-UI-2159: the merchant wears it (the wield context gives its scripts their wearer) after the weight test of 0x466510; a merchant the AI host holds no build of takes the diagnostic check.
+        var map = _session.QueryActor().Map;
+        var result = _session.BarterSellWorn(_session.Version, Merchant.Entity, entity, slot, wearable, price, line.Kind,
+            _inventory.NpcSlotInsertCheck?.Invoke(Merchant.Entity) ?? AreaInventoryHost.DiagnosticInsertCheck,
+            identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session), npcWearer: _inventory.NpcWearer?.Invoke(map, Merchant.Entity));
         // A slot the merchant's list shows filled goes back silently (the original never swaps an NPC's slot); the other refusals print as a grid sale's do.
         if (result.Disposition != GameSessionDisposition.Changed && result.Item is null && result.Failure == GameSessionFailure.InvalidEquipment) return Refused("");
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);

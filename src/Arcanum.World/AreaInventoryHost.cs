@@ -375,6 +375,9 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-UI-2138: an NPC as the wearer of the wear test 0x464D20 (race, gender, crippled arms, in its current life state), asked before a hero's item is sold onto a slot of a merchant's doll; null: the host does not know it (the item goes back).</summary>
     public Func<SessionMapId, string, Arcanum.Simulation.Equipment.EquipmentWearer?>? NpcWearerFacts { get; set; }
 
+    /// <summary>ARC-UI-2159: the weight test of an item put on a wear slot of an NPC (a merchant's doll in a barter window, 0x466510 of the wear 0x466640), or null when the host cannot say (the sale then takes the diagnostic check).</summary>
+    public Func<string, SessionInsertCheck?>? NpcSlotInsertCheck { get; set; }
+
     /// <summary>The dialog's negative IN through the session (<see cref="SessionDialogInventoryPort"/>) with this insert check.</summary>
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session), entity => AttachHolderMap(session, entity), entity => NpcWearer?.Invoke(session.QueryActor().Map, entity));
