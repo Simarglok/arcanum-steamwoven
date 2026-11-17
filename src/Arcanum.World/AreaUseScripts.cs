@@ -293,6 +293,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
         HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
 
+    /// <summary>
+    /// ARC-SCRIPT-2513 (ledger BS3d): the set a taking-damage script (attachment point 23) runs under (<see cref="RunTakingDamage"/>): <see cref="HeartbeatAdmission"/> plus play script eye candy (120) and destroy (68), which the container script
+    /// 2827 (the one installed site, on the main map) uses to destroy the sceneries around it and play their eye candy. The original's executor (0x447220) has no per-point restriction (ledger BS3, BS1); the narrow set only keeps the
+    /// scripts this host can apply whole, so a script that holds anything else is still refused at the plan. A destroy of a scenery is applied by <see cref="DestroyScenery"/>.
+    /// </summary>
+    public static ScrAdmissionSet TakingDamageAdmission { get; } = new("S2-area-taking-damage-heartbeat-eye-candy-destroy",
+        HeartbeatAdmission.Conditions,
+        HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
     public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
@@ -1398,7 +1408,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the taking-damage script (attachment point 0x17, 23) of <paramref name="victim"/>, an object of the shown map (any type: the original runs it for portals, containers, scenery and items too), run by the
     /// damage apply 0x4B4390 before the destroyed, invulnerable and wall gates and before the resistance step. The triggerer is the damage's attacker (<paramref name="attacker"/>, null for a damage without one: a script's own damage,
-    /// the null handle), the extra object none, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
+    /// the null handle), the extra object none, line 0, under <see cref="TakingDamageAdmission"/> (ARC-SCRIPT-2513: the heartbeat set plus play script eye candy and destroy); its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
     /// call only) skips it: no run. The caller reads <see cref="TakingDamageVetoes"/>. An object that is not a row of the shown map, or has no slot at the point, has no script (the step goes on).
     /// </summary>
     public AreaScriptedUse RunTakingDamage(string victim, ScrObjectRef? attacker, ScrRuleProfile rules)
@@ -1413,7 +1423,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _inTakingDamage = true;
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = TakingDamageAdmission });
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
