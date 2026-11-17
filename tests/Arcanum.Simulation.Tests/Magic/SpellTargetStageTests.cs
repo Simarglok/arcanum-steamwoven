@@ -82,7 +82,26 @@ public sealed class SpellTargetStageTests
         Assert.IsTrue(SpellTargetStage.EnvironmentAllows(SpellTargetStage.DetectingInvisible, 0, true), "extraordinary perception");
         Assert.IsFalse(SpellTargetStage.EnvironmentAllows(Air, null, true), "no local player");
         var reflections = SpellRunTable.Empty.With(Run(4, target: Orc) with { SetSpellFlags = Reflect, Parent = Mage });
-        Assert.AreEqual(Mage, SpellTargetStage.FlagCaster(reflections, Orc, Reflect, Reflect));
-        Assert.IsNull(SpellTargetStage.FlagCaster(reflections, Orc, 0, Reflect), "the target must carry the flag");
+        Assert.AreEqual(Mage, SpellTargetStage.FlagCaster(reflections, r => r.Target?.Id == Orc.Id, r => r.SetSpellFlags, Reflect, Reflect));
+        Assert.IsNull(SpellTargetStage.FlagCaster(reflections, r => r.Target?.Id == Orc.Id, r => r.SetSpellFlags, 0, Reflect), "the target must carry the flag");
+    }
+
+    [TestMethod]
+    public void The_flag_controller_reads_the_summoned_and_object_lists_in_slot_order()
+    {
+        // ARC-WORLD-2144 (0x459040 in full): the holder test replaces the target match; the first run in slot order that sets every mask bit and holds the object answers with its parent.
+        const int Mind = 0x8000000;
+        var summoner = Mage;
+        var table = SpellRunTable.Empty
+            .With(Run(1, target: Orc) with { SetSpellFlags = Mind >> 1, Parent = Orc })
+            .With(Run(2, target: Orc) with { SetSpellFlags = Mind, Parent = summoner })
+            .With(Run(3, target: Orc) with { SetSpellFlags = Mind, Parent = Orc });
+        Assert.AreEqual(summoner, SpellTargetStage.FlagCaster(table, run => run.Id == 2 || run.Id == 3, r => r.SetSpellFlags, Mind, Mind), "the first run that sets the whole mask and holds the object");
+        Assert.AreEqual(summoner, SpellTargetStage.FlagCaster(table, run => run.Id == 2, r => r.SetSpellFlags, Mind, Mind), "a creature of the summoned list, not the run's target");
+        Assert.IsNull(SpellTargetStage.FlagCaster(table, run => run.Id == 1, r => r.SetSpellFlags, Mind, Mind), "the run lacks the mask bits");
+        Assert.IsNull(SpellTargetStage.FlagCaster(table, _ => true, r => r.SetSpellFlags, 0, Mind), "the object carries no mind-controlled flag");
+        Assert.IsNull(SpellTargetStage.FlagCaster(table, _ => false, r => r.SetSpellFlags, Mind, Mind), "no run holds the object");
+        Assert.AreEqual(Orc, SpellTargetStage.FlagCaster(table, run => run.Id == 1, r => r.SetSpellFlags | Mind, Mind, Mind), "the host's derived word decides, not the stored one");
+        Assert.IsNull(SpellTargetStage.FlagCaster(SpellRunTable.Empty.With(Run(5, target: Orc) with { SetSpellFlags = Mind, Parent = summoner, Source = null }), _ => true, r => r.SetSpellFlags, Mind, Mind), "a run without a source is a free slot");
     }
 }
