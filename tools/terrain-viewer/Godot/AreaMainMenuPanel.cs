@@ -25,6 +25,7 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaMainMenuPanel : CanvasLayer
 {
     private ColorRect _backdrop = null!;
+    private SteamwovenBoardView _frameBackdrop = null!;
     private PanelContainer _panel = null!;
     private Label _header = null!;
     private VBoxContainer _buttons = null!;
@@ -121,6 +122,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
         Layer = 4;
         _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = DiagnosticBackdrop, MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
+        // ARC-UI-2577: the generated backdrop of the Steamwoven full-screen menus (over the frame, under the art; the window outside the frame is the black of _backdrop).
+        _frameBackdrop = new SteamwovenBoardView { Name = "MainMenuFrameBackdrop", Visible = false };
+        AddChild(_frameBackdrop);
         _art = new AreaMenuArtView();
         _art.ButtonPressed += index => ButtonPressed?.Invoke(index);
         _art.SoundRequested += id => SoundRequested?.Invoke(id);
@@ -472,12 +476,14 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
+        UpdateFrameBackdrop();
         _modal.Position = Vector2.Zero; _modal.Size = size;
         if (_dialogScreen.Visible)
         {
             // The plate the menu's art stands on (the dialog's point is a point of the original's 800 × 600 screen).
             var (factor, position) = _art.PlateFit();
             _dialogScreen.Scale = new Vector2(factor, factor); _dialogScreen.Position = position;
+            _dialogScreen.TextureFilter = _art.TextureFilter; // the box samples as the plate under it does (ARC-UI-2577)
         }
         if (_art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible)
         {
@@ -493,6 +499,21 @@ public partial class AreaMainMenuPanel : CanvasLayer
         var height = _panel.GetCombinedMinimumSize().Y;
         _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
     }
+
+    /// <summary>ARC-UI-2577: the generated backdrop over the frame while a full-screen menu is drawn by the Steamwoven layout; shown once its first paint is in (until then the black of the window shows).</summary>
+    private void UpdateFrameBackdrop()
+    {
+        var plan = _art.Visible ? _art.FullScreenPlan : null;
+        if (plan is null) { _frameBackdrop.Visible = false; return; }
+        var frame = plan.Frame;
+        // The grain is laid out in original units from the zone's top left, as the layout's scale says.
+        _frameBackdrop.Request(new(ChromeMaterial.WoodDark, ChromeSides.None, new Rect2I(frame.X, frame.Y, frame.Width, frame.Height), plan.Factor,
+            (frame.X - plan.Zone.X) / plan.Factor, (frame.Y - plan.Zone.Y) / plan.Factor, null, null, 0, 0));
+        _frameBackdrop.Visible = _frameBackdrop.Texture is not null;
+    }
+
+    /// <summary>ARC-UI-2577: for the self-test: the generated backdrop and whether it shows.</summary>
+    internal (SteamwovenBoardView Backdrop, bool Shown) FrameBackdropForSelfTest => (_frameBackdrop, _frameBackdrop.Visible);
 
     private bool _dockedBelow, _optionsArt;
 

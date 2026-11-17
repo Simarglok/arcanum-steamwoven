@@ -648,6 +648,44 @@ public sealed class AreaCombatPointScriptTests
     }
 
     [TestMethod]
+    public void Adjust_stat_of_a_critter_created_at_run_time_or_of_an_NPC_of_another_loaded_map_writes_its_alignment_like_a_shown_map_NPC()
+    {
+        // ARC-SCRIPT-2574 (CP13 tail): 921 is -200 on the triggerer. A created critter (the world's CreatedRow answers its base record) and an NPC row of another given map are written as the shown map's NPC is (the entry npc.stat.19 by identity).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var victim = Row(3, NpcType, 0, ScrPoint.Heartbeat);
+            var created = CritterRow(5, 0);
+            var other = CritterRow(6, 0);
+            var otherEntity = AreaConversationState.EntityId(other);
+            var map = new AreaInventoryMap(2, new([new(otherEntity, SessionHolderKind.Npc, false, false, [], [])], []), new Dictionary<string, AreaObjectRecord> { [otherEntity] = other });
+            var host = new AreaUseScriptHost(session, 1, [weapon, victim], [map], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                CreatedRow: entity => entity == AreaUseScriptHost.EntityId(created) ? created : null));
+            var createdRef = Ref(created);
+            var otherRef = new ScrObjectRef(2, otherEntity);
+            Assert.IsTrue(host.CanAdjustStat(createdRef, 19));
+            Assert.IsTrue(host.CanAdjustStat(otherRef, 19));
+            Assert.IsFalse(host.CanAdjustStat(createdRef, 0), "another stat is not modelled");
+            Assert.IsFalse(host.CanAdjustStat(new ScrObjectRef(1, AreaUseScriptHost.EntityId(CritterRow(7, 0))), 19), "an object with no row here is unknown");
+            int Alignment(AreaObjectRecord row) => AreaWrittenCritterFields.Read(session, row)!.Critter!.BaseStats[19];
+            foreach (var (row, wielder) in new[] { (created, createdRef), (other, otherRef) })
+            {
+                Assert.AreEqual(0, Alignment(row));
+                var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), wielder, Ref(victim), session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                Assert.AreEqual(-200, Alignment(row));
+                Assert.AreEqual(-200, session.QueryCritterIndexedWrites(AreaConversationState.EntityId(row)).Stats[19]);
+                foreach (var expected in new[] { -400, -600, -800, -1000, -1000 })
+                {
+                    Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), wielder, Ref(victim), session.Rules.Scripts).Outcome);
+                    Assert.AreEqual(expected, Alignment(row), "the setter clamps at -1000");
+                }
+            }
+        });
+    }
+
+    [TestMethod]
     public void Adjust_stat_of_an_NPC_wielder_or_without_a_hero_ends_the_run_as_not_modelled_and_changes_nothing()
     {
         WithContent(content =>
