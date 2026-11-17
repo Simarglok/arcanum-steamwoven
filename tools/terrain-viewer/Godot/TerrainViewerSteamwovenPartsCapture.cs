@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-UI-2510: a local capture (ARC_AREA_BAR_CAPTURE, never in git) of the parts that hang from the screen of the Steamwoven layout: two follower portraits, one floating line over a marked point, and the outline of
+    // ARC-UI-2510: a local capture (ARC_AREA_BAR_CAPTURE, never in git) of the parts that hang from the screen of the Steamwoven layout: two follower portraits, one text bubble over a marked point, and the outline of
     // the free area the windows lie in. Uses only the parts' public places, so the same capture runs on the build before the change.
     private async Task CaptureSteamwovenPartsAsync(string tag, Func<int, Task> frames)
     {
@@ -25,6 +25,8 @@ public partial class TerrainViewerApp
             if (_portraitContent is { } content) portraits.Bind(InterfaceTextures(content.Art));
             portraits.Show(Enumerable.Range(0, 3).Select(i => ($"capture:{i}", $"F{i}", (AreaLife?)new AreaLife(100 - 20 * i, 100, 60, 60, 0), (Texture2D?)null)).ToArray());
             layer.Anchor = _ => new Vector2(size.X / 2, size.Y / 2);
+            layer.BubbleAnchor = _ => new Vector2(size.X / 2, size.Y / 2);
+            layer.AddBubble("capture:0", "A text bubble over a character, drawn in the original's pixels", BubbleColor.White, (long)Time.GetTicksMsec());
             layer.Field.Add("capture:0", "Floating line", FloaterColor.White);
             await frames(3);
             for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
