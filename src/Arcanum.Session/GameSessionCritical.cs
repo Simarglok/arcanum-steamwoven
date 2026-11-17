@@ -82,7 +82,8 @@ public sealed partial class GameSessionOwner
     /// <summary>The cell of an NPC's seed item a critical dropped, or null.</summary>
     internal CellCoord? DroppedCell(SessionMapId map, InventoryDomain.Seed seed, string item)
     {
-        if (!seed.HolderOf.TryGetValue(item, out var holder) || seed.Holders[holder].Kind != SessionHolderKind.Npc) return null;
+        // ARC-WORLD-2502: a container's seed item the script destroy of the container took out (0x4639E0) lies loose the same way.
+        if (!seed.HolderOf.TryGetValue(item, out var holder) || seed.Holders[holder].Kind is not (SessionHolderKind.Npc or SessionHolderKind.Container)) return null;
         if (_maps.Get(map, MapChangeKey.ForEntity(item, ItemDroppedProperty)) is not { } packed || packed <= 0) return null;
         return new CellCoord((int)((packed - 1) & 0xFFFFFF), (int)(((packed - 1) >> 24) & 0xFFFFFF));
     }

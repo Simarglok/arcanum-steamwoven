@@ -24,17 +24,20 @@ public sealed partial class GameSessionOwner
 
     // The generation a breaking container with flag 0x200 will run, planned before the break is written (the plan changes nothing): null for
     // a container that needs none or whose generation the session cannot run, which then spills as before.
-    private BreakGeneration? PlanBreakGeneration(SessionObjectTarget target)
+    private BreakGeneration? PlanBreakGeneration(SessionObjectTarget target) => PlanBreakGeneration(target.Map, target.Entity);
+
+    // ARC-WORLD-2502: the same planning for a container the script destroy removes (0x4639E0 runs the regeneration before its walk too).
+    private BreakGeneration? PlanBreakGeneration(SessionMapId map, string entity)
     {
         // The pass's world when it can answer, else the host's own.
         var world = PassWorldAs<ISessionRestockWorld>() is { RestockReady: true } passed ? passed : GenerateOnceWorld?.Invoke();
         // The generation and the break are two revisions.
-        if (_revision >= long.MaxValue - 1 || world is not { RestockReady: true } || !_inventory.Seeds.TryGetValue(target.Map, out var seed) ||
-            !seed.Holders.TryGetValue(target.Entity, out var row) || row.Kind != SessionHolderKind.Container ||
-            world.RestockFacts(target.Map, target.Entity) is not { Kind: RestockHolderKind.Container } found) return null;
-        var facts = GeneratedFacts(target.Map, target.Entity, found);
+        if (_revision >= long.MaxValue - 1 || world is not { RestockReady: true } || !_inventory.Seeds.TryGetValue(map, out var seed) ||
+            !seed.Holders.TryGetValue(entity, out var row) || row.Kind != SessionHolderKind.Container ||
+            world.RestockFacts(map, entity) is not { Kind: RestockHolderKind.Container } found) return null;
+        var facts = GeneratedFacts(map, entity, found);
         if ((facts.ContainerFlags & RestockRules.GeneratedOnceFlag) == 0) return null;
-        var plan = PlanRestock(world, target.Map, seed, target.Entity, facts);
+        var plan = PlanRestock(world, map, seed, entity, facts);
         return plan.Outcome == SessionRestockOutcome.Unsupported || !RestockFits([plan]) ? null : new(world, plan);
     }
 }

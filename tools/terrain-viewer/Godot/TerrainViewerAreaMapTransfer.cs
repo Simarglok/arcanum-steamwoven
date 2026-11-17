@@ -293,6 +293,8 @@ public partial class TerrainViewerApp
             ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
             // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
+            // ARC-SCRIPT-2506 (TI5): the made critter of a script's transform takes the old NPC's hit-point and fatigue percentages through the session's life.
+            CarryVitals: (entity, hitPointPercent, fatiguePercent) => CarryTransformVitals(owner, entity, hitPointPercent, fatiguePercent),
             // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
             ScriptAttack: (attacker, victim) =>
             {
