@@ -105,4 +105,29 @@ public sealed class CreatedCritterDestroyDropTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyCreatedObjects(owner.Version, [critter.Entity]).Disposition);
         Assert.AreEqual("gem", owner.QueryPlacedItems().Single().Entity);
     }
+
+    [TestMethod]
+    public void ASecondDestroyChangesNothingAndTheListDestroySkipsAScenery()
+    {
+        var (owner, critter) = WithGiven();
+        using var _ = owner;
+        var scenery = owner.CreateObject(owner.Version, SessionCreatedKind.Scenery, 3000, Exterior, new(90, 90), 0, 0).Object!;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyCreatedObjects(owner.Version, [scenery.Entity, critter.Entity]).Disposition);
+        Assert.AreEqual("gem", owner.QueryPlacedItems().Single().Entity);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.DestroyCreatedObject(owner.Version, critter.Entity).Disposition);
+        Assert.AreEqual(1, owner.QueryPlacedItems().Count, "nothing dropped twice");
+    }
+
+    [TestMethod]
+    public void TheDroppedItemAndItsDecaySurviveASave()
+    {
+        var (owner, critter) = WithGiven();
+        using var _ = owner;
+        var before = owner.Version;
+        var result = owner.DestroyCreatedObject(before, critter.Entity);
+        Assert.AreEqual(before.Revision + 1, result.Version.Revision, "one revision for the drops and the destroy");
+        using var back = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        CollectionAssert.AreEquivalent(owner.QueryPlacedItems().ToArray(), back.QueryPlacedItems().ToArray());
+        CollectionAssert.AreEqual(new[] { "gem" }, back.QueryItemDecays().Select(decay => decay.Entity).ToArray());
+    }
 }
