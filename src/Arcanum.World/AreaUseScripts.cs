@@ -2932,7 +2932,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         LastTransformed = null;
         var old = request.Object;
         var cell = Place(old)!.Value;
-        var percents = TransformPercents(_world!.Vitals!(old.Code)!.Value);
+        // The plan's vitals may have moved since (an earlier request of the run): read again, refuse on any that cannot carry.
+        if (_world?.Vitals?.Invoke(old.Code) is not { MaxHitPoints: > 0, MaxFatigue: > 0 } oldVitals) return null;
+        var percents = TransformPercents(oldVitals);
         var made = _session.CreateObject(_session.Version, SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell);
         if (made.Object is not { } critter) return null;
         LastTransformed = critter;
@@ -2944,18 +2946,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             LastTransformed = null;
             return null;
         }
+        // The earlier requests and the creation may have used the session's budgets since the plan: asked again before anything else applies.
+        if (_session.DestroyMapNpcRefusal(new SessionMapId(old.Map), old.Code, cell) is not null) return Undo();
         if (percents is not (100, 100) && _world.CarryVitals?.Invoke(critter.Entity, percents.HitPoints, percents.Fatigue) != true) return Undo();
         // F6: the old object's destroy script runs first; a return of 0 keeps it (the creation stands either way), a run that could not apply leaves everything as it was.
         if (Slot(old, ScrPoint.Destroy) is { Script: > 0 })
         {
-            if (!_destroyingScenery.Add(old.Code)) return Undo();
-            try
-            {
-                var ran = RunDestroyPoint(old.Code, _lastRules ?? _session.Rules.Scripts);
-                if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return Undo();
-                if (DyingStops(ran)) return new ScrObjectRef(_shownMap, critter.Entity);
-            }
-            finally { _destroyingScenery.Remove(old.Code); }
+            var ran = RunDestroyPoint(old.Code, _lastRules ?? _session.Rules.Scripts);
+            if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return Undo();
+            if (DyingStops(ran)) return new ScrObjectRef(_shownMap, critter.Entity);
         }
         // F5: a follower of the PC leaves the party (the same forced leave as a disband, NS1); an NPC's leader and followers are unlinked by the session's destroy.
         if (FollowsPc(old))
