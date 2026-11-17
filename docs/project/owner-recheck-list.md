@@ -375,7 +375,7 @@ Compare in both games with the same hero (Divination college: See Contents 6, Re
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick picks an item of the hero's own inventory window only; an item of a loot, steal or barter window is not a target (ARC-MAGIC-1128).
+- Divine Magick picks an item of the hero's own inventory window or of a loot window kept open (ARC-MAGIC-1336); the original closes a barter or steal window when a spell on an inventory item starts, so their items are not targets (0x57BC70).
 
 ## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
 

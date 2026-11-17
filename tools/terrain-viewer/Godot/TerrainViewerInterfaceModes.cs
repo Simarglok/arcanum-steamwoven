@@ -217,9 +217,9 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-111 (SA52): the hero's state the window openers refuse for.</summary>
     private (bool Dead, bool Unconscious) HeroDownState() => _areaSession?.QueryHeroLife()?.Status is { } life ? (life.IsDead, life.IsUnconscious) : (false, false);
 
-    /// <summary>ARC-MAGIC-1128: a spell's or an item's target mode stands over the player's own inventory window (the spell's target area has the inventory bit,
+    /// <summary>ARC-MAGIC-1128: a spell's or an item's target mode stands over the player's own inventory window or, ARC-MAGIC-1336, a loot window (the spell's target area has the inventory bit,
     /// IA4, SU3): the window is the cursor's picking surface, so it does not drop the target.</summary>
-    private bool TargetOverInventory => (TargetModeOpen(InterfaceMode.SpellTarget) || _itemAiming is not null && TargetModeOpen(InterfaceMode.ItemTarget)) && WindowOpen(InterfaceMode.Inventory);
+    private bool TargetOverInventory => (TargetModeOpen(InterfaceMode.SpellTarget) || _itemAiming is not null && TargetModeOpen(InterfaceMode.ItemTarget)) && (WindowOpen(InterfaceMode.Inventory) || WindowOpen(InterfaceMode.Loot));
 
     /// <summary>ARC-DEV-111 (SA51, 0x541180): what drops an open target mode. A window that opens pops it (SA40) and so do the palette, the
     /// death cover and the bug report; the in-play menu does not (it is no mode: it changes nothing on the stack, and Continue returns to the

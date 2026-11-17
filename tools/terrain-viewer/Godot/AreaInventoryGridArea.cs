@@ -415,8 +415,16 @@ public partial class AreaInventoryGridArea : Control
         if (Mode == AreaInventoryMode.Contents && !ArrangeAt(frame)) { QueueRedraw(); return; }
         if (TargetPicking)
         {
-            // The own window's grid and doll only: the loot, steal and barter looks name their items by their own layouts (not ready for a target).
-            if (!BarterLook && !LootLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
+            // ARC-MAGIC-1336 (0x573850, IW44): the loot window (and the steal window, which the activation closes first) names the item under the pointer by its own layout, the holder's grid and doll
+            // and the hero's; its doll and bag buttons are the button system's and take the press first. The barter window is closed by the activation, so it has no target.
+            if (LootLook)
+            {
+                _toggleDown = ToggleAt(frame);
+                if (_toggleDown is not null) { QueueRedraw(); return; }
+                if (AreaLootArtLayout.Press(_view, LootHit(frame)) is { } lootPicked) Callable.From(() => ItemPicked?.Invoke(lootPicked)).CallDeferred();
+                return;
+            }
+            if (!BarterLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
                 Callable.From(() => ItemPicked?.Invoke(picked)).CallDeferred();
             return;
         }
