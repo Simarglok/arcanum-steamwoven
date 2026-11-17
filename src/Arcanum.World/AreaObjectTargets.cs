@@ -154,7 +154,9 @@ public sealed class AreaObjectTargets
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
             or SessionObjectCondition.Off).Select(pair => pair.Key)
             .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
-                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)).Select(pair => pair.Key)).ToHashSet();
+                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)
+                // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is no object of this map's lists (the original moves its record; this map's away change names where it stands).
+                || session.QueryMapChange(_map, AreaCompanionPlacement.MapKey(pair.Value.Entity)) is { } away and >= 1 && away != _map.RuntimeMap).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);

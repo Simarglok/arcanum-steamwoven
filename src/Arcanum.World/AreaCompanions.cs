@@ -640,7 +640,8 @@ public sealed class AreaCompanionGroup
             : Arrive(follower.Entity, follower.Home, follower.HomeWorld, from, destination, arrival, facing);
     }
 
-    private static IReadOnlyList<MapChangeEdit> Arrive(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing) =>
+    /// <summary>ARC-WORLD-2039: the edits of <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for an NPC known by its entity, its home map and its stored cell there (a free NPC a script's teleport sends to another map).</summary>
+    public static IReadOnlyList<MapChangeEdit> Arrive(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing) =>
     [
         new(from, AreaCompanionPlacement.Key(entity), null),
         .. AreaCompanionPlacement.Edits(entity, home, homeWorld, destination, arrival, facing),
