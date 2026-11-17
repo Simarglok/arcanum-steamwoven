@@ -113,7 +113,7 @@ public sealed class AreaObjectTargets
         ArgumentNullException.ThrowIfNull(session);
         if (_objects.TryGetValue(key, out var found))
         {
-            if (session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return null;
+            if (session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off || SceneryOff(session, found)) return null;
             // ARC-SCRIPT-2386 (IV13, screen pick 0x43D9F0): a switched-off item (a script's toggle) is not a target.
             if (found.Kind == DamageableObjectKind.Item && session.QueryItemOff(_map, found.Entity, dataOff: false)) return null;
             var read = CombatFieldReader.ReadBreakable(found.Row);
@@ -142,6 +142,17 @@ public sealed class AreaObjectTargets
 
     private (GameSessionVersion Version, IReadOnlySet<AreaObjectKey> Keys)? _gone;
 
+    /// <summary>
+    /// ARC-SCRIPT-2324 (ledger OT8): whether a scenery's off flag (0x2) is set now: the map data's bit, or the record of a script's toggle state (56) over it
+    /// (<see cref="GameSessionOwner.QueryObjectOff"/>). Any other static object type is never asked: only a scenery is toggled and read as off.
+    /// </summary>
+    private bool SceneryOff(GameSessionOwner session, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind) found) =>
+        found.Kind == DamageableObjectKind.Scenery && session.QueryObjectOff(_map, found.Entity, DataOff(found.Row));
+
+    /// <summary>ARC-SCRIPT-2324: the object flag "off" (0x2) of a row's map data.</summary>
+    internal static bool DataOff(AreaObjectRecord row) =>
+        row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags and >= int.MinValue and <= uint.MaxValue } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
+
     /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off, since ARC-SCRIPT-052
     /// those a script destroyed): the view no
     /// longer draws them, and since ARC-WORLD-065 they no longer block a step (the live overlay moves their T0 records). The same set is returned while the session's version is
@@ -152,7 +163,7 @@ public sealed class AreaObjectTargets
         var version = session.Version;
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
-            or SessionObjectCondition.Off).Select(pair => pair.Key)
+            or SessionObjectCondition.Off || SceneryOff(session, pair.Value)).Select(pair => pair.Key)
             .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
                 || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)
                 // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is no object of this map's lists (the original moves its record; this map's away change names where it stands).
