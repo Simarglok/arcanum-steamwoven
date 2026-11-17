@@ -2213,8 +2213,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.HealPoison)
             {
-                // VT3: the PC or an NPC of the shown map; the level falls by the amount to 0 at most through the session's life step (the stat setter's timer event, ledger PZ1, PZ3).
-                if (request.Value > 0 && (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object)))
+                // VT3: the PC or an NPC of the shown map; the level falls by the amount to 0 at most through the session's life step (the stat setter's timer event, ledger PZ1, PZ3); a negative amount raises it (ARC-SCRIPT-1593).
+                if (request.Value != 0 && (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object)))
                     LastHealLife = _world!.ScriptHealLife!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, 0, request.Value);
                 continue;
             }
@@ -2814,9 +2814,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.HealPoison)
             {
-                // VT3: a negative amount raises the level in the original (the level minus the amount); that is not modelled.
+                // VT3: a negative amount raises the level (the level minus the amount, ARC-SCRIPT-1593): the life step is asked with the negative amount.
                 if (_world?.ScriptHealLife is null) return "heal poison needs the session's life step";
-                if (request.Value < 0) return "heal poison of a negative amount raises the poison level, which is not modelled";
                 continue;
             }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)

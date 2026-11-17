@@ -89,6 +89,12 @@ public partial class TerrainViewerApp
             Require(_dialogBoxContent is { ArtReady: true } && _mainMenuPanel!.QuitInArt && _mainMenuPanel.DialogForSelfTest.LinesForSelfTest >= 1
                 && _mainMenuPanel.DialogForSelfTest.TextForSelfTest == texts.Text(AreaMainMenuTexts.QuitQuestion),
                 $"the quit question is drawn in the original's dialog box ({_dialogBoxContent?.Detail})");
+            // ARC-UI-2489 (M11): ARC_AREA_QUIT_CAPTURE=PATH.png saves a readback of the quit box (the menu's dialog box over the in-play window).
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_QUIT_CAPTURE") is { Length: > 0 } quitCapture)
+            {
+                using var quitShot = GetViewport().GetTexture().GetImage();
+                Require(quitShot.SavePng(quitCapture) == Error.Ok, "the quit box capture saved to " + quitCapture);
+            }
             // ARC-UI-1819: with ARC_AREA_WINDOW_ART the box's background and the frames of its two buttons are checked in the generated interface at the box's own device scale.
             if (WindowArtSmokeRequested)
             {
