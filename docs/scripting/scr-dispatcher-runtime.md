@@ -417,6 +417,9 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
   top run's (empty for a refused callee, whose number the result names). The callee runs at the caller's point (0x44B030 copies it into the invocation, then the event runner 0x4449B0), so at the dialog point its attachee meets the dialog gates (E6: dead without the callee's death-speech flag or surrendered without its surrender-speech flag runs nothing, mind-controlled runs 2188; ARC-SCRIPT-2198; the hosts answer all three states for an NPC of the shown map, the session's danger record and spell flag 0x8000000 for the last two, ARC-SCRIPT-2464), and a dialog-point event may run call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
   attachee pair of two groups.
+- **Transform of the attachee (ARC-SCRIPT-2440, ledger TI5b/TI5c)**: transform (40) adds its request as before; when the host says `IScrHost.RebindsTransformedAttachee` the interpreter also hands the later actions of the run (and the scripts it calls) the placeholder
+  `ScrTransformedObject.Placeholder` (`transformed:N`) as the attachee, as the original writes the new handle into the run's own record. The host makes the object and rebinds the placeholder with `ScrEffects.Rebind` before it applies the later requests; the run's own writeback stays
+  the old attachee's. A host that returns false (the default: the use, tile, thrown-item and other hosts) sees no change.
 - **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
   from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use

@@ -24,6 +24,8 @@ internal sealed class ScrInterpreter
     private sealed class Shared
     {
         public ScrDialogStart? Dialog;
+        // ARC-SCRIPT-2440: the transforms (40) of the dispatch so far, which number the placeholders of the objects they make.
+        public int Transforms;
         public readonly List<ScrCallRequest> Calls = new();
         public readonly List<ScrPrintLine> Lines = new();
         public readonly List<ScrSound> Sounds = new();
@@ -742,7 +744,13 @@ internal sealed class ScrInterpreter
                 // TI5: the run's attachee becomes a new object of the basic prototype of operand 0. The host applies it and reads the attachee in the later requests of the run as that object; an absent attachee changes nothing (a project choice:
                 // the original reads the null handle's location).
                 var prototype = Get(a, 0);
-                if (_roles.Attachee is { } attachee) _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                if (_roles.Attachee is { } attachee)
+                {
+                    _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                    // ARC-SCRIPT-2440 (TI5, F11): the original writes the new handle into the run's own record, so the later actions of the run (and of the scripts it calls) name the new object. A host that applies the transform
+                    // (IScrHost.RebindsTransformedAttachee) rebinds this placeholder to it; the other hosts keep the old attachee, which they read after the transform themselves.
+                    if (_host.RebindsTransformedAttachee) _roles = _roles with { Attachee = ScrTransformedObject.Placeholder(attachee.Map, ++_shared.Transforms) };
+                }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MakeFollow:
@@ -1235,6 +1243,7 @@ internal sealed class ScrInterpreter
     private void CallEx(ScrObjectRef? attachee, int point, int line, ScrObjectRef? triggerer, int at)
     {
         if (attachee is not { } obj) throw new MissingObjectStop(at);
+        if (ScrTransformedObject.Is(obj)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);   // ARC-SCRIPT-2440: the made object has no slot yet
         if (point is < 0 or >= ScrPoint.Count || point == ScrPoint.DialogOverride) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
         if (point == ScrPoint.Use)
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
@@ -1466,6 +1475,8 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Vicinity(ScrFocusKind kind)
     {
         if (_roles.Attachee is not { } centre) return [];
+        // ARC-SCRIPT-2440: around the object a transform made (not made yet while the run is read) is not answerable; the run stops rather than loop over nobody.
+        if (ScrTransformedObject.Is(centre)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
         var list = (kind is ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : kind is ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity ? Containers.ContainersInVicinity(centre) : World.CrittersInVicinity(centre))
             ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;

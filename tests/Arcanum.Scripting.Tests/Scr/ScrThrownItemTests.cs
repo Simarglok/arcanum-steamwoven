@@ -24,6 +24,8 @@ public sealed class ScrThrownItemTests
     private sealed class Host(FakeHost inner) : IScrHost, IScrWorldQueries
     {
         public IReadOnlyList<ScrObjectRef> Around { get; set; } = [];
+        public bool Rebinds { get; set; }
+        public bool RebindsTransformedAttachee => Rebinds;
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);
         public ScrScriptLookup Script(int number) => inner.Script(number);
         public bool GlobalFlag(int index) => inner.GlobalFlag(index);
@@ -42,11 +44,49 @@ public sealed class ScrThrownItemTests
         public (long X, long Y)? Location(ScrObjectRef obj) => null;
     }
 
-    private static ScrRunResult Run(ScrProgram program, IReadOnlyList<ScrObjectRef>? around = null, ScrObjectRef? extra = null)
+    private static ScrRunResult Run(ScrProgram program, IReadOnlyList<ScrObjectRef>? around = null, ScrObjectRef? extra = null, bool rebinds = false)
     {
         var fake = new FakeHost();
         fake.Attach(Item, ScrPoint.Hit, 1022, program);
-        return ScrDispatcher.RunObject(new(ScrPoint.Hit, Item, Pc, extra), new Host(fake) { Around = around ?? [] }, Options);
+        return ScrDispatcher.RunObject(new(ScrPoint.Hit, Item, Pc, extra), new Host(fake) { Around = around ?? [], Rebinds = rebinds }, Options);
+    }
+
+    [TestMethod]
+    public void A_loop_around_the_made_object_stops_the_run_not_modelled()
+    {
+        var run = Run(Program(
+            Do(C(ScrCatalogue.Action.TransformObject, N(27368))),
+            Do(C(ScrCatalogue.Action.Attack, (EveryoneInVicinity, 0), (AttacheeKind, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault))), around: [Bystander], rebinds: true);
+        Assert.AreEqual(ScrStop.NotModelled, run.Stop);
+    }
+
+    // ARC-SCRIPT-2440 (TI5, F11): a host that applies the transform itself gets the later actions on the placeholder of the made object, and rebinds it.
+    [TestMethod]
+    public void A_host_that_rebinds_gets_the_later_requests_on_the_placeholder_of_the_made_object()
+    {
+        var program = Program(
+            Do(C(ScrCatalogue.Action.TransformObject, N(27368))),
+            Do(C(ScrCatalogue.Action.Attack, (TriggererKind, 0), (AttacheeKind, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var run = Run(program, rebinds: true);
+        var placeholder = ScrTransformedObject.Placeholder(Item.Map, 1);
+        CollectionAssert.AreEqual(new[]
+        {
+            new ScrObjectStateRequest(ScrObjectStateChange.Transform, Item, 27368),
+            new ScrObjectStateRequest(ScrObjectStateChange.Attack, Pc, Other: placeholder),
+        }, run.Effects.ObjectStates.ToArray(), "the transform names the old attachee, the attack the new one");
+        Assert.IsTrue(run.Effects.Names(placeholder));
+        var made = new ScrObjectRef(1, "oid:critter:7");
+        var rebound = run.Effects.Rebind(placeholder, made);
+        CollectionAssert.AreEqual(new[]
+        {
+            new ScrObjectStateRequest(ScrObjectStateChange.Transform, Item, 27368),
+            new ScrObjectStateRequest(ScrObjectStateChange.Attack, Pc, Other: made),
+        }, rebound.ObjectStates.ToArray());
+        Assert.IsFalse(rebound.Names(placeholder));
+        Assert.AreEqual(ScrOutcome.RunDefault, Run(program).Outcome);
+        Assert.AreEqual(Item, Run(program).Effects.ObjectStates[1].Other, "a host that does not rebind keeps the old attachee");
     }
 
     [TestMethod]
