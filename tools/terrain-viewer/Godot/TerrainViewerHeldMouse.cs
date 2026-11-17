@@ -35,8 +35,13 @@ public partial class TerrainViewerApp
     private bool LeftButtonDown => _leftDownForSelfTest ?? Godot.Input.IsMouseButtonPressed(MouseButton.Left);
     private ulong HeldClockMs => _clockMsForSelfTest ?? Time.GetTicksMsec();
 
-    /// <summary>A left press the world's click handler takes stamps the button (the poll's first record).</summary>
-    private void NoteLeftPress() { _leftStampMs = HeldClockMs; _pressFromInput = false; }
+    /// <summary>A left press the world's click handler takes stamps the button (the poll's first record) when the button is really down.</summary>
+    private void NoteLeftPress()
+    {
+        _pressFromInput = false;
+        // Only a button that is down can be held: a press fed in with no button state behind it (a smoke's, an event with no real button) is released at once and has no repeats.
+        _leftStampMs = LeftButtonDown ? HeldClockMs : null;
+    }
 
     /// <summary>The release of the left button: the flag is cleared and the stamp dropped (the walk goes on, GT112).</summary>
     private void NoteLeftRelease() { _leftStampMs = null; _heldWalkFlag = false; }
