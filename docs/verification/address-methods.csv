@@ -694,6 +694,7 @@ src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,DestroyScenery,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,FactionOf,exempt,host
@@ -714,6 +715,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RunDestroyPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,

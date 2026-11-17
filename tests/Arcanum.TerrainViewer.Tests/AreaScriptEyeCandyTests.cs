@@ -372,5 +372,17 @@ public sealed class AreaScriptEyeCandyTests
         var bust = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.BustAdmission);
         Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|bust|admitted {bust.IsAdmitted}|{bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
         Assert.IsTrue(bust.IsAdmitted, $"1734 by the bust set: {bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
+        // ARC-SCRIPT-2501 (BS3): the destroy points (2) of the four installed sceneries that carry one (1734, 1194, 2403, 2560) under the destroy-point set (2560 stops on the focus kind 19, the k'na tha map's own); the container
+        // script 2092 (points 2 and 30, destroys the sceneries it loops over) is admitted whole by the bust set, which holds destroy (68).
+        foreach (var number in new[] { 1734, 1194, 2403 })
+        {
+            Assert.IsTrue(content.Script(number) is { Status: ScriptContentStatus.Read, Program: { } }, $"script {number} is installed");
+            var point = ScrAdmission.Admit(content.Script(number).Program!, AreaUseScriptHost.DestroyPointAdmission);
+            Console.WriteLine($"SCENERY-DESTROY-ADMISSION|script {number}|destroy point|admitted {point.IsAdmitted}|{point.Refusal?.Code}@{point.Refusal?.Line}/{point.Refusal?.Type}/{point.Refusal?.Kind}");
+            Assert.IsTrue(point.IsAdmitted, $"{number} by the destroy-point set: {point.Refusal?.Code}@{point.Refusal?.Line}/{point.Refusal?.Type}/{point.Refusal?.Kind}");
+        }
+        var container = ScrAdmission.Admit(content.Script(2092).Program!, AreaUseScriptHost.BustAdmission);
+        Console.WriteLine($"SCENERY-DESTROY-ADMISSION|script 2092|bust|admitted {container.IsAdmitted}|{container.Refusal?.Code}@{container.Refusal?.Line}/{container.Refusal?.Type}/{container.Refusal?.Kind}");
+        Assert.IsTrue(container.IsAdmitted, $"2092 by the bust set: {container.Refusal?.Code}@{container.Refusal?.Line}/{container.Refusal?.Type}/{container.Refusal?.Kind}");
     }
 }

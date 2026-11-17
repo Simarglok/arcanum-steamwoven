@@ -17,16 +17,17 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaObjectBreakHostTests
 {
-    private const byte Attachee = 1, Number = 3, Triggerer = 0;
+    private const byte Attachee = 1, Number = 3, Triggerer = 0, Extra = 12;
     private const int Scenery = 3, Container = 4, BustFlag = 2301, TrapUse = 1, BustPoint = ScrPoint.Bust;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
     // A row on (10 + index, 20) with a use slot (point 1) and a BUST slot (point 30); a script of 0 leaves the slot out.
-    private static AreaObjectRecord Row(int index, int type, int use, int bust)
+    private static AreaObjectRecord Row(int index, int type, int use, int bust, int destroy = 0)
     {
         var slots = new List<AreaSparseElement>();
         if (use != 0) slots.Add(new(TrapUse, [0, 0, use]));
+        if (destroy != 0) slots.Add(new(ScrPoint.Destroy, [0, 0, destroy]));
         if (bust != 0) slots.Add(new(BustPoint, [0, 0, bust]));
         var fields = new List<AreaFieldValue> { new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, slots, null) };
         return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
@@ -79,6 +80,16 @@ public sealed class AreaObjectBreakHostTests
                 Do(new(ScrCatalogue.Action.SetRumor, N(1100), (Triggerer, 0))), Do(new(ScrCatalogue.Action.AddReputation, (Triggerer, 0), N(1005))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 833 (ARC-SCRIPT-2338, BS2): a script that sets flag 2301 and then destroys its own scenery.
             Write("scr/00833destroy.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(BustFlag))), Do(new(ScrCatalogue.Action.Destroy, (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2501 (BS3): destroy point scripts of a scenery: 834 sets flag 2303 and runs the default (the object goes), 835 sets flag 2304 and skips the default (the object stays), 836 holds a command no set admits (queue slide).
+            // 837 destroys the neighbour scenery given by the extra object (a use script), 838 destroys its own attachee at its destroy point (the guard).
+            Write("scr/00834goes.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(2303))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00835stays.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(2304))), Do(new(skip))));
+            Write("scr/00836refused.scr", Program(0, Do(new(ScrCatalogue.Action.QueueSlide, N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00837neighbour.scr", Program(0, Do(new(ScrCatalogue.Action.Destroy, (Extra, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00838itself.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(2305))), Do(new(ScrCatalogue.Action.Destroy, (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 839: a destroy point that sets a local flag and skips the default (its slot is kept, the object stays); 840: a destroy point that teleports its scenery (a nested effect no host models: the point's own run is not applied).
+            Write("scr/00839localskip.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(skip))));
+            Write("scr/00840nestedrefused.scr", Program(0, Do(new(ScrCatalogue.Action.Teleport, (Attachee, -1), N(5000), N(30), N(40))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00831local.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -167,10 +178,12 @@ public sealed class AreaObjectBreakHostTests
 
     private static ScrProgram Read(ScriptContent content, int number) => content.Script(number).Program!;
 
-    // ARC-SCRIPT-2338 (BS2): no host destroys a scenery, so the destroy point (2) of a scenery with a script of its own (installed script 1734 holds one) is never reached: a script's destroy of a scenery is refused whole, with the reason, before
-    // anything of the run applies.
+    private static bool Destroyed(GameSessionOwner session, AreaObjectRecord row) =>
+        session.QueryObjectCondition(new SessionMapId(1), AreaUseScriptHost.EntityId(row), Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed;
+
+    // ARC-SCRIPT-2501 (BS3, TD2): a script's destroy of a scenery of the shown map is applied: the session records the scenery destroyed (the view reads it as gone), and the rest of the run applies.
     [TestMethod]
-    public void A_script_that_destroys_a_scenery_is_refused_whole_and_its_destroy_point_is_not_run()
+    public void A_script_that_destroys_its_scenery_destroys_it_and_the_run_applies()
     {
         WithContent(content =>
         {
@@ -178,10 +191,156 @@ public sealed class AreaObjectBreakHostTests
             var statue = Row(1, Scenery, 833, 832);
             var (host, _) = Hosts(session, content, new Probe(), true, statue);
             var ran = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(BustFlag), "the run's other effects applied");
+            Assert.IsTrue(Destroyed(session, statue));
+        });
+    }
+
+    // The destroy point (2) of the scenery runs first (TD2: the object is the triggerer and the attachee); a run-default answer lets the destroy go on.
+    [TestMethod]
+    public void The_destroy_point_of_a_scenery_runs_before_the_destroy_and_a_default_answer_lets_it_go()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 0, destroy: 834);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(2303), "the destroy point ran");
+            Assert.IsTrue(Destroyed(session, statue));
+            // Destroyed once: a second destroy of the same object is left as it is and runs the point no more.
+            var again = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, again.Outcome, again.Detail);
+        });
+    }
+
+    // The destroyed scenery need not be the attachee: a use script destroys the extra object, whose destroy point runs with that scenery as triggerer and attachee.
+    [TestMethod]
+    public void A_script_that_destroys_another_scenery_runs_that_sceneries_destroy_point()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var lever = Row(1, Scenery, 837, 0);
+            var statue = Row(2, Scenery, 0, 0, destroy: 834);
+            var (host, _) = Hosts(session, content, new Probe(), true, lever, statue);
+            var ran = host.RunUseScript(AreaUseScriptHost.EntityId(lever), host.Pc, host.ObjectRef(AreaUseScriptHost.EntityId(statue)), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(2303), "the neighbour's destroy point ran");
+            Assert.IsTrue(Destroyed(session, statue));
+            Assert.IsFalse(Destroyed(session, lever));
+        });
+    }
+
+    // The destroy point's return 0 (skip default) keeps the object, as 0x43CCA0 returns at once.
+    [TestMethod]
+    public void A_destroy_point_that_skips_the_default_keeps_the_scenery()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 0, destroy: 835);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(2304), "the destroy point ran");
+            Assert.IsFalse(Destroyed(session, statue), "the skip default kept the object");
+        });
+    }
+
+    // A destroy point script no set admits refuses the whole run before anything applies (the object's script would not run).
+    [TestMethod]
+    public void A_destroy_point_script_the_set_does_not_admit_refuses_the_destroy_run_whole()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 0, destroy: 836);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.Run(statue, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
-            StringAssert.Contains(ran.Detail, "is not modelled (only an NPC of the shown map)");
+            StringAssert.Contains(ran.Detail, "destroy script 836");
+            Assert.IsFalse(host.GlobalFlag(BustFlag), "nothing of the refused run applied");
+            Assert.IsFalse(Destroyed(session, statue));
+        });
+    }
+
+    // A destroy point that destroys its own object is left to the running destroy (no second run of the point).
+    [TestMethod]
+    public void A_destroy_point_that_destroys_its_own_scenery_does_not_run_again()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 0, destroy: 838);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(2305));
+            Assert.IsTrue(Destroyed(session, statue));
+        });
+    }
+
+    // The destroy point's own slot is kept as map changes (scr2.*): a point that sets a local flag and skips the default keeps the object and the flag.
+    [TestMethod]
+    public void A_destroy_point_that_writes_a_local_flag_and_skips_the_default_keeps_the_scenery_and_its_slot()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 0, destroy: 839);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsFalse(Destroyed(session, statue), "the skip default kept the object");
+            Assert.AreNotEqual(0u, host.Slot(new ScrObjectRef(1, AreaUseScriptHost.EntityId(statue)), ScrPoint.Destroy)!.Value.LocalFlags, "the destroy slot is kept as map changes (scr2.lf)");
+        });
+    }
+
+    // A destroy point whose own run is not applied (it teleports a scenery, which no host models) does not destroy the scenery: the outer run fails instead of dropping the point silently.
+    [TestMethod]
+    public void A_destroy_point_whose_own_run_is_refused_leaves_the_scenery_and_fails_the_run()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, Container, 0, 0);
+            var statue = Row(2, Scenery, 0, 0, destroy: 840);
+            var lever = Row(3, Scenery, 837, 0);
+            var (host, _) = Hosts(session, content, new Probe(), true, chest, statue, lever);
+            var ran = host.RunUseScript(AreaUseScriptHost.EntityId(lever), host.Pc, host.ObjectRef(AreaUseScriptHost.EntityId(statue)), session.Rules.Scripts);
+            Assert.AreNotEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, "the run fails");
+            Assert.IsFalse(Destroyed(session, statue), "the scenery stays");
+            Assert.IsFalse(ran.Detail?.Contains("which the destroy-point set does not admit") == true, "the failure is the nested run's, not the plan's: " + ran.Detail);
+        });
+    }
+
+    // Any other object (a container) is still not modelled: the run is refused whole with the reason.
+    [TestMethod]
+    public void A_script_that_destroys_a_container_is_still_refused_whole()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, 2, 833, 0);
+            var (host, _) = Hosts(session, content, new Probe(), true, chest);
+            var ran = host.Run(chest, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
+            StringAssert.Contains(ran.Detail, "is not modelled (only an NPC or a scenery of the shown map)");
             Assert.IsFalse(host.GlobalFlag(BustFlag), "nothing of the refused run applied");
         });
+    }
+
+    // The bust set holds destroy (68): the container script 2092 loops over the sceneries around it and destroys them.
+    [TestMethod]
+    public void The_bust_set_admits_destroy_and_the_destroy_point_set_is_the_bust_and_dying_sets_together()
+    {
+        Assert.IsTrue(AreaUseScriptHost.BustAdmission.Actions.Contains(ScrCatalogue.Action.Destroy));
+        Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.Actions.Contains(ScrCatalogue.Action.Destroy), "the heartbeat set stays narrow");
+        Assert.IsTrue(AreaUseScriptHost.DestroyPointAdmission.Actions.IsSupersetOf(AreaUseScriptHost.BustAdmission.Actions));
+        Assert.IsTrue(AreaUseScriptHost.DestroyPointAdmission.Actions.IsSupersetOf(AreaUseScriptHost.DyingAdmission.Actions));
     }
 
     [TestMethod]

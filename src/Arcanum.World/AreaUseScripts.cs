@@ -285,10 +285,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// state 16, mark map location 49, set rumor 50, add and remove reputation 72 and 73) and play script eye candy (120). The original's script executor (0x447220) has no per-point restriction, so a bust script runs the same commands a use
     /// script does; the heartbeat set stays narrow because it runs every few seconds for every NPC near the PC, and a break runs once. The installed bust script 1734 (main map, the scenery that stops the script eye candy
     /// of its neighbours) sets a PC quest state and plays a script eye candy; the run applies them through the same <see cref="Apply"/> as a use click (<see cref="AreaScriptStory.Apply"/>, the eye candy requests for the viewer).
+    /// ARC-SCRIPT-2501 (ledger BS3): plus destroy (68), so the container script 2092 (points 2 and 30), which destroys the sceneries around it, is admitted; a destroy of a scenery of the shown map is applied by <see cref="DestroyScenery"/>.
     /// </summary>
     public static ScrAdmissionSet BustAdmission { get; } = new("S2-area-bust-heartbeat-story-eye-candy",
         HeartbeatAdmission.Conditions,
-        HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy),
+        HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
         HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
@@ -1029,7 +1030,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
         or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
@@ -1315,7 +1316,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = null; }
@@ -1337,7 +1338,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = null; }
@@ -1362,7 +1363,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var npc = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
             return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc));
         }
         finally { _clicked = null; }
@@ -1389,7 +1390,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _inTakingDamage = true;
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
@@ -1428,7 +1429,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _clicked = (attachee.Code, row);
             try
             {
-                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = rules, Admission = CombatPointAdmission });
+                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = CombatPointAdmission });
                 return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
             }
             finally { _clicked = previous; }
@@ -1452,7 +1453,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (follower, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
             return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
@@ -1465,6 +1466,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public static ScrAdmissionSet DyingAdmission { get; } = new("S4-area-dying",
         PlacedAdmission.Conditions.Union(HeartbeatAdmission.Conditions), PlacedAdmission.Actions.Union(HeartbeatAdmission.Actions),
         PlacedAdmission.ValueKinds.Union(HeartbeatAdmission.ValueKinds), PlacedAdmission.FocusKinds.Union(HeartbeatAdmission.FocusKinds), counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 (ledger BS3): the set the destroy point (2) of a scenery runs under (<see cref="RunDestroyPoint"/>): the union of <see cref="BustAdmission"/> (the story actions and the script eye candy the installed scenery
+    /// scripts 1734, 1194 and 2403 use) and <see cref="DyingAdmission"/> (the commands of the other object point scripts). The original's executor has no per-point restriction (BS1).
+    /// </summary>
+    public static ScrAdmissionSet DestroyPointAdmission { get; } = new("S4-area-destroy-point",
+        DyingAdmission.Conditions.Union(BustAdmission.Conditions), DyingAdmission.Actions.Union(BustAdmission.Actions),
+        DyingAdmission.ValueKinds.Union(BustAdmission.ValueKinds), DyingAdmission.FocusKinds.Union(BustAdmission.FocusKinds), counterIndexWraps: true);
 
     /// <summary>
     /// ARC-DEV-312 (exe read 2026-11-10, ledger DY1–DY3): the dying script (attachment point 12) of <paramref name="victim"/>, a creature of the shown map whose hit points the damage or kill has just written, which the kill (0x45DA20)
@@ -1482,7 +1491,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (victim, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = rules, Admission = DyingAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
             return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
@@ -1511,7 +1520,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _dangerRunDepth++;
         try
         {
-            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = rules, Admission = DyingAdmission });
+            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
             return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _dangerRunDepth--; _clicked = previous; }
@@ -1537,7 +1546,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _raiseRunDepth++;
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = rules, Admission = DyingAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
             return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _raiseRunDepth--; _clicked = previous; }
@@ -1590,10 +1599,74 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (victim, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = BustAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = Remember(rules), Admission = BustAdmission });
             return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-SCRIPT-2501: the rules of the latest run this host began, which a destroy point run nested in that run's effects takes (the original has one executor; the rule mode is the session's).</summary>
+    private ScrRuleProfile Remember(ScrRuleProfile rules) => _lastRules = rules;
+
+    private ScrRuleProfile? _lastRules;
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 (ledger TD2, BS3): the destroy point (2) of <paramref name="victim"/>, a scenery of the shown map that a script's destroy (68, 0x43CCA0) is about to remove: the object is the triggerer and the attachee, no extra
+    /// object, line 0 (0x441980 at 0x43CD0E), under <see cref="DestroyPointAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>, keys scr2.*, no schema step). The caller reads <see cref="DyingStops"/> (return 0 keeps the object). An object that is not a
+    /// row of the shown map, or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunDestroyPoint(string victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, victim);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Destroy) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (victim, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Destroy, attachee, attachee, null), this, new() { Rules = Remember(rules), Admission = DestroyPointAdmission });
+            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 (ledger TD2, BS3): a script's destroy of a scenery of the shown map. An object already destroyed (its map data's flag 0x1, or an earlier destroy) is left as it is; otherwise the scenery's destroy point (2) runs first, and
+    /// a return of 0 (skip default, <see cref="DyingStops"/>) keeps it; else the session records it destroyed (the object condition, which the view reads as gone: not drawn, not picked, out of the vicinity lists). A script that destroys the
+    /// scenery whose destroy point is running leaves it to that run (the original would run the point again, as flag 0x1 is set last). The runs the original ends at once (0x423FF0) and the other clean-up are not modelled (BS3).
+    /// </summary>
+    private bool DestroyScenery(ScrObjectRef obj)
+    {
+        if (AlreadyDestroyed(obj) || _destroyingScenery.Contains(obj.Code)) return true;
+        if (Slot(obj, ScrPoint.Destroy) is { Script: > 0 })
+        {
+            _destroyingScenery.Add(obj.Code);
+            try
+            {
+                var ran = RunDestroyPoint(obj.Code, _lastRules ?? ScrRuleProfile.Steamwoven);
+                // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
+                if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return false;
+                if (DyingStops(ran)) return true;
+            }
+            finally { _destroyingScenery.Remove(obj.Code); }
+            if (AlreadyDestroyed(obj)) return true;
+        }
+        return _session.ApplyChanges(_session.Version, null,
+            [new(new SessionMapId(obj.Map), MapChangeKey.ForEntity(obj.Code, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition != GameSessionDisposition.Rejected;
+    }
+
+    private readonly HashSet<string> _destroyingScenery = new(StringComparer.Ordinal);
+
+    // ARC-SCRIPT-2501: a scenery of the shown map.
+    private bool ShownScenery(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.SceneryType };
+
+    // ARC-SCRIPT-2501: why the destroy point of a scenery cannot run (null: it has none, or the program is admitted whole by the destroy-point set).
+    private string? DestroyPointRefusal(ScrObjectRef obj)
+    {
+        if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 } own) return null;
+        if (Script(own.Script) is not { Status: ScrScriptStatus.Found, Program: { } program }) return $"destroy of {obj.Code} runs its destroy script {own.Script}, which is unreadable";
+        return ScrAdmission.Admit(program, DestroyPointAdmission).IsAdmitted ? null : $"destroy of {obj.Code} runs its destroy script {own.Script}, which the destroy-point set does not admit";
     }
 
     /// <summary>
@@ -1628,7 +1701,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (entity, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
@@ -1665,7 +1738,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (Slot(attachee, ScrPoint.Examine) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
             if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
             if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
@@ -1691,7 +1764,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (target, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
@@ -1738,7 +1811,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
         }
         finally { _itemUse = null; }
@@ -1787,7 +1860,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.
         var slot = PlacedSlot(placed);
-        var options = new ScrRunOptions { Rules = rules, Admission = PlacedAdmission };
+        var options = new ScrRunOptions { Rules = Remember(rules), Admission = PlacedAdmission };
         var run = placed.Trigger == MapTransitionTrigger.TileEntry
             ? ScrDispatcher.RunTile(new(slot, triggerer ?? Pc), this, options)
             : ScrDispatcher.RunSector(new(slot, Pc), this, options);
@@ -1995,6 +2068,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
                     if (_session.DestroyUsedItem(_session.Version, used.Code).Disposition == GameSessionDisposition.Rejected) return false;
+                    continue;
+                }
+                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map.
+                if (ShownScenery(request.Object))
+                {
+                    if (!DestroyScenery(request.Object)) return false;
                     continue;
                 }
                 // TD2: an NPC already destroyed is left as it is.
@@ -2483,7 +2562,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
-        Row(obj) is { } row && ((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0 || Destroyed(_session, obj.Map, obj.Code);
+        Row(obj) is { } row && (((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0
+            || row.Type == Arcanum.Data.Combat.CombatFieldReader.SceneryType && !IsPc(obj) && _session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
+        || Destroyed(_session, obj.Map, obj.Code);
 
     // ARC-SCRIPT-052 (TD3): the NPCs a stop attacking of the object reaches (the PC's whole follower tree for the PC (0x4AA4A0, ARC-WORLD-2119)) with the world's facts for each.
     private Dictionary<string, SessionPeaceFacts> StopFacts(ScrObjectRef obj)
@@ -2551,8 +2632,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     if (_session.UsedItemDestructionRefusal(used.Code) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
                     continue;
                 }
+                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first.
+                if (ShownScenery(request.Object))
+                {
+                    if (AlreadyDestroyed(request.Object)) continue;
+                    if (DestroyPointRefusal(request.Object) is { } pointWhy) return pointWhy;
+                    continue;
+                }
                 if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc)
-                    return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
+                    return $"destroy of {request.Object.Code} is not modelled (only an NPC or a scenery of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
                 if (FollowsPc(request.Object)) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
