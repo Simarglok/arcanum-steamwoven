@@ -108,7 +108,7 @@ texture of the wood backgrounds).
 | --- | --- |
 | Provenance — **decided 2026-11-16**: original art is a Codex input; the kit is local only, like the HD pack | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) |
 | Who runs Codex — **decided 2026-11-16**: the owner, through the inbox/outbox handoff | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) |
-| Panel heights and proportions after the prototype | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) |
+| Panel heights and proportions after the prototype — **decided 2026-11-17**: top 120 and bottom 456 master px | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) |
 | Approval of the material sheet | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) |
 | Method for the panel board and backdrops | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) |
 | The player's `uiScale` in the Steamwoven interface; behaviour above ×1 (5K screens); vertical place of the window zone on 16:10 | [TRD open questions](steamwoven-interface-trd.md#open-questions) |

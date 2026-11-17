@@ -726,7 +726,8 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
   object stops the run (`MissingObject`).
 - **The viewer.** Only the AREA dialog host (`AreaScriptHost.TalkAdmission` and `SkillTalkAdmission`) holds the action: it answers for one of its
   speakers toward the PC from the session's reaction query, the one the dialog's `re` condition reads, so a script and a reply see the same value.
-  Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
+  ARC-SCRIPT-2505: any other NPC of the shown map toward the PC (Kerghan's script 1105 line 57 loop) is the use host's `ReactionOf`, the AI host's standard reaction through
+  `AreaScriptWorld.StandardReaction`, and a first object that is no NPC (the PC among them) gives 50. Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
 - **Tests.** `ScrReactionTests` (the interpreter, a fake host), `AreaTalkQueryTests` (the viewer's host), `WorldTravelTests` (`NearestArea`,
   `AreaAt`), `AreaWorldMapTests` (the town maps of the shown sectors and of the area table).
 

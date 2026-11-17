@@ -54,10 +54,8 @@ public sealed record SteamwovenLayout(
 /// ARC-UI-2450: builds the <see cref="SteamwovenLayout"/>. `f` is `min(W / 3840, H / 2160)`, kept as an exact fraction. A window from 16:10 to 16:9 is
 /// laid out whole; a narrower one is letterboxed to 2400 · f and a wider one pillarboxed to 3840 · f, centred, and a bar under 4 px per side is
 /// dropped (the frame is the window; the middle band or the sides take the difference). The panel heights are rounded as sizes from the frame's top
-/// and bottom edges (`round(150 · f)`, `round(570 · f)`: this is what the TRD reference table shows, e.g. 238 and 599 at 1600 × 900, where rounding the
-/// bottom panel's top edge would give 237 and 600); every other edge (centre block, split, zone, backdrop) is rounded from its own exact position, halves
-/// up, so neighbouring parts share edges. The window zone is centred in the middle band and clamped to it: where the exact zone is a pixel taller
-/// than the rounded band (1600 × 900), it loses that pixel. Godot-free; the viewer reads the rectangles.
+/// and bottom edges (`round(120 · f)`, `round(456 · f)` with the default heights, as the TRD reference table shows); every other edge (centre block, split, zone, backdrop) is rounded from its own exact position, halves
+/// up, so neighbouring parts share edges. The window zone is centred in the middle band and kept inside it. Godot-free; the viewer reads the rectangles.
 /// </summary>
 public static class SteamwovenLayoutBuilder
 {
@@ -102,7 +100,7 @@ public static class SteamwovenLayoutBuilder
             PixelRect.FromEdges(frame.X, middleRect.Y, splitX, middleRect.Bottom),
             PixelRect.FromEdges(splitX, middleRect.Y, frame.Right, middleRect.Bottom));
 
-        var middleBackdrop = Backdrop(middleRect, SteamwovenGrid.ReferenceWidth, SteamwovenGrid.BackdropHeight, scale, zone);
+        var middleBackdrop = Backdrop(middleRect, SteamwovenGrid.ReferenceWidth, options.BackdropHeight, scale, zone);
         var fullZone = CentredZone(frame, centreLeft, centreRight, scale * SteamwovenGrid.FullScreenZoneHeight);
         var fullBackdrop = Backdrop(frame, SteamwovenGrid.ReferenceWidth, SteamwovenGrid.FullScreenHeight, scale, fullZone);
 
