@@ -37,4 +37,12 @@ public sealed class PickHideRulesTests
         Assert.IsNull(PickHideRules.DeadBox(100, 100, bx, by, 1920, 1080, mapWidth: 50, mapHeight: 50), "both bounds clamp to the last tile: an empty axis lists nothing");
         Assert.IsNull(PickHideRules.DeadBox(100, 100, bx, by, 0, 1080), "no view");
     }
+
+    [TestMethod]
+    public void A_view_centre_off_the_tile_centre_snaps_the_box_by_the_centre_tile()
+    {
+        // The centre pixel lies 30 px right and 15 px below the hero tile's centre, inside tile (100, 101): the rectangle origin is the hero's point minus that tile's point, so the box shifts by the snap.
+        var (cx, cy) = CentreOf(100, 100);
+        Assert.AreEqual(new PickHideRules.Box(75, 126, 74, 125), PickHideRules.DeadBox(100, 100, cx + 30, cy + 15, 1920, 1080)!.Value);
+    }
 }
