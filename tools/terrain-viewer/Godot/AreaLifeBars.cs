@@ -277,8 +277,10 @@ public partial class AreaHeroGauges : CanvasLayer
         _compact.Visible = !inBars;
         // The bars' own placement: the 800 × 600 screen centred at the whole factor, its bottom at the window's bottom.
         var factor = inBars ? _bars!.Factor : AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2452: in the Steamwoven layout the screen lies where the strips put it, at the strips' fractional scale.
+        var (origin, scale) = inBars ? _bars!.ScreenFrame(size) : (new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor), (float)factor);
+        _root.Position = origin;
+        _root.Scale = new(scale, scale);
         if (!inBars)
         {
             var (x, y, width, height) = AreaCompactPanelLayout.Window;
