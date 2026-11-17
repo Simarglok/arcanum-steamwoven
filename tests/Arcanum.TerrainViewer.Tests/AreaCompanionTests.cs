@@ -234,7 +234,7 @@ public sealed class AreaCompanionTests
     }
 
     // ARC-RENDER-2564 (0x42EDC0): the gait of a concealed follower the AI host does not hold. The companion is far from the PC (its follow decision is a run).
-    private static IReadOnlyList<StepAssessmentTiming> FarFollowSteps(bool concealed, SkillTraining? training)
+    private static IReadOnlyList<StepAssessmentTiming> FarFollowSteps(bool concealed, SkillTraining? training, bool clearAfterFirstFrames = false)
     {
         var f = Load();
         using var session = ConversationSessionFixture.CreateWithHero();
@@ -249,8 +249,11 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(concealed, session.IsConcealed(SessionCombatant.Critter(companion.Entity)), "the hero's concealment flags the follower");
         var permits = new List<StepAssessmentTiming>();
         for (var i = 1; i <= 100; i++)
+        {
+            if (clearAfterFirstFrames && i == 20) session.ToggleHeroConcealment(session.Version);
             foreach (var (_, advance) in group.Drive(session, pc.State, SimulationTime.At(110 + i, 10)))
                 permits.AddRange(advance.Movement.Events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!));
+        }
         Assert.IsTrue(permits.Count > 3, "the follower walked");
         return permits;
     }
@@ -277,6 +280,10 @@ public sealed class AreaCompanionTests
         CollectionAssert.DoesNotContain(expert, GaitTiming.SneakProvenance);
         // Concealed master: runs.
         CollectionAssert.Contains(Provenance(FarFollowSteps(true, SkillTraining.Master)), GaitTiming.RunProvenance);
+        // Concealment cleared mid-walk: the far follower runs again (the flags are recomputed at each drive).
+        var cleared = Provenance(FarFollowSteps(true, SkillTraining.Apprentice, clearAfterFirstFrames: true));
+        CollectionAssert.Contains(cleared, GaitTiming.SneakProvenance);
+        CollectionAssert.Contains(cleared, GaitTiming.RunProvenance);
     }
 
     [TestMethod]

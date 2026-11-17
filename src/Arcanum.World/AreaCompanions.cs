@@ -521,7 +521,8 @@ public sealed class AreaCompanionGroup
             if (!held)
             {
                 // ARC-RENDER-2564 (0x42EDC0): the gait function reads the concealment flag and the prowling training for every critter, the AI host's or not.
-                var facts = new AiMoverFacts(Prowling: session.IsConcealed(SessionCombatant.Critter(companion.Entity)), ProwlingTraining: ProwlingTraining?.Invoke(companion.Entity) ?? SkillTraining.None);
+                var prowling = session.IsConcealed(SessionCombatant.Critter(companion.Entity));
+                var facts = new AiMoverFacts(Prowling: prowling, ProwlingTraining: prowling ? ProwlingTraining?.Invoke(companion.Entity) ?? SkillTraining.None : SkillTraining.None);
                 companion.AiSneaking = AiExecutorRules.Sneaks(facts);
                 companion.RunRefused = !AiExecutorRules.RunPermitted(facts);
             }

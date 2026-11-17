@@ -235,7 +235,7 @@ public static class HeroBodyArt
                     byte[] bytes;
                     // ARC-COMBAT-1865: a stunned or bloody dying ART over the archive's entry size limit (the air elemental's stunned ART is 1.2 MB) is no ART of the species: the body loads without it.
                     try { bytes = archive.ReadEntry(entries[0]); }
-                    catch (DatLimitExceededException) when (action is ActorDiagnosticAction.Stunned or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg) { continue; }
+                    catch (DatLimitExceededException) when (action is ActorDiagnosticAction.Stunned or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg or ActorDiagnosticAction.Sneak) { continue; }
                     ArtMetadata metadata;
                     try { metadata = ArtDecoder.Inspect(bytes, options); }
                     catch (ArtException) { continue; }
