@@ -1496,6 +1496,16 @@ public sealed partial class GameSessionOwner : IDisposable
         return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, level));
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1593 (VT3, heal poison with a negative amount): the original's setter takes the level minus the amount, so a negative amount raises the level by its size. The level read now
+    /// plus <paramref name="amount"/> goes through <see cref="SetPoisonLevel"/>'s write (clamped to 0..1000, 0 for a constitution of 20 or more, the timers of every positive write).
+    /// </summary>
+    public SessionLifeResult RaisePoisonLevel(GameSessionVersion expected, SessionLifeTarget target, long amount)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, state.PoisonLevel + amount));
+    }
+
     /// <summary>The stun animation ended or could not start (<see cref="LifeRules.ClearStun"/>).</summary>
     public SessionLifeResult ClearStun(GameSessionVersion expected, SessionLifeTarget target)
     {

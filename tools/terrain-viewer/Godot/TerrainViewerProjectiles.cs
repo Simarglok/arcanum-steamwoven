@@ -537,8 +537,9 @@ public partial class TerrainViewerApp
             return ProjectileCrossResult.Ended;
         }
         ProjectileCrossResult end;
-        if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
-                : _combatHost!.Target(owner, map, struck.Key) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
+        // ARC-COMBAT-2568 (RH6, 0x4B2F60): a companion the shot meets is struck like any critter (its identity, its live cell).
+        if ((struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
+                : (IsAreaCompanion(struck.Key) ? AreaTargetOf(struck.Key) : _combatHost!.Target(owner, map, struck.Key)) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
         {
             var result = owner.LandShot(owner.Version, projectile.Shot, CritterAttack(goal, 1, null));
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"

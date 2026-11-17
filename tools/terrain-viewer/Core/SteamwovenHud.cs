@@ -12,6 +12,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// a squashed strip: the prototype's stand-in for the art that will be drawn to fit the panel. The top strip stands on the bottom edge of the top band and the bottom strip hangs from the top edge of the bottom band, so each strip's
 /// rim meets the rim of the board that continues it at the sides; at k = 1 the strip is 147.6 · f high in a 150 · f band (the board shows above it) and 572.4 · f in
 /// a 570 · f band (its last 2.4 · f px lie beyond the frame's bottom edge); at k = 0.8 it is 118.1 · f in 120 · f and 457.9 · f in 456 · f.
+/// This scale is the prototype's stand-in only: the owner's choice of #2526 (TRD SWI-LAY-11) is a centre block of 2880 px with the controls placed by <see cref="SteamwovenLayout.Controls"/>.
 /// </remarks>
 public sealed record SteamwovenHudPlan(
     SteamwovenLayout Layout, SteamwovenLayoutOptions Options, double StripScale, int StripLeft, int TopStripY, int BottomStripY, int TopInset, int BottomInset)
