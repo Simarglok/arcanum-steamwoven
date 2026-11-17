@@ -37,6 +37,12 @@ public sealed class CharacterStatsSnapshot
 
     public int GetBase(CharacterStat stat) => baseValues[Index(stat)];
     public int GetEffective(CharacterStat stat) => effectiveValues[Index(stat)];
+    /// <summary>
+    /// The snapshot's effects applied to <paramref name="value"/> as the stat's own effect list (the source's per-stat effect aggregation), without the
+    /// race range clamp. Armour class uses it for the Original setting's second count of the AC-adjustment effects (ledger VC36, A6).
+    /// </summary>
+    public int ApplyEffects(CharacterStat stat, int value) => CharacterStatRules.ApplyModifiers(Checked(stat), value, AppliedEffects);
+
     public StatRange GetRange(CharacterStat stat) => CharacterStatRules.Range(Race, Checked(stat));
 
     /// <summary>True for a primary stat whose effective value is at least 20.</summary>
