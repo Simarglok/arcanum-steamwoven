@@ -153,10 +153,11 @@ public partial class TerrainViewerApp
         ?? (_areaCompanions?.Companions.FirstOrDefault(c => c.Key == key) is { } visitor ? _combatHost.Target(_areaSession!, visitor.Entity) : null);
 
     /// <summary>
-    /// ARC-COMBAT-1944 (0x54ED30 before the type switch, ledger VC62): out of combat mode, a living NPC whose first run is an attack aimed at the hero or, through the leader chain, a follower (0x44E940) puts the hero into combat mode
+    /// ARC-COMBAT-1944 (VC62): out of combat mode, a living NPC whose first run is an attack aimed at the hero or, through the leader chain, a follower puts the hero into combat mode
     /// before the click resolves, even when the decision then builds nothing. The click rules decide (<see cref="HeroClickRules.Decide"/>: <c>EntersCombatMode</c>); the hero's own refusals (stoned, stunned, dead) keep it out.
     /// True when the hero entered combat mode (the caller's attack branch then takes the press).
     /// </summary>
+    // (The original does it before the type switch of its click decision, 0x54ED30.)
     private bool EnterCombatModeForAttacker(Vector2 screen, bool alt, bool shift)
     {
         if (HeroInCombatMode || !AttackMapActive || _areaSession is not { } session || _combatHost is null || session.QueryHero() is null) return false;
@@ -169,7 +170,7 @@ public partial class TerrainViewerApp
         return HeroInCombatMode;
     }
 
-    /// <summary>ARC-COMBAT-1944: the NPC's first run attacks the hero, or a creature whose chain of PC leaders ends at the hero (0x44E940 with the hero as the target, compared through 0x45DDA0).</summary>
+    /// <summary>ARC-COMBAT-1944: the NPC's first run attacks the hero, or a creature whose chain of PC leaders ends at the hero (the goal table's first-run-attacks test, compared through the PC leader).</summary>
     private static bool NpcAttacksHero(GameSessionOwner session, string npc) =>
         session.QueryGoals().FirstRunAttacks(npc, AreaHeroRunsHost.Hero, id =>
         {
