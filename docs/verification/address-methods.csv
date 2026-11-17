@@ -395,6 +395,7 @@ src/Arcanum.Simulation/Equipment/WeaponArtRules.cs,WeaponPart,pending,
 src/Arcanum.Simulation/Goals/GoalDescriptors.cs,IsSameActivity,pending,
 src/Arcanum.Simulation/Goals/GoalRunTable.cs,InsertAtBottom,pending,
 src/Arcanum.Simulation/Goals/GoalRunTable.cs,RetargetDestination,pending,
+src/Arcanum.Simulation/Goals/HeroClickRules.cs,ClickStartOf,exempt,host
 src/Arcanum.Simulation/Goals/HeroInputRules.cs,RightReleaseTailOf,pending,
 src/Arcanum.Simulation/Hotkeys/HotkeyRules.cs,EntryOfScancode,pending,
 src/Arcanum.Simulation/Hotkeys/HotkeyRules.cs,PcCanActivate,pending,
@@ -615,6 +616,7 @@ src/Arcanum.World/AreaGreeting.cs,FactsFor,pending,
 src/Arcanum.World/AreaHeldThrow.cs,Lift,pending,
 src/Arcanum.World/AreaHeroDeath.cs,BeginShow,exempt,reference
 src/Arcanum.World/AreaHeroDeath.cs,StartCredits,exempt,reference
+src/Arcanum.World/AreaHeroRunsHost.cs,ApplyClickFlags,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,Attack,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Cast,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,IdleRestart,pending,
@@ -626,7 +628,9 @@ src/Arcanum.World/AreaHeroRunsHost.cs,PickLock,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickPocket,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickUpObject,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Pickup,pending,
+src/Arcanum.World/AreaHeroRunsHost.cs,QueueAttack,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,QueueCast,pending,
+src/Arcanum.World/AreaHeroRunsHost.cs,StartContext,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,StepTurn,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Turn,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Use,pending,
@@ -735,6 +739,7 @@ src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,
 src/Arcanum.World/HeroBody.cs,Armed,pending,
 src/Arcanum.World/HeroBody.cs,Wearing,pending,
+src/Arcanum.World/HeroRequests.cs,QueueAttack,exempt,host
 src/Arcanum.World/HeroRequests.cs,StartPickPocket,pending,
 src/Arcanum.World/InterfaceModes.cs,LeavePutsHeldItemBack,pending,
 src/Arcanum.World/InterfaceModes.cs,OpenerRefuses,pending,
@@ -930,6 +935,7 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,BedOccupantGoal,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,RepeatAttackClick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
