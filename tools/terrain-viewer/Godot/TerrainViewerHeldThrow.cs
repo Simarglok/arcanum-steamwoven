@@ -418,6 +418,8 @@ public partial class TerrainViewerApp
         var locationLine = new SessionLineOfFire(from != tile && AreaLineOfFireNow() is { } lineMap ? Math.Min(LineOfFireRules.Trace(from, 0, 0, tile, lineMap, owner.Rules.Combat).Cost, AttackResolver.MaxMagnitude) : 0, false);
         request = request with { TargetLight = AreaCellLightLevel(tile.X, tile.Y) };
         if (aimed is null) request = request with { LineOfFire = locationLine };
+        // ARC-COMBAT-2435 smoke seam: a smoke that needs its throw at a tile to hit sets the session's random stream at the action frame (the stream's draws before it are not the smoke's to count).
+        if (_heldThrowSeedForSelfTest is { } seed) { owner.RestoreRandom(new SessionRandomState(seed, 0)); _heldThrowSeedForSelfTest = null; }
         var result = owner.ThrowHeroItem(owner.Version, request);
         // A struck critter that died meanwhile refuses the attack: the original's press throws at the location anyway.
         if (aimed is not null && result.Disposition == GameSessionDisposition.NoChange && owner.QueryHeroLife() is { Status.IsActive: true })
@@ -526,6 +528,9 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-315: the stored fields of an item the session made (no row in any map: a copy of its prototype), or null for any other item.</summary>
     private Arcanum.Data.Combat.CombatFields? MadeItemFields(string item) =>
         _areaSession is { } session && AreaMadeItems.Prototype(session, item) is { } prototype ? PrototypeItems()?.Fields(prototype) : null;
+
+    /// <summary>ARC-COMBAT-2435: the seed the next held throw's roll starts from (a smoke whose throw at a tile must hit: the hit roll of seed 727 is 1); cleared by that throw.</summary>
+    private ulong? _heldThrowSeedForSelfTest;
 
     private void SetHeldThrowNotice(string notice) { _heldThrowNotice = notice; _heldThrowNoticeAt = Time.GetTicksMsec(); }
 
