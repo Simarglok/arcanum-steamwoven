@@ -311,6 +311,12 @@ public sealed class CritterStateGoalsTests
             world.Arts[Npc] = (DyingAnimationRules.FallDown, 3);
             AiExecutorRules.EndRun(Run(new GoalFrame(goal)), world);
             Assert.AreEqual((DyingAnimationRules.FallDown, 3), world.Arts[Npc], $"{goal}: a fallen critter keeps its fall");
+
+            world = Arena();
+            world.Movers[Npc] = new(Prowling: true, Fatigue: 20, MaxFatigue: 20);
+            world.Arts[Npc] = (DyingAnimationRules.Decapitation, 2);
+            AiExecutorRules.EndRun(Run(new GoalFrame(goal)), world);
+            Assert.AreEqual((DyingAnimationRules.Decapitation, 2), world.Arts[Npc], $"{goal}: a dying animation is kept");
         }
         // The goals the original's walks of a path do not end with 0x42B090 (3, 7, 61, 80) leave the art alone.
         var plain = Arena();
