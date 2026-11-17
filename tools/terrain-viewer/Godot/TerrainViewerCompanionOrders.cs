@@ -230,7 +230,13 @@ public partial class TerrainViewerApp
         }
         if (HeroInCombatMode)
         {
-            _companionNotice = "follower click in combat mode: attacking a follower is not ready"; // 0x54EFDA: the left Alt attacks it, nothing happens without
+            // 0x54EFDA: the left Alt attacks it (ARC-COMBAT-1945), nothing happens without.
+            if (!LeftAltHeld) { _companionNotice = "follower click in combat mode: a follower is attacked only with left Alt held"; RefreshReadyStatus(); return; }
+            CancelPortalApproach("a follower click replaced it", keepArmed: true);
+            if (_pendingOrder is not null) CancelPendingOrder("a follower attack replaced it");
+            if (AttackMapActive && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } attacked && AreaTargetOf(attacked.Key) is { } follower
+                && AttackCritterClick(follower, true, Godot.Input.IsKeyPressed(Key.Shift)) && _attack is not null) { _companionNotice = "follower click in combat mode: attack"; return; }
+            _companionNotice = "follower click in combat mode: no attack started";
             RefreshReadyStatus();
             return;
         }
