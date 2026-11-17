@@ -13,6 +13,9 @@ public partial class AreaShopArtView : Control
 {
     private static readonly AreaShopArtButton[] AllButtons = Enum.GetValues<AreaShopArtButton>();
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
+    // ARC-UI-2575: the generated frames are painted at this view's own device scale (the unit scale of the Steamwoven layout).
+    private AreaDeviceScale? _claim;
+    private AreaDeviceScale Claim => _claim ??= new(this);
     private bool _artSet;
     private int _focus = -1;
     private bool _focusLit;
@@ -43,7 +46,9 @@ public partial class AreaShopArtView : Control
     /// <summary>The art's frames by number (the strips and the buttons, <see cref="AreaShopArtLayout.ArtNumbers"/>).</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art)
     {
+        Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
+        Claim.Claim(_art.Values.SelectMany(frames => frames));
         _artSet = true;
     }
 
@@ -70,6 +75,14 @@ public partial class AreaShopArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
+        // ARC-UI-2575: with the Steamwoven layout the screen's 800 × 400 body lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneScreen(size, AreaShopArtLayout.Window.Y) is { } zone)
+        {
+            Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+            Position = new Vector2((float)zone.X, (float)zone.Y);
+            Claim.RedrawIfScaleChanged();
+            return;
+        }
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), MathF.Round((size.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2));

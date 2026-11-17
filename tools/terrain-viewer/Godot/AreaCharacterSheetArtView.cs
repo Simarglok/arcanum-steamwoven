@@ -147,6 +147,14 @@ public partial class AreaCharacterSheetArtView : Control
         {
             // ARC-UI-147: the menu's 800 × 600 screen at the bars' whole factor, centred; the window under the top strip (as AreaShopArtLayout.Window).
             var screen = GetViewportRect().Size;
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
+            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            {
+                Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+                Position = new Vector2((float)zone.X, (float)(zone.Y + AreaShopArtLayout.Window.Y * zone.Scale));
+                RedrawOnScaleChange();
+                return;
+            }
             var factor = AreaGameBarPanel.ScreenFactor(screen);
             Scale = new Vector2(factor, factor);
             Position = new Vector2(AreaGameBarPanel.ScreenLeft(screen, factor),

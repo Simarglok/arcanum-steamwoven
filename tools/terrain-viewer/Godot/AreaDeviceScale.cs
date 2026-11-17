@@ -41,6 +41,17 @@ internal sealed class AreaDeviceScale
     public void Claim(IReadOnlyDictionary<int, Texture2D[]> art, params int[] numbers) =>
         Claim(numbers.Where(art.ContainsKey).SelectMany(number => art[number]));
 
+    private float _drawn;
+
+    /// <summary>ARC-UI-2575: asks the owner to draw again when its device scale changed since the last call (a window's frames are painted at its device scale; a new scale moves no pixel by itself).</summary>
+    public void RedrawIfScaleChanged()
+    {
+        var current = Current();
+        if (Math.Abs(current - _drawn) < 0.0005f) return;
+        _drawn = current;
+        if (GodotObject.IsInstanceValid(_owner)) _owner.QueueRedraw();
+    }
+
     /// <summary>Stops watching (the art was taken back or the view left the tree).</summary>
     public void Release()
     {
