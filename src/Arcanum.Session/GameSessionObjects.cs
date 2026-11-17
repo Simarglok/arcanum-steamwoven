@@ -463,10 +463,11 @@ public sealed partial class GameSessionOwner
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step, at the landing for a shot that flew.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
+        // ARC-COMBAT-1973 (RH5): a wall's hit offers them too (the weapon's scripts with the wall as the extra object), as any struck object's.
+        if (resolution.Refusal == AttackRefusal.None && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
             attack.HitScripts?.Invoke(new(pending is null ? WieldedEntity() : pending.WeaponItem, resolution.Outcome == AttackOutcome.CriticalHit, pending is not null, pending?.Thrown is not null));
-        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); a wall has none, and the answer cannot change the outcome.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
+        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); ARC-COMBAT-1973 (RH5): so is a wall's (the damage step offers point 23 before it leaves for a wall), and the answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
                 null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying };
