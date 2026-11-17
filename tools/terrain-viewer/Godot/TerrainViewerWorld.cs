@@ -898,7 +898,14 @@ public partial class TerrainViewerApp
             RefreshReadyStatus(); return;
         }
         // ARC-UI-063: an item on the game cursor takes the press: it is thrown, or goes back for a hero that cannot act (TT2, TT6).
-        if (_gameCursorItem is not null) { _worldRouteClick = "throw"; GameCursorPress(screen); return; }
+        // ARC-INPUT-1937: the throw's pick is the mode-0 press pick too (0x551F80 runs before it): it sees through the followers and the dead as the press does.
+        if (_gameCursorItem is not null)
+        {
+            _worldRouteClick = "throw";
+            _pressSpared = PressPickSpared(alt);
+            try { GameCursorPress(screen); } finally { _pressSpared = null; }
+            return;
+        }
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).

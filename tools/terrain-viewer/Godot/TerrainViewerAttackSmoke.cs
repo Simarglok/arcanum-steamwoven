@@ -165,7 +165,8 @@ public partial class TerrainViewerApp
             HeroRequests.Apply(new Arcanum.World.StopRequest(null));
             _worldRouteClick = "none";
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
-            Require(_attack is null && !_worldRouteClick.Contains("goal set", StringComparison.Ordinal), "a corpse click with Alt is the loot, not a walk: " + _worldRouteClick);
+            Require(_attack is null && !_worldRouteClick.Contains("goal set", StringComparison.Ordinal) && _inventoryStatus.Contains("goal 81 started", StringComparison.Ordinal),
+                "a corpse click with Alt is the loot (goal 81), not a walk: " + _worldRouteClick + " / " + _inventoryStatus);
             CancelInventoryApproach("smoke: the loot click is shown");
             HeroRequests.Apply(new Arcanum.World.StopRequest(null));
             ToggleCombatMode();

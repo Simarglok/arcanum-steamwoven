@@ -165,6 +165,8 @@ public partial class TerrainViewerApp
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
             (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode, _gameBarPanel?.Visible == true),
             (_spellTargeting?.Spell, _spellTargeting?.Mask),
+            // ARC-INPUT-1937: the armed cursors and skills keep their own pick mask (see PressPickSpared).
+            (_itemAiming is not null, _lockpickArmed is not null, PickPocketArmed, DisarmArmed),
             // ARC-INPUT-1356: a body that moves under the resting pointer is picked again where it is drawn now.
             visible ? _canvas.AreaMovingDrawnStamp : 0);
         if (Equals(stamp, _hoverStamp)) return;
@@ -188,6 +190,7 @@ public partial class TerrainViewerApp
             // with left Alt (as WorldRouteClick decides).
             if (AttackMapActive && HeroInCombatMode && AreaTargetOf(hit) is { } foe)
             {
+                // Without Alt the pick sees through a corpse (ARC-INPUT-1937), so a corpse reaches here only with an Alt key held.
                 if (foe.Dead) return Godot.Input.IsKeyPressed(Key.Alt) && InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } corpse
                     ? Chebyshev(corpse.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot
                     : AreaHoverAction.None;

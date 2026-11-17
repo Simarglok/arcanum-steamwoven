@@ -152,7 +152,7 @@ public partial class TerrainViewerApp
         ?? (_areaCompanions?.Companions.FirstOrDefault(c => c.Key == key) is { } visitor ? _combatHost.Target(_areaSession!, visitor.Entity) : null);
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) in combat mode on an NPC: true when the press belongs to combat
-    /// (an attack, a refused one, or a corpse clicked without Alt, which does nothing in the original).</summary>
+    /// (an attack, a refused one). ARC-INPUT-1937: with no Alt key held the pick has already seen through the followers and the dead (0x551F80), so a corpse or follower reaches here only with an Alt key (a corpse with Alt is looted, a follower attacked with left Alt; right Alt gets the refusal below, FA2).</summary>
     private bool TryAreaAttack(Vector2 screen, bool alt, bool shift = false)
     {
         // ARC-COMBAT-008: an object is attacked only with Alt held (ledger OD14); without it the click uses the object as out of combat.
@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
         }
         if (target.Dead)
         {
-            // FA3: a corpse in combat mode is looted with Alt and otherwise ignored.
+            // FA3: a corpse in combat mode is looted with Alt; the no-Alt branch is never reached (the pick sees through the corpse, ARC-INPUT-1937).
             if (alt) return false;
             _attackNotice = "a corpse in combat mode: Alt+click loots it";
             RefreshAreaStatus();
