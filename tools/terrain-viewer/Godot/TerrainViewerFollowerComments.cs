@@ -1,3 +1,6 @@
+using Arcanum.Data.Audio;
+using Arcanum.Presentation.Audio;
+using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
@@ -10,7 +13,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-AI-1527 (FR-DIALOG-003, VB4-1..VB4-5): the followers' comment lines in the shown map: the combat taunt at the end of the hero's hit (0x4B6B90 → 0x4AE9E0), the near-death line of a follower an attack brought below a fifth of
 // its hit points (0x4AEAB0, from the damage step 0x4B4390) and the upset line of a complaint (0x414370). The AI host chooses the comment and names the speaker and the message range (AreaAiHost.FollowerSpeaks); the conversation host
-// reads a random line of the range from the player's generated files and floats it over the follower (AreaConversationHost.SayFollowerLine). The texts are read at run time and never stored; no voice is played.
+// reads a random line of the range from the player's generated files and floats it over the follower (AreaConversationHost.SayFollowerLine). The texts are read at run time and never stored. ARC-AI-1640: a line from the speaker's own override dialog starts that record's voice (the speech display 0x568540 → 0x5688D0); generated lines have none.
 public partial class TerrainViewerApp
 {
     /// <summary>
@@ -31,7 +34,7 @@ public partial class TerrainViewerApp
     private void SayRaceLine(string entity, int group, string? listener, bool refusesFightOrFlee) =>
         SayFrom(entity, $"race={group}", listener, refusesFightOrFlee, (talk, speaker) => talk.SayRaceLine(speaker, group, listener));
 
-    private void SayFrom(string entity, string what, string? listener, bool refusesFightOrFlee, Func<AreaConversationHost, AreaSpeaker, string?> say)
+    private void SayFrom(string entity, string what, string? listener, bool refusesFightOrFlee, Func<AreaConversationHost, AreaSpeaker, AreaSaidLine?> say)
     {
         if (_conversationHost is not { } talk || _areaSession is not { } session)
         {
@@ -52,8 +55,12 @@ public partial class TerrainViewerApp
             if (listener is not null) FaceListenerOf(entity, listener);
             return;
         }
-        var text = say(talk, speaker);
+        var line = say(talk, speaker);
+        var text = line?.Text;
         _followerLinesSaid += text is null ? 0 : 1;
+        // ARC-AI-1640: the voice starts with the float; a line without one leaves a playing voice alone (0x5688D0 does nothing for -1).
+        if (line is { Voice: >= 0 } && _audio is not null)
+            ExecuteVoice(new(DialogVoiceCommandKind.Play, line.Voice), line.ListenerGender is { } gender ? (gender == DialogPcGender.Female ? SpeechGender.Female : SpeechGender.Male) : SpeechGender.Female);
         GD.Print($"ARC-AI-1527 follower-line speaker={entity} {what} listener={listener ?? "-"} said={(text is null ? "nothing" : text)}");
         // The line pick found nothing (a range without an entry, a refused roll): the original's display still turns the speaker to its listener.
         if (text is null && listener is not null) FaceListenerOf(entity, listener);
