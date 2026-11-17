@@ -197,8 +197,10 @@ public partial class TerrainViewerApp
             var goal = new AttackGoal(far, far.Build.Combat!, null);
             StrikeBlocker(goal, companion.Speaker.Row, here);
             require(_lineOfFireStruck == companion.Entity, $"the line of fire's strike is the companion's ({_lineOfFireStruck} for {companion.Entity}): {_attackNotice}");
-            require(session.QueryRandom().Draws > draws && _lastCritterAttackForSelfTest is { Disposition: not GameSessionDisposition.Rejected }, $"the strike rolled and resolved as an attack on a critter: {_lastCritterAttackForSelfTest?.Disposition} {_lastCritterAttackForSelfTest?.Failure}");
+            require(session.QueryRandom().Draws > draws && _lastCritterAttackForSelfTest is { Disposition: not GameSessionDisposition.Rejected, Shot: null }, $"the strike rolled and resolved as an attack on a critter: {_lastCritterAttackForSelfTest?.Disposition} {_lastCritterAttackForSelfTest?.Failure}");
             require(session.QueryLife(far.Build.Combat!.Target).View!.Status.HitPoints == farLife.HitPoints, "the far NPC keeps its hit points");
+            var after = session.QueryLife(combat.Target).View!.Status.HitPoints;
+            require(_lastCritterAttackForSelfTest?.Resolution?.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit) || after < life.HitPoints, $"a hit lowers the companion's hit points ({life.HitPoints} to {after})");
             GD.Print($"ARC-COMBAT-2568 native-smoke companion-on-line PASS target={companion.Entity} far={far.Entity} distance={distance} hp={life.HitPoints}->{session.QueryLife(combat.Target).View!.Status.HitPoints} outcome={_lastCritterAttackForSelfTest?.Resolution?.Outcome}");
         }
         finally
