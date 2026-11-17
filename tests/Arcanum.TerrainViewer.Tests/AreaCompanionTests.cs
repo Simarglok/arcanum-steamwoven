@@ -728,7 +728,8 @@ public sealed class AreaCompanionTests
 
     // ARC-WORLD-2522 (tail of #2039, ledger TT20, FM1): a FREE NPC (no party record, no leader) that a script's teleport sent to another map by the record edits alone is a visitor of the
     // destination: the destination's visitor list names it with its home and stored cell, its body is the home map's template (the led-NPC build), the group stands it on the arrival cell as a free
-    // companion with a place and a drawn body, the take of the open's teleported mark finds it, and the home map (seen from there) holds it away. Nothing of this is a mode of the NPC: the same group serves it.
+    // companion with a place and a drawn body, and the take of the open's teleported mark finds it. Nothing of this is a mode of the NPC: the same group serves it. What the AI host then does with it
+    // (its first forced pass sends a leaderless NPC whose teleport map is another map back there, FM10) is the host's rule, shown by the follower-home smoke.
     [TestMethod]
     public void A_free_npc_a_script_teleported_to_another_map_stands_on_the_destination_as_a_visitor_the_group_runs()
     {
@@ -771,7 +772,8 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(0, group.Skipped.Count, "its arrival cell is admitted: " + string.Join(";", group.Skipped));
         var homeGroup = AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0));
         Assert.AreEqual(0, homeGroup.Companions.Count);
-        Assert.IsTrue(homeGroup.Absent.Contains(template.Key), "the home map's own body of it is not in the world");
+        Assert.IsTrue(homeGroup.Absent.Contains(template.Key), "a body template of the home map would not stand in the world (a dialog-less NPC's row is hidden by AreaObjectTargets.Gone, AreaObjectTargetsTests)");
+        Assert.IsNull(session.QueryTeleportMap(entity), "the record edits write no teleport map: FM6 writes the open map at the ping's own payload (GameSessionOwner.WithTeleportMaps), so the destination's AI pass sees a teleport map elsewhere (FM10)");
 
         // The open's take of the mark (the route to the arrival cell's tile script) finds it on the arrival cell and removes it.
         var (taken, objects) = session.TakeTeleportedMarks(session.Version, dest);
