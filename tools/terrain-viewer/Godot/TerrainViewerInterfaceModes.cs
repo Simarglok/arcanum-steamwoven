@@ -219,7 +219,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-MAGIC-1128: a spell's or an item's target mode stands over the player's own inventory window or, ARC-MAGIC-1336, a loot window (the spell's target area has the inventory bit,
     /// IA4, SU3): the window is the cursor's picking surface, so it does not drop the target.</summary>
-    private bool TargetOverInventory => (TargetModeOpen(InterfaceMode.SpellTarget) || _itemAiming is not null && TargetModeOpen(InterfaceMode.ItemTarget)) && (WindowOpen(InterfaceMode.Inventory) || WindowOpen(InterfaceMode.Loot));
+    private bool TargetOverInventory => (TargetModeOpen(InterfaceMode.SpellTarget) && (WindowOpen(InterfaceMode.Inventory) || WindowOpen(InterfaceMode.Loot))
+        || _itemAiming is not null && TargetModeOpen(InterfaceMode.ItemTarget) && WindowOpen(InterfaceMode.Inventory));
 
     /// <summary>ARC-DEV-111 (SA51, 0x541180): what drops an open target mode. A window that opens pops it (SA40) and so do the palette, the
     /// death cover and the bug report; the in-play menu does not (it is no mode: it changes nothing on the stack, and Continue returns to the
