@@ -64,6 +64,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-1299: the item flag 0x10 (field 0x57) "no display": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
     public bool NoDisplay { get; init; }
 
+    /// <summary>ARC-WORLD-2493: the object flag 0x400000 (field 0x13) "invulnerable" of the item's data: the one thing the original's inventory-on-destroy (0x4639E0) asks of an item, which it takes out of a destroyed holder and drops. A seed that does not say reads as clear.</summary>
+    public bool Invulnerable { get; init; }
+
     /// <summary>ARC-WORLD-1299: the spell flag 0x4000 (field 0x14) "summoned": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
     public bool Summoned { get; init; }
 

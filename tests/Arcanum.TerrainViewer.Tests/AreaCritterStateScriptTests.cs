@@ -188,6 +188,33 @@ public sealed class AreaCritterStateScriptTests
         Assert.IsNull(host.IsSurrendered(new(1, "oid:nobody")));
     }
 
+    // ARC-SCRIPT-2464 (E6, TG5): the dialog gates of an NPC's dialog point as the use host answers them: dead, surrendered (0x4AF210) and mind-controlled (spell flag 0x8000000), each on its own and together; none for the hero,
+    // another map's object or a non-NPC.
+    [TestMethod]
+    public void The_dialog_gates_of_an_NPC_answer_dead_surrendered_and_mind_controlled()
+    {
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        var calm = Npc(1);
+        var surrendering = Npc(2);
+        var controlled = Npc(3, spellFlags: AreaUseScriptHost.MindControlledFlag);
+        var killed = Npc(4);
+        var all = Npc(5, spellFlags: AreaUseScriptHost.MindControlledFlag);
+        var scenery = Plain(6, ScenerySlotType, spellFlags: AreaUseScriptHost.MindControlledFlag);
+        var host = Host(session, null, calm, surrendering, controlled, killed, all, scenery);
+        Assert.AreEqual(ScrDialogState.Normal, host.DialogState(Ref(calm)));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetDangerState(session.Version, new SessionDangerRequest { Entity = AreaUseScriptHost.EntityId(surrendering), State = DangerState.Surrender, Target = SessionCombatant.Hero }).Disposition);
+        Assert.AreEqual(ScrDialogState.Surrendered, host.DialogState(Ref(surrendering)));
+        Assert.AreEqual(ScrDialogState.MindControlled, host.DialogState(Ref(controlled)));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.Kill(session.Version, SessionLifeTarget.Critter(AreaUseScriptHost.EntityId(killed), new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+        Assert.AreEqual(ScrDialogState.Dead, host.DialogState(Ref(killed)));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetDangerState(session.Version, new SessionDangerRequest { Entity = AreaUseScriptHost.EntityId(all), State = DangerState.Surrender, Target = SessionCombatant.Hero }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.Kill(session.Version, SessionLifeTarget.Critter(AreaUseScriptHost.EntityId(all), new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+        Assert.AreEqual(ScrDialogState.Dead | ScrDialogState.Surrendered | ScrDialogState.MindControlled, host.DialogState(Ref(all)), "the gates are independent");
+        Assert.AreEqual(ScrDialogState.Normal, host.DialogState(Ref(scenery)), "a scenery with the bit set is no NPC");
+        Assert.AreEqual(ScrDialogState.Normal, host.DialogState(host.Pc));
+        Assert.AreEqual(ScrDialogState.Normal, host.DialogState(new(2, Ref(surrendering).Code)), "another map's object");
+    }
+
     [TestMethod]
     public void Can_see_and_can_hear_go_through_the_world_for_an_NPC_of_the_shown_map_toward_an_NPC_or_the_hero()
     {

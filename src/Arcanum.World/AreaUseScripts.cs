@@ -1149,10 +1149,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
-    // ARC-SCRIPT-047: the dialog gates of a call-ex of an NPC's dialog point (E6): dead as the session holds it (map data or killed);
-    // surrender and mind control are not modelled here (normal).
-    public ScrDialogState DialogState(ScrObjectRef attachee) =>
-        !IsPc(attachee) && attachee.Map == _shownMap && Row(attachee) is { Type: NpcType } && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
+    // ARC-SCRIPT-047 / ARC-SCRIPT-2464: the dialog gates of a call-ex or call script callee on an NPC's dialog point (E6, TG5), all three read on the NPC's row of the shown map: dead as the session holds it (map data or killed),
+    // surrendered as the session's danger record says (0x4AF210, <see cref="IsSurrendered"/>) and mind-controlled by bit 0x8000000 of the spell flags, field 0x14 (<see cref="IsMindControlled(AreaObjectRecord)"/>).
+    // The gates are independent, as the dispatcher tests them one after the other. The PC, another map's object and anything that is not an NPC meet none.
+    public ScrDialogState DialogState(ScrObjectRef attachee)
+    {
+        if (IsPc(attachee) || attachee.Map != _shownMap || Row(attachee) is not { Type: NpcType } row) return ScrDialogState.Normal;
+        var state = ScrDialogState.Normal;
+        if (_session.QueryNpcDead(attachee.Code)) state |= ScrDialogState.Dead;
+        if (IsSurrendered(attachee) == true) state |= ScrDialogState.Surrendered;
+        if (IsMindControlled(row)) state |= ScrDialogState.MindControlled;
+        return state;
+    }
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
@@ -1999,8 +2007,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 }
                 // TD2: an NPC already destroyed is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
-                var destroyed = _session.ApplyChanges(_session.Version, null,
-                    [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
+                // ARC-WORLD-2493 (0x43CCA0 → 0x4639E0): the NPC's invulnerable items are dropped on its cell with the destroy; an NPC with no cell of its own is destroyed with its list.
+                var destroyed = Place(request.Object) is { } cell
+                    ? _session.DestroyMapNpc(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, cell)
+                    : _session.ApplyChanges(_session.Version, null,
+                        [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
                 if (destroyed.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
@@ -2555,6 +2566,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
+                // ARC-WORLD-2493: the destroy drops the NPC's invulnerable items (0x4639E0), which the session's budgets may refuse; checked before any effect applies.
+                if (Place(request.Object) is { } dropCell && _session.DestroyMapNpcRefusal(new SessionMapId(request.Object.Map), request.Object.Code, dropCell) is { } dropWhy)
+                    return $"destroy of {request.Object.Code} is refused by the session ({dropWhy})";
                 if (FollowsPc(request.Object)) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
                 // ARC-SCRIPT-1842: the map change does not reach the session's destroy (which unlinks, 0x45E180), so a leader or follower of an NPC is left as it is.
                 if (_session.QueryLeader(request.Object.Code) is not null || _session.QueryFollowers(request.Object.Code).Count > 0)

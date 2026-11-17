@@ -65,7 +65,7 @@ public partial class TerrainViewerApp
     {
         var player = _areaSession?.QueryHero()?.Portrait;
         // The catalogue is read only when a clash is possible (an NPC storing the PC's own portrait).
-        return AreaPortraits.Shown(row, AreaPortraits.Stored(row) is { } stored && stored == player ? PortraitCatalogueNow() : null, player);
+        return AreaPortraits.Shown(row, AreaPortraits.Stored(row) is { } stored && stored == player ? PortraitCatalogueNow() : null, player, _areaSession);
     }
 
     /// <summary>ARC-UI-2444: the portrait catalogue (read with the panel content on first use); null with no game folder.</summary>
