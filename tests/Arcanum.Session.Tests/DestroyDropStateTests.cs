@@ -23,6 +23,23 @@ public sealed class DestroyDropStateTests
 
     private static long? Changed(GameSessionOwner owner, string entity, string property) => owner.QueryMapChange(Exterior, MapChangeKey.ForEntity(entity, property));
 
+    // ARC-SCRIPT-2506 (0x45E180, 0x45E040): the destroy a transform makes unlinks the NPC from its NPC leader and frees the followers it led; the plain script destroy leaves the links (its host refuses such an NPC).
+    [TestMethod]
+    public void TheDestroyOfALinkedNpcUnlinksItOnlyWhenAsked()
+    {
+        foreach (var unlink in new[] { false, true })
+        {
+            using var owner = WithNpc();
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, "npc-1", "npc-2").Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, "npc-3", "npc-1").Disposition);
+            var result = owner.DestroyMapNpc(owner.Version, Exterior, "npc-1", Spot, leaveLeaders: unlink);
+            Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+            Assert.AreEqual(unlink ? null : "npc-2", owner.QueryLeader("npc-1"), "its leader");
+            Assert.AreEqual(unlink ? 0 : 1, owner.QueryFollowers("npc-2").Count, "the leader's array");
+            Assert.AreEqual(unlink ? null : "npc-1", owner.QueryLeader("npc-3"), "the follower it led");
+        }
+    }
+
     [TestMethod]
     public void OnlyTheInvulnerableItemsAreTakenOutAndDroppedAndTheNpcIsDestroyed()
     {

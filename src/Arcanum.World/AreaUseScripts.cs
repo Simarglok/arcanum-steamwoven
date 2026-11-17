@@ -49,6 +49,8 @@ namespace Arcanum.World;
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
 /// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
 /// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
+/// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
+/// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -61,7 +63,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
-    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null);
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int, int, bool>? CarryVitals = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -2880,51 +2882,89 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-2440 (ledger TI5, exe read 2026-11-17, F1–F12): why a transform (40) of <paramref name="request"/>'s object into critter prototype <see cref="ScrObjectStateRequest.Value"/> cannot be applied here, or null. Modelled: a placed NPC of the shown map
-    /// (no created critter, not already destroyed, no follower of the PC, no leader or follower of an NPC, no destroy script of its own: the original runs that script first and a refusal of it keeps the old object, F6) that stands at full hit points and fatigue
-    /// (the original carries both shares, F2: below full, or unknown, they are not carried yet), becomes a created critter of the prototype's file (the script's number + 20, F1) on its tile in the session, and the old NPC is destroyed as a script destroy does (the map change,
-    /// F5). The new critter starts from its prototype alone (F2; its inventory is the host's restock of a created critter, F4); the old rotation and the old inventory (which stays in the destroyed holder) are not carried.
+    /// ARC-SCRIPT-2440, ARC-SCRIPT-2506 (ledger TI5, TI5b, exe read 2026-11-17, F1–F12): why a transform (40) of <paramref name="request"/>'s object into critter prototype <see cref="ScrObjectStateRequest.Value"/> cannot be applied here, or null.
+    /// Modelled: a placed NPC of the shown map (no created critter, not already destroyed) becomes a created critter of the prototype's file (the script's number + 20, F1) on its tile in the session; it starts from its prototype alone (F2; its inventory
+    /// is the host's restock of a created critter, F4) and carries the old NPC's hit-point and fatigue percentages (F2, F3: <see cref="TransformDamage"/>, through <see cref="AreaScriptWorld.CarryVitals"/> when either is below 100); the old NPC's destroy
+    /// script (point 2) runs first and a refusal of it keeps the old NPC while the made critter stands (F6); then the old NPC is destroyed as a script destroy does (the map change, its invulnerable items dropped on its tile, F4), a follower of the PC
+    /// leaves the party and an NPC's leader and followers are unlinked (F5). Not modelled (ledger TI5c): the old rotation (a created critter has no stored facing), the AI focus and combat references to the old handle, turn-based combat entries.
     /// </summary>
     internal string? TransformRefusal(ScrObjectStateRequest request)
     {
         var obj = request.Object;
         string Not(string why) => $"transform of {obj.Code} into prototype {request.Value} is not modelled ({why})";
         if (ScrTransformedObject.Is(obj)) return Not("the object a transform made");
-        if (IsPc(obj) || obj.Map != _shownMap || Row(obj) is not { Type: NpcType } npc) return Not("only an NPC of the shown map");
+        if (IsPc(obj) || obj.Map != _shownMap || Row(obj) is not { Type: NpcType }) return Not("only an NPC of the shown map");
         if (_session.QueryCreatedObject(obj.Code) is not null) return Not("a created critter");
         if (AlreadyDestroyed(obj)) return Not("the NPC is destroyed already");
-        if (FollowsPc(obj)) return Not("a follower of the PC");
-        if (_session.QueryLeader(obj.Code) is not null || _session.QueryFollowers(obj.Code).Count > 0) return Not("it leads or follows an NPC");
-        if (LoadedSlot(npc, ScrPoint.Destroy) is { Script: not 0 } own) return Not($"its destroy script {own.Script} runs first");
+        if (DestroyPointRefusal(obj) is { } scriptWhy) return Not(scriptWhy);
         if (_world?.Critter is not { } critter || !critter(request.Value)) return Not("no critter prototype the session can create");
         if (Place(obj) is not { } cell) return Not("it has no tile");
-        if (_world.Vitals?.Invoke(obj.Code) is not { } vitals) return Not("its hit points and fatigue are unknown: the shares are not carried yet");
-        if (vitals.HitPoints < vitals.MaxHitPoints || vitals.Fatigue < vitals.MaxFatigue) return Not("its hit points or fatigue are below full: the shares are not carried yet");
+        if (_world.Vitals?.Invoke(obj.Code) is not { } vitals) return Not("its hit points and fatigue are unknown: the shares cannot be carried");
+        if (vitals.MaxHitPoints <= 0 || vitals.MaxFatigue <= 0) return Not("a maximum of 0: the original divides by it without a guard (0x4AB400)");
+        if (TransformPercents(vitals) is not (100, 100) && _world.CarryVitals is null) return Not("its hit points or fatigue are below full and the viewer's life cannot carry the shares");
+        if (_session.DestroyMapNpcRefusal(new SessionMapId(_shownMap), obj.Code, cell) is { } dropWhy) return Not($"the session would refuse the destroy's drops ({dropWhy})");
         if (_session.QueryCreateObjectRefusal(SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell) is { } why) return Not($"the session would refuse it ({why})");
         return null;
     }
+
+    // ARC-SCRIPT-2506 (F2): the hit-point and fatigue percentages of the old NPC, current × 100 / maximum truncated (0x4AB400, 0x4AB430), each capped at 100 (a higher one carries no damage).
+    private static (int HitPoints, int Fatigue) TransformPercents(AreaScriptVitals vitals) =>
+        ((int)Math.Min(100, vitals.HitPoints * 100L / vitals.MaxHitPoints), (int)Math.Min(100, vitals.Fatigue * 100L / vitals.MaxFatigue));
+
+    /// <summary>
+    /// ARC-SCRIPT-2506 (ledger TI5, F3, 0x43D530): the damage a transform sets on the new critter so it holds the old one's percentages: <c>(100 - percent) * maximum / 100</c> for hit points, at most maximum - 1 (the new critter never starts dead), and for fatigue the
+    /// same without that clamp (a fatigue share can leave the new critter out cold). A percentage of 100 or more carries no damage (a negative damage is not stored).
+    /// </summary>
+    public static (int HitPoints, int Fatigue) TransformDamage(int hitPointPercent, int maxHitPoints, int fatiguePercent, int maxFatigue) =>
+        ((int)Math.Clamp((100L - hitPointPercent) * maxHitPoints / 100, 0, Math.Max(0, maxHitPoints - 1)),
+         (int)Math.Clamp((100L - fatiguePercent) * maxFatigue / 100, 0, Arcanum.Simulation.Combat.LifeLimits.MaxAmount));
 
     /// <summary>ARC-SCRIPT-2440 (ledger TI5): the critter the last <see cref="ApplyTalkTransform"/> made (test and smoke seam; null before any).</summary>
     public SessionCreatedObject? LastTransformed { get; private set; }
 
     /// <summary>
-    /// ARC-SCRIPT-2440 (ledger TI5; <see cref="TransformRefusal"/> planned it): the transform of a placed NPC, in the original's order: the new critter of the prototype's file is created on the old one's tile (a failure ends the action, nothing else
-    /// happens), then the old NPC is destroyed (the destroy map change of a script destroy); the host is told of the made critter (<see cref="AreaScriptWorld.CritterMade"/>). Returns the made object, or null when the session refused.
+    /// ARC-SCRIPT-2440, ARC-SCRIPT-2506 (ledger TI5; <see cref="TransformRefusal"/> planned it): the transform of a placed NPC, in the original's order: the new critter of the prototype's file is created on the old one's tile (a failure ends the action, nothing
+    /// else happens) and told to the host (<see cref="AreaScriptWorld.CritterMade"/>), it takes the old NPC's percentages, the old NPC's destroy script runs (a refusal keeps the old NPC and the made critter stands, F6), then the old NPC is destroyed (its leader
+    /// links and, for a follower of the PC, its place in the party go; the invulnerable items drop on its tile). Returns the made object, or null when something refused: the made critter then goes again, so a refusal never leaves two of them.
     /// </summary>
     internal ScrObjectRef? ApplyTalkTransform(ScrObjectStateRequest request)
     {
         LastTransformed = null;
-        var cell = Place(request.Object)!.Value;
+        var old = request.Object;
+        var cell = Place(old)!.Value;
+        var percents = TransformPercents(_world!.Vitals!(old.Code)!.Value);
         var made = _session.CreateObject(_session.Version, SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell);
         if (made.Object is not { } critter) return null;
         LastTransformed = critter;
-        _world!.CritterMade?.Invoke(critter.Entity);
-        var destroyed = _session.ApplyChanges(_session.Version, null, [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
-        if (destroyed.Disposition != GameSessionDisposition.Rejected) return new ScrObjectRef(_shownMap, critter.Entity);
-        // The old NPC stays: the made critter goes again, so the refusal never leaves two of them (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
-        _session.DestroyCreatedObject(_session.Version, critter.Entity);
-        LastTransformed = null;
-        return null;
+        _world.CritterMade?.Invoke(critter.Entity);
+        // The old NPC stays on any refusal below: the made critter goes again (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
+        ScrObjectRef? Undo()
+        {
+            _session.DestroyCreatedObject(_session.Version, critter.Entity);
+            LastTransformed = null;
+            return null;
+        }
+        if (percents is not (100, 100) && _world.CarryVitals?.Invoke(critter.Entity, percents.HitPoints, percents.Fatigue) != true) return Undo();
+        // F6: the old object's destroy script runs first; a return of 0 keeps it (the creation stands either way), a run that could not apply leaves everything as it was.
+        if (Slot(old, ScrPoint.Destroy) is { Script: > 0 })
+        {
+            if (!_destroyingScenery.Add(old.Code)) return Undo();
+            try
+            {
+                var ran = RunDestroyPoint(old.Code, _lastRules ?? _session.Rules.Scripts);
+                if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return Undo();
+                if (DyingStops(ran)) return new ScrObjectRef(_shownMap, critter.Entity);
+            }
+            finally { _destroyingScenery.Remove(old.Code); }
+        }
+        // F5: a follower of the PC leaves the party (the same forced leave as a disband, NS1); an NPC's leader and followers are unlinked by the session's destroy.
+        if (FollowsPc(old))
+        {
+            var left = _session.LeaveParty(_session.Version, old.Code, new PartyLeave(Force: true));
+            if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
+        }
+        var destroyed = _session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true);
+        return destroyed.Disposition == GameSessionDisposition.Rejected ? Undo() : new ScrObjectRef(_shownMap, critter.Entity);
     }
 
     /// <summary>ARC-SCRIPT-2198: one disband or create item request of a talk run, in action order (<see cref="TalkStateRefusal"/> planned it); false when the session refuses. Any other request is not this host's and does nothing.</summary>

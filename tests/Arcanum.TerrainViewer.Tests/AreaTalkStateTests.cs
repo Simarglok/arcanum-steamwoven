@@ -104,6 +104,9 @@ public sealed class AreaTalkStateTests
                 Do(new(ScrCatalogue.Action.LoopFor, (2, -1))),
                 Do(new(ScrCatalogue.Action.LoopEnd)),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // 4003: a destroy script that runs the default; 4004: one that returns 0 (skip default) and keeps the object (0x43CCA0 returns without destroying).
+            Write("scr/04003destroy.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag + 1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/04004keep.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag + 2))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -119,14 +122,14 @@ public sealed class AreaTalkStateTests
         public bool Flag => Host.GlobalFlag(AreaFlag);
     }
 
-    private static Talk Create(ScriptContent content, int dialog, bool useHost = true, Func<int, bool>? critter = null, Action<string>? made = null, Func<string, AreaScriptVitals?>? vitals = null, int destroyScript = 0, Func<string, string, string>? attack = null, long spellFlags = 0)
+    private static Talk Create(ScriptContent content, int dialog, bool useHost = true, Func<int, bool>? critter = null, Action<string>? made = null, Func<string, AreaScriptVitals?>? vitals = null, int destroyScript = 0, Func<string, string, string>? attack = null, long spellFlags = 0, Func<string, int, int, bool>? carry = null)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog, destroyScript, spellFlags);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
-        var use = new AreaUseScriptHost(session, Map, [row], [], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, Critter: critter, CritterMade: made, Vitals: vitals, ScriptAttack: attack));
+        var use = new AreaUseScriptHost(session, Map, [row], [], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, Critter: critter, CritterMade: made, Vitals: vitals, ScriptAttack: attack, CarryVitals: carry));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = useHost ? () => use : null };
         return new(session, speaker, host) { Use = use };
     }
@@ -240,6 +243,96 @@ public sealed class AreaTalkStateTests
         });
     }
 
+    // ARC-SCRIPT-2506 (TI5, F2, F3, 0x43D530): the made critter takes the old NPC's hit-point and fatigue percentages through the world's life; the damage is the share of its own maxima, hit points at most maximum - 1.
+    [TestMethod]
+    public void The_made_critter_carries_the_hit_point_and_fatigue_shares_of_the_old_npc()
+    {
+        Assert.AreEqual((50, 10), AreaUseScriptHost.TransformDamage(50, 100, 50, 20));
+        Assert.AreEqual((0, 0), AreaUseScriptHost.TransformDamage(100, 100, 100, 20), "a full critter carries no damage");
+        Assert.AreEqual((0, 0), AreaUseScriptHost.TransformDamage(130, 100, 101, 20), "a percentage above 100 stores no negative damage");
+        Assert.AreEqual((99, 20), AreaUseScriptHost.TransformDamage(0, 100, 0, 20), "hit points stop one short of the maximum; fatigue is not clamped");
+        Assert.AreEqual((30, 6), AreaUseScriptHost.TransformDamage(70, 100, 66, 20), "the damage rounds down");
+        WithContent(content =>
+        {
+            var carried = new List<(string, int, int)>();
+            // 20 of 40 hit points (50 %), 10 of 20 fatigue (50 %); 7 of 9 hit points would be 77 %.
+            using var talk = Create(content, 801, critter: prototype => prototype == 27368, vitals: _ => new AreaScriptVitals(20, 40, 10, 20, 0),
+                carry: (entity, hitPoints, fatigue) => { carried.Add((entity, hitPoints, fatigue)); return true; });
+            var run = talk.Run();
+            Assert.IsTrue(talk.Host.Apply(run.Effects), talk.Use.TalkStateRefusal(run.Effects));
+            var critter = talk.Use.LastTransformed!;
+            CollectionAssert.AreEqual(new[] { (critter.Entity, 50, 50) }, carried);
+            Assert.IsTrue(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)));
+        });
+        WithContent(content =>
+        {
+            var carried = new List<(string, int, int)>();
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0), carry: (e, h, f) => { carried.Add((e, h, f)); return true; });
+            Assert.IsTrue(talk.Host.Apply(talk.Run().Effects));
+            Assert.AreEqual(0, carried.Count, "a full NPC needs no carry");
+        });
+        WithContent(content =>
+        {
+            // The life refuses the share: the made critter goes again and the old NPC stays.
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(20, 40, 20, 20, 0), carry: (_, _, _) => false);
+            Assert.IsFalse(talk.Host.Apply(talk.Run().Effects));
+            Assert.IsNull(talk.Use.LastTransformed);
+            Assert.IsFalse(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)));
+            Assert.AreEqual(0, talk.Session.QueryCreatedObjects(new SessionMapId(Map)).Count, "no second critter is left");
+        });
+        WithContent(content =>
+        {
+            // A maximum of 0 is refused (the original divides by it without a guard).
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(0, 0, 20, 20, 0), carry: (_, _, _) => true);
+            StringAssert.Contains(talk.Use.TalkStateRefusal(talk.Run().Effects) ?? "", "maximum of 0");
+        });
+    }
+
+    // ARC-SCRIPT-2506 (F6): the old NPC's destroy script runs first; the default lets the destroy go on, a return of 0 keeps the old NPC while the made critter stands.
+    [TestMethod]
+    public void The_old_npcs_destroy_script_runs_first_and_a_skip_default_keeps_it()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0), destroyScript: 4003);
+            var run = talk.Run();
+            Assert.IsNull(talk.Use.TalkStateRefusal(run.Effects));
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.IsTrue(talk.Host.GlobalFlag(AreaFlag + 1), "the destroy script ran");
+            Assert.IsTrue(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)));
+            Assert.IsNotNull(talk.Use.LastTransformed);
+        });
+        WithContent(content =>
+        {
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0), destroyScript: 4004);
+            Assert.IsTrue(talk.Host.Apply(talk.Run().Effects));
+            Assert.IsTrue(talk.Host.GlobalFlag(AreaFlag + 2), "the destroy script ran");
+            Assert.IsFalse(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)), "the refusal keeps the old NPC");
+            Assert.IsNotNull(talk.Use.LastTransformed, "the made critter stands (F6)");
+            Assert.AreEqual(1, talk.Session.QueryCreatedObjects(new SessionMapId(Map)).Count);
+        });
+    }
+
+    // ARC-SCRIPT-2506 (F5): the destroy takes the old NPC out of its NPC leader's array and frees what it led.
+    [TestMethod]
+    public void The_destroy_of_a_transform_unlinks_the_old_npc_from_its_leaders_and_followers()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0));
+            var old = AreaConversationState.EntityId(talk.Speaker.Row);
+            const string leader = "npc-leader", led = "npc-led";
+            Assert.AreEqual(GameSessionDisposition.Changed, talk.Session.ForceJoinLeader(talk.Session.Version, old, leader).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, talk.Session.ForceJoinLeader(talk.Session.Version, led, old).Disposition);
+            var run = talk.Run();
+            Assert.IsNull(talk.Use.TalkStateRefusal(run.Effects), "a leader or follower is no longer a refusal");
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.IsNull(talk.Session.QueryLeader(old));
+            Assert.AreEqual(0, talk.Session.QueryFollowers(leader).Count);
+            Assert.IsNull(talk.Session.QueryLeader(led));
+        });
+    }
+
     [TestMethod]
     public void A_dialog_action_in_the_run_of_a_transform_leaves_the_run_unapplied()
     {
@@ -268,7 +361,7 @@ public sealed class AreaTalkStateTests
                 Assert.IsFalse(talk.Flag, "the flag before the transform was not applied: the run is refused whole");
                 Assert.IsNull(talk.Use.LastTransformed);
             }
-            // A speaker that is hurt: the hit-point share is not carried yet.
+            // A speaker that is hurt while the world has no life to carry the share: refused whole.
             using (var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(39, 40, 20, 20, 0)))
             {
                 var run = talk.Run();

@@ -46,10 +46,10 @@ public sealed partial class GameSessionOwner
     /// and no drop script. An NPC with no inventory record, or no invulnerable item, only gets the destroy. The budgets come first (<see cref="DestroyMapNpcRefusal"/>), so the destroy does all of it or is refused whole.
     /// A destroyed NPC is left as it is (TD2: <see cref="GameSessionDisposition.NoChange"/>). One revision for the destroy and one for the drops. Limits: the item's own remove-item script (point 28) is not run, a made item's
     /// flags read as clear (its prototype is the host's), a given kit item's too, an added item whose ground record only a hero's drop makes stays out of the walk in a session with no hero, and an added item the body walk
-    /// would destroy (no-display or summoned flag of its origin seed) is not dropped either; the NPC's leave of its leader, its destroy script and the host's runs of it are the caller's (the script host refuses such a destroy).
+    /// would destroy (no-display or summoned flag of its origin seed) is not dropped either; the NPC's leave of its leader (with <paramref name="leaveLeaders"/> the session unlinks it, ARC-SCRIPT-2506), its destroy script and the host's runs of it are the caller's (the script host refuses such a destroy).
     /// </summary>
     [OriginalFunction(0x4639E0, OriginalFunctionScope.Partial)]
-    public GameSessionMutationResult DestroyMapNpc(GameSessionVersion expected, SessionMapId map, string entity, CellCoord cell)
+    public GameSessionMutationResult DestroyMapNpc(GameSessionVersion expected, SessionMapId map, string entity, CellCoord cell, bool leaveLeaders = false)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidObject, Version);
@@ -64,7 +64,16 @@ public sealed partial class GameSessionOwner
         var edits = new List<MapChangeEdit> { new(map, MapChangeKey.ForEntity(entity, ObjectDestroyedProperty), 1) };
         foreach (var item in walk.Where(item => item.Seed)) edits.Add(new(map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(cell)));
         var written = ApplyChanges(Version, null, edits);
-        if (written.Disposition != GameSessionDisposition.Changed || walk.Count == 0) return written;
+        if (written.Disposition != GameSessionDisposition.Changed) return written;
+        // ARC-SCRIPT-2506 (0x45E180, 0x45E040): a destroy that goes through the object's own destroy (a transform's) takes the NPC out of its NPC leader's array and frees the followers it led.
+        var unlinked = leaveLeaders && (_party.NpcLed.ContainsKey(entity) || _party.NpcArrays.ContainsKey(entity));
+        if (unlinked) DisbandNpcLinks(entity);
+        if (walk.Count == 0)
+        {
+            if (!unlinked) return written;
+            Revise();
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+        }
 
         // Each item leaves its holder in the walk's order; each placement sees the items still to come as not yet dropped (as a container's spill does), and a drop schedules the item's decay (0x468090).
         var later = walk.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
