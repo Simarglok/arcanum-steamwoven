@@ -40,11 +40,9 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true;
             Require(AreaAiHostNow() is not null, "the AI host is up");
-            // ARC-DEV-1330: not a weapon, armour or generic item either (a torch-like one takes the shield slot). The running AI re-wields its NPC (ARC-AI-1139, 0x4A8570), so such an item can be
-            // worn by the time of the attempt (the walk and the frames in between), and the session refuses a worn item (the original steals it, PP3).
-            bool Plain(SessionInventoryItem item) => item.Facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo or SessionItemType.Key or SessionItemType.KeyRing
-                    or SessionItemType.Weapon or SessionItemType.Armor or SessionItemType.Generic)
-                && !item.Facts.Worn && item.Facts.ScriptPoints.Count == 0;
+            // ARC-DEV-1338: a worn item is stolen too (PP3, PP12: the move takes it off its slot), so weapons, armour and generic items qualify again (ARC-DEV-1330 had left them out while the session refused a worn item).
+            bool Plain(SessionInventoryItem item) => item.Facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo or SessionItemType.Key or SessionItemType.KeyRing)
+                && item.Facts.ScriptPoints.Count == 0 && !item.Facts.NoDrop;
             var holders = session.QueryMapInventory(mapId)!.Holders
                 .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free && inventory.TryGetRow(h.Entity, out var row) &&
                     row.Scope == AreaScope.Core && row.WorldX is not null && combat.Fields(map.RuntimeMap, h.Entity) is { Critter: not null }

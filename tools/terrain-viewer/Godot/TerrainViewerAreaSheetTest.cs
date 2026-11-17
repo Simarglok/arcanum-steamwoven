@@ -170,11 +170,11 @@ public partial class TerrainViewerApp
                 && _messageLog.History[0].Line == "Level 5" && _messageLog.Shown?.Line == "Level 14",
                 "eleven more levels: the window keeps the last ten");
 
-            // ARC-SKILLS-008: the palette's Prowl action conceals the hero; an untrained prowler's run becomes a walk, and off again.
+            // ARC-SKILLS-008: the palette's Prowl action conceals the hero; an untrained prowler's step is the stealth walk (ARC-RENDER-2539), and off again.
             PaletteProwlToggle();
             Require(_areaSession.IsConcealed(SessionCombatant.Hero) && _prowlNotice == "prowling (concealed)", "prowl on: " + _prowlNotice);
             SetObjectApproachGait();
-            Require(StepGait() == Arcanum.World.MovementGait.Walk && GaitSummary().Contains("prowling: walks only", StringComparison.Ordinal),
+            Require(StepGait() == Arcanum.World.MovementGait.Sneak && GaitSummary().Contains("prowling: walks only", StringComparison.Ordinal),
                 "a concealed untrained hero walks: " + GaitSummary());
             PaletteProwlToggle();
             Require(!_areaSession.IsConcealed(SessionCombatant.Hero) && StepGait() == Arcanum.World.MovementGait.Run, "prowl off runs again");
