@@ -153,8 +153,7 @@ public partial class TerrainViewerApp
                 case AreaInventoryTargetKind.GroundItem:
                     return AreaHeroPull.PullItem(session, found.Entity, heroCell);
                 case AreaInventoryTargetKind.DeadNpc:
-                    var at = app.LiveWorldCell(found.Row);
-                    return AreaHeroPull.PullBody(app._aiHost, found.Entity, new CellCoord((int)at.X, (int)at.Y), heroCell);
+                    return AreaHeroPull.PullBody(app._aiHost, found.Entity, heroCell);
                 default:
                     return HeroImmediateResult.None;
             }

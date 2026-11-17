@@ -116,17 +116,17 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.Kill(scene.Session.Version, target).Disposition);
         Assert.IsFalse(scene.Host.PlaceBody(scene.Npc, new(99, 99)), "a cell the map does not hold is refused");
         Assert.IsFalse(scene.Host.PlaceBody(Entity(7), HeroCell), "an id the host does not hold");
-        Assert.AreEqual(HeroImmediateResult.TooFar, AreaHeroPull.PullBody(scene.Host, scene.Npc, NpcCell, HeroCell), "four tiles away");
+        Assert.AreEqual(HeroImmediateResult.TooFar, AreaHeroPull.PullBody(scene.Host, scene.Npc, HeroCell), "four tiles away");
         Assert.AreEqual(NpcCell, Cell(scene));
         var near = new CellCoord(13, 21);
         Assert.IsTrue(scene.Host.PlaceBody(scene.Npc, near), "the body of the dead NPC may lie anywhere the map holds");
         scene.Host.DrainNotices();
-        Assert.AreEqual(HeroImmediateResult.Moved, AreaHeroPull.PullBody(scene.Host, scene.Npc, near, HeroCell));
+        Assert.AreEqual(HeroImmediateResult.Moved, AreaHeroPull.PullBody(scene.Host, scene.Npc, HeroCell));
         Assert.AreEqual(HeroCell, Cell(scene), "the hero's own cell holds the body");
         Assert.AreEqual(HeroCell, scene.Session.QueryNpcPlace(scene.Npc)!.Value.World, "the place is the session's");
         Assert.IsFalse(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered), "no tile script is told for a body");
         Assert.AreEqual(HeroCell, scene.Rebuild().Tile(scene.Npc), "a host built again restores the body on the hero's cell");
-        Assert.AreEqual(HeroImmediateResult.None, AreaHeroPull.PullBody(null, scene.Npc, HeroCell, HeroCell), "no AI host, no body");
+        Assert.AreEqual(HeroImmediateResult.None, AreaHeroPull.PullBody(null, scene.Npc, HeroCell), "no AI host, no body");
     }
 
     private static CellCoord Cell(Scene scene) => scene.Host.Tile(scene.Npc)!.Value;

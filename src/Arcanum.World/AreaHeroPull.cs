@@ -31,12 +31,12 @@ public static class AreaHeroPull
     }
 
     /// <summary>
-    /// Pulls the body of the dead NPC <paramref name="npc"/>, which lies on <paramref name="body"/>, onto <paramref name="hero"/> through the AI host (<see cref="AreaAiHost.PlaceBody"/>): <see cref="HeroImmediateResult.TooFar"/> beyond
+    /// Pulls the body of the dead NPC <paramref name="npc"/> (its cell is the AI host's) onto <paramref name="hero"/> through <see cref="AreaAiHost.PlaceBody"/>: <see cref="HeroImmediateResult.TooFar"/> beyond
     /// <see cref="Reach"/>, <see cref="HeroImmediateResult.None"/> when the host refuses the body (not held, gone, not dead, a cell the map does not hold).
     /// </summary>
-    public static HeroImmediateResult PullBody(AreaAiHost? host, string npc, CellCoord body, CellCoord hero)
+    public static HeroImmediateResult PullBody(AreaAiHost? host, string npc, CellCoord hero)
     {
-        if (host is null) return HeroImmediateResult.None;
+        if (host?.Tile(npc) is not { } body) return HeroImmediateResult.None;
         if (Distance(body, hero) > Reach) return HeroImmediateResult.TooFar;
         return host.PlaceBody(npc, hero) ? HeroImmediateResult.Moved : HeroImmediateResult.None;
     }

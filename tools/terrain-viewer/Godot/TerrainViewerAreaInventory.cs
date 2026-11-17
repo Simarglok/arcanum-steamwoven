@@ -232,8 +232,9 @@ public partial class TerrainViewerApp
     /// rules make it the pickup goal 15 for an item (the hero walks onto its tile through goal 8 with range 0, then goal 16 takes it) or the use goal 81 for a container or a body (S11b: range 1, then the loot window). There is no walk-to-pick-up
     /// intent any more; the act is applied at the frame's next safe point (<see cref="ProcessUsePending"/>). ARC-INPUT-1946: Alt is passed as pressed; out of combat mode it is the immediate action 0x4445A0 (<see cref="AreaHeroPull"/>), which builds no goal and replaces nothing the hero does.
     /// </summary>
-    private bool TryAreaInventoryClick(Vector2 screen, bool alt)
+    private bool TryAreaInventoryClick(Vector2 screen, bool alt, out bool immediate)
     {
+        immediate = false;
         if (InventoryOpen || ActorCell() is null || InventoryTargetAt(screen) is not { } target) return false;
         // ARC-INPUT-1946 (0x4445A0): the Alt action builds no goal, so it cancels no approach and starts no run; it moves the item or body at once.
         if (alt && HeroRequests.ClickGoalOf(InventoryTargetOf(target.Row.Key), alt, false) == Arcanum.Simulation.Goals.HeroClickGoal.Immediate)
@@ -242,6 +243,7 @@ public partial class TerrainViewerApp
             _inventoryStatus = moved.Outcome == HeroRequestOutcome.Done ? "moved onto the hero's tile" : "nothing moved: out of reach (one tile) or not takable";
             GD.Print($"ARC-INPUT-1946 alt-click kind={target.Kind} outcome={moved.Outcome}");
             SyncAreaInventory(); RefreshAreaStatus();
+            immediate = true;
             return true;
         }
         CancelPickPocket("an item click replaced it");
