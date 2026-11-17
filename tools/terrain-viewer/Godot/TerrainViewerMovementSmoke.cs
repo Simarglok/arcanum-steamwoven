@@ -126,6 +126,9 @@ public partial class TerrainViewerApp
                 HeldMouseForSelfTest(true, 10_502, (Screen(far.Value), true)); // 251 ms after the repeat: due, but the pointer is over a control (the stamp still resets)
                 PollHeldMouse();
                 Require(HeldMouseRepeats == 1 && HeroWalkGoal == heldTile && _heldWalkFlag, "a pointer over a control posts nothing and keeps the flag");
+                HeldMouseForSelfTest(true, 10_700, (Screen(far.Value), false));
+                PollHeldMouse();
+                Require(HeldMouseRepeats == 1 && HeroWalkGoal == heldTile, "the stamp was reset by the repeat that fell over a control: 198 ms later none is due");
                 HeldMouseForSelfTest(true, 10_753, (Screen(far.Value), false));
                 PollHeldMouse();
                 Require(HeldMouseRepeats == 2 && HeroWalkGoal == far, $"the next repeat retargets in place to {far}: {HeroWalkGoal}");

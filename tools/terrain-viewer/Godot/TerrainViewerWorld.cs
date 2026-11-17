@@ -835,8 +835,9 @@ public partial class TerrainViewerApp
         TraceMousePress(@event, MousePressTrace.Stage.Unhandled);
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
         {
-            NoteLeftPress(); // ARC-INPUT-1938: the held button's first record; the polled mouse reposts it every 250 ms.
-            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
+            _pressFromInput = true; // ARC-INPUT-1938: the mode-0 press stamps the held button (NoteLeftPress); an armed cursor's press does not.
+            try { WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed)); }
+            finally { _pressFromInput = false; }
         }
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
         // press has no action of its own, so it is the original's Ctrl+LMB (its release is taken with it).
@@ -962,6 +963,7 @@ public partial class TerrainViewerApp
     /// <summary>The mode-0 left press on the world once no armed cursor or skill took it: combat, talk, use, door, inventory, then the ground (ARC-INPUT-1937: the pick is <see cref="_pressSpared"/>'s).</summary>
     private void WorldRouteClickMode0(Vector2 screen, RouteFollower route, bool ctrl, bool alt, bool shift, bool repeat = false)
     {
+        if (_pressFromInput) NoteLeftPress();
         // ARC-INPUT-1938 (GT108, 0x54E05E): while the held flag is 1 (a tile walk press, the button still down) a press on an object is ignored: dragging over an object does nothing.
         if (_heldWalkFlag && AreaObjectAtScreen(screen, spared: _pressSpared) is not null)
         {
@@ -1015,6 +1017,8 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         NoteWorldPointer(input);
+        // ARC-INPUT-1938: a left release clears the held flag at once (the frame poll is the backstop), whichever window took it.
+        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }) NoteLeftRelease();
         TraceMousePress(input, MousePressTrace.Stage.Input);
         // ARC-UI-2071 (DH10): the release of the click that chose a dialog reply reaches the window the reply opened (Original).
         if (TrackReplyRelease(input)) { GetViewport().SetInputAsHandled(); return; }
