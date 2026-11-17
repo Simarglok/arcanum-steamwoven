@@ -222,6 +222,20 @@ public sealed class AreaTalkStateTests
     }
 
     [TestMethod]
+    public void A_refused_transform_leaves_no_recorded_place_of_the_critter_it_took_away()
+    {
+        WithContent(content =>
+        {
+            string? entity = null;
+            using var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(20, 40, 20, 20, 0), carry: (e, _, _) => { entity = e; return false; },
+                facing: _ => NeighborDirection.XMinus);
+            Assert.IsFalse(talk.Host.Apply(talk.Run().Effects));
+            Assert.IsNotNull(entity, "the carry was reached");
+            Assert.IsNull(talk.Session.QueryNpcPlace(entity!), "the made critter went again and left no place");
+        });
+    }
+
+    [TestMethod]
     public void A_transform_with_no_known_facing_records_no_place()
     {
         WithContent(content =>

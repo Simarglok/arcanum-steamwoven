@@ -2985,9 +2985,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (made.Object is not { } critter) return null;
         LastTransformed = critter;
         _world.CritterMade?.Invoke(critter.Entity);
-        // ARC-SCRIPT-2519 (TI5c, F2, 0x502880 and 0x502930): the made critter takes the old object's art rotation. Steamwoven keeps a critter's facing as its recorded place (npc.pos, the AI host stands a created critter there
-        // when it hosts it and a save keeps it); a refusal only leaves the critter in its prototype's facing.
-        if (_world.NpcFacing?.Invoke(old.Code) is { } facing) _session.RecordNpcPlace(_session.Version, new SessionMapId(_shownMap), critter.Entity, cell, facing);
+        // ARC-SCRIPT-2519 (TI5c, F2, 0x502880 and 0x502930): the made critter takes the old object's art rotation, read now while the old NPC stands. Steamwoven keeps a critter's facing as its recorded place (npc.pos: the AI host
+        // stands a created critter there when it hosts it and a save keeps it), written once nothing can take the critter away again. A follower of the PC has no mover facing of its own in the AI host (its body is the companion's): not carried.
+        var facing = FollowsPc(old) ? null : _world.NpcFacing?.Invoke(old.Code);
+        void CarryFacing() { if (facing is { } turned) _session.RecordNpcPlace(_session.Version, new SessionMapId(_shownMap), critter.Entity, cell, turned); }
         // The old NPC stays on any refusal below: the made critter goes again (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
         ScrObjectRef? Undo()
         {
@@ -3003,7 +3004,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var ran = RunDestroyPoint(old.Code, _lastRules ?? _session.Rules.Scripts);
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return Undo();
-            if (DyingStops(ran)) return new ScrObjectRef(_shownMap, critter.Entity);
+            if (DyingStops(ran)) { CarryFacing(); return new ScrObjectRef(_shownMap, critter.Entity); }
         }
         // F5: a follower of the PC leaves the party (the same forced leave as a disband, NS1); an NPC's leader and followers are unlinked by the session's destroy.
         if (FollowsPc(old))
@@ -3012,7 +3013,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
         }
         var destroyed = _session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true);
-        return destroyed.Disposition == GameSessionDisposition.Rejected ? Undo() : new ScrObjectRef(_shownMap, critter.Entity);
+        if (destroyed.Disposition == GameSessionDisposition.Rejected) return Undo();
+        CarryFacing();
+        return new ScrObjectRef(_shownMap, critter.Entity);
     }
 
     /// <summary>ARC-SCRIPT-2198: one disband or create item request of a talk run, in action order (<see cref="TalkStateRefusal"/> planned it); false when the session refuses. Any other request is not this host's and does nothing.</summary>
