@@ -1660,6 +1660,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             finally { _destroyingScenery.Remove(obj.Code); }
             if (AlreadyDestroyed(obj)) return true;
         }
+        // ARC-WORLD-2502 (0x43CCA0 → 0x4639E0): a container's invulnerable items are dropped on its cell with the destroy (a junk pile only destroyed, a never generated 0x200 container regenerated first).
+        if (ShownContainer(obj) && Place(obj) is { } cell)
+            return _session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj)).Disposition != GameSessionDisposition.Rejected;
         return _session.ApplyChanges(_session.Version, null,
             [new(new SessionMapId(obj.Map), MapChangeKey.ForEntity(obj.Code, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition != GameSessionDisposition.Rejected;
     }
@@ -1668,6 +1671,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // ARC-SCRIPT-2501: a scenery of the shown map.
     private bool ShownScenery(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.SceneryType };
+
+    // ARC-WORLD-2502: a container of the shown map (including a junk pile, prototype 3043).
+    private bool ShownContainer(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.ContainerType };
+
+    // ARC-WORLD-2502 (DD2): a junk pile, which the destroy's inventory step (0x4639E0) leaves alone.
+    private bool IsJunkPile(ScrObjectRef obj) => Row(obj) is { PrototypeNumber: SessionObjectFacts.JunkPilePrototypeFile };
 
     // ARC-SCRIPT-2501: why the destroy point of a scenery cannot run (null: it has none, or the program is admitted whole by the destroy-point set).
     private string? DestroyPointRefusal(ScrObjectRef obj)
@@ -2078,8 +2087,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     if (_session.DestroyUsedItem(_session.Version, used.Code).Disposition == GameSessionDisposition.Rejected) return false;
                     continue;
                 }
-                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map.
-                if (ShownScenery(request.Object))
+                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map; ARC-WORLD-2502: a container of it (its destroy point first, then the destroy with the drop of its invulnerable items).
+                if (ShownScenery(request.Object) || ShownContainer(request.Object))
                 {
                     if (!DestroyScenery(request.Object)) return false;
                     continue;
@@ -2574,7 +2583,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
         Row(obj) is { } row && (((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0
-            || row.Type == Arcanum.Data.Combat.CombatFieldReader.SceneryType && !IsPc(obj) && _session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
+            || row.Type == Arcanum.Data.Combat.CombatFieldReader.SceneryType && !IsPc(obj) && _session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed
+            || row.Type == Arcanum.Data.Combat.CombatFieldReader.ContainerType && !IsPc(obj) && _session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Container) == SessionObjectCondition.Destroyed)
         || Destroyed(_session, obj.Map, obj.Code);
 
     // ARC-SCRIPT-052 (TD3): the NPCs a stop attacking of the object reaches (the PC's whole follower tree for the PC (0x4AA4A0, ARC-WORLD-2119)) with the world's facts for each.
@@ -2643,15 +2653,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     if (_session.UsedItemDestructionRefusal(used.Code) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
                     continue;
                 }
-                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first.
-                if (ShownScenery(request.Object))
+                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first; ARC-WORLD-2502: so is a container, whose invulnerable items the session's budgets may refuse to lay down.
+                if (ShownScenery(request.Object) || ShownContainer(request.Object))
                 {
                     if (AlreadyDestroyed(request.Object)) continue;
                     if (DestroyPointRefusal(request.Object) is { } pointWhy) return pointWhy;
+                    if (ShownContainer(request.Object) && Place(request.Object) is { } containerCell
+                        && _session.DestroyMapContainerRefusal(new SessionMapId(request.Object.Map), request.Object.Code, containerCell, IsJunkPile(request.Object)) is { } containerWhy)
+                        return $"destroy of {request.Object.Code} is refused by the session ({containerWhy})";
                     continue;
                 }
                 if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc)
-                    return $"destroy of {request.Object.Code} is not modelled (only an NPC or a scenery of the shown map)";
+                    return $"destroy of {request.Object.Code} is not modelled (only an NPC, a scenery or a container of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
                 // ARC-WORLD-2493: the destroy drops the NPC's invulnerable items (0x4639E0), which the session's budgets may refuse; checked before any effect applies.
