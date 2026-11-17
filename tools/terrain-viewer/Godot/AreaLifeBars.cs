@@ -221,6 +221,7 @@ public partial class AreaHeroGauges : CanvasLayer
         _root.AddChild(_healthNumber); _root.AddChild(_fatigueNumber); _root.AddChild(_poison);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
+        AreaGameBarPanel.Placed += Place;
         Hide();
     }
 
@@ -228,6 +229,7 @@ public partial class AreaHeroGauges : CanvasLayer
     {
         GetViewport().SizeChanged -= Place;
         AreaGameBarPanel.InsetsChanged -= Place;
+        AreaGameBarPanel.Placed -= Place;
     }
 
     private static AreaBarNumber Number(string name, int slot)

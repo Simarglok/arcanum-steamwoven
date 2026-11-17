@@ -66,6 +66,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     public static float TopInset { get; private set; }
     /// <summary>Raised after the insets changed (the bars shown, hidden or scaled): the panels placed by them place themselves again.</summary>
     public static event Action? InsetsChanged;
+    /// <summary>ARC-UI-2608: raised at the end of every placement of the bars (the plan and the screen frame are current): the parts that read the screen frame place themselves again.</summary>
+    public static event Action? Placed;
 
     /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
@@ -401,7 +403,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         // Only while the bars show: windows that hide them (the full-screen views) keep the whole-factor scale for their own textures.
         var plan = SteamwovenOn && Visible ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
         _plan = plan;
-        if (plan is not null) { PlaceSteamwoven(size, plan); return; }
+        if (plan is not null) { PlaceSteamwoven(size, plan); Placed?.Invoke(); return; }
         // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
         ResetControlRects();
         InterfaceHd.SetFractionalScale(null);
@@ -419,6 +421,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, _sideLeft, _sideRight);
         SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0);
+        Placed?.Invoke();
     }
 
     /// <summary>
@@ -555,11 +558,11 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2608: where a control the panel draws really lies in the window (its node's rectangle after every scale), for the smoke; null for a control another part draws (the vials).</summary>
     internal Rect2? ControlRectForSelfTest(SteamwovenControlId id)
     {
-        foreach (var (button, control) in ButtonControls) if (control == id) return _buttons[button].GetGlobalRect();
+        foreach (var (button, control) in ButtonControls) if (control == id) return _buttons[button].GetGlobalTransform() * new Rect2(Vector2.Zero, _buttons[button].Size);
         return id switch
         {
-            SteamwovenControlId.Clock => _clock.GetGlobalRect(),
-            SteamwovenControlId.HoverImage => _hoverImage.GetGlobalRect(),
+            SteamwovenControlId.Clock => _clock.GetGlobalTransform() * new Rect2(Vector2.Zero, _clock.Size),
+            SteamwovenControlId.HoverImage => _hoverImage.GetGlobalTransform() * new Rect2(Vector2.Zero, _hoverImage.Size),
             SteamwovenControlId.MessageWindow => _messageLog.GetGlobalTransform() * new Rect2(AreaMessageLayout.Window.X, AreaMessageLayout.Window.Y - AreaGameBarLayout.BottomTop, AreaMessageLayout.Window.Width, AreaMessageLayout.Window.Height),
             SteamwovenControlId.ExperienceStrip => _experience.GetGlobalTransform() * new Rect2(AreaExperienceStripLayout.ClearX, AreaExperienceStripLayout.ClearY, AreaExperienceStripLayout.ClearWidth, AreaExperienceStripLayout.ClearHeight),
             _ => null,
