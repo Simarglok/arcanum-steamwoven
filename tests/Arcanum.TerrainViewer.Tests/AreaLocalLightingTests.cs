@@ -251,6 +251,29 @@ public sealed class AreaLocalLightingTests
     }
 
     [TestMethod]
+    public void Posed_placements_follow_the_animation_pose_for_the_relit_light_list()
+    {
+        // ARC-RENDER-2207: the relit look reads the lights' rectangles where the animation puts them (the Legacy lattice does the same through the poses).
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var still = Local([visual], Light(92928, 82560, 0, 0, 8));
+        Assert.AreSame(still.Field.Placements, still.PosedPlacements, "an unposed view reads the loaded placements");
+        Assert.AreSame(still.Field.Placements, still.AtAnimation(1000).PosedPlacements);
+        var mask = Uniform(8, 400, 400, 200, 200, 100).Item6;
+        var later = new StationaryLightFrame(8, "a", "h", 200, 200, 100, 100, mask.Take(200 * 200 * 4).ToArray(), stepX: 1000);
+        var first = new StationaryLightFrame(8, "a", "h", 400, 400, 200, 200, mask, stepX: -1000, later: [later], framesPerSecond: 10);
+        var objects = new AreaObjectLightSource(5000, null, [new ObjectLight(new(Digest, 5000, AreaSourceKind.Static, 100, 0, 0, Digest, 1), 3, -1,
+            92928, 82560, 0, 0, 0, 8u << 19 | 9u << 28, AmbientColor.Neutral, false, false, false)], new Dictionary<int, StationaryLightFrame> { [8] = first });
+        var animated = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, AreaStationaryLightSource.Create(5000, [], []), objects);
+        var at0 = animated.AtAnimation(0).PosedPlacements.Single().Rect;
+        var at1 = animated.AtAnimation(100).PosedPlacements.Single().Rect;
+        Assert.AreEqual(400, at0.Width);
+        Assert.AreEqual(200, at1.Width, "the next frame has its own size");
+        Assert.AreEqual(1000 + 200 - 100, at1.X - at0.X, "the pose's offset step (1000) and the frames' hot spots (200, 100) move the rectangle");
+        Assert.AreEqual(at0, animated.AtAnimation(200).PosedPlacements.Single().Rect, "two steps make a cycle");
+    }
+
+    [TestMethod]
     public void Body_takes_the_tile_class_ambient_plus_the_lights_at_its_anchor()
     {
         var body = AreaCompositionFixture.Body(0);

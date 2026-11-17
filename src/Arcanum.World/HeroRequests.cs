@@ -89,7 +89,8 @@ public enum HeroRequestOutcome
 /// <param name="Verdict">The rotate starter's verdict where one was asked (a stop or a face), else <see cref="RotateStartVerdict.NoObject"/>.</param>
 /// <param name="Click">The goal an <see cref="ObjectClickRequest"/> decided on (<see cref="HeroClickGoal.None"/> for the other requests, and for a click the rules refuse).</param>
 /// <param name="Start">ARC-COMBAT-1949: how an object click's goal started (the start branch of 0x54ED30); null for the other requests and for a click the rules refused first.</param>
-public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = false, int? Rotation = null, RotateStartVerdict Verdict = RotateStartVerdict.NoObject, HeroClickGoal Click = HeroClickGoal.None, HeroClickStart? Start = null);
+/// <param name="BodyOfAirMessage">ARC-COMBAT-1943: the click's attack was refused by the hero's Body of Air spell flag, whose line 25 of the interface message file the caller shows.</param>
+public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = false, int? Rotation = null, RotateStartVerdict Verdict = RotateStartVerdict.NoObject, HeroClickGoal Click = HeroClickGoal.None, HeroClickStart? Start = null, bool BodyOfAirMessage = false);
 
 /// <summary>What the hero is, and does, now (the facts the request rules read).</summary>
 /// <param name="Cell">The hero's cell on the map; null when it has none.</param>
@@ -272,12 +273,16 @@ public sealed class HeroRequestHost
         return new(_hero.StartThrow(request.Item, request.Tile) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, Start: start);
     }
 
+    /// <summary>ARC-COMBAT-1943: the click facts the rules would read for a press on <paramref name="target"/> now (the smoke reads the hero's spell flags through them).</summary>
+    public HeroClickFacts ClickFactsOf(string target, bool alt, bool shift) => _hero.ClickFacts(target, alt, shift);
+
     /// <summary>ARC-INPUT-1946: the goal the click rules would decide for a press on <paramref name="target"/> now, so a caller can tell the Alt action (<see cref="HeroClickGoal.Immediate"/>, which replaces nothing the hero does) before it clears what a goal would replace.</summary>
     public HeroClickGoal ClickGoalOf(string target, bool alt, bool shift) => HeroClickRules.Decide(_hero.ClickFacts(target, alt, shift)).Goal;
 
     private HeroRequestResult ObjectClick(ObjectClickRequest request)
     {
         var decision = HeroClickRules.Decide(_hero.ClickFacts(request.Target, request.Alt, request.Shift));
+        if (decision.BodyOfAirMessage) return new(HeroRequestOutcome.Ignored, Click: HeroClickGoal.None, BodyOfAirMessage: true);
         // ARC-INPUT-1946 (0x4445A0): the Alt action builds no goal and runs no start branch; it moves the target at once.
         if (decision.Goal == HeroClickGoal.Immediate)
             return new(_hero.ImmediateAction(request.Target) == HeroImmediateResult.Moved ? HeroRequestOutcome.Done : HeroRequestOutcome.Ignored, Click: decision.Goal);

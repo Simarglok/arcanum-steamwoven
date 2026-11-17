@@ -74,6 +74,28 @@ public sealed class AreaCursorTests
         Assert.IsFalse(new AreaCursorContent(large, "synthetic").Ready, "an image larger than a system cursor");
     }
 
+    [TestMethod]
+    public void The_cursor_sheet_lays_each_art_in_a_row_and_marks_the_hot_point()
+    {
+        // ARC-UI-2489 (H13): a 2 x 2 opaque white frame with the hot point at (1, 0) for every art, the spell art with two frames.
+        byte[] white = [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
+        var frame = new AreaInterfaceFrame(2, 2, white, 1, 0);
+        var art = AreaCursorArt.ArtNumbers.ToDictionary(n => n, n => new AreaInterfaceArtLoad(n, AreaInterfaceArtStatus.Ready, $"{n}.art",
+            n == AreaCursorArt.Spell ? [frame, frame] : [frame], "synthetic", 10));
+        var sheet = AreaCursorSheet.Compose(new AreaCursorContent(art, "synthetic"))!.Value;
+        var pad = AreaCursorSheet.Pad;
+        Assert.AreEqual(pad + 2 * (2 + pad), sheet.Width, "the widest row (two frames) sets the width");
+        Assert.AreEqual(pad + AreaCursorArt.ArtNumbers.Count * (2 + pad), sheet.Height, "one row each");
+        Assert.AreEqual(sheet.Width * sheet.Height * 4, sheet.Rgba.Length);
+        Assert.AreEqual(0x58, sheet.Rgba[0], "a grey ground in the corner");
+        var firstFrame = ((pad + 1) * sheet.Width + pad) * 4; // frame pixel (0, 1): off the hot cross at (1, 0)
+        Assert.AreEqual(255, sheet.Rgba[firstFrame + 1], "the frame's own pixel, opaque white");
+        var hot = (pad * sheet.Width + pad + 1) * 4;
+        CollectionAssert.AreEqual(new byte[] { 0xFF, 0x20, 0x20, 0xFF }, sheet.Rgba[hot..(hot + 4)], "the hot point is marked red");
+        Assert.IsNull(AreaCursorSheet.Compose(AreaCursorContent.Empty("none")), "no art, no sheet");
+        Assert.ThrowsExactly<ArgumentNullException>(() => AreaCursorSheet.Compose(null!));
+    }
+
     /// <summary>The installed game's cursor art read (sizes, frame counts, rates and hot points only).</summary>
     [TestMethod, TestCategory("RealData")]
     public void Original_cursor_art_reads()

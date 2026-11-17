@@ -75,6 +75,15 @@ public interface ISessionItemWorldHost
     /// of its own location field (IV2: where the map put it, or the tile a dropped item lies on; never the holder's). Null for an object the host cannot place: the session then refuses the move. The default places nothing.
     /// </summary>
     (long X, long Y)? LocationOf(ScrObjectRef obj) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2377 (IV45, CQ1): get social class (38): an NPC's social class (field 0x128, the map data's), 0 for the hero and any other object type, as the use host reads it. Null for an object the host reads no row for: the session then refuses the move.
+    /// The default answers nothing.
+    /// </summary>
+    int? SocialClassOf(ScrObjectRef obj) => null;
+
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ2): get origin (39): an NPC's origin as it is now (a dialog action's set origin over the map data's), 0 for the hero and any other object type. Null for an object the host reads no row for: the session then refuses the move.</summary>
+    int? OriginOf(ScrObjectRef obj) => null;
 }
 
 /// <summary>
