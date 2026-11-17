@@ -37,14 +37,21 @@ public static class AreaScriptStory
     /// <param name="award">Takes the experience a completed quest gave (the host passes its follower step and level-up messages on,
     /// as for a dialog's quest command).</param>
     /// <param name="blessingEffect">The effect rule of a blessing or curse number (<c>BlessingRules.EffectOf</c> over the tables, then the effect table); null when the host has none.</param>
+    /// <param name="adjustOther">ARC-SCRIPT-1705: applies an adjust stat request (stat, number) whose object is not the PC (an NPC's alignment); false refuses the run. Without it such a request is skipped as every request for a non-PC is.</param>
     public static bool Apply(GameSessionOwner session, ScrEffects effects, Func<ScrObjectRef, bool> isPc, Action<SessionExperienceAward> award,
-        Func<SessionBlessingKind, int, SessionEffectDefinition?>? blessingEffect = null)
+        Func<SessionBlessingKind, int, SessionEffectDefinition?>? blessingEffect = null, Func<ScrObjectRef, int, int, bool>? adjustOther = null)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(effects); ArgumentNullException.ThrowIfNull(isPc);
         ArgumentNullException.ThrowIfNull(award);
         if (effects.StoryState is { } story && session.RaiseStoryState(session.Version, story).Disposition == GameSessionDisposition.Rejected) return false;
         foreach (var request in effects.States)
         {
+            // ARC-SCRIPT-1705 (CP12, 0x4B0980): adjust stat of an object that is no PC is the stat setter's write of that object's base stat (an NPC's alignment: no follower arming, which is the PC's).
+            if (request.Kind == ScrStateKind.AdjustStat && adjustOther is not null && request.Object is { } other && !isPc(other))
+            {
+                if (!adjustOther(other, request.Number, request.Value)) return false;
+                continue;
+            }
             // Every request is for a PC but the game-wide ones (set quest global state).
             if (request.Kind != ScrStateKind.GlobalQuestState && (request.Object is not { } who || !isPc(who))) continue;
             switch (request.Kind)

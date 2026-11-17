@@ -678,10 +678,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1661 (CP12): this host adjusts the hero's alignment (stat 19) only, which the session stores as a base stat; an NPC's alignment, which the world keeps in its combat values and the session does not write, and every other stat stop the dispatch as not modelled.
+    /// ARC-SCRIPT-1661 (CP12), ARC-SCRIPT-1705: this host adjusts the alignment (stat 19) of the hero, which the session stores as a base stat, and of an NPC of the shown map (the entry the stat setter writes into the NPC's stored base stats, kept as the written entry
+    /// <c>npc.stat.19</c>; <see cref="NpcStoredAlignment"/>); every other stat, a created critter, an NPC of another map and a scenery, portal or container stop the dispatch as not modelled.
     /// </summary>
     /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
-    public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
+    public bool CanAdjustStat(ScrObjectRef obj, int stat) =>
+        stat == AreaScriptStory.AlignmentStat && (IsPc(obj) ? _session.QueryHero() is not null : NpcStoredAlignment(obj) is not null);
+
+    // ARC-SCRIPT-1705: the stored base alignment (0x4B0740) of an NPC row of the shown map with the entries the session wrote over the row's fields; null for a created critter, an object that is no NPC, or fields that do not read.
+    private int? NpcStoredAlignment(ScrObjectRef obj)
+    {
+        if (obj.Map != _shownMap || Row(obj) is not { } row || row.Type != NpcType || _world?.CreatedRow?.Invoke(obj.Code) is not null) return null;
+        var stats = AreaWrittenCritterFields.Read(_session, row)?.Critter?.BaseStats;
+        return stats is { Count: Arcanum.Session.SessionCritterIndexedWrites.StatCount } ? stats[AreaScriptStory.AlignmentStat] : null;
+    }
+
+    // ARC-SCRIPT-1705 (0x4B0980 for an NPC, stat 19): the stored base alignment plus the number, clamped to -1000..1000, written as the object's base stat; the followers' re-check is the PC's only, so none is armed. A request the session refuses refuses the run.
+    private bool AdjustNpcStat(ScrObjectRef who, int stat, int delta)
+    {
+        if (stat != AreaScriptStory.AlignmentStat || NpcStoredAlignment(who) is not { } stored) return false;
+        var next = (int)Math.Clamp((long)stored + delta, AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
+        if (next == stored) return true;
+        return _session.WriteCritterStat(_session.Version, _session.QueryActor().Map, AreaConversationState.EntityId(Row(who)!), AreaScriptStory.AlignmentStat, next).Disposition != GameSessionDisposition.Rejected;
+    }
 
     private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1,
         SummonedSpellFlag = 0x4000, NoStrayNpcFlag = 0x8000, AssociateBlockingObjectFlags = 0x102;
@@ -1437,7 +1456,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
-    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). ARC-SCRIPT-1661 (CP11, CP12): plus the commands of <see cref="ScrAdmissionSet.S52"/> the area weapon scripts 30064 and 30074 and the alignment weapon 30252 use: obj is in combat (31, <see cref="IsInCombat"/>) and adjust stat (137, the hero's alignment only, <see cref="CanAdjustStat"/>). A script outside it is refused and the hit goes on as without one.
+    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). ARC-SCRIPT-1661 (CP11, CP12): plus the commands of <see cref="ScrAdmissionSet.S52"/> the area weapon scripts 30064 and 30074 and the alignment weapon 30252 use: obj is in combat (31, <see cref="IsInCombat"/>) and adjust stat (137, the alignment of the hero or of an NPC of the shown map, <see cref="CanAdjustStat"/>; ARC-SCRIPT-1705). A script outside it is refused and the hit goes on as without one.
     /// </summary>
     public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Concat([ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat]),
         PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.AdjustStat]),
@@ -2039,7 +2058,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-DEV-100: the global variables and the hero's variables and flags.
         if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
-        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add, BlessingEffects)) return false;
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add, BlessingEffects, AdjustNpcStat)) return false;
         // ARC-SCRIPT-1764 (NP9): the queue newspaper requests, in action order, by the rule of the original's queue (0x4BF140).
         if (!AreaScriptNewspaper.Queue(_session, effects)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later

@@ -129,6 +129,7 @@ public sealed class AreaCombatPointScriptTests
             // ARC-SCRIPT-1661: 920 (an area weapon's test of the victim, as 30064's looped critter): sets a global flag when the extra object is in combat; 921 (the alignment weapon 30252's shape): the triggerer's alignment (stat 19) falls by 200.
             Write("scr/00920incombat.scr", Program(If(new(ScrCatalogue.Condition.IsInCombat, (Extra, 0)), new(ScrCatalogue.Action.Assign, (GlobalFlag, CombatSeen), N(1)), new(0)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00921alignment.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00927extra.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Extra, 0), N(300))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00922twice.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(50))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-COMBAT-1973: 923 (a weapon's test of the victim, as 911 for a wall): sets a flag when the extra object is a wall (object type 0); 924 (a wall's taking-damage script): marks that it ran and skips the default.
             Write("scr/00923wall.scr", Program([.. FlagIfType(Extra, WallType, WallSeen, 0), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
@@ -564,6 +565,57 @@ public sealed class AreaCombatPointScriptTests
                 Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
                 Assert.AreEqual(after, session.QueryHeroStoredStat(19), $"{before} − 200, the setter clamps at −1000");
             }
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_of_an_NPC_wielder_writes_its_stored_alignment_clamped_in_action_order_and_leaves_the_hero_s_alone()
+    {
+        // ARC-SCRIPT-1705 (CP12, 0x4B0980 for an NPC): 921 is -200 on the triggerer, 922 is -200 then +50; the entry is the written base stat 19 of the NPC (no follower arming, no change of the hero).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var twice = Row(4, WeaponType, 922, ScrPoint.Hit, 0);
+            var wielder = CritterRow(2, 0);
+            var victim = Row(3, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, twice, wielder, victim);
+            var entity = AreaUseScriptHost.EntityId(wielder);
+            var hero = session.QueryHeroStoredStat(19);
+            Assert.IsTrue(host.CanAdjustStat(Ref(wielder), 19));
+            Assert.IsFalse(host.CanAdjustStat(Ref(wielder), 0), "another stat is not modelled");
+            Assert.IsFalse(host.CanAdjustStat(Ref(victim), 19), "an NPC row without combat fields has no alignment to read");
+            int Alignment() => AreaWrittenCritterFields.Read(session, wielder)!.Critter!.BaseStats[19];
+            Assert.AreEqual(0, Alignment());
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(wielder), Ref(victim), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(-200, Alignment());
+            Assert.AreEqual(-200, session.QueryCritterIndexedWrites(entity).Stats[19]);
+            Assert.AreEqual(hero, session.QueryHeroStoredStat(19), "the hero's alignment is untouched");
+            foreach (var expected in new[] { -400, -600, -800, -1000, -1000 })
+            {
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(wielder), Ref(victim), session.Rules.Scripts).Outcome);
+                Assert.AreEqual(expected, Alignment(), "the setter clamps at -1000");
+            }
+            // 922 from -1000: -200 clamps to -1000, then +50 gives -950 (the sum -150 applied at once would give -1150 clamped to -1000).
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCombatPoint(ScrPoint.Hit, Ref(twice), Ref(wielder), Ref(victim), session.Rules.Scripts).Outcome);
+            Assert.AreEqual(-950, Alignment());
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_of_an_NPC_the_hero_hits_is_the_extra_object_s_stored_alignment_too()
+    {
+        // A script that names the extra object (the victim) instead of the triggerer: 927 raises the extra object's alignment by 300.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 927, ScrPoint.Hit, 0);
+            var victim = CritterRow(2, 0);
+            var host = Host(session, content, null, weapon, victim);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(victim), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(300, AreaWrittenCritterFields.Read(session, victim)!.Critter!.BaseStats[19]);
         });
     }
 
