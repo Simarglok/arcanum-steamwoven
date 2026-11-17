@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaObjectBreakHostTests
 {
     private const byte Attachee = 1, Number = 3, Triggerer = 0, Extra = 12;
-    private const int Scenery = 3, Container = 4, BustFlag = 2301, TrapUse = 1, BustPoint = ScrPoint.Bust;
+    private const int Scenery = 3, Container = 4, ContainerType = 2, BustFlag = 2301, TrapUse = 1, BustPoint = ScrPoint.Bust;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
@@ -356,19 +356,67 @@ public sealed class AreaObjectBreakHostTests
         });
     }
 
-    // Any other object (a container) is still not modelled: the run is refused whole with the reason.
+    // ARC-WORLD-2502: a container of the shown map is destroyed too (its invulnerable items are dropped by the session); a portal is still not modelled: the run is refused whole with the reason.
     [TestMethod]
-    public void A_script_that_destroys_a_container_is_still_refused_whole()
+    public void A_script_that_destroys_a_container_applies_and_one_that_destroys_a_portal_is_still_refused_whole()
     {
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();
-            var chest = Row(1, 2, 833, 0);
+            var chest = Row(1, ContainerType, 833, 0);
             var (host, _) = Hosts(session, content, new Probe(), true, chest);
             var ran = host.Run(chest, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(BustFlag), "the rest of the run applied");
+            Assert.AreEqual(SessionObjectCondition.Destroyed, session.QueryObjectCondition(new SessionMapId(1), AreaUseScriptHost.EntityId(chest), Arcanum.Simulation.Combat.DamageableObjectKind.Container));
+        });
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var door = Row(1, 1, 833, 0);
+            var (host, _) = Hosts(session, content, new Probe(), true, door);
+            var ran = host.Run(door, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
-            StringAssert.Contains(ran.Detail, "is not modelled (only an NPC or a scenery of the shown map)");
+            StringAssert.Contains(ran.Detail, "is not modelled (only an NPC, a scenery or a container of the shown map)");
             Assert.IsFalse(host.GlobalFlag(BustFlag), "nothing of the refused run applied");
+        });
+    }
+
+    // ARC-WORLD-2502 (TD2, DD1): a container's destroy runs its destroy point (2) first, as a scenery's does: a run default destroys it, a skip default keeps it; a destroyed container (a break, an earlier destroy) is left as it is.
+    [TestMethod]
+    public void A_containers_destroy_point_runs_first_and_a_skip_default_keeps_the_container()
+    {
+        Arcanum.Simulation.Combat.DamageableObjectKind kind = Arcanum.Simulation.Combat.DamageableObjectKind.Container;
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var goes = Row(1, ContainerType, 833, 0, destroy: 834);
+            var (host, _) = Hosts(session, content, new Probe(), true, goes);
+            var ran = host.Run(goes, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(2303), "the destroy point ran");
+            Assert.AreEqual(SessionObjectCondition.Destroyed, session.QueryObjectCondition(new SessionMapId(1), AreaUseScriptHost.EntityId(goes), kind));
+        });
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var stays = Row(1, ContainerType, 833, 0, destroy: 835);
+            var (host, _) = Hosts(session, content, new Probe(), true, stays);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(stays, session.Rules.Scripts).Outcome);
+            Assert.IsTrue(host.GlobalFlag(2304), "the destroy point ran and skipped the default");
+            Assert.AreEqual(SessionObjectCondition.Whole, session.QueryObjectCondition(new SessionMapId(1), AreaUseScriptHost.EntityId(stays), kind), "the container stays");
+        });
+        // A container that broke earlier (its items spilled) is destroyed already: the destroy point does not run again.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var broken = Row(1, ContainerType, 833, 0, destroy: 834);
+            var (host, traps) = Hosts(session, content, new Probe(), true, broken);
+            var key = AreaUseScriptHost.EntityId(broken);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+                [new(new SessionMapId(1), MapChangeKey.ForEntity(key, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(broken, session.Rules.Scripts).Outcome);
+            Assert.IsFalse(host.GlobalFlag(2303), "TD2: left as it is, its destroy point not run");
         });
     }
 
