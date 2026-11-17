@@ -170,6 +170,34 @@ public partial class TerrainViewerApp
         return HeroInCombatMode;
     }
 
+    /// <summary>ARC-COMBAT-1943: the hero's Body of Air (spell flag 0x4) and polymorph (0x20000) flags the click rules read (what the spells wrote on the hero; false with no session).</summary>
+    private (bool BodyOfAir, bool Polymorphed) HeroClickSpells()
+    {
+        if (_areaSession is not { } session) return default;
+        var spell = session.QueryObjectFlags(SessionSpellCaster.Hero).Spell(0);
+        return ((spell & SessionSpellCaster.BodyOfAirSpellFlag) != 0, (spell & SessionSpellCaster.PolymorphedSpellFlag) != 0);
+    }
+
+    /// <summary>ARC-COMBAT-1943 (the hero click decision): a click that would attack while the hero is in Body of Air builds no goal and shows line 25 of intgame.mes in the message bar (text kind 6). True when the hero is in that form.</summary>
+    private bool RefuseAttackInBodyOfAir()
+    {
+        if (!HeroClickSpells().BodyOfAir) return false;
+        ShowBodyOfAirMessage();
+        return true;
+    }
+
+    /// <summary>The last line 25 shown for a refused attack (the smoke reads it: a hover-kind entry is not stored in the log).</summary>
+    private string? _bodyOfAirLine;
+
+    private void ShowBodyOfAirMessage()
+    {
+        var line = (_gameBarContent?.Texts ?? AreaGameBarTexts.Project("no game bar")).Text(AreaGameBarTexts.BodyOfAirMessage);
+        _bodyOfAirLine = line;
+        PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, line), "body of air");
+        GD.Print($"ARC-COMBAT-1943 body-of-air attack refused line=\"{line}\"");
+        RefreshAreaStatus();
+    }
+
     /// <summary>ARC-COMBAT-1944: the NPC's first run attacks the hero, or a creature whose chain of PC leaders ends at the hero (the goal table's first-run-attacks test, compared through the PC leader).</summary>
     private static bool NpcAttacksHero(GameSessionOwner session, string npc) =>
         session.QueryGoals().FirstRunAttacks(npc, AreaHeroRunsHost.Hero, id =>
@@ -205,6 +233,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
+        // ARC-COMBAT-1943: the Body of Air test sits after the follower's Alt test, on the way to the attack goal.
+        if (RefuseAttackInBodyOfAir()) return true;
         if (IsAreaCompanion(target.Row.Key))
         {
             _attackNotice = "attacking a companion is not ready";
@@ -236,6 +266,7 @@ public partial class TerrainViewerApp
     {
         var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(running), Alt: running.Object is not null || running.Wall, Shift: shift));
         GD.Print($"ARC-COMBAT-1949 attack-repeat outcome={request.Outcome} start={request.Start} target={running.Entity}");
+        if (request.BodyOfAirMessage) ShowBodyOfAirMessage(); // ARC-COMBAT-1943: the hero turned into air under a running attack: the repeated click shows line 25.
         // A run the click started again carries the click's Shift and begins from nothing (as StartAttackGoal sets the goal up); a queued attack or an ignored click leaves the goal as it is.
         if (request.Outcome == HeroRequestOutcome.Done && request.Start is Arcanum.Simulation.Goals.HeroClickStart.InterruptAndStart or Arcanum.Simulation.Goals.HeroClickStart.Start)
         {
@@ -280,6 +311,9 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
+        // ARC-COMBAT-1943 (0x54ED30): a polymorphed hero's click on a container is refused silently before the Alt attack; Body of Air then refuses every attack goal with line 25.
+        if (target?.Kind == Arcanum.Simulation.Combat.DamageableObjectKind.Container && HeroClickSpells().Polymorphed) return true;
+        if (RefuseAttackInBodyOfAir()) return true;
         if (target?.Refusal is not null)
         {
             _attackNotice = $"cannot attack: {target.Refusal}";

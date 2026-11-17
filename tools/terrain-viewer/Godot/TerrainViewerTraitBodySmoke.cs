@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Arcanum.Data.Objects;
 using Arcanum.Session;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
 using Arcanum.World;
 using Godot;
@@ -163,10 +164,30 @@ public partial class TerrainViewerApp
             Require((monsterProfile.Idle.Selector >> 23 & 31) == heroArt.Species && ReferenceEquals(_readyActorPlan?.Profile, monsterProfile), "the plan draws the monster profile of the record's species");
             Require(_readyActor is { } drawnHero && drawnHero.TextureKey.Selector >> 28 == 12 && _cache.TryGet(drawnHero.TextureKey, out _), "the drawn hero frame is a monster frame and uploaded: " + _readyActor?.TextureKey);
             await Shot("hero-after");
+            // ARC-COMBAT-1943 (0x54ED30): the polymorph spell flag reaches the click facts and refuses the cursor item's throw; an attack click (a creature in combat mode) is not refused by it.
+            Require(HeroClickSpells() is { Polymorphed: true, BodyOfAir: false } && HeroRequests.ClickFactsOf("atk:smoke", false, false).HeroPolymorphed, "the Polymorph spell flag 0x20000 is on the hero's click facts");
+            Require(HeroClickRules.ThrowRefused(HeroClickSpells().Polymorphed), "a polymorphed hero's cursor throw press is refused");
+            Require(HeroRequests.ClickGoalOf("atk:smoke", false, false) == HeroClickGoal.Attack, "a polymorphed hero's attack click is not refused");
+            GD.Print("ARC-COMBAT-1943 trait-body hero-polymorph click-facts ok");
             SpellCasterNow()!.Act(new(SessionSpellRunActionKind.ForceEnd, heroPoly));
             FlushSpellLog(null);
             await Until(() => session.QueryTraitArt(SessionSpellCaster.Hero) is null && !WantedHeroBody().IsMonster && _worldActor.Profile.Idle.Selector >> 28 != 12, "the END of Polymorph gave the hero its own body back");
             await Shot("hero-restored");
+
+            // ARC-COMBAT-1943 (0x54ED30): Body of Air (spell flag 0x4) on the hero builds no attack goal: the click decision is refused with line 25 for the message bar, and the flag ends with the spell.
+            {
+                var bodyAir = Cast(13, SessionSpellCaster.Hero);
+                await Until(() => HeroClickSpells().BodyOfAir, "the BEGIN of Body of Air wrote spell flag 0x4 on the hero");
+                Require(HeroRequests.ClickGoalOf("atk:smoke", false, false) == HeroClickGoal.None, "a hero in Body of Air builds no attack goal");
+                var refused = HeroClickRules.Decide(HeroRequests.ClickFactsOf("atk:smoke", false, false));
+                Require(refused.BodyOfAirMessage, "the refused attack asks for line 25");
+                Require(RefuseAttackInBodyOfAir() && !string.IsNullOrEmpty(_bodyOfAirLine), "the message bar was given line 25 (text kind 6)");
+                GD.Print($"ARC-COMBAT-1943 trait-body hero-air refused line=\"{_bodyOfAirLine}\"");
+                SpellCasterNow()!.Act(new(SessionSpellRunActionKind.ForceEnd, bodyAir));
+                FlushSpellLog(null);
+                await Until(() => !HeroClickSpells().BodyOfAir && session.QueryTraitArt(SessionSpellCaster.Hero) is null, "the END of Body of Air cleared spell flag 0x4");
+                Require(HeroRequests.ClickGoalOf("atk:smoke", false, false) == HeroClickGoal.Attack, "the attack click is built again after the END");
+            }
 
             // The hero: Body of Air takes every worn item off, its END chooses the best items again.
             var worn = session.QueryEquipment().Worn.Count;
