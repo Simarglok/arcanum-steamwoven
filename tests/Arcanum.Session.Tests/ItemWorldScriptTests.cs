@@ -20,6 +20,7 @@ public sealed class ItemWorldScriptTests
         SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843, SetCallRead = 844, GiveThenXp = 845, XpThenGive = 846, SetThenStop = 847, XpEffect = 60,
         ToggleGen = 860, ToggleGenTwice = 861, ToggleGenThenRead = 862, ToggleGenOutside = 863, ToggleGenThenSector = 864, ToggleTwoSlots = 865;
     private const int DistanceToHero = 870, DistanceItemToHero = 871;
+    private const int RandomRoll = 900, RandomTwice = 901, RandomThenRefuse = 902, SocialRead = 903, OriginRead = 904, SocialOfHero = 905, GrantFate = 906, GrantFateTwice = 907, GrantFateItem = 908;
     private const byte PlayerKind = 21;
     private const int StoryRaise = 880, StoryReadBack = 881, RumorOfHero = 882, RumorOfItem = 883, RumorOutOfRange = 884, RenameSelf = 885, RenameSelfTwice = 886, RenameHero = 887, ChangeLooped = 888, ChangeHero = 889, ChangeThenRead = 890, ChangeUnkept = 891, ChangeLater = 892, CallDialogOfLooped = 893, ChangedTo = 1358, RumorNumber = 1500, RenamedTo = 2805, DataName = 3100;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
@@ -43,6 +44,43 @@ public sealed class ItemWorldScriptTests
                 for (var i = 0; i < clause.Operands.Length; i++) { slot[4 + i] = clause.Operands[i].Kind; BinaryPrimitives.WriteInt32LittleEndian(slot[(12 + 4 * i)..], clause.Operands[i].Value); }
             }
         return ScrProgram.Read(bytes).Program!;
+    }
+
+
+    // ARC-SCRIPT-2377 (IV44): random (37) of 1..1000 into local variable 0 (and, twice, a second draw into variable 1), then every container in the vicinity gets the last number drawn as its art number (the art is what the test reads back);
+    // `thenRefuse` ends the run on a quest write the session refuses (a quest outside the log).
+    private static ScrProgram RandomProgram(int draws, bool thenRefuse = false)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        for (var i = 0; i < draws; i++) lines.Add(Do(C(ScrCatalogue.Action.Random, N(1), N(1000), (LocalVariable, i))));
+        if (thenRefuse) lines.Add(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(5), N(2))));
+        lines.Add(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))));
+        lines.Add(Do(C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), (LocalVariable, draws - 1))));
+        lines.Add(Do(C(ScrCatalogue.Action.LoopEnd)));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
+    // ARC-SCRIPT-2377 (IV45): get social class (38) or get origin (39) of the looped container into a variable, which becomes its art number; `of` reads the object named instead (the hero, outside the loop).
+    private static ScrProgram FieldProgram(int action, (byte, int)? of = null)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        if (of is { } who) lines.Add(Do(C(action, who, (LocalVariable, 0))));
+        lines.Add(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))));
+        if (of is null) lines.Add(Do(C(action, (Looped, 0), (LocalVariable, 0))));
+        lines.Add(Do(C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), (LocalVariable, 0))));
+        lines.Add(Do(C(ScrCatalogue.Action.LoopEnd)));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
+    // ARC-SCRIPT-2377 (IV46): grant fate point (117) of one object, `times` times.
+    private static ScrProgram FateProgram(byte kind, int times = 1)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        for (var i = 0; i < times; i++) lines.Add(Do(C(ScrCatalogue.Action.GrantFatePoint, (kind, 0))));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
     }
 
     // ARC-SCRIPT-2376 (IV25): the dialog loops of the installed scripts: the looped critter that carries the name is sent a deferred call into a dialog script (call script in: script, line, the hero as triggerer, the looped one as attachee, 2 seconds).
@@ -203,6 +241,8 @@ public sealed class ItemWorldScriptTests
             [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true), [SetCallRead] = SetCallAndRead(1004, 2), [GiveThenXp] = GiveThenAddXp(), [XpThenGive] = AddXpThenGive(), [SetThenStop] = SetThenCallOutsidePoints(),
             [ToggleGen] = ToggleGenerators([GeneratorSlot]), [ToggleGenTwice] = ToggleGenerators([GeneratorSlot, GeneratorSlot]), [ToggleGenThenRead] = ToggleGenerators([GeneratorSlot], read: true),
             [ToggleGenOutside] = ToggleGenerators([300, -1]), [ToggleGenThenSector] = ToggleGenerators([GeneratorSlot], sector: true), [ToggleTwoSlots] = ToggleGenerators([GeneratorSlot, GeneratorSlot + 1, GeneratorSlot]),
+            [RandomRoll] = RandomProgram(1), [RandomTwice] = RandomProgram(2), [RandomThenRefuse] = RandomProgram(1, thenRefuse: true), [SocialRead] = FieldProgram(ScrCatalogue.Action.GetSocialClass), [OriginRead] = FieldProgram(ScrCatalogue.Action.GetOrigin),
+            [SocialOfHero] = FieldProgram(ScrCatalogue.Action.GetSocialClass, (Triggerer, 0)), [GrantFate] = FateProgram(Triggerer), [GrantFateTwice] = FateProgram(Triggerer, 2), [GrantFateItem] = FateProgram(Attachee),
             [DistanceToHero] = Distance(Looped, PlayerKind), [DistanceItemToHero] = Distance(Attachee, Triggerer),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer),
             [StoryRaise] = StoryRaiseProgram(), [StoryReadBack] = StoryReadBackProgram(), [RumorOfHero] = RumorProgram(Triggerer), [RumorOfItem] = RumorProgram(Attachee), [RumorOutOfRange] = RumorProgram(Triggerer, 3000),
@@ -307,6 +347,12 @@ public sealed class ItemWorldScriptTests
             return [new(new SessionMapId(obj.Map), DialogKey(obj.Code, "script"), write.Slot.Script), new(new SessionMapId(obj.Map), DialogKey(obj.Code, "lf"), write.Slot.LocalFlags),
                 new(new SessionMapId(obj.Map), DialogKey(obj.Code, "ctr"), write.Slot.Counters)];
         }
+
+        // ARC-SCRIPT-2377 (IV45): the social class and the origin each object reads (the hero reads 0, as the use host answers; an object that is absent has no row).
+        public Dictionary<string, int> SocialClasses { get; } = new() { ["case"] = 7, ["other"] = 9, [SessionEventKinds.PlayerEntity] = 0 };
+        public Dictionary<string, int> Origins { get; } = new() { ["case"] = 3, ["other"] = 4, [SessionEventKinds.PlayerEntity] = 0 };
+        public int? SocialClassOf(ScrObjectRef obj) => SocialClasses.TryGetValue(obj.Code, out var value) ? value : null;
+        public int? OriginOf(ScrObjectRef obj) => Origins.TryGetValue(obj.Code, out var value) ? value : null;
 
         public bool? ItemOffInData(ScrObjectRef item) => DataOff;
         public int? ItemNameInData(ScrObjectRef item) => NameInData;
@@ -877,7 +923,7 @@ public sealed class ItemWorldScriptTests
     public void The_item_set_keeps_to_the_questions_the_session_answers()
     {
         var set = SessionItemScripts.Admission;
-        foreach (var action in new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.FloatLine })
+        foreach (var action in new[] { ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.Destroy })
             Assert.IsFalse(set.Actions.Contains(action), $"action {action}");
         foreach (var condition in new[] { ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
             Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
@@ -1089,6 +1135,120 @@ public sealed class ItemWorldScriptTests
         foreach (var action in new[] { ScrCatalogue.Action.GetStoryState, ScrCatalogue.Action.SetStoryState, ScrCatalogue.Action.SetRumor, ScrCatalogue.Action.Rename })
             Assert.IsTrue(set.Actions.Contains(action), $"action {action}");
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.Dialog));
+    }
+
+
+    // ARC-SCRIPT-2377 (IV44, PG5): random (37) in an insert-item run draws from the session's own generator, one revision for the pickup and the draws, and the save keeps the position.
+    [TestMethod]
+    public void Random_draws_from_the_session_generator_in_the_moves_own_revision()
+    {
+        using var owner = Owner();
+        var at = owner.QueryRandom();
+        var probe = new Arcanum.Simulation.Randomness.SeededRandom(at.Seed, at.Draws);
+        Assert.IsTrue(probe.TryNext(1, 1000, out var expected));
+        var before = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(RandomRoll)).Disposition);
+        Assert.AreEqual((expected, expected, at.Draws + 1, before + 1), ((int)Art(owner, "case")!, (int)Art(owner, "other")!, owner.QueryRandom().Draws, owner.Version.Revision), "the number is the generator's next draw");
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(owner.QueryRandom(), restored.QueryRandom(), "the position survives a save");
+    }
+
+    [TestMethod]
+    public void Two_draws_of_one_run_continue_one_sequence()
+    {
+        using var owner = Owner();
+        var at = owner.QueryRandom();
+        var probe = new Arcanum.Simulation.Randomness.SeededRandom(at.Seed, at.Draws);
+        Assert.IsTrue(probe.TryNext(1, 1000, out _));
+        Assert.IsTrue(probe.TryNext(1, 1000, out var second));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(RandomTwice)).Disposition);
+        Assert.AreEqual((second, at.Draws + 2), ((int)Art(owner, "case")!, owner.QueryRandom().Draws));
+    }
+
+    [TestMethod]
+    public void A_refused_move_spends_no_draw_and_a_generator_at_its_end_refuses_the_move()
+    {
+        using var owner = Owner();
+        var at = owner.QueryRandom();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(RandomThenRefuse));
+        Assert.AreEqual((GameSessionDisposition.Rejected, before, at), (refused.Disposition, owner.Version, owner.QueryRandom()), "the draw of a refused move is not kept");
+        Assert.IsNull(Art(owner, "case"));
+
+        using var spent = Owner();
+        Assert.IsTrue(spent.RestoreRandom(new(spent.QueryRandom().Seed, long.MaxValue)));
+        var version = spent.Version;
+        var exhausted = spent.PickUpItem(version, "oid:tome", Accept, new Host(RandomRoll));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.RandomExhausted, version), (exhausted.Disposition, exhausted.Failure, spent.Version));
+    }
+
+    // ARC-SCRIPT-2377 (IV45, CQ1, CQ2): get social class and get origin answer from the host's world part for each object they name.
+    [TestMethod]
+    public void Get_social_class_and_origin_read_the_host_per_object()
+    {
+        using var social = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, social.PickUpItem(social.Version, "oid:tome", Accept, new Host(SocialRead)).Disposition);
+        Assert.AreEqual((7, 9), ((int)Art(social, "case")!, (int)Art(social, "other")!));
+        using var origin = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, origin.PickUpItem(origin.Version, "oid:tome", Accept, new Host(OriginRead)).Disposition);
+        Assert.AreEqual((3, 4), ((int)Art(origin, "case")!, (int)Art(origin, "other")!));
+        using var hero = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, hero.PickUpItem(hero.Version, "oid:tome", Accept, new Host(SocialOfHero)).Disposition);
+        Assert.AreEqual((0, 0), ((int)Art(hero, "case")!, (int)Art(hero, "other")!), "the hero reads 0");
+    }
+
+    [TestMethod]
+    public void A_social_class_the_host_cannot_answer_refuses_the_move()
+    {
+        var host = new Host(SocialRead);
+        host.SocialClasses.Remove("other");
+        foreach (ISessionItemScriptHost candidate in new ISessionItemScriptHost[] { host, new WorldlessHost(new Host(SocialRead)) })
+        {
+            using var owner = Owner();
+            var before = owner.Version;
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, candidate);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+            Assert.IsNull(Art(owner, "case"));
+        }
+    }
+
+    // ARC-SCRIPT-2377 (IV46, SQ11): grant fate point raises the hero's points by one a request, in the move's own revision; an item or any other non-PC object changes nothing, and at 100 the grant is lost (FT7).
+    [TestMethod]
+    public void Grant_fate_point_raises_the_heros_points_in_the_moves_revision_and_the_save_keeps_them()
+    {
+        using var owner = Owner();
+        var points = owner.QueryHeroFate()!.Value.Points;
+        var before = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(GrantFate)).Disposition);
+        Assert.AreEqual((points + 1, before + 1), (owner.QueryHeroFate()!.Value.Points, owner.Version.Revision));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(points + 1, restored.QueryHeroFate()!.Value.Points);
+
+        using var twice = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, twice.PickUpItem(twice.Version, "oid:tome", Accept, new Host(GrantFateTwice)).Disposition);
+        Assert.AreEqual(points + 2, twice.QueryHeroFate()!.Value.Points);
+
+        using var item = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, item.PickUpItem(item.Version, "oid:tome", Accept, new Host(GrantFateItem)).Disposition);
+        Assert.AreEqual(points, item.QueryHeroFate()!.Value.Points, "an item is no PC");
+    }
+
+    [TestMethod]
+    public void A_grant_at_the_top_is_lost_and_the_session_keeps_100()
+    {
+        using var owner = Owner();
+        while (owner.QueryHeroFate()!.Value.Points < 100) Assert.AreEqual(GameSessionDisposition.Changed, owner.GrantHeroFatePoint(owner.Version).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(GrantFate)).Disposition);
+        Assert.AreEqual(100, owner.QueryHeroFate()!.Value.Points);
+    }
+
+    [TestMethod]
+    public void The_random_social_class_origin_and_fate_commands_are_in_the_item_set_and_the_faction_and_armor_getters_stay_out()
+    {
+        var set = SessionItemScripts.Admission;
+        foreach (var action in new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GrantFatePoint })
+            Assert.IsTrue(set.Actions.Contains(action), $"action {action}");
+        Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetFaction) || set.Actions.Contains(ScrCatalogue.Action.GetArmor));
     }
 
     // The same host with the world part hidden: the question is not answerable.

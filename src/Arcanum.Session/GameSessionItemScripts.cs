@@ -4,6 +4,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Randomness;
 
 namespace Arcanum.Session;
 
@@ -222,6 +223,11 @@ public sealed partial class GameSessionOwner
         private readonly Dictionary<int, bool> _generatorBlocked = [];
         private bool _awardRaisesLevel;
         private bool _raisedBeforeRun;
+        // ARC-SCRIPT-2377 (IV44): the generator as the move's runs have drawn from it (a copy of the session's stream, taken at the first draw; the commit makes it the session's), and whether a draw ran past the end of the sequence (the move is refused).
+        private SeededRandom? _trialRandom;
+        private bool _randomExhausted;
+        // ARC-SCRIPT-2377 (IV46, SQ11): the fate points the runs grant the hero (one per request for a PC), raised by the commit.
+        private int _fateGrants;
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
@@ -281,7 +287,25 @@ public sealed partial class GameSessionOwner
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
         internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges || _questRecords.Count > 0 || _questShared.Count > 0 || _questGains.Count > 0 || GeneratorChanges
-            || _storyRaised is { } raised && raised > _owner._story.StoryState || _rumors.Any(rumor => !_owner._story.Rumors.ContainsKey(rumor));
+            || _storyRaised is { } raised && raised > _owner._story.StoryState || _rumors.Any(rumor => !_owner._story.Rumors.ContainsKey(rumor)) || RandomDrawn || FateChanges;
+
+        /// <summary>ARC-SCRIPT-2377 (IV44): whether the runs drew from the generator (the commit moves the session's stream on).</summary>
+        private bool RandomDrawn => _trialRandom is { } trial && trial.Draws != _owner._random.Draws;
+
+        /// <summary>ARC-SCRIPT-2377 (IV46): whether the granted fate points change the hero (at 100 points a grant is lost, FT7; a session without a hero grants none).</summary>
+        private bool FateChanges => _fateGrants > 0 && _owner._hero is { } hero && hero.State.Fate.Points < FateRules.MaxPoints;
+
+        /// <summary>
+        /// ARC-SCRIPT-2377 (IV44, PG5): the number a random action draws, both bounds included, from the move's own copy of the session's generator. A draw past the end of the sequence answers the low bound and refuses the move
+        /// (<see cref="GameSessionFailure.RandomExhausted"/>), as the other session rolls do.
+        /// </summary>
+        internal int Draw(int low, int high)
+        {
+            _trialRandom ??= new SeededRandom(_owner._random.Seed, _owner._random.Draws);
+            if (_trialRandom.TryNext(low, high, out var value)) return value;
+            _randomExhausted = true;
+            return low;
+        }
 
         /// <summary>ARC-SCRIPT-2375 (IV30): the name number an earlier run of the move gave the item, or null.</summary>
         internal int? PendingName(ScrObjectRef obj) => obj.Map == _map && _namePending.TryGetValue(obj.Code, out var number) ? number : null;
@@ -308,6 +332,7 @@ public sealed partial class GameSessionOwner
             _owner.ThrowIfDisposed();
             _runs.Add(new(point, attachee, run));
             Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcTriggerer);
+            if (Failure == GameSessionFailure.None && _randomExhausted) Failure = GameSessionFailure.RandomExhausted;
             if (Failure == GameSessionFailure.None) Failure = Accept(run);
             return run;
         }
@@ -403,6 +428,11 @@ public sealed partial class GameSessionOwner
                     if (request.Object is not { } who || !_host.IsPc(who)) continue;
                     if (!SessionStoryLimits.IsRumor(request.Number)) return GameSessionFailure.ItemScriptUnsupported;
                     _rumors.Add(request.Number);
+                }
+                // ARC-SCRIPT-2377 (IV46, SQ11): grant fate point raises the hero's stat 20 by one when the object is a PC; any other object's request does nothing.
+                else if (request.Kind == ScrStateKind.FatePoint)
+                {
+                    if (request.Object is { } pc && _host.IsPc(pc)) _fateGrants++;
                 }
                 else if (request.Kind is not (ScrStateKind.QuestState or ScrStateKind.QuestExperience)) return GameSessionFailure.ItemScriptUnsupported;
             }
@@ -671,7 +701,7 @@ public sealed partial class GameSessionOwner
         {
             if (Failure != GameSessionFailure.None) return;
             if (_writes.Count > 0 && _owner._flags.Version.Revision > GlobalFlagLimits.MaxRevision - _writes.Count) { Failure = GameSessionFailure.RevisionExhausted; return; }
-            if ((_questRecords.Count > 0 || _questGains.Count > 0 || GeneratorChanges) && _owner._revision == long.MaxValue) { Failure = GameSessionFailure.RevisionExhausted; return; }
+            if ((_questRecords.Count > 0 || _questGains.Count > 0 || GeneratorChanges || FateChanges) && _owner._revision == long.MaxValue) { Failure = GameSessionFailure.RevisionExhausted; return; }
             // The slots are planned once, here: the commit applies this plan and asks the host nothing more after the first flag write.
             _planned = Writes();
             if (_planned.Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
@@ -715,6 +745,14 @@ public sealed partial class GameSessionOwner
                 // ARC-SCRIPT-2394: what the host shows and passes on for an award (the level-up messages, the followers' level step).
                 if (questAward.Award.Followers is not null || questAward.Award.LevelUps is not null) _owner._itemScriptAwards.Add(questAward.Award);
             }
+            // ARC-SCRIPT-2377 (IV46): the fate points, over the hero as the awards left it (FT7: the stat setter clamps at 100).
+            if (FateChanges)
+            {
+                var fate = _owner._hero!.State.Fate;
+                for (var i = 0; i < _fateGrants; i++) fate = FateRules.Grant(fate).After;
+                _owner._hero.Apply(_owner._hero.State.WithFate(fate));
+            }
+            if (_trialRandom is not null) _owner._random = _trialRandom;
             foreach (var (slot, blocked) in _generatorBlocked) _owner._generators.SetBlocked(slot, blocked);
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
             if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)
@@ -839,11 +877,11 @@ public sealed partial class GameSessionOwner
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are being rewielded only
     /// in the runs of an NPC's rewield (ARC-MAGIC-1644).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries, IScrQuestWrites
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries, IScrQuestWrites, IScrCritterFieldQueries
     {
         // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds, the follower kinds (ARC-SCRIPT-2336) and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
-        // (UnknownObject: the session refuses the move). The set admits no random, held-item, wielded-item or reputation question and asks a location for distance between only (ARC-SCRIPT-2426), so no other is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
-        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the held-item, wielded-item and reputation guard conditions) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
+        // (UnknownObject: the session refuses the move). The set admits no held-item, wielded-item or reputation question and asks a location for distance between only (ARC-SCRIPT-2426); random (ARC-SCRIPT-2377) draws from the move's copy of the session's generator, so no other is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
+        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (within range, the held-item, wielded-item and reputation guard conditions) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
         private ISessionItemWorldHost? World => host as ISessionItemWorldHost;
 
         public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
@@ -891,7 +929,26 @@ public sealed partial class GameSessionOwner
             return [];
         }
 
-        public int Random(int low, int high) => throw new InvalidOperationException("ITEM_SCRIPT_RANDOM_NOT_ADMITTED");
+        // ARC-SCRIPT-2377 (IV44): random (37) draws from the session's generator in the move (a trial copy of the stream the commit takes over), so the runs of a move continue one sequence and a refused move spends none.
+        public int Random(int low, int high) => runs.Draw(low, high);
+
+        // ARC-SCRIPT-2377 (IV45, CQ1, CQ2): get social class and get origin go to the host's world part; an object it reads no row for stops the run as an absent one does (UnknownObject: the session refuses the move). The faction and armor getters are not admitted.
+        public int? SocialClassOf(ScrObjectRef obj)
+        {
+            var value = World?.SocialClassOf(obj);
+            UnknownObject |= value is null;
+            return value;
+        }
+
+        public int? OriginOf(ScrObjectRef obj)
+        {
+            var value = World?.OriginOf(obj);
+            UnknownObject |= value is null;
+            return value;
+        }
+
+        public int? FactionOf(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_FACTION_NOT_ADMITTED");
+        public int? ArmorOf(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_ARMOR_NOT_ADMITTED");
         // ARC-SCRIPT-2426 (IV36): distance between (71) asks the location of each of its two objects from the host's world part; an object it cannot place stops the run as an absent one does (UnknownObject: the session refuses the move). The condition
         // within range (34) and get location (95) stay out of the set, so only distance between asks.
         public (long X, long Y)? Location(ScrObjectRef obj)
