@@ -329,9 +329,15 @@ public sealed class AreaTrapsTests
             Assert.IsFalse(AreaUseScriptHost.UseStops(refused));
             CollectionAssert.AreEqual(new[] { $"check {npc.Code}" }, log);
 
-            // Another map, an opener that is no NPC row of the shown map, and the hero's own teleport (the caller's, not the NPC hooks') stay as before.
-            log.Clear(); refusal = null;
+            // ARC-WORLD-2039: another map is asked of the seam too (it decides which maps it lists); a refusal leaves the run unapplied, no refusal records the request.
+            log.Clear(); refusal = "map not listed";
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunUseScript(AreaUseScriptHost.EntityId(elsewhere), npc, npc, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { $"check {npc.Code}" }, log);
+            log.Clear(); refusal = null;
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunUseScript(AreaUseScriptHost.EntityId(elsewhere), npc, npc, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(2, log.Count);
+            // An opener that is no NPC row of the shown map, and the hero's own teleport (the caller's, not the NPC hooks') stay as before.
+            log.Clear();
             var stranger = new ScrObjectRef(1, "oid:thug");
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), stranger, stranger, session.Rules.Scripts).Outcome);
             var pc = host.Pc;

@@ -1905,14 +1905,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-WORLD-2038 (ledger TT20): why a script's teleport of an object other than the hero cannot be recorded as the NPC request (<see cref="AreaScriptWorld.RequestNpcTeleport"/>), or null: no world seam, an object that is no NPC of the shown map,
-    /// a destination on another map (FM1: only its record would move, not built) or the AI host's own refusal (a follower, a cell it does not hold). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
+    /// the AI host's own refusal (a follower, a cell it does not hold on the shown map, a map the viewer does not list; a destination on another map is ARC-WORLD-2039: only the NPC's record moves, FM1). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
     /// </summary>
     public string? NpcTeleportRefusedBecause(ScrTeleport other)
     {
         ArgumentNullException.ThrowIfNull(other);
         if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null) return $"a teleport of {other.Object.Code} is not modelled";
         if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType }) return $"a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled";
-        if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap) return $"a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled";
         return npcRefusal(other);
     }
 
