@@ -41,28 +41,28 @@ implemented yet.
   neighbouring parts share their edges; halves round up. The two panel heights are the exception: each is `round(height · f)`
   from the frame's own top or bottom edge, as the reference table below shows (1600 × 900: bottom panel 238, middle 599).
 
-Reference table (band heights at their provisional values; "bars" are per side, horizontal / vertical). The layout
+Reference table (band heights at the default values of SWI-LAY-10; "bars" are per side, horizontal / vertical). The layout
 model's unit tests use these numbers ([#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450)):
 
 | Window | Frame | `f` | Step | Run-time scale | Top | Middle | Bottom | Centre | Side | Bars |
 | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 3840 × 2160 | 3840 × 2160 | 1.0000 | 1 | 1.000 | 150 | 1440 | 570 | 2880 | 480 | 0 / 0 |
-| 2560 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 960 | 380 | 1920 | 320 | 0 / 0 |
-| 1920 × 1080 | 1920 × 1080 | 0.5000 | 1/2 | 1.000 | 75 | 720 | 285 | 1440 | 240 | 0 / 0 |
-| 1280 × 720 | 1280 × 720 | 0.3333 | 1/3 | 1.000 | 50 | 480 | 190 | 960 | 160 | 0 / 0 |
-| 3840 × 2400 | 3840 × 2400 | 1.0000 | 1 | 1.000 | 150 | 1680 | 570 | 2880 | 480 | 0 / 0 |
-| 2560 × 1600 | 2560 × 1600 | 0.6667 | 2/3 | 1.000 | 100 | 1120 | 380 | 1920 | 320 | 0 / 0 |
-| 1920 × 1200 | 1920 × 1200 | 0.5000 | 1/2 | 1.000 | 75 | 840 | 285 | 1440 | 240 | 0 / 0 |
-| 1280 × 800 | 1280 × 800 | 0.3333 | 1/3 | 1.000 | 50 | 560 | 190 | 960 | 160 | 0 / 0 |
-| 3024 × 1964 | 3024 × 1890 | 0.7875 | 1 | 0.787 | 118 | 1323 | 449 | 2268 | 378 | 0 / 37 |
-| 3456 × 2234 | 3456 × 2160 | 0.9000 | 1 | 0.900 | 135 | 1512 | 513 | 2592 | 432 | 0 / 37 |
-| 2880 × 1800 | 2880 × 1800 | 0.7500 | 1 | 0.750 | 113 | 1259 | 428 | 2160 | 360 | 0 / 0 |
-| 1366 × 768 | 1366 × 768 | 0.3556 | 1/2 | 0.711 | 53 | 512 | 203 | 1024 | 171 | 0 / 0 |
-| 1600 × 900 | 1600 × 900 | 0.4167 | 1/2 | 0.833 | 63 | 599 | 238 | 1200 | 200 | 0 / 0 |
-| 3440 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 960 | 380 | 1920 | 320 | 440 / 0 |
-| 5120 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 960 | 380 | 1920 | 320 | 1280 / 0 |
-| 1024 × 768 | 1024 × 640 | 0.2667 | 1/3 | 0.800 | 40 | 448 | 152 | 768 | 128 | 0 / 64 |
-| 5120 × 2880 | 5120 × 2880 | 1.3333 | 1 | 1.333 | 200 | 1920 | 760 | 3840 | 640 | 0 / 0 |
+| 3840 × 2160 | 3840 × 2160 | 1.0000 | 1 | 1.000 | 120 | 1584 | 456 | 2880 | 480 | 0 / 0 |
+| 2560 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 0 / 0 |
+| 1920 × 1080 | 1920 × 1080 | 0.5000 | 1/2 | 1.000 | 60 | 792 | 228 | 1440 | 240 | 0 / 0 |
+| 1280 × 720 | 1280 × 720 | 0.3333 | 1/3 | 1.000 | 40 | 528 | 152 | 960 | 160 | 0 / 0 |
+| 3840 × 2400 | 3840 × 2400 | 1.0000 | 1 | 1.000 | 120 | 1824 | 456 | 2880 | 480 | 0 / 0 |
+| 2560 × 1600 | 2560 × 1600 | 0.6667 | 2/3 | 1.000 | 80 | 1216 | 304 | 1920 | 320 | 0 / 0 |
+| 1920 × 1200 | 1920 × 1200 | 0.5000 | 1/2 | 1.000 | 60 | 912 | 228 | 1440 | 240 | 0 / 0 |
+| 1280 × 800 | 1280 × 800 | 0.3333 | 1/3 | 1.000 | 40 | 608 | 152 | 960 | 160 | 0 / 0 |
+| 3024 × 1964 | 3024 × 1890 | 0.7875 | 1 | 0.787 | 95 | 1436 | 359 | 2268 | 378 | 0 / 37 |
+| 3456 × 2234 | 3456 × 2160 | 0.9000 | 1 | 0.900 | 108 | 1642 | 410 | 2592 | 432 | 0 / 37 |
+| 2880 × 1800 | 2880 × 1800 | 0.7500 | 1 | 0.750 | 90 | 1368 | 342 | 2160 | 360 | 0 / 0 |
+| 1366 × 768 | 1366 × 768 | 0.3556 | 1/2 | 0.711 | 43 | 563 | 162 | 1024 | 171 | 0 / 0 |
+| 1600 × 900 | 1600 × 900 | 0.4167 | 1/2 | 0.833 | 50 | 660 | 190 | 1200 | 200 | 0 / 0 |
+| 3440 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 440 / 0 |
+| 5120 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 1280 / 0 |
+| 1024 × 768 | 1024 × 640 | 0.2667 | 1/3 | 0.800 | 32 | 486 | 122 | 768 | 128 | 0 / 64 |
+| 5120 × 2880 | 5120 × 2880 | 1.3333 | 1 | 1.333 | 160 | 2112 | 608 | 3840 | 640 | 0 / 0 |
 
 The two MacBook rows (3024 × 1964, 3456 × 2234) are narrower than 16:10 and get bars of 37 px; in macOS full screen
 the area beside the camera notch is usually left out, which may make the window 16:10 already (to check on the
@@ -76,10 +76,10 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
 
 ## Play screen layout
 
-- **SWI-LAY-10** Three bands: top panel 150 px, bottom panel 570 px (master, *provisional*: the original's 41 and 159
-  units × 3.6 = 147.6 and 572.4, rounded to the grid so that they still sum to 720 px, the original's 200 units, and the
-  window zone of SWI-BDR-2 fits a 16:9 middle band exactly; fixed by [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453)),
-  and the middle band = frame height − top − bottom.
+- **SWI-LAY-10** Three bands: top panel 120 px, bottom panel 456 px (master; **owner decision 2026-11-17**,
+  [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453), after the [prototype](#prototype-of-the-play-screen-arc-ui-2452)'s comparison of this pair with the original strips' own 150 and 570: the original's
+  41 and 159 units × 3.6 = 147.6 and 572.4, rounded to the grid), and the middle band = frame height − top − bottom. Both heights are multiples of 6 and together at most 720, so the window zone of SWI-BDR-2 always fits
+  a 16:9 middle band; at 120 and 456 the middle band is 1584 px at 16:9 and 1824 px at 16:10, and the zone has 72 px above and below it at 16:9. The layout model's options hold the pair in one place.
 - **SWI-LAY-11** Each panel spans the whole frame width. The centre block (2880 px) is centred; the sides take the
   rest. Controls in the centre block sit at their original offsets × 3.6, snapped to the 6 px grid (shift at most
   3 px, under one unit).
@@ -100,10 +100,10 @@ Slice [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452): the 
 Codex art. It is on while the HD option and the generated interface are both on (`AreaGameBarPanel.SteamwovenOn`); with the HD option off, or with the generated interface off, the whole-factor layout is unchanged (the strips and the
 bars' captures are pixel-identical to `origin/main`; only the changing text of the diagnostic palette differs).
 
-- **Scale.** The two strips keep the original's 800-unit layout and are drawn at one fractional scale, `f · 3.6 · k` (`SteamwovenHud.Plan`); `k` is 1 for the TRD heights (150 and 570 master px) and the smaller of
-  `top / 150` and `bottom / 570` for another pair, so thinner panels give a smaller centre block and wider sides, not a squashed strip. The top strip stands on the lower edge of the top band and the bottom strip hangs
-  from the upper edge of the bottom band, so each strip's rim meets the board's rim. A 41-unit strip is 147.6 · f px in a 150 · f band (the board shows above it); a 159-unit strip is 572.4 · f px in a 570 · f band (its last
-  2.4 · f px lie beyond the frame's bottom edge). Both are the price of SWI-LAY-11's original offsets and the grid; the owner decision #2453 can change the heights.
+- **Scale.** The two strips keep the original's 800-unit layout and are drawn at one fractional scale, `f · 3.6 · k` (`SteamwovenHud.Plan`); `k` is 1 for the original strips' own heights (150 and 570 master px) and the smaller of
+  `top / 150` and `bottom / 570` for another pair (0.8 for 120 and 456, the owner's choice), so thinner panels give a smaller centre block (2304 px) and wider sides, not a squashed strip: the prototype's stand-in for art that will be drawn to fit the panel. The top strip stands on the lower edge of the top band and the bottom strip hangs
+  from the upper edge of the bottom band, so each strip's rim meets the board's rim. At k = 1 a 41-unit strip is 147.6 · f px in a 150 · f band (the board shows above it) and a 159-unit strip is 572.4 · f px in a 570 · f band (its last
+  2.4 · f px lie beyond the frame's bottom edge); at k = 0.8 they are 118.1 · f in 120 · f and 457.9 · f in 456 · f.
 - **Boards.** The band beside each strip is a generated board of the strip's own wood (colours tuned from the strip frame, grain continued from the strip's position, the rim on the edge facing the world), painted off
   the main thread (`InterfaceChromeRenderer.RenderBoard`, `SteamwovenBoardView`). The world is still drawn behind the panels over the whole frame, as in the original; the bars of a letterboxed or pillarboxed
   window are black rectangles over it.
@@ -114,7 +114,7 @@ bars' captures are pixel-identical to `origin/main`; only the changing text of t
   strips' fractional scale while the bars show). The windows' free width is still the whole window (a window wider than the 16:9 frame can lie under a pillarbox bar). The strips are not snapped to the 6 px grid and are sampled
   Linear; the boards are painted at the logical scale (the prototype assumes a content scale of 1). The backdrop is for the menu windows, not for the dialog or sleep.
 - **Smoke.** `./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_AREA_BAR_CAPTURE=<prefix>` checks the plan, the strips' places, the insets, the boards, the bars and the open-menu
-  backdrop at the SWI-VER-6 sizes (`ARC_STEAMWOVEN_SIZES=WxH,...` to choose others) for the variants of `ARC_STEAMWOVEN_VARIANTS` (`trd`, `thin` = 120 and 456, `before` = the old layout, `TOP-BOTTOM` master px), without
+  backdrop at the SWI-VER-6 sizes (`ARC_STEAMWOVEN_SIZES=WxH,...` to choose others) for the variants of `ARC_STEAMWOVEN_VARIANTS` (`thin` = the default 120 and 456, `original` = 150 and 570, `before` = the old layout, `TOP-BOTTOM` master px), without
   resizing the window (the root viewport takes the size as its logical render target), and saves `<prefix>-hud-steamwoven-VARIANT-WxH[-menu].png` (local, never in git). The older generated-interface smokes run with the layout
   suspended (`SteamwovenHud.Suspended`): they measure the whole-factor geometry.
 
@@ -124,8 +124,8 @@ bars' captures are pixel-identical to `origin/main`; only the changing text of t
 - **SWI-BDR-2** The window zone, 2880 × 1440 px (the original 800 × 400 units), is centred in the middle band
   (vertical placement: [open questions](#open-questions)); window content (paper doll, grids, pages, buttons) sits in
   it at the original offsets × 3.6, snapped to the grid.
-- **SWI-BDR-3** A backdrop master is 3840 × 1680 px (the middle band of a 16:10 frame at ×1). A shorter middle band
-  shows its centred crop (16:9: 1440 px). A middle band a few pixels taller than 16:10 allows (a bar under 4 px dropped by
+- **SWI-BDR-3** A backdrop master is 3840 × 1824 px (the middle band of a 16:10 frame at ×1: 2400 − 120 − 456). A shorter middle band
+  shows its centred crop (16:9: 1584 px). A middle band a few pixels taller than 16:10 allows (a bar under 4 px dropped by
   SWI-LAY-3) gets the backdrop scaled uniformly to cover it, centred.
 - **SWI-BDR-4** Menus whose original backgrounds share a material share one backdrop (a family). The families are
   fixed by the census ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)): eight families (BD-A to BD-H) and the
@@ -269,7 +269,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | Codex runner — decided: the owner runs Codex (closed, not planned) | — |
 | 1. Geometry | [#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450) | layout model (SWI-LAY, SWI-BDR) | — |
 | 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | prototype with generated chrome ([done](#prototype-of-the-play-screen-arc-ui-2452)) | #2450 |
-| 1. Geometry | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) | owner: panel proportions | #2452 |
+| 1. Geometry | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) | owner: panel proportions — decided 2026-11-17: 120 / 456 | #2452 |
 | 2. Census | [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451) | census, families, production issues | — |
 | 2. Census | [#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454) | kit manifest and validator | #2451 |
 | 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images, material sheet, prompts | #2451 |
@@ -287,6 +287,8 @@ Ready now: #2450; the census (#2451) is done and unblocks #2454 and #2455 (#2462
 
 ## Open questions
 
+- How the controls of the centre block fit the thinner panels: SWI-LAY-11 puts them at the original offsets × 3.6, which the 120 and 456 px bands cannot hold (the original strips are 147.6 and 572.4 px high at that scale),
+  so the kit's hardware is drawn for these bands (vertical offsets compressed) or the centre block is scaled by `k` as in the prototype (2304 px); to settle in the kit design ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454), [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)).
 - The player's `uiScale` setting (50–300 %) in the Steamwoven look: ignored (the interface is proportional by design)
   or a multiplier on `f` with the run-time scale absorbing it.
 - Screens above ×1 (5K): scale the ×1 set up (current requirement) or add a ×4/3 set.

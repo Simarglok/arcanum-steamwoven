@@ -30,13 +30,14 @@ public static class SteamwovenGrid
     public const int CentreWidth = 2880;
     /// <summary>The original window zone 800 × 400 units (SWI-BDR-2).</summary>
     public const int WindowZoneHeight = 1440;
-    /// <summary>The middle-band backdrop master, 3840 × 1680: the middle band of a 16:10 frame at ×1 (SWI-BDR-3).</summary>
-    public const int BackdropHeight = 1680;
     /// <summary>The full-screen menu master, 3840 × 2400, and its 800 × 600 unit zone, 2880 × 2160 (SWI-BDR-6).</summary>
     public const int FullScreenHeight = 2400, FullScreenZoneHeight = 2160;
     /// <summary>The split of a two-part window (358 units, snapped to the grid) from the centre block's left edge (SWI-BDR-5).</summary>
     public const int SplitFromCentreLeft = 1290;
-    public const int DefaultTopPanel = 150, DefaultBottomPanel = 570;
+    /// <summary>The panel heights the owner chose (decision 2026-11-17, #2453, SWI-LAY-10): the thinner pair, 120 and 456 master px.</summary>
+    public const int DefaultTopPanel = 120, DefaultBottomPanel = 456;
+    /// <summary>The heights of the original's two strips at 3.6 master px per unit, snapped to the grid (41 and 159 units: 147.6 and 572.4): the panels the prototype (#2452) offered first, and the reference the strips' scale is measured against.</summary>
+    public const int StripTopPanel = 150, StripBottomPanel = 570;
     /// <summary>A black bar under this many pixels per side is dropped (SWI-LAY-3).</summary>
     public const int MinBarPx = 4;
     /// <summary>The largest window side the model takes; a bound for the exact arithmetic.</summary>

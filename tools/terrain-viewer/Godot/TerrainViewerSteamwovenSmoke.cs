@@ -8,7 +8,7 @@ public partial class TerrainViewerApp
 {
     // ARC-UI-2452: opt-in part of the native bar smoke (ARC_AREA_BAR_STEAMWOVEN=1, with ARC_HD_PACK: the generated interface runs the HD path). The play screen is laid out by the
     // Steamwoven layout model at each size of ARC_STEAMWOVEN_SIZES (default: the TRD's verification sizes, SWI-VER-6) for each panel-height variant of ARC_STEAMWOVEN_VARIANTS
-    // (default "trd,thin": SWI-LAY-10's 150 and 570 master px, and 120 and 456), with and without an open menu. The window is not resized (a Mac screen may be smaller than 3840 x 2160): the root
+    // (default "thin,original": SWI-LAY-10's 120 and 456 master px, and the original strips' 150 and 570), with and without an open menu. The window is not resized (a Mac screen may be smaller than 3840 x 2160): the root
     // viewport is given the size as its logical render target (content scale mode Viewport), so the captures have exactly the requested size.
     // ARC_AREA_BAR_CAPTURE=PREFIX saves PREFIX-hud-steamwoven-VARIANT-WxH[-menu].png (local, never in git).
     private static IReadOnlyList<Vector2I> SteamwovenSizes()
@@ -23,13 +23,13 @@ public partial class TerrainViewerApp
     private static IReadOnlyList<(string Name, SteamwovenLayoutOptions Options)> SteamwovenVariants()
     {
         var text = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_VARIANTS");
-        if (string.IsNullOrWhiteSpace(text)) text = "trd,thin";
+        if (string.IsNullOrWhiteSpace(text)) text = "thin,original";
         var list = new List<(string, SteamwovenLayoutOptions)>();
         foreach (var name in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             // "before" is the whole-factor layout of the generated interface as it was (captured for the owner's comparison; no layout checks).
-            var options = name switch { "trd" or "before" => SteamwovenLayoutOptions.Default, "thin" => SteamwovenHud.Thin, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
-            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not trd, thin, before or TOP-BOTTOM master px");
+            var options = name switch { "thin" or "before" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
+            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, before or TOP-BOTTOM master px");
             list.Add((name, options));
         }
         return list;
