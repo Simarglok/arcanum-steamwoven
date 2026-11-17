@@ -222,6 +222,21 @@ public partial class AreaInventoryGridArea : Control
         QueueRedraw();
     }
 
+    /// <summary>
+    /// ARC-UI-2575: with the Steamwoven layout on, puts <paramref name="panel"/> (whose <paramref name="area"/> is the 800 × 400 frame) so the frame lies in the window zone at the layout's unit scale, whatever the panel
+    /// holds around the frame (the switch, the message and quantity rows); false while that layout is not in use (nothing is changed). The one placement of the inventory, loot and barter windows.
+    /// </summary>
+    public static bool PlaceInZone(PanelContainer panel, AreaInventoryGridArea area, Vector2 viewSize)
+    {
+        if (AreaGameBarPanel.ZoneWindow(viewSize, (int)AreaInventoryDrag.FrameWidth, (int)AreaInventoryDrag.FrameHeight) is not { } zone) return false;
+        area.FitScale((float)zone.Scale);
+        var offset = area.GlobalPosition - panel.GlobalPosition;
+        panel.Size = new((float)(AreaInventoryDrag.FrameWidth * zone.Scale) + offset.X * 2, 0);
+        panel.Size = new(panel.Size.X, panel.GetCombinedMinimumSize().Y);
+        panel.Position = new((float)zone.X - offset.X, (float)zone.Y - offset.Y);
+        return true;
+    }
+
     /// <summary>ARC-UI-051: sets the original look (null: the diagnostic shapes).</summary>
     public void SetLook(AreaInventoryArtLook? look)
     {

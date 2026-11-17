@@ -97,12 +97,26 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// </summary>
     public static (float Scale, Vector2 Position) FittedWindow(Vector2 size, int widthUnits, int heightUnits, bool fractional)
     {
+        // ARC-UI-2575: the Steamwoven layout puts every window in the window zone at the layout's unit scale, bars shown or not.
+        if (ZoneWindow(size, widthUnits, heightUnits) is { } zone) return ((float)zone.Scale, new Vector2((float)zone.X, (float)zone.Y));
         var factor = ScreenFactor(size);
         if (BottomInset <= 0) return (factor, new Vector2(ScreenLeft(size, factor), TopInset));
         var fit = MathF.Min((size.Y - TopInset - BottomInset) / heightUnits, size.X / widthUnits);
         var scale = MathF.Max(factor, fractional ? fit : MathF.Floor(fit));
         return (scale, new Vector2(MathF.Round((size.X - widthUnits * scale) / 2), DockedWindowTop(size, scale, heightUnits)));
     }
+
+    /// <summary>
+    /// ARC-UI-2575: the place of a menu window of <paramref name="widthUnits"/> × <paramref name="heightUnits"/> original units in the window zone of the Steamwoven layout (at the layout's unit scale `f · 3.6`),
+    /// or null while that layout is not in use (the HD option or the generated interface off: the window keeps its own whole or fitted scale). The one hook every menu window reads; it does not
+    /// depend on whether the bars show, so the windows that hide them (loot, barter, reading, save and load) follow the same zone.
+    /// </summary>
+    public static SteamwovenWindowPlace? ZoneWindow(Vector2 size, int widthUnits, int heightUnits) =>
+        SteamwovenOn ? SteamwovenWindowZone.Body((int)size.X, (int)size.Y, widthUnits, heightUnits) : null;
+
+    /// <summary>ARC-UI-2575: the place of an 800 × 600 original screen whose 800 × 400 body (at <paramref name="bodyTopUnits"/> from its top) lies in the window zone, or null (see <see cref="ZoneWindow"/>).</summary>
+    public static SteamwovenWindowPlace? ZoneScreen(Vector2 size, int bodyTopUnits) =>
+        SteamwovenOn ? SteamwovenWindowZone.Screen((int)size.X, (int)size.Y, bodyTopUnits) : null;
 
     /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
     public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);

@@ -73,6 +73,7 @@ public partial class TerrainViewerApp
                         OpenInventory(); await frames(3); await WaitBarArtGeneratedAsync(panel, frames);
                         await CaptureHudAsync("steamwoven-" + tag + "-menu", frames);
                         EndInventory(); await frames(3);
+                        await VerifySteamwovenWindowsAsync(tag, null, panel, frames, () => WaitBarArtGeneratedAsync(panel, frames), Require);
                         SteamwovenHud.Suspended = false; panel.Relayout();
                         continue;
                     }
@@ -135,6 +136,7 @@ public partial class TerrainViewerApp
                     EndInventory();
                     await frames(3);
                     Require(!panel.BoardsForSelfTest.BackdropShown, $"[{tag}] the backdrop goes with the menu");
+                    await VerifySteamwovenWindowsAsync(tag, plan, panel, frames, WaitPaintedAsync, Require);
                     checkedSizes++;
                     GD.Print($"ARC-UI-2452 steamwoven {tag} scale={plan.StripScale:F4} step={layout.Step} top={layout.Top.Band} middle={layout.Middle.Band} bottom={layout.Bottom.Band} bars={layout.Bars}");
                 }
@@ -162,6 +164,47 @@ public partial class TerrainViewerApp
         await frames(3);
         await WaitBarArtGeneratedAsync(panel, frames);
         GD.Print($"ARC-UI-2452 native steamwoven layout PASS sizes={checkedSizes}");
+    }
+
+    // ARC-UI-2575: every menu window the smoke can open (inventory, character sheet, logbook, world map, schematics, the save list) stands in the window zone of the layout at the layout's unit scale:
+    // the drawn body (its top left and its scale) is what SteamwovenWindowZone says, and the window is captured as steamwoven-VARIANT-WxH-WINDOW.png (local). With a null plan (the "before" variant, the old
+    // layout) only the captures are made. The loot, barter, reading, pre-made and new-character windows need an NPC, a container, a written item or the main menu: they take the same hook
+    // (unit tests of the hook) and are captured with the window hooks of #2489.
+    private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
+    {
+        var windows = new (string Name, Action Open, Func<bool> IsOpen, Action Close, Func<(Vector2 Origin, float Scale, int BodyTop)?> View)[]
+        {
+            ("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale, 0) : null),
+            ("sheet", OpenSheet, () => SheetOpen, EndSheet, () => _sheetPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
+            ("logbook", OpenLogbook, () => LogbookOpen, CloseLogbookByPlayer, () => _logbookPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
+            ("map", OpenWorldMap, () => WorldMapOpen, CloseWorldMapByPlayer, () => _worldMapPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
+            ("schematics", () => OpenSchematics(), () => SchematicsOpen, CloseSchematicsByPlayer, () => _schematicsPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
+            ("saves", () => OpenSaveList(AreaSaveListMode.Load), () => SaveListOpen, () => EndSaveList(), () => _saveListPanel?.ArtForSelfTest is { } v ? (v.Position, v.Scale.X, AreaShopArtLayout.Window.Y) : null),
+        };
+        foreach (var (name, open, isOpen, close, view) in windows)
+        {
+            if (isOpen()) close();
+            await frames(2);
+            open();
+            await frames(3);
+            if (!isOpen()) { GD.Print($"ARC-UI-2575 steamwoven window [{tag}] {name} did not open (not captured)"); continue; }
+            await waitPainted();
+            await frames(2);
+            if (plan is not null)
+            {
+                require(view() is not null, $"[{tag}] the {name} window shows the original's look (a view to measure)");
+                var (origin, scale, bodyTop) = view()!.Value;
+                // A window that docks between the strips stands with its body in the zone; a screen (the save list) has its body at 41 units from the screen's top.
+                var expected = bodyTop > 0 ? SteamwovenWindowZone.Screen(plan, bodyTop) : SteamwovenWindowZone.Body(plan, 800, 400);
+                var (ex, ey) = (expected.X, expected.Y);
+                require(Math.Abs(scale - expected.Scale) < 0.002 && Math.Abs(origin.X - ex) <= 1.01 && Math.Abs(origin.Y - ey) <= 1.01,
+                    $"[{tag}] the {name} window is at the zone place ({ex:F1}, {ey:F1}) scale {expected.Scale:F4}, got ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
+                GD.Print($"ARC-UI-2575 steamwoven window [{tag}] {name} origin=({origin.X:F1},{origin.Y:F1}) scale={scale:F4} zone={plan.Layout.WindowZone}");
+            }
+            await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
+            close();
+            await frames(3);
+        }
     }
 
     // Both strips and every frame of every bar button draw generated chrome (asking for it paints it on a worker).

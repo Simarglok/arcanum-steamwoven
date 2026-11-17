@@ -717,7 +717,8 @@ public partial class TerrainViewerApp
         SessionLifeTarget? target = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionLifeTarget.Hero
             : _combatHost?.Build(session, CurrentAreaMap, victim).Combat?.Target;
         if (target is not { } who) return "no combat values";
-        var healed = session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
+        // ARC-SCRIPT-1593 (VT3): a negative heal poison amount raises the level by its size (the setter takes the level minus the amount).
+        var healed = poison < 0 ? session.RaisePoisonLevel(session.Version, who, -(long)poison) : session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
         GD.Print($"ARC-SCRIPT-1481 script-heal-life victim={victim} fatigue={fatigue} poison={poison} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
         RefreshAreaStatus();
         return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}"
