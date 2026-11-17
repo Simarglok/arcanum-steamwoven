@@ -343,10 +343,8 @@ public static partial class AiExecutorRules
     // Whether the object may run (the gait function's run test with the encumbrance refusal): a critter whose concealment flag is set runs only with the prowling training master
     // (an apprentice or untrained one sneaks, an expert walks); an unflagged one, and the PC (whose stealth gait the viewer owns), run unless the encumbrance level is
     // RunRefusedEncumbrance (ARC-AI-1711, ledger VBG19).
-    /// <summary>
-    /// ARC-RENDER-2539 (the gait function 0x42EDC0): whether the step is the stealth walk (animation 3): the concealment flag is set and the prowling training (skill 6) is below expert;
-    /// a run wanted is ignored then, an expert walks. The PC's stealth gait is the viewer's (as for <see cref="RunPermitted"/>).
-    /// </summary>
+    // ARC-RENDER-2539 (the gait function 0x42EDC0): whether the step is the stealth walk (animation 3): the concealment flag is set and the prowling training (skill 6) is below expert;
+    // a run wanted is ignored then, an expert walks. The PC's stealth gait is the viewer's (as for RunPermitted).
     public static bool Sneaks(AiMoverFacts mover) => !mover.Pc && mover.Prowling && mover.ProwlingTraining < SkillTraining.Expert;
 
     public static bool RunPermitted(AiMoverFacts mover) =>
