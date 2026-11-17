@@ -274,6 +274,12 @@ public sealed class AreaCombatPointScriptTests
             var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(wall), session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(Flag(session, WallSeen), "the extra object is the wall");
+            // Negative control: with an NPC as the extra object the same script sets nothing (the flag is not the type's default value).
+            using var control = ConversationSessionFixture.Create();
+            var controlWeapon = Row(4, WeaponType, 923, ScrPoint.Hit);
+            var controlHost = Host(control, content, null, controlWeapon, attacker);
+            Assert.IsNotNull(controlHost.RunCombatPoint(ScrPoint.Hit, Ref(controlWeapon), Ref(attacker), Ref(attacker), control.Rules.Scripts).Run);
+            Assert.IsFalse(Flag(control, WallSeen), "an NPC is no wall");
             var damage = host.RunTakingDamage(AreaUseScriptHost.EntityId(wall), host.Pc, session.Rules.Scripts);
             Assert.IsTrue(AreaUseScriptHost.TakingDamageVetoes(damage), damage.Detail);
             Assert.IsTrue(Flag(session, WallDamaged), "the wall's own taking-damage script ran");
@@ -294,7 +300,7 @@ public sealed class AreaCombatPointScriptTests
             var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(wall), session.Rules.Scripts);
             // Whatever the host makes of the wall as a damage target, the run neither throws nor cancels anything (no answer of a combat point cancels the hit).
             Assert.IsNotNull(ran.Run, ran.Detail);
-            Assert.IsTrue(damaged.Count <= 1, "the wall takes at most the one script damage");
+            Assert.AreEqual(0, damaged.Count, "a wall is no damage target of a script (the damage step leaves it at once)");
         });
     }
 
