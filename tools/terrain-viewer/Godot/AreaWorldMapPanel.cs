@@ -71,6 +71,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
     internal string MessageForSelfTest => _message.Text;
     /// <summary>ARC-MAGIC-1147 (TP6): whether the original look shows its Travel button now (hidden in a Teleportation cast's window).</summary>
     internal bool TravelShownForSelfTest => _artView.TravelButtonShownForSelfTest;
+    internal AreaWorldMapArtView ArtViewForSelfTest => _artView;
     /// <summary>ARC-DEV-050: the area list and Teleport are shown (debug mode only).</summary>
     internal bool DebugControlsShownForSelfTest => _areas.Visible && _teleport.Visible;
     /// <summary>Selects an area in the list and presses Teleport, as a player does.</summary>
