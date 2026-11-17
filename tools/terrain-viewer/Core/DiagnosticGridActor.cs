@@ -133,10 +133,11 @@ public sealed class DiagnosticGridActor
     public static double Seconds(ExactScalar value) => GridActorMath.Seconds(value);
     public static DiagnosticActorState RenderState(MovementState state) => new(
         new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action, StepAction(state.Segment?.Assessment)));
-    // The drawn action of a moving step from its permit's gait code (ARC-WORLD-020 run, ARC-WORLD-021 vault).
+    // The drawn action of a moving step from its permit's gait code (ARC-WORLD-020 run, ARC-WORLD-021 vault, ARC-RENDER-2539 stealth walk).
     private static ActorDiagnosticAction StepAction(StepAssessmentTiming? permit) =>
         permit?.Provenance.Contains(GaitTiming.VaultProvenance) == true ? ActorDiagnosticAction.Vault
-        : permit?.Provenance.Contains(GaitTiming.RunProvenance) == true ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk;
+        : permit?.Provenance.Contains(GaitTiming.RunProvenance) == true ? ActorDiagnosticAction.Run
+        : permit?.Provenance.Contains(GaitTiming.SneakProvenance) == true ? ActorDiagnosticAction.Sneak : ActorDiagnosticAction.Walk;
     private static ActorDiagnosticAction Action(MovementAction action, ActorDiagnosticAction stepping) => action switch
     {
         MovementAction.Idle => ActorDiagnosticAction.Idle,
@@ -151,6 +152,8 @@ public sealed class DiagnosticGridActor
     {
         ActorDiagnosticAction.Walk => AreaGaitTiming?.ArtRate(MovementGait.Walk),
         ActorDiagnosticAction.Run => AreaGaitTiming?.ArtRate(MovementGait.Run),
+        // ARC-RENDER-2539: the stealth walk plays at the stealth rate (10 at Speed 8, research L6).
+        ActorDiagnosticAction.Sneak => AreaGaitTiming?.ArtRate(MovementGait.Sneak),
         _ => null,
     });
     private static AnimationTimeline Timeline(ActorDiagnosticProfile profile, ActorDiagnosticAction action, int? rate = null)
@@ -159,7 +162,7 @@ public sealed class DiagnosticGridActor
         var timeline = new AnimationTimeline(resource.FramesPerGroup, rate ?? resource.RawFramesPerSecond);
         // The vault plays once over its step (it stops on the last frame); walk and run cycles loop.
         timeline.SetMode(action == ActorDiagnosticAction.Vault ? PlaybackMode.Once : PlaybackMode.Loop);
-        if (action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Vault) timeline.Play();
+        if (action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak or ActorDiagnosticAction.Vault) timeline.Play();
         return timeline;
     }
 

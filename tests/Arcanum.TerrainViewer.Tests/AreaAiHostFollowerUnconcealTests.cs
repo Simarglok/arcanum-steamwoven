@@ -1,5 +1,6 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.Movement;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -36,6 +37,26 @@ public sealed class AreaAiHostFollowerUnconcealTests
         f.Session.ToggleHeroConcealment(f.Session.Version);
         Assert.IsFalse(host.Mover(f.B).Concealed || host.Mover(f.B).Prowling, "the clear stands it again");
         Assert.AreEqual(0, host.ShownAnimation(f.B));
+    }
+
+    // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk; an unflagged one walks.
+    [TestMethod]
+    public void A_concealed_follower_below_expert_steps_the_stealth_walk_and_an_ordinary_one_walks()
+    {
+        var (f, host) = Setup();
+        using var _ = f;
+        host.BeginStep(f.B, new CellCoord(41, 10), running: false);
+        Assert.IsFalse(host.Movers.Of(f.B)!.Sneaking, "an ordinary follower walks");
+        f.Session.ToggleHeroConcealment(f.Session.Version);
+        var plain = host.BeginStep(f.B, new CellCoord(42, 10), running: false);
+        var mover = host.Movers.Of(f.B)!;
+        Assert.IsTrue(mover.Sneaking && !mover.Running, "an untrained prowler sneaks");
+        Assert.AreEqual(plain, mover.StepMs, "the step lasts the stealth walk's time");
+        host.BeginStep(f.B, new CellCoord(43, 10), running: true);
+        Assert.IsFalse(host.Movers.Of(f.B)!.Sneaking && host.Movers.Of(f.B)!.Running, "a step is never both");
+        f.Session.ToggleHeroConcealment(f.Session.Version);
+        host.BeginStep(f.B, new CellCoord(44, 10), running: false);
+        Assert.IsFalse(host.Movers.Of(f.B)!.Sneaking, "the flag cleared: the walk again");
     }
 
     [TestMethod]

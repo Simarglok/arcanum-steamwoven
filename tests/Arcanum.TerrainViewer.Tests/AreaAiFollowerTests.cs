@@ -72,7 +72,7 @@ public sealed class AreaAiFollowerTests
         public int Steps, Turns, Jumps;
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = [companion];
 
-        public bool Step(string entity, CellCoord next, bool running)
+        public bool Step(string entity, CellCoord next, bool running, bool sneaking = false)
         {
             Steps++;
             Cells[entity] = next;

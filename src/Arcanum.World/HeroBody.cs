@@ -144,6 +144,9 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// human's bare hands when the body shows no weapon: out of combat mode nothing attacks), the animations 6..19 (run, fall, get up,
     /// vault, and since ARC-RENDER-039 the throw, 14) neither.
     /// </summary>
+    /// <summary>ARC-RENDER-2539: the stealth walk's animation number (the gait function 0x42EDC0 picks it for a concealed critter below prowling expert).</summary>
+    public const uint SneakAnimation = 3;
+
     public uint Selector(uint humanSelector)
     {
         var animation = (humanSelector >> 6) & 31;
@@ -155,6 +158,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
             >= 6 and <= 19 => (0, 0),
             // ARC-COMBAT-1741 (N1): the stunned animation names the unarmed weapon letter and no shield whatever the body wields.
             StunnedAnimation => (WeaponArtRules.Unarmed, 0),
+            // ARC-RENDER-2539 (MA2, 0x41D510): weapon 1 with the stealth walk (animation 3) or the conceal fidget (5) becomes weapon 0; the weapon and shield are kept otherwise, as for the stand.
+            SneakAnimation or 5 => (Weapon == WeaponArtRules.Unarmed ? 0 : Weapon, Shield),
             _ => (Weapon, Shield),
         };
         return (humanSelector & ~0x0FF8003Fu) | BodyBits | ((uint)shield << 19) | (uint)weapon;

@@ -39,6 +39,40 @@ public sealed class ActorGaitTests
         Assert.AreEqual(800, GaitTiming.FrameMilliseconds(1));
     }
 
+    // ARC-RENDER-2539 (research L6, 0x437990): the stealth walk's rate is 10 at Speed 8, 4 below and 16 at the top; a dwarf or halfling adds 4 to each.
+    [TestMethod]
+    public void TheStealthWalkRateIs10With4AndSixteenAtTheEnds()
+    {
+        Assert.AreEqual(4, GaitTiming.FramesPerSecond(MovementGait.Sneak, 0));
+        Assert.AreEqual(9, GaitTiming.FramesPerSecond(MovementGait.Sneak, 7));
+        Assert.AreEqual(10, GaitTiming.FramesPerSecond(MovementGait.Sneak, 8));
+        Assert.AreEqual(13, GaitTiming.FramesPerSecond(MovementGait.Sneak, 15));
+        Assert.AreEqual(16, GaitTiming.FramesPerSecond(MovementGait.Sneak, 30));
+        Assert.AreEqual(14, GaitTiming.FramesPerSecond(MovementGait.Sneak, 8, 4), "a dwarf or halfling body adds 4");
+        Assert.AreEqual("GAIT_SNEAK", GaitTiming.Provenance(MovementGait.Sneak));
+        Assert.IsFalse(GaitTiming.Provenance(MovementGait.Sneak).Contains(GaitTiming.RunProvenance, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void TheStealthWalkStepIsSlowerThanTheWalkAndUsesItsOwnStrideWhenGiven()
+    {
+        var timing = GaitTiming.HumanFixed;
+        // Without a stealth ART the walk's stride goes at the stealth rate: 10 fps against 17.
+        Assert.AreEqual(timing.Walk, timing.Sneak);
+        foreach (var direction in Enum.GetValues<NeighborDirection>())
+            Assert.IsTrue(timing.For(MovementGait.Sneak, direction).Value > timing.For(MovementGait.Walk, direction).Value);
+        Assert.AreEqual(StepDuration.Of(1000 * 2000, 1000 * 2120), timing.For(MovementGait.Sneak, NeighborDirection.XPlus), "10 frames of 100 ms over the 1.06-tile axis stride");
+        Assert.AreEqual(10, timing.ArtRate(MovementGait.Sneak));
+        // The stealth ART's own stride replaces it.
+        var own = new GaitStride(8, 10, 30, 15, 45);
+        var custom = new GaitTiming(timing.Walk, timing.Run, 8, sneak: own);
+        Assert.AreEqual(own, custom.Sneak);
+        Assert.AreNotEqual(timing.For(MovementGait.Sneak, NeighborDirection.XPlus), custom.For(MovementGait.Sneak, NeighborDirection.XPlus));
+        Assert.Throws<ArgumentException>(() => new GaitTiming(timing.Walk, timing.Run, 8, sneak: own with { AxisDx = 0, AxisDy = 0 }));
+        // The step costs the walk's action points (ledger ST3).
+        Assert.AreEqual(AreaTurnBased.StepCost(MovementGait.Walk, 5), AreaTurnBased.StepCost(MovementGait.Sneak, 5));
+    }
+
     [TestMethod]
     public void HumanStepDurationsAreTheResearchAverages()
     {
