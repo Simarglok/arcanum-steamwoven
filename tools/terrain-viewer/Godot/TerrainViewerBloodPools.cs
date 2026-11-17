@@ -28,8 +28,8 @@ public partial class TerrainViewerApp
     /// ARC-RENDER-041: a death the view sees recorded on the shown map leaves a pool of blood (0x42FED0 → 0x432D90, ledger BP1–BP7):
     /// an NPC of the map's seed lies at the cell its body is drawn on (a companion's or an AI walker's cell, with no pixel offset; else its
     /// map cell and offsets), the hero at its committed cell. The deaths recorded when the map and session were first seen leave none
-    /// (they were before this view, or a save that predates pools). The NPC's flags come from its map data (an NPC the session stoned is
-    /// not seen as stoned: Not ready); the hero's flags are none. As the original (0x42FED0 runs when the dying goal has played its
+    /// (they were before this view, or a save that predates pools). The NPC's flags come from its map data and the hero's are none; the session lays the
+    /// flags it wrote on the critter (stoned, undead, elemental) over them when it leaves the pool (ARC-COMBAT-1928). As the original (0x42FED0 runs when the dying goal has played its
     /// frames), a death leaves its pool when its dying animation has played (ARC-RENDER-040, <see cref="DyingPending"/>; the hero's is
     /// its fall). A refusal or failure is said once.
     /// </summary>
@@ -160,7 +160,15 @@ public partial class TerrainViewerApp
         var pool = session.QueryBloodPools(new SessionMapId(runtimeMap)).FirstOrDefault(p => p.Critter == npc);
         var facts = NpcPoolPlace(_inventoryHost!.Maps.First(m => m.RuntimeMap == runtimeMap), npc);
         Require(facts is not null, "the dead NPC's place and flags read");
-        var refusal = BloodPoolRules.Leaves(facts!.Value.Facts);
+        // ARC-COMBAT-1928: the session lays the flags it wrote over the map data's, so the expected refusal does too.
+        var written = session.QueryObjectFlags(npc);
+        var expected = facts!.Value.Facts with
+        {
+            CritterFlags = unchecked((uint)written.Critter(unchecked((int)facts.Value.Facts.CritterFlags))),
+            CritterFlags2 = unchecked((uint)written.Critter2(unchecked((int)facts.Value.Facts.CritterFlags2))),
+            SpellFlags = unchecked((uint)written.Spell(unchecked((int)facts.Value.Facts.SpellFlags))),
+        };
+        var refusal = BloodPoolRules.Leaves(expected);
         GD.Print($"ARC-RENDER-041 smoke blood-pool npc={npc} refusal={refusal} pool={pool?.Entity} cell={pool?.Cell.X},{pool?.Cell.Y}");
         if (refusal != BloodPoolRefusal.None) { Require(pool is null, "a refused death leaves no pool"); return; }
         Require(pool is not null && pool.Cell == facts.Value.Cell && pool.DeathTimeMs == session.QueryLifeRecord(npc)!.Value.DeathTimeMs, "the death left its pool at the body's cell");
