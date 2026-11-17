@@ -230,7 +230,7 @@ line, its frame advanced once per step; each projectile keeps the session that h
 way ends the shot without a strike (RH6, not ready). Native smoke `ARC-COMBAT-016 native-smoke projectile PASS` (in the ranged stage,
 with the lent bow and scenery art 0 as its projectile art): from the first cell each shot flies, a hit deals nothing at the shot and
 strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
-afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
+afterwards, until a hit has landed and a miss has flown (at most 60 shots; the miss is reported, not required; ARC-COMBAT-2573: the hit chance is a seeded roll, 25 % at the hero's bow level, so the number of shots a hit takes depends on how many draws the earlier stages of the chain made, and twelve misses in a row appeared after unrelated changes; a critical miss that takes the bow ends the leg with `NONE`).
 
 Not ready: (the scale arc of a thrown non-weapon item, PF11, is the viewer's since ARC-UI-063),
 boomerangs (ARC-COMBAT-019; thrown weapons since [ARC-COMBAT-017](#thrown-weapons-arc-combat-017)), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event

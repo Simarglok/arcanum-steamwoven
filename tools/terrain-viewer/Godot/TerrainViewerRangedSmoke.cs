@@ -18,6 +18,8 @@ public partial class TerrainViewerApp
     private int _clearShotStops;
 
     private const int LentBowRange = 10;
+    // ARC-COMBAT-2573: the most shots the projectile leg fires to see a hit land (the hit chance is a seeded roll, 25 % at the hero's bow level).
+    private const int MaxProjectileShots = 60;
     // ARC-COMBAT-016: the projectile art the smoke lends its bow: scenery number 0, the art of every installed bow (combat census).
     private const int LentMissileArt = 0x40000000;
 
@@ -46,7 +48,7 @@ public partial class TerrainViewerApp
     // side). The NPC is healed back afterwards. NONE on a map without such cells.
     private async Task RunAreaRangedSmokeAsync()
     {
-        // ARC-WORLD-1149: this stage judges the shots' flight, strikes and wear, and wants a hit within 12 shots; at night a shot would meet the darkness penalty
+        // ARC-WORLD-1149: this stage judges the shots' flight, strikes and wear, and wants a hit within MaxProjectileShots; at night a shot would meet the darkness penalty
         // (FR-LIGHT-011) and miss, so its checks read full light.
         _cellLightForSelfTest = Arcanum.Simulation.Combat.AttackRules.MaxLightLevel;
         try { await RunAreaRangedSmokeCoreAsync(); }
@@ -228,7 +230,9 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-016: with the lent bow's projectile art each shot flies from the hero's cell: the hit decided at the shot deals
         // nothing until the arrow leaves the target's tile, its art is drawn on the way, and a missed arrow flies on past the target
         // (to its range's end, a stray critter or an obstruction). Shots from the first cell until a hit has landed and a miss has
-        // flown (at most 12; a miss is reported, not required).
+        // flown (at most MaxProjectileShots; a miss is reported, not required). The hero's check is a seeded stream of the session's draws and the
+        // hero's bow level (25 of 100 here), so how many shots a hit takes depends on every earlier stage of the chain (ARC-COMBAT-2573:
+        // twelve misses in a row after the map chain's earlier stages); the cap is far above that and a critical miss that took the bow ends the leg.
         async Task<object> Projectiles()
         {
             _lentMissileArtForSelfTest = LentMissileArt;
@@ -239,9 +243,10 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var life = pick.Target.Build.Combat!.Target;
             int Hp() => session.QueryLife(life).View!.Status.HitPoints;
-            var hits = 0; var misses = new List<string>(); var drawn = 0; var maxSteps = 0L;
-            for (var shots = 0; shots < 12 && (hits == 0 || misses.Count == 0); shots++)
+            var hits = 0; var misses = new List<string>(); var drawn = 0; var maxSteps = 0L; var bowLost = false;
+            for (var shots = 0; shots < MaxProjectileShots && (hits == 0 || misses.Count == 0); shots++)
             {
+                if (session.QueryHeroAttack() is not { Skill: CombatSkill.Bow }) { bowLost = true; break; }
                 Heal();
                 _projectileEndsForSelfTest.Clear(); _shotEndScriptsForSelfTest.Clear();
                 var unlaunchedArrow = _projectilesUnlaunchedForSelfTest;
@@ -275,7 +280,12 @@ public partial class TerrainViewerApp
                 }
                 Require(session.QueryShotsInFlight().Count == 0, "the session holds no shot after the flight");
             }
-            Require(hits >= 1, $"a hit landed within 12 shots (misses {string.Join(",", misses)})");
+            if (hits == 0 && bowLost)
+            {
+                GD.Print($"ARC-COMBAT-016 native-smoke projectile NONE map={_readyMapName} (a critical miss took the bow after {misses.Count} misses)");
+                return $"NONE (a critical miss took the bow after {misses.Count} misses)";
+            }
+            Require(hits >= 1, $"a hit landed within {MaxProjectileShots} shots (misses {string.Join(",", misses)})");
             Require(drawn > 0 && maxSteps >= ProjectileRules.DefaultStepsPerTick, $"the arrow was drawn while it flew ({drawn} frames, {maxSteps} steps)");
             GD.Print($"ARC-COMBAT-016 native-smoke projectile PASS map={_readyMapName} target={pick.Target.Entity} misses={misses.Count} drawn={drawn} steps={maxSteps}");
             return new { Hits = hits, Misses = misses, DrawnFrames = drawn, Steps = maxSteps };
