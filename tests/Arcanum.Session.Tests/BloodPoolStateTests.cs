@@ -81,6 +81,42 @@ public sealed class BloodPoolStateTests
         Assert.AreEqual(0, owner.QueryBloodPools(Map).Count);
     }
 
+    // ARC-COMBAT-1928 (0x432D90 reads the critter's own fields when the pool is made): the flags the session wrote count, the map data's facts alone do not.
+    [TestMethod]
+    public void FlagsTheSessionWroteRefuseThePoolForAnNpcAndTheHero()
+    {
+        using var owner = Owner();
+        Kill(owner, Wolf);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
+        foreach (var (critter, field, mask, refusal) in new[]
+        {
+            (Wolf, SessionObjectFlagField.Spell, unchecked((int)BloodPoolRules.StonedSpellFlag), BloodPoolRefusal.Stoned),
+            (SessionEventKinds.PlayerEntity, SessionObjectFlagField.Spell, unchecked((int)BloodPoolRules.StonedSpellFlag), BloodPoolRefusal.Stoned),
+            (Wolf, SessionObjectFlagField.Critter, unchecked((int)BloodPoolRules.UndeadFlag), BloodPoolRefusal.UndeadOrMechanical),
+            (Wolf, SessionObjectFlagField.Critter2, unchecked((int)BloodPoolRules.ElementalFlag2), BloodPoolRefusal.Elemental),
+        })
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, critter, field, mask, true).Disposition);
+            var revision = owner.Version.Revision;
+            var refused = Leave(owner, critter, default);
+            Assert.AreEqual(GameSessionDisposition.NoChange, refused.Disposition, $"{critter} {field}");
+            Assert.AreEqual(refusal, refused.Refusal, $"{critter} {field}");
+            Assert.IsNull(refused.Pool);
+            Assert.AreEqual(revision, owner.Version.Revision);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, critter, field, mask, false).Disposition);
+        }
+        Assert.AreEqual(0, owner.QueryBloodPools(Map).Count);
+
+        // The loop left the stone written as cleared: a written clear of a bit the data has gives the pool back.
+        var dataStoned = new BloodPoolFacts(0, 0, BloodPoolRules.StonedSpellFlag, false, false);
+        Assert.AreEqual(BloodPoolRefusal.None, Leave(owner, Wolf, dataStoned).Refusal, "the session cleared the stone the data had");
+        Assert.AreEqual(1, owner.QueryBloodPools(Map).Count);
+        Assert.AreEqual(Wolf, owner.QueryBloodPools(Map).Single().Critter);
+
+        // Nothing written, the hero: a pool, as before.
+        Assert.AreEqual("pool:2", Leave(owner, SessionEventKinds.PlayerEntity).Pool!.Entity);
+    }
+
     [TestMethod]
     public void BadInputIsRefused()
     {

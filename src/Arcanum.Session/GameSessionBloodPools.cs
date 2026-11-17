@@ -31,7 +31,8 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-RENDER-041: the host's dying critter leaves a pool of blood when its dying animation has played (0x42FED0 → 0x432D90,
-    /// ledger BP1–BP7): <see cref="BloodPoolRules.Leaves"/> decides from the host's facts, and the pool lies at
+    /// ledger BP1–BP7): <see cref="BloodPoolRules.Leaves"/> decides from the host's facts with the flags the session wrote on the critter
+    /// (<see cref="QueryObjectFlags"/>: stoned, undead, elemental, ARC-COMBAT-1928) laid over them, and the pool lies at
     /// <paramref name="cell"/> of <paramref name="map"/> with the critter's pixel offsets. <paramref name="critter"/> is an NPC with
     /// a recorded death, or <see cref="SessionEventKinds.PlayerEntity"/> once the hero has died; each recorded death leaves one pool at
     /// most while that pool is kept (a repeated call answers it, NoChange; once it has decayed and been dropped, a call leaves a new
@@ -51,6 +52,15 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (_inventory.Objects.Pools.FirstOrDefault(pool => pool.Critter == critter && pool.DeathTimeMs == deathMs) is { } left)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, left, BloodPoolRefusal.None, new(_identity, _revision));
+        // ARC-COMBAT-1928 (0x432D90 reads the critter's own fields when the pool is made, so the bits a spell or an effect wrote count): the session's written flags go over the facts the host read from the map data.
+        var written = _objectFlags.GetValueOrDefault(critter);
+        if (!written.IsEmpty)
+            facts = facts with
+            {
+                CritterFlags = unchecked((uint)written.Critter(unchecked((int)facts.CritterFlags))),
+                CritterFlags2 = unchecked((uint)written.Critter2(unchecked((int)facts.CritterFlags2))),
+                SpellFlags = unchecked((uint)written.Spell(unchecked((int)facts.SpellFlags))),
+            };
         var refusal = BloodPoolRules.Leaves(facts);
         if (refusal != BloodPoolRefusal.None)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, refusal, new(_identity, _revision));

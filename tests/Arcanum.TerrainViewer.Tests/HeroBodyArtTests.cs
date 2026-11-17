@@ -322,6 +322,23 @@ public sealed class HeroBodyArtTests
         }
     }
 
+    // ARC-RENDER-2564: the stealth walk ART (animation 3, the body's weapon part) of a species is read when it has one; a species without it draws the walk at the stealth rate.
+    [TestMethod]
+    public void AMonsterBodyReadsTheStealthWalkArtWhenTheSpeciesHasItAndOtherwiseDrawsTheWalk()
+    {
+        using var with = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["ad"] = [0], ["bd"] = [0] });
+        foreach (var combat in new[] { false, true })
+        {
+            var body = HeroBody.Monster(28, 0, combat ? 1 : 0);
+            var profile = HeroBodyArt.LoadMonster([with], body, Name).Profile;
+            Assert.AreEqual(body.MonsterSelector(3), profile.Sneak!.Selector, $"stealth walk combat={combat}");
+            Assert.AreEqual(ActorDiagnosticAction.Sneak, profile.ActionFor(profile.Sneak.Selector));
+            Assert.IsNotNull(profile.Sneak.Stride, "the stealth walk keeps its stride");
+        }
+        using var without = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0] });
+        Assert.IsNull(HeroBodyArt.LoadMonster([without], HeroBody.Monster(28, 0), Name).Profile.Sneak, "no species file: the walk is drawn at the stealth rate");
+    }
+
     [TestMethod]
     public void AMonsterBodyWithoutTheStunnedAndBloodyDyingArtsFallsBack()
     {

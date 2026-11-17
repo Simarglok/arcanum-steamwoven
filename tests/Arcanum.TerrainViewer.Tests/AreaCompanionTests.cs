@@ -3,6 +3,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Party;
@@ -230,6 +231,59 @@ public sealed class AreaCompanionTests
         CollectionAssert.Contains(last.Provenance.ToArray(), GaitTiming.WalkProvenance);
         Assert.AreEqual(GaitTiming.HumanFixed.For(MovementGait.Walk, last.Key.Direction), last.Duration);
         Assert.AreEqual(2, FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pc.State.CommittedCell));
+    }
+
+    // ARC-RENDER-2564 (0x42EDC0): the gait of a concealed follower the AI host does not hold. The companion is far from the PC (its follow decision is a run).
+    private static IReadOnlyList<StepAssessmentTiming> FarFollowSteps(bool concealed, SkillTraining? training, bool clearAfterFirstFrames = false)
+    {
+        var f = Load();
+        using var session = ConversationSessionFixture.CreateWithHero();
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0), GaitTiming.HumanFixed);
+        var companion = group.Companions.Single();
+        if (training is { } trained) group.ProwlingTraining = _ => trained;
+        var pc = new AreaGridSession(f.Steps, SimulationTime.At(0), Step) { Occupancy = group.OccupancyForPc };
+        pc.Advance(SimulationTime.At(9), [new(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        pc.Advance(SimulationTime.At(11), [new(SimulationTime.At(19, 2), [MovementInput.Set(1, ActorIntent.Neutral)])]);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.JoinParty(session.Version, companion.Entity, AreaCompanionRoster.Facts(AreaCompanionRoster.Virgil, 0, 50), false).Disposition);
+        if (concealed) session.ToggleHeroConcealment(session.Version);
+        Assert.AreEqual(concealed, session.IsConcealed(SessionCombatant.Critter(companion.Entity)), "the hero's concealment flags the follower");
+        var permits = new List<StepAssessmentTiming>();
+        for (var i = 1; i <= 100; i++)
+        {
+            if (clearAfterFirstFrames && i == 20) session.ToggleHeroConcealment(session.Version);
+            foreach (var (_, advance) in group.Drive(session, pc.State, SimulationTime.At(110 + i, 10)))
+                permits.AddRange(advance.Movement.Events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!));
+        }
+        Assert.IsTrue(permits.Count > 3, "the follower walked");
+        return permits;
+    }
+
+    [TestMethod]
+    public void AConcealedFollowerTheHostDoesNotHoldSneaksBelowExpertWalksAtExpertAndRunsAsMaster()
+    {
+        string[] Provenance(IReadOnlyList<StepAssessmentTiming> steps) => steps.SelectMany(s => s.Provenance).Distinct().ToArray();
+        // Not concealed: the run of the far follower (the existing rule).
+        CollectionAssert.Contains(Provenance(FarFollowSteps(false, null)), GaitTiming.RunProvenance);
+        // Concealed and untrained or apprentice: the stealth walk only, a run wanted ignored.
+        foreach (var training in new SkillTraining?[] { null, SkillTraining.Apprentice })
+        {
+            var steps = FarFollowSteps(true, training);
+            CollectionAssert.Contains(Provenance(steps), GaitTiming.SneakProvenance);
+            CollectionAssert.DoesNotContain(Provenance(steps), GaitTiming.RunProvenance);
+            CollectionAssert.DoesNotContain(Provenance(steps), GaitTiming.WalkProvenance);
+            Assert.AreEqual(GaitTiming.HumanFixed.For(MovementGait.Sneak, steps[0].Key.Direction), steps[0].Duration);
+        }
+        // Concealed expert: the ordinary walk, no run below master.
+        var expert = Provenance(FarFollowSteps(true, SkillTraining.Expert));
+        CollectionAssert.Contains(expert, GaitTiming.WalkProvenance);
+        CollectionAssert.DoesNotContain(expert, GaitTiming.RunProvenance);
+        CollectionAssert.DoesNotContain(expert, GaitTiming.SneakProvenance);
+        // Concealed master: runs.
+        CollectionAssert.Contains(Provenance(FarFollowSteps(true, SkillTraining.Master)), GaitTiming.RunProvenance);
+        // Concealment cleared mid-walk: the far follower runs again (the flags are recomputed at each drive).
+        var cleared = Provenance(FarFollowSteps(true, SkillTraining.Apprentice, clearAfterFirstFrames: true));
+        CollectionAssert.Contains(cleared, GaitTiming.SneakProvenance);
+        CollectionAssert.Contains(cleared, GaitTiming.RunProvenance);
     }
 
     [TestMethod]
