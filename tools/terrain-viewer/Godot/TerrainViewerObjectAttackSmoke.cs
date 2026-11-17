@@ -239,7 +239,8 @@ public partial class TerrainViewerApp
     // Native observation (ARC-WORLD-065) with --hero, after the object attack: the container or scenery of the shown map whose T0
     // record alone blocks steps onto its tile is marked destroyed in the session (as a break does), and those steps are open for
     // the PC's live overlay and its click routes; marked whole again, they block again. The object is restored, so the stages after
-    // see the map as before. NONE on a map without such an object.
+    // see the map as before. NONE on a map without such an object. ARC-SCRIPT-2324: a second pass does the same for a scenery marked as a
+    // script's toggle state marks it (the off record of its entity), which the view also reads as gone.
     private Task RunAreaFreedCellSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || ObjectTargets() is not { } targets || _readyArea is not { } area
@@ -251,49 +252,55 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-065 freed-cell smoke FAIL: " + why);
             throw new InvalidOperationException("AREA_FREED_CELL_SMOKE_FAILED");
         }
-        var candidate = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null)
-            .Select(row => targets.Target(session, row.Key))
-            .Where(t => t is { Object: not null, Kind: DamageableObjectKind.Container or DamageableObjectKind.Scenery }
-                && session.QueryObject(t.Object!).Condition == SessionObjectCondition.Whole)
-            .Select(t => (Target: t!, Steps: BlockedSteps(grid, t!.Row.Key, grid.Chart.ToChart(new(t.Row.WorldX!.Value, t.Row.WorldY!.Value)))))
-            .Where(c => c.Steps.Length > 0).OrderBy(c => c.Target.Entity, StringComparer.Ordinal).FirstOrDefault();
-        if (candidate.Target is null) { GD.Print($"ARC-WORLD-065 native-smoke freed-cell NONE map={_readyMapName} (no object blocks a step by itself)"); return Task.CompletedTask; }
-        var (target, allSteps) = candidate;
-        // Steps a live actor (a companion) holds at their start, end or a shoulder are blocked for their own reason; they are left out.
-        var held = grid.Occupancy?.Invoke()?.Occupied ?? new HashSet<CellCoord>();
-        var targetCell = grid.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-        var actors = new AreaOccupancy([], held);
-        var steps = allSteps.Where(step => AreaOccupancyRules.Apply(step.Raw, step.From, step.Direction, actors).ReasonCode
-            is not (AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor) && !held.Contains(step.From)).ToArray();
-        if (steps.Length == 0) { GD.Print($"ARC-WORLD-065 native-smoke freed-cell NONE map={_readyMapName} (a companion holds the steps)"); return Task.CompletedTask; }
-        var mapId = new SessionMapId(CurrentAreaMap);
-        var routes = new AreaRouteSource(grid.Snapshot, grid.Chart, grid.Occupancy, () => grid.Portals?.Invoke());
-        int Open() => steps.Count(step => AreaOccupancyRules.Apply(step.Raw, step.From, step.Direction, grid.Occupancy?.Invoke()) is
-            { Coverage: Arcanum.Data.Traversal.CardinalTraversalCoverage.Supported, Disposition: Arcanum.Data.Traversal.CardinalTraversalDisposition.Open });
-        int RouteOpen() => steps.Count(step => routes.Assess(step.From, step.Direction) == Arcanum.Simulation.Navigation.RouteStepVerdict.Open);
-        var conditionKey = MapChangeKey.ForEntity(target.Entity, GameSessionOwner.ObjectConditionProperty);
-        var prior = session.QueryMapChange(mapId, conditionKey);
-        void Mark(long? condition)
+        void Probe(bool off)
         {
-            // Null returns the key to its loaded baseline.
-            var written = session.ApplyChanges(session.Version, null, [new MapChangeEdit(mapId, conditionKey, condition)]);
-            Require(written.Disposition != GameSessionDisposition.Rejected, $"the condition {condition} was written ({written.Failure})");
-            SyncAreaInventory();
+            var candidate = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null)
+                .Select(row => targets.Target(session, row.Key))
+                .Where(t => t is { Object: not null, Kind: DamageableObjectKind.Container or DamageableObjectKind.Scenery }
+                    && (!off || t.Kind == DamageableObjectKind.Scenery) && session.QueryObject(t.Object!).Condition == SessionObjectCondition.Whole)
+                .Select(t => (Target: t!, Steps: BlockedSteps(grid, t!.Row.Key, grid.Chart.ToChart(new(t.Row.WorldX!.Value, t.Row.WorldY!.Value)))))
+                .Where(c => c.Steps.Length > 0).OrderBy(c => c.Target.Entity, StringComparer.Ordinal).FirstOrDefault();
+            if (candidate.Target is null) { GD.Print($"{(off ? "ARC-SCRIPT-2324 native-smoke scenery-off" : "ARC-WORLD-065 native-smoke freed-cell")} NONE map={_readyMapName} ({(off ? "no scenery" : "no object")} blocks a step by itself)"); return; }
+            var (target, allSteps) = candidate;
+            // Steps a live actor (a companion) holds at their start, end or a shoulder are blocked for their own reason; they are left out.
+            var held = grid.Occupancy?.Invoke()?.Occupied ?? new HashSet<CellCoord>();
+            var targetCell = grid.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            var actors = new AreaOccupancy([], held);
+            var steps = allSteps.Where(step => AreaOccupancyRules.Apply(step.Raw, step.From, step.Direction, actors).ReasonCode
+                is not (AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor) && !held.Contains(step.From)).ToArray();
+            if (steps.Length == 0) { GD.Print($"ARC-WORLD-065 native-smoke freed-cell NONE map={_readyMapName} (a companion holds the steps)"); return; }
+            var mapId = new SessionMapId(CurrentAreaMap);
+            var routes = new AreaRouteSource(grid.Snapshot, grid.Chart, grid.Occupancy, () => grid.Portals?.Invoke());
+            int Open() => steps.Count(step => AreaOccupancyRules.Apply(step.Raw, step.From, step.Direction, grid.Occupancy?.Invoke()) is
+                { Coverage: Arcanum.Data.Traversal.CardinalTraversalCoverage.Supported, Disposition: Arcanum.Data.Traversal.CardinalTraversalDisposition.Open });
+            int RouteOpen() => steps.Count(step => routes.Assess(step.From, step.Direction) == Arcanum.Simulation.Navigation.RouteStepVerdict.Open);
+            // ARC-SCRIPT-2324 (OT8): the second pass marks a scenery as a script's toggle state does (the off record of its entity, which the view reads as gone), not as a break does.
+            var conditionKey = off ? SessionItemOff.Key(target.Entity) : MapChangeKey.ForEntity(target.Entity, GameSessionOwner.ObjectConditionProperty);
+            var prior = session.QueryMapChange(mapId, conditionKey);
+            void Mark(long? condition)
+            {
+                // Null returns the key to its loaded baseline.
+                var written = session.ApplyChanges(session.Version, null, [new MapChangeEdit(mapId, conditionKey, condition)]);
+                Require(written.Disposition != GameSessionDisposition.Rejected, $"the condition {condition} was written ({written.Failure})");
+                SyncAreaInventory();
+            }
+            var before = (Open(), RouteOpen());
+            Require(before == (0, 0), $"the standing object blocks its steps ({before})");
+            Mark(off ? 1L : (long)SessionObjectCondition.Destroyed);
+            var freed = (Open(), RouteOpen());
+            var moved = grid.Occupancy?.Invoke()?.Moved.Contains(target.Row.Key) == true;
+            Mark(prior);
+            var restored = (Open(), RouteOpen());
+            Require(moved, "the PC's overlay moves the removed object's record");
+            Require(freed == (steps.Length, steps.Length), $"every step onto the removed object's tile is open ({freed} of {steps.Length})");
+            Require(restored == (0, 0), $"the object blocks again once it is whole ({restored})");
+            Require(session.QueryMapChange(mapId, conditionKey) == prior, "the object's condition is as it was");
+            GD.Print((off ? "ARC-SCRIPT-2324 native-smoke scenery-off PASS " : "ARC-WORLD-065 native-smoke freed-cell PASS ") + System.Text.Json.JsonSerializer.Serialize(new {
+                Map = _readyMapName, target.Entity, Kind = target.Kind.ToString(), Steps = steps.Length, Freed = freed.Item1, RouteFreed = freed.Item2,
+                Parity = "NOT_VERIFIED (rule read in the original executable, FC1–FC3; no original-runtime run)" }));
         }
-        var before = (Open(), RouteOpen());
-        Require(before == (0, 0), $"the standing object blocks its steps ({before})");
-        Mark((long)SessionObjectCondition.Destroyed);
-        var freed = (Open(), RouteOpen());
-        var moved = grid.Occupancy?.Invoke()?.Moved.Contains(target.Row.Key) == true;
-        Mark(prior);
-        var restored = (Open(), RouteOpen());
-        Require(moved, "the PC's overlay moves the removed object's record");
-        Require(freed == (steps.Length, steps.Length), $"every step onto the removed object's tile is open ({freed} of {steps.Length})");
-        Require(restored == (0, 0), $"the object blocks again once it is whole ({restored})");
-        Require(session.QueryMapChange(mapId, conditionKey) == prior, "the object's condition is as it was");
-        GD.Print("ARC-WORLD-065 native-smoke freed-cell PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-            Map = _readyMapName, target.Entity, Kind = target.Kind.ToString(), Steps = steps.Length, Freed = freed.Item1, RouteFreed = freed.Item2,
-            Parity = "NOT_VERIFIED (rule read in the original executable, FC1–FC3; no original-runtime run)" }));
+        Probe(false);
+        Probe(true);
         return Task.CompletedTask;
     }
 }
