@@ -853,7 +853,20 @@ public partial class TerrainViewerApp
             Require(_mainMenu.Window == AreaMenuWindow.SinglePlayer, "single player by its letter");
             Choose(52);
             Require(MainMenuOpen && ReferenceEquals(placeholder, _areaSession) && _mainMenu.Notice == "no save to continue from", "Last Save without a save stayed");
-            Choose(50); Choose(420);
+            Choose(50);
+            // ARC-UI-2489 (M03): the new-game window, as NAME-newgame.png beside ARC_AREA_MENU_CAPTURE's main window.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } newGameCapture)
+            {
+                Require(_mainMenu.Window == AreaMenuWindow.NewGame, "the new game window opened for its capture: " + _mainMenu.Window);
+                for (var i = 0; i < 2; i++)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                }
+                using var newGameShot = GetViewport().GetTexture().GetImage();
+                Require(newGameShot.SavePng(System.IO.Path.ChangeExtension(newGameCapture, null) + "-newgame.png") == Error.Ok, "the new game capture saved");
+            }
+            Choose(420);
             Require(_mainMenu.Window == AreaMenuWindow.PickCharacter, "the pre-made browser opened");
             // ARC-UI-066: the browser in the original's look, browsed by its arrows.
             await PremadeBrowserArtForSmoke(Require);

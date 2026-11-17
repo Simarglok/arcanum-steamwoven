@@ -24,6 +24,17 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_HOVER_WINDOW_SMOKE_FAILED");
         }
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_HOVER_WINDOW_CAPTURE");
+        // ARC-UI-2489 (H13): ARC_AREA_CURSOR_CAPTURE=PATH.png saves the cursor art sheet (the framebuffer holds no cursors), composed from the game's art.
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_CURSOR_CAPTURE") is { Length: > 0 } cursorCapture)
+        {
+            if (CursorContent() is { Ready: true } cursorArt && AreaCursorSheet.Compose(cursorArt) is { } sheet)
+            {
+                using var sheetImage = Image.CreateFromData(sheet.Width, sheet.Height, false, Image.Format.Rgba8, sheet.Rgba);
+                Require(sheetImage.SavePng(cursorCapture) == Error.Ok, "the cursor sheet saved to " + cursorCapture);
+                GD.Print($"ARC-UI-2489 cursor sheet saved {sheet.Width}x{sheet.Height}");
+            }
+            else GD.Print("ARC-UI-2489 cursor sheet NONE (the cursor art did not read)");
+        }
         async Task<Image> Frame()
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
