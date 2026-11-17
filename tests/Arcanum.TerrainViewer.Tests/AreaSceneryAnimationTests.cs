@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Animation;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -345,5 +346,55 @@ public sealed class AreaSceneryAnimationTests
         Assert.AreEqual(0, f.Host.TakeSoundBegins().Count, "taken once");
         f.Run(1000);
         Assert.AreEqual(0, f.Host.TakeSoundBegins().Count, "the run's frames and distance checks are no begin");
+    }
+    [TestMethod]
+    public void A_destroyed_scenery_loses_its_loop_and_every_other_run_of_the_object()
+    {
+        // ARC-SCRIPT-2514 (BS3c, 0x43CCA0 -> 0x423FF0): the destroy kills every goal run of the object, a loop and an overlay alike; the loop never restarts.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        var eye = new AreaEyeCandyHost(f.Session, _ => null, (art, parts) => new EyeCandyFacts(4, 2, 100, 0, true, true), (low, high) => low);
+        f.Host.Start();
+        f.Run(300);
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(eye.StartHover(entity), "the hover overlay runs beside the loop");
+        Assert.AreEqual(2, f.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done));
+        Assert.IsTrue(f.Host.ObjectDestroyed(entity));
+        Assert.AreEqual(0, f.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done), "the loop and the hover are both gone");
+        Assert.AreEqual(0, f.Animation.Loops.Count);
+        Assert.AreEqual(0, f.Host.Running);
+        Assert.IsTrue(f.Host.TakeChanged(), "the body is drawn again");
+        CollectionAssert.AreEqual(new[] { entity }, f.Host.TakeKilledByArt().ToArray(), "the viewer stops the looping voice");
+    }
+
+    [TestMethod]
+    public void A_destroyed_scenery_does_not_start_again_and_an_unknown_object_is_left_alone()
+    {
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        var entity = f.Loop.Entity;
+        f.Host.Start();
+        f.Run(200);
+        Assert.IsTrue(f.Host.ObjectDestroyed(entity));
+        Assert.AreEqual(0, f.Host.Start(), "a sweep's start finds no loop for the destroyed object");
+        f.Run(500);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "nothing steps for it");
+        Assert.IsFalse(f.Host.ObjectDestroyed(entity), "a second destroy has nothing to end");
+        Assert.IsFalse(f.Host.ObjectDestroyed("not-in-this-host"));
+    }
+    [TestMethod]
+    public void A_destroy_also_ends_the_overlay_runs_owned_by_the_objects_cast_id()
+    {
+        // ARC-SCRIPT-2514: the overlays of a script or a spell are owned by the object's id on the spell side, which differs from the entity for a mobile row.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        var eye = new AreaEyeCandyHost(f.Session, _ => null, (art, parts) => new EyeCandyFacts(4, 2, 100, 0, true, true), (low, high) => low);
+        f.Host.Start();
+        const string cast = "row:Mobile:7";
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(eye.StartHover(cast));
+        Assert.IsTrue(f.Host.ObjectDestroyed(entity, cast));
+        Assert.AreEqual(0, f.Session.QueryGoals().RunsOf(cast).Count(r => !r.Done), "the overlay owned by the cast id ended");
+        Assert.AreEqual(0, f.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done));
     }
 }
