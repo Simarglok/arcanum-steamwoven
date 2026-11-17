@@ -181,10 +181,10 @@ public partial class TerrainViewerApp
                 var (ex, ey) = (expected.X, expected.Y);
                 require(Math.Abs(scale - expected.Scale) < 0.002 && Math.Abs(origin.X - ex) <= 1.01 && Math.Abs(origin.Y - ey) <= 1.01,
                     $"[{tag}] the {name} window is at the zone place ({ex:F1}, {ey:F1}) scale {expected.Scale:F4}, got ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
-                CheckBackdrop(tag, name, family, plan, panel, require);
                 GD.Print($"ARC-UI-2575 steamwoven window [{tag}] {name} origin=({origin.X:F1},{origin.Y:F1}) scale={scale:F4} zone={plan.Layout.WindowZone}");
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
+            if (plan is not null) CheckBackdrop(tag, name, family, plan, panel, require);
             close();
             await frames(3);
         }
@@ -216,14 +216,29 @@ public partial class TerrainViewerApp
         var (width, height) = (captured.GetWidth(), captured.GetHeight());
         var zone = plan.Layout.WindowZone;
         var band = plan.Layout.Middle.Band;
-        var reach = 3 * SteamwovenSeam.Band + 16;
+        // The interior band beside a join lies on the backdrop inside the middle band (never on a strip or the world), clear of the join's own band; where there is no room it is skipped.
+        int? Reference(int join, int low, int high)
+        {
+            var wanted = join + Math.Sign(low - join + high - join) * (3 * SteamwovenSeam.Band + 16);
+            var (lo, hi) = (low + SteamwovenSeam.Band + 1, high - SteamwovenSeam.Band - 1);
+            if (wanted < join) { hi = Math.Min(hi, join - 2 * SteamwovenSeam.Band); return lo <= hi ? Math.Clamp(wanted, lo, hi) : null; }
+            lo = Math.Max(lo, join + 2 * SteamwovenSeam.Band);
+            return lo <= hi ? Math.Clamp(wanted, lo, hi) : null;
+        }
         var seams = new (string Edge, double? Ratio)[]
         {
-            ("left", SteamwovenSeam.ColumnRatio(rgba, width, height, zone.X, zone.Y, zone.Bottom, zone.X - reach)),
-            ("right", SteamwovenSeam.ColumnRatio(rgba, width, height, zone.Right, zone.Y, zone.Bottom, zone.Right + reach)),
-            ("top", SteamwovenSeam.RowRatio(rgba, width, height, zone.Y, zone.X, zone.Right, zone.Y - reach)),
-            ("bottom", SteamwovenSeam.RowRatio(rgba, width, height, zone.Bottom, zone.X, zone.Right, zone.Bottom + reach)),
+            ("left", Reference(zone.X, band.X, zone.X) is { } left ? SteamwovenSeam.ColumnRatio(rgba, width, height, zone.X, zone.Y, zone.Bottom, left) : null),
+            ("right", Reference(zone.Right, zone.Right, band.Right) is { } right ? SteamwovenSeam.ColumnRatio(rgba, width, height, zone.Right, zone.Y, zone.Bottom, right) : null),
+            ("top", Reference(zone.Y, band.Y, zone.Y) is { } top ? SteamwovenSeam.RowRatio(rgba, width, height, zone.Y, zone.X, zone.Right, top) : null),
+            ("bottom", Reference(zone.Bottom, zone.Bottom, band.Bottom) is { } bottom ? SteamwovenSeam.RowRatio(rgba, width, height, zone.Bottom, zone.X, zone.Right, bottom) : null),
         };
+        // The split of a two-part window is a designed join of two arts (each half's grain starts at its own left edge, as the window's own halves do): printed above and below the zone, not gated.
+        if (pieces.Count == 2 && pieces[1].Rect.Width > 4 * SteamwovenSeam.Band + 2)
+        {
+            var splitReference = pieces[1].Rect.X + 3 * SteamwovenSeam.Band + 16;
+            var above = zone.Y - band.Y >= 2 * SteamwovenSeam.Band + 1 ? SteamwovenSeam.ColumnRatio(rgba, width, height, pieces[0].Rect.Right, band.Y, zone.Y, splitReference) : null;
+            GD.Print($"ARC-UI-2576 seam [{tag}] {name} split above the zone R={(above is { } a ? a.ToString("F2") : "n/a")} (a designed join, not gated)");
+        }
         foreach (var (edge, ratio) in seams)
         {
             GD.Print($"ARC-UI-2576 seam [{tag}] {name} {edge} R={(ratio is { } r ? r.ToString("F2") : "n/a")} zone={zone} band={band}");

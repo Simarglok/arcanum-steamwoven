@@ -50,11 +50,15 @@ public static class SteamwovenBackdrops
     };
 
     /// <summary>The family of the window nearest the top of an interface mode stack (bottom first, as <c>InterfaceModeStack.Modes</c>): an overlay or target mode over a window (the quantity picker over the inventory) keeps the window's
-    /// backdrop, a dialog under a barter window gives way to the barter's; null when no mode on it has one.</summary>
+    /// backdrop, a dialog under a barter window gives way to the barter's, but a dialog or sleep view on top of a window has none; null when no mode on it has one.</summary>
     public static SteamwovenBackdropFamily? FamilyOf(IReadOnlyList<InterfaceMode> stack)
     {
         for (var i = stack.Count - 1; i >= 0; i--)
+        {
             if (FamilyOf(stack[i]) is { } family) return family;
+            // The dialog and sleep views keep the world in view: a window below them gives no backdrop.
+            if (stack[i] is InterfaceMode.Dialog or InterfaceMode.Sleep) return null;
+        }
         return null;
     }
 

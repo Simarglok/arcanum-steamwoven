@@ -34,6 +34,8 @@ public sealed class SteamwovenBackdropsTests
         Assert.AreEqual(SteamwovenBackdropFamily.Inventory, SteamwovenBackdrops.FamilyOf([InterfaceMode.Game, InterfaceMode.Inventory, InterfaceMode.QuantityPicker]));
         Assert.AreEqual(SteamwovenBackdropFamily.Inventory, SteamwovenBackdrops.FamilyOf([InterfaceMode.Game, InterfaceMode.Dialog, InterfaceMode.Barter]));
         Assert.IsNull(SteamwovenBackdrops.FamilyOf([InterfaceMode.Game, InterfaceMode.Dialog]));
+        Assert.IsNull(SteamwovenBackdrops.FamilyOf([InterfaceMode.Game, InterfaceMode.Inventory, InterfaceMode.Dialog]), "a dialog on top keeps the world in view");
+        Assert.IsNull(SteamwovenBackdrops.FamilyOf([InterfaceMode.Game, InterfaceMode.Logbook, InterfaceMode.Sleep]));
         Assert.IsNull(SteamwovenBackdrops.FamilyOf([InterfaceMode.Game]));
     }
 
