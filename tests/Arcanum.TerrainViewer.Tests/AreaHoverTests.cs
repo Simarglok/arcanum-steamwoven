@@ -209,4 +209,17 @@ public sealed class AreaHoverTests
         }
         finally { root.Delete(true); }
     }
+
+    [TestMethod]
+    public void The_left_press_pick_sees_through_followers_and_the_dead_only_in_combat_mode_without_Alt()
+    {
+        // ARC-INPUT-1937 (0x551F80): masks (0x90000004, 0x10008200) in combat mode without Alt; Alt, or no combat mode, hide only the PC.
+        Assert.IsTrue(AreaHover.PickSeesThrough(true, false, dead: true, follower: false), "a corpse");
+        Assert.IsTrue(AreaHover.PickSeesThrough(true, false, dead: false, follower: true), "a follower");
+        Assert.IsTrue(AreaHover.PickSeesThrough(true, false, dead: true, follower: true), "a dead follower");
+        Assert.IsFalse(AreaHover.PickSeesThrough(true, false, dead: false, follower: false), "a living stranger is picked");
+        Assert.IsFalse(AreaHover.PickSeesThrough(true, true, dead: true, follower: false), "with Alt the corpse is picked");
+        Assert.IsFalse(AreaHover.PickSeesThrough(true, true, dead: false, follower: true), "with Alt the follower is picked");
+        Assert.IsFalse(AreaHover.PickSeesThrough(false, false, dead: true, follower: true), "out of combat mode nothing is hidden");
+    }
 }

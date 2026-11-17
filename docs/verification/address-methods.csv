@@ -885,6 +885,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,HandleFateKey,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,RouteFateKey,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,ToggleFate,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaHover.cs,PressPickSpared,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,DescribeObject,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,ArmLockpick,pending,

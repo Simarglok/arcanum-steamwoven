@@ -1728,8 +1728,8 @@ In combat mode (R, `--hero`) a left click on a living NPC attacks it, on the ext
 [FA1–FA10](../research/ledger/combat.md#hero-attack-arc-combat-005)): the hero walks (running) within its
 weapon's reach, turns to the target and plays its bare-handed attack ART at the rate of its Speed; the frame that shows the
 action frame resolves the hit through the session, and the attack repeats (auto attack) until the target dies. Shift makes
-it the attempt-attack goal 19 with run flag 0x100 (ARC-DEV-270: from where the hero stands, no approach walk); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
-head, an arm or a leg; a corpse is looted only with Alt, a plain click on it does nothing. The cursor over a living NPC is the
+it the attempt-attack goal 19 with run flag 0x100 (ARC-DEV-270: from where the hero stands, no approach walk); a follower is attacked only with left Alt held (without any Alt the press and the hover pick see through followers and corpses to the object or tile behind, ARC-INPUT-1937); held `,` `.` `/` aim at the
+head, an arm or a leg; a corpse is looted only with Alt, a plain click walks to the tile behind it. The cursor over a living NPC is the
 closed hand (`attack`, `walk to attack`). The status line names the outcome, damage, the target's hit points, a knockout or
 kill and the experience paid. A killed or unconscious NPC plays its dying or fall-down animation, read on demand from the
 archive its body came from, and keeps its last frame (ARC-RENDER-040; a body already lying when the map is shown holds it); out of combat mode a plain click loots the corpse. The stick, another
