@@ -241,7 +241,7 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "the speaker's reaction is the state's 62");
             Assert.AreEqual(62, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc));
-            Assert.IsNull(talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no speaker");
+            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no NPC: 50");
             Assert.IsNull(talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Object(talk.Speaker)), "the second object is not the PC");
             Assert.IsNull(talk.Host.ReactionOf(new ScrObjectRef(Map + 1, "npc"), talk.Host.Pc), "an object of another map");
             // Without the query host the set has no get reaction and the talk is refused at it.
