@@ -957,6 +957,13 @@ public partial class TerrainViewerApp
     /// <summary>The mode-0 left press on the world once no armed cursor or skill took it: combat, talk, use, door, inventory, then the ground (ARC-INPUT-1937: the pick is <see cref="_pressSpared"/>'s).</summary>
     private void WorldRouteClickMode0(Vector2 screen, RouteFollower route, bool ctrl, bool alt, bool shift)
     {
+        // ARC-COMBAT-1944 (0x54ED30): out of combat mode, a press on an NPC about to attack the hero or a follower enters combat mode first, so the press below is an attack.
+        // A round the entry started (turn-based) may open on another participant's subturn: the press waits as the guard above makes it wait.
+        if (EnterCombatModeForAttacker(screen, alt, shift) && _areaSession?.QueryCombatRound() is { } entered && !entered.Actor.IsHero)
+        {
+            _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
+            RefreshReadyStatus(); return;
+        }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");

@@ -726,6 +726,63 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(new AreaCompanionWhere(cave, (cell, NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
     }
 
+    // ARC-WORLD-2522 (tail of #2039, ledger TT20, FM1): a FREE NPC (no party record, no leader) that a script's teleport sent to another map by the record edits alone is a visitor of the
+    // destination: the destination's visitor list names it with its home and stored cell, its body is the home map's template (the led-NPC build), the group stands it on the arrival cell as a free
+    // companion with a place and a drawn body, and the take of the open's teleported mark finds it. Nothing of this is a mode of the NPC: the same group serves it. What the AI host then does with it
+    // (its first forced pass sends a leaderless NPC whose teleport map is another map back there, FM10) is the host's rule, shown by the follower-home smoke.
+    [TestMethod]
+    public void A_free_npc_a_script_teleported_to_another_map_stands_on_the_destination_as_a_visitor_the_group_runs()
+    {
+        var f = Load();
+        var row = f.Speaker.Row with { Type = 16, Scope = AreaScope.Core };
+        var entity = AreaConversationState.EntityId(row);
+        var facts = new Func<AreaSpeaker, AreaCompanionFacts?>(_ => AreaCompanionRoster.Virgil with { ScriptId = 0 });
+        var template = AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, new HashSet<string> { entity }, AreaScenePlan.Create(f.Area), AreaChart.Exterior, new(1), facts).Single();
+        SessionMapId home = new(1), dest = new(2);
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        var stored = At(0); var arrival = At(2);
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(CompanionStanding.Free, session.QueryCompanion(entity).Standing, "no party record: a free NPC");
+        Assert.IsNull(session.QueryLeader(entity));
+
+        // Before the script runs it stands on its home map and is not a visitor anywhere.
+        Assert.AreEqual(0, AreaVisitors.Here(session, dest, [], null).Count);
+
+        // The script's teleport (PR #2530): the record edits of a free NPC, no move list, no hero placement.
+        var arrive = AreaCompanionGroup.Arrive(entity, home, stored, home, dest, arrival, NeighborDirection.YPlus);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, arrive).Disposition);
+        Assert.AreEqual(new AreaCompanionWhere(dest, (arrival, NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
+        Assert.AreEqual(home.RuntimeMap, EntityHomes.HomeOf(session, entity), "its away change names its home");
+        Assert.AreEqual(stored, AreaCompanionPlacement.HomeCell(session, home, entity), "its home map keeps the stored cell");
+        Assert.AreEqual(1, session.QueryTeleportedMarks(dest).Count(m => m.Entity == entity), "the arrival left the original's teleported mark for the open to notify");
+
+        // The destination names it as a visitor, with the cell it stands on inside the loaded chart.
+        var visitor = AreaVisitors.Here(session, dest, [], null).Single();
+        Assert.AreEqual(new AreaVisitor(entity, home.RuntimeMap, stored), visitor);
+        Assert.AreEqual(1, AreaVisitors.Here(session, dest, [], world => world == arrival).Count);
+        Assert.AreEqual(0, AreaVisitors.Here(session, dest, [], world => world == stored).Count, "a cell outside the shown window is not here");
+        Assert.AreEqual(0, AreaVisitors.Here(session, home, [], null).Count, "its home map no longer has it standing there");
+
+        // The destination's group stands it on the arrival cell, drawn and free; the home map's group holds it away.
+        var group = AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, dest, SimulationTime.At(0));
+        Assert.AreEqual(1, group.Companions.Count, "the destination's group holds the visitor");
+        Assert.AreEqual(CompanionStanding.Free, group.Companions[0].Standing, "free, run by the AI host as any leaderless NPC");
+        Assert.AreEqual(1, group.Poses().Count);
+        Assert.IsTrue(group.Commands().Count > 0, "it draws its body");
+        Assert.AreEqual(0, group.Skipped.Count, "its arrival cell is admitted: " + string.Join(";", group.Skipped));
+        var homeGroup = AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0));
+        Assert.AreEqual(0, homeGroup.Companions.Count);
+        Assert.IsTrue(homeGroup.Absent.Contains(template.Key), "a body template of the home map would not stand in the world (a dialog-less NPC's row is hidden by AreaObjectTargets.Gone, AreaObjectTargetsTests)");
+        Assert.IsNull(session.QueryTeleportMap(entity), "the record edits write no teleport map: FM6 writes the open map at the ping's own payload (GameSessionOwner.WithTeleportMaps), so the destination's AI pass sees a teleport map elsewhere (FM10)");
+
+        // The open's take of the mark (the route to the arrival cell's tile script) finds it on the arrival cell and removes it.
+        var (taken, objects) = session.TakeTeleportedMarks(session.Version, dest);
+        Assert.AreEqual(GameSessionDisposition.Changed, taken.Disposition);
+        Assert.AreEqual(new SessionTeleportedObject(entity, arrival, NeighborDirection.YPlus), objects.Single());
+        Assert.AreEqual(0, session.QueryTeleportedMarks(dest).Count);
+        Assert.AreEqual(dest, AreaCompanionPlacement.Where(session, home, entity).Map, "the take leaves the placement");
+    }
+
     // ARC-WORLD-2161 (tail of #2132; 0x4D3760 carries the whole follower tree as objects): a follower of a companion that the shown group holds no body for (its body is not drawn, its follow facts do not
     // read) is still in the move list and arrives on the destination by the session's placement edits alone, with its leader link kept and its home recorded, so it is a visitor there.
     [TestMethod]
