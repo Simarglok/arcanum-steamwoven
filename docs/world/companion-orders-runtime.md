@@ -90,8 +90,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   AI host the orders run each follower's AI pass ([AI host](ai-host.md#followers-in-combat-arc-world-115)); F2's target is the
   object under the pointer at the release. The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's rows draw the
-  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares (`AreaCompanionOrders.Label`) is still the viewer's own
-  lower-case word (the original joins the follower's name with the file's text).
+  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares is the same message (`AreaCompanionOrders.OrderLabel`,
+  ARC-UI-1975; the original joins the follower's name with the file's text, FP10): a row whose message is missing sends no order, and without the file the project's English words stand
+  in. `AreaCompanionOrders.Label` stays the viewer's own lower-case word for its notices and log only.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
   the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`. The PC side
   of both is the session hero with `--hero` (ARC-WORLD-067, [party runtime](party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)),
