@@ -210,9 +210,12 @@ public partial class TerrainViewerApp
                     var posedAtZero = hourForm.AtAnimation(0).PosedPlacements.Where(p => (p.Light.Flags & (StationaryLightFlags.Off | StationaryLightFlags.Dark)) == 0).Count();
                     Require(still.Length == posedAtZero, $"the relit map lights are the lit placements ({still.Length} of {posedAtZero})");
                     var movedAt = -1;
+                    static bool Lit(StationaryLight light) => (light.Flags & (StationaryLightFlags.Off | StationaryLightFlags.Dark)) == 0;
+                    var litAtZero = hourForm.AtAnimation(0).PosedPlacements.Where(p => Lit(p.Light)).Select(p => p.Rect).ToArray();
                     if (hourForm.Field.Animated.Count > 0)
                         for (var ms = 50; ms <= 20000 && movedAt < 0; ms += 50)
-                            if (!hourForm.AtAnimation(ms).PosedPlacements.Select(p => p.Rect).SequenceEqual(hourForm.AtAnimation(0).PosedPlacements.Select(p => p.Rect))) movedAt = ms;
+                            if (!hourForm.AtAnimation(ms).PosedPlacements.Where(p => Lit(p.Light)).Select(p => p.Rect).SequenceEqual(litAtZero)) movedAt = ms;
+                    // The installed data has next to no animated lights (one, on the void map), so on most maps this stays unexercised here; the unit test of the posed placements is the coverage then.
                     if (movedAt > 0)
                     {
                         _lightAnimationMs = movedAt; PushAreaAmbient();
