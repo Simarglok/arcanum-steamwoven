@@ -32,12 +32,13 @@ public partial class TerrainViewerApp
         foreach (var command in _dialogVoice.Update(conversation, conversation.Turn, identity)) ExecuteVoice(command);
     }
 
-    private void ExecuteVoice(DialogVoiceCommand command)
+    private void ExecuteVoice(DialogVoiceCommand command, SpeechGender? listenerGender = null)
     {
         if (_voiceHandle is { } playing) { _audio!.Stop(playing); _voiceHandle = null; }
         if (command.Kind != DialogVoiceCommandKind.Play) return;
         if (AreaSoundCatalog() is not { } catalog) { _voiceNotice = "no catalogue"; return; }
-        var gender = _conversationHost?.Profile.Pc.Gender == DialogPcGender.Female ? SpeechGender.Female : SpeechGender.Male;
+        // ARC-AI-1640 (0x5688D0): the listener's gender picks the file; the conversation's own lines are addressed to the hero.
+        var gender = listenerGender ?? (_conversationHost?.Profile.Pc.Gender == DialogPcGender.Female ? SpeechGender.Female : SpeechGender.Male);
         var speech = catalog.ResolveSpeech(command.Identity, gender);
         if (speech.File is not { } file) { _voiceNotice = $"voice {speech.Folder}/{speech.Line}: {speech.Status}"; return; }
         var payload = catalog.OpenPayload(file);

@@ -21,7 +21,7 @@ public sealed class AreaCombatPointScriptTests
 {
     private const byte Attachee = 1, Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0, Extra = 12;
     private const int AttackerIsNpc = 2410, VictimIsPc = 2411, AttacheeIsWeapon = 2412, CritterHitsTriggererIsPc = 2413, SecondHit = 2414, CriticalSeen = 2415;
-    private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417;
+    private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417, WallType = 0, WallSeen = 2418, WallDamaged = 2419;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
@@ -130,6 +130,9 @@ public sealed class AreaCombatPointScriptTests
             Write("scr/00920incombat.scr", Program(If(new(ScrCatalogue.Condition.IsInCombat, (Extra, 0)), new(ScrCatalogue.Action.Assign, (GlobalFlag, CombatSeen), N(1)), new(0)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00921alignment.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00922twice.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(50))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-COMBAT-1973: 923 (a weapon's test of the victim, as 911 for a wall): sets a flag when the extra object is a wall (object type 0); 924 (a wall's taking-damage script): marks that it ran and skips the default.
+            Write("scr/00923wall.scr", Program([.. FlagIfType(Extra, WallType, WallSeen, 0), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
+            Write("scr/00924walldamage.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, WallDamaged), N(1))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -253,6 +256,51 @@ public sealed class AreaCombatPointScriptTests
             var bare = Host(session, content, null, weapon, victim, attacker);
             Assert.AreEqual(1, damaged.Count);
             Assert.IsNotNull(bare.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(victim), session.Rules.Scripts).Run);
+        });
+    }
+
+    // ARC-COMBAT-1973 (ledger RH5): the hit on a wall offers the weapon's hit script with the wall as the extra object, and the wall's own taking-damage script (point 23) as any object's; a poison weapon's damage to the wall is a script
+    // damage of a wall, which the damage step leaves at once (the viewer's delegate answers it).
+    [TestMethod]
+    public void A_hit_on_a_wall_runs_the_weapon_s_hit_script_with_the_wall_as_the_extra_object_and_the_wall_s_taking_damage_script()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var weapon = Row(1, WeaponType, 923, ScrPoint.Hit);
+            var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var wall = Row(3, WallType, 924, ScrPoint.TakingDamage);
+            var host = Host(session, content, null, weapon, attacker, wall);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(wall), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(Flag(session, WallSeen), "the extra object is the wall");
+            // Negative control: with an NPC as the extra object the same script sets nothing (the flag is not the type's default value).
+            using var control = ConversationSessionFixture.Create();
+            var controlWeapon = Row(4, WeaponType, 923, ScrPoint.Hit);
+            var controlHost = Host(control, content, null, controlWeapon, attacker);
+            Assert.IsNotNull(controlHost.RunCombatPoint(ScrPoint.Hit, Ref(controlWeapon), Ref(attacker), Ref(attacker), control.Rules.Scripts).Run);
+            Assert.IsFalse(Flag(control, WallSeen), "an NPC is no wall");
+            var damage = host.RunTakingDamage(AreaUseScriptHost.EntityId(wall), host.Pc, session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.TakingDamageVetoes(damage), damage.Detail);
+            Assert.IsTrue(Flag(session, WallDamaged), "the wall's own taking-damage script ran");
+        });
+    }
+
+    [TestMethod]
+    public void A_poison_weapon_s_hit_script_on_a_wall_leaves_the_hit_going_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var weapon = Row(1, WeaponType, 914, ScrPoint.Hit);
+            var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var wall = Row(3, WallType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, damaged, weapon, attacker, wall);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(wall), session.Rules.Scripts);
+            // Whatever the host makes of the wall as a damage target, the run neither throws nor cancels anything (no answer of a combat point cancels the hit).
+            Assert.IsNotNull(ran.Run, ran.Detail);
+            Assert.AreEqual(0, damaged.Count, "a wall is no damage target of a script (the damage step leaves it at once)");
         });
     }
 
