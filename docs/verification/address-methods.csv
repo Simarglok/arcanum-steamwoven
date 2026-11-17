@@ -912,6 +912,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaInventoryTest.cs,StillPointerForSmok
 tools/terrain-viewer/Godot/TerrainViewerAreaItemUse.cs,DropToGround,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,OpenInPlayMenuOverWindows,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,RouteOptionsKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaMapCompanionSmoke.cs,RequireCompanionAttackClick,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,NoteScriptCreations,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,QueueCreationNotice,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pending,
@@ -938,6 +939,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackApproachCell,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackCritterClick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,BedOccupantGoal,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference

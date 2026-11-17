@@ -19,8 +19,8 @@ namespace Arcanum.TerrainViewer;
 // frame runs the hit through the session (resolution, damage, experience), and with the auto-attack setting (on, the
 // original's default) the attack starts again 5 ms after it ends while the target lives. A click elsewhere, the stick, a
 // dialog, a quick load, the hero leaving combat mode (refused while the animation plays: the exit gate's attempt-attack test)
-// or losing the ability to act stop it; a refused hit ends it. Companions are not attacked yet (they move with their own
-// actor). The status line names the outcome; a killed NPC can be looted (Alt in combat mode, a plain click out of it).
+// or losing the ability to act stop it; a refused hit ends it. A companion (it moves with its own actor) is attacked like any
+// follower, with left Alt (ARC-COMBAT-1945). The status line names the outcome; a killed NPC can be looted (Alt in combat mode, a plain click out of it).
 public partial class TerrainViewerApp
 {
     private AreaCombatHost? _combatHost;
@@ -128,7 +128,9 @@ public partial class TerrainViewerApp
     }
 
     // A key-up lost to a focus change cannot leave left Alt held: Alt must still be down.
-    private bool LeftAltHeld => _leftAltHeld && Godot.Input.IsKeyPressed(Key.Alt);
+    private bool LeftAltHeld => _leftAltForSelfTest || _leftAltHeld && Godot.Input.IsKeyPressed(Key.Alt);
+    // Tests set the left Alt a native click would read from the keyboard.
+    private bool _leftAltForSelfTest;
 
     /// <summary>ARC-COMBAT-005: a companion of the shown map (it moves with its own actor); attacking one is not ready.</summary>
     private bool IsAreaCompanion(AreaObjectKey key) => _areaCompanions?.Companions.Any(c => c.Speaker.Row.Key == key) == true;
@@ -212,6 +214,15 @@ public partial class TerrainViewerApp
     {
         // ARC-COMBAT-008: an object is attacked only with Alt held (ledger OD14); without it the click uses the object as out of combat.
         if (CombatTargetAt(screen) is not { } target) return alt && TryAreaObjectAttack(screen, shift);
+        return AttackCritterClick(target, alt, shift);
+    }
+
+    /// <summary>
+    /// The combat-mode click on the NPC <paramref name="target"/> (a press on its body, or ARC-COMBAT-1945 the release over a follower's portrait, 0x56A9D0 → 0x54EA80 → 0x54ED30): true when the click belongs to combat (an attack, a
+    /// refused one). A follower, a companion that moves with its own actor included, is attacked only with left Alt held.
+    /// </summary>
+    private bool AttackCritterClick(AreaCombatTarget target, bool alt, bool shift)
+    {
         // FA6: a hero that cannot act (stoned, stunned, paralysed, unconscious, dead) does nothing with the click.
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
         {
@@ -235,12 +246,6 @@ public partial class TerrainViewerApp
         }
         // ARC-COMBAT-1943: the Body of Air test sits after the follower's Alt test, on the way to the attack goal.
         if (RefuseAttackInBodyOfAir()) return true;
-        if (IsAreaCompanion(target.Row.Key))
-        {
-            _attackNotice = "attacking a companion is not ready";
-            RefreshAreaStatus();
-            return true;
-        }
         if (target.Build.Combat is not { } combat)
         {
             _attackNotice = $"cannot attack: {target.Build.Failure}";
@@ -548,7 +553,7 @@ public partial class TerrainViewerApp
         var (x, y) = LiveWorldCell(goal.Row);
         var tile = new CellCoord(checked((int)x), checked((int)y));
         // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
-        var now = goal.Combat is null ? null : _combatHost!.Target(owner, goal.Row.Key);
+        var now = goal.Combat is null ? null : AreaTargetOf(goal.Row.Key);
         var dead = goal.Wall ? false : goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
             : now?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
         return new(tile, dead);
