@@ -385,4 +385,26 @@ public sealed class AreaScriptEyeCandyTests
         Console.WriteLine($"SCENERY-DESTROY-ADMISSION|script 2092|bust|admitted {container.IsAdmitted}|{container.Refusal?.Code}@{container.Refusal?.Line}/{container.Refusal?.Type}/{container.Refusal?.Kind}");
         Assert.IsTrue(container.IsAdmitted, $"2092 by the bust set: {container.Refusal?.Code}@{container.Refusal?.Line}/{container.Refusal?.Type}/{container.Refusal?.Kind}");
     }
+
+    // ARC-SCRIPT-2513 (ledger BS3d, issue #2513 of #2501): the container script 2827 (taking-damage point 23, 1 main-map site) loops over every scenery, destroys those that pass condition 20 and attacks the everyone loop. The heartbeat set
+    // the taking-damage point ran under refused it (play script eye candy, destroy); the taking-damage set of its own admits it whole.
+    [TestMethod, TestCategory("RealData")]
+    public void The_container_taking_damage_script_2827_is_admitted_whole_by_the_taking_damage_set()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in taking-damage check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        Assert.IsTrue(content.Script(2827) is { Status: ScriptContentStatus.Read, Program: { } }, "script 2827 is installed");
+        var program = content.Script(2827).Program!;
+        var heartbeat = ScrAdmission.Admit(program, AreaUseScriptHost.HeartbeatAdmission);
+        Console.WriteLine($"TAKING-DAMAGE-ADMISSION|script 2827|heartbeat|admitted {heartbeat.IsAdmitted}|{heartbeat.Refusal?.Code}@{heartbeat.Refusal?.Line}/{heartbeat.Refusal?.Type}/{heartbeat.Refusal?.Kind}");
+        var taking = ScrAdmission.Admit(program, AreaUseScriptHost.TakingDamageAdmission);
+        Console.WriteLine($"TAKING-DAMAGE-ADMISSION|script 2827|taking damage|admitted {taking.IsAdmitted}|{taking.Refusal?.Code}@{taking.Refusal?.Line}/{taking.Refusal?.Type}/{taking.Refusal?.Kind}");
+        Assert.IsFalse(heartbeat.IsAdmitted, "the heartbeat set still refuses it");
+        Assert.IsTrue(taking.IsAdmitted, $"2827 by the taking-damage set: {taking.Refusal?.Code}@{taking.Refusal?.Line}/{taking.Refusal?.Type}/{taking.Refusal?.Kind}");
+    }
 }
