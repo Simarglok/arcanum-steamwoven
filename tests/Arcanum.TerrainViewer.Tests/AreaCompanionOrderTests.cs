@@ -89,4 +89,16 @@ public sealed class AreaCompanionOrderTests
         Assert.AreEqual(new CellCoord(int.MaxValue, 4), AreaCompanionOrders.Away(new(int.MaxValue - 1, 4), new(0, 4)), "clamped, no overflow");
         Assert.AreEqual("wait", AreaCompanionOrders.Label(FollowerMenuItem.Wait));
     }
+
+    // ARC-UI-1975 (FP10, OL1): the order text is the row's message of follower_ui.mes; a missing message sends no order.
+    [TestMethod]
+    public void The_order_label_is_the_rows_message_of_the_file_and_a_missing_message_has_none()
+    {
+        var texts = AreaFollowerMenuTexts.From(number => number == (int)FollowerMenuItem.Wait ? null : $"слово {number}", "test");
+        Assert.AreEqual("слово 0", AreaCompanionOrders.OrderLabel(FollowerMenuItem.Walk, texts));
+        Assert.AreEqual("слово 4", AreaCompanionOrders.OrderLabel(FollowerMenuItem.BackOff, texts));
+        Assert.IsNull(AreaCompanionOrders.OrderLabel(FollowerMenuItem.Wait, texts), "no message: the row is skipped, no order");
+        Assert.AreEqual("Stay Close", AreaCompanionOrders.OrderLabel(FollowerMenuItem.StayClose, AreaFollowerMenuTexts.Project("no game folder")), "without the file: the project's words");
+        Assert.Throws<ArgumentNullException>(() => AreaCompanionOrders.OrderLabel(FollowerMenuItem.Walk, null!));
+    }
 }
