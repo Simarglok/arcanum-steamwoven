@@ -133,6 +133,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-114: runs an NPC's first-heartbeat or heartbeat script (the NPC as attachee and triggerer) and answers whether
     /// the tick goes on ("run default", or no script that runs); null: no script runs at these points.</summary>
     public Func<AiScriptPoint, string, bool>? Heartbeat { get; init; }
+    /// <summary>ARC-SCRIPT-1590 (0x441980, item use 0x462CC0): runs the use script (point 1) of an item an NPC holds, the NPC as the user and triggerer and the target (the entity the use names, "pc" for the hero) as the extra object, and answers whether the use goes on (a script that
+    /// ran default, or none that runs: refused, not applied); false when it skipped the default (the food script 30282 always does, after it destroyed the item); null: no NPC's item use runs a script, and the use goes on as the script let it.</summary>
+    public Func<string, string, string?, bool>? ItemUseScript { get; init; }
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
@@ -3373,12 +3376,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return AreaItemUse.Used(facts, _scene.Spells?.Invoke()?.Item(item), tooHard);
     }
 
-    /// <summary>The use script (0x441980): NOT READY for an NPC (no SCR runs at the AI points); an item with one goes on as if the
-    /// script let it, which the trace notes.</summary>
+    /// <summary>The use script (0x441980) of an item the NPC holds (ARC-SCRIPT-1590): run through the scene's script runner with the NPC as the user and the use's target as the extra object (<see cref="AreaAiScene.ItemUseScript"/>); false when the script skipped the default,
+    /// which ends the use (its action points are still charged; the food script 30282 destroys the food itself). Without a runner, or for a run it could not apply (refused, effects rejected, an item made or kit without a row), an item with a script goes on as if the script let it,
+    /// which the trace notes.</summary>
     public bool RunUseScript(string user, string item, string? target)
     {
-        if (UseFacts(item) is { UseScript: true }) Trace(user).Item += $" use-script {item} not run";
-        return true;
+        if (UseFacts(item) is not { UseScript: true }) return true;
+        if (_scene.ItemUseScript is not { } run) { Trace(user).Item += $" use-script {item} not run"; return true; }
+        var goesOn = run(user, item, target);
+        NoteUsedItem(user, item);
+        Trace(user).Item += $" use-script {item} {(goesOn ? "default" : "skipped")}";
+        return goesOn;
     }
 
     // The targeting cursor (0x4EE060) is the player's: an NPC's use always has a target (the starter's and the chooser's), so it never opens.

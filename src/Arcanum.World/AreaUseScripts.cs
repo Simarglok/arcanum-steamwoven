@@ -1016,6 +1016,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-DEV-316: the item whose use script runs now (the only object <see cref="OtherMapRow"/> answers for), else null.</summary>
     private ScrObjectRef? _itemUse;
+    // ARC-SCRIPT-1590: the NPC that uses the item of the run (null: the PC), whose list the destroy of the item in use leaves.
+    private ScrObjectRef? _itemUser;
 
     /// <summary>
     /// ARC-DEV-316 (B32 tail): the row of the item whose use script runs (<see cref="RunItemUse"/>) when its origin map is one the host was
@@ -1834,20 +1836,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied. ARC-SCRIPT-1481 (IU2): with a <paramref name="target"/> entity (the PC's, or an NPC of the shown map) that object is the use's target too (the extra object: a right click and the use icon with Shift
     /// target the hero, the item cursor a critter; the food use script 30282 heals its extra object).
     /// </summary>
-    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, string? target = null)
+    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, string? target = null, ScrObjectRef? user = null)
     {
         ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
         var item = new ScrObjectRef(originMap, entity);
+        // ARC-SCRIPT-1590 (IU2): an NPC of the shown map that eats or drinks is the user, the triggerer of the script, and its own list loses the item the script destroys.
+        if (user is { } npc && !IsPc(npc) && (npc.Map != _shownMap || Row(npc) is not { Type: NpcType })) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the user is not an NPC of the shown map");
         _itemUse = item;
+        _itemUser = user is { } holder && !IsPc(holder) ? holder : null;
         try
         {
             if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
         }
-        finally { _itemUse = null; }
+        finally { _itemUse = null; _itemUser = null; }
     }
 
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,
@@ -2099,7 +2104,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_itemUse is { } used && used.Equals(request.Object))
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
-                    if (_session.DestroyUsedItem(_session.Version, used.Code).Disposition == GameSessionDisposition.Rejected) return false;
+                    // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
+                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code).Disposition : _session.DestroyUsedItem(_session.Version, used.Code).Disposition;
+                    if (removed == GameSessionDisposition.Rejected) return false;
                     continue;
                 }
                 // ARC-SCRIPT-2501 (BS3): a scenery of the shown map.
@@ -2664,7 +2671,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_itemUse is { } used && used.Equals(request.Object))
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
-                    if (_session.UsedItemDestructionRefusal(used.Code) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
+                    if ((_itemUser is { } eater ? _session.NpcItemRemovalRefusal(eater.Code, used.Code) : _session.UsedItemDestructionRefusal(used.Code)) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
                     continue;
                 }
                 // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first.

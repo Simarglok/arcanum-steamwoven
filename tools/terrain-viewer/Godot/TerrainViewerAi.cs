@@ -217,6 +217,8 @@ public partial class TerrainViewerApp
             Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
+            ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
             GuardCatchingThief = AiGuardCatchingThief,
             // ARC-DEV-258 (MIG13 S14n): an NPC's thrown grenade flies as a projectile.
@@ -374,6 +376,22 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-114 heartbeat npc={npc} point={scrPoint} script={ran.Run.Script} outcome={ran.Run.Outcome} states="
                 + string.Join(",", states.Select(s => $"{s.Change}:{s.Object.Code}")));
         }
+        return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
+    }
+
+    /// <summary>ARC-SCRIPT-1590 (item use 0x462CC0 → 0x441980, ledger IU2, VT8): the use script of an item an NPC of the shown map holds, through the shown map's use-script host with the NPC as the user and triggerer and the target as the extra object ("pc" is the hero).
+    /// True lets the use go on (the script ran default, or none that runs: a refused or unapplied run goes on as without a script, logged once); false when the script skipped the default.</summary>
+    private bool AiItemUseScript(string npc, string item, string? target)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return true;
+        var ran = Awarded(host, host.RunItemUse(CurrentAreaMap, item, session.Rules.Scripts, target, new(CurrentAreaMap, npc)));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
+        {
+            if (_heartbeatRefusalsLogged.Add($"use|{npc}|{item}|{ran.Outcome}|{ran.Run?.Script}"))
+                GD.Print($"ARC-SCRIPT-1590 item-use-refused npc={npc} item={item} outcome={ran.Outcome} detail={ran.Detail}");
+            return true;
+        }
+        GD.Print($"ARC-SCRIPT-1590 item-use npc={npc} item={item} script={ran.Run!.Script} outcome={ran.Run.Outcome} states={string.Join(",", ran.Run.Effects.ObjectStates.Select(s => $"{s.Change}:{s.Object.Code}"))}");
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
