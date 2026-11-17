@@ -222,7 +222,7 @@ public partial class TerrainViewerApp
     {
         if (!AreaRelight.Active) return;
         if (_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting && LightsNow(lighting.Local, driver) is { } now)
-            AreaRelight.SetMapLights(now.Field.Placements.Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, driver.Effective))
+            AreaRelight.SetMapLights(now.PosedPlacements.Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, driver.Effective))
                 .Where(light => light is not null).Select(light => light!.Value));
         else AreaRelight.SetMapLights([]);
     }

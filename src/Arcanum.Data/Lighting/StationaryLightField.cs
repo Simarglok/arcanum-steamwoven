@@ -127,6 +127,11 @@ public sealed class StationaryLightField
     public AreaStationaryLightSource Source { get; }
     /// <summary>Every light with its chart screen rectangle, in source order.</summary>
     public IReadOnlyList<(StationaryLight Light, TerrainRect Rect)> Placements { get; }
+
+    /// <summary>ARC-RENDER-2207: every light with its chart screen rectangle where its animation pose puts it (the frame's size and hot spot, the pose's offsets), in source order
+    /// (<see cref="Placements"/> when there are no poses); an unposed light stands as in <see cref="Placements"/>.</summary>
+    public IReadOnlyList<(StationaryLight Light, TerrainRect Rect)> PlacementsAt(IReadOnlyDictionary<int, LightPose>? poses) =>
+        poses is null || poses.Count == 0 ? Placements : Enumerable.Range(0, _placements.Length).Select(i => { var p = Posed(i, poses); return (p.Light, p.Rect); }).ToArray();
     public bool HasActiveLights => _placements.Any(p => (p.Light.Flags & StationaryLightFlags.Off) == 0);
 
     /// <summary>The emitter tint: INDOOR takes the hour's indoor colour, else OUTDOOR the outdoor colour,

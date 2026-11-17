@@ -200,6 +200,27 @@ public partial class TerrainViewerApp
                 var lookImage = await Capture("setting-2-on-hd");
                 var lookDiff = Differing(nightLegacy, lookImage, near);
                 Require(lookDiff > 0, "the relit look differs from Legacy near the hero's light at night");
+                // ARC-RENDER-2207: the relit light list follows the animation poses of the map's animated lights (a light that steps to another frame or offset moves in the list too).
+                var wasAnimationMs = _lightAnimationMs;
+                try
+                {
+                    _lightAnimationMs = 0; PushAreaAmbient();
+                    var still = AreaRelight.MapLightList.ToArray();
+                    var hourForm = all.AtHour(driver.Selection.Hour);
+                    var posedAtZero = hourForm.AtAnimation(0).PosedPlacements.Where(p => (p.Light.Flags & (StationaryLightFlags.Off | StationaryLightFlags.Dark)) == 0).Count();
+                    Require(still.Length == posedAtZero, $"the relit map lights are the lit placements ({still.Length} of {posedAtZero})");
+                    var movedAt = -1;
+                    if (hourForm.Field.Animated.Count > 0)
+                        for (var ms = 50; ms <= 20000 && movedAt < 0; ms += 50)
+                            if (!hourForm.AtAnimation(ms).PosedPlacements.Select(p => p.Rect).SequenceEqual(hourForm.AtAnimation(0).PosedPlacements.Select(p => p.Rect))) movedAt = ms;
+                    if (movedAt > 0)
+                    {
+                        _lightAnimationMs = movedAt; PushAreaAmbient();
+                        Require(!AreaRelight.MapLightList.SequenceEqual(still), $"an animated light moved in the relit list at {movedAt} ms");
+                    }
+                    settingReport["AnimatedLights"] = hourForm.Field.Animated.Count; settingReport["AnimatedMovedAtMs"] = movedAt;
+                }
+                finally { _lightAnimationMs = wasAnimationMs; PushAreaAmbient(); }
                 _canvas.SetVisualProfile(VisualProfile.Legacy, wasSource, wasBudget); SyncRelitLook(); // the developer mode alone from here, so the per-frame sync does not turn the look back on
                 AreaRelight.SetMode(AreaRelight.Mode.NightAdd); var wasStrength = AreaRelight.Strength; AreaRelight.Strength = AreaRelight.LookStrength; PushAreaAmbient();
                 var developerImage = await Capture("setting-3-developer-night");
