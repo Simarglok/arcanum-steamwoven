@@ -18,8 +18,6 @@ public sealed class AreaAiMindControllerTests
     private const int Spell = 61, MindControlled = 0x8000000;
     private static readonly Arcanum.Simulation.Movement.CellCoord HeroCell = new(58, 12), NpcCell = new(59, 14);
 
-    private static SessionSpellRecord Record() => AreaHealerCastTests.Record() with { };
-
     [TestMethod]
     public void The_host_names_the_parent_of_the_run_that_sets_the_flag_as_the_controller_and_none_without_it()
     {
@@ -47,5 +45,16 @@ public sealed class AreaAiMindControllerTests
 
         Assert.AreEqual(GameSessionDisposition.Changed, f.Session.WriteObjectFlag(f.Session.Version, f.B, SessionObjectFlagField.Spell, MindControlled, false, dataHas: false).Disposition);
         Assert.IsNull(host.MindController(f.B), "the flag cleared");
+    }
+
+    [TestMethod]
+    public void The_mind_control_acceptance_of_the_two_unwait_checks_follows_the_controller_record()
+    {
+        // 0x4AD950: a controller equal to the leader accepts both checks; none found accepts the first by the PC chain only; another controller accepts neither; not controlled accepts neither.
+        Assert.AreEqual((true, true), AreaAiHost.MindControlAcceptance(true, "npc:a", "npc:a", () => false));
+        Assert.AreEqual((true, false), AreaAiHost.MindControlAcceptance(true, null, "npc:a", () => true), "the chain reaches a PC, the handle is cleared at the second check");
+        Assert.AreEqual((false, false), AreaAiHost.MindControlAcceptance(true, null, "npc:a", () => false));
+        Assert.AreEqual((false, false), AreaAiHost.MindControlAcceptance(true, "pc", "npc:a", () => true), "another controller: the ordinary tests follow");
+        Assert.AreEqual((false, false), AreaAiHost.MindControlAcceptance(false, "npc:a", "npc:a", () => true), "no flag, no mind-control branch");
     }
 }

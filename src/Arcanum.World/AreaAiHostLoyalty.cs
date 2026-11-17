@@ -59,8 +59,7 @@ public sealed partial class AreaAiHost
         if (Fields(npc)?.Critter is null || Build(npc) is not { } build || Row(npc) is not { } row) return null;
         if (CharismaOf(leader) is not { } charisma || Fields(leader)?.Critter is null || Build(leader) is not { } leaderBuild) return null;
         var controller = MindController(npc);
-        var mindControlled = (SpellFlagsOf(npc, Fields(npc)!.Object.SpellFlags) & MindControlledSpell) != 0
-            && (controller is null ? PcLeader(npc) is not null : controller == leader);
+        var mindControlled = MindControlAcceptance((SpellFlagsOf(npc, Fields(npc)!.Object.SpellFlags) & MindControlledSpell) != 0, controller, leader, () => PcLeader(npc) is not null).First;
         var persuasion = (PersuasionTraining)(int)(NpcSkill(leader, Skill.Persuasion)?.Training ?? SkillTraining.None);
         var reaction = _session.QueryDanger(npc).Enemies.Contains(SessionCombatant.Critter(leader)) ? 0 : NpcLeaderReaction;
         return FollowConsentRules.Evaluate(new(mindControlled, persuasion, charisma, AlignmentOf(leader) ?? 0, AreaAdvancement.Level(_session, leader, leaderBuild.Level), OtherLeaderCharisma: null,

@@ -4399,10 +4399,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Leader(npc) is not { } leader || leader == Pc || NpcLeaderSide(leader) is not { } side || Fields(npc) is not { } fields || AlignmentOf(npc) is not { } alignment || Row(npc) is not { } row || Build(npc) is not { } build) return null;
         // ARC-WORLD-2144 (0x4AD950): a controller equal to the leader accepts in both checks; with no controller found the chain walk to a PC accepts the first check only (the handle is cleared at the second); another controller accepts neither.
         var mind = (SpellFlagsOf(npc, fields.Object.SpellFlags) & MindControlledSpell) != 0;
-        var controller = MindController(npc);
+        var (first, second) = MindControlAcceptance(mind, MindController(npc), leader, () => PcLeader(npc) is not null);
         return new(side.Persuasion, side.Alignment, side.Level, side.MaxFollowers, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
-            alignment, build.Level, mind && (controller is null ? PcLeader(npc) is not null : controller == leader), mind && controller == leader, side.Charisma);
+            alignment, build.Level, first, second, side.Charisma);
     }
+
+    /// <summary>
+    /// ARC-WORLD-2144 (0x4AD950's mind-control branch): whether a mind-controlled follower is accepted by the first check and by the join's second one (the handle is cleared, so the chain walk 0x45DDA0 cannot see a PC): a controller equal
+    /// to the leader accepts both; no controller record accepts the first when a PC leads it up its chain; another controller accepts neither (the ordinary tests follow). Not mind controlled: neither.
+    /// </summary>
+    internal static (bool First, bool Second) MindControlAcceptance(bool mindControlled, string? controller, string leader, Func<bool> pcChain) =>
+        !mindControlled ? (false, false) : controller is null ? (pcChain(), false) : (controller == leader, controller == leader);
 
     /// <summary>The unforced unwait of a follower waiting under an NPC leader with the facts read here (<see cref="LeaderUnwaitFacts"/>); null when they cannot be read.</summary>
     internal PartyMutationResult? UnwaitUnforced(string npc) =>
