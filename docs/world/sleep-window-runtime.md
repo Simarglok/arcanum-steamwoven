@@ -30,8 +30,8 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
   ([`AreaUseScriptHost.RunLeaderSleeping`](../../src/Arcanum.World/AreaUseScripts.cs), the heartbeat admission set, its answer decides nothing); then **the sleeper's maintained spells end**
   (ARC-MAGIC-1161, ledger UE6; the ending is queued by the press and told by the next frame pass of the cast host, before the first step is due: `SessionSpellCaster.EndMaintainedSpells` for the hero, 0x457450, so every run the hero is the source of ends but technology runs and item-trigger runs with no maintenance period; the
   followers' spells go on; no interrupt of the hero's actions is asked, unlike the world-map start; the same in the wait window; nothing ends when the window only opens, and a close without a press ends nothing).
-- **Step** (SWB9, TL27): the game clock jumps an hour (due events fire once and late, as in a world-map step), the hero and every follower the
-  AI host runs are healed ([`AreaRestParty.Step`](../../src/Arcanum.World/AreaRest.cs), `LifeRules.RestHeal`: hit-point damage drops by the
+- **Step** (SWB9, TL27): the game clock jumps an hour (due events fire once and late, as in a world-map step), the hero and every follower of the hero's tree the
+  AI host runs (followers of followers too) are healed ([`AreaRestParty.Step`](../../src/Arcanum.World/AreaRest.cs), `LifeRules.RestHeal`: hit-point damage drops by the
   healing rate, fatigue damage by three times that; nothing in the wait window), then the end tests
   ([`AreaRestRules.AfterStep`](../../src/Arcanum.World/AreaRest.cs)): the hero's death ends the rest; a length counts down to its last hour;
   until 07:00 and until 20:00 stop at the first step whose hour matches; until healed stops when hit-point damage is gone (fatigue damage is
@@ -138,7 +138,7 @@ switch wakes a sleeper only when it is farther than its radius from the *current
   wanderer starts one in the same step, as the original does, SWB21); the attack resolver's and the turn-based round's sleeping tests (+hit chance, round skip) read the stored critter flag only, so a sleeping NPC the
   step seated is skipped by the danger update, the item search and the heal but not by those two; NPCs of the main map's windows are seated only for the beds the window holds; an NPC a script moves or destroys while seated is not taken out (only a kill and the first bed question of a host do); an NPC still walking to its standpoint when it comes within the radius is seated without an interrupt of its walk, so it may finish the walk onto the bed's tile (hidden, not nudged: the nudge is the seat's own test; not read in the original); an NPC whose map row already has the sleeping flag is never seated (it already counts as asleep, so its step is the sleeper branch).
 - **Random encounter** (SWB13): built (ARC-WORLD-1159, [random encounters](random-encounters-runtime.md)): the roll takes five times the chance while the window is open and a fired roll closes it (0x57B450); the viewer's `HandleEncounterNotices` does the close.
-- **Followers of followers**, and followers the AI host does not run, are not healed or told of event 29.
+- **Followers the AI host does not run** are not healed or told of event 29. Followers of followers (a companion's summon or a script group under a companion) are healed (ARC-WORLD-2596: the follower tree in the order of 0x441260); event 29 still reaches only the direct followers.
 - The exit gate's NPC scan uses an approximated view rectangle (`AreaAiHost.CombatThreats`); the original's is the game view's size.
 - A town-map sector whose town-map files are not read yet (or cannot be) gets a notice, not message 20; the viewer cannot decide it (SWB3).
 - No step runs under the death cover (the frame is frozen); the pending step waits. The animated-light push is also held during a rest.
