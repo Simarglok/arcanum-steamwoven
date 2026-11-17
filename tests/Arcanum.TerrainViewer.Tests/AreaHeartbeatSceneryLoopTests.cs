@@ -20,7 +20,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaHeartbeatSceneryLoopTests
 {
     private const byte Attachee = 1, Number = 3, Looped = 10, LocalObject = 11, EveryScenery = 15, EveryPortal = 19;
-    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, ToggleScript = 835, PortalToggleScript = 836, MixedToggleScript = 837, SceneryToggleScript = 838, LoopFlag = 2360, AssignFlag = 2361;
+    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, ToggleScript = 835, PortalToggleScript = 836, MixedToggleScript = 837, SceneryToggleScript = 838, TwiceScript = 839, LoopFlag = 2360, AssignFlag = 2361;
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
     private static (byte, int) N(int value) => (Number, value);
@@ -91,6 +91,11 @@ public sealed class AreaHeartbeatSceneryLoopTests
                 Do(new(ScrCatalogue.Action.LoopFor, (EveryScenery, -1))),
                 Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
                 Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 839: toggle the attachee twice in one run.
+            Write("scr/00839twice.scr", Program(
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -414,6 +419,28 @@ public sealed class AreaHeartbeatSceneryLoopTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, second.Outcome, second.Detail);
             Assert.AreEqual(true, host.IsSwitchedOff(new(1, entity)), "still off");
             Assert.AreEqual(1L, session.QueryObjectChange(new SessionMapId(1), SessionItemOff.Key(entity)), "the record of the toggle");
+        });
+    }
+
+    // ARC-SCRIPT-2324: the same scenery toggled twice in one run ends as it began, with no record, over a data that stores it on and over one that stores it off.
+    [TestMethod]
+    public void A_scenery_toggled_twice_in_one_run_ends_as_it_began()
+    {
+        WithContent(content =>
+        {
+            foreach (var dataFlags in new uint[] { 0, AreaUseScriptHost.OffObjectFlagBit })
+            {
+                using var session = ConversationSessionFixture.Create();
+                var scenery = AreaHeartbeatScriptTests.Row(2, 3, TwiceScript, objectFlags: dataFlags, point: ScrPoint.Use) with { WorldX = 12 };
+                var targets = new AreaObjectTargets(1, [scenery], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+                var host = Host(session, content, row => targets.Gone(session).Contains(row.Key), scenery);
+                var entity = AreaUseScriptHost.EntityId(scenery);
+                var run = host.Run(scenery, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
+                Assert.AreEqual(dataFlags != 0, host.IsSwitchedOff(new(1, entity)), $"data flags {dataFlags}");
+                Assert.AreEqual(dataFlags != 0, targets.Gone(session).Contains(scenery.Key));
+                Assert.IsNull(session.QueryObjectChange(new SessionMapId(1), SessionItemOff.Key(entity)), "no record");
+            }
         });
     }
 

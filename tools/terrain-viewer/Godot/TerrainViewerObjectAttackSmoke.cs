@@ -268,7 +268,7 @@ public partial class TerrainViewerApp
             var actors = new AreaOccupancy([], held);
             var steps = allSteps.Where(step => AreaOccupancyRules.Apply(step.Raw, step.From, step.Direction, actors).ReasonCode
                 is not (AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor) && !held.Contains(step.From)).ToArray();
-            if (steps.Length == 0) { GD.Print($"ARC-WORLD-065 native-smoke freed-cell NONE map={_readyMapName} (a companion holds the steps)"); return; }
+            if (steps.Length == 0) { GD.Print($"{(off ? "ARC-SCRIPT-2324 native-smoke scenery-off" : "ARC-WORLD-065 native-smoke freed-cell")} NONE map={_readyMapName} (a companion holds the steps)"); return; }
             var mapId = new SessionMapId(CurrentAreaMap);
             var routes = new AreaRouteSource(grid.Snapshot, grid.Chart, grid.Occupancy, () => grid.Portals?.Invoke());
             int Open() => steps.Count(step => AreaOccupancyRules.Apply(step.Raw, step.From, step.Direction, grid.Occupancy?.Invoke()) is

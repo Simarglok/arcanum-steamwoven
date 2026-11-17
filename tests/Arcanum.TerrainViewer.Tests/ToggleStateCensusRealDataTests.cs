@@ -69,7 +69,7 @@ public sealed class ToggleStateCensusRealDataTests
         CollectionAssert.AreEqual(new[] { 1179, 1198, 1239, 1734, 2088, 2221, 2407, 2475, 2476, 2477, 2478 }, named);
         // The placed attachments of the windows that run a toggle are an NPC's or the item set's (item type 7, script 3030, and 1239 on item type 5): none is a scenery, portal or container.
         Assert.IsFalse(rows.Keys.Any(k => k.Type is 1 or 2 or 3), "a placed portal, container or scenery runs a toggle");
-        // The map data stores 16 sceneries and 3 containers off (the view drew them before ARC-SCRIPT-2324).
+        // The map data stores 16 sceneries and 3 containers off; the view reads only the sceneries' bit since ARC-SCRIPT-2324.
         Assert.AreEqual((16, 3), (dataOff.GetValueOrDefault(3), dataOff.GetValueOrDefault(2)));
     }
 

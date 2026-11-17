@@ -151,7 +151,7 @@ public sealed class AreaObjectTargets
 
     /// <summary>ARC-SCRIPT-2324: the object flag "off" (0x2) of a row's map data.</summary>
     internal static bool DataOff(AreaObjectRecord row) =>
-        row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
+        row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags and >= int.MinValue and <= uint.MaxValue } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
 
     /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off, since ARC-SCRIPT-052
     /// those a script destroyed): the view no
