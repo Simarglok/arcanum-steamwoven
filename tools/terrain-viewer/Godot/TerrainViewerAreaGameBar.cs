@@ -105,6 +105,8 @@ public partial class TerrainViewerApp
             _gameBarPanel.MessageLog.Render();
         }
         _gameBarPanel.Visible = true;
+        // ARC-UI-2452: the Steamwoven layout fills the middle band with a generated backdrop while a menu window is open (nothing otherwise).
+        _gameBarPanel.SetMenuBackdrop(AnyWindowOpen);
         _gameBarPanel.SetClock(_gameClock.Face);
         // ARC-UI-1365 (GB13): the experience strip follows the hero's progress toward the next level (null without a hero or experience data).
         _gameBarPanel.SetExperience(_areaSession?.QueryHeroExperience()?.Progress);

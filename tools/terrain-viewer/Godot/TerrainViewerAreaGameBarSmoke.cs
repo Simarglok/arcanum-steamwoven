@@ -59,7 +59,9 @@ public partial class TerrainViewerApp
         var savedInterfaceHd = _gameSettings.HdInterface;
         var savedGenerated = _gameSettings.GeneratedInterface;
         // ARC-UI-140: the generated interface runs the HD path with the pack (pictures from its redraw) and the chrome generated.
-        var verifyGenerated = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_GENERATED_VERIFY") == "1";
+        // ARC-UI-2452: ARC_AREA_BAR_STEAMWOVEN=1 runs the Steamwoven layout check (the generated interface on, the HD path with the pack) in place of the whole-factor generated check.
+        var verifySteamwoven = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_STEAMWOVEN") == "1";
+        var verifyGenerated = verifySteamwoven || System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_GENERATED_VERIFY") == "1";
         var verifyHd = verifyGenerated || System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_HD_VERIFY") == "1";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
@@ -124,9 +126,12 @@ public partial class TerrainViewerApp
             if (verifyHd)
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                // ARC-UI-2452: the older generated checks and the rest of this smoke measure the whole-factor geometry of the strips, which the Steamwoven layout replaces: it is suspended for them.
+                SteamwovenHud.Suspended = true;
                 _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = verifyGenerated };
                 SyncInterfaceHd();
-                if (verifyGenerated) await VerifyGeneratedInterfaceAsync(panel, Frames);
+                if (verifySteamwoven) await VerifySteamwovenLayoutAsync(panel, Frames);
+                else if (verifyGenerated) await VerifyGeneratedInterfaceAsync(panel, Frames);
                 await VerifyTopBarHdAsync(panel, Frames, Move, Button);
             }
             await CaptureHudAsync(verifyGenerated ? "generated" : verifyHd ? "hd" : "legacy", Frames);
@@ -601,7 +606,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGenerated }; SyncInterfaceHd(); }
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGenerated }; SyncInterfaceHd(); SteamwovenHud.Suspended = false; _gameBarPanel?.Relayout(); }
             _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }

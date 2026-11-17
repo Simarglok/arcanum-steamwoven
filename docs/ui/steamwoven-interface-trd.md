@@ -94,6 +94,28 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
   ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)).
 
+## Prototype of the play screen (ARC-UI-2452)
+
+Slice [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452): the viewer lays the play screen out by the layout model with the **generated chrome** as the placeholder, to judge sizes and proportions before any
+Codex art. It is on while the HD option and the generated interface are both on (`AreaGameBarPanel.SteamwovenOn`); with the HD option off, or with the generated interface off, the whole-factor layout is unchanged (the strips and the
+bars' captures are pixel-identical to `origin/main`; only the changing text of the diagnostic palette differs).
+
+- **Scale.** The two strips keep the original's 800-unit layout and are drawn at one fractional scale, `f · 3.6 · k` (`SteamwovenHud.Plan`); `k` is 1 for the TRD heights (150 and 570 master px) and the smaller of
+  `top / 150` and `bottom / 570` for another pair, so thinner panels give a smaller centre block and wider sides, not a squashed strip. The top strip stands on the lower edge of the top band and the bottom strip hangs
+  from the upper edge of the bottom band, so each strip's rim meets the board's rim. A 41-unit strip is 147.6 · f px in a 150 · f band (the board shows above it); a 159-unit strip is 572.4 · f px in a 570 · f band (its last
+  2.4 · f px lie beyond the frame's bottom edge). Both are the price of SWI-LAY-11's original offsets and the grid; the owner decision #2453 can change the heights.
+- **Boards.** The band beside each strip is a generated board of the strip's own wood (colours tuned from the strip frame, grain continued from the strip's position, the rim on the edge facing the world), painted off
+  the main thread (`InterfaceChromeRenderer.RenderBoard`, `SteamwovenBoardView`). The world is still drawn behind the panels over the whole frame, as in the original; the bars of a letterboxed or pillarboxed
+  window are black rectangles over it.
+- **Menus.** `AreaGameBarPanel.TopInset` and `BottomInset` are now the middle band's, so every window that docks between the strips docks in it (windows keep their own whole or fitted scale until
+  [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) integrates each). While a menu window is open a generated dark-wood backdrop fills the whole middle band (layer 3, under the windows).
+- **Not yet laid out by the model** (follow-ups of the per-window integration): the full-screen menus (SWI-BDR-6), the two-part split backdrops (SWI-BDR-5), the barter and loot windows, which hide the bars, and the 800 × 600
+  windows' own scale (the inventory stays at its fitted scale on the generated backdrop).
+- **Smoke.** `./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_AREA_BAR_CAPTURE=<prefix>` checks the plan, the strips' places, the insets, the boards, the bars and the open-menu
+  backdrop at the SWI-VER-6 sizes (`ARC_STEAMWOVEN_SIZES=WxH,...` to choose others) for the variants of `ARC_STEAMWOVEN_VARIANTS` (`trd`, `thin` = 120 and 456, `before` = the old layout, `TOP-BOTTOM` master px), without
+  resizing the window (the root viewport takes the size as its logical render target), and saves `<prefix>-hud-steamwoven-VARIANT-WxH[-menu].png` (local, never in git). The older generated-interface smokes run with the layout
+  suspended (`SteamwovenHud.Suspended`): they measure the whole-factor geometry.
+
 ## Menu backdrops
 
 - **SWI-BDR-1** An open menu window fills the whole middle band (full width and height) with its backdrop.
@@ -244,7 +266,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 0. Decisions | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) | owner: provenance and distribution — decided: originals are Codex inputs, kit local only | — |
 | 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | Codex runner — decided: the owner runs Codex (closed, not planned) | — |
 | 1. Geometry | [#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450) | layout model (SWI-LAY, SWI-BDR) | — |
-| 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | prototype with generated chrome | #2450 |
+| 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | prototype with generated chrome ([done](#prototype-of-the-play-screen-arc-ui-2452)) | #2450 |
 | 1. Geometry | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) | owner: panel proportions | #2452 |
 | 2. Census | [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451) | census, families, production issues | — |
 | 2. Census | [#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454) | kit manifest and validator | #2451 |
