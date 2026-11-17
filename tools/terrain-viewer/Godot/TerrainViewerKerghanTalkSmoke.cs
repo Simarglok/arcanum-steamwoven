@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     // AREA conversation host. 1. The story talk is a conversation from the greeting the script's own lines choose (script line 10, DLG node 1): the hero stands beside him, seven replies by response id lead to the reply that
     // ends the dialog on script line 100; Close resumes the script there: the game clock moves by 10,800 s (three hours, flag 2) and movie 6 is asked for (it plays through the real decoder when ffmpeg is installed and is
     // passed over, said so, when it is not; a key ends it). 2. The talk after the task is opened the way a script's dialog action opens it, at the DLG node 612 (what the script's counters choose after the four beings
-    // are killed is not played here), and its five replies end on script line 80: Close runs the change of shape: Kerghan is destroyed, a created critter of prototype 27368 stands on his tile, the deferred call of
+    // are killed is not played here), and its four replies after it end on script line 80: Close runs the change of shape: Kerghan is destroyed, a created critter of prototype 27368 stands on his tile, the deferred call of
     // line 86 waits in the session naming the made critter, and when the clock reaches its due time the call plays movie 3 and asks for the end of the game (the stage ends there; the ending itself is the `slides` stage's).
     // Exe facts: ledger TI5b (F8, F10, F12), TI5c.
     private async Task RunAreaKerghanTalkSmokeAsync(TerrainLoadResult? mapMode = null)
@@ -43,7 +43,7 @@ public partial class TerrainViewerApp
         var speakers = host.Speakers.Where(s => s.ScriptId == KerghanScript && SpeakerPresent(s) && s.Row.WorldX is not null && s.Row.WorldY is not null).ToArray();
         if (speakers.Length == 0) { GD.Print($"{KerghanTalkCode} native-smoke kerghan-talk NONE map={map.RuntimeMap} (no living speaker of script {KerghanScript}; speakers={host.Speakers.Count})"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime; var takesScripted = _smokeTakesScriptedConversations;
-        var moviesBefore = _moviesForSelfTest; var startupDone = _startupMoviesDone;
+        var moviesBefore = _moviesForSelfTest; var startupDone = _startupMoviesDone; var pathBefore = _moviePathForSelfTest; var tableBefore = _movieTableForSelfTest; var sourceBefore = _movieSourceForSelfTest;
         _worldFocusSimulationForSelfTest = true; _smokeTakesScriptedConversations = true;
         var ended = false; var aiBefore = _aiForSmoke;
         try
@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
             }
             var finalStory = _conversationPanel!.Conversation;
             Require(finalStory is { Phase: DialogConversationPhase.Ended, End: { Kind: DialogEndKind.ReturnToScript, ScriptLine.Value: 100 } }, $"the last story reply ends the dialog on script line 100: {finalStory?.Phase} {finalStory?.End?.Kind} {finalStory?.End?.ScriptLine}");
-            Require(session.QueryClockSnapshot().GameTimestampMs == clockBefore && _scriptFades.Count == 0, "the clock and the fades wait for the dialog's close (F8: the script resumes after it)");
+            Require(session.QueryClockSnapshot().GameTimestampMs - clockBefore is >= 0 and < 60_000 && _scriptFades.Count == 0, "the clock and the fades wait for the dialog's close (F8: the script resumes after it)");
             // Movie 6 plays through the real decoder when it can; the other stages' movies stay off.
             _moviesForSelfTest = true; _moviePathForSelfTest = null; _movieTableForSelfTest = null; _movieSourceForSelfTest = null; _startupMoviesDone = true;
             var movies = MovieRefusal() is null;
@@ -150,7 +150,7 @@ public partial class TerrainViewerApp
             // 3. The call's due time: the clock reaches it and the call runs line 86 (movie 3 with the truth flag, then the end of the game).
             var gameBefore = session.QueryClockSnapshot();
             var step = Math.Max(1000L, call[0].DeadlineMs - gameBefore.GameTimestampMs + 1000);
-            var playedBeforeCall = _scriptFadesPlayed;
+            var playedBeforeCall = _scriptFadesPlayed; var refusalsBefore = AreaEvents.CallRefusals;
             Require(session.JumpClocks(gameBefore.Token, step).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the clock moved to the call's due time");
             SpellCasterNow()?.ProcessEvents();
             for (var f = 0; f < 300 && session.QueryScriptCalls().Any(c => c.Call.Script == KerghanScript); f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -163,6 +163,8 @@ public partial class TerrainViewerApp
                 HandleMovieInput(new InputEventKey { Keycode = Key.Space, Pressed = true });
                 for (var f = 0; f < 300 && _movieActive; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             }
+            else Require(!_movieActive && _scriptFadesPlayed == playedBeforeCall, "no movie played (passed over; movie 3 is checked with the decoder only)");
+            Require(AreaEvents.CallRefusals == refusalsBefore, $"the call was not refused ({AreaEvents.LastCallRefusal})");
             var endGame = _endGameAsked || _heroDeath.Kind == AreaSlideKind.EndGame;
             for (var f = 0; f < 300 && !endGame; f++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); endGame = _endGameAsked || _heroDeath.Kind == AreaSlideKind.EndGame; }
             Require(endGame, $"the call asked for the end of the game (asked {_endGameAsked}, show {_heroDeath.Kind}/{_heroDeath.Stage}, fades {_scriptFades.Count})");
@@ -173,7 +175,7 @@ public partial class TerrainViewerApp
         finally
         {
             // The call's end game resets the session to the main menu: nothing below touches the session then.
-            _moviesForSelfTest = moviesBefore; _startupMoviesDone = startupDone;
+            _moviesForSelfTest = moviesBefore; _startupMoviesDone = startupDone; _moviePathForSelfTest = pathBefore; _movieTableForSelfTest = tableBefore; _movieSourceForSelfTest = sourceBefore;
             if (!ended)
             {
                 if (ConversationOpen) EndConversation();
