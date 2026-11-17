@@ -294,6 +294,9 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(9L, scene.Session.QueryMapChange(new SessionMapId(Map), AreaCompanionPlacement.MapKey(scene.Npc)), "the home map names where it stands");
         Assert.AreEqual((int?)Map, EntityHomes.HomeOf(scene.Session, scene.Npc));
         Assert.IsNotNull(scene.Session.QueryMapChange(there, SessionTeleportedMark.Key(scene.Npc)), "the open of that map notifies it");
+        // A second script teleport of the NPC that already stands on another map is refused (its departure would clear the wrong map's placement).
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(scene.Npc, 9, new(5, 5))!, "already stands on map 9");
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(scene.Npc, Map, new(5, 5))!, "already stands on map 9");
     }
 
     [TestMethod]

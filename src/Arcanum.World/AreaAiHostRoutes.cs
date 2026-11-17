@@ -376,6 +376,8 @@ public sealed partial class AreaAiHost
         if (!_npcs.ContainsKey(npc)) return _followers.ContainsKey(npc) ? $"{npc} follows the hero: a follower's teleport by a script is not modelled" : $"{npc} is not an NPC the AI host runs here";
         if (PcLeader(npc) is not null) return $"{npc} follows the hero: a follower's teleport by a script is not modelled";
         if (cell.X < 0 || cell.Y < 0) return $"target {cell.X},{cell.Y} outside the cell range";
+        // An NPC a script already sent to another map no longer stands here (review of ARC-WORLD-2039: a second move would clear the wrong map's placement); its record moves again only when its own map's host runs it.
+        if (_session.QueryMapChange(new SessionMapId(_scene.RuntimeMap), AreaCompanionPlacement.MapKey(npc)) is { } away and >= 1 && away != _scene.RuntimeMap) return $"{npc} already stands on map {away}: a second script teleport of it is not modelled";
         if (map == _scene.RuntimeMap) return PlaceHeld(cell) ? null : $"target {cell.X},{cell.Y} not held by the shown map";
         // Another map: the NPC's record moves there; a created critter has no home map data to name (its edits are the session's own, not built for a script's departure).
         if (_created.Contains(npc)) return $"{npc} is a created critter: its departure to another map by a script is not modelled";
