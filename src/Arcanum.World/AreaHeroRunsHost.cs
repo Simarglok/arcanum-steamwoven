@@ -416,8 +416,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>
     /// ARC-COMBAT-1949 (VC62): the click's run flags on the hero's existing main run, where the click added nothing (label 0x54FB19): Shift (0x436C50) turns on the no-walk flag 0x100 and no running; otherwise running 0x40
-    /// (0x436AB0), refused at encumbrance 4 or more (0x45F790); a use goal (38, 81) turns on 0x4000 as well (0x436ED0). The ORed flags are all the table keeps; whether a walk under way stops at its next step is the walk step's own
-    /// reading of 0x100 (0x42E9B0, F1: not modelled for the hero's walk). No-op with no main run in the table.
+    /// (0x436AB0), refused at encumbrance 4 or more (0x45F790); a use goal (38, 81) turns on 0x4000 as well (0x436ED0). The ORed flags are all the table keeps; a walk under way stops at its next step by the walk step's own
+    /// reading of 0x100 (0x42E9B0, GT148/GT213; ARC-COMBAT-2561: <see cref="AiExecutorReason.NoWalkStep"/>). No-op with no main run in the table.
     /// </summary>
     public void ApplyClickFlags(bool shift, bool nearOccupied)
     {
