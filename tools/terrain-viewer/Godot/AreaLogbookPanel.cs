@@ -198,7 +198,7 @@ public partial class AreaLogbookPanel : CanvasLayer
         var width = Math.Max(1, Math.Min(900, size.X - 48));
         var height = Math.Max(1, Math.Min(640, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     /// <summary>ARC-UI-098: the lens shows the game view around the hero while the original look is up (LB23, IW33).</summary>
