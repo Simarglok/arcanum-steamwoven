@@ -139,8 +139,28 @@ public partial class AreaMenuArtView : Control
         (_controls, _arrows, _controlFocus, _arrowHovered, _arrowHeld) = ([], [], -1, -1, -1);
     }
 
+    /// <summary>ARC-UI-2577 (SWI-BDR-6): the full-screen layout of the Steamwoven interface for the window now (the 800 × 600 zone centred in the frame at `f · 3.6`, the generated
+    /// backdrop over the frame, black outside it), or null while the layout is off (the HD option or the generated interface off, the older smokes' suspension, or a window below f = 0.25).</summary>
+    internal SteamwovenFullScreenPlan? FullScreenPlan
+    {
+        get
+        {
+            if (!AreaGameBarPanel.SteamwovenOn) return null;
+            var size = GetViewportRect().Size;
+            // The window's size decides the plan: it is looked up once per size (the panel asks several times a frame).
+            if (_planSize != size) (_plan, _planSize) = (SteamwovenFullScreen.Plan((int)size.X, (int)size.Y), size);
+            return _plan;
+        }
+    }
+
+    private SteamwovenFullScreenPlan? _plan;
+    private Vector2 _planSize;
+    private bool _hadPlan;
+
     private Texture2D? WidescreenBackground()
     {
+        // The generated backdrop continues the menu's background over the frame, so the pack's 16:9 plate is not used.
+        if (FullScreenPlan is not null) return null;
         if (_window is not { } window || !AreaMenuArtLayout.UsesWidescreenPlate(window) || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
         if (ReferenceEquals(_widescreenPack, pack)) return _widescreenBackground;
         _widescreenPack = pack;
@@ -167,6 +187,8 @@ public partial class AreaMenuArtView : Control
     /// original's dialog box the in-play menu's quit question puts on the same plate.</summary>
     public (float Factor, Vector2 Position) PlateFit()
     {
+        // ARC-UI-2577: the Steamwoven layout puts the plate in the frame's 800 × 600 zone at the layout scale.
+        if (FullScreenPlan is { } layout) return ((float)layout.Factor, new Vector2(layout.Zone.X, layout.Zone.Y));
         var size = GetViewportRect().Size;
         var plate = new Vector2(AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight);
         var widescreen = WidescreenBackground() is not null;
@@ -183,6 +205,11 @@ public partial class AreaMenuArtView : Control
         var (factor, position) = PlateFit();
         Scale = new Vector2(factor, factor);
         Position = position;
+        // A fractional layout scale is sampled linear (as the strips of the prototype are); the original's whole factors stay Nearest.
+        var layoutOn = FullScreenPlan is not null;
+        TextureFilter = layoutOn ? TextureFilterEnum.Linear : TextureFilterEnum.Nearest;
+        // The plate (the pack's 16:9 one or the original's) follows the layout: a switch of it with no new Render still redraws.
+        if (layoutOn != _hadPlan) { _hadPlan = layoutOn; QueueRedraw(); }
     }
 
     public override void _Draw()
