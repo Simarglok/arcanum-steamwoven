@@ -203,7 +203,7 @@ public partial class TerrainViewerApp
                 var castId = ObjectTargets()!.KeyOfEntity(t!.Object!.Entity) is { } key ? _spellCastMap?.IdOf(key) : null;
                 if (castId is null || _spellCastMap?.Row(castId) is not { WorldX: not null, WorldY: not null } candidate) return false;
                 _floaterCells[castId] = LiveWorldCell(candidate);
-                return FloaterAnchor(castId) is { } point && objectView.HasPoint(point - new Vector2(0, FloaterRules.BoxRise * layer.Factor));
+                return FloaterAnchor(castId) is { } point && objectView.HasPoint(point - new Vector2(0, FloaterRules.BoxRise * layer.DrawScale));
             }) ?? damageables.FirstOrDefault();
             if (damageable?.Object is { } doomed && ObjectTargets()!.KeyOfEntity(doomed.Entity) is { } doomedKey && _spellCastMap?.IdOf(doomedKey) is { } doomedId)
             {
