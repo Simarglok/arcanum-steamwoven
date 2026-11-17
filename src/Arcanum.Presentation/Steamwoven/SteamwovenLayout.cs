@@ -44,8 +44,12 @@ public sealed record SteamwovenLayout(
     PixelRect Frame, PixelInsets Bars,
     SteamwovenBand Top, SteamwovenBand Middle, SteamwovenBand Bottom,
     PixelRect WindowZone, SteamwovenSplit Split,
-    SteamwovenBackdrop MiddleBackdrop, SteamwovenBackdrop FullScreenBackdrop)
+    SteamwovenBackdrop MiddleBackdrop, SteamwovenBackdrop FullScreenBackdrop,
+    SteamwovenControlList Controls)
 {
+    /// <summary>The control with this id (ARC-UI-2526, SWI-LAY-11).</summary>
+    public SteamwovenControl Control(SteamwovenControlId id) => Controls.First(control => control.Id == id);
+
     /// <summary>A master position along the frame's width as a device x: `round(frame left + position · f)`, per edge (SWI-LAY-7).</summary>
     public int DeviceX(int masterXFromFrameLeft) => Frame.X + (Scale * masterXFromFrameLeft).RoundHalfUp();
 }
@@ -107,8 +111,23 @@ public static class SteamwovenLayoutBuilder
         var layout = new SteamwovenLayout(
             width, height, scale, step, runtime, runtime == Ratio.One,
             frame, bars, BandOf(topRect), BandOf(middleRect), BandOf(bottomRect),
-            zone, split, middleBackdrop, fullBackdrop);
+            zone, split, middleBackdrop, fullBackdrop,
+            PlaceControls(options, scale, centreLeft, topRect, bottomRect));
         return new SteamwovenLayoutResult(layout, null);
+    }
+
+    /// <summary>The centre block's controls (<see cref="SteamwovenControls"/>) in device pixels: each edge is rounded from its own exact position, from the centre block's left edge and the band's top edge, halves up.</summary>
+    private static SteamwovenControlList PlaceControls(SteamwovenLayoutOptions options, Ratio scale, int centreLeft, PixelRect top, PixelRect bottom)
+    {
+        var placed = new List<SteamwovenControl>();
+        foreach (var spec in SteamwovenControls.For(options.TopPanelMaster, options.BottomPanelMaster))
+        {
+            var band = spec.Band == SteamwovenHudBand.Top ? top : bottom;
+            int Edge(int origin, int master) => origin + (scale * master).RoundHalfUp();
+            placed.Add(new SteamwovenControl(spec, PixelRect.FromEdges(
+                Edge(centreLeft, spec.X), Edge(band.Y, spec.Y), Edge(centreLeft, spec.X + spec.Width), Edge(band.Y, spec.Y + spec.Height))));
+        }
+        return new SteamwovenControlList(placed);
     }
 
     private static SteamwovenLayoutResult Fail(SteamwovenLayoutFailure failure) => new(null, failure);
