@@ -219,12 +219,28 @@ public partial class TerrainViewerApp
             return true;
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
-        // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
-        if (_attack is { } running && running.Entity == target.Entity && !running.Stop && running.NoWalk == shift) return true; // ARC-DEV-270: a Shift click on a plain attack's target (or the reverse) restarts it as the other goal
+        // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30 (an equal goal is ignored with the auto attack option on, queued beneath the running attack with it off).
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
         CancelAreaAttack(null);
         _attack = new(target, combat, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
         return true;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62): a left click on the target the hero already attacks. The click is an <see cref="ObjectClickRequest"/> like the first one: the start branch of 0x54ED30 ignores it with the auto attack option on (an equal
+    /// goal is queued; 18 and 19 count as equal, so a Shift click on a plain attack's target is ignored too), queues a repeated attack beneath the running one with the option off, or (the run's top goal being idle, or the run gone) restarts it,
+    /// which carries the click's Shift into the viewer's goal. The goal the viewer holds stays: its ports find it by the target.
+    /// </summary>
+    private void RepeatAttackClick(AttackGoal running, bool shift)
+    {
+        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(running), Alt: running.Object is not null || running.Wall, Shift: shift));
+        GD.Print($"ARC-COMBAT-1949 attack-repeat outcome={request.Outcome} start={request.Start} target={running.Entity}");
+        // A run the click started again carries the click's Shift and begins from nothing (as StartAttackGoal sets the goal up); a queued attack or an ignored click leaves the goal as it is.
+        if (request.Outcome == HeroRequestOutcome.Done && request.Start is Arcanum.Simulation.Goals.HeroClickStart.InterruptAndStart or Arcanum.Simulation.Goals.HeroClickStart.Start)
+        {
+            running.NoWalk = shift; running.ClearShotStop = false; running.TestedCell = null;
+        }
     }
 
     // ARC-COMBAT-008: the attackable objects of the shown map, rebuilt when the map or its portals are bound again.
@@ -273,8 +289,8 @@ public partial class TerrainViewerApp
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         var entity = target?.Entity ?? AttackGoal.WallEntity(wall!);
-        // ARC-COMBAT-1941: the same target clicked again keeps its goal, a Shift click on a plain attack's target (or the reverse) restarts it as the other goal (as for a creature, ARC-DEV-270).
-        if (_attack is { } running && running.Entity == entity && !running.Stop && running.NoWalk == shift) return true;
+        // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30, as for a creature.
+        if (_attack is { } running && running.Entity == entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
         CancelAreaAttack(null);
         _attack = target is not null ? new(target, HeldAim()) { NoWalk = shift } : new(wall!, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
@@ -604,7 +620,8 @@ public partial class TerrainViewerApp
         var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
             owner.QueryCombatRound() is not null, known is null, known is { Dead: true }, false, false, false, owner.QueryBoomerangInFlight()));
         GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");
-        if (!repeats) _attack = null;
+        // ARC-COMBAT-1949: a repeated click queued another attack beneath this one (the option off): the goal stays for the run's next frame, which swings at the same target.
+        if (!repeats && HeroRunsHost()?.AttackQueuedBeneath != true) _attack = null;
         PublishWorldSelection(); RefreshAreaStatus();
         return repeats;
     }
@@ -864,7 +881,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-COMBAT-015, ARC-COMBAT-1941: the hit on a wall, the one the line of fire struck instead of the target (<paramref name="byLine"/>) or the one the click's goal targets: the session's wall attack, which takes nothing from the wall (OD1)
-    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The wall's own hit scripts (RH5: the weapon's hit script and the wall's points 26 and 23) are not run on this path.
+    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The weapon's hit scripts and the wall's taking-damage script run as for any struck object (ARC-COMBAT-1973, RH5).
     /// </summary>
     private void StrikeWall(AttackGoal goal, AreaObjectRecord wall, int distance, bool byLine)
     {
@@ -878,6 +895,9 @@ public partial class TerrainViewerApp
             Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
             // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
+            // ARC-COMBAT-1973 (RH5): the weapon's hit scripts (7, 34) with the wall as the extra object and the wall's taking-damage script (23), as for any struck object.
+            TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(wall), SessionSpellCaster.Hero),
+            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;

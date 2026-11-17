@@ -111,4 +111,38 @@ public sealed class HeroClickRulesTests
         Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.StartOf(false, true, true, false, true));
         Assert.AreEqual(HeroClickStart.Ignored, HeroClickRules.StartOf(false, true, true, false, false));
     }
+
+    // ARC-COMBAT-1949 (VC62): the click's start branch with the main run's depth and top goal, as the exe reads it.
+    [TestMethod]
+    public void TheClickStartBranchWithTheOptionOnIgnoresAnEqualGoalAndOtherwiseInterrupts()
+    {
+        Assert.AreEqual(HeroClickStart.Ignored, HeroClickRules.ClickStartOf(true, false, true, true, false, 1, false, false), "an equal talk, use, loot or pickup click");
+        Assert.AreEqual(HeroClickStart.Ignored, HeroClickRules.ClickStartOf(true, false, true, true, true, 1, false, false));
+        Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.ClickStartOf(true, false, true, false, true, 1, false, false));
+        // The option on never queues beneath, whatever the depth.
+        Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.ClickStartOf(true, false, true, false, true, 0, false, false));
+    }
+
+    [TestMethod]
+    public void TheClickStartBranchWithTheOptionOffQueuesARepeatedAttackBeneathTheMainRun()
+    {
+        Assert.AreEqual(HeroClickStart.Start, HeroClickRules.ClickStartOf(false, false, false, false, true, 0, false, false));
+        Assert.AreEqual(HeroClickStart.QueueBeneath, HeroClickRules.ClickStartOf(false, false, true, true, true, 1, false, false));
+        Assert.AreEqual(HeroClickStart.QueueBeneath, HeroClickRules.ClickStartOf(false, false, true, true, true, 3, false, false), "the index must be under 4");
+        Assert.AreEqual(HeroClickStart.FlagsOnly, HeroClickRules.ClickStartOf(false, false, true, true, true, 4, false, false), "a deep stack adds nothing");
+        Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.ClickStartOf(false, false, true, true, true, 1, true, false), "an idle main run is interrupted");
+        // Only an attack is queued; an equal talk restarts (a repeated order), and so does a different goal.
+        Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.ClickStartOf(false, false, true, true, false, 1, false, false));
+        Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.ClickStartOf(false, false, true, false, true, 1, false, false));
+    }
+
+    [TestMethod]
+    public void TheClickStartBranchInARoundSkipsTheOptionAndTheEqualTest()
+    {
+        Assert.AreEqual(HeroClickStart.Start, HeroClickRules.ClickStartOf(true, true, false, true, true, 0, false, false));
+        Assert.AreEqual(HeroClickStart.FlagsOnly, HeroClickRules.ClickStartOf(true, true, true, true, true, 1, false, false), "a main run that is not the fidget");
+        Assert.AreEqual(HeroClickStart.FlagsOnly, HeroClickRules.ClickStartOf(false, true, true, false, false, 4, true, true), "a fidget at four goals");
+        Assert.AreEqual(HeroClickStart.InterruptAndStart, HeroClickRules.ClickStartOf(false, true, true, false, false, 0, true, true));
+        Assert.AreEqual(HeroClickStart.QueueBeneath, HeroClickRules.ClickStartOf(false, true, true, false, false, 1, false, true));
+    }
 }

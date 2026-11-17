@@ -336,8 +336,18 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
-        IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, AreaCompanionOrders.Label(item)));
+        if (PortraitOrderLabel(item) is not { } label)
+        {
+            _companionNotice = $"{AreaCompanionOrders.Label(item)}: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})";
+            RefreshReadyStatus();
+            return;
+        }
+        IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, label));
     }
+
+    /// <summary>ARC-UI-1975 (FP10): the label of a menu row's order, the message of the file the menu draws (the project's words without it); null: the row has no message, so no order.</summary>
+    private string? PortraitOrderLabel(FollowerMenuItem item) =>
+        AreaCompanionOrders.OrderLabel(item, _followerPortraits?.MenuTexts ?? AreaFollowerMenuTexts.Project("no texts read"));
 
     /// <summary>ARC-UI-1736 (FP12, 0x56AB68, the editor 0x5597C0 with mode 2): the follower's character sheet, the NPC sheet (never greyed; the editor's own refusal for a dead hero).</summary>
     private void OpenFollowerSheet(string entity)
@@ -378,14 +388,20 @@ public partial class TerrainViewerApp
         }
         if (pending.Type == CompanionOrderType.Attack)
         {
-            IssueAreaOrder("portrait", new(CompanionOrderType.Attack, CompanionOrderAddressing.Portrait, [], entity,
-                AreaCompanionOrders.Label(FollowerMenuItem.Attack)) { Target = OrderTarget(AreaObjectAtScreen(screen)) });
+            if (PortraitOrderLabel(FollowerMenuItem.Attack) is not { } attackLabel)
+            {
+                _companionNotice = $"attack: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})"; RefreshReadyStatus(); return true;
+            }
+            IssueAreaOrder("portrait", new(CompanionOrderType.Attack, CompanionOrderAddressing.Portrait, [], entity, attackLabel) { Target = OrderTarget(AreaObjectAtScreen(screen)) });
             return true;
         }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) { _companionNotice = "walk: no tile there"; RefreshReadyStatus(); return true; }
-        IssueAreaOrder("portrait", new(CompanionOrderType.WalkHere, CompanionOrderAddressing.Portrait, [], entity,
-            AreaCompanionOrders.Label(FollowerMenuItem.Walk), cell));
+        if (PortraitOrderLabel(FollowerMenuItem.Walk) is not { } walkLabel)
+        {
+            _companionNotice = $"walk: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})"; RefreshReadyStatus(); return true;
+        }
+        IssueAreaOrder("portrait", new(CompanionOrderType.WalkHere, CompanionOrderAddressing.Portrait, [], entity, walkLabel, cell));
         return true;
     }
 }
