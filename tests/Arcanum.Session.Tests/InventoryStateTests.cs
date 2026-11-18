@@ -322,7 +322,7 @@ public sealed class InventoryStateTests
             // ARC-WORLD-085: each taken item keeps its seed's weight facts.
             "\"weights\":[{\"entity\":\"apple\",\"weight\":5,\"magicWeight\":0,\"complexity\":0},{\"entity\":\"ring\",\"weight\":5,\"magicWeight\":0,\"complexity\":0}],\"identified\":[],\"lastDiscardedMade\":0," +
             // ARC-UI-019: each taken item takes the next free grid slot.
-            "\"grid\":[{\"entity\":\"ring\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"apple\",\"slot\":1,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}" +
+            "\"grid\":[{\"entity\":\"ring\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"apple\",\"slot\":1,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[],\"lastDrops\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}" +
             NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment +
             // ARC-WORLD-1284: the ring left virgil's list (0x467860), so its re-wield bit (NPC flag 0x40) is saved with it.
             ",\"danger\":{\"records\":[{\"entity\":\"virgil\",\"flags\":[\"CheckWield\"]}]}" + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + NoBarLights + NoGamblingRoll + ",\"lighting\":null}");
@@ -354,7 +354,7 @@ public sealed class InventoryStateTests
     public void DecodeAndRestoreRefusePcItemsTheTransfersCannotProduce()
     {
         const string Item = "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":1,\"name\":2804,\"description\":2}";
-        string With(string pc) => GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" + pc + "],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
+        string With(string pc) => GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" + pc + "],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[],\"lastDrops\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         void Fails(string pc, SnapshotDecodeFailure failure, string path)
         {
             var result = GameSessionSnapshotCodec.TryDecode(With(pc));
@@ -367,7 +367,7 @@ public sealed class InventoryStateTests
         Fails(Item.Replace("\"ring\"", "\"r i\""), SnapshotDecodeFailure.OutOfRange, "$.inventory.pc[0].entity");
         Fails(Item.Replace("}", ",\"slot\":0}"), SnapshotDecodeFailure.UnknownField, "$.inventory.pc[0].slot");
         Fails(Item.Replace(",\"description\":2", ""), SnapshotDecodeFailure.MissingField, "$.inventory.pc[0].description");
-        var notList = GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":{},\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}"));
+        var notList = GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":{},\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[],\"lastDrops\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}"));
         Assert.AreEqual((SnapshotDecodeFailure.WrongType, "$.inventory.pc"), (notList.Failure, notList.Path));
 
         // Gold and keys never enter the list, so a save holding one is refused on restore; ammunition (ARC-WORLD-066) needs its stack.

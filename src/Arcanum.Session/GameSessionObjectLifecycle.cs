@@ -218,6 +218,7 @@ public sealed partial class GameSessionOwner
     {
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Hero.Remove(entity);
+        _inventory.Hero.ForgetLastDrop(entity);
         _inventory.RemoveFromNpc(entity);
         // ARC-WORLD-103: a deleted item an NPC wore is worn no more.
         _inventory.Unwear(entity);

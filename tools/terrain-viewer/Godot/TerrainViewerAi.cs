@@ -1046,10 +1046,19 @@ public partial class TerrainViewerApp
         var thrown = notice.Throw!;
         GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
             + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}"
-            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : "") + (thrown.ScriptDeclined ? " script-declined" : "") + (thrown.Messages.Count > 0 ? $" lines={thrown.Messages.Count}" : ""));
+            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : "") + (thrown.ScriptDeclined ? " script-declined" : "") + (thrown.AmmunitionShort ? " out-of-ammunition" : "") + (thrown.Messages.Count > 0 ? $" lines={thrown.Messages.Count}" : ""));
         // ARC-COMBAT-1761: a line the item's removal or throw script printed goes to the message window, and the eye candy they made plays.
         PostNpcPickupLines(notice);
         QueueScriptEyeCandies(notice.EyeCandies);
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the ammunition check refused the thrown weapon: it lies on the thrower's tile switched off, nothing was struck.
+        if (thrown.AmmunitionShort)
+        {
+            _aiNotice = $"{AiName(notice.Npc)} cannot throw: no ammunition for the weapon (it lies switched off on its tile)";
+            SyncAreaCombatBodies();
+            SyncAreaInventory();
+            RefreshAreaStatus();
+            return;
+        }
         if (notice.Target is not null && notice.Result is not null)
         {
             AiHit(notice);
