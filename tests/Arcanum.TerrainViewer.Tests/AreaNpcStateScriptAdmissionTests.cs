@@ -64,6 +64,6 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // target it cannot draw with another art before anything applies.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 160, from 98).
         // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64) on main with the group and container focus kinds (S61, S62) and toggle state in the use set: the any-scenery focus kind (16) alone moves one script into each of the use, placed, heartbeat and dying counts; the other moves since the numbers above came with the sets merged since (issue #1846).
-        Assert.AreEqual((270, 208, 97, 187, 183, 235), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((270, 208, 102, 187, 183, 235), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

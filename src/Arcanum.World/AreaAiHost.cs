@@ -19,6 +19,7 @@ using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Items;
 
 namespace Arcanum.World;
 
@@ -269,6 +270,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionNpcPickPocketResult? PickPocket { get; init; }
     /// <summary>ARC-AI-1854: the session's plain roll of a skill with no handler of its own (the goal-33 attempt's remaining cases).</summary>
     public SessionNpcSkillRoll? PlainRoll { get; init; }
+    /// <summary>ARC-AI-2622: the session's answer of an NPC's repair of an item (<see cref="GameSessionOwner.RepairByNpc"/>); null when the host did not ask it (no sheet or no repairable item).</summary>
+    public SessionNpcRepairResult? Repair { get; init; }
     /// <summary>ARC-COMBAT-1776 (<see cref="AreaAiNoticeKind.Skill"/> with the pick-locks skill): the session's answer of an NPC's pick of a lock (<see cref="GameSessionOwner.PickLockByNpc"/>); null when the host did not ask it (no sheet or no lock target).</summary>
     public SessionPickLockResult? PickLock { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
@@ -3140,13 +3143,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
     /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
     /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
-    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). ARC-AI-1854: the plain-roll skills are <see cref="PlainSkillAttempt"/>. ARC-AI-2623: gambling is <see cref="GamblingAttempt"/>. Pick locks has its own attempt goal (67, <see cref="AttemptPickLocks"/>), so goal 34 never carries it. NOT READY: repair, which does nothing and
+    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). ARC-AI-1854: the plain-roll skills are <see cref="PlainSkillAttempt"/>. ARC-AI-2623: gambling is <see cref="GamblingAttempt"/>. ARC-AI-2622: repair is <see cref="RepairAttempt"/>. Pick locks has its own attempt goal (67, <see cref="AttemptPickLocks"/>), so goal 34 never carries it. NOT READY: repair, which does nothing and
     /// answers false.
     /// </summary>
     [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
+        if (skill == (int)Skill.Repair) return RepairAttempt(id, target);
         if (skill == (int)Skill.Gambling) return GamblingAttempt(id, target);
         if (skill != AiPassChoice.HealSkill)
             return PlainSkillAttempt(id, target, skill);
@@ -3204,6 +3208,34 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             : $"gambling on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} roll={roll.Check?.Check.Roll} next={roll.Check?.NextGamblingRoll}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = (int)Skill.Gambling, PlainRoll = roll });
         return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
+    }
+
+    /// <summary>
+    /// ARC-AI-2622 (0x4C7160, repair case 12): the NPC repairs the item the goal names with the session's <see cref="GameSessionOwner.RepairByNpc"/>, on the item's own fields: an item it holds or one lying loose on the shown map
+    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>). The answer is the case's success, which sets the run's flag 0x40000. The original's repair has no target test, so a critter or a scenery target would be
+    /// "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). NOT READY: an item in a junk pile, an item of another holder (the hero's, another NPC's), the swap of a ground item's drawn art
+    /// after a master's broken-art clear, and the repair UI callbacks of the local player.
+    /// </summary>
+    private bool RepairAttempt(string id, string target)
+    {
+        string? refusal = null;
+        SessionNpcRepairResult? result = null;
+        if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else if (RepairBaseline(id, target) is not { } baseline) refusal = "no item to repair";
+        else result = _session.RepairByNpc(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), target, baseline);
+        Trace(id).Skill = result is null ? $"repair {target}: {refusal}"
+            : $"repair {target} {result.Disposition} {result.Failure} success={result.Success} check={result.Check?.Success} critical={result.Check?.Critical} status={result.Repair} amount={result.Amount}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = (int)Skill.Repair, Repair = result });
+        return result is { Disposition: GameSessionDisposition.Changed, Success: true };
+    }
+
+    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds or one lying loose on the shown map; null for any other target.
+    private ItemCondition? RepairBaseline(string id, string target)
+    {
+        var fields = _scene.Combat.HeldItemFields(_session, id, target);
+        if (fields is null && GroundView()?.Ground.FirstOrDefault(ground => ground.Item.Entity == target) is { } lying && !_session.IsItemDestroyed(target))
+            fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying.Item);
+        return fields is null ? null : SessionItemConditions.FromCombatFields(fields);
     }
 
     /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>
