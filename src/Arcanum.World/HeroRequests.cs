@@ -136,10 +136,10 @@ public interface IHeroActions
     HeroImmediateResult ImmediateAction(string target) => HeroImmediateResult.None;
     /// <summary>ARC-DEV-169: starts the hero's talk goal 21 at <paramref name="target"/>, running when <paramref name="run"/> (ARC-AI-1137: with <paramref name="noWalk"/>, the click had Shift, the run flag 0x100 is set and no approach steps: GT122); false when the movement gate or a run's refusal stopped it.</summary>
     bool StartTalk(string target, bool run, bool noWalk) => false;
-    /// <summary>ARC-DEV-174: starts the hero's use goal 38 (<paramref name="container"/>: 81) at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
-    bool StartUse(string target, bool container, bool run) => false;
-    /// <summary>ARC-DEV-175: starts the hero's pickup goal 15 at <paramref name="target"/> (an item on the ground), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
-    bool StartPickup(string target, bool run) => false;
+    /// <summary>ARC-DEV-174: starts the hero's use goal 38 (<paramref name="container"/>: 81) at <paramref name="target"/>, running when <paramref name="run"/>, with the no-walk flag 0x100 when <paramref name="noWalk"/> (the click had Shift, ARC-COMBAT-1948) and always with run flag 0x4000; false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartUse(string target, bool container, bool run, bool noWalk) => false;
+    /// <summary>ARC-DEV-175: starts the hero's pickup goal 15 at <paramref name="target"/> (an item on the ground), running when <paramref name="run"/>, with the no-walk flag 0x100 when <paramref name="noWalk"/> (the click had Shift, ARC-COMBAT-1948); false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartPickup(string target, bool run, bool noWalk) => false;
     /// <summary>ARC-DEV-181: starts the hero's attack goal 18 at <paramref name="target"/> (a creature, or with Alt a door, container, scenery object or wall), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartAttack(string target, bool run) => false;
     /// <summary>ARC-DEV-270: starts the hero's attempt attack goal 19 at <paramref name="target"/> with the run flag 0x100 (the click had Shift, GS27): the hero swings from where it stands and walks no approach; false when the movement gate or a run's refusal stopped it.</summary>
@@ -290,7 +290,8 @@ public sealed class HeroRequestHost
         var facts = _hero.Facts();
         // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift sets the no-walk flag 0x100 instead (the attempt attack 19, ARC-DEV-270), and no run.
         // ARC-AI-1137 (GT122): the talk goal follows the same rule (the Shift branch replaces the running call).
-        var run = decision.Goal != HeroClickGoal.AttemptAttack && !(decision.Goal == HeroClickGoal.Talk && request.Shift);
+        // ARC-COMBAT-1948 (VC62, 0x54ED30 start tail): the use, loot and pickup goals follow it as well: Shift gives run flag 0x100 and no running; use and loot (38, 81) also carry 0x4000.
+        var run = decision.Goal != HeroClickGoal.AttemptAttack && !(request.Shift && decision.Goal is HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup);
         // GS27 outside combat mode (a talk is never taken in a round: the click there is an attack): the goal starts at once without a main run, otherwise the hero's runs are interrupted at level 3 first, and the new goal starts.
         // ARC-COMBAT-1949 (VC62): the start branch reads the auto attack option, the equal goal queued and the main run's depth and top goal.
         var attack = decision.Goal is HeroClickGoal.Attack or HeroClickGoal.AttemptAttack;
@@ -311,10 +312,10 @@ public sealed class HeroRequestHost
         var started = decision.Goal switch
         {
             HeroClickGoal.Talk => _hero.StartTalk(request.Target, run, request.Shift),
-            HeroClickGoal.Pickup => _hero.StartPickup(request.Target, run),
+            HeroClickGoal.Pickup => _hero.StartPickup(request.Target, run, request.Shift),
             HeroClickGoal.Attack => _hero.StartAttack(request.Target, run),
             HeroClickGoal.AttemptAttack => _hero.StartAttemptAttack(request.Target),
-            _ => _hero.StartUse(request.Target, decision.Goal == HeroClickGoal.UseContainer, run),
+            _ => _hero.StartUse(request.Target, decision.Goal == HeroClickGoal.UseContainer, run, request.Shift),
         };
         return new(started ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run, Click: decision.Goal, Start: start);
     }

@@ -130,7 +130,7 @@ public partial class TerrainViewerApp
     /// (goal 8), turns into the door goals 11 or 49 and 12 or 50 at its node 6, and starts the door's own run (goals 70 and 71, S7). The hero's open attempt, its 2 action points (<see cref="HeroDoorUse"/>) and the
     /// refusals are the goals' (<see cref="AreaDoorHost"/> reports them). Armed lockpicks (the skill, S12) keep the old intent: a pick in range now, or after a walk. Returns true when the click was on a portal.
     /// </summary>
-    private bool TryAreaPortalUse(Vector2 screen, bool alt = false)
+    private bool TryAreaPortalUse(Vector2 screen, bool alt = false, bool shift = false)
     {
         // Armed lockpicks go to this press: on a portal they pick its lock, elsewhere the pick is cancelled.
         // The press pops the item target mode (SA51: every outcome after the dead and unconscious test pops).
@@ -146,7 +146,7 @@ public partial class TerrainViewerApp
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it"); CancelAreaUseApproach("a use click replaced it");
         if (pick is null)
         {
-            var request = HeroRequests.Apply(new ObjectClickRequest(portal.Entity, Alt: alt && HeroInCombatMode));
+            var request = HeroRequests.Apply(new ObjectClickRequest(portal.Entity, Alt: alt && HeroInCombatMode, Shift: shift));
             _portalNotice = request.Click != HeroClickGoal.UseObject ? $"{PortalName(portal)}: the click does nothing here ({request.Click})"
                 : request.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: using, goal 38 started" : $"{PortalName(portal)}: the use was refused";
             GD.Print($"ARC-DEV-176 portal-click outcome={request.Outcome} goal={request.Click}");

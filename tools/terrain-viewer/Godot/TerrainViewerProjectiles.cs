@@ -126,12 +126,13 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-017: the throw of the wielded weapon when it "default throws" (weapon flag 0x200, ledger RH2), with its stored
     /// weight: the smoke's lent one, else the wielded kit item's; null for a weapon that stays in the hand.</summary>
-    private SessionThrow? HeroThrow(AttackGoal goal)
-    {
-        var weight = _lentThrowWeightForSelfTest ?? (WieldedKitNumber() is { } number && _areaKitThrowWeight is { } kit && number <= kit.Count ? kit[number - 1] : null);
+    private SessionThrow? HeroThrow(AttackGoal goal) =>
         // ARC-COMBAT-018: the throw's target location is the goal target's tile, from which a missed throw scatters (TW1, RH2).
-        return weight is { } w ? new(w) { Target = GoalTile(goal) } : null;
-    }
+        HeroDefaultThrowWeight() is { } w ? new(w) { Target = GoalTile(goal) } : null;
+
+    /// <summary>ARC-COMBAT-2524: the stored weight of the wielded weapon when it "default throws" (the smoke's lent one, else the wielded kit item's); null for a weapon that stays in the hand.</summary>
+    private int? HeroDefaultThrowWeight() =>
+        _lentThrowWeightForSelfTest ?? (WieldedKitNumber() is { } number && _areaKitThrowWeight is { } kit && number <= kit.Count ? kit[number - 1] : null);
 
     /// <summary>ARC-COMBAT-1930 (VCG9): the loudness of an attack event of the hero's wielded weapon (loud for weapon flag 0x1, silent for 0x2, else normal; bare hands and a non-weapon are normal). Asked before the attack,
     /// as a thrown weapon leaves the hand at it.</summary>

@@ -83,7 +83,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The click on a trigger object that guards and refusals let through: the use goal 38 starts (the hero walks within use range first, as the goal's nodes decide). Returns true: the click was a use.</summary>
-    private bool StartUseClick(AreaObjectKey key)
+    private bool StartUseClick(AreaObjectKey key, bool shift = false)
     {
         _useOpenPending = null; _useOpenInventory = false;
         if (HeroRunsHost() is null)
@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
             ApplyUse(key);
             return true;
         }
-        var request = HeroRequests.Apply(new ObjectClickRequest(UseTargetOf(key)));
+        var request = HeroRequests.Apply(new ObjectClickRequest(UseTargetOf(key), Shift: shift));
         _areaUseStatus = request.Click != HeroClickGoal.UseObject ? $"use refused: the click is {request.Click}"
             : request.Outcome == HeroRequestOutcome.Done ? "using: goal 38 started" : "the use was refused";
         GD.Print($"ARC-DEV-174 use-click outcome={request.Outcome} goal={request.Click}");

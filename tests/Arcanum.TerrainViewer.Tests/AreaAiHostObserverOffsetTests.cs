@@ -109,4 +109,49 @@ public sealed class AreaAiHostObserverOffsetTests
         host.Frame(1400);
         Assert.AreEqual(new AwarenessResult(1, AwarenessReason.Blocked), host.SeeToward(f.A, Pc));
     }
+
+    /// <summary>
+    /// ARC-COMBAT-1934 (0x4ADE00, ledger RA7, AW18, VC56): the line of fire an NPC's attack, throw or cast reads starts at the shooter's tile centre plus its pixel offset, as the sight line does.
+    /// </summary>
+    [TestMethod]
+    public void A_shooters_line_of_fire_starts_at_the_offset_of_its_map_data()
+    {
+        var hero = new CellCoord(62, 13);
+        var (f, host, map) = Setup(hero);
+        using var _ = f;
+        map.Crates.Add(new(62, 11));
+        map.Crates.Add(new(62, 12));
+        var straight = host.LineOfFire(f.A, Pc);
+        Assert.IsNotNull(straight.Blocker, "from the tile centre the crates are on the line");
+
+        var (g, shifted, gMap) = Setup(hero, StepX.X, StepX.Y);
+        using var __ = g;
+        gMap.Crates.Add(new(62, 11));
+        gMap.Crates.Add(new(62, 12));
+        Assert.AreEqual((StepX.X, StepX.Y), shifted.ShooterOffset(g.A));
+        var open = shifted.LineOfFire(g.A, Pc);
+        Assert.IsNull(open.Blocker, "a line that starts one tile to the side passes the crates");
+    }
+
+    [TestMethod]
+    public void A_shooters_offset_is_zero_for_the_hero_and_an_unknown_object()
+    {
+        var (f, host, _) = Setup(new CellCoord(62, 13), StepX.X, StepX.Y);
+        using var _ = f;
+        Assert.AreEqual((0, 0), host.ShooterOffset(Pc));
+        Assert.AreEqual((0, 0), host.ShooterOffset("npc:unknown"));
+    }
+
+    [TestMethod]
+    public void A_walking_shooter_starts_its_line_of_fire_where_its_body_is()
+    {
+        var (f, host, _) = Setup(new CellCoord(62, 13));
+        using var _ = f;
+        // The NPC steps +x at once and slides over 400 ms: at the start of the step its body is still on its old tile (the negative projection of the step), at the end the offset is the map data's own.
+        host.Frame(1000);
+        host.Movers.Step(f.A, f.RowA.Key, Observer, new CellCoord(63, 10), 1000, 400);
+        Assert.AreEqual((40, -20), host.ShooterOffset(f.A));
+        host.Frame(1400);
+        Assert.AreEqual((0, 0), host.ShooterOffset(f.A));
+    }
 }

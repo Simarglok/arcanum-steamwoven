@@ -28,8 +28,8 @@ public sealed class HeroRequestsTests
         public HeroImmediateResult ImmediateResult = HeroImmediateResult.Moved;
         public HeroImmediateResult ImmediateAction(string target) { Calls.Add("immediate " + target); return ImmediateResult; }
         public bool StartTalk(string target, bool run, bool noWalk) { Calls.Add($"talk {target} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
-        public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
-        public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
+        public bool StartUse(string target, bool container, bool run, bool noWalk) { Calls.Add($"use {target} container={container} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
+        public bool StartPickup(string target, bool run, bool noWalk) { Calls.Add($"pickup {target} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
         public bool StartAttemptAttack(string target) { Calls.Add($"attempt {target}"); return TalkStarts; }
         public bool StartLockpick(string portal, string item) { Calls.Add($"lockpick {portal} {item}"); return TalkStarts; }
@@ -241,6 +241,40 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(HeroClickGoal.Talk, result.Click);
         Assert.IsFalse(result.Run);
         CollectionAssert.AreEqual(new[] { "talk npc:1 run=False nowalk" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AShiftClickOnAContainerSceneryOrItemStartsTheGoalWithTheNoWalkFlagAndNoRunning()
+    {
+        // ARC-COMBAT-1948 (VC62, 0x54ED30 start tail): Shift sets run flag 0x100 in place of running for every goal the click builds, the use, loot and pickup goals too.
+        foreach (var (kind, expected) in new[]
+        {
+            (HeroClickTarget.Container, "use obj:1 container=True run=False nowalk"),
+            (HeroClickTarget.Scenery, "use obj:1 container=False run=False nowalk"),
+            (HeroClickTarget.Item, "pickup obj:1 run=False nowalk"),
+        })
+        {
+            var hero = new Hero { Click = new(true, false, false, false, false, kind), Input = new(AlwaysRunOption: true, NumLockRun: false) };
+            var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Shift: true));
+            Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome, kind.ToString());
+            Assert.IsFalse(result.Run, kind.ToString());
+            CollectionAssert.AreEqual(new[] { expected }, hero.Calls, kind.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void APlainClickOnAContainerOrItemStillRunsWithoutTheNoWalkFlag()
+    {
+        foreach (var (kind, expected) in new[]
+        {
+            (HeroClickTarget.Container, "use obj:1 container=True run=True"),
+            (HeroClickTarget.Item, "pickup obj:1 run=True"),
+        })
+        {
+            var hero = new Hero { Click = new(true, false, false, false, false, kind) };
+            new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1"));
+            CollectionAssert.AreEqual(new[] { expected }, hero.Calls, kind.ToString());
+        }
     }
 
     [TestMethod]
