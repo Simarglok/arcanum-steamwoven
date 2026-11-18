@@ -476,6 +476,7 @@ src/Arcanum.World/AreaAiHost.cs,CastActionFrame,pending,
 src/Arcanum.World/AreaAiHost.cs,CatchUp,pending,
 src/Arcanum.World/AreaAiHost.cs,ChooseSkillUser,exempt,host
 src/Arcanum.World/AreaAiHost.cs,DeadCritter,exempt,reference
+src/Arcanum.World/AreaAiHost.cs,DodgeRefused,exempt,host
 src/Arcanum.World/AreaAiHost.cs,DyingRunning,pending,
 src/Arcanum.World/AreaAiHost.cs,EndCast,pending,
 src/Arcanum.World/AreaAiHost.cs,FaceCast,pending,
@@ -702,6 +703,7 @@ src/Arcanum.World/AreaTraps.cs,DisarmByNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,Step,pending,
 src/Arcanum.World/AreaTraps.cs,StepEndsWalk,exempt,host
 src/Arcanum.World/AreaTraps.cs,StepNpc,exempt,host
+src/Arcanum.World/AreaTraps.cs,TargetClass,exempt,host
 src/Arcanum.World/AreaTraps.cs,Use,pending,
 src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,WalkCheck,pending,
