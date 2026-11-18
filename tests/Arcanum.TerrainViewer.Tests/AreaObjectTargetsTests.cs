@@ -144,6 +144,31 @@ public sealed class AreaObjectTargetsTests
     }
 
     [TestMethod]
+    public void TheSceneriesAScriptToggledAreListedWithTheirStateForTheirLights()
+    {
+        // ARC-SCRIPT-2585 (ledger OT10): only a scenery with a record of a toggle is listed (true off, false on over a data that stores it off); a scenery nobody toggled keeps the lights the map data loaded.
+        using var session = ConversationSessionFixture.Create();
+        var lamp = Row(0, 3);
+        var braziers = Row(1, 3, objectFlags: 0x2);
+        var statue = Row(2, 3);
+        var chest = Row(3, 2, flags: 0x11);
+        var targets = Targets(lamp, braziers, statue, chest);
+        Assert.AreEqual(0, targets.SceneryOffStates(session).Count);
+        Assert.IsNull(session.QueryObjectOffRecord(new(1), AreaUseScriptHost.EntityId(lamp)));
+        void Toggle(AreaObjectRecord row, long? value) => Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            [new(new(1), SessionItemOff.Key(AreaUseScriptHost.EntityId(row)), value)]).Disposition);
+        Toggle(lamp, 1); Toggle(braziers, 0); Toggle(chest, 1);
+        var states = targets.SceneryOffStates(session);
+        CollectionAssert.AreEquivalent(new[] { (lamp.Key, true), (braziers.Key, false) }, states.Select(p => (p.Key, p.Value)).ToArray(), "a container's record is no scenery's");
+        Assert.AreEqual(true, session.QueryObjectOffRecord(new(1), AreaUseScriptHost.EntityId(lamp)));
+        Assert.AreSame(states, targets.SceneryOffStates(session));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new(1), MapChangeKey.ForEntity("other", "use.lf"), 1)]).Disposition);
+        Assert.AreSame(states, targets.SceneryOffStates(session), "an unrelated change keeps the dictionary, so the lighting made of it stays valid");
+        Toggle(lamp, null);
+        CollectionAssert.AreEqual(new[] { (braziers.Key, false) }, targets.SceneryOffStates(session).Select(p => (p.Key, p.Value)).ToArray(), "the flag back at the data's state leaves no record");
+    }
+
+    [TestMethod]
     public void TheBustedTestReadsEachKindsOwnBit()
     {
         // ARC-AI-1636 (0x43F630): a portal or container reads the lock domain's busted bit 0x80, a scenery or trap its busted condition (the stored flag 0x2 or a recorded break); a destroyed object is not busted.
