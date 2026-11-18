@@ -44,11 +44,12 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!ValidItemDamage(item, facts)) return RejectItemDamage(GameSessionFailure.InvalidItem);
         if (_durability.Destroyed.Contains(item.Entity) || onGround && !OnGround(item.Entity)) return RejectItemDamage(GameSessionFailure.ObjectUnavailable);
-        var result = DamageItem(expected, item.Entity, item.Baseline, Math.Clamp(amount, 0, ItemDurabilityLimits.MaxDamageStep));
+        var result = DamageItem(expected, item.Entity, item.Baseline, Math.Clamp(amount, 0, ItemDurabilityLimits.MaxDamageStep), destroyPoint: true);
         if (result.Disposition == GameSessionDisposition.Rejected) return RejectItemDamage(result.Failure);
         if (result.Disposition == GameSessionDisposition.NoChange) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, result, SessionObjectHostSteps.None, Version);
         var host = SessionObjectHostSteps.None;
         if (result.Break != ItemBreakStep.None && facts.Trapped) host |= SessionObjectHostSteps.TrapFires;
+        if (result.DestroyKept) host |= SessionObjectHostSteps.DestroyKept;
         host |= result.Break switch
         {
             ItemBreakStep.Broken => SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound,
