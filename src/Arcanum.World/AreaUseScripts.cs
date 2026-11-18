@@ -925,7 +925,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map), else of an item the hero wears (a made or kit item has no row, ARC-SCRIPT-1562); null for any other (not modelled).
     private int? ComplexityOf(ScrObjectRef item) => Row(item) is { } row
         ? Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Item is { } fields ? fields.MagickTechComplexity : null
-        : _session.QueryWornComplexity(item.Code);
+        : _session.QueryWornComplexity(item.Code) ?? PrototypeItemComplexity(item);
+
+    /// <summary>ARC-SCRIPT-1594 (VT8): the magick-tech complexity of a made or kit item's prototype (the original makes every object as a copy of its prototype, which holds the value until something writes it), as the viewer reads it
+    /// (<see cref="AreaInventoryHost.PrototypeComplexity"/>); null without the source or for an item that stands on no prototype of the session.</summary>
+    public Func<int, int?>? PrototypeComplexity { get; set; }
+
+    private int? PrototypeItemComplexity(ScrObjectRef item) =>
+        IsPrototypeItem(item) && _session.QueryPrototypeItemKind(item.Code) is { } kind ? PrototypeComplexity?.Invoke(kind.Prototype) : null;
+
+    // ARC-SCRIPT-1594 (VT8): an item of the shown map's session that owns no object row: one the session made (a made item) or the starting kit holds, wherever it lies or is carried; its slots and prototype come from the session.
+    private bool IsPrototypeItem(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is null && _session.QueryPrototypeItemKind(obj.Code) is not null;
 
     /// <summary>The identified test is not answered by the use host (its set holds no condition that asks it).</summary>
     public bool? IsIdentified(ScrObjectRef obj) => null;
@@ -1088,6 +1098,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-WORLD-110 its script is 0 once the trap state removed the trap it names (docs/world/trap-state-runtime.md).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
+        // ARC-SCRIPT-1594 (VT8): a made or kit item reads the slot the session kept for it, else its prototype's element.
+        if (IsPrototypeItem(attachee)) return _session.QueryItemScriptSlot(attachee.Code, point) is { } own ? new(own.Script, own.LocalFlags, own.Counters) : null;
         if (Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, point) is not { } loaded) return null;
         if (!KeptAsMapChanges(point)) return loaded;
         long? Read(string property) => _session.QueryObjectChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
@@ -1956,14 +1968,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        // ARC-SCRIPT-1594 (VT8): a made item or one of the starting kit owns no object row and no origin map; it is named by the shown map.
         var item = new ScrObjectRef(originMap, entity);
+        if (Row(item) is null && IsPrototypeItem(new ScrObjectRef(_shownMap, entity))) item = new ScrObjectRef(_shownMap, entity);
         // ARC-SCRIPT-1590 (IU2): an NPC of the shown map that eats or drinks is the user, the triggerer of the script, and its own list loses the item the script destroys.
         if (user is { } npc && !IsPc(npc) && (npc.Map != _shownMap || Row(npc) is not { Type: NpcType })) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the user is not an NPC of the shown map");
         _itemUse = item;
         _itemUser = user is { } holder && !IsPc(holder) ? holder : null;
         try
         {
-            if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+            if (Row(item) is null && !IsPrototypeItem(item)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
             return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
         }
@@ -3144,7 +3158,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-2198: whether <see cref="WriteObjectSlot(ScrWriteback)"/> can store the slot (an object of the shown map with the loaded element at a point kept as map changes), a pure lookup.</summary>
     internal bool CanWriteObjectSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Attachee: { } attachee } && KeptAsMapChanges(writeback.Point)
-        && Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, writeback.Point) is not null;
+        && (IsPrototypeItem(attachee) || Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, writeback.Point) is not null);
 
     /// <summary>ARC-SCRIPT-2198: stores the slot of another object a talk run wrote (change script, a call-ex callee's result) as map changes, as a use run does.</summary>
     internal bool WriteObjectSlot(ScrWriteback writeback) => CanWriteObjectSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
@@ -3157,7 +3171,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     internal bool WriteUseSlot(ScrWriteback writeback) => CanWriteUseSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
 
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee) =>
-        writeback.Attachee == attachee && ObjectSlotEdits(writeback) is { } edits && _session.ApplyChanges(_session.Version, null, edits).Disposition != GameSessionDisposition.Rejected;
+        writeback.Attachee == attachee && IsPrototypeItem(attachee) ? WritePrototypeItemSlot(writeback, attachee)
+        : writeback.Attachee == attachee && ObjectSlotEdits(writeback) is { } edits && _session.ApplyChanges(_session.Version, null, edits).Disposition != GameSessionDisposition.Rejected;
+
+    // ARC-SCRIPT-1594 (VT8): the slot a run left on a made or kit item is the session's (the item owns no row, so no map change keeps it); an item the run destroyed keeps none.
+    private bool WritePrototypeItemSlot(ScrWriteback writeback, ScrObjectRef item) =>
+        !KeptAsMapChanges(writeback.Point) ? false
+        : _session.IsItemDestroyed(item.Code) ? true
+        : _session.StoreItemScriptSlot(_session.Version, new(item.Code, writeback.Point, writeback.Slot.Script, writeback.Slot.LocalFlags, writeback.Slot.Counters)).Disposition != GameSessionDisposition.Rejected;
 
     // The map changes that keep a slot write of an object: the loaded element's three parts, each cleared where it is back at its loaded value (ARC-DEV-096: where the object's record sits, which may be another map than the attachee's). Null for a write the
     // host does not keep (no row, a point outside the kept ones, no loaded element).
