@@ -104,6 +104,20 @@ public sealed class SteamwovenBackdropsTests
     }
 
     [TestMethod]
+    public void Every_piece_has_a_window_art_for_its_tone_and_the_bars_read_it()
+    {
+        foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
+            for (var piece = 0; piece < (SteamwovenBackdrops.LeftUnits(family) is null ? 1 : 2); piece++)
+                CollectionAssert.Contains(SteamwovenBackdrops.ToneArts.ToArray(), SteamwovenBackdrops.ToneArt(family, piece), $"{family} piece {piece}");
+        // The census arts: the paper doll and inventory, the sheet, the logbook's side and book, the reading side bar, the map frame, the schematic base.
+        Assert.AreEqual(223, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Inventory, 0));
+        Assert.AreEqual(221, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Inventory, 1));
+        Assert.AreEqual(264, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Logbook, 0));
+        Assert.AreEqual(260, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Logbook, 1));
+        foreach (var number in SteamwovenBackdrops.ToneArts) CollectionAssert.Contains(AreaGameBarContent.ArtNumbers.ToArray(), number);
+    }
+
+    [TestMethod]
     public void The_grain_of_each_piece_starts_at_the_art_it_continues()
     {
         var plan = SteamwovenHud.Plan(1920, 1080)!;

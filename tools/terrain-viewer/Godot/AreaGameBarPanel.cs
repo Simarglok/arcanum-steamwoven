@@ -510,9 +510,11 @@ public partial class AreaGameBarPanel : CanvasLayer
         UpdateSteamwovenParts(plan);
     }
 
-    private (ChromeRecipe? Recipe, byte[]? Legacy, int Width, int Height) ToneOf(AreaBarStrip strip)
+    private (ChromeRecipe? Recipe, byte[]? Legacy, int Width, int Height) ToneOf(AreaBarStrip strip) => ToneOfArt(AreaGameBarLayout.StripArt(strip));
+
+    private (ChromeRecipe? Recipe, byte[]? Legacy, int Width, int Height) ToneOfArt(int art)
     {
-        var frame = (ArtFrame(AreaGameBarLayout.StripArt(strip)) as HdInterfaceTexture)?.FrameForBoard;
+        var frame = (ArtFrame(art) as HdInterfaceTexture)?.FrameForBoard;
         var recipe = frame?.Hd is { } query ? InterfaceChromeRecipes.For(query) : null;
         return (recipe, frame?.Rgba, frame?.Width ?? 0, frame?.Height ?? 0);
     }
@@ -547,7 +549,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         {
             if (i >= pieces.Count) { _backdrops[i].Visible = false; continue; }
             var piece = pieces[i];
-            _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, bottomRecipe, bottomLegacy, bottomW, bottomH));
+            // ARC-UI-2643: the wood takes the tone of the window art it continues (the bottom strip's where that art is not read).
+            var tone = ToneOfArt(SteamwovenBackdrops.ToneArt(_backdropFamily!.Value, i));
+            if (tone.Legacy is null || tone.Recipe is null) tone = (bottomRecipe, bottomLegacy, bottomW, bottomH);
+            _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, tone.Recipe, tone.Legacy, tone.Width, tone.Height));
             _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
         }
         _backdropLayer.Visible = pieces.Count > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible);
