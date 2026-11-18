@@ -794,19 +794,23 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         done += 1
         # ARC-DEV-2412: a step that died in the finalizer thread of Godot's .NET runtime (an engine crash under load, none of
         # its stages failed) runs once more; the summary names it, and a second crash is a failure like any other.
-        if 0 != code < STOPPED and log is not None and run_log_crash(log):
+        crashed_twice = False
+        if 0 != code < STOPPED and code != run_queue.TIMEOUT_EXIT and log is not None and run_log_crash(log):
             say(f"  {step.name}: Godot crashed in a type's Finalize on the .NET finalizer thread (ARC-DEV-2412, exit={code}); running the step once more")
-            results.pop()
+            results.pop()  # the first run's result is replaced by the second's (its record stays in the history and the times)
+            if step.name in only_known:
+                only_known.remove(step.name)
             first = code
             code, log = run_step(step)
             engine_retried.append((step.name, first, code))
+            crashed_twice = code != 0 and log is not None and run_log_crash(log)  # a second crash is the step's result: no per-stage retry hides it as order dependence
         if code >= STOPPED or (code != 0 and step.gate):
             break
         # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
         # passes alone may fail only after the others (state it leaves behind). The unfinished stages run one to a process.
         if code == start_check.FAILED_START_EXIT and step.again is not None:
             say("  not retried one to a process: the viewer did not start, which says nothing about its stages")
-        elif code != 0 and step.again is not None:
+        elif code != 0 and step.again is not None and not crashed_twice:
             unfinished = stages_not_run(log, step.requires)[0]
             if unfinished:
                 say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")

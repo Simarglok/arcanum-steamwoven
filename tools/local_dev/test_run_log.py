@@ -117,6 +117,9 @@ class SummaryTests(unittest.TestCase):
         # a crash without a Godot Finalize, and a Finalize without a crash, are not this crash
         self.assertFalse(run_log.engine_finalizer_crash("handle_crash: Program crashed with signal 11\n   at MyApp.Foo()\n".splitlines()))
         self.assertFalse(run_log.engine_finalizer_crash("   at Godot.StringName.Finalize()\nARC-UI-006 smoke PASS ok\n".splitlines()))
+        # a failure the log printed before the crash is a real failure that crashed too
+        for failure in ("ARC-RENDER-007 frontier=InvalidOperationException", "ARC-X native-smoke failure mode=area stage=Upload", "ARC-X smoke FAIL cast"):
+            self.assertFalse(run_log.engine_finalizer_crash([failure] + text.splitlines()), failure)
 
     def test_a_signal_note_claims_no_more_than_the_log_shows(self) -> None:
         self.assertEqual(self.summary("start\nstage 1\n", -11)[1],

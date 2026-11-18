@@ -82,10 +82,18 @@ CRASH_EVIDENCE = re.compile(r"handle_crash: Program crashed with signal|Fatal er
 GODOT_FINALIZE = re.compile(r"\bGodot\.\w+\.Finalize\(\)")
 
 
+STAGE_FAILURE = re.compile(r"\bFAIL\b|\bfailure (?:mode|stage)=|[A-Z]_FAILED\b|\bfrontier=")
+
+
 def engine_finalizer_crash(lines: Sequence[str]) -> bool:
     """True when the log shows a crash (the engine's crash handler or a fatal AccessViolationException) and a Godot type's
-    Finalize in the backtrace: the finalizer-thread crash of ARC-DEV-2412, not a failed check."""
-    return any(CRASH_EVIDENCE.search(line) for line in lines) and any(GODOT_FINALIZE.search(line) for line in lines)
+    Finalize in the backtrace: the finalizer-thread crash of ARC-DEV-2412. A log that printed a failure of its own before
+    the crash (a `FAIL` line, `failure mode=`, `..._FAILED`, `frontier=`) is a real failure that happened to crash too, so
+    it is not this crash."""
+    crash = next((index for index, line in enumerate(lines) if CRASH_EVIDENCE.search(line)), None)
+    if crash is None or not any(GODOT_FINALIZE.search(line) for line in lines):
+        return False
+    return not any(STAGE_FAILURE.search(line) for line in lines[:crash])
 
 
 def signal_note(lines: Sequence[str], exit_code: int) -> str | None:
@@ -106,7 +114,7 @@ def signal_note(lines: Sequence[str], exit_code: int) -> str | None:
         return f"note: ended by {name}, not a crash signal"
     if engine_finalizer_crash(lines):
         return (f"note: killed by {name} in a Godot type's Finalize on the .NET finalizer thread (ARC-DEV-2412, an engine crash "
-                "seen under load): not a failed check; the smoke runner runs such a step once more")
+                "seen under load); `./arcanum smoke` runs such a step once more")
     passes = [index for index, line in enumerate(lines) if PASS_LINE.search(line)]
     if not passes:
         return f"note: killed by {name} and the log has no PASS line: a crash, not a shutdown crash"

@@ -566,6 +566,37 @@ class ExecuteTests(unittest.TestCase):
         self.assertEqual(smoke.execute([again], always, lines.append, []), 1)
         self.assertEqual(len(runs), 2)
         self.assertIn("  engine crash: stages-crash-site-cave died in Godot's finalizer thread (exit=-6, ARC-DEV-2412) and ran once more: FAIL exit=-6", lines)
+        # a first-run failure that crashed too, a hang and a crash that the per-stage retry could hide are not retried or not hidden
+        runs.clear()
+
+        def failing(kind, command, *, label, timeout, quiet, start, log_sink, **rest) -> int:
+            path = Path(self.temp.name) / f"failing{len(runs)}.log"
+            path.write_text("ARC-RENDER-007 frontier=InvalidOperationException\n" + crash, encoding="utf-8")
+            log_sink(path)
+            runs.append(0)
+            return -6
+
+        self.assertEqual(smoke.execute([again], failing, lambda line: None, []), 1)
+        self.assertEqual(len(runs), 1)  # a real failure first: no free rerun
+        runs.clear()
+
+        def hung(kind, command, *, label, timeout, quiet, start, log_sink, **rest) -> int:
+            path = Path(self.temp.name) / f"hung{len(runs)}.log"
+            path.write_text(crash, encoding="utf-8")
+            log_sink(path)
+            runs.append(0)
+            return run_queue.TIMEOUT_EXIT
+
+        self.assertEqual(smoke.execute([again], hung, lambda line: None, []), 1)
+        self.assertEqual(len(runs), 1)  # a hang is not rerun for a second full timeout
+        # two crashes in a step with per-stage retries stay a failure: no stage of it runs alone, none can make it order dependence
+        runs.clear()
+        retry = lambda stage: smoke.Step(f"stages-retry-{stage}", "window", ("g",), requires=(stage,))
+        group = smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai"), again=retry)
+        lines = []
+        self.assertEqual(smoke.execute([group], always, lines.append, []), 1)
+        self.assertEqual(len(runs), 2)
+        self.assertFalse(any("order-dependent" in line for line in lines))
         # a crash without the Godot finalizer is retried by nobody
         runs.clear()
 
