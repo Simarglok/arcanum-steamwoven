@@ -140,7 +140,12 @@ public partial class TerrainViewerApp
             Require(!MainMenuOpen && ReferenceEquals(running, _areaSession), "Escape continued play");
             InventoryKey(Key.Escape);
             var loads = _sceneLoadsForSelfTest;
-            Letter('q'); InventoryKey(Key.Enter);
+            Letter('q');
+            // ARC-INPUT-2648 (yes/no box 0x51EBF0 answers on the release): a lone release and the press do nothing, the release of the press says yes.
+            InputWorld(new InputEventKey { Keycode = Key.Enter, PhysicalKeycode = Key.Enter, Pressed = false });
+            InputWorld(new InputEventKey { Keycode = Key.Enter, PhysicalKeycode = Key.Enter, Pressed = true });
+            Require(_sceneLoadsForSelfTest == loads && MainMenuOpen && _mainMenu!.QuitPending, "the Return press and a lone release left the quit box open");
+            InputWorld(new InputEventKey { Keycode = Key.Enter, PhysicalKeycode = Key.Enter, Pressed = false });
             Require(_sceneLoadsForSelfTest == loads + 1 && !ReferenceEquals(running, _areaSession) && _areaSession!.QueryHero() is null
                 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main && _mainMenu.Reopened && library.List().Entries.Count == 1,
                 "Quit loaded the start scene with a fresh session and reopened the main menu, the save kept");
