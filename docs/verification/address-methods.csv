@@ -173,6 +173,7 @@ src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
 src/Arcanum.Session/GameSessionNpcPickup.cs,PickUpItemByNpc,exempt,host
+src/Arcanum.Session/GameSessionNpcRepair.cs,RepairByNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcSkillRoll.cs,IsPlainNpcSkill,exempt,reference
 src/Arcanum.Session/GameSessionNpcSkillRoll.cs,RollNpcSkill,exempt,host
 src/Arcanum.Session/GameSessionNpcThrowScripts.cs,RunNpcThrowScripts,exempt,host
@@ -531,6 +532,7 @@ src/Arcanum.World/AreaAiHost.cs,PickPocketAttempt,pending,
 src/Arcanum.World/AreaAiHost.cs,PlainSkillAttempt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ReWield,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ReleaseCast,pending,
+src/Arcanum.World/AreaAiHost.cs,RepairAttempt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,RunRoutine,pending,
 src/Arcanum.World/AreaAiHost.cs,RunUseScript,pending,
 src/Arcanum.World/AreaAiHost.cs,RunsOf,pending,
