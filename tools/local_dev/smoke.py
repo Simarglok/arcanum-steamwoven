@@ -375,7 +375,7 @@ SOAK_TAIL_MINUTES = 15.0  # the loads, the last cycle and the exit on top of the
 
 def soak_timeout(stages: Sequence[str], extra: Sequence[tuple[str, str]]) -> float | None:
     """ARC-DEV-1398: the `soak` stage runs ARC_SOAK_STAGE_MINUTES (6 by default, `--env` changes it), so its viewer run may last
-    longer than the queue's window default; every other stage list keeps the default (None). An unreadable value leaves the
+    longer than the queue's window default (30 minutes) once `--env` raises the length; every other stage list keeps the default (None). An unreadable value leaves the
     default: the viewer refuses it by itself."""
     if "soak" not in stages:
         return None
@@ -387,6 +387,12 @@ def soak_timeout(stages: Sequence[str], extra: Sequence[tuple[str, str]]) -> flo
     return minutes + SOAK_TAIL_MINUTES
 
 
+def soak_estimate(stages: Sequence[str], extra: Sequence[tuple[str, str]], base: float) -> float:
+    """ARC-DEV-1398: the declared seconds of a run with `soak` follow its minutes (`--env ARC_SOAK_STAGE_MINUTES`); other runs keep `base`."""
+    timeout = soak_timeout(stages, extra)
+    return base if timeout is None else max(base, (timeout - SOAK_TAIL_MINUTES) * 60.0 + RUN_SECONDS)
+
+
 def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, str], godot: str, map_name: str, *,
              hero: str | None, sector: str | None, stages: Sequence[str] = (), main_menu: bool = False,
              extra: Sequence[tuple[str, str]] = ()) -> Step:
@@ -395,7 +401,7 @@ def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, st
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
                 start_line(map_name, main_menu), settings=name, timeout=soak_timeout(stages, extra) if stages else BATTERY_MINUTES,
                 requires=tuple(stages) or BATTERY_STAGES,
-                estimate=estimate(stages, full=any(name == ALL_ENV for name, _ in extra)))
+                estimate=soak_estimate(stages, extra, estimate(stages, full=any(name == ALL_ENV for name, _ in extra))))
 
 
 @dataclass(frozen=True)

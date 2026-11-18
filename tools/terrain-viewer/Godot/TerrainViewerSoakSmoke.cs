@@ -5,7 +5,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-1398 native observation (stage "soak", only when named, map mode with --hero, a sector with a map exit: the Crash Site window has none,
-// use --sector 1409,1314; the zone `soak`, not part of the per-PR scope or of the daily complete run): a long, scripted, play-like loop that
+// the stage pins that sector by itself: `./arcanum smoke pr --stages soak`; the zone `soak`, not part of the per-PR scope or of the daily complete run): a long, scripted, play-like loop that
 // watches the resource counters for a leak. One cycle opens and closes each window key (I C L T W M and S, the sleep window, which may refuse
 // where resting is not allowed), takes a quick save (F7) and loads it back (F8), then leaves the map by an exit and
 // returns by the exit back (two whole map loads). The cycles repeat for ARC_SOAK_STAGE_MINUTES (6 by default); a full collection runs and the

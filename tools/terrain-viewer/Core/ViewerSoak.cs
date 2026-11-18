@@ -33,17 +33,19 @@ public sealed record ViewerSoakSettings(string LogPath, int IntervalSeconds, int
     /// <summary>ARC-DEV-1398: the length of the <c>soak</c> smoke stage in minutes (<c>ARC_SOAK_STAGE_MINUTES</c>).</summary>
     public const string StageMinutesVariable = "ARC_SOAK_STAGE_MINUTES";
     public const int DefaultStageMinutes = 6;
+    /// <summary>The shortest stage: the 120 s warm-up plus two minutes of readings, so the verdict has at least two readings after the warm-up.</summary>
+    public const int MinStageMinutes = 4;
     public const int MaxStageMinutes = 120;
 
-    /// <summary>ARC-DEV-1398: the soak stage's length: the variable (1 to <see cref="MaxStageMinutes"/>) or <see cref="DefaultStageMinutes"/>;
+    /// <summary>ARC-DEV-1398: the soak stage's length: the variable (<see cref="MinStageMinutes"/> to <see cref="MaxStageMinutes"/>) or <see cref="DefaultStageMinutes"/>;
     /// null with <paramref name="problem"/> set for a value that cannot be used. The default leaves four minutes after the 120 s warm-up.</summary>
     public static int? StageMinutes(Func<string, string?> get, out string? problem)
     {
         ArgumentNullException.ThrowIfNull(get);
         problem = null;
         if (get(StageMinutesVariable) is not { Length: > 0 } text) return DefaultStageMinutes;
-        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) && minutes is >= 1 and <= MaxStageMinutes) return minutes;
-        problem = $"{StageMinutesVariable} must be 1 to {MaxStageMinutes} minutes, not '{text}'";
+        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) && minutes is >= MinStageMinutes and <= MaxStageMinutes) return minutes;
+        problem = $"{StageMinutesVariable} must be {MinStageMinutes} to {MaxStageMinutes} minutes, not '{text}'";
         return null;
     }
 

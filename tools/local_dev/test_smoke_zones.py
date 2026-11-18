@@ -232,6 +232,7 @@ class ZonePlanTests(unittest.TestCase):
         long = self.plan("pr", "--stages", "soak", "--env", "ARC_SOAK_STAGE_MINUTES=45", "--no-build")[0]
         self.assertEqual(long.timeout, 45 + smoke.SOAK_TAIL_MINUTES)
         self.assertIn("ARC_SOAK_STAGE_MINUTES=45", long.command)
+        self.assertGreaterEqual(long.estimate, 45 * 60)  # the declared seconds follow the minutes too
         self.assertIsNone(self.plan("pr", "--stages", "cast", "--no-build")[0].timeout)
         self.assertIsNone(smoke.soak_timeout(["soak"], (("ARC_SOAK_STAGE_MINUTES", "many"),)))  # the viewer refuses it itself
         for touched in ("tools/terrain-viewer/Godot/TerrainViewerSoakSmoke.cs", "tools/terrain-viewer/Core/ViewerSoak.cs"):

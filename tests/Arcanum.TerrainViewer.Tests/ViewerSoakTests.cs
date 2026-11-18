@@ -151,7 +151,8 @@ public sealed class ViewerSoakTests
         Assert.AreEqual(6, ViewerSoakSettings.StageMinutes(Env(), out var problem));
         Assert.IsNull(problem);
         Assert.AreEqual(30, ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", "30")), out problem));
-        foreach (var bad in new[] { "0", "121", "-1", "2.5", "abc" })
+        Assert.AreEqual(4, ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", "4")), out problem));
+        foreach (var bad in new[] { "0", "1", "3", "121", "-1", "2.5", "abc" })
         {
             Assert.IsNull(ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", bad)), out problem), bad);
             StringAssert.Contains(problem, "ARC_SOAK_STAGE_MINUTES");
