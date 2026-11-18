@@ -84,7 +84,7 @@ Owner decision 2026-10-20: every difference is documented. This slice adds no ru
 | The mastery test and set take any college index (SB7). | A college outside 0..15 is refused (`Invalid`). | both |
 | Each function reads only the one college it needs; a rank above 5 or a mastery outside −1..15 elsewhere in the field is not noticed. | The rules take a whole book and refuse one outside its ranges (`Invalid`); the session and the critter-field reader never hold such a book. | both |
 | The editor reports a failed learn by testing the level, then intelligence, then names willpower for anything else, so a rank-order failure is reported as a level, intelligence or willpower failure (SB8). | The typed status names the failing check in the learn's order; the messages are the sheet's (MT19). | — |
-| The level check reads the effective level (stat 17 through the effect system). | The sheet's stored level; no effect changes the level in the modelled effects. | both |
+| The level check reads the effective level (stat 17 through the effect system). | The sheet's stored level; the script getter and the AI host's hero facts read the effect list's changes of stat 17 (ARC-AI-2750), the spell-book check still the stored level. | both |
 | A network client sends learns, unlearns and rank writes to the host. | Single player only. | — |
 | The learn refreshes the player's interface; the unlearn clears the spell from the spell bar (0x57F340). | The host's. | — |
 | The forced learn is called by the prototype loader and the cheat key. | The rule takes the flag; no session path calls it yet (a critter's book comes from its fields). | — |
