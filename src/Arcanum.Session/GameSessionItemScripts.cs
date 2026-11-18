@@ -1096,6 +1096,7 @@ public sealed partial class GameSessionOwner
         public bool IsTrapObject(ScrObjectRef attachee) => host.IsTrapObject(attachee);
         public ScrObjectRef? Player() => host.Player();
         public ScrObjectRef? Leader(ScrObjectRef critter) => host.Leader(critter);
+        public bool SameObject(ScrObjectRef a, ScrObjectRef b) => host.SameObject(a, b);
         public bool IsJilted(ScrObjectRef critter) => host.IsJilted(critter);
         public bool IsPc(ScrObjectRef critter) => host.IsPc(critter);
 

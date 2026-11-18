@@ -48,6 +48,8 @@ internal sealed class ScrInterpreter
         public readonly HashSet<(ScrObjectRef Object, int Stat)> AdjustedStats = new();
         // ARC-SCRIPT-1163 (NS1): the objects the dispatch's critter disbands let go, which its later following tests read (the original removes the leader at once).
         public readonly HashSet<ScrObjectRef> Disbanded = new();
+        // ARC-SCRIPT-1899 (0x45DE90, 0x45DFC0): the dispatch's own make follows and disbands in order (a disband is a null leader), which its later following tests read: the original joins and leaves inline, the host applies after the run.
+        public readonly List<(ScrObjectRef Follower, ScrObjectRef? Leader)> InlineLeaders = new();
         // ARC-SCRIPT-1772 (CQ4, CQ5): the objects the dispatch's toggle invulnerability left flipped (odd count), which its later invulnerable tests read; the objects whose faction a set faction wrote, which a later get faction cannot read (the host applies after the run), so it
         // ends the dispatch as not modelled; and the name numbers its renames wrote, which a later is-named test of the same object reads (the original writes the field at once). A rename the host cannot apply refuses the whole run, so the read is only ever of an NPC.
         public readonly HashSet<ScrObjectRef> InvulnerabilityToggled = new(), FactionSet = new();
@@ -227,7 +229,7 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.LessOrEqual => Get(c, 0) <= Get(c, 1),
         ScrCatalogue.Condition.GlobalFlag => Flag(GlobalFlag(Get(c, 0), line)),
         // Following: the first object's leader is the second object (both single objects in the set).
-        ScrCatalogue.Condition.FollowingPc => (_shared.Disbanded.Contains(Object(c, 0, line)) ? null : _host.Leader(Object(c, 0, line))) == Object(c, 1, line),
+        ScrCatalogue.Condition.FollowingPc => LeaderOf(Object(c, 0, line)) is { } leader && _host.SameObject(leader, Object(c, 1, line)),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
         // GF9, FK5 (SG1–SG6): a guard condition on a group or follower focus kind tests each object of the list by the list rule (kind 13 every one, kind 14 one is enough).
         ScrCatalogue.Condition.PcQuestState or ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
@@ -756,7 +758,7 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.MakeFollow:
             {
                 // TI6: the first object of operand 0 follows the first object of operand 1, the follow check skipped (force 1); nothing without both (a project choice: the original reads null handles). The run goes on.
-                if (OptionalObject(a, 0) is { } follower && OptionalObject(a, 1) is { } leader) _shared.ObjectStates.Add(new(ScrObjectStateChange.MakeFollow, follower, Other: leader));
+                if (OptionalObject(a, 0) is { } follower && OptionalObject(a, 1) is { } leader) { _shared.ObjectStates.Add(new(ScrObjectStateChange.MakeFollow, follower, Other: leader)); _shared.InlineLeaders.Add((follower, leader)); }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.Attack:
@@ -769,7 +771,7 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.CritterDisband:
             {
                 // NS1: the first object of operand 0 goes to the disband (0x45DFC0, force 1); the run goes on. An absent object changes nothing (a project choice: the original reads the null handle's fields).
-                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.Disband, obj)); _shared.Disbanded.Add(obj); }
+                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.Disband, obj)); _shared.Disbanded.Add(obj); _shared.InlineLeaders.Add((obj, null)); }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.SetReaction:
@@ -1460,6 +1462,14 @@ internal sealed class ScrInterpreter
     {
         if (_roles.Triggerer is not { } leader) return [];
         return [.. DirectFollowers(leader), leader];
+    }
+
+    // ARC-SCRIPT-1899: the critter's leader as the run has left it: the last make follow or disband of the dispatch on the same object (told by the host's identity test), else the host's own answer.
+    private ScrObjectRef? LeaderOf(ScrObjectRef critter)
+    {
+        for (var i = _shared.InlineLeaders.Count - 1; i >= 0; i--)
+            if (_host.SameObject(_shared.InlineLeaders[i].Follower, critter)) return _shared.InlineLeaders[i].Leader;
+        return _host.Leader(critter);
     }
 
     // The leader's direct followers from the host (GF2, FK2): the first ScrWorld.VicinityListCap under the Original profile; a follower the run itself disbanded (held until applied) is already off the array in the original.

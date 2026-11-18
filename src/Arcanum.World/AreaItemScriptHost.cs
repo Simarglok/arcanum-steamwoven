@@ -154,6 +154,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         AreaScriptHost.PcCode => Player(),
         var leader => new ScrObjectRef(critter.Map, leader),
     };
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     public SessionPrintedLine PrintedLine(int script, int line) => ReadLine(script, line, npcTriggerer: false);

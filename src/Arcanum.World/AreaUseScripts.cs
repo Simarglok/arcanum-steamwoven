@@ -1256,6 +1256,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The hero's side: the PC's follower or waiting NPC (the host's own reads that mean the hero's party, not the script leader query).
     private bool FollowsPc(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc;
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     // SG1: the PC's own entry (botched reads as 6); any other object the quest's global state. A number outside the quest
