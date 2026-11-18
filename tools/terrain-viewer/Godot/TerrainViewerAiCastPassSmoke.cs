@@ -140,27 +140,43 @@ public partial class TerrainViewerApp
                 Field(SessionObjectFlagField.Npc, now.NpcSet, now.NpcCleared, was.NpcSet, was.NpcCleared);
             }
             foreach (var id in ally is { } first ? new[] { entity, SessionSpellCaster.Hero, first.Entity } : new[] { entity, SessionSpellCaster.Hero }) RestoreFlags(id);
+            // Leaving combat sets the NPC's DEMAINTAIN_SPELLS bit (0x4A8570 step 15 clears it at its next AI pass and ends the spells it maintains, the original's rule, ledger UE5), and the pass of a cast's busy NPC runs only after
+            // the casting goal: a stale bit left by the reset would end the next cast's maintained run (ARC-MAGIC-2654). A flee exit sets no bit and clears FIGHTING, so the calm goes through it and the next exit is of an NPC that is not fighting.
+            void CalmWithoutDemaintain(IEnumerable<string> ids)
+            {
+                foreach (var id in ids)
+                    if (session.QueryDanger(id).State != DangerState.None)
+                    {
+                        session.SetDangerState(session.Version, new SessionDangerRequest { Entity = id, State = DangerState.Flee });
+                        session.SetDangerState(session.Version, new SessionDangerRequest { Entity = id, State = DangerState.None });
+                        Require(!session.QueryDanger(id).Flags.HasFlag(DangerFlags.Fighting) && !session.QueryDanger(id).Flags.HasFlag(DangerFlags.DemaintainSpells), $"the calm of {id} left FIGHTING or DEMAINTAIN_SPELLS set ({session.QueryDanger(id).Flags}; a flee request may have turned into combat focus)");
+                    }
+            }
+            // The runs end as the original ends a caster's maintained spells (0x457450: by event, so an END_CALLBACK Destroy takes a summoned creature away; a forced end would leave it fighting the hero), then what is left is forced to end.
             void EndRuns()
             {
+                foreach (var source in new[] { entity, SessionSpellCaster.Hero }) caster!.Act(new(SessionSpellRunActionKind.Demaintain, Object: source));
+                for (var wait = 0; wait < 80 && session.QuerySpellRuns().Runs.Any(r => !baseline.Contains(r.Id)); wait++) Frame();
                 foreach (var left in session.QuerySpellRuns().Runs.Select(r => r.Id).Where(id => !baseline.Contains(id)).ToArray()) caster!.Act(new(SessionSpellRunActionKind.ForceEnd, left));
             }
             // Between two casts: every run the stage made (or an NPC's own AI cast in the meantime) ends, the NPC goes calm and idle, then the three critters are whole, alive and free of what the spells wrote on them.
             void Reset()
             {
                 var named = ally is { } held ? new[] { entity, held.Entity } : new[] { entity };
-                EndRuns(); CalmNpcsForSmoke(session, named);
+                EndRuns(); CalmWithoutDemaintain(named);
                 for (var idle = 0; idle < 900 && (host!.RunOf(entity) is not null || _spellGoal is not null || _spellMissiles.Count > 0); idle++) Frame();
                 EndRuns();
                 foreach (var id in named.Append(SessionSpellCaster.Hero)) RestoreFlags(id);
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 if (ally is { } friend) session.Heal(session.Version, friend.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-                CalmNpcsForSmoke(session, named);
+                CalmWithoutDemaintain(named);
             }
             AiCastPassSide Observe(string parent, int spell, Action cast, Func<bool> goalPlaying, Func<string?> why)
             {
                 var before = session.QuerySpellRuns().Runs.Select(r => r.Id).ToHashSet();
                 var logAt = caster!.Log.Count;
+                var freeSlotsBefore = parent == SessionSpellCaster.Hero ? 0 : caster.AiFreeMaintainSlots(parent);
                 cast();
                 // A run that begins and is freed at once (a resisted cast) is no longer in the table, but its events name it.
                 var run = session.QuerySpellRuns().Runs.Where(r => !before.Contains(r.Id) && r.Parent?.Id == parent && r.Spell == spell).Select(r => (int?)r.Id).FirstOrDefault()
@@ -183,7 +199,9 @@ public partial class TerrainViewerApp
                     if (e.Kind == SpellCastEventKind.FatiguePaid) paid += e.Value;
                     if (e.Kind == SpellCastEventKind.Freed) break;
                 }
-                return new(true, null, frames, stuck, kinds, paid, session.QuerySpellRuns()[id] is not null, session.QueryMaintainBar().SlotOf(id) is not null);
+                // The hero's maintained run sits on its maintain bar; an NPC has no bar, its run holds one of the maintenance slots its intelligence gives (0x450B40, the AI's eligibility test counts them).
+                var held = parent == SessionSpellCaster.Hero ? session.QueryMaintainBar().SlotOf(id) is not null : session.QuerySpellRuns()[id] is not null && caster.AiFreeMaintainSlots(parent) < freeSlotsBefore;
+                return new(true, null, frames, stuck, kinds, paid, session.QuerySpellRuns()[id] is not null, held);
             }
             // The kinds a difference of caster or target explains by themselves (the payment, the messages for the local player, the hero-only effect and identify events, experience) are set aside; damage and heal are compared by presence.
             var aside = new HashSet<string> { "FatiguePaid", "Message", "Freed", "ExperienceGiven", "ExperienceNotSaved", "EffectAdded", "EffectRemoved", "EffectNotSaved", "IdentifyCritter", "IdentifyContainer", "IdentifyItem", "ItemIdentified", "ItemIdentifyNotSaved" };
@@ -192,6 +210,7 @@ public partial class TerrainViewerApp
                 ? $"started frames={s.Frames}{(s.Stuck ? " STUCK" : "")} alive={s.Alive} maintained={s.Maintained} paid={s.Paid} [{string.Join(",", s.Kinds.Select(k => $"{k.Key}:{k.Value}"))}]"
                 : "no run (" + s.Why + ")";
 
+            var maintainedSelf = new HashSet<int> { 10, 15, 20, 25, 30, 40, 45 };
             int ran = 0, differs = 0, notRun = 0, refused = 0, notComparable = 0;
             var differing = new List<int>();
             foreach (var (spell, kind, lists) in pairs)
@@ -244,6 +263,8 @@ public partial class TerrainViewerApp
                 Require(!npcAtHero.Stuck, $"the NPC's cast of spell {spell} at the hero never settled: {Show(npcAtHero)}");
                 Require(!npc.Stuck, $"the NPC's cast of spell {spell} never settled: {Show(npc)}");
                 Require(!heroCast.Stuck, $"the hero's cast of spell {spell} never settled: {Show(heroCast)}");
+                // ARC-MAGIC-2654 (ledger AP4): a maintained Defensive spell an NPC casts at itself keeps its run and its maintenance slot while the NPC fights; only leaving combat ends it (the AI gate's demaintain, UE5).
+                if (maintainedSelf.Contains(spell) && kind == "self") Require(npc.Started && npc.Alive && npc.Maintained, $"the NPC's maintained spell {spell} cast at itself keeps its run and slot: {Show(npc)}");
             }
             var leftOver = session.QuerySpellRuns().Runs.Where(r => !baseline.Contains(r.Id)).Select(r => r.Id).ToArray();
             Require(leftOver.Length == 0, $"no run is left after the pass: {string.Join(",", leftOver)}");
