@@ -177,14 +177,14 @@ public partial class TerrainViewerApp
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: the hero's use goal 38 (ARC-DEV-174, <see cref="StartUseClick"/>).
     /// Returns true when the click was a use.</summary>
-    private bool TryAreaUse(Vector2 screen)
+    private bool TryAreaUse(Vector2 screen, bool shift = false)
     {
-        if (_mapTransfers is not null) return TryAreaMapUse(screen);
+        if (_mapTransfers is not null) return TryAreaMapUse(screen, shift);
         if (_areaTransitions is null || _readyArea is null || _worldActor.Session is not AreaGridSession) return false;
         var hit = AreaTriggerAt(screen);
         if (hit is null) return false;
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
-        return StartUseClick(hit.Value);
+        return StartUseClick(hit.Value, shift);
     }
 
     /// <summary>The trigger object that is the frontmost pickable object under the screen point, if any (ARC-UI-005 pick).</summary>

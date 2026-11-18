@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
     /// A guarded left press on a map-mode trigger object. ARC-DEV-174 (MIG13 S11b): the click is an <see cref="ObjectClickRequest"/>, the hero's use goal 38 of the goal table (<see cref="StartUseClick"/>): its steps test the range,
     /// walk the hero within use range (goal 8) and ask for the use in the last node, which <see cref="ApplyUse"/> applies at the frame's next safe point.
     /// </summary>
-    private bool TryAreaMapUse(Vector2 screen)
+    private bool TryAreaMapUse(Vector2 screen, bool shift = false)
     {
         if (_mapTransfers is null || _worldActor.Session is not AreaGridSession || AreaObjectAtScreen(screen) is not { } hit
             || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null && !_mapTransfers.IsBed(hit))) return false;
@@ -178,7 +178,7 @@ public partial class TerrainViewerApp
             _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
             return true;
         }
-        return StartUseClick(hit);
+        return StartUseClick(hit, shift);
     }
 
     /// <summary>A cell from which the use rule accepts a use of the trigger (so a walk-to-use ends where the use runs).</summary>

@@ -176,12 +176,12 @@ public partial class TerrainViewerApp
             return host.Talk(target, run, noWalk);
         }
 
-        public bool StartPickup(string target, bool run)
+        public bool StartPickup(string target, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
             app.StopWorldRoute("ROUTE_REPLACED_BY_PICKUP");
             app._mapFarGoal = null;
-            return host.Pickup(target, run);
+            return host.Pickup(target, run, noWalk);
         }
 
         public bool StartAttack(string target, bool run)
@@ -244,12 +244,12 @@ public partial class TerrainViewerApp
             return host.Cast(run, target);
         }
 
-        public bool StartUse(string target, bool container, bool run)
+        public bool StartUse(string target, bool container, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
             app.StopWorldRoute("ROUTE_REPLACED_BY_USE");
             app._mapFarGoal = null;
-            return host.Use(target, container, run);
+            return host.Use(target, container, run, noWalk);
         }
 
         public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun, app._gameSettings.AutoAttack);
