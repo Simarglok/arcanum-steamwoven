@@ -141,8 +141,8 @@ public sealed partial class SessionSpellCaster
             spells is null ? null : ItemPower(spells, facts), TeleportAllowed: TeleportAllowedFor(spell, caster), ParentIsLocalPlayer: caster == Hero,
             TurnBased: round is not null, TurnBasedActor: round is null ? null : round.Actor.Entity ?? Hero);
         var world = InvocationWorld();
-        if (!SpellInvocationRules.Check(invocation, record.Run.Invocation, world, _owner.SpellRolls).Allowed)
-            return new(SpellCastAttemptOutcome.Refused);
+        var check = SpellInvocationRules.Check(invocation, record.Run.Invocation, world, _owner.SpellRolls);
+        if (!check.Allowed) return new(SpellCastAttemptOutcome.Refused, Refusal: check.Refusal);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
         var run = started.Disposition == GameSessionDisposition.Changed ? started.Creation?.Run : null;
         if (run is not null) _itemChains.Remove(run.Id);
