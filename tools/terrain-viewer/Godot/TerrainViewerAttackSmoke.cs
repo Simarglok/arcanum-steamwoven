@@ -140,6 +140,10 @@ public partial class TerrainViewerApp
                     var heroStruck = new SessionAttackResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, DamageRecipient.Target, null, null, null, GameSessionFailure.None, session.Version)
                         { Criticals = [new SessionCriticalStep(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, wielded.Entity, SessionCriticalStepOutcome.Dropped, null)] };
                     Require(HeroWeaponLostToStrike(heroStruck, target.Row, false) == wielded.Entity, "auto switch on: a struck hero's dropped weapon wields the best weapon");
+                    // ARC-COMBAT-2698: a thrown weapon the ammunition check refused re-wields the same way; a throw that was not refused calls nothing.
+                    var refusedThrow = new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, session.Version) { AmmunitionShort = true };
+                    Require(HeroThrowOutOfAmmunition(refusedThrow with { AmmunitionShort = false }, target.Row) is null, "a served throw calls no re-wield");
+                    Require(HeroThrowOutOfAmmunition(refusedThrow, target.Row) == wielded.Entity, "auto switch on: a refused thrown weapon wields the best weapon");
                     _gameSettings = _gameSettings with { AutoSwitchWeapons = false };
                     Require(HeroOutOfAmmunition(AttackRefusal.OutOfAmmunition, target.Row, false) is null && HeroWeaponLostToStrike(heroStruck, target.Row, false) is null, "auto switch off: the two cases change nothing");
                 }
