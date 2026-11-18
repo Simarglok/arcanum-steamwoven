@@ -11,6 +11,8 @@ public partial class TerrainViewerApp
     // (SWI-BDR-6) at each size of ARC_STEAMWOVEN_SIZES (default: the TRD's verification sizes, SWI-VER-6): the 800 x 600 plate centred in the frame at `f · 3.6`, a generated backdrop over the
     // whole frame, black outside it, and the pointer hitting the labels where they are drawn. The window is not resized (a Mac screen may be smaller than 3840 x 2160): the root viewport is given
     // the size as its logical render target. ARC_AREA_MENU_CAPTURE=PATH.png also saves PATH-steamwoven-WINDOW-WxH.png and, as the comparison, PATH-steamwoven-WINDOW-WxH-before.png (local, never in git).
+    // ARC-DEV-2672: with the variant "legacy" in ARC_STEAMWOVEN_VARIANTS (the default is without it) the same windows are also saved in the Original look (the HD option off, the whole-factor plate, no plan)
+    // at each size as PATH-legacy-WINDOW-WxH.png, with no layout checks beyond the HD option being off; the settings are put back after each capture.
     private async Task MenuSteamwovenForSmoke(Action<bool, string> require, Func<int, Task> frames)
     {
         var panel = _mainMenuPanel!;
@@ -97,6 +99,27 @@ public partial class TerrainViewerApp
                     }
                     await SaveAsync($"steamwoven-{tag}");
                     checkedSizes++;
+                }
+                // ARC-DEV-2672: the Original look at each size (the HD option off: the whole-factor plate, no plan, no backdrop), saved as PATH-legacy-WINDOW-WxH.png; no layout checks.
+                if (capture is not null && SteamwovenVariants().Any(variant => variant.Name == "legacy"))
+                {
+                    _gameSettings = _gameSettings with { HdInterface = false, GeneratedInterface = false };
+                    SyncInterfaceHd();
+                    await frames(3);
+                    foreach (var size in SteamwovenSizes())
+                    {
+                        window.ContentScaleSize = size;
+                        for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
+                        require((Vector2I)window.GetVisibleRect().Size == size, $"[legacy-{windowName}] the viewport is {size}, got {window.GetVisibleRect().Size}");
+                        await frames(3);
+                        require(!InterfaceHd.Enabled && art.FullScreenPlan is null && !panel.FrameBackdropForSelfTest.Shown, $"[legacy-{windowName}-{size.X}x{size.Y}] the HD option is off: no full-screen plan, no backdrop");
+                        await SaveAsync($"legacy-{windowName}-{size.X}x{size.Y}");
+                    }
+                    _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+                    SyncInterfaceHd();
+                    await frames(3);
+                    await WaitBackdropAsync();
+                    require(AreaGameBarPanel.SteamwovenOn && art.FullScreenPlan is not null, $"[legacy-{windowName}] the HD option is back on after the Original-look pass");
                 }
                 // The comparison: the same window as before (the layout suspended), at the first size.
                 if (capture is not null && SteamwovenSizes() is [var first, ..])
