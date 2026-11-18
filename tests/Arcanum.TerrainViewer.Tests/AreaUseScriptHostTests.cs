@@ -148,6 +148,9 @@ public sealed class AreaUseScriptHostTests
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
+            // ARC-SCRIPT-2752 (SX3): 723 has the triggerer use its item (the attachee) with pick locks on the extra object, modifier 5, then skips the default (the shape of the installed lockpicks' 29010).
+            Write("scr/00723pick.scr", Program(Do(new(ScrCatalogue.Action.UseItemWithSkill, (Triggerer, 0), (Attachee, -1), (12, 0), N(14), N(5))), Do(Skip)));
+            Write("scr/00724skill.scr", Program(Do(new(ScrCatalogue.Action.UseItemWithSkill, (Triggerer, 0), (Attachee, -1), (12, 0), N(10), N(0))), Do(Skip)));
             // 720: raises the story state, sets a quest (for the PC and for the gate, which is ignored), marks an area, learns a rumor
             // and adds a reputation (ARC-SCRIPT-019).
             Write("scr/00720story.scr", Program(Do(new(ScrCatalogue.Action.SetStoryState, N(5))), Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))),
@@ -1043,6 +1046,38 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (stop.Outcome, stop.Run!.Outcome));
             Assert.IsTrue(host.GlobalFlag(32), "the effects apply either way, as the original's run does");
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(2, Entity(6), session.Rules.Scripts).Outcome, "not a row of a loaded map");
+        });
+    }
+
+    // ARC-SCRIPT-2752 (SX3): the use item with skill of an item's use script starts the NPC user's goal 40 through the AI host; the hero as the user, another skill and a target that is no portal leave the run unapplied.
+    [TestMethod]
+    public void An_item_s_use_item_with_skill_starts_the_npc_users_goal_40_for_pick_locks_on_a_portal_only()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(8, 16, 0, 9000);
+            var items = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20)), new SessionSeedItem(Entity(7), Facts(61), new CellCoord(17, 20))]),
+                new[] { Row(6, 13, 723, 60), Row(7, 13, 724, 61) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+            var asked = new List<(string Npc, string? Item, string Target, int Skill, int Modifier)>();
+            var portal = true;
+            var openable = new AreaScriptOpenable(new SessionOpenable(new SessionMapId(1), "oid:door"), new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Portal, 0, 0, 0), new Arcanum.Simulation.Locks.PortalArt(true, 3, 7), 3);
+            AreaUseScriptHost Open(bool ai) => new(session, 1, [npc], [items], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                Openable: _ => portal ? openable : null, ScriptUseItemWithSkill: ai ? (who, item, target, skill, modifier) => { asked.Add((who, item, target, skill, modifier)); return "started"; } : null));
+            var user = new ScrObjectRef(1, AreaUseScriptHost.EntityId(npc));
+            var host = Open(true);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:door", user);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), (string?)Entity(6), "oid:door", 14, 5) }, asked, "the starter is asked with the user, the item, the target, the skill and the modifier");
+            Assert.AreEqual("started", host.LastSkillUse);
+            asked.Clear();
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(7), session.Rules.Scripts, "oid:door", user).Outcome, "only pick locks takes the modifier");
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:door").Outcome, "the hero's goal 40 is the hero host's");
+            portal = false;
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:crate", user).Outcome, "a target that is no portal");
+            portal = true;
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Open(false).RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:door", user).Outcome, "no AI host");
+            Assert.AreEqual(0, asked.Count, "a refused run starts nothing");
         });
     }
 

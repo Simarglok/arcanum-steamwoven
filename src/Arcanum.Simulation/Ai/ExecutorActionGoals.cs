@@ -58,17 +58,17 @@ public static partial class AiExecutorRules
 
     /// <summary>
     /// ARC-COMBAT-1878: the use-item-with-skill starter (0x4352C0) of <paramref name="npc"/> using <paramref name="skill"/> on <paramref name="target"/> with the tool <paramref name="item"/> (null: none): a target is needed (the item is not);
-    /// the start gate with <see cref="TurnBasedRules.UseItemCost"/> (0x4348E0 with 4: it charges nothing itself); goal 40 with the target, the item and the skill (the modifier word the scripts' action passes is 0 here), run flag 0x4000 and running for an NPC with
+    /// the start gate with <see cref="TurnBasedRules.UseItemCost"/> (0x4348E0 with 4: it charges nothing itself); goal 40 with the target, the item and the skill (the modifier word is the invocation modifier the scripts' action 79 passes, ARC-SCRIPT-2752; 0 for the follower), run flag 0x4000 and running for an NPC with
     /// current fatigue above 8, as the item-use starter's. No animation and no duration are set (the timed pick-lock goal 33 of 0x436220 sets both). The follower the lockpick chooser picks starts it with its own lockpicks or, holding none, without any (0x571CB0).
     /// </summary>
     [OriginalFunction(0x4352C0, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartUseItemWithSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, GoalRun? current)
+    public static AiPerformResult StartUseItemWithSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, GoalRun? current, int modifier = 0)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (target is null) return new(AiPerformKind.UseSkill, current, AiStartRefusal.NoObject);
         if (!StartGate(world, npc, TurnBasedRules.UseItemCost)) return new(AiPerformKind.UseSkill, current, AiStartRefusal.Gate);
-        var frame = new GoalFrame(GoalType.UseItemWithSkill, target) { Item = item, Skill = skill };
+        var frame = new GoalFrame(GoalType.UseItemWithSkill, target) { Item = item, Skill = skill, Modifier = modifier };
         return new(AiPerformKind.UseSkill, new GoalRun(npc, default, frame, ActionFlags(world, npc, running: true))) { Started = true };
     }
 
@@ -482,7 +482,7 @@ public static partial class AiExecutorRules
             default:
                 if (target is null || world.Gone(target)) return End(AiExecutorReason.ObjectGone);
                 if (goal.Item is { } item && (world.ItemHolder(item) != owner || world.Gone(item))) return End(AiExecutorReason.ItemNotHeld);
-                if (goal.Skill == PickLocksSkill) world.AttemptPickLocks(owner, target, goal.Item);
+                world.AttemptSkillWithItem(owner, target, goal.Item, goal.Skill ?? -1, goal.Modifier);
                 return End(AiExecutorReason.SkillAttempted);
         }
     }
