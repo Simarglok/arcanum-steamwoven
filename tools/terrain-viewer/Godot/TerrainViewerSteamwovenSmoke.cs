@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
 {
     // ARC-UI-2452: opt-in part of the native bar smoke (ARC_AREA_BAR_STEAMWOVEN=1, with ARC_HD_PACK: the generated interface runs the HD path). The play screen is laid out by the
     // Steamwoven layout model at each size of ARC_STEAMWOVEN_SIZES (default: the TRD's verification sizes, SWI-VER-6) for each panel-height variant of ARC_STEAMWOVEN_VARIANTS
-    // (default "thin,original": SWI-LAY-10's 120 and 456 master px, and the original strips' 150 and 570), with and without an open menu. The window is not resized (a Mac screen may be smaller than 3840 x 2160): the root
+    // (default "thin,original": SWI-LAY-10's 120 and 456 master px, and the original strips' 150 and 570), with and without an open menu. The window takes the size's width, not its height (a Mac screen may be smaller than 3840 x 2160; ARC-UI-2696, FitWindowToRenderTargetAsync): the root
     // viewport is given the size as its logical render target (content scale mode Viewport), so the captures have exactly the requested size.
     // ARC_AREA_BAR_CAPTURE=PREFIX saves PREFIX-hud-steamwoven-VARIANT-WxH[-menu].png (local, never in git).
     // ARC-DEV-2672: the variant "legacy" is the Original look (the HD option off: Legacy textures, no plan, the whole-factor layout) at the same sizes and windows, for side-by-side comparison with the Steamwoven
@@ -48,12 +48,13 @@ public partial class TerrainViewerApp
     /// again, softer than the boards beside them, which are painted at the logical scale; the captures then showed two woods). The height is the operating system's to limit (a Mac's screen is lower than
     /// 2160 or 1440), the stretch along it does not matter to the paint (it reads the stretch across).
     /// </summary>
-    private async Task FitWindowToRenderTargetAsync(AreaGameBarPanel panel, Window window, Vector2I size, Func<int, Task> frames)
+    private async Task FitWindowToRenderTargetAsync(AreaGameBarPanel panel, Window window, Vector2I size, Func<int, Task> frames, Action<bool, string> require)
     {
         // ARC_STEAMWOVEN_FIT_WINDOW=0 keeps the window as it is (the old captures, for a comparison of the two woods).
         if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_FIT_WINDOW") == "0") return;
         window.Size = size;
         for (var wait = 0; wait < 120 && window.Size.X != size.X; wait++) await frames(1);
+        require(window.Size.X == size.X, $"the window took the render target's width {size.X}, got {window.Size}");
         await frames(3);
         // A new stretch moves no viewport size, so nothing else tells the bars to paint at it.
         panel.Relayout();
@@ -92,7 +93,7 @@ public partial class TerrainViewerApp
                 foreach (var size in SteamwovenSizes())
                 {
                     window.ContentScaleSize = size;
-                    await FitWindowToRenderTargetAsync(panel, window, size, frames);
+                    await FitWindowToRenderTargetAsync(panel, window, size, frames, Require);
                     for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
                     Require((Vector2I)window.GetVisibleRect().Size == size, $"the viewport is {size}, got {window.GetVisibleRect().Size}");
                     await frames(2);
@@ -168,6 +169,7 @@ public partial class TerrainViewerApp
             SteamwovenHud.Options = SteamwovenLayoutOptions.Default;
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
             window.Size = savedWindowSize;
+            await frames(3);
             SteamwovenHud.Suspended = true;
             panel.Relayout();
             await frames(3);
@@ -212,6 +214,7 @@ public partial class TerrainViewerApp
             foreach (var size in SteamwovenSizes())
             {
                 window.ContentScaleSize = size;
+                await FitWindowToRenderTargetAsync(panel, window, size, frames, require);
                 for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
                 require((Vector2I)window.GetVisibleRect().Size == size, $"[legacy] the viewport is {size}, got {window.GetVisibleRect().Size}");
                 await WaitSettledAsync();
