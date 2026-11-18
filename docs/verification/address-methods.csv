@@ -187,6 +187,7 @@ src/Arcanum.Session/GameSessionNpcTransfer.cs,TakeAmmoFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,TakeItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcWear.cs,RewieldNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcWear.cs,WieldNpcBest,pending,
+src/Arcanum.Session/GameSessionObjectDestroyGate.cs,AttachObjectDestroyGate,exempt,host
 src/Arcanum.Session/GameSessionObjectFlags.cs,Assign,pending,
 src/Arcanum.Session/GameSessionObjectFlags.cs,AssignObjectFlag,pending,
 src/Arcanum.Session/GameSessionObjects.cs,AttackObject,pending,
@@ -712,6 +713,7 @@ src/Arcanum.World/AreaUseScripts.cs,ApplyMakeFollow,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,BreakMayDestroy,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DestroyScenery,exempt,host
@@ -736,6 +738,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDestroyPoint,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RunDestroyPointGate,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,

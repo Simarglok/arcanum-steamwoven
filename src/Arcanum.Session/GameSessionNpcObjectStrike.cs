@@ -201,11 +201,11 @@ public sealed partial class GameSessionOwner
         var amount = Math.Clamp(damage.HitPointDamage, 0, ItemDurabilityLimits.MaxDamageStep);
         var state = ObjectState(struck);
         var hit = ObjectDamageRules.Hit(Facts(struck.Baseline, state.Condition), state.Damage, amount);
-        var write = ObjectWrite(struck, hit);
+        var write = ObjectWrite(struck, hit, out var kept);
         if (write.Disposition == GameSessionDisposition.Rejected)
             return new(Disposition(changed), GameSessionFailure.None, resolution, hit, null, null, null, SessionObjectHostSteps.None, write.Failure, Version) { Ammunition = spentAmmo, Shots = flying };
         // ARC-AI-2084: the witness steps stay: 0x4AEE50 hears only a PC or a PC-led NPC's damage, which the host's rule decides (the AI host's GuardWitnesses leaves any other attacker out).
-        var host = HostSteps(struck.Baseline, hit);
+        var host = HostSteps(struck.Baseline, hit, kept);
         var wear = resolution.Wear is { Any: true }
             ? WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = attackerSide, Target = objectSide, TargetBroken = hit.Broken })
             : null;

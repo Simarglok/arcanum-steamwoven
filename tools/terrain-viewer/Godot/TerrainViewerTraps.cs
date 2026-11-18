@@ -60,6 +60,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
     {
+        // ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs below take their own).
+        if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost && gateHost.TakeBreakDestroyRun() is { } destroyRun) Awarded(gateHost, destroyRun);
         RunObjectBreakScripts(row, steps, byHero, ranged, breaker);
         // ARC-SCRIPT-2620 (OD7–OD11, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): a scenery, trap or container the break destroyed ends its goal runs and tells its spell runs, as a script's destroy does (the trap fired before the break, the sound plays after).
         if (AreaObjectBreakHost.EndsRuns(steps) && ShownObjectRef(row) is { } destroyed) EndDestroyedObjectRuns(destroyed);

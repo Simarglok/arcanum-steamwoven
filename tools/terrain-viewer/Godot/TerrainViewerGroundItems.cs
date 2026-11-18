@@ -83,7 +83,13 @@ public partial class TerrainViewerApp
         session.AttachItemScripts(prototype => PrototypeItems()?.Item(prototype)?.Scripts);
         // ARC-WORLD-1283: and their no-drop flag, which the remove check of a transfer reads on a kit or made item.
         session.AttachItemNoDrop(prototype => PrototypeItems()?.Item(prototype)?.NoDrop == true);
+        // ARC-SCRIPT-2644 (TD2): a break that destroys a door, container, trap or busted scenery runs the object's destroy point first, which can keep it.
+        session.AttachObjectDestroyGate(target => ObjectBreakMayDestroy(session, target));
     }
+
+    /// <summary>ARC-SCRIPT-2644: the break's destroy gate of the shown map's session (the host is built on first need); another session or no ready area lets the break destroy.</summary>
+    private bool ObjectBreakMayDestroy(GameSessionOwner session, SessionObjectTarget target) =>
+        !ReferenceEquals(_areaSession, session) || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host || host.BreakMayDestroy(target);
 
     /// <summary>The frame of an art id no body drew at T0 (the extra art read from the module), added to the shown map's repository; null when it does not read (said once).</summary>
     private AreaExtraFrame? ExtraArtFrame(uint aid, string what)
