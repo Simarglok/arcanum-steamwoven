@@ -142,6 +142,54 @@ public sealed class GeneratorItemCopyTests
     }
 
     [TestMethod]
+    public void What_the_session_recorded_for_a_generators_item_travels_to_its_copy_and_the_other_items_get_none()
+    {
+        using var owner = Owner();
+        var baseline = new ItemCondition(40, 0, 0, false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DamageItem(owner.Version, "g-sword", baseline, 12).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MarkItemIdentified(owner.Version, "g-sword").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "g-sword", 5).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.SetItemWrittenStart(owner.Version, "g-sword", 77).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.ToggleItemDisplay(owner.Version, "g-bread").Failure);
+        var copy = owner.RunGenerator(owner.Version, Run()).Made.Single();
+        var items = View(owner, copy.Entity).Items.ToDictionary(item => item.Facts.Kind.Prototype);
+        var sword = items[Sword.Prototype].Entity;
+        Assert.AreEqual(owner.QueryItemCondition("g-sword", baseline), owner.QueryItemCondition(sword, baseline), "the damage the sword took");
+        Assert.AreNotEqual(baseline, owner.QueryItemCondition(sword, baseline));
+        Assert.IsTrue(owner.QueryItemIdentified(sword));
+        Assert.AreEqual(4, owner.QueryItemCharges(sword));
+        Assert.AreEqual(new SessionItemFieldWrites(77, false), owner.QueryItemFieldWrites(sword));
+        Assert.AreEqual(new SessionItemFieldWrites(null, true), owner.QueryItemFieldWrites(items[Bread.Prototype].Entity));
+        // The generator's own records stay, and an item with none gets none.
+        Assert.AreEqual(4, owner.QueryItemCharges("g-sword"));
+        Assert.IsFalse(owner.QueryItemIdentified(items[Mail.Prototype].Entity));
+        Assert.IsNull(owner.QueryItemCharges(items[Mail.Prototype].Entity));
+        Assert.AreEqual(baseline, owner.QueryItemCondition(items[Mail.Prototype].Entity, baseline));
+        // Saved and restored with the copy, no schema field of its own.
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var back = Restore(Decode(text));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(back.Capture()));
+        Assert.AreEqual(4, back.QueryItemCharges(sword));
+        Assert.IsTrue(back.QueryItemIdentified(sword));
+    }
+
+    [TestMethod]
+    public void A_copy_made_after_the_generators_records_are_full_keeps_the_items_and_drops_only_the_full_record()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "g-sword", 5).Disposition);
+        var copy = owner.RunGenerator(owner.Version, Run()).Made.Single();
+        Assert.AreEqual(5, View(owner, copy.Entity).Items.Count);
+        // A second copy of the same generator copies the same records: every copy has its own record, none is shared.
+        var second = owner.RunGenerator(owner.Version, Run(slot: 6)).Made.Single();
+        var swords = new[] { copy, second }.Select(made => View(owner, made.Entity).Items.Single(item => item.Facts.Kind == Sword).Entity).ToArray();
+        Assert.AreNotEqual(swords[0], swords[1]);
+        Assert.IsTrue(swords.All(sword => owner.QueryItemCharges(sword) == 4));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, swords[0], 5).Disposition);
+        Assert.AreEqual((3, 4, 4), (owner.QueryItemCharges(swords[0]), owner.QueryItemCharges(swords[1]), owner.QueryItemCharges("g-sword")), "the records are independent");
+    }
+
+    [TestMethod]
     public void Destroying_the_copy_destroys_its_items_with_it()
     {
         using var owner = Owner();
