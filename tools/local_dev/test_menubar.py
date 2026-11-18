@@ -115,6 +115,17 @@ class AppTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertFalse(menubar.recently_failed(self.source, now=time.time() + menubar.FAILURE_PAUSE_SECONDS + 1))
 
+    def test_start_hands_the_games_folders_to_the_app_for_the_automatic_playing_mode(self) -> None:
+        """ARC-DEV-2291: the app reads the packaged game's process itself, so it is told the folders (none when the mode is off)."""
+        from tools.local_dev import run_queue
+        built = self.root / "ArcanumQueue-test"
+        for roots, expected in ((["/a", "/b"], ["--game-root", "/a", "--game-root", "/b"]), ([], [])):
+            with patch.object(menubar, "build", return_value=(built, "")), patch.object(menubar, "running", return_value=False), \
+                    patch.object(run_queue, "game_roots", return_value=roots), patch.object(menubar.fcntl, "flock"), \
+                    patch.object(os, "execv") as execv:  # (flock: the first call's descriptor still holds the start lock)
+                menubar.start(["--open-menu"])
+            execv.assert_called_once_with(built, [str(built), *expected, "--open-menu"])
+
 
 if __name__ == "__main__":
     unittest.main()

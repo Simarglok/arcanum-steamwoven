@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -761,6 +762,158 @@ class TaskCodeTests(unittest.TestCase):
         self.assertEqual(text, '#3 quick e ARC-DEV-1408 "t"')
 
 
+def build_game(root: Path, folder: str = "game") -> Path:
+    """A program `<root>/<folder>/Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven` that sleeps (ARC-DEV-2291): compiled
+    with the Mac's clang (a copy of a system binary or of Python is killed or re-executed from elsewhere); skips without one."""
+    clang = shutil.which("clang")
+    if clang is None:
+        raise unittest.SkipTest("no clang to build a stand-in game")
+    program = root / folder / "Arcanum Steamwoven.app" / "Contents" / "MacOS" / "Arcanum Steamwoven"
+    program.parent.mkdir(parents=True)
+    source = root / f"{folder}.c"
+    source.write_text("#include <unistd.h>\nint main(void) { sleep(120); return 0; }\n")
+    done = subprocess.run([clang, "-o", str(program), str(source)], capture_output=True, text=True)
+    if done.returncode != 0:
+        raise unittest.SkipTest(f"clang failed: {done.stderr.strip()[:200]}")
+    return program
+
+
+class GameDetectionTests(unittest.TestCase):
+    """ARC-DEV-2291: the automatic playing mode reads the packaged game's process through libproc."""
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(self.root / "home")})
+        self.env.start()
+        for name in (run_queue.AUTO_PLAYING_ENV, run_queue.GAME_ROOTS_ENV):
+            os.environ.pop(name, None)
+        self.games: list[subprocess.Popen] = []
+
+    def tearDown(self) -> None:
+        for game in self.games:
+            game.kill()
+            game.wait()
+        self.env.stop()
+        self.temp.cleanup()
+
+    def start_game(self, folder: str = "game") -> subprocess.Popen:
+        game = subprocess.Popen([str(build_game(self.root, folder))], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.games.append(game)
+        time.sleep(0.3)
+        self.assertIsNone(game.poll(), "the stand-in game did not stay up")
+        return game
+
+    @unittest.skipIf(run_queue._LIBPROC is None, "libproc is macOS only")
+    def test_a_process_under_a_root_is_the_game_and_ends_with_it(self) -> None:
+        roots = [str(self.root / "game")]
+        self.assertIsNone(run_queue.find_game(roots))
+        before = time.time()
+        game = self.start_game()
+        since = run_queue.find_game(roots)
+        self.assertIsNotNone(since)
+        self.assertAlmostEqual(since, before, delta=10)
+        self.assertIsNone(run_queue.find_game([str(self.root / "other")]))  # another folder is not the game
+        self.assertIsNone(run_queue.find_game([str(self.root / "gam")]))  # a prefix of a name is not a folder of it
+        game.kill()
+        game.wait()
+        self.assertIsNone(run_queue.find_game(roots))
+
+    def test_the_roots_default_to_the_main_checkouts_package_folder_and_the_mode_can_be_turned_off(self) -> None:
+        if run_queue._LIBPROC is None:
+            self.assertEqual(run_queue.game_roots({}), [])
+            return
+        self.assertEqual(run_queue.game_roots({"ARCANUM_LOCAL_HOME": "x"}), [])  # under ARCANUM_LOCAL_HOME nothing is read unless roots are named
+        env = {run_queue.GAME_ROOTS_ENV: os.pathsep.join([str(self.root / "a"), str(self.root / "b") + "/"])}
+        self.assertEqual(run_queue.game_roots(env), [str(self.root / "a"), str(self.root / "b")])
+        self.assertEqual(run_queue.game_roots({**env, run_queue.AUTO_PLAYING_ENV: "off"}), [])
+        self.assertEqual(run_queue.game_roots({**env, run_queue.AUTO_PLAYING_ENV: "0"}), [])
+        default = run_queue.game_roots({"HOME": "x"})  # the real default
+        self.assertEqual(len(default), 1)
+        self.assertTrue(default[0].endswith("/artifacts/packages/macos"), default)
+
+    def test_the_main_checkout_of_a_worktree_is_read_from_its_git_file(self) -> None:
+        main = self.root / "main"
+        (main / ".git" / "worktrees" / "w").mkdir(parents=True)
+        (main / ".git" / "worktrees" / "w" / "commondir").write_text("../..\n")
+        work = self.root / "main" / ".claude" / "worktrees" / "w"
+        work.mkdir(parents=True)
+        (work / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'w'}\n")
+        self.assertEqual(run_queue._main_checkout(work), main.resolve())
+        self.assertEqual(run_queue._main_checkout(main), main)
+        self.assertEqual(run_queue._main_checkout(self.root / "nowhere"), self.root / "nowhere")  # unreadable: itself
+
+    @unittest.skipIf(run_queue._LIBPROC is None, "libproc is macOS only")
+    def test_the_game_is_the_playing_ticket_in_memory_and_holds_window_runs_only(self) -> None:
+        os.environ[run_queue.GAME_ROOTS_ENV] = str(self.root / "game")
+        run_queue._GAME_CACHE.update(at=None)
+        self.assertIsNone(run_queue.playing_state())
+        self.start_game()
+        run_queue._GAME_CACHE.update(at=None)
+        state = run_queue.playing_state()
+        self.assertTrue(state["playing"] and state["auto"], state)
+        self.assertIsNone(state["until"])
+        self.assertIn("game running for", run_queue.playing_text(state))
+        self.assertNotIn("--not-playing", run_queue.playing_hint(state))
+        self.assertEqual(run_queue.playing_hint({"playing": True}), "./arcanum queue --not-playing")
+        with run_queue._QueueLock():
+            live = [item for _, item in run_queue.tickets()]
+        self.assertEqual([item["seq"] for item in live if item.get("playing")], [0])  # one, first, nothing written
+        self.assertFalse(run_queue.playing_file().exists())
+        window, headless = ticket(5, "window"), ticket(6, "headless")
+        self.assertTrue(run_queue.blocker(window, [*live, window]).get("auto"))
+        self.assertIsNone(run_queue.blocker(headless, [*live, headless]))
+        self.assertIn("quit the game", run_queue._describe(state))
+        self.assertIn("quit the game", run_queue.status()[0])
+        self.assertFalse(run_queue.set_playing(False))  # the switch does not end the automatic mode
+        self.assertIsNotNone(run_queue.playing_state())
+
+    @unittest.skipIf(run_queue._LIBPROC is None, "libproc is macOS only")
+    def test_a_manual_switch_beside_a_running_game_counts_once(self) -> None:
+        os.environ[run_queue.GAME_ROOTS_ENV] = str(self.root / "game")
+        self.start_game()
+        run_queue._GAME_CACHE.update(at=None)
+        run_queue.set_playing(True, 60.0, "test")
+        try:
+            self.assertFalse(run_queue.playing_state().get("auto"))  # the switch is the mode, with its limit
+            with run_queue._QueueLock():
+                live = [item for _, item in run_queue.tickets()]
+            self.assertEqual(sum(1 for item in live if item.get("playing")), 1)
+        finally:
+            run_queue.set_playing(False)
+        run_queue._GAME_CACHE.update(at=None)
+        self.assertTrue(run_queue.playing_state().get("auto"))  # the game still holds it after the switch ends
+
+    @unittest.skipIf(run_queue._LIBPROC is None, "libproc is macOS only")
+    def test_the_answer_is_cached_for_a_moment(self) -> None:
+        os.environ[run_queue.GAME_ROOTS_ENV] = str(self.root / "game")
+        run_queue._GAME_CACHE.update(at=None)
+        with patch.object(run_queue, "find_game", return_value=None) as scan:
+            for _ in range(5):
+                self.assertIsNone(run_queue.game_running_since())
+            self.assertEqual(scan.call_count, 1)
+            run_queue._GAME_CACHE.update(at=time.monotonic() - run_queue.GAME_CACHE_SECONDS - 1)
+            run_queue.game_running_since()
+            self.assertEqual(scan.call_count, 2)
+
+    @unittest.skipIf(run_queue._LIBPROC is None, "libproc is macOS only")
+    def test_the_command_says_that_the_game_keeps_the_mode_on_after_the_switch_ends(self) -> None:
+        os.environ[run_queue.GAME_ROOTS_ENV] = str(self.root / "game")
+        self.start_game()
+        done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--not-playing"], capture_output=True, text=True,
+                              cwd=REPO, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("was not playing", done.stdout)
+        self.assertIn("the packaged game is running: window runs still wait until it quits", done.stdout)
+        self.assertIn("PLAYING", done.stdout)  # the queue listing follows
+        self.assertIn("quit the game", done.stdout)
+
+    def test_a_failed_scan_is_not_playing(self) -> None:
+        os.environ[run_queue.GAME_ROOTS_ENV] = str(self.root / "game")
+        run_queue._GAME_CACHE.update(at=None)
+        with patch.object(run_queue, "_LIBPROC", object()), patch.object(run_queue, "find_game", side_effect=OSError("no")):
+            self.assertIsNone(run_queue.game_running_since())
+
+
 class QueueRunTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -1262,6 +1415,35 @@ class QueueRunTests(unittest.TestCase):
         with run_queue._QueueLock():
             self.assertEqual(run_queue.tickets(prune=True), [])
         self.assertFalse(run_queue.playing_file().exists())
+
+    @unittest.skipIf(run_queue._LIBPROC is None, "libproc is macOS only")
+    def test_a_running_game_holds_window_runs_by_itself_and_releases_them_when_it_quits(self) -> None:
+        """ARC-DEV-2291 acceptance: with the game running a queued window run waits (headless/quick/dotnet never do); when the game
+        quits the window run starts within a minute."""
+        program = build_game(self.root)
+        os.environ[run_queue.GAME_ROOTS_ENV] = str(self.root / "game")  # the wrappers inherit it
+        game = subprocess.Popen([str(program)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.processes.append(game)
+        time.sleep(0.3)
+        self.assertIsNone(game.poll(), "the stand-in game did not stay up")
+        window = self.queued("window", "w", 0.1)
+        self.until(lambda: len(self.runs()) == 1)
+        for kind in ("headless", "quick", "dotnet"):
+            self.queued(kind, kind[0], 0.1)
+        self.started("h", "q", "d")  # the runs without a window go on
+        time.sleep(1.5)
+        self.assertNotIn("start w ", self.log.read_text())
+        self.assertIsNone(window.poll())
+        lines = run_queue.status()
+        self.assertTrue(lines[0].startswith("PLAYING") and "quit the game" in lines[0], lines)
+        self.assertTrue(any(line.startswith("waiting #") and line.endswith("(owner playing)") for line in lines), lines)
+        self.assertFalse(run_queue.playing_file().exists())  # nothing was written for the mode
+        game.kill()
+        game.wait()
+        self.finish()  # the cache (2 s) and the poll are all it waits for
+        self.assertIn("end w", self.events())
+        run_queue._GAME_CACHE.update(at=None)  # this process read the game a moment ago
+        self.assertFalse(any(line.startswith("PLAYING") for line in run_queue.status()))
 
     def test_the_command_turns_the_mode_on_and_off_and_refuses_bad_combinations(self) -> None:
         def run(*args: str) -> subprocess.CompletedProcess:
