@@ -34,10 +34,10 @@ public sealed class AreaAiSkillTests
     private static AreaFieldValue Empty(int slot) => new(slot, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null);
 
     // A generic item (type 14) with the healing flag (generic flags 0x08), usage bonus 10 and three uses, in the pack (location 0).
-    private static AreaObjectRecord Item(int index) => new(Key(index), 0, 14, HealingPrototype, "p", "p", "r", "s",
+    private static AreaObjectRecord Item(int index, int points = 10, int damage = 0) => new(Key(index), 0, 14, HealingPrototype, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
-            Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
+            Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, points), Field(27, 0), Field(28, damage), Field(29, 4),
             Array(30), Empty(31),
             Field(36, 0x1), Field(38, 1), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
@@ -46,23 +46,23 @@ public sealed class AreaAiSkillTests
 
     // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, heal 5 points, 20 hit points, at world
     // cell (10, 20).
-    private static AreaObjectRecord Npc(int index, uint critterFlags = 0, uint spellFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
+    private static AreaObjectRecord Npc(int index, uint critterFlags = 0, long repair = 0, uint spellFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, spellFlags), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
             Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
-            Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
+            Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0), Array(40, repair, 0, 0, 0), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
             Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
         ], true, true, true);
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null, uint spellFlags = 0)
+    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null, long repair = 0, int itemPoints = 10, int itemDamage = 0, uint spellFlags = 0)
     {
         var session = hero ? ConversationSessionFixture.CreateWithHero() : ConversationSessionFixture.Create();
-        var rows = new[] { Npc(0, critterFlags, spellFlags), Item(1) };
+        var rows = new[] { Npc(0, critterFlags, repair, spellFlags), Item(1, itemPoints, itemDamage) };
         var map = new AreaInventoryMap(1,
             new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(Healing, 1, 0, 0, null, []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
@@ -76,7 +76,7 @@ public sealed class AreaAiSkillTests
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, critterFlags, spellFlags), new(10, 20))], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, critterFlags, repair, spellFlags), new(10, 20))], Combat = combat,
             HeroCell = () => new CellCoord(14, 20),
             NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
@@ -331,7 +331,7 @@ public sealed class AreaAiSkillTests
     [TestMethod]
     public void A_skill_with_no_case_of_its_own_answers_the_sessions_plain_roll_and_one_with_a_handler_not_built_answers_false()
     {
-        // ARC-AI-1854 (0x4C7160): bow, melee, ... are the shared check alone; repair is not built here (gambling is the next test, pick locks has its own goal 67).
+        // ARC-AI-1854 (0x4C7160): bow, melee, ... are the shared check alone; repair has its own tests (ARC-AI-2622) (gambling is the next test, pick locks has its own goal 67).
         var (session, host, npc, _) = Open(hero: true);
         var before = session.Version.Revision;
         var answer = host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)Skill.Melee, null);
@@ -340,7 +340,7 @@ public sealed class AreaAiSkillTests
         Assert.AreEqual((GameSessionDisposition.Changed, roll.Success), (roll.Disposition, answer), "the answer is the roll's success (run flag 0x40000)");
         Assert.AreEqual(before + 1, session.Version.Revision, "the roll is one revision");
         StringAssert.StartsWith(host.TraceOf(npc)!.Skill, $"skill {(int)Skill.Melee} on {AiSchedulerRules.Pc} Changed");
-        foreach (var skill in new[] { Skill.Repair, Skill.PickLocks })
+        foreach (var skill in new[] { Skill.PickLocks })
         {
             var revision = session.Version.Revision;
             Assert.IsFalse(host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)skill, null), skill.ToString());
@@ -419,6 +419,36 @@ public sealed class AreaAiSkillTests
         Assert.IsNull(host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll);
         Assert.AreEqual($"gambling on {Entity(9)}: no target", host.TraceOf(npc)!.Skill);
         Assert.AreEqual(before, (session.Version.Revision, session.QueryGamblingRoll()), "nothing is rolled");
+    }
+
+    [TestMethod]
+    public void An_npcs_repair_of_a_held_damaged_item_goes_through_the_session_and_writes_the_item_record()
+    {
+        // ARC-AI-2622 (0x4C7160, repair case 12): the NPC (repair 20 points, master) repairs the item it holds: the damage falls, hp_adj does not (master), one revision, the run's answer is the forced success.
+        var (session, host, npc, item) = Open(repair: 20 | (long)SkillTraining.Master << 6, itemPoints: 100, itemDamage: 60);
+        var before = session.Version.Revision;
+        var answer = host.AttemptSkill(npc, item, (int)Skill.Repair, null);
+        var notice = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill);
+        var repair = notice.Repair ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no repair");
+        Assert.IsTrue(answer, host.TraceOf(npc)?.Skill);
+        Assert.AreEqual((GameSessionDisposition.Changed, true), (repair.Disposition, repair.Success));
+        Assert.AreEqual(before + 1, session.Version.Revision, "the repair is one revision");
+        Assert.AreEqual(Math.Max(0, 60 - repair.Amount), repair.Condition!.Value.Damage, "the damage falls by the amount");
+        Assert.AreEqual(100, repair.Condition!.Value.Points + repair.Condition.Value.Adjustment, "a master takes nothing from hp_adj");
+        StringAssert.StartsWith(host.TraceOf(npc)!.Skill, $"repair {item} Changed");
+    }
+
+    [TestMethod]
+    public void An_npcs_repair_with_no_item_to_repair_is_refused_and_changes_nothing()
+    {
+        var (session, host, npc, item) = Open(hero: true, repair: 20, itemPoints: 100, itemDamage: 60);
+        var before = session.Version;
+        Assert.IsFalse(host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)Skill.Repair, null), "a critter is no item here (the original has no target test)");
+        Assert.IsFalse(host.AttemptSkill(npc, Entity(9), (int)Skill.Repair, null), "a target the host does not know");
+        StringAssert.EndsWith(host.TraceOf(npc)!.Skill, "no item to repair");
+        Assert.AreEqual(before, session.Version, "nothing is rolled");
+        Assert.IsTrue(host.DrainNotices().All(n => n.Kind == AreaAiNoticeKind.Skill && n.Repair is null));
+        _ = item;
     }
 
     [TestMethod]

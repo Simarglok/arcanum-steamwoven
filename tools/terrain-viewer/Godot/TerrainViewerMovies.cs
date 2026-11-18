@@ -35,6 +35,8 @@ public partial class TerrainViewerApp
     private static IReadOnlyList<MovieItem> StartupMovieItems() =>
         [.. AreaMovieTable.LogoPaths().Select(path => new MovieItem(0, path)), new MovieItem(AreaMovieTable.StartupMovie, null)];
     private bool _movieActive;
+    // ARC-INPUT-2647: the key whose press skipped a movie; its release is taken by the movie cover too.
+    private Key _movieSkipKey;
     private Action? _movieDone;
     private int _movieTrack;
     private IMovieSource? _movieSource;
@@ -228,9 +230,18 @@ public partial class TerrainViewerApp
     /// <summary>Any input while a movie plays; true when it took it (it takes all). A key press ends the movie (a press, not an auto-repeat).</summary>
     private bool HandleMovieInput(InputEvent input)
     {
-        if (!MovieCovering) return false;
-        if (input is InputEventKey { Pressed: true, Echo: false })
+        // ARC-INPUT-2647: the menu under a movie (View Intro) acts on Escape's release, so the release of the key that skipped the
+        // movie is taken here too, after the movie ended; one press never skips the movie and goes back in the menu.
+        if (input is InputEventKey { Pressed: false } release && _movieSkipKey != Key.None
+            && (release.Keycode != Key.None ? release.Keycode : release.PhysicalKeycode) == _movieSkipKey)
         {
+            _movieSkipKey = Key.None;
+            return true;
+        }
+        if (!MovieCovering) return false;
+        if (input is InputEventKey { Pressed: true, Echo: false } skip)
+        {
+            _movieSkipKey = skip.Keycode != Key.None ? skip.Keycode : skip.PhysicalKeycode;
             GD.Print("ARC-RENDER-1170 movie key skip");
             // Between two movies (none open yet) a key drops the rest of the queue.
             if (_moviePlayback is { } playback) playback.Skip(); else _movieQueue.Clear();
