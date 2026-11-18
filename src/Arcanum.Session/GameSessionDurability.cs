@@ -66,7 +66,7 @@ public readonly record struct ItemDurabilityResult(GameSessionDisposition Dispos
     /// <summary>The repair rule's status, for a repair call.</summary>
     public ItemRepairStatus? Repair { get; init; }
 
-    /// <summary>ARC-SCRIPT-2722 (ledger OD12, TD2): the break was a deleting one (<see cref="Break"/> is <see cref="ItemBreakStep.Deleted"/>), the item's destroy point (2) ran and kept the item: it stays where it is with its record unchanged, no deletion.</summary>
+    /// <summary>ARC-SCRIPT-2722 (ledger OD12, TD2): the break was a deleting one (<see cref="Break"/> is <see cref="ItemBreakStep.Deleted"/>), the item's destroy point (2) ran and kept the item: it stays where it is, no deletion, with the hit's damage written (0 hit points, still broken).</summary>
     public bool DestroyKept { get; init; }
 }
 
@@ -145,7 +145,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// <see cref="DamageItem(GameSessionVersion, string, ItemCondition, int)"/> as a hit on an item that the host follows with the break's steps (the hero's attack on an item, damage with no attacker):
-    /// with <paramref name="destroyPoint"/> a deleting break first asks the attached item destroy gate (<see cref="AttachItemDestroyGate"/>), as the original's break does through the object destroy 0x43CCA0 (ARC-SCRIPT-2722).
+    /// with <paramref name="destroyPoint"/> a deleting break first asks the attached item destroy gate (<see cref="AttachItemDestroyGate"/>), as the original's break does through the object destroy (ARC-SCRIPT-2722, ledger BS3g).
     /// The wear paths leave it out: nothing there shows a destroy point's lines.
     /// </summary>
     internal ItemDurabilityResult DamageItem(GameSessionVersion expected, string entity, ItemCondition baseline, int amount, bool destroyPoint)
@@ -230,8 +230,11 @@ public sealed partial class GameSessionOwner
                 if (_durability.Destroyed.Contains(entity)) return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, ItemBreakStep.Deleted, slot, Version);
                 if (!allowed)
                 {
+                    // The caller wrote the hit's damage before the break (0x4B4390 → 0x43D530), so the kept item stands at 0 hit points with the destroyed bit and the next hit breaks it again.
+                    _durability.Records[entity] = outcome.Condition;
+                    if (slot is { } held) _equipment.Worn[held] = _equipment.Worn[held] with { Item = Conditioned(_equipment.Worn[held].Item, outcome.Condition) };
                     Revise();
-                    return new(GameSessionDisposition.Changed, GameSessionFailure.None, current, ItemBreakStep.Deleted, null, Version) { DestroyKept = true };
+                    return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome.Condition, ItemBreakStep.Deleted, null, Version) { DestroyKept = true };
                 }
             }
             DestroyObject(entity);

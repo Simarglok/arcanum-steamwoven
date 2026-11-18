@@ -86,10 +86,11 @@ public sealed class ItemDamageStateTests
         Assert.AreEqual((GameSessionDisposition.Changed, ItemBreakStep.Deleted, true), (kept.Disposition, kept.Item!.Value.Break, kept.Item!.Value.DestroyKept));
         Assert.AreEqual(SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.DestroyKept, kept.Host, "the sound still plays, the destroy is refused");
         Assert.IsFalse(owner.IsItemDestroyed("vase"));
-        Assert.AreEqual(broken, owner.QueryItemCondition("vase", Vase.Baseline)!.Value, "the record is unchanged");
-        // The refusal is the item's own: the next hit breaks it again and asks again.
+        var stands = owner.QueryItemCondition("vase", Vase.Baseline)!.Value;
+        Assert.AreEqual((broken with { Damage = 10 }), stands, "the hit's damage is written: 0 hit points, still broken");
+        // The refusal is the item's own: any next hit breaks it again (it is at 0 hit points) and asks again.
         answer = true;
-        var gone = owner.DamageItemUnattacked(owner.Version, Vase, Glass, 10, true);
+        var gone = owner.DamageItemUnattacked(owner.Version, Vase, Glass, 1, true);
         Assert.AreEqual((ItemBreakStep.Deleted, false), (gone.Item!.Value.Break, gone.Item!.Value.DestroyKept));
         Assert.IsTrue(owner.IsItemDestroyed("vase"));
         CollectionAssert.AreEqual(new[] { "vase", "vase" }, asked);

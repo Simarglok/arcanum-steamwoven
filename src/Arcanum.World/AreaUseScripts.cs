@@ -1776,8 +1776,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2722 (ledger TD2, OD12): the session's gate for the break's item deletion (<see cref="GameSessionOwner.AttachItemDestroyGate"/>): an item that is hit again after its first break is deleted through the object destroy
-    /// (0x43F1C0 → 0x43CCA0), which runs the item's destroy point (2) first (the item as the triggerer and the attachee). The answer 0, or a run that did not apply, keeps the item. False: the item stays. An item the shown map's rows do not
-    /// hold (the host reads the slots from a row; one carried from another map has none here), one with no destroy point, or one whose point is already running (it destroyed itself) answers true. The run is taken by the viewer's break step
+    /// (the break's items case, ledger BS3g), which runs the item's destroy point (2) first (the item as the triggerer and the attachee). The answer 0, or a run that did not apply, keeps the item. False: the item stays. An item the shown map's rows do not
+    /// hold (the slots are read from a row: an item carried from another map or worn by a critter answers true, a gap left open by ARC-SCRIPT-2722), one with no destroy point, or one whose point is already running (it destroyed itself) answers true. The run is taken by the viewer's break step
     /// (<see cref="TakeBreakDestroyRun"/>).
     /// </summary>
     public bool ItemMayDestroy(string entity)

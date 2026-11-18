@@ -991,7 +991,7 @@ public partial class TerrainViewerApp
                     FloatObjectDamage(hit.Id, row, AreaCombatFloaters.Of(hit));
                     RunObjectBreakSteps(row, hit.Host, false, false);
                 }
-                // ARC-SCRIPT-2722: a worn or carried item has no row to run the break's steps for, but its deleting break's destroy point ran all the same.
+                // ARC-SCRIPT-2722: an item with no map row has no break steps to run; show the destroy point's run its gate left (the host runs the point only for an item of the shown map's rows, so this is rare and drains a stale run).
                 else ShowBreakDestroyRun(hit.Id);
             }
         }

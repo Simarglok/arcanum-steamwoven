@@ -77,7 +77,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs take their own).
     /// ARC-SCRIPT-2686: and its printed lines go to the message window (IS2, PW1) and its dialog action is queued as a heartbeat's is (opened once the pump that broke the object returned).
-    /// ARC-SCRIPT-2722: also the gate of an item's deleting break, whose hit has no map row to run the break's steps for (a carried or worn item): the run is shown all the same.
+    /// ARC-SCRIPT-2722: also the gate of an item's deleting break (a hit on an item with no map row drains a run its gate left all the same).
     /// </summary>
     private void ShowBreakDestroyRun(string entity)
     {
