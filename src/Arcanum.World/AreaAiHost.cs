@@ -3428,7 +3428,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result.ScriptDeclined) Trace(id).Throw += " script-declined";
         _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack, Messages = result.Messages, EyeCandies = result.EyeCandies });
         // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
-        var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
+        // ARC-COMBAT-2523: a grenade flies to the location whatever the line names, so its roll is the location's and no critter is its victim.
+        var attackedVictim = struck?.Who is { } hurt && fields.Object.Type != AreaHealingItems.GenericType && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
         if (attackedVictim is { } victim)
         {
             // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a thrown item flies and sends no event at the throw; only a throw decided a hit raises it here (the strike's alert, at the shot: deviation A), with the loudness of the thrown item

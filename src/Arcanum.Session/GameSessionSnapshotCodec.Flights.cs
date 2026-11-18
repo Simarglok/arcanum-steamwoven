@@ -373,7 +373,7 @@ public static partial class GameSessionSnapshotCodec
                 Int(v["speed"], vp + ".speed", int.MinValue, int.MaxValue), Int(v["range"], vp + ".range", int.MinValue, int.MaxValue), Bool(v["supported"], vp + ".supported"));
             var target = String(r["target"], at + ".target");
             arrows[i] = new SessionSavedNpcArrow(shot, Entity(r["shooter"], at + ".shooter"), values, CarriedCheckOf(r["check"], at + ".check"), Bool(r["hit"], at + ".hit"),
-                target == SessionNpcShotFacts.HeroTarget ? target : Entity(r["target"], at + ".target"));
+                target is SessionNpcShotFacts.HeroTarget or SessionNpcShotFacts.LocationTarget ? target : Entity(r["target"], at + ".target"));
         }
         var lastMissile = Int(f["lastMissile"], p + ".lastMissile", 0, int.MaxValue);
         var missileRows = Array(f["missiles"], p + ".missiles", SessionMissile.MaxMissiles);
