@@ -87,6 +87,9 @@ public sealed record AreaAiScene
     /// <summary>The companions standing here: their session entity, the T0 record they were made from (a visitor's is a row of its home map) and
     /// the world cells they hold now (their live overlay). ARC-DEV-075: the entity is given, never read back from the key on the shown map.</summary>
     public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
+    /// <summary>ARC-AI-1605 (ledger AW18, VBG9): the screen offset the hero or a companion (by its entity) has left inside its committed cell while a step is under way (<see cref="AreaCritterLights.StepOffset"/>), which the original adds to the start of its
+    /// sight and sound lines (<see cref="AreaAiHost.ObserverOffset"/>); null (the provider, or its answer): the critter is not tracked, and its offset is (0, 0) as before.</summary>
+    public Func<string, (int X, int Y)?>? ObserverStep { get; init; }
     /// <summary>ARC-AI-1515: the follow check's facts of a companion the hero hit (<see cref="AreaCompanionLoyalty.Facts"/>: its alignment, level and thresholds against the
     /// PC side, its effective reaction now); null (or a null answer): the check cannot run and the hit changes the reaction only.</summary>
     public Func<string, PartyConsentFacts?>? FollowFacts { get; init; }
@@ -4389,11 +4392,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-AI-1520 (ledger AW18, VBG9): the observer's pixel offset (object fields 3 and 4) that the original adds to the start of the sight line
     /// and the sound line (ledger RA7, VB3-16, VB3-18): the offset of its map data plus, for an NPC the host walked, the screen shift its
     /// step has left (the pose's shift less the projection of its cell from the T0 cell, <see cref="AreaCritterLights.Stand"/>). The hero and an
-    /// NPC this host does not walk stand at their cell centre (0, 0): the hero's step offset and a follower's are not tracked here.
+    /// NPC this host does not walk stand at their cell centre (0, 0) unless the scene tracks them (ARC-AI-1605: <see cref="AreaAiScene.ObserverStep"/>, the hero's step offset and a companion's).
     /// </summary>
     private (int X, int Y) ObserverOffset(string observer)
     {
-        if (!_npcs.TryGetValue(observer, out var npc)) return (0, 0);
+        // ARC-AI-1605: the hero and a companion have no map-data offset here (the hero has no row; a companion's template does not carry its own): their offset is the rest of the step they are walking.
+        if (!_npcs.TryGetValue(observer, out var npc)) return _scene.ObserverStep?.Invoke(observer) ?? (0, 0);
         int Base(int slot) => npc.Row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number is { } n && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0;
         var (offsetX, offsetY) = (Base(OffsetXSlot), Base(OffsetYSlot));
         if (Movers.PoseOf(observer, _nowMs) is not { } pose) return (offsetX, offsetY);
@@ -4401,7 +4405,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return (stood.OffsetX, stood.OffsetY);
     }
 
-    /// <summary>ARC-COMBAT-1934: the pixel offset a shooter's or caster's line of fire starts at (<see cref="ObserverOffset"/>); (0, 0) for the hero and an NPC this host does not walk.</summary>
+    /// <summary>ARC-COMBAT-1934: the pixel offset a shooter's or caster's line of fire starts at (<see cref="ObserverOffset"/>); (0, 0) for an NPC this host does not walk and for a hero or companion the scene does not track.</summary>
     public (int X, int Y) ShooterOffset(string id) => ObserverOffset(id);
 
     public AwarenessResult Hear(string observer, string target, Loudness loudness)
