@@ -139,7 +139,7 @@ public enum ChromeKind
 /// the Parchment material shades, in the same coordinates as the materials (the art's own plus <paramref name="OriginX"/>): the logbook's book has it at its 286, the reading window's book at the
 /// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -488,7 +488,12 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, barterDoll, dollCover, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        // ARC-UI-2763: the windows of the inventory family (the inventory, loot, barter, steal, identify and repair windows, backdrop BD-A) are all one wood: the original's arts have wood of slightly different tones
+        // (the doll 223 darker than the pack 221, the loot doll lighter), so the window's two halves and the backdrop behind them read as two surfaces. Every art of the family takes the tone `FamilyWoodLow` / `FamilyWoodHigh`;
+        // the pack art (inventor.art) continues the doll's grain from the split (358 units), as the backdrop's right piece does.
+        ChromeRecipe Family(ChromeRecipe recipe) => recipe with { FamilyWood = true };
+        return [top, bottom, Family(inventory with { OriginX = InterfaceChromeRenderer.SteamwovenFamilySplitUnits }), Family(doll), Family(loot), Family(barter), Family(follower), Family(lootDoll), Family(barterDoll), Family(dollCover),
+            .. lenses.Select(recipe => recipe.File is "lns_bart.art" or "lns_loot.art" or "lns_papr.art" ? Family(recipe) : recipe), .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
@@ -618,6 +623,13 @@ public static class InterfaceChromeRenderer
     }
 
     private static readonly Rgb Ink = new(20, 14, 8), BrassLight = new(214, 178, 96), Brass = new(160, 120, 52), BrassDark = new(96, 70, 30);
+    /// <summary>ARC-UI-2763: the width in original units of the left part of the inventory family's window (the doll's, the loot and barter windows' left art, the pack's `PackX`): where the pack art 221 starts, so its grain continues the left part's.</summary>
+    public const int SteamwovenFamilySplitUnits = Arcanum.World.AreaInventoryArtLayout.PackX;
+
+    /// <summary>ARC-UI-2763: the darkest and lightest wood colour of the inventory family: the wood of the pack art 221 (`inventor.art`) as <see cref="TuneWood"/> reads it (mean 64, 51, 42 in the Legacy pixels), the art every window of the family has
+    /// on its right and the middle one of the family's arts (the doll 223 reads 61, 46, 38, the loot window 66, 53, 45, its doll 70, 53, 43).</summary>
+    public static readonly (float R, float G, float B) FamilyWoodLow = (12.34f, 1.14f, 5.40f), FamilyWoodHigh = (102.34f, 87.10f, 69.89f);
+
     private static readonly Rgb WoodLowDefault = new(58, 37, 20), WoodHighDefault = new(112, 76, 43), IronLow = new(44, 46, 50), IronHigh = new(96, 98, 104);
     private static readonly Rgb SlateLow = new(20, 22, 26), SlateHigh = new(66, 68, 74);
     private static readonly Rgb PitFill = new(3, 3, 5), GridLine = new(48, 54, 64);
@@ -1047,6 +1059,12 @@ public static class InterfaceChromeRenderer
     // wood is the middle of our grain; its spread (about six standard deviations of the pixels) is the grain's range, never wider than ours.
     private static void TuneWood(Canvas c, ChromeRecipe recipe)
     {
+        if (recipe.FamilyWood)
+        {
+            c.WoodLow = new Rgb(FamilyWoodLow.R, FamilyWoodLow.G, FamilyWoodLow.B);
+            c.WoodHigh = new Rgb(FamilyWoodHigh.R, FamilyWoodHigh.G, FamilyWoodHigh.B);
+            return;
+        }
         double sr = 0, sg = 0, sb = 0, qr = 0, qg = 0, qb = 0; long n = 0;
         for (var y = 0; y < c.LegacyH; y++)
         for (var x = 0; x < c.LegacyW; x++)
