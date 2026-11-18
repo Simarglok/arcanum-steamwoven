@@ -565,6 +565,7 @@ src/Arcanum.World/AreaAiHost.cs,StandardReaction,pending,
 src/Arcanum.World/AreaAiHost.cs,StartCast,pending,
 src/Arcanum.World/AreaAiHost.cs,StartPickLocks,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StartPleaseMove,exempt,host
+src/Arcanum.World/AreaAiHost.cs,StartSkillWithItem,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StartSpreadOut,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StepClear,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Struck,pending,
@@ -659,6 +660,7 @@ src/Arcanum.World/AreaHeroRunsHost.cs,UseItem,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,UseItemOnTile,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,UseObject,pending,
 src/Arcanum.World/AreaInventoryArtLayout.cs,Place,pending,
+src/Arcanum.World/AreaInventoryHost.cs,FirstLockpicks,exempt,reference
 src/Arcanum.World/AreaInventoryHost.cs,HolderPortrait,exempt,host
 src/Arcanum.World/AreaInventoryHost.cs,Name,pending,
 src/Arcanum.World/AreaInventoryHost.cs,SubstituteContainer,pending,
@@ -730,6 +732,7 @@ src/Arcanum.World/AreaUseScripts.cs,DestroyScenery,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,FactionOf,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,GiveNpcPrototypeItem,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,HasBadAssociates,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
@@ -1005,6 +1008,7 @@ tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerCanSpeak,exe
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerHurt,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SayFollowerLine,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SpeakerCanSpeakFacts,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerFollowerSkills.cs,HandOverLockpick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHeldMouse.cs,PollHeldMouse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,GameCursorPress,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroBeginThrow,pending,

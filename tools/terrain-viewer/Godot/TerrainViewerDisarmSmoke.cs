@@ -168,7 +168,10 @@ public partial class TerrainViewerApp
             _gameSettings = settings with { FollowerSkills = true }; FollowerSkillsCtrlForSelfTest = false;
             Require(FollowerSkillsAllowed(), "the option on and no Ctrl: the chooser runs");
             FollowerSkillsCtrlForSelfTest = true;
-            Require(!FollowerSkillsAllowed(), "Ctrl skips the chooser");
+            Require(!FollowerSkillsAllowed() && !FollowerSkillsAllowed(eitherCtrl: true), "left Ctrl skips the chooser");
+            FollowerSkillsCtrlForSelfTest = false; FollowerSkillsRightCtrlForSelfTest = true;
+            Require(FollowerSkillsAllowed() && !FollowerSkillsAllowed(eitherCtrl: true), "right Ctrl skips the Disarm Traps chooser only");
+            FollowerSkillsRightCtrlForSelfTest = null;
             FollowerSkillsCtrlForSelfTest = false; _gameSettings = settings with { FollowerSkills = false };
             Require(!FollowerSkillsAllowed(), "the option off skips the chooser");
             _gameSettings = settings with { FollowerSkills = true };
@@ -188,7 +191,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            FollowerSkillsScoreForSelfTest = null; FollowerSkillsCtrlForSelfTest = null; _gameSettings = settings;
+            FollowerSkillsScoreForSelfTest = null; FollowerSkillsCtrlForSelfTest = null; FollowerSkillsRightCtrlForSelfTest = null; _gameSettings = settings;
             if (DisarmArmed) CancelDisarm("the smoke ended");
             session.LeaveParty(session.Version, follower, new PartyLeave(Force: true));
             _smokeLedNpc = before;

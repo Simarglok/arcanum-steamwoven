@@ -518,8 +518,6 @@ public enum AiPerformKind
     UseItem,
     /// <summary>The skill starter ran (0x4350F0, or 0x436220 for pick locks).</summary>
     UseSkill,
-    /// <summary>ARC-SCRIPT-2752: the use-item-with-skill starter ran (0x4352C0, goal 40).</summary>
-    UseItemWithSkill,
     /// <summary>The throw starter ran on its own (0x434F80).</summary>
     Throw,
     /// <summary>The pickup starter ran (0x4356C0).</summary>

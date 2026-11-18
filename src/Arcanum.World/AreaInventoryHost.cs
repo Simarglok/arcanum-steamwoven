@@ -885,6 +885,19 @@ public sealed class AreaInventoryHost
         return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? AreaLockpicks.From(entity, fields) : null;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-1878 (the finder 0x462760, ledger PL4, PL5): the PC's first lockpicks in inventory order, armed or not: the starting kit's items first, then the items taken from the world, then the made ones (the order of the inventory lines,
+    /// <see cref="View"/>); the first that reads as lockpicks (<see cref="Lockpick"/>: an item the session destroyed is not one). Null when the hero holds none or there is no hero. The best-follower chooser scores every candidate with this one item.
+    /// </summary>
+    public SessionLockpick? FirstLockpicks(GameSessionOwner session, IReadOnlyList<SessionLockpick?>? kitLockpicks)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null) return null;
+        foreach (var entity in session.QueryHeroKit().Select(item => item.Entity).Concat(session.QueryPcInventory().Select(item => item.Entity)).Concat(session.QueryMadeItems().Select(item => item.Entity)))
+            if (Lockpick(session, entity, kitLockpicks) is { } pick) return pick;
+        return null;
+    }
+
     /// <summary>ARC-UI-016: the spell facts of an item the hero holds (the cast host's item lookup): a kit item's from
     /// <paramref name="kitItemSpells"/> (the hero load's, by kit entity), a taken item's from its object row
     /// (<see cref="SessionItemSpells.FromCombatFields"/>), whether listed or worn; null for anything else, an item the session no
