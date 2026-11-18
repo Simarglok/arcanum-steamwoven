@@ -30,7 +30,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-AI-2750 (exe read of the stat getter 0x4B0490 for stats 17 and 19, the PC included): the hero's level (17) or alignment (19) as the getter gives
+    /// ARC-AI-2750 (exe read of the stat getter for stats 17 and 19, the PC included, ledger AP5): the hero's level (17) or alignment (19) as the getter gives
     /// it: the stored value, then every change of that stat in the effect list as <see cref="EffectModifiers.Apply"/> aggregates them (the innate entries of
     /// the race and gender stand first, then the entries of <paramref name="entries"/>), clamped to the stat's range. A number without a rule has no changes.
     /// Null without a hero or for another stat.
