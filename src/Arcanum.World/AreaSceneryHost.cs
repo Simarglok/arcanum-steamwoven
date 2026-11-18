@@ -124,6 +124,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     public bool ObjectDestroyed(string entity, string? castId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        _brokenLoops.Remove(entity);
         var had = KillRuns(entity);
         // The spell side names an object by its cast id, which differs from the entity for a mobile row (the eye-candy overlays of a script or a spell are owned by it).
         if (castId is not null && castId != entity) had |= KillRuns(castId);
@@ -132,6 +133,66 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         if (loop) { _killedByArt.Add(entity); _changed = true; }
         return had || loop;
     }
+
+    /// <summary>The level of the break's interrupt of the object's goal runs (0x43F1C0 → 0x424070 with level 5).</summary>
+    public const int BreakInterruptLevel = 5;
+
+    /// <summary>
+    /// ARC-SCRIPT-2646 (ledger OD7, BS3c, 0x43F1C0 → 0x424070, rule 0x44E2C0): every break of a container, scenery or trap that is not already destroyed starts with the interrupt of the object's goal runs at level 5, before the type dispatch (a destroying break's
+    /// kill, <see cref="ObjectDestroyed"/>, follows it). The rule ends the scenery's loop (goal 1 or 77, priority 1) with its end node, which stops the run's looping sound (listed for <see cref="TakeKilledByArt"/>); the loop is kept as the object's but has no run: a respawning
+    /// scenery gets it back when the object is switched on again (<see cref="RestartBroken"/>, 0x43D280 → 0x43F710), a busted one at once, on its busted ART (ARC-SCRIPT-2670: the break writes the busted art through 0x43EB30, whose restart is <see cref="Reframe"/>: several frames start the loop again, one frame kills the object's runs). The no-interrupt overlays (eye candy, hover, floating) stay
+    /// running, and the walk stops at a run that refuses (a priority-5 goal that is not no-interrupt). <paramref name="castId"/> is the object's id on the spell side when it differs from <paramref name="entity"/>. A call the session refuses for a pass in progress is tried again by <see cref="TakeChanged"/>.
+    /// True when a loop run of the object ended.
+    /// </summary>
+    public bool ObjectBroken(string entity, string? castId = null)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var ended = InterruptRuns(entity);
+        if (castId is not null && castId != entity) InterruptRuns(castId);
+        return ended;
+    }
+
+    private bool InterruptRuns(string owner)
+    {
+        var loopRuns = _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && IsLoopRun(r));
+        var change = _session.InterruptGoals(owner, BreakInterruptLevel);
+        if (change.Failure == SessionGoalFailure.PassInProgress) { _pendingInterrupt.Add(owner); return false; }
+        if (!loopRuns || _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && IsLoopRun(r))) return false;
+        // The loop's end node ran: its voice stops, the scenery keeps the frame it shows and waits for a start (a respawn, a sector shown again).
+        if (_byEntity.ContainsKey(owner)) _killedByArt.Add(owner);
+        _brokenLoops.Add(owner);
+        _changed = true;
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2646 (0x43F5F0 → 0x43D280 → 0x43F710): the loops a break ended start again once the object is switched on: <paramref name="comesBack"/> says the entity is whole again (a respawned scenery), and the loop then starts as the restart does (the
+    /// starter refuses an object that has a main run already). A loop whose object is still busted, off or destroyed waits. Returns how many runs started.
+    /// </summary>
+    public int RestartBroken(Func<string, bool> comesBack)
+    {
+        ArgumentNullException.ThrowIfNull(comesBack);
+        var started = 0;
+        foreach (var entity in _brokenLoops.ToArray())
+        {
+            if (!Owns(entity)) { _brokenLoops.Remove(entity); continue; }
+            if (!comesBack(entity)) continue;
+            if (StartOne(entity, Burns(entity)))
+            {
+                started++;
+                // SUM4: a restarted run has no burn source any more.
+                if (_created.TryGetValue(entity, out var made)) _created[entity] = made with { Source = null, Begun = true };
+            }
+            if (!StartPending) _brokenLoops.Remove(entity);
+        }
+        return started;
+    }
+
+    private bool Burns(string entity) => _byEntity.TryGetValue(entity, out var loop) ? loop.Burning : _created.TryGetValue(entity, out var made) && made.Burning;
+
+    // The entities whose loop run a break's interrupt ended and that have not started again.
+    private readonly HashSet<string> _brokenLoops = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _pendingInterrupt = new(StringComparer.Ordinal);
 
     // The session refuses a kill while a pass holds the table (spell-run rules under way): the owner is tried again at the next take.
     private bool KillRuns(string owner)
@@ -157,7 +218,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     {
         if (_session.QueryGoals().MainRunOf(entity) is not null) return false;
         var result = _session.StartGoal(new GoalStartRequest(entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame(burning)), _startPorts);
-        if (result.Started) return true;
+        if (result.Started) { _brokenLoops.Remove(entity); return true; }
         if (result.Failure == SessionGoalFailure.PassInProgress) StartPending = true; else Refused++;
         return false;
     }
@@ -185,6 +246,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     public bool TakeChanged()
     {
         if (_pendingKill.Count > 0) foreach (var owner in _pendingKill.ToArray()) { _pendingKill.Remove(owner); KillRuns(owner); }
+        if (_pendingInterrupt.Count > 0) foreach (var owner in _pendingInterrupt.ToArray()) { _pendingInterrupt.Remove(owner); InterruptRuns(owner); }
         var changed = _changed;
         _changed = false;
         return changed;
@@ -200,10 +262,10 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         var started = 0;
         StartPending = false;
         foreach (var loop in _animation.Loops)
-            if (StartOne(loop.Entity, loop.Burning)) started++;
+            if (!_brokenLoops.Contains(loop.Entity) && StartOne(loop.Entity, loop.Burning)) started++;
         foreach (var (entity, made) in _created.ToArray())
         {
-            if (!StartOne(entity, made.Burning)) continue;
+            if (_brokenLoops.Contains(entity) || !StartOne(entity, made.Burning)) continue;
             started++;
             // SUM4: a loop that ran before and is started again (a sweep ended it) has no source any more; the first start keeps it.
             _created[entity] = made with { Source = made.Begun ? null : made.Source, Begun = true };
@@ -247,7 +309,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         var offset = had ? (old!.Loop.OffsetX, old.Loop.OffsetY) : _resting.GetValueOrDefault(entity);
         if (decision == SceneryRestart.Kill)
         {
-            _session.KillGoals(entity);
+            // A kill the session refuses for a pass in progress is tried again by TakeChanged (the overlays of the object must not outlive the art write).
+            if (_session.KillGoals(entity).Failure == SessionGoalFailure.PassInProgress) _pendingKill.Add(entity);
             if (_byEntity.Remove(entity)) { _animation.Remove(entity); _resting[entity] = offset; _killedByArt.Add(entity); }
             _changed = true;
         }
@@ -260,6 +323,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
             var burning = (sceneryFlags & AreaSceneryAnimation.BurningFlag) != 0;
             var loop = new AreaSceneryLoop(row, frames, new SceneryLoop(x, y, frames.Select(f => (f.ArtOffsetX, f.ArtOffsetY)).ToArray(), 0, pause, offset.Item1, offset.Item2), burning);
             _byEntity[entity] = loop; _animation.Replace(loop); _resting.Remove(entity);
+            // ARC-SCRIPT-2670: the restart the art writer ran gives a loop a break interrupted its run back at once (the busted art's frames), so the break's mark goes.
+            _brokenLoops.Remove(entity);
             if (!running) StartOne(entity, burning);
             _changed = true;
         }

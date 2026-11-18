@@ -2230,6 +2230,29 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, on every map, in placing order.</summary>
     public IReadOnlyList<SessionPlacedItem> QueryPlacedItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Placed.ToArray()); }
 
+    /// <summary>
+    /// ARC-SCRIPT-2594 (ledger IV8): the tile the item last lay on after the session dropped it (or a script created it on the ground) and a pickup took it up again, or null when it never did (an item still on the ground reads
+    /// its placed cell, <see cref="QueryPlacedItems"/>). In the original a held item keeps this stale location field; an insert-item script's vicinity scans and distance between centre on it. A read of the current state, in no revision.
+    /// </summary>
+    public Arcanum.Simulation.Movement.CellCoord? QueryItemLastDrop(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return _inventory.Hero.LastDrops.TryGetValue(entity, out var cell) ? cell : null;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2701 (ledger IV8): the tile a map-data item of the hero's map lies loose on now when that is not the tile its map data holds (a spilled container's, where a critical dropped it or a push left it), or null for an item on its own
+    /// data tile, held, taken, destroyed, in flight or not on the map's ground. Before its pickup commits this is the item's location field the insert-item run's scans centre on. A read of the current state, in no revision.
+    /// </summary>
+    public Arcanum.Simulation.Movement.CellCoord? QueryItemLooseCell(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
+        return _inventory.Seeds.TryGetValue(_actor.Map, out var seed) && seed.Items.TryGetValue(entity, out var row) && LooseCell(_actor.Map, seed, entity) is { } cell && cell != row.Cell ? cell : null;
+    }
+
     // The insertion (0x466640): since ARC-WORLD-066 its merge of ammunition into a held stack of the same prototype. ARC-SCRIPT-041:
     // the item events of the two transfers in the original's order (ledger IE1–IE4): from the ground (0x461810) the item's get
     // script, which can cancel, then the insert check, then the insertion's insert-item script; from a holder (0x461CA0) the
@@ -2388,6 +2411,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         else
         {
+            // ARC-SCRIPT-2701 (IV8): a map-data item that lay loose on another tile than its data holds (an NPC's critical drop, a spill, a throw's landing, a push) keeps that tile as its location field.
+            if (seed.Items.TryGetValue(item.Entity, out var seeded) && LooseCell(origin, seed, item.Entity) is { } lying && lying != seeded.Cell) _inventory.Hero.NoteLastDrop(item.Entity, lying);
             _inventory.Add(new SessionPcItem(item.Entity, origin, facts.Kind));
             // ARC-WORLD-085: the item keeps its seed's weight facts wherever it goes.
             _inventory.SetWeight(item.Entity, facts.WeightFacts);
@@ -2547,6 +2572,14 @@ public sealed partial class GameSessionOwner : IDisposable
                 inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
             inventory.Hero.AddPlaced(item);
             inventory.Taken.Add(item.Entity);
+        }
+        // ARC-SCRIPT-2594 (IV8): a last-drop tile names an item that exists, is off the ground now and is held by the hero or an NPC (or still taken), within the bound.
+        if (saved.LastDrops.Count > HeroLists.MaxLastDrops) return GameSessionFailure.BudgetExceeded;
+        foreach (var drop in saved.LastDrops)
+        {
+            if (!SessionValidation.Entity(drop.Entity) || !DropCellFits(drop.Cell) || destroyed.Contains(drop.Entity) || inventory.PlacedItem(drop.Entity) is not null ||
+                inventory.Hero.PlaceOf(drop.Entity) is null && inventory.NpcOf(drop.Entity) is null && !inventory.Taken.Contains(drop.Entity)) return GameSessionFailure.InvalidSnapshot;
+            if (!inventory.Hero.RestoreLastDrop(drop.Entity, drop.Cell)) return GameSessionFailure.InvalidSnapshot;
         }
         // ARC-WORLD-071: every given item is in an NPC's list, and a given kit item lies within the kit's numbers; a pile record names no
         // item of the hero's (a seed pile, or a made pile in an NPC's list).

@@ -785,8 +785,9 @@ public sealed class InterfaceChromeTests
     {
         var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
         Assert.AreEqual(ChromeKind.Panel, recipe.Kind);
-        // ARC-UI-1810: the portrait's ring is the generated round view (the lens 198's corners carry the same ring), not a kept picture.
-        Assert.AreEqual(1, recipe.Parts.OfType<ChromeRoundView>().Count());
+        // ARC-UI-2694: the window frame draws no ring of its own around the lens's circle (the lens art 198 carries the one ring inside its square): its square takes no rim.
+        Assert.AreEqual(0, recipe.Parts.OfType<ChromeRoundView>().Count());
+        Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (25, 24, 89, 89)), "the lens's square takes no rim");
         Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < 119 && keep.Y < 119 && keep.X + keep.Width > 19 && keep.Y + keep.Height > 19), "no kept picture over the portrait's ring");
         // 140 and 199 (the waypoint panel's pieces) and 219 and 220 (the two landscape pictures) are drawn by no window of the viewer; the picture stays art.
         foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART" })
@@ -802,10 +803,10 @@ public sealed class InterfaceChromeTests
         {
             ChromeSunk p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "sunk"),
             ChromeKeep p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "keep"),
-            ChromeRoundView p => (X: (int)(p.CenterX - p.Radius), Y: (int)(p.CenterY - p.Radius), Width: (int)Math.Ceiling(2 * p.Radius), Height: (int)Math.Ceiling(2 * p.Radius), Kind: "view"),
+            ChromeBare p when p.Width == 89 => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "view"), // ARC-UI-2694: the lens's square, no ring of the frame's own
             _ => (X: 0, Y: 0, Width: 0, Height: 0, Kind: "other"),
         }).Where(box => box.Kind != "other").ToArray();
-        Assert.IsTrue(boxes.Count(box => box.Kind == "sunk") == 3 && boxes.Count(box => box.Kind == "view") == 1);
+        Assert.IsTrue(boxes.Count(box => box.Kind == "sunk") == 3 && boxes.Count(box => box.Kind == "view") == 1, $"sunk {boxes.Count(box => box.Kind == "sunk")}, view {boxes.Count(box => box.Kind == "view")}");
         foreach (var (x, y, w, h, kind) in boxes) Assert.IsTrue(x >= 0 && y >= 0 && x + w <= 800 && y + h <= 400, $"a {kind} at ({x}, {y}, {w} x {h}) lies inside 800 x 400");
         foreach (var keep in boxes.Where(box => box.Kind == "keep"))
         foreach (var other in boxes.Where(box => box.Kind == "sunk"))
@@ -959,6 +960,14 @@ public sealed class InterfaceChromeTests
             var (pw, _) = InterfaceChromeRenderer.PixelSize(89, 89, scale);
             Assert.AreEqual(0, Pixel(a, pw, pw / 2, pw / 2).A, $"the lens is clear in the middle at {scale}");
             Assert.AreEqual(255, Pixel(a, pw, 1, 1).A, $"and opaque in the corner at {scale}");
+            // ARC-UI-2645: the circle touches the frame's four sides, so the ring lies inside it: at the middle of each side the ring is there (opaque, brass), not cut off by the box.
+            foreach (var (x, y) in new[] { (pw / 2, 1), (pw / 2, pw - 2), (1, pw / 2), (pw - 2, pw / 2) })
+            {
+                var edge = Pixel(a, pw, x, y);
+                Assert.AreEqual(255, edge.A, $"the ring is whole at ({x}, {y}) at {scale}");
+                Assert.IsTrue(edge.R > edge.B, $"the ring is brass at ({x}, {y}) at {scale}: {edge}");
+            }
+            Assert.IsTrue(Pixel(a, pw, pw / 2, (int)(pw * 0.2)).A < 255, $"the view is clear inside the ring at {scale}");
         }
     }
 
@@ -1127,7 +1136,7 @@ public sealed class InterfaceChromeTests
         Assert.AreEqual(ChromeHoles.Cloth, Recipe("book_quests.art").Holes);
         // ARC-UI-1810: the lens art (pcwincvr, 198) is shared with the character sheet and the world map; its recipe is the round view's ring (the lenses 231 to 233's), found by the lowercase name.
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("PCWinCvr.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
-        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5) }, Recipe("PCWinCvr.ART").Parts.ToArray());
+        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5, Inward: true) }, Recipe("PCWinCvr.ART").Parts.ToArray());
         var tabs = new[] { "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art" };
         for (var i = 0; i < tabs.Length; i++)
         {

@@ -20,6 +20,49 @@ public sealed class SpellInvocationAreas(ISpellTargetWorld targets, Func<int, ul
     public bool TargetMatchesBeginArea(SpellInvocation invocation) =>
         SpellTargetRules.Test(Context(invocation, SpellInvocationRules.FallbackRadius), targets, profile).Passes;
 
+    /// <summary>
+    /// ARC-MAGIC-2655 (diagnostic only, no original function): the BEGIN-area mask bits whose removal alone lets the invocation's
+    /// target pass the target area test, so a refused check can name the bits that failed. Empty when the target passes, or
+    /// when no single bit explains the refusal (two bits fail together). Bit 0 of the answer is the mask's bit 0 (low word first).
+    /// </summary>
+    public ulong FailingBeginBits(SpellInvocation invocation)
+    {
+        var context = Context(invocation, SpellInvocationRules.FallbackRadius);
+        if (SpellTargetRules.Test(context, targets, profile).Passes) return 0;
+        var mask = context.Area.Targets;
+        ulong failing = 0;
+        for (var bit = 0; bit < 64; bit++)
+        {
+            var one = 1UL << bit;
+            if ((mask & one) != 0 && SpellTargetRules.Test(context with { Area = context.Area with { Targets = mask & ~one } }, targets, profile).Passes) failing |= one;
+        }
+        return failing;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-2655 (diagnostic only): the 5 x 5 tiles around the target's location as the fallback sees them, rows from y-2 to y+2:
+    /// B blocked tile, O blocking object on it, . free; "no-target-location" for the whole note when the target has no location.
+    /// </summary>
+    public string FallbackTilesNote(SpellInvocation invocation)
+    {
+        if (Resolve(invocation.TargetObject) is not { } target || target.Location.IsNone) return "no-target-location";
+        var rows = new List<string>();
+        var detail = new List<string>();
+        for (var dy = -2; dy <= 2; dy++)
+        {
+            var row = "";
+            for (var dx = -2; dx <= 2; dx++)
+            {
+                var tile = new SpellLocation((uint)(target.Location.X + dx), (uint)(target.Location.Y + dy));
+                var blocking = targets.ObjectsAt(tile, 0x3FFEF).Where(o => !o.IsItem && (o.ObjectFlags & SpellTargetObject.NoBlock) == 0).ToArray();
+                row += targets.TileBlocked(tile) ? 'B' : blocking.Length > 0 ? 'O' : '.';
+                if (Math.Abs(dx) <= 1 && Math.Abs(dy) <= 1 && blocking.Length > 0) detail.Add($"{dx},{dy}:" + string.Join("+", blocking.Select(o => $"t{o.Type}f{o.ObjectFlags:X}")));
+            }
+            rows.Add(row);
+        }
+        return "tiles=" + string.Join("/", rows) + " blockers=" + string.Join(";", detail);
+    }
+
     public bool BeginAreaTakesTiles(int spell) => ((beginTargets(spell) >> 32) & 0x8000) != 0;
 
     public SpellLocation FirstTileInBeginArea(SpellInvocation invocation, int radius)

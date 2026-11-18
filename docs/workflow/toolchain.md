@@ -483,7 +483,7 @@ before it. It replaces the earlier
     ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
     ./arcanum queue --playing [--for MIN]   # the owner is playing: no window run starts until --not-playing or the limit (default 4 h; ARC-DEV-2272)
-    ./arcanum queue --not-playing
+    ./arcanum queue --not-playing   # (the packaged game running turns the mode on by itself: ARC-DEV-2291)
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
     ./arcanum queue --wait [RUN_ID | --all] [--timeout MIN]   # block until that run (or the whole queue) has ended (ARC-DEV-1983)
 
@@ -577,11 +577,24 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
   A wrapper of another checkout from **before this change** does not know the flag and reads it as a running exclusive Godot run, so
   it holds back every Godot kind (`window`, `headless`, `export`) of that checkout, but not `dotnet` or `quick` runs, and also the
   owner's own launches from that checkout, until that checkout has merged main. Nothing else is needed for the mode to hold there.
-- **Not built:** detecting the packaged game by its process and turning the mode on and off by itself (the manual switch and its limit
-  are the rule; the automatic variant is filed as a follow-up).
+- **Automatic mode (ARC-DEV-2291).** While a process of the packaged game runs, the queue treats the mode as on, and releases it when
+  the game quits: start `artifacts/packages/macos/Arcanum Steamwoven.app` and a queued window run says
+  `waiting-for=owner playing (game running for ...; no window run starts, headless/quick/dotnet go on; quit the game)`; quit the game and it
+  starts within a few seconds (a minute at most). The game is any process whose program lies under the main checkout's
+  `artifacts/packages/macos` (also from a worktree: the main checkout is read from the `.git` file), found through libproc
+  (`proc_listpids`, `proc_pidpath`, no process spawned: about 3 ms, cached 2 s per process). The rule is the same as the manual
+  switch's: window runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
+  print `SKIP owner is playing (game running ...)`. The state is the game's process itself, so nothing is written to the queue folder and
+  no limit applies; it counts once beside a manual switch (which keeps its limit and its `--not-playing`). `--not-playing` does not end it
+  (the command says so); quit the game. `ARCANUM_QUEUE_AUTO_PLAYING=0` turns it off for a command or wrapper it is set on, and
+  `ARCANUM_QUEUE_GAME_ROOTS` (a `:` list of folders) names other game folders; both are for tests and rare cases. Under
+  `ARCANUM_LOCAL_HOME` (the tests' own queue folder) the mode reads nothing unless the roots are named. The menu-bar app reads the
+  same process (`--game-root`, given by `menubar.py` and `queue --app`; the roots are fixed when the app starts) and shows `OWNER PLAYING (game running)` (its menu item does nothing while only the game holds the mode); `ArcanumQueue --game-root DIR --game-status`
+  prints `game since <epoch>` or `no game`. A game started from another path (a copy, another machine) is not seen: use the manual switch.
+  A wrapper from before this change does not see the automatic mode (it is in memory, not a file) and runs window runs as before.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (`playing` tests: admission rule, real wrappers, the command, the
-limit), `test_smoke`, `test_daily`, `test_main_smoke`; the app: `ArcanumQueue --set-playing` / `--clear-playing` do what its menu item does.
+limit, the automatic game mode with a stand-in game built by clang), `test_smoke`, `test_daily`, `test_main_smoke`, `test_menubar`; the app: `ArcanumQueue --set-playing` / `--clear-playing` do what its menu item does.
 
 ### Queue menu-bar app (ARC-DEV-1344)
 
@@ -989,6 +1002,30 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   cause is not found: that log held two leaked `InputEventKey` objects (F8, the self-test's quick-key route) reported
   by the mono module at exit and none of the 30 other logs did, which fits a Godot shutdown crash but is a
   hypothesis, so the issue is recorded as not reproducible.
+- **Godot finalizer-thread crash (ARC-DEV-2412).** Godot 4.7.2 .NET sometimes dies on the .NET finalizer thread inside a
+  Godot type's `Finalize` (the log's C# backtrace ends `Godot.StringName.Dispose` / `Godot.StringName.Finalize`, once with
+  `Godot.DisposablesTracker.UnregisterDisposable` after a fatal `System.AccessViolationException`), as `handle_crash:
+  Program crashed with signal 11` and exit `-6`. It was seen once in a `pr --auto` run on the cave stage (#2405 merge,
+  2026-11-16), then reproduced: the cave stage (`./arcanum smoke map "crash site cave" --stages tile-ghost,route-barrel,
+  grenade`) alone passed 10 of 10, and with four such loops running at once it crashed in 5 of 16 runs, then in 3 of
+  16 and 3 of 10 in later batches (at different points of the stage, from 26 s to 80 s in; the stage's checks are not at
+  fault). The line `The caller thread can't call the function propagate_notification() on this node` that precedes the
+  crash comes from the engine's crash handler (the crash handler line follows it in every such log, and the backtrace of the crashing
+  thread is the finalizer thread's; by the engine's design the handler notifies the scene tree from the crashing thread); no viewer code calls the scene tree off the main thread (the viewer's background work is the HD frame decode,
+  the chunk composes and the window art warm-up, all plain managed code or Godot `Image` objects). The viewer has no
+  `unsafe` code and creates no `StringName` itself (every one is the implicit string conversion of an engine call). The
+  .NET settings that did not remove it in the same stress: a one-gigabyte first-generation budget
+  (`DOTNET_GCgen0size`), `DOTNET_gcConcurrent=0`, `DOTNET_TieredPGO=0`, `DOTNET_TieredCompilation=0` (each 0 to 1 crash in
+  8 to 16 runs against about 3 in 10 without it, too few runs to tell a small effect). Note that .NET reads
+  `DOTNET_*` names case-sensitively (`DOTNET_GCgen0size`, not `DOTNET_GCGEN0SIZE`), and `smoke --env` accepts upper-case names
+  only (`parse_env` in `tools/local_dev/smoke.py`), so an upper-case form of such a name is ignored without a message. The root cause is in the engine or the .NET
+  runtime, so the smoke runner works around it: a step whose log shows a crash (the crash handler's line or a fatal
+  `AccessViolationException`) together with a Godot type's `Finalize` in the backtrace is run once more, says so as
+  `engine crash: STEP died in Godot's finalizer thread ... and ran once more: PASS|FAIL` in the summary, and a second crash
+  is a failure like any other (no per-stage retry of that step follows it). A log that printed a failure of its own before the
+  crash (`FAIL`, `failure mode=`, `..._FAILED`, `frontier=`), a stopped run and a timeout are not rerun. The run summary's `note:` line also names this crash. Reproduce it with four parallel
+  loops of the stage command above (`--no-build` after the first run), and keep the stage's own checks as the failing
+  evidence: a crash without a Godot `Finalize` in its backtrace is not retried.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
 - **`--verbose`** streams the command's output to the terminal as before, with no log file, no summary and no

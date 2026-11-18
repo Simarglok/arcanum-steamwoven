@@ -192,21 +192,26 @@ public partial class TerrainViewerApp
             else _saveListPanel.Render(_saveList, SelectedPreview());
             return true;
         }
-        if (!key.Pressed) return !typing;
+        // ARC-INPUT-2648 (same handler 0x546EE0, ledger SF6): Up, Down, Enter, Delete and Backspace are key events too, so they act on the
+        // release of a press this window saw (echoes ignored, no repeat); the press does nothing. The release of a press made before the
+        // window was there (Enter that chose Save in the menu) finds nothing armed, so one physical press never acts twice.
+        if (!ReferenceEquals(_saveListKeysFor, _saveList)) { _saveListKeysFor = _saveList; _saveListKeysArmed.Clear(); }
+        var listKey = routed is Key.Up or Key.Down or Key.Enter or Key.KpEnter || routed is Key.Delete or Key.Backspace && !typing;
+        if (!listKey || key.Echo) return listKey || !typing;
+        if (key.Pressed) { _saveListKeysArmed.Add(routed); return true; }
+        if (!_saveListKeysArmed.Remove(routed)) return !typing;
         switch (routed)
         {
-            case Key.Up: SaveListCommand(() => { _saveList!.Move(-1); return AreaSaveCommand.Nothing; }); return true;
-            case Key.Down: SaveListCommand(() => { _saveList!.Move(1); return AreaSaveCommand.Nothing; }); return true;
-            case Key.Enter or Key.KpEnter:
-                if (!key.Echo) SaveListCommand(() => _saveList!.Confirm());
-                return true;
-            case Key.Delete or Key.Backspace when !typing:
-                if (!key.Echo) SaveListCommand(() => _saveList!.RequestDelete());
-                return true;
-            default:
-                return !typing;
+            case Key.Up: SaveListCommand(() => { _saveList!.Move(-1); return AreaSaveCommand.Nothing; }); break;
+            case Key.Down: SaveListCommand(() => { _saveList!.Move(1); return AreaSaveCommand.Nothing; }); break;
+            case Key.Enter or Key.KpEnter: SaveListCommand(() => _saveList!.Confirm()); break;
+            default: SaveListCommand(() => _saveList!.RequestDelete()); break;
         }
+        return true;
     }
+
+    private AreaSaveList? _saveListKeysFor;
+    private readonly HashSet<Key> _saveListKeysArmed = [];
 
     private void HandleSaveListPulse(IntentFrame intent)
     {

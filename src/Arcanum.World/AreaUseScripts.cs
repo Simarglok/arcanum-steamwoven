@@ -488,9 +488,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-WORLD-081 (PG3): the shown map's scenery within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
-    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place.
+    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
-    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => centre.Map != _shownMap || Place(centre) is not { } at ? [] : SceneryAround(at);
+    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : SceneryAround(at);
 
     private IReadOnlyList<ScrObjectRef> SceneryAround(CellCoord at)
     {
@@ -501,11 +501,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2041 (PV1–PV3): the shown map's portals within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, open, closed or locked alike, in snapshot order
-    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place.
+    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        if (VicinityCentre(centre) is not { } at) return [];
         return _portals.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
@@ -526,11 +526,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2322 (CV1–CV3): the shown map's containers within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, in snapshot order (the portals' rule with the
-    /// container type). Empty for a centre of another map or without a place.
+    /// container type). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        if (VicinityCentre(centre) is not { } at) return [];
         return ContainersAround(at);
     }
 
@@ -546,13 +546,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
     public IReadOnlyList<ScrObjectRef>? CrittersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? CrittersAround(cell) : null;
 
-    // The item's own location field as the host reads it (IV2): the placed cell of a session-dropped item, else the tile of its map data or of the carried item's row; null for an item of another map, or one without a tile.
-    private CellCoord? ItemCentre(ScrObjectRef item)
+    // The item's own location field as the host reads it (IV2, IV8): the placed cell of a session-dropped item lying on the ground, else the tile it last lay on after the session dropped it and took it up again or a pickup took it from the ground where an NPC dropped it, a container spilled it or a push left it (a held item keeps that stale
+    // location field in the original, also on another map: the scan is of the shown map around those coordinates), else the tile of its map data or of the carried item's row; null for an item of another map with no drop, or one without a tile.
+    // ARC-SCRIPT-1704: with <paramref name="anyMap"/> (a vicinity scan, whose centre is the location field whichever map the reference names) an item named on another map reads its row by identity too, and a dropped item matches on its origin map.
+    private CellCoord? ItemCentre(ScrObjectRef item, bool anyMap = false)
     {
-        if (item.Map != _shownMap) return null;
-        var placed = _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && p.Map.RuntimeMap == item.Map);
+        if ((item.Map == _shownMap || anyMap) && _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && (p.Map.RuntimeMap == item.Map || anyMap && p.Origin?.RuntimeMap == item.Map)) is { } placed) return placed.Cell;
+        if (_session.QueryItemLastDrop(item.Code) is { } dropped) return dropped;
+        if (item.Map != _shownMap && !anyMap) return null;
+        // ARC-SCRIPT-2701 (IV8): a map-data item lying loose on another tile than its data holds (a drop of an NPC, a spill, a throw's landing, a push) reads that tile, also in the insert-item run of its own pickup.
+        if (_session.QueryItemLooseCell(item.Code) is { } loose) return loose;
         // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
-        return placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
+        return (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
     }
 
     private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
@@ -563,13 +568,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1704 (CP14, IV2): the centre of a vicinity scan whose centre is <paramref name="centre"/>. The original's vicinity builder reads the object's own location field (the object field reader's field 2, ledger CP14) and scans the current map around it, so an item
+    /// (a combat-point script's weapon, which the hero carries from the map it took it on, or an NPC holds) is centred on its own stale location (<see cref="ItemCentre"/>: the tile a session-dropped item lies on, else the tile of its map data, read by
+    /// identity from the origin map when the item is carried here), whichever map the reference names; any other object is centred on its place when it is of the shown map. Null (an empty scan) for an object without a place, a made or kit item
+    /// (the location its creation wrote is not read) and an object of another map.
+    /// </summary>
+    private CellCoord? VicinityCentre(ScrObjectRef centre) => !IsPc(centre) && IsItemObject(centre) ? ItemCentre(centre, anyMap: true) : centre.Map == _shownMap ? Place(centre) : null;
+
+    /// <summary>
     /// ARC-SCRIPT-047 (TG4): the shown map's PCs and NPCs within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
     /// destroyed or switched off, the centre itself and the dead included: the NPC rows in snapshot order at their live cells
     /// (<see cref="AreaScriptWorld.CritterCell"/>, else the row's), then the PC at its live cell (the original's list order is not read).
-    /// Empty for a centre of another map or without a place.
+    /// Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     [OriginalFunction(0x440FF0, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => centre.Map != _shownMap || Place(centre) is not { } at ? [] : CrittersAround(at);
+    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : CrittersAround(at);
 
     private IReadOnlyList<ScrObjectRef> CrittersAround(CellCoord at)
     {
@@ -935,7 +948,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public (long X, long Y)? Location(ScrObjectRef obj) => Place(obj) is { } cell ? (cell.X, cell.Y) : null;
 
     /// <summary>
-    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile of its map data or the carried item's row: the same centre as
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile it last lay on after a pickup (IV8), else the tile of its map data or the carried item's row: the same centre as
     /// the vicinity scans of the run, <see cref="ContainersNearItem"/>, IV2), any other object its place as <see cref="Location"/> gives it. Null for an object without a place (an item of another map, one with no tile).
     /// </summary>
     public (long X, long Y)? LocationOfObject(ScrObjectRef obj)
@@ -946,7 +959,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
     private bool IsItemObject(ScrObjectRef obj) =>
-        (Row(obj) ?? CarriedItemRow(obj)) is { Type: >= FirstItemType and <= LastItemType } || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && p.Map.RuntimeMap == obj.Map);
+        Row(obj) is { } row ? row.Type is >= FirstItemType and <= LastItemType
+        : CarriedItemRow(obj) is not null || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && (p.Map.RuntimeMap == obj.Map || p.Origin?.RuntimeMap == obj.Map)) || _session.QueryItemLastDrop(obj.Code) is not null;
 
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>
@@ -1701,19 +1715,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private bool DestroyScenery(ScrObjectRef obj)
     {
         if (AlreadyDestroyed(obj) || _destroyingScenery.Contains(obj.Code)) return true;
-        if (Slot(obj, ScrPoint.Destroy) is { Script: > 0 })
+        switch (RunDestroyPointGate(obj))
         {
-            _destroyingScenery.Add(obj.Code);
-            try
-            {
-                var ran = RunDestroyPoint(obj.Code, _lastRules ?? ScrRuleProfile.Steamwoven);
-                // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
-                if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return false;
-                if (DyingStops(ran)) return true;
-            }
-            finally { _destroyingScenery.Remove(obj.Code); }
-            if (AlreadyDestroyed(obj)) return true;
+            case DestroyPointFate.Failed: return false;
+            case DestroyPointFate.Kept: return true;
         }
+        if (AlreadyDestroyed(obj)) return true;
         // ARC-WORLD-2502 (0x43CCA0 → 0x4639E0): a container's invulnerable items are dropped on its cell with the destroy (a junk pile only destroyed, a never generated 0x200 container regenerated first).
         var applied = ShownContainer(obj) && Place(obj) is { } cell
             ? _session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj)).Disposition != GameSessionDisposition.Rejected
@@ -1725,6 +1732,55 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     private readonly HashSet<string> _destroyingScenery = new(StringComparer.Ordinal);
+
+    private enum DestroyPointFate { Proceed, Kept, Failed }
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 / ARC-SCRIPT-2644 (TD2): runs the destroy point (2) of <paramref name="obj"/> as the first step of its object destroy (0x43CCA0) and says what follows: <see cref="DestroyPointFate.Proceed"/> (no point, or it answered to go on, or the point's run
+    /// destroyed the object itself), <see cref="DestroyPointFate.Kept"/> (the point answered 0), <see cref="DestroyPointFate.Failed"/> (the run did not apply: nothing is destroyed on a guess). The object's own destroy that the point raises again is left to the running one.
+    /// </summary>
+    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj)
+    {
+        if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 }) return DestroyPointFate.Proceed;
+        _destroyingScenery.Add(obj.Code);
+        try
+        {
+            var ran = RunDestroyPoint(obj.Code, _lastRules ?? _session.Rules.Scripts);
+            LastDestroyPointRun = ran;
+            // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
+            if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return DestroyPointFate.Failed;
+            if (DyingStops(ran)) return DestroyPointFate.Kept;
+        }
+        finally { _destroyingScenery.Remove(obj.Code); }
+        return DestroyPointFate.Proceed;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2644 (ledger TD2, OD7–OD11): the session's gate for the break's object destroy (<see cref="GameSessionOwner.AttachObjectDestroyGate"/>): a door, container (after its drop), trap or busted scenery of the shown map that the break is about to destroy runs its destroy point (2) first
+    /// (0x43F1C0 → 0x43CCA0, the object as the triggerer and the attachee), and the answer 0 (or a run that did not apply) keeps it. False: the object stays. An object of another map, one with no destroy point, or one whose point is already running (it destroyed itself) answers true.
+    /// </summary>
+    public bool BreakMayDestroy(SessionObjectTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.Map.RuntimeMap != _shownMap) return true;
+        var obj = new ScrObjectRef(_shownMap, target.Entity);
+        // The row's own entity id is the code the scripts and the guard use (the viewer names a container by its inventory holder id).
+        if (_content is null || Row(obj) is not { } row) return true;
+        obj = new ScrObjectRef(_shownMap, EntityId(row));
+        if (_destroyingScenery.Contains(obj.Code)) return true;
+        return RunDestroyPointGate(obj) == DestroyPointFate.Proceed;
+    }
+
+    /// <summary>ARC-SCRIPT-2644: the run of the destroy point a break's gate made last (its award, message and float queues belong to the viewer's break step); taken once, null when none ran since.</summary>
+    public AreaScriptedUse? TakeBreakDestroyRun()
+    {
+        var ran = LastDestroyPointRun;
+        LastDestroyPointRun = null;
+        return ran;
+    }
+
+    private AreaScriptedUse? LastDestroyPointRun { get; set; }
+
 
     // ARC-SCRIPT-2501: a scenery of the shown map.
     private bool ShownScenery(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.SceneryType };

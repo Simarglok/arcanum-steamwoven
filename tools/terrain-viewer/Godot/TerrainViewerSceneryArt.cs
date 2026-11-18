@@ -9,6 +9,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-RENDER-1781 (ledger AN6, AN10-AN13): a scenery whose art id a script's change art number wrote (the session's object art field, ARC-SCRIPT-1735) is drawn from the new art's frames and its animation loop runs over them:
 // the original's loop step reads the object's current art every time (frame count from its header, next frame, frame delta), so a new art of several frames animates and one of a single frame is still.
 // The viewer loads every frame of the new art (AreaExtraArt, one art id per frame), hands them to the scenery host (AreaSceneryHost.Reframe: the restart rule of the art writer), and draws the host's frame in SyncSceneryBodies.
+// ARC-SCRIPT-2670: a busted scenery's destroyed art goes through the same path (the break's art write, ledger BS3c); the restart is decided at the next art scan, after the BUST script (the original writes the art before it: a run the BUST script starts on the scenery is killed by a one-frame busted art here, a kept difference).
 // Not ready: the hover and pick shape of the changed object stay the T0 body's (the hover ring and index read the map data's art), and the loop sound of a changed art is the begin node's (the sound follows the object, not the art).
 public partial class TerrainViewerApp
 {
@@ -23,7 +24,7 @@ public partial class TerrainViewerApp
         => _sceneryArtStamp.Area is { } a && ReferenceEquals(a.Target, area) && _sceneryArtStamp.Session is { } s && ReferenceEquals(s.Target, session) && _sceneryArtStamp.Revision == revision;
     private void SceneryArtStampSet(AreaLoadResult area, GameSessionOwner session, long revision) => _sceneryArtStamp = (new WeakReference(area), new WeakReference(session), revision);
     /// <summary>A cleared scene forgets the scenery arts drawn for its map and the stamp of its last scan.</summary>
-    private void RetireSceneryArt() { _sceneryArt = []; _sceneryArtStamp = default; _sceneryArtScanDue = true; }
+    private void RetireSceneryArt() { _bustableSceneryFor = null; _bustableSceneries = []; _sceneryArt = []; _sceneryArtStamp = default; _sceneryArtScanDue = true; }
     private readonly HashSet<string> _sceneryArtReported = [];
     // The scan of the session's art fields copies and sorts the map's changes: at most one per this many wall milliseconds (a change shows within it), and at once when a stage asks (ScanSceneryArtNow).
     private const long SceneryArtScanMs = 150;
@@ -48,7 +49,7 @@ public partial class TerrainViewerApp
         else if (SceneryArtStampIs(area, session, revision) || !_sceneryArtScanDue && System.Environment.TickCount64 - _sceneryArtScanAt < SceneryArtScanMs) return false;
         _sceneryArtScanAt = System.Environment.TickCount64; _sceneryArtScanDue = false;
         var map = new SessionMapId(area.Snapshot.RuntimeMap);
-        var wanted = session.QueryObjectArts(map);
+        var wanted = WantedSceneryArts(area, session, map);
         if (wanted.Count == 0 && _sceneryArt.Count == 0) { SceneryArtStampSet(area, session, revision); return false; }
         // Without the module's content the art cannot be read: tried again on the next frame.
         if (ExtraArt() is not { } art) return false;
@@ -69,12 +70,21 @@ public partial class TerrainViewerApp
             _sceneryArt[entity] = new(aid, row, loaded.Frames);
             host.Reframe(row, loaded.Frames, loaded.FramesPerSecond);
             changed = true;
+            // A busted body is drawn from the loop's frames now, not from the static ground body.
+            if (IsBustedSceneryArt(row, aid)) _groundStamp = null;
         }
         foreach (var entity in _sceneryArt.Keys.Where(entity => !seen.Contains(entity)).ToArray())
         {
             // The field went: the object has the art of the map data again (its frames from the plan, or its body alone).
             var row = _sceneryArt[entity].Row;
+            if (IsBustedSceneryArt(row, _sceneryArt[entity].Art)) _groundStamp = null;
             _sceneryArt.Remove(entity);
+            // ARC-SCRIPT-2670: a busted scenery the next hit destroyed has no art to give back: its runs ended at the destroy and nothing restarts for it.
+            if (AreaUseScriptHost.Destroyed(session, area.Snapshot.RuntimeMap, entity) || session.QueryObjectCondition(map, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
+            {
+                changed = true;
+                continue;
+            }
             if (overlay.Bodies.TryGetValue(row.Key, out var command) && overlay.Visuals.TryGetValue(command.Visual, out var visual))
             {
                 var own = AreaSceneryAnimation.BaseFrames(area.Plan, row);
@@ -84,6 +94,36 @@ public partial class TerrainViewerApp
         }
         return changed;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2670 (ledger OD7, BS3c, 0x43EB30 → 0x43F710): the arts the shown map's sceneries have apart from the map data. A script's art number comes from the session; a scenery the session holds busted has its destroyed ART (field 24 of the row) too: the break wrote it
+    /// into the object through the art writer, so the loop is the restart's decision on that art (several frames: the loop runs on them; one frame: the object's runs end). The busted art wins over a script's art, as the ground body of a busted scenery did.
+    /// </summary>
+    private IReadOnlyList<(string Entity, uint Art)> WantedSceneryArts(AreaLoadResult area, GameSessionOwner session, SessionMapId map)
+    {
+        var wanted = session.QueryObjectArts(map).ToList();
+        // The sceneries with a destroyed art are listed once per map data (a scan runs on the session's revisions); the session says which of them are busted, with no dependency on the attack host.
+        if (!ReferenceEquals(_bustableSceneryFor, area.Snapshot))
+        {
+            _bustableSceneryFor = area.Snapshot;
+            _bustableSceneries = area.Snapshot.Objects.Where(r => r.Type == SceneryType && BustedArt(r) is not null).Select(r => (AreaUseScriptHost.EntityId(r), r)).ToList();
+        }
+        foreach (var (entity, row) in _bustableSceneries)
+        {
+            if (session.QueryObjectCondition(map, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) != SessionObjectCondition.Busted) continue;
+            wanted.RemoveAll(w => w.Entity == entity);
+            wanted.Add((entity, BustedArt(row)!.Value));
+        }
+        return wanted;
+    }
+
+    private object? _bustableSceneryFor;
+    private List<(string Entity, AreaObjectRecord Row)> _bustableSceneries = [];
+
+    /// <summary>The destroyed ART of a scenery row (field 24), null when it has none.</summary>
+    private uint? BustedArt(AreaObjectRecord row) => Number(row, DestroyedArtSlot) is { } art && !AreaDataOwner.NamesNoArt(art) ? art : null;
+
+    private bool IsBustedSceneryArt(AreaObjectRecord row, uint art) => BustedArt(row) == art;
 
     /// <summary>Every frame of the art id (frame 0 first), each loaded into the frame overlay; null (said once) when a frame cannot be read: the object is then drawn from its map data as before.</summary>
     private (IReadOnlyList<AreaVisualRecord> Frames, int FramesPerSecond)? LoadSceneryArt(AreaExtraArt art, uint aid, string entity)

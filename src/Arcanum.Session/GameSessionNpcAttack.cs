@@ -57,6 +57,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public bool StruckHero { get; init; }
     public CellCoord? StruckCell { get; init; }
     public SessionLineOfFire? LineOfFire { get; init; }
+    /// <summary>ARC-COMBAT-2523 (ledger TW11): the light level 0..255 (255: full light) at <see cref="Target"/>, a term of the roll of a throw that names no struck critter (0x4C8430); null reads as full light.</summary>
+    public int? TargetLight { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? ThrowerWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? StruckWorn { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
@@ -90,6 +92,9 @@ public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, G
     /// <summary>ARC-COMBAT-1761 (0x4B3C00): the item's throw script (point 6) answered skip default, so nothing was thrown: the item went back to the thrower's list unworn (the original puts it on the thrower's tile and inserts it again, 0x4415C0, 0x4617F0),
     /// the removal's and the throw script's own changes kept. The result is <see cref="GameSessionDisposition.Changed"/> with no attack, shot or landing.</summary>
     public bool ScriptDeclined { get; init; }
+    /// <summary>ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused the throw: the item left the thrower and lies on its tile switched off, with no shot and no landing (<see cref="GameSessionOwner.QueryItemOff"/>); the host's reaction is 0x4ADFF0 (<see cref="AttackRefusal.OutOfAmmunition"/>).
+    /// The result is Changed.</summary>
+    public bool AmmunitionShort { get; init; }
     /// <summary>ARC-COMBAT-1761: the lines the removal and throw scripts printed, in order, for the host to post as it posts any script's printed line (<see cref="InventoryMutationResult.Messages"/>).</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
     /// <summary>ARC-COMBAT-1761: the eye candy requests of those scripts, in order, for the host to play.</summary>
@@ -106,6 +111,9 @@ public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int 
 
     /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
     public const string HeroTarget = "\0hero";
+
+    /// <summary>ARC-COMBAT-2523 (TW11): the <see cref="Target"/> of a thrown weapon aimed at a location with no struck critter: a hit strikes nothing, a miss strikes the critters it passes with a forced hit.</summary>
+    public const string LocationTarget = "\0location";
 }
 
 public sealed partial class GameSessionOwner
@@ -133,7 +141,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.AttackUnavailable"/>), a cell outside 0 .. 2^24 − 1, a weight outside 0 ..
     /// <see cref="ThrowRules.MaxWeight"/>, a struck critter without its cell or both struck kinds, a no-drop item
     /// (<see cref="GameSessionFailure.InvalidAttack"/>), an item not in the NPC's seed list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// an item with a script the session does not run (<see cref="GameSessionFailure.ItemScriptUnsupported"/>: another point, or a removal or throw script without a host or one it cannot apply), an item that is not the wielded melee weapon
+    /// an item with a script the session does not run (<see cref="GameSessionFailure.ItemScriptUnsupported"/>: another point, or a removal or throw script without a host or one it cannot apply), an item that is not the wielded weapon, or one the NPC attack does not support (a throwing-skill weapon)
     /// (<see cref="GameSessionFailure.AttackUnsupported"/>), then <see cref="AttackByNpc"/>'s refusals (without a struck critter the
     /// thrower's: its life record, its worn items), the version, the revision. A resolver refusal throws nothing (NoChange, as the
     /// hero's), as does an inactive thrower without a struck critter.
@@ -149,7 +157,7 @@ public sealed partial class GameSessionOwner
         var struck = request.StruckHero || request.Struck is not null;
         if (!SessionValidation.Entity(request.Item) || !DropCellFits(request.ThrowerCell) || !DropCellFits(request.Target) ||
             request.StruckCell is { } at && !DropCellFits(at) || struck != request.StruckCell.HasValue || request.StruckHero && request.Struck is not null ||
-            request.Weight is < 0 or > ThrowRules.MaxWeight || request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude })
+            request.Weight is < 0 or > ThrowRules.MaxWeight || request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || request.TargetLight is < 0 or > AttackRules.MaxLightLevel)
             return Refused(GameSessionFailure.InvalidAttack);
         // An item a critical or an earlier throw dropped, or one destroyed, is no longer the NPC's.
         if (NpcItemSeed(request.Thrower.Entity, request.Item) is not { } listed || Gone(request.Item)) return Refused(GameSessionFailure.ItemNotAvailable);
@@ -192,30 +200,8 @@ public sealed partial class GameSessionOwner
     // The throw once its scripts ran (or it has none): ARC-DEV-258's generic flight, an unstruck weapon's landing or flight, the attack on the struck critter.
     private SessionNpcThrowResult ThrowNpcPlanned(GameSessionVersion expected, SessionNpcThrow request, bool generic, bool struck)
     {
-        SessionNpcThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, Version);
-        if (generic) return ThrowNpcGeneric(expected, request);
-        if (!struck)
-        {
-            // The thrower's own checks, as the attack's: its life record, its worn items, the wielded melee weapon (TW7); an inactive
-            // thrower throws nothing (the resolver's refusal on the attack's path).
-            var resolved = Resolve(request.Thrower.Target, out var record, out var facts, out _);
-            if (resolved != GameSessionFailure.None) return Refused(resolved);
-            if (!ValidWear(new SessionWearSide { Life = request.Thrower.Target, Worn = request.ThrowerWorn }, new SessionWearSide(), targetBroken: false, wear: null))
-                return Refused(GameSessionFailure.InvalidWear);
-            var status = LifeRules.Evaluate(record.State, facts!);
-            SessionNpcAttackValues values;
-            try { values = Levelled(request.Thrower).AttackValues(status, record.State, _rules.Combat, request.ThrowerWorn?.Keys); }
-            catch (ArgumentException) { return Refused(GameSessionFailure.InvalidAttack); }
-            if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee) return Refused(GameSessionFailure.AttackUnsupported);
-            if (!status.IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
-            if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
-            if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
-            // ARC-COMBAT-1717: the weapon thrown at a location flies unchecked to it, as a generic item does.
-            if (request.Flight && ShotsInFlight <= MaxShotsInFlight - 1) return ThrowNpcGeneric(expected, request);
-            var failure = LandNpcItem(request.Item, request.Target);
-            return failure == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, null, request.Target, Version)
-                : Refused(failure);
-        }
+        // ARC-COMBAT-2523 (TW11): a generic item (a grenade) always flies to the location; a weapon that names no struck critter is thrown at the location: both roll as the hero's location throw does.
+        if (generic || !struck) return ThrowNpcAtLocation(expected, request, generic, struck);
         var attack = new SessionNpcAttack(request.Thrower)
         {
             Target = request.Struck,
@@ -232,6 +218,8 @@ public sealed partial class GameSessionOwner
         };
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed, null);
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the dispatcher refused the thrown weapon before any roll (the thrower, led by a PC, has fewer units of its ammunition type than it consumes): the item stays on the thrower's tile switched off.
+        if (result.Resolution?.Refusal == AttackRefusal.OutOfAmmunition) return NpcThrowRefusedForAmmunition(request, result);
         // ARC-COMBAT-1717: a weapon that flies goes to the struck critter's cell (a hit) or the scatter tile (a miss).
         return new(result.Disposition, result.Failure, result.Disposition == GameSessionDisposition.Rejected ? null : result, landed, Version)
         {
@@ -239,6 +227,25 @@ public sealed partial class GameSessionOwner
             Destination = result.Shots.Count > 0 ? result.Scatter ?? request.StruckCell : null,
         };
     }
+
+    /// <summary>
+    /// ARC-COMBAT-2415 (ledger TW8): an NPC's throw of its weapon the ammunition check refused (a thrower led by a PC with fewer units of the weapon's ammunition type than its consumption). Nothing is rolled or spent; the item, which the
+    /// original took out of the thrower's hand, is not given back: it leaves the NPC (worn no more) and lies on the thrower's tile switched off (the field a script's toggle writes, <see cref="QueryItemOff"/>), in two revisions. The result is Changed with
+    /// <see cref="SessionNpcThrowResult.AmmunitionShort"/>; the host's reaction (<see cref="AttackRefusal.OutOfAmmunition"/>) reads it from <see cref="SessionNpcThrowResult.Attack"/>'s resolution when the attack was made, else from the flag.
+    /// </summary>
+    private SessionNpcThrowResult NpcThrowRefusedForAmmunition(SessionNpcThrow request, SessionAttackResult? attack)
+    {
+        if (_revision >= long.MaxValue - 1) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, null, null, Version);
+        var leaving = LandNpcItem(request.Item, request.ThrowerCell);
+        if (leaving != GameSessionFailure.None) return new(GameSessionDisposition.Rejected, leaving, null, null, Version);
+        var off = ApplyChanges(Version, null, [new(_actor.Map, SessionItemOff.Key(request.Item), 1)]);
+        return new(GameSessionDisposition.Changed, off.Disposition == GameSessionDisposition.Rejected ? off.Failure : GameSessionFailure.None, attack, null, Version) { AmmunitionShort = true };
+    }
+
+    // ARC-COMBAT-2415: the ammunition a thrown weapon takes from an NPC led by a PC (0x4B65D0), and whether the thrower has too few units; null for a weapon without an ammunition type or consumption, or a thrower with no PC up its leader chain (it passes at once).
+    private (SessionAmmoHolder Holder, int Type, int Count, bool Short)? NpcThrowAmmunition(string npc, CombatWeapon weapon) =>
+        weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } type && weapon.AmmoConsumption > 0 && PcLeads(npc)
+            ? (new SessionAmmoHolder(npc), type, weapon.AmmoConsumption, type is < 0 or >= SessionAmmoRecord.AmmoTypes || (NpcStackOfType(npc, type)?.Units ?? 0) < weapon.AmmoConsumption) : null;
 
     /// <summary>
     /// ARC-DEV-258 (MIG13 S14n, GT63): an NPC throws a generic item of its list (a grenade the AI chose, the throw goal 37) at a location: the item
@@ -374,8 +381,9 @@ public sealed partial class GameSessionOwner
         var reach = values.Weapon.Kind == WeaponKind.Unarmed ? (int?)null : values.Range;
         if (throwing is not null)
         {
-            // TW7: the only installed "default throws" weapon is a melee one; another skill's would follow other rules.
-            if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee) return RejectAttack(GameSessionFailure.AttackUnsupported);
+            // TW7, ARC-COMBAT-2699 (TW8, 0x42AB90 asks nothing of the weapon's skill, the check is the throwing skill's): any wielded weapon the attack supports (a melee, bow or firearms one) is thrown, so a bow or firearm
+            // reaches the ammunition check too; a throwing-skill weapon (a boomerang) is not a supported NPC attack and is refused with the others.
+            if (values.Weapon.Kind != WeaponKind.Weapon) return RejectAttack(GameSessionFailure.AttackUnsupported);
             var (level, training) = Levelled(attacker).SkillValues(CombatSkill.Throwing, attackerRecord.State);
             values = values with
             {
@@ -411,8 +419,8 @@ public sealed partial class GameSessionOwner
         var throwFlies = arrow is null && throwing is not null && attack.Flight && ShotsInFlight <= MaxShotsInFlight - 1;
         if (throwFlies) { flies = true; projectiles = 1; }
         // ARC-DEV-283 (RA3, AM4, 0x4B65D0): a shot of an NPC led by a PC (a companion) spends its weapon's ammunition from the NPC's own stack, right after the location roll and before every
-        // other roll, all or nothing; too few units refuse the attack (the resolver's out-of-ammunition refusal). An NPC with no PC leader spends nothing. Spent at the shot, not at the strike.
-        var ammunition = arrow is null && throwing is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && PcLeads(attacker.Entity!)
+        // other roll, all or nothing; too few units refuse the attack (the resolver's out-of-ammunition refusal). An NPC with no PC leader spends nothing. Spent at the shot, not at the strike. ARC-COMBAT-2415 (TW8): a thrown weapon is checked the same (ThrowNpcPlanned leaves the refused one on the thrower's tile).
+        var ammunition = arrow is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && PcLeads(attacker.Entity!)
             ? (Holder: new SessionAmmoHolder(attacker.Entity), Type: ammoType, Count: weapon.AmmoConsumption) : ((SessionAmmoHolder Holder, int Type, int Count)?)null;
         var unsupplied = ammunition is { } need && (need.Type is < 0 or >= SessionAmmoRecord.AmmoTypes || (NpcStackOfType(attacker.Entity!, need.Type)?.Units ?? 0) < need.Count);
         var striker = values.Combatant;

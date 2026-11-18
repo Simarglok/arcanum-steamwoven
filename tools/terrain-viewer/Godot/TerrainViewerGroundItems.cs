@@ -83,7 +83,13 @@ public partial class TerrainViewerApp
         session.AttachItemScripts(prototype => PrototypeItems()?.Item(prototype)?.Scripts);
         // ARC-WORLD-1283: and their no-drop flag, which the remove check of a transfer reads on a kit or made item.
         session.AttachItemNoDrop(prototype => PrototypeItems()?.Item(prototype)?.NoDrop == true);
+        // ARC-SCRIPT-2644 (TD2): a break that destroys a door, container, trap or busted scenery runs the object's destroy point first, which can keep it.
+        session.AttachObjectDestroyGate(target => ObjectBreakMayDestroy(session, target));
     }
+
+    /// <summary>ARC-SCRIPT-2644: the break's destroy gate of the shown map's session (the host is built on first need); another session or no ready area lets the break destroy.</summary>
+    private bool ObjectBreakMayDestroy(GameSessionOwner session, SessionObjectTarget target) =>
+        !ReferenceEquals(_areaSession, session) || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host || host.BreakMayDestroy(target);
 
     /// <summary>The frame of an art id no body drew at T0 (the extra art read from the module), added to the shown map's repository; null when it does not read (said once).</summary>
     private AreaExtraFrame? ExtraArtFrame(uint aid, string what)
@@ -138,6 +144,8 @@ public partial class TerrainViewerApp
                 if (!overlay.Bodies.TryGetValue(key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)
                     || area.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is not { Type: SceneryType or TrapType } row) continue;
                 if (Number(row, DestroyedArtSlot) is not { } destroyed || AreaDataOwner.NamesNoArt(destroyed) || destroyed == visual.RawArt) continue;
+                // ARC-SCRIPT-2670: a busted scenery whose destroyed ART is read as a scenery art is drawn from its loop's frames (SyncSceneryBodies), not from this still frame 0.
+                if (row.Type == SceneryType && _sceneryArt.TryGetValue(AreaUseScriptHost.EntityId(row), out var animated) && animated.Art == destroyed) continue;
                 if (Frame(destroyed, "destroyed") is not { } frame) continue;
                 bodies[key] = AreaScenePlan.Repose(command, row, visual, frame.Key, frame.Frame.Width, frame.Frame.Height, frame.Visual.HotX, frame.Visual.HotY);
             }

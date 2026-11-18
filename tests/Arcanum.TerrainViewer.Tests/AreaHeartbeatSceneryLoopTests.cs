@@ -283,6 +283,59 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2594 (ledger IV8): an item the session dropped and took up again keeps the tile it lay on as its location field: the vicinity scans and distance between of its insert-item run centre on it (before, a made item had no tile and the move was refused),
+    // also while the shown map is another one (the scan is of the shown map around the stale coordinates), and a drop again lets the placed cell answer.
+    [TestMethod]
+    public void A_made_item_the_hero_dropped_and_took_up_again_scans_around_its_drop_tile()
+    {
+        WithContent(content =>
+        {
+            using var session = AreaMadeItemFactsTests.HeroWithProducts();
+            var host0 = new AreaInventoryHost([], prototypeFields: AreaMadeItemFactsTests.ProductFields);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.DropHeroItem(session.Version, "made:1", host0.GridMoveItem(session, "made:1", null)!).Disposition);
+            var cell = session.QueryPlacedItems().Single().Cell;
+            var near = Container(2, cell.X + 1) with { WorldY = cell.Y };
+            var far = Container(3, cell.X + 60) with { WorldY = cell.Y };
+            var item = new ScrObjectRef(1, "made:1");
+            AreaUseScriptHost Host1() => Host(session, content, _ => false, near, far);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, Host1().ContainersNearItem(item)!.Select(o => o.Code).ToArray(), "lying on the ground: the placed cell");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, "made:1", AreaInventoryHost.DiagnosticInsertCheck).Disposition);
+            Assert.AreEqual(0, session.QueryPlacedItems().Count);
+            var host = Host1();
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.ContainersNearItem(item)!.Select(o => o.Code).ToArray(), "held again: the drop tile, not the hero's cell");
+            Assert.AreEqual(((long)cell.X, (long)cell.Y), host.LocationOfObject(item), "distance between reads the same location field");
+            Assert.IsNotNull(host.SceneryNearItem(item));
+            Assert.IsNotNull(host.CrittersNearItem(item));
+            Assert.IsNull(host.ContainersNearItem(new(1, "made:2")), "an item never dropped has no tile");
+            // The scan is of the shown map around the stale coordinates: an item ref of another map reads the tile too.
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.ContainersNearItem(new(2, "made:1"))!.Select(o => o.Code).ToArray());
+        });
+    }
+
+    // ARC-SCRIPT-2701 (ledger IV8): a map-data item that a push left on another tile than its data holds scans around that tile, in the insert-item run of its own pickup and after it (the stale location field of the held item).
+    [TestMethod]
+    public void A_pushed_map_data_item_scans_around_the_tile_it_lay_on_before_and_after_its_pickup()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var entity = AreaUseScriptHost.EntityId(item);
+            var dataTile = Container(2);
+            var pushedTile = Container(3, 41) with { WorldY = 20 };
+            Assert.AreEqual(GameSessionDisposition.Changed, session.AttachMapInventory(new(1), new SessionMapInventorySeed([], [new SessionSeedItem(entity, new(new(SessionItemType.Generic, 1, 10, 20), 0, 0, 0, null, []), new(12, 20))])).Disposition);
+            AreaUseScriptHost Host1() => Host(session, content, _ => false, item, dataTile, pushedTile);
+            var at = new ScrObjectRef(1, entity);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(dataTile) }, Host1().ContainersNearItem(at)!.Select(o => o.Code).ToArray(), "on its data tile");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.MoveGroundItem(session.Version, entity, new(40, 20)).Disposition);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(pushedTile) }, Host1().ContainersNearItem(at)!.Select(o => o.Code).ToArray(), "lying where the push left it: the loose cell, before the pickup commits");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition);
+            var host = Host1();
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(pushedTile) }, host.ContainersNearItem(at)!.Select(o => o.Code).ToArray(), "held: the tile it last lay on");
+            Assert.AreEqual((40L, 20L), host.LocationOfObject(at), "distance between reads the same location field");
+        });
+    }
+
     // ARC-SCRIPT-2426 (ledger IV36-IV39, HW3): distance between on an insert-item run reads each object's location field: an item its own tile (never the holder's), a critter its tile, the hero its live cell; an object without a place (a made item, an item of
     // another map, an unknown entity) has no answer, and the item host passes the shown map's answers on (without a shown map none).
     [TestMethod]

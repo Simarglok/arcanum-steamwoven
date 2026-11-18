@@ -176,6 +176,7 @@ src/Arcanum.Session/GameSessionNpcPickup.cs,PickUpItemByNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcRepair.cs,RepairByNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcSkillRoll.cs,IsPlainNpcSkill,exempt,reference
 src/Arcanum.Session/GameSessionNpcSkillRoll.cs,RollNpcSkill,exempt,host
+src/Arcanum.Session/GameSessionNpcThrowLocation.cs,ThrowNpcAtLocation,exempt,host
 src/Arcanum.Session/GameSessionNpcThrowScripts.cs,RunNpcThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
@@ -187,6 +188,7 @@ src/Arcanum.Session/GameSessionNpcTransfer.cs,TakeAmmoFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,TakeItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcWear.cs,RewieldNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcWear.cs,WieldNpcBest,pending,
+src/Arcanum.Session/GameSessionObjectDestroyGate.cs,AttachObjectDestroyGate,exempt,host
 src/Arcanum.Session/GameSessionObjectFlags.cs,Assign,pending,
 src/Arcanum.Session/GameSessionObjectFlags.cs,AssignObjectFlag,pending,
 src/Arcanum.Session/GameSessionObjects.cs,AttackObject,pending,
@@ -525,6 +527,7 @@ src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
 src/Arcanum.World/AreaAiHost.cs,OccupantInPlaceOf,exempt,reference
+src/Arcanum.World/AreaAiHost.cs,OpposedStat,exempt,host
 src/Arcanum.World/AreaAiHost.cs,OtherLeaderCharisma,exempt,host
 src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
@@ -615,6 +618,7 @@ src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
 src/Arcanum.World/AreaConversation.cs,PickClassLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,PickLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,SayFollowerLine,exempt,host
+src/Arcanum.World/AreaDoorHost.cs,ObjectBroken,exempt,host
 src/Arcanum.World/AreaDoorHost.cs,Open,pending,
 src/Arcanum.World/AreaDropMap.cs,HasCritter,pending,
 src/Arcanum.World/AreaDropMap.cs,Path,pending,
@@ -671,6 +675,7 @@ src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
 src/Arcanum.World/AreaNpcSheet.cs,Mark,pending,
+src/Arcanum.World/AreaObjectBreakHost.cs,Interrupts,exempt,reference
 src/Arcanum.World/AreaOpeningShop.cs,Make,pending,
 src/Arcanum.World/AreaPickPocket.cs,Start,pending,
 src/Arcanum.World/AreaProjectileHost.cs,Finish,pending,
@@ -686,9 +691,11 @@ src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
 src/Arcanum.World/AreaRestock.cs,Wielder,pending,
 src/Arcanum.World/AreaScenePlan.cs,BodyRanks,pending,
 src/Arcanum.World/AreaSceneryHost.cs,AddCreated,pending,
+src/Arcanum.World/AreaSceneryHost.cs,ObjectBroken,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,ObjectDestroyed,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Reframe,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
+src/Arcanum.World/AreaSceneryHost.cs,RestartBroken,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
 src/Arcanum.World/AreaScriptHost.cs,ReactionOf,pending,
 src/Arcanum.World/AreaScriptSpells.cs,GiveMastery,pending,
@@ -712,6 +719,7 @@ src/Arcanum.World/AreaUseScripts.cs,ApplyMakeFollow,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,BreakMayDestroy,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DestroyScenery,exempt,host
@@ -736,6 +744,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDestroyPoint,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RunDestroyPointGate,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
@@ -956,7 +965,9 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,ref
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,RepeatAttackClick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
+tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayAmmunitionRefusalSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
+tools/terrain-viewer/Godot/TerrainViewerAutoSwitch.cs,HeroThrowOutOfAmmunition,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
 tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,ArmedWalk,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,UnmovedArmedBodies,exempt,host
@@ -1048,6 +1059,8 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,EndDestroyedObjectRuns,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,InterruptBrokenObjectRuns,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSceneryArt.cs,WantedSceneryArts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host

@@ -692,9 +692,9 @@ public sealed class GameSessionSnapshot
     /// Schema 99 adds the hero's stored resistance array and stored age (<see cref="SessionHeroState.Resistances"/>, <see cref="SessionHeroState.Age"/>, ARC-MAGIC-1658).
     /// Schema 100 adds the native traps' shots in flight to the flights section (<see cref="SessionFlightState.TrapShots"/>, ARC-TECHNOLOGY-1635).
     /// Schema 101 adds the saved gambling roll (<see cref="GamblingRoll"/>, ARC-UI-1740). Schema 102 adds the followers of NPC leaders (<see cref="SessionPartyState.NpcLed"/>, ARC-WORLD-1840).
-    /// Schema 103 adds the changed mana stores of worn items to the durability section (ARC-MAGIC-2371). Schema 104 gives each pending recharge event (<c>item.recharge</c>) the map it is parked or scheduled on instead of a placeholder (ARC-MAGIC-2400).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 103 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 104;
+    /// Schema 103 adds the changed mana stores of worn items to the durability section (ARC-MAGIC-2371). Schema 104 gives each pending recharge event (<c>item.recharge</c>) the map it is parked or scheduled on instead of a placeholder (ARC-MAGIC-2400). Schema 105 adds the inventory's last-drop tiles (ARC-SCRIPT-2594).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 104 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 105;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

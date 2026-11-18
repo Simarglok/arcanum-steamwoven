@@ -142,7 +142,10 @@ public sealed partial class SessionSpellCaster
             TurnBased: round is not null, TurnBasedActor: round is null ? null : round.Actor.Entity ?? Hero);
         var world = InvocationWorld();
         var check = SpellInvocationRules.Check(invocation, record.Run.Invocation, world, _owner.SpellRolls);
-        if (!check.Allowed) return new(SpellCastAttemptOutcome.Refused, Refusal: check.Refusal);
+        if (!check.Allowed)
+            return new(SpellCastAttemptOutcome.Refused, Refusal: check.Refusal,
+                RefusalNote: RefusalDiagnostics && check.Refusal == SpellInvocationRefusal.NoValidTarget && world is SpellInvocationAreas areas
+                    ? $"begin-mask={(_records(spell)?.Areas is { Length: > 0 } a ? a[0].Targets : 0):X} failing={areas.FailingBeginBits(invocation):X} {(areas.BeginAreaTakesTiles(spell) ? areas.FallbackTilesNote(invocation) : "")}" : null);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
         var run = started.Disposition == GameSessionDisposition.Changed ? started.Creation?.Run : null;
         if (run is not null) _itemChains.Remove(run.Id);

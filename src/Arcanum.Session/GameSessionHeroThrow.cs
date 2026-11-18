@@ -62,6 +62,9 @@ public sealed record SessionHeroThrowResult(GameSessionDisposition Disposition, 
     /// <summary>ARC-COMBAT-1955 (0x4B3C00): the item's throw script (point 6) answered skip default, so nothing was thrown: the item is back in the hero's list unworn (the original puts it on the hero's tile and inserts it again, 0x4415C0,
     /// 0x4617F0), the removal's and the throw script's own changes kept. The result is <see cref="GameSessionDisposition.Changed"/> with no attack and no shot.</summary>
     public bool ScriptDeclined { get; init; }
+    /// <summary>ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused the throw (the hero carries fewer units of the weapon's ammunition type than its consumption): the item left the hero's list and lies on the hero's cell still switched off
+    /// (<see cref="GameSessionOwner.QueryItemOff"/>, no flight, no give-back), no attack was made; the host plays the weapon's out-of-ammunition sound on the hero and runs the hero's auto switch (ARC-COMBAT-2698; the original's "message code 3" is that sound). The result is Changed with no attack and no shot.</summary>
+    public bool AmmunitionShort { get; init; }
     /// <summary>ARC-COMBAT-1955: the lines the removal and throw scripts printed, in order, for the host to post as it posts any script's printed line.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
     /// <summary>ARC-COMBAT-1955: the eye candy requests of those scripts, in order, for the host to play.</summary>
@@ -77,6 +80,8 @@ public sealed partial class GameSessionOwner
     {
         /// <summary>ARC-UI-086: the units and kind of the ammunition split the throw makes at the moment the item leaves.</summary>
         public (int Count, SessionItemKind Kind)? Split { get; init; }
+        /// <summary>ARC-COMBAT-2415 (ledger TW8): the ammunition type and units a thrown weapon with an ammunition type takes from the hero's stack when it leaves (the check passed); null for any other item.</summary>
+        public (int Type, int Count)? Ammo { get; init; }
     }
 
     /// <summary>ARC-UI-086 (QW5, 0x4658E0, 0x465A40): the refusal of a split of <paramref name="count"/> units off the hero's ammunition stack
@@ -246,11 +251,27 @@ public sealed partial class GameSessionOwner
         var hero = ThrownHero(request, ammoSplit, weapon, combat, out var range);
         var wornBefore = worn is not null;
         SessionHeroThrowResult? result = null;
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): a thrown weapon with an ammunition type is checked by the dispatcher before any roll: the hero's units of that type against the weapon's consumption (field 126). Enough: they are spent at the throw (the attack's spend, in
+        // order with its rolls), and the throw goes on; fewer: nothing is thrown and the item stays on the hero's tile switched off.
+        (int Type, int Count)? ammo = null;
+        if (weapon && combat?.Weapon is { AmmoType: { } ammoType } ammoWeapon)
+        {
+            var units = ammoType is >= 0 and < SessionAmmoRecord.AmmoTypes && HeroStackOfType(ammoType) is { } carried ? carried.Units : 0;
+            if (units < ammoWeapon.AmmoConsumption)
+            {
+                var left = ThrowRefusedForAmmunition(expected, request);
+                if (left.Failure != GameSessionFailure.None) return Refused(left.Failure);
+                if (left.Result!.Disposition == GameSessionDisposition.NoChange) return With(left.Result);
+                result = left.Result;
+                struck = false;
+            }
+            else if (ammoWeapon.AmmoConsumption > 0) ammo = (ammoType, ammoWeapon.AmmoConsumption);
+        }
         if (struck)
         {
             // ARC-DEV-261: no TakingDamage here: the throw always flies and its hit is deferred, so the script is asked at the landing (LandShot with the host's SessionAttack).
             var attack = HeroThrowAttack(request, triggers);
-            var attacked = CritterAttack(expected, attack, null, new PackThrow(request.Item, request.Target, hero) { Split = split ? (request.Count!.Value, request.SplitKind!.Value) : null });
+            var attacked = CritterAttack(expected, attack, null, new PackThrow(request.Item, request.Target, hero) { Split = split ? (request.Count!.Value, request.SplitKind!.Value) : null, Ammo = ammo });
             // ARC-COMBAT-1955: a struck critter that is dead no longer refuses the attack (ARC-COMBAT-2392); the host would throw again without it, but the scripts ran already and must not run twice, so after them the session throws at the location itself.
             // ARC-COMBAT-2390: so does any other refusal of the attack that only the scripts' runs could bring about (the preflight judged the throw before them): the original's throw flies in any case (its hit is
             // deferred, ARC-DEV-261), so the item is thrown at the location below, whose own checks (worn items, an inactive hero, the budget, the version, the revision) refuse what binds a throw of any kind.
@@ -273,7 +294,7 @@ public sealed partial class GameSessionOwner
             if (ShotsInFlight > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
-            var located = ThrowAtLocation(request, hero, range, split);
+            var located = ThrowAtLocation(request, hero, range, split, ammo);
             if (located.Failure != GameSessionFailure.None) return Refused(located.Failure);
             result = located.Result!;
         }
@@ -287,7 +308,7 @@ public sealed partial class GameSessionOwner
     /// the critical miss's own rolls and, for any miss, the scatter direction. A hit flies to the tile and lands striking nothing; a miss flies toward its scattered tile and strikes the critters it passes (the shot's landing); a critical miss turns
     /// on the hero as for any attack (its damage step and the item steps after it).
     /// </summary>
-    private (GameSessionFailure Failure, SessionHeroThrowResult? Result) ThrowAtLocation(SessionHeroThrow request, SessionHeroAttack hero, int range, bool split)
+    private (GameSessionFailure Failure, SessionHeroThrowResult? Result) ThrowAtLocation(SessionHeroThrow request, SessionHeroAttack hero, int range, bool split, (int Type, int Count)? ammo = null)
     {
         // The hero's own checks, as the attack's: its worn items; an inactive hero throws nothing (the press puts it back, 0x54E021).
         var heroSide = new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn };
@@ -325,10 +346,15 @@ public sealed partial class GameSessionOwner
         {
             var legacyItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
             Throw(legacyItem, null);
+            // ARC-COMBAT-2415: the ammunition a thrown weapon takes goes at the throw whether or not its rolls could be drawn.
+            SessionAmmoUse? unrolledAmmo = ammo is { } unrolled ? SpendAmmo(Version, SessionAmmoHolder.Hero, unrolled.Type, unrolled.Count) : null;
+            if (unrolledAmmo is { Disposition: GameSessionDisposition.Rejected } unrolledRefused)
+                return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
+                    new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, unrolledRefused.Failure, Version) { Ammunition = unrolledRefused }, Version) { AtLocation = true });
             var flying = Launch(new PendingShot(ShotFacts.Of(hero), AttackResolver.ForcedHit(false), false, null, null)
                 { Thrown = new SessionThrownShot(legacyItem, range), WeaponItem = legacyItem }, 1);
             return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
-                new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, GameSessionFailure.None, Version) { Shots = flying }, Version) { Destination = request.Target, AtLocation = true });
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, GameSessionFailure.None, Version) { Shots = flying, Ammunition = unrolledAmmo }, Version) { Destination = request.Target, AtLocation = true });
         }
         var resolution = resolved;
         if (resolution.Refusal != AttackRefusal.None) return (GameSessionFailure.InvalidAttack, null);
@@ -341,6 +367,11 @@ public sealed partial class GameSessionOwner
         }
         var thrownItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
         heroSide = heroSide with { Worn = Throw(thrownItem, request.HeroWorn) };
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): a thrown weapon's ammunition goes for a hit or a miss, before the item flies (the attack's order).
+        SessionAmmoUse? ammunition = ammo is { } use ? SpendAmmo(Version, SessionAmmoHolder.Hero, use.Type, use.Count) : null;
+        if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
+            return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend }, Version) { AtLocation = true });
         var scatter = scatterRotation is { } rotation ? ScatterThrow(request.Target, hero.SkillLevel, rotation, request.DropMap) : (CellCoord?)null;
         var hit = resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
         var shots = Launch(new PendingShot(ShotFacts.Of(hero), resolution, hit, null, null)
@@ -348,14 +379,14 @@ public sealed partial class GameSessionOwner
         var destination = scatter ?? request.Target;
         if (resolution.Damage is null || LifeDamage.FromAttack(resolution) is not { } damage)
             return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
-                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots, Scatter = scatter }, Version) { Destination = destination, AtLocation = true });
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots, Scatter = scatter, Ammunition = ammunition }, Version) { Destination = destination, AtLocation = true });
 
         // A critical miss: the throw turns on the hero (the attacker is the victim, as in any attack's critical-miss procedure).
         var applied = ApplyDamage(Version, SessionLifeTarget.Hero, damage, killer: null);
         var recipient = resolution.Damage.Recipient;
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
-                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version) { Shots = shots, Scatter = scatter }, Version) { Destination = destination, AtLocation = true });
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version) { Shots = shots, Scatter = scatter, Ammunition = ammunition }, Version) { Destination = destination, AtLocation = true });
         var outcome = applied.Outcome!;
         var stepFailure = RecordHeroInjuries(outcome.Events, SelfInflictedCause);
         SessionAttackWearResult? wear = null;
@@ -364,7 +395,36 @@ public sealed partial class GameSessionOwner
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, new SessionWearSide(), null, null, request.DropMap, criticals);
         return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
             new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, null, null, stepFailure, Version)
-            { Wear = wear, Criticals = criticals, Shots = shots, Scatter = scatter, ItemEvents = applied.ItemEvents }, Version) { Destination = destination, AtLocation = true });
+            { Wear = wear, Criticals = criticals, Shots = shots, Scatter = scatter, ItemEvents = applied.ItemEvents, Ammunition = ammunition }, Version) { Destination = destination, AtLocation = true });
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2415 (ledger TW8): the hero's throw of a weapon with an ammunition type whose units the hero lacks. The dispatcher refuses before any roll: nothing is rolled or spent, and the thrown item, which the
+    /// original took out of the hero's list at the lift, is not given back: it stays on the hero's tile switched off (object flag 0x2, the field a script's toggle writes, so <see cref="QueryItemOff"/> reads it and no window lists it), in two revisions
+    /// (the item leaving its list, the off flag), after the hit-location roll the dispatcher draws first (<see cref="DrawHitLocationBeforeAmmunitionRefusal"/>). An inactive hero throws nothing (NoChange, as <see cref="ThrowAtLocation"/>). The host plays the out-of-ammunition sound on the hero (<see cref="SessionHeroThrowResult.AmmunitionShort"/>). The refusal's sound and the hero's auto switch
+    /// (ARC-COMBAT-2698) belong to the host; the session itself reaches neither.
+    /// </summary>
+    private (GameSessionFailure Failure, SessionHeroThrowResult? Result) ThrowRefusedForAmmunition(GameSessionVersion expected, SessionHeroThrow request)
+    {
+        if (!ValidWear(new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn }, new SessionWearSide(), targetBroken: false, wear: null)) return (GameSessionFailure.InvalidWear, null);
+        var life = _life.Hero!.Value.State;
+        if (!LifeRules.Evaluate(life, HeroLifeFacts(life)).IsActive) return (GameSessionFailure.None, new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version));
+        if (!IsCurrent(expected)) return (GameSessionFailure.StaleVersion, null);
+        if (_revision >= long.MaxValue - 1) return (GameSessionFailure.RevisionExhausted, null);
+        DrawHitLocationBeforeAmmunitionRefusal();
+        Throw(request.Item, request.HeroWorn);
+        var off = ApplyChanges(Version, null, [new(_actor.Map, SessionItemOff.Key(request.Item), 1)]);
+        return (GameSessionFailure.None, new(GameSessionDisposition.Changed, off.Disposition == GameSessionDisposition.Rejected ? off.Failure : GameSessionFailure.None, null, Version) { AmmunitionShort = true });
+    }
+
+    // ARC-COMBAT-2415 (0x4B3170, the shared check's order, ARC-COMBAT-012): the dispatcher rolls the hit location (d100) before its ammunition check, so a refused throw has drawn that one roll from the project's stream, as the resolver's own refusal does. A stream that
+    // cannot give it (the bounded project stream) draws nothing: the refusal does not depend on it.
+    private void DrawHitLocationBeforeAmmunitionRefusal()
+    {
+        var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
+        try { rolls.Roll(CombatRollPurpose.HitLocation, 1, 100); }
+        catch (TrialCombatRolls.ExhaustedException) { return; }
+        _random = rolls.Trial;
     }
 
     // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.

@@ -423,6 +423,8 @@ public partial class TerrainViewerApp
         if (aimed is null) request = request with { LineOfFire = locationLine };
         // ARC-COMBAT-2435 smoke seam: a smoke that needs its throw at a tile to hit sets the session's random stream at the action frame (the stream's draws before it are not the smoke's to count).
         if (_heldThrowSeedForSelfTest is { } seed) { owner.RestoreRandom(new SessionRandomState(seed, 0)); _heldThrowSeedForSelfTest = null; }
+        // ARC-COMBAT-2698: the refused weapon's sound fields are read while it is still the hero's (the refusal's sound plays after it left the list).
+        var thrownSounds = EntitySounds(held.Item);
         var result = owner.ThrowHeroItem(owner.Version, request);
         // A struck critter that died meanwhile refuses the attack: the original's press throws at the location anyway.
         if (aimed is not null && result.Disposition == GameSessionDisposition.NoChange && owner.QueryHeroLife() is { Status.IsActive: true })
@@ -436,7 +438,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-063 throw item={held.Item} tile={tile.X},{tile.Y} struck={aimed?.Entity ?? "none"} disposition={result.Disposition}"
             + $" failure={result.Failure} outcome={result.Attack?.Resolution?.Outcome.ToString() ?? "-"} shots={result.Shots.Count}"
             + $" destination={(result.Destination is { } d ? $"{d.X},{d.Y}" : "-")} cost={owner.QueryHeroThrowCost()}"
-            + (result.ScriptDeclined ? " script-declined" : "") + (result.Scripts.Count > 0 ? $" scripts={result.Scripts.Count}" : "") + (result.Messages.Count > 0 ? $" lines={result.Messages.Count}" : ""));
+            + (result.ScriptDeclined ? " script-declined" : "") + (result.AmmunitionShort ? " out-of-ammunition" : "") + (result.Scripts.Count > 0 ? $" scripts={result.Scripts.Count}" : "") + (result.Messages.Count > 0 ? $" lines={result.Messages.Count}" : ""));
         // ARC-COMBAT-1955: a line the item's removal or throw script printed goes to the message window, and the eye candy they made plays (a refused throw whose scripts changed nothing shows none).
         PostScriptLines(result.Messages);
         QueueScriptEyeCandies(result.EyeCandies);
@@ -448,6 +450,16 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             // A refusal after the scripts took effect keeps its own notice: the throw goal's end must not replace it with "stopped".
             return result.Disposition == GameSessionDisposition.Rejected ? null : result;
+        }
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused: the item left the pack and lies on the hero's tile switched off (the original plays its out-of-ammunition sound).
+        if (result.AmmunitionShort)
+        {
+            SetHeldThrowNotice($"{held.Name} not thrown: no ammunition for it (it lies switched off on the hero's tile)");
+            // ARC-COMBAT-2698 (0x4B3170): the out-of-ammunition sound on the hero, then the auto switch (a PC thrower only; 0x4B83E0).
+            if (ActorCell() is { } sounded) PlayAmmunitionRefusalSound(thrownSounds, sounded.X, sounded.Y);
+            HeroThrowOutOfAmmunition(result, aimed?.Row);
+            SyncAreaInventory(); RefreshAreaStatus();
+            return result;
         }
         if (result.ScriptDeclined)
         {

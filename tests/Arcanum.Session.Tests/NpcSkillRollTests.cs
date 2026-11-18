@@ -48,6 +48,45 @@ public sealed class NpcSkillRollTests
     }
 
     [TestMethod]
+    public void Persuasion_and_prowling_are_opposed_by_the_targets_stat_and_no_target_reads_a_hundred()
+    {
+        // ARC-AI-2652 (0x4C6410): the effectiveness is the opposed table over the level difference; a skill with no opposed stat ignores the value.
+        foreach (var skill in new[] { Skill.Persuasion, Skill.Prowling })
+        {
+            using var owner = Owner(5);
+            var user = User(skill, 10, SkillTraining.Master);
+            var level = owner.QueryNpcSkills(user.Loaded, user.Modifiers)[skill].Level;
+            var none = owner.RollNpcSkill(owner.Version, user, skill);
+            var weak = owner.RollNpcSkill(owner.Version, user, skill, opponentStat: 0);
+            var strong = owner.RollNpcSkill(owner.Version, user, skill, opponentStat: level + 9);
+            Assert.IsTrue(none.Check!.Check.Effectiveness >= SkillCheckRules.EffectivenessCap, $"{skill}: no target reads 100 (plus the intelligence term, capped at 95 for persuasion)");
+            Assert.IsTrue(none.Check.Check.Effectiveness > strong.Check!.Check.Effectiveness, $"{skill}: a strong opponent lowers the chance");
+            Assert.IsTrue(weak.Check!.Check.Effectiveness >= strong.Check.Check.Effectiveness);
+            var expected = SkillCheckRules.Opposed(level, level + 9) + 10;
+            Assert.AreEqual(expected, strong.Check.Check.Effectiveness, $"{skill}: the table over the difference of {level} and {level + 9}, plus the +10 of the fixture sheet's extraordinary intelligence (every stat 20)");
+        }
+        using var plain = Owner(5);
+        var melee = User(Skill.Melee, 20, SkillTraining.Master);
+        Assert.AreEqual(plain.RollNpcSkill(plain.Version, melee, Skill.Melee).Check!.Check.Effectiveness, plain.RollNpcSkill(plain.Version, melee, Skill.Melee, opponentStat: 20).Check!.Check.Effectiveness,
+            "melee is no opposed skill");
+    }
+
+    [TestMethod]
+    public void An_opponent_stat_outside_the_limit_is_refused_and_rolls_nothing()
+    {
+        using var owner = Owner(5);
+        var edge = owner.RollNpcSkill(owner.Version, User(Skill.Persuasion, 10, SkillTraining.Master), Skill.Persuasion, opponentStat: GameSessionOwner.MaxPickPocketStat);
+        Assert.AreEqual(GameSessionDisposition.Changed, edge.Disposition, "the limit itself is accepted");
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        foreach (var bad in new[] { GameSessionOwner.MaxPickPocketStat + 1, -GameSessionOwner.MaxPickPocketStat - 1 })
+        {
+            var result = owner.RollNpcSkill(owner.Version, User(Skill.Persuasion, 10, SkillTraining.Master), Skill.Persuasion, opponentStat: bad);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidSkill), (result.Disposition, result.Failure));
+        }
+        Assert.AreEqual((revision, draws), (owner.Version.Revision, owner.QueryRandom().Draws));
+    }
+
+    [TestMethod]
     public void A_highly_skilled_npc_always_succeeds_and_an_unskilled_one_mostly_fails()
     {
         var strong = 0;

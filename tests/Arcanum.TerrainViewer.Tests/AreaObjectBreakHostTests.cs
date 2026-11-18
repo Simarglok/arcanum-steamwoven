@@ -572,6 +572,30 @@ public sealed class AreaObjectBreakHostTests
         });
     }
 
+    // ARC-SCRIPT-2646 (OD7, 0x43F1C0 -> 0x424070): the interrupt of the object's runs follows the object-broken step, and it runs after the trap and before the BUST script.
+    [TestMethod]
+    public void The_interrupt_runs_after_the_trap_and_before_the_bust_script_and_only_for_its_step()
+    {
+        Assert.IsTrue(AreaObjectBreakHost.Interrupts(SessionObjectHostSteps.ObjectBroken));
+        Assert.IsFalse(AreaObjectBreakHost.Interrupts(SessionObjectHostSteps.BustScript | SessionObjectHostSteps.ObjectDestroyed));
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, Container, 30001, 830);
+            var probe = new Probe();
+            var (host, traps) = Hosts(session, content, probe, true, chest);
+            var seen = new List<string>();
+            var steps = SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.ObjectBroken;
+            var ran = AreaObjectBreakHost.Run(host, traps, chest, steps, true, false, session.Rules.Scripts, interrupt: () => seen.Add($"interrupt:trap={probe.Order.Count}:bust={host.GlobalFlag(BustFlag)}"));
+            CollectionAssert.AreEqual(new[] { "interrupt:trap=1:bust=False" }, seen, "the trap ran, the BUST script did not yet");
+            Assert.IsTrue(host.GlobalFlag(BustFlag));
+            Assert.IsNotNull(ran.Bust?.Run);
+            seen.Clear();
+            AreaObjectBreakHost.Run(host, traps, chest, SessionObjectHostSteps.BustScript, true, false, session.Rules.Scripts, interrupt: () => seen.Add("x"));
+            Assert.AreEqual(0, seen.Count, "no step, no interrupt");
+        });
+    }
+
     // ARC-SCRIPT-2620 (OD7-OD11, BS3c): the end of the runs follows the destroy step only: a bust, a witness, a sound or the trap alone end nothing.
     [TestMethod]
     public void Only_the_object_destroyed_step_ends_the_runs_of_a_break()
@@ -580,5 +604,117 @@ public sealed class AreaObjectBreakHostTests
         Assert.IsTrue(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectDestroyed));
         Assert.IsFalse(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.None));
         Assert.IsFalse(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound | SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.TrapFires));
+    }
+
+    // ARC-SCRIPT-2644 (TD2, OD7-OD11, 0x43F1C0 -> 0x43CCA0): the break's destroy branches run the object's destroy point (2) before the session writes the destroyed condition, through the gate the host hands the session.
+    private static SessionObjectTarget BreakTarget(AreaObjectRecord row, Arcanum.Simulation.Combat.DamageableObjectKind kind, int map = 1) =>
+        new(new SessionMapId(map), AreaUseScriptHost.EntityId(row), new SessionObjectBaseline { Kind = kind, Points = 4, Busted = kind == Arcanum.Simulation.Combat.DamageableObjectKind.Scenery,
+            Cell = new((int)row.WorldX!.Value, (int)row.WorldY!.Value) });
+
+    private static SessionObjectCondition ConditionOf(GameSessionOwner session, AreaObjectRecord row, Arcanum.Simulation.Combat.DamageableObjectKind kind) =>
+        session.QueryObjectCondition(new SessionMapId(1), AreaUseScriptHost.EntityId(row), kind);
+
+    [TestMethod]
+    public void A_break_that_destroys_a_scenery_runs_its_destroy_point_first_and_a_skip_default_keeps_it()
+    {
+        var kind = Arcanum.Simulation.Combat.DamageableObjectKind.Scenery;
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0, destroy: 834);
+            var probe = new Probe();
+            var (host, _) = Hosts(session, content, probe, true, statue);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            var broke = session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+            Assert.AreEqual(Arcanum.Simulation.Combat.ObjectBreak.Destroyed, broke.Hit!.Break);
+            Assert.IsTrue(host.GlobalFlag(2303), "the destroy point ran");
+            Assert.AreEqual(SessionObjectCondition.Destroyed, ConditionOf(session, statue, kind));
+            Assert.IsTrue(AreaObjectBreakHost.EndsRuns(broke.Host));
+        });
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0, destroy: 835);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            var broke = session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+            Assert.IsTrue(host.GlobalFlag(2304), "the destroy point ran and skipped the default");
+            Assert.AreEqual(SessionObjectCondition.Busted, ConditionOf(session, statue, kind), "the busted scenery stays");
+            Assert.IsFalse(AreaObjectBreakHost.EndsRuns(broke.Host), "no destroy, no runs to end");
+            Assert.IsTrue(broke.Host.HasFlag(SessionObjectHostSteps.DestroySound), "the sound plays after the destroy returns");
+            Assert.AreEqual(10, session.QueryObject(BreakTarget(statue, kind)).Damage, "the hit's damage is written");
+        });
+    }
+
+    [TestMethod]
+    public void A_break_without_a_destroy_point_or_off_the_shown_map_destroys_with_no_run()
+    {
+        var kind = Arcanum.Simulation.Combat.DamageableObjectKind.Scenery;
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+            Assert.AreEqual(SessionObjectCondition.Destroyed, ConditionOf(session, statue, kind));
+            Assert.IsTrue(host.BreakMayDestroy(BreakTarget(Row(2, Scenery, 0, 0, destroy: 835), kind, map: 7)), "an object of another map is not the host's");
+            Assert.IsFalse(host.GlobalFlag(2304));
+            Assert.IsTrue(host.BreakMayDestroy(BreakTarget(Row(3, Scenery, 0, 0, destroy: 835), kind)), "not a row of the shown map");
+        });
+    }
+
+    [TestMethod]
+    public void A_destroy_point_the_set_refuses_keeps_the_object_and_one_that_destroys_itself_leaves_it_destroyed()
+    {
+        var kind = Arcanum.Simulation.Combat.DamageableObjectKind.Scenery;
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0, destroy: 836);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+            Assert.AreEqual(SessionObjectCondition.Busted, ConditionOf(session, statue, kind), "a point run that did not apply destroys nothing on a guess");
+        });
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0, destroy: 838);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+            Assert.IsTrue(host.GlobalFlag(2305), "the point ran");
+            Assert.AreEqual(SessionObjectCondition.Destroyed, ConditionOf(session, statue, kind), "its own destroy inside the point is left to the break");
+        });
+    }
+
+    [TestMethod]
+    public void A_containers_break_runs_its_destroy_point_after_the_drop_and_a_skip_default_keeps_the_container()
+    {
+        var kind = Arcanum.Simulation.Combat.DamageableObjectKind.Container;
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, ContainerType, 0, 0, destroy: 835);
+            var (host, _) = Hosts(session, content, new Probe(), true, chest);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            var broke = session.DamageObject(session.Version, BreakTarget(chest, kind), 10);
+            Assert.AreEqual(Arcanum.Simulation.Combat.ObjectBreak.ContainerSpilled, broke.Hit!.Break);
+            Assert.IsTrue(host.GlobalFlag(2304));
+            Assert.AreEqual(SessionObjectCondition.Whole, ConditionOf(session, chest, kind), "the refused container stays");
+            Assert.IsTrue(broke.Host.HasFlag(SessionObjectHostSteps.SpillEyeCandy));
+            Assert.IsFalse(AreaObjectBreakHost.EndsRuns(broke.Host));
+        });
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, ContainerType, 0, 0, destroy: 834);
+            var (host, _) = Hosts(session, content, new Probe(), true, chest);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            session.DamageObject(session.Version, BreakTarget(chest, kind), 10);
+            Assert.IsTrue(host.GlobalFlag(2303));
+            Assert.AreEqual(SessionObjectCondition.Destroyed, ConditionOf(session, chest, kind));
+        });
     }
 }

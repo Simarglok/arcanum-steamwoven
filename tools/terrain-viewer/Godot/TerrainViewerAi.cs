@@ -197,6 +197,8 @@ public partial class TerrainViewerApp
             // ARC-WORLD-1157 (SZ6): a generator's off-screen option reads the game window and the generator's drawn rectangle.
             Screen = () => new RestockScreen(this),
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
+            // ARC-AI-2673 (ledger DSV5): an NPC's repair of an item the PC holds; a kit item's baseline lives in the hero load, not in the session.
+            HeroItemCondition = entity => _inventoryHost?.RepairBaseline(session, entity, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
             // ARC-DEV-287 (MIG13 tail T6): the hero is pushed by the knockback through its grid actor.
             HeroPush = new ViewerHeroPush(this),
@@ -1044,10 +1046,25 @@ public partial class TerrainViewerApp
         var thrown = notice.Throw!;
         GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
             + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}"
-            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : "") + (thrown.ScriptDeclined ? " script-declined" : "") + (thrown.Messages.Count > 0 ? $" lines={thrown.Messages.Count}" : ""));
+            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : "") + (thrown.ScriptDeclined ? " script-declined" : "") + (thrown.AmmunitionShort ? " out-of-ammunition" : "") + (thrown.Messages.Count > 0 ? $" lines={thrown.Messages.Count}" : ""));
         // ARC-COMBAT-1761: a line the item's removal or throw script printed goes to the message window, and the eye candy they made plays.
         PostNpcPickupLines(notice);
         QueueScriptEyeCandies(notice.EyeCandies);
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the ammunition check refused the thrown weapon: it lies on the thrower's tile switched off, nothing was struck.
+        if (thrown.AmmunitionShort)
+        {
+            _aiNotice = $"{AiName(notice.Npc)} cannot throw: no ammunition for the weapon (it lies switched off on its tile)";
+            // ARC-COMBAT-2698 (0x4B3170): the refusal's out-of-ammunition sound on the thrower (the thrown weapon's sound base + 7); an NPC gets no auto switch (0x4ADFF0 marks it, ARC-COMBAT-2415).
+            if (_aiHost is { } throwHost && NpcOf(throwHost, notice.Npc) is { } thrower && thrower.Row.WorldX is not null && notice.Item is { } refusedItem)
+            {
+                var (sx, sy) = LiveWorldCell(thrower.Row);
+                PlayAmmunitionRefusalSound(EntitySounds(refusedItem, notice.Npc), sx, sy);
+            }
+            SyncAreaCombatBodies();
+            SyncAreaInventory();
+            RefreshAreaStatus();
+            return;
+        }
         if (notice.Target is not null && notice.Result is not null)
         {
             AiHit(notice);

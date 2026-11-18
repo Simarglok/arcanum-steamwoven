@@ -162,7 +162,7 @@ public sealed partial class GameSessionOwner
         foreach (var shot in saved.NpcThrows)
             if (!SessionValidation.Entity(shot.Thrower) || !SessionValidation.Entity(shot.Thrown.Item) || shot.Thrown.Range < 0) return GameSessionFailure.InvalidSnapshot;
         foreach (var shot in saved.NpcArrows)
-            if (!SessionValidation.Entity(shot.Shooter) || shot.Target != SessionNpcShotFacts.HeroTarget && !SessionValidation.Entity(shot.Target) || shot.Values.SkillLevel < 0
+            if (!SessionValidation.Entity(shot.Shooter) || shot.Target is not (SessionNpcShotFacts.HeroTarget or SessionNpcShotFacts.LocationTarget) && !SessionValidation.Entity(shot.Target) || shot.Values.SkillLevel < 0
                 || !CarriedCheckFits(shot.Check, shot.Hit)) return GameSessionFailure.InvalidSnapshot;
         foreach (var shot in saved.TrapShots)
             if (!SessionValidation.Entity(shot.Shooter) || !SessionValidation.Entity(shot.Victim) || shot.Amount < 0) return GameSessionFailure.InvalidSnapshot;

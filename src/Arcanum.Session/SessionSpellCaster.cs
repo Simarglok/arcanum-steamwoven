@@ -119,8 +119,8 @@ public enum SpellCastQueueOutcome { Queued, Refused, NoRun }
 /// check or the session: <see cref="SpellCastAttempt.Run"/>), or the run started and waits for its casting goal.</summary>
 public enum SpellCastAttemptOutcome { Nothing, CannotAfford, NoLineOfFire, Refused, Started }
 
-/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot; since ARC-MAGIC-1835 the invocation check's refusal when the AI's cast was refused by it (None otherwise).</summary>
-public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null, SpellInvocationRefusal Refusal = SpellInvocationRefusal.None);
+/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot; since ARC-MAGIC-1835 the invocation check's refusal when the AI's cast was refused by it (None otherwise); a BEGIN-area refusal also names the mask and the failing bits in <c>RefusalNote</c> (ARC-MAGIC-2655, diagnostic).</summary>
+public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null, SpellInvocationRefusal Refusal = SpellInvocationRefusal.None, string? RefusalNote = null);
 
 public enum SpellCastEventKind
 {
@@ -390,6 +390,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     }
 
     /// <summary>The invocation world over the map (MT7): the line of fire and the BEGIN area tests (MT8's areas).</summary>
+    /// <summary>ARC-MAGIC-2655: when set, an AI cast refused by the BEGIN-area test builds its <see cref="SpellCastAttempt.RefusalNote"/> (a smoke stage's diagnostic; off in play, the note costs dozens of area tests).</summary>
+    public bool RefusalDiagnostics { get; set; }
+
     public ISpellInvocationWorld InvocationWorld() =>
         new SpellInvocationAreas(_map, spell => _records(spell) is { } r && r.Areas.Length > 0 ? r.Areas[0].Targets : 0, _map.LineOfFire, Profile);
 

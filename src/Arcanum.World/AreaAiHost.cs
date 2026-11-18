@@ -103,6 +103,9 @@ public sealed record AreaAiScene
     public Func<IAreaRestockScreen?>? Screen { get; init; }
     /// <summary>The hero's worn items with their durability values, or null.</summary>
     public Func<IReadOnlyDictionary<EquipmentSlot, SessionWearItem>?>? HeroWorn { get; init; }
+    /// <summary>ARC-AI-2673 (ledger DSV5): the condition baseline (hp_pts, hp_adj, hp_damage, destroyed bits) of an item the PC holds: a kit item's comes from the hero load (the viewer's kit durability), a taken or made item's from its own fields
+    /// (<see cref="AreaInventoryHost.RepairBaseline"/>); null for an item the PC does not hold. An NPC's repair of such an item reads it. Null provider: the PC's items are not repairable by an NPC.</summary>
+    public Func<string, ItemCondition?>? HeroItemCondition { get; init; }
     /// <summary>The NPC the hero talks with, or null.</summary>
     public Func<string?>? ConversationPartner { get; init; }
     /// <summary>ARC-DEV-177 (MIG13 S11e): the dialog-end callback the AI gate calls (0x5678D0 through 0x5F848C): the viewer ends the PC's conversation with this NPC at its next safe point (in the viewer a barter has already closed the dialog, so nothing is open to end).</summary>
@@ -2558,6 +2561,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private void NeedsAmmunition(string npc, AttackResolution? resolution)
     {
         if (resolution?.Refusal != AttackRefusal.OutOfAmmunition) return;
+        NeedsAmmunition(npc);
+    }
+
+    // ARC-COMBAT-2415 (0x4B65D0 → 0x4ADFF0): the same marks for a thrown weapon the ammunition check refused (a throw at a location makes no attack to read the refusal from).
+    private void NeedsAmmunition(string npc)
+    {
         var set = _session.SetAiSupportBits(_session.Version, npc, DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.CheckWeapon);
         Trace(npc).Item = $"out of ammunition {set.Disposition} {set.Failure}";
     }
@@ -2637,10 +2646,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var struck = info?.Object;
         if (Build(id) is not { } attacker) return null;
         var weapon = WieldedPrototype(id);
+        // ARC-COMBAT-2538 (RH5): the victim a script names: the object's entity, or a wall's row (a wall's scripts are offered like any struck object's).
+        var victim = struck?.Entity ?? (info is null ? AreaUseScriptHost.EntityId(blocker) : null);
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck), HitScripts = HitScriptsOf(id, struck?.Entity),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim),
         });
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2652,7 +2663,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var shot in result.Shots)
             if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
             {
-                if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                if (LandShotOnObject(id, shot, struck, struck is null, blocker) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
                 _session.EndShot(shot);
             }
         return result;
@@ -2717,22 +2728,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result is { Disposition: not GameSessionDisposition.Rejected } && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
-    private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>
-        _scene.TakingDamage is { } asks && target is not null ? () => asks(target.Entity, attacker) : null;
+    private Func<bool>? TakingDamageOfObject(string attacker, string? victim) =>
+        _scene.TakingDamage is { } asks && victim is not null ? () => asks(victim, attacker) : null;
 
     /// <summary>
     /// ARC-COMBAT-1140 (PF8, RH5, OD1–OD5; tail T4e): an arrow or bullet of <paramref name="shooter"/> reached an object it met: the one the shot was decided for (<see cref="HitBlockingObject"/>) takes the carried hit, another
     /// object or wall past its destination a forced hit (<see cref="GameSessionOwner.LandNpcShotOnObject"/>); the object's taking-damage script is asked with the shooter as the attacker. A door, window, container,
-    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
+    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>), named by its row <paramref name="wallRow"/> for the scripts it is offered (ARC-COMBAT-2538: the weapon's hit scripts and the wall's
+    /// taking-damage script, as for any struck object). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
     /// Null when the shooter has no combat values (the shot is gone either way).
     /// </summary>
-    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
+    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall, AreaObjectRecord? wallRow = null)
     {
+        // ARC-COMBAT-2538 (RH5): a wall's row names it for the hit scripts and its taking-damage script (a wall without a row offers none).
+        var victim = target?.Entity ?? (wall && wallRow is not null ? AreaUseScriptHost.EntityId(wallRow) : null);
         if (Build(shooter) is not { } attacker) { EndStruckShot(shot); return null; }
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, target), HitScripts = HitScriptsOf(shooter, target?.Entity),
+            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim),
         });
         EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
@@ -3167,20 +3181,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-AI-1854 (0x4C7160, the cases with no world write): the skills that have no case of their own in the attempt (bow, melee, throwing, backstab, prowling, haggle, persuasion, firearms), dodge (its incapacity gate), spot trap
     /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is
-    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. NOT READY: repair (its own handler: item damage), the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
+    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. The opposed skills read the target's stat (<see cref="OpposedStat"/>, ARC-AI-2652). NOT READY: the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
     /// outside the 16 answers false.
     /// </summary>
     private bool PlainSkillAttempt(string id, string target, int skill)
     {
         string? refusal = null;
         SessionNpcSkillRoll? roll = null;
+        int? opponent = null;
         if (skill is < 0 or > (int)Skill.DisarmTraps || !GameSessionOwner.IsPlainNpcSkill((Skill)skill)) refusal = "not ready";
+        else if (!OpposedStat(target, (Skill)skill, out opponent, out refusal)) { }
         else if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
         else
         {
             var incapable = skill == (int)Skill.Dodge && DodgeRefused(id);
             var trap = skill == (int)Skill.SpotTrap ? _scene.TargetTrapClass?.Invoke(target) ?? TrapClass.None : TrapClass.None;
-            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable, trap);
+            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable, trap, opponent);
         }
         Trace(id).Skill = roll is null ? $"skill {skill} on {target}: {refusal}"
             : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Critical} second={roll.SecondRoll}";
@@ -3189,9 +3205,33 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-2652 (0x4C6410): the value a plain attempt's effectiveness is opposed by. A skill the table 0x5B6F64 flags as opposed by perception (0x10: prowling) or intelligence (0x20: persuasion) reads the target's effective
+    /// stat through the getter 0x4B0490 (5 or 4): the hero's through the session, a critter of the shown map from its sheet and effects (<see cref="Find"/>), 0 for a target that is no critter (the getter answers 0 for any
+    /// object but a critter). No target (an empty id) is no opponent (an effectiveness of 100); the other plain skills have none. A target the host holds no fields of, or a critter it holds no facts of, is refused and the attempt does nothing.
+    /// </summary>
+    private bool OpposedStat(string target, Skill skill, out int? value, out string? refusal)
+    {
+        value = null;
+        refusal = null;
+        var kind = SkillCheckRules.Opponent(skill);
+        if (kind is not (SkillOpponent.Perception or SkillOpponent.Intelligence) || string.IsNullOrEmpty(target)) return true;
+        var perception = kind == SkillOpponent.Perception;
+        if (target == Pc)
+        {
+            value = _session.QueryHeroScriptStat(perception ? (int)CharacterStat.Perception : (int)CharacterStat.Intelligence);
+            if (value is null) refusal = "no hero";
+        }
+        else if (Fields(target) is not { } fields) refusal = "no target";
+        else if (fields.Critter is null) value = 0;
+        else if (Find(target) is { } critter) value = perception ? critter.Perception : critter.Intelligence;
+        else refusal = "no target sheet";
+        return refusal is null;
+    }
+
+    /// <summary>
     /// ARC-AI-2623 (0x4C7160 with skill 8, the roll 0x4C6560): an NPC's gambling attempt, the session's <see cref="GameSessionOwner.RollNpcGambling"/> with the stored roll of the skill module. The skill is opposed by the target's
     /// gambling level (0x4C6410 over 0x4C5EB0): the hero's, a map NPC's from its sheet, 0 for a target that is no critter. A target the host holds no fields of, or a critter with no sheet, is not read and the attempt does nothing. The answer is
-    /// the check's success (run flag 0x40000); the handler has no case of its own for the skill. NOT READY: the opponent of the other opposed skills (persuasion).
+    /// the check's success (run flag 0x40000); the handler has no case of its own for the skill. The other opposed skills (prowling, persuasion) read a stat of the target: <see cref="OpposedStat"/> (ARC-AI-2652).
     /// </summary>
     private bool GamblingAttempt(string id, string target)
     {
@@ -3216,9 +3256,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-AI-2622 (0x4C7160, repair case 12): the NPC repairs the item the goal names with the session's <see cref="GameSessionOwner.RepairByNpc"/>, on the item's own fields: an item it holds or one lying loose on the shown map
-    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>). The answer is the case's success, which sets the run's flag 0x40000. The original's repair has no target test, so a critter or a scenery target would be
-    /// "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). NOT READY: an item in a junk pile, an item of another holder (the hero's, another NPC's), the swap of a ground item's drawn art
-    /// after a master's broken-art clear, and the repair UI callbacks of the local player.
+    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>), in a junk pile or held by another NPC (ARC-AI-2663, <see cref="RepairBaseline"/>). The answer is the case's success, which sets the run's flag 0x40000.
+    /// The original's repair has no target test, so a critter or a scenery target would be "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). The roll modifier 0x4C8430 of the case is
+    /// the shared check's (<see cref="Arcanum.Simulation.Skills.SkillCheckRules"/>: Repair's table 0x980, blinded +30, both arms +50 or one +20, nothing else; it only picks which critical test runs). NOT READY: the swap of a ground item's drawn
+    /// art after a master's broken-art clear (the viewer draws no broken art of an item) and the repair UI callbacks of the local player. The items the PC holds (kit, taken, made) are repaired through <see cref="AreaAiScene.HeroItemCondition"/> (ARC-AI-2673).
     /// </summary>
     private bool RepairAttempt(string id, string target)
     {
@@ -3233,14 +3274,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
 
-    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds or one lying loose on the shown map; null for any other target.
+    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds, one lying loose on the shown map, one in a junk pile (the session's own or the map's data) or one another
+    // NPC of any covered map holds (ARC-AI-2663; the original's repair case works on the target handle's own fields and asks nothing of its holder, 0x4C7160), or (ARC-AI-2673) one the PC holds, whose baseline the viewer supplies (a kit item's
+    // lives in the hero load, not in the session); null for any other target, a destroyed item and a critter.
     private ItemCondition? RepairBaseline(string id, string target)
     {
+        if (_session.IsItemDestroyed(target)) return null;
         var fields = _scene.Combat.HeldItemFields(_session, id, target);
-        if (fields is null && GroundView()?.Ground.FirstOrDefault(ground => ground.Item.Entity == target) is { } lying && !_session.IsItemDestroyed(target))
-            fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying.Item);
-        return fields is null ? null : SessionItemConditions.FromCombatFields(fields);
+        if (fields is null && GroundView() is { } view)
+        {
+            var lying = view.Ground.Select(ground => ground.Item).Concat(view.JunkPiles.SelectMany(pile => pile.Items)).FirstOrDefault(item => item.Entity == target);
+            if (lying is not null) fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying);
+        }
+        if (fields is null && MapPileOf(target) is not null && MapPileHolder(target) is { } listed) fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, listed);
+        fields ??= _scene.Combat.NpcItemFields(_session, target);
+        return fields is null ? _scene.HeroItemCondition?.Invoke(target) : SessionItemConditions.FromCombatFields(fields);
     }
+
+    // The item as the standing junk pile of the map's data that lists it now holds it (its list as the session shows it), or null.
+    private SessionInventoryItem? MapPileHolder(string item) =>
+        _scene.Combat.MapJunkPileHolding(_session, _scene.RuntimeMap, item) is { } pile ? _session.QueryHolderItems(pile.Entity)?.FirstOrDefault(listed => listed.Entity == item) : null;
 
     /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>
     private const int GoldArtCells = 1;
@@ -3381,7 +3434,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Struck = struck is { Who: { } who } && who != Pc ? Build(who) : null,
             StruckHero = hero,
             StruckCell = struck?.Cell,
-            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : null,
+            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : LocationLine(from, tile),
+            // ARC-COMBAT-2523 (TW11): a throw that names no struck critter rolls as a throw at the location: the light of the tile and the line of fire's cost are its terms.
+            TargetLight = Math.Clamp(CellLight(tile), 0, AttackRules.MaxLightLevel),
             ThrowerWorn = _scene.Combat.WornItems(_session, id),
             StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             DropMap = _scene.DropMap?.Invoke(),
@@ -3398,9 +3453,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
         if (result.ScriptDeclined) Trace(id).Throw += " script-declined";
+        if (result.AmmunitionShort) { Trace(id).Throw += " out-of-ammunition"; NeedsAmmunition(id); }
         _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack, Messages = result.Messages, EyeCandies = result.EyeCandies });
         // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
-        var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
+        // ARC-COMBAT-2523: a grenade flies to the location whatever the line names, so its roll is the location's and no critter is its victim.
+        var attackedVictim = struck?.Who is { } hurt && fields.Object.Type != AreaHealingItems.GenericType && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
         if (attackedVictim is { } victim)
         {
             // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a thrown item flies and sends no event at the throw; only a throw decided a hit raises it here (the strike's alert, at the shot: deviation A), with the loudness of the thrown item
@@ -3426,7 +3483,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 else
                 {
                     // ARC-COMBAT-1717 (PF1: no art, the hit resolves at once): a thrown weapon decided a hit strikes where the flight would have met it, then the item lands there.
-                    if (_session.QueryNpcShot(shot) is { Hit: true } decided) LandShot(id, shot, decided.Target == SessionNpcShotFacts.HeroTarget ? Pc : decided.Target);
+                    if (_session.QueryNpcShot(shot) is { Hit: true, Target: not SessionNpcShotFacts.LocationTarget } decided) LandShot(id, shot, decided.Target == SessionNpcShotFacts.HeroTarget ? Pc : decided.Target);
                     // A decided miss that resolves at once gives the victim its miss-path pass, as an unflown throw's did (ARC-DEV-292).
                     else if (attackedVictim is { } missed && _session.QueryNpcShot(shot) is not null) Struck(missed);
                     if (_session.LandThrownItem(_session.Version, shot, destination).Disposition == GameSessionDisposition.Rejected) { _session.EndShot(shot); outcome = "given up"; }
@@ -3450,6 +3507,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 && (Walks(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
         return null;
     }
+
+    // ARC-COMBAT-2523 (TW11): the line of fire to a throw's location with no struck critter (the blocker, if any, is no living critter, or it would be the struck one): its cost, never blocked, as the hero's.
+    private SessionLineOfFire LocationLine(CellCoord from, CellCoord to) =>
+        new(from != to && _scene.LineOfFire?.Invoke() is { } map ? Math.Min(LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat).Cost, AttackResolver.MaxMagnitude) : 0, false);
 
     // The line of fire to the struck critter's cell as the check reads it (the hero's attack's SessionLineOfFire): its cost and whether
     // an object other than the struck one stops it.
@@ -3611,7 +3672,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ? caster.CastByScript(npc, choice.Spell, scriptTarget, script.Free, script.Unresistable)
             : caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
         if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
-        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal} {(attempt.Refusal == Arcanum.Simulation.Magic.SpellInvocationRefusal.None ? "" : "check " + attempt.Refusal)}";
+        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal} {(attempt.Refusal == Arcanum.Simulation.Magic.SpellInvocationRefusal.None ? "" : "check " + attempt.Refusal)} {attempt.RefusalNote}";
         if (attempt.RunId is not { } run) return new(null);
         var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
         if (RunOf(npc) is not { } held || held.Bottom.Goal is not (GoalType.CastSpell or GoalType.AttemptSpell))
