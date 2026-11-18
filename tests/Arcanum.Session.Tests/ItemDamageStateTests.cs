@@ -70,6 +70,55 @@ public sealed class ItemDamageStateTests
         Assert.AreEqual(GameSessionFailure.ObjectUnavailable, owner.DamageItemUnattacked(owner.Version, Vase, Glass, 1, true).Failure, "a deleted item takes nothing");
     }
 
+    // ARC-SCRIPT-2722 (ledger OD12, TD2): the deleting break calls the object destroy (0x43CCA0), whose destroy point (2) can answer 0: the item stays as it is.
+    [TestMethod]
+    public void ADeletingBreakAsksTheItemDestroyGateAndAnAnswerOfNoKeepsTheItem()
+    {
+        using var owner = Owner();
+        var asked = new List<string>();
+        var answer = false;
+        owner.AttachItemDestroyGate(entity => { asked.Add(entity); return answer; });
+        Assert.AreEqual(ItemBreakStep.None, owner.DamageItemUnattacked(owner.Version, Vase, Glass, 4, true).Item!.Value.Break);
+        Assert.AreEqual(ItemBreakStep.Broken, owner.DamageItemUnattacked(owner.Version, Vase, Glass, 6, true).Item!.Value.Break);
+        Assert.AreEqual(0, asked.Count, "a first break destroys nothing");
+        var broken = owner.QueryItemCondition("vase", Vase.Baseline)!.Value;
+        var kept = owner.DamageItemUnattacked(owner.Version, Vase, Glass, 10, true);
+        Assert.AreEqual((GameSessionDisposition.Changed, ItemBreakStep.Deleted, true), (kept.Disposition, kept.Item!.Value.Break, kept.Item!.Value.DestroyKept));
+        Assert.AreEqual(SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.DestroyKept, kept.Host, "the sound still plays, the destroy is refused");
+        Assert.IsFalse(owner.IsItemDestroyed("vase"));
+        var stands = owner.QueryItemCondition("vase", Vase.Baseline)!.Value;
+        Assert.AreEqual((broken with { Damage = 10 }), stands, "the hit's damage is written: 0 hit points, still broken");
+        // The refusal is the item's own: any next hit breaks it again (it is at 0 hit points) and asks again.
+        answer = true;
+        var gone = owner.DamageItemUnattacked(owner.Version, Vase, Glass, 1, true);
+        Assert.AreEqual((ItemBreakStep.Deleted, false), (gone.Item!.Value.Break, gone.Item!.Value.DestroyKept));
+        Assert.IsTrue(owner.IsItemDestroyed("vase"));
+        CollectionAssert.AreEqual(new[] { "vase", "vase" }, asked);
+    }
+
+    [TestMethod]
+    public void ADestroyPointThatDeletesItsItemItselfLeavesTheOuterBreakNothingToWrite()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(ItemBreakStep.Broken, owner.DamageItemUnattacked(owner.Version, Vase, Glass, 10, true).Item!.Value.Break);
+        owner.AttachItemDestroyGate(entity => { owner.DestroyItem(owner.Version, entity, Vase.Baseline); return true; });
+        var deleted = owner.DamageItemUnattacked(owner.Version, Vase, Glass, 10, true);
+        Assert.AreEqual((GameSessionDisposition.Changed, ItemBreakStep.Deleted, false), (deleted.Disposition, deleted.Item!.Value.Break, deleted.Item!.Value.DestroyKept));
+        Assert.IsTrue(owner.IsItemDestroyed("vase"));
+    }
+
+    [TestMethod]
+    public void TheWearPathsDeleteWithoutTheItemDestroyGate()
+    {
+        using var owner = Owner();
+        var asked = 0;
+        owner.AttachItemDestroyGate(_ => { asked++; return false; });
+        Assert.AreEqual(ItemBreakStep.Broken, owner.BreakItem(owner.Version, "vase", Vase.Baseline).Break);
+        Assert.AreEqual(ItemBreakStep.Deleted, owner.DamageItem(owner.Version, "vase", Vase.Baseline, 10).Break);
+        Assert.IsTrue(owner.IsItemDestroyed("vase"));
+        Assert.AreEqual(0, asked, "nothing there shows a destroy point's lines (ARC-SCRIPT-2722 scope)");
+    }
+
     [TestMethod]
     public void ATrappedItemFiresItsTrapAtTheBreakAndNotBefore()
     {

@@ -255,6 +255,26 @@ public sealed class ObjectAttackStateTests
             owner.AttackObject(owner.Version, new() { Item = new("cup", new(4, 0, 0, false)), ItemFacts = facts }).Failure, "an item in a chest");
     }
 
+    // ARC-SCRIPT-2722 (OD12, TD2): the hero's hit that would delete an item asks the item destroy gate; a refusal keeps the item and the host steps say so.
+    [TestMethod]
+    public void AnItemWhoseDestroyPointKeepsItIsNotDeletedByTheHerosHit()
+    {
+        using var owner = Owner();
+        var answer = false;
+        owner.AttachItemDestroyGate(_ => answer);
+        var vase = new SessionWearItem("vase", new ItemCondition(4, 0, 0, false));
+        var facts = new SessionObjectBaseline { Kind = DamageableObjectKind.Item, Material = ObjectMaterial.Glass };
+        Assert.AreEqual(ItemBreakStep.Broken, BreakIt(owner, new() { Item = vase, ItemFacts = facts }).Item!.Value.Break);
+        var kept = BreakIt(owner, new() { Item = vase, ItemFacts = facts });
+        Assert.AreEqual((ItemBreakStep.Deleted, true), (kept.Item!.Value.Break, kept.Item!.Value.DestroyKept));
+        Assert.IsTrue(kept.Host.HasFlag(SessionObjectHostSteps.DestroyKept) && kept.Host.HasFlag(SessionObjectHostSteps.DestroySound));
+        Assert.IsFalse(owner.IsItemDestroyed("vase"));
+        answer = true;
+        var gone = BreakIt(owner, new() { Item = vase, ItemFacts = facts });
+        Assert.AreEqual((ItemBreakStep.Deleted, false), (gone.Item!.Value.Break, gone.Item!.Value.DestroyKept));
+        Assert.IsTrue(owner.IsItemDestroyed("vase"));
+    }
+
     [TestMethod]
     public void TheHerosBladeWearsOnStoneWhileTheObjectStaysWhole()
     {
