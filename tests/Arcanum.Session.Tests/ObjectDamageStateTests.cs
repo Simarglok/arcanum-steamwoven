@@ -71,7 +71,7 @@ public sealed class ObjectDamageStateTests
         var whole = owner.DamageObject(owner.Version, door, 2, attacked: true);
         Assert.AreEqual(SessionObjectHostSteps.WitnessesHearAttack, whole.Host);
         var broke = owner.DamageObject(owner.Version, door, 6, attacked: true);
-        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak, broke.Host, "a door's runs are the door host's: no interrupt step (issue #2669)");
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.ObjectBroken, broke.Host, "a break of a door also interrupts its runs at level 5 (ARC-SCRIPT-2669, OD7); the door host does it");
         using var plain = Owner();
         Assert.AreEqual(SessionObjectHostSteps.None, plain.DamageObject(plain.Version, door, 2, attacked: false).Host);
     }
@@ -101,7 +101,7 @@ public sealed class ObjectDamageStateTests
         var broke = owner.DamageObject(owner.Version, door, 6);
         Assert.AreEqual((true, ObjectBreak.Destroyed), (broke.Hit!.Broken, broke.Hit.Break));
         Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(door).Condition);
-        Assert.AreEqual(SessionObjectHostSteps.None, broke.Host, "a door has no destroy sound and no destroy step (the door host owns its runs)");
+        Assert.AreEqual(SessionObjectHostSteps.ObjectBroken, broke.Host, "a door has no destroy sound and no destroy step (the door host owns its runs), only the break's level-5 interrupt of them (ARC-SCRIPT-2669, OD7)");
         var again = owner.DamageObject(owner.Version, door, 1);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ObjectUnavailable), (again.Disposition, again.Failure));
     }
