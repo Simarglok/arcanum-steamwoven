@@ -436,6 +436,17 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   (the load's lines are the load); `M`, the spell pane, is not on the interface stack and has no `window.open` span; a headless run prints `NONE` (no frame is drawn).
 - **`perf-menu`** (a menu stage, `--main-menu`): `startup` to the main menu's first frame (`start-to-menu`) and a new game from the
   menu. `./arcanum smoke pr --stages perf-menu --main-menu`.
+- **`soak`** (ARC-DEV-1398, a hero stage, own run, the zone `soak`; like `perf` it needs a window with a map exit:
+  `./arcanum smoke pr --zones soak` or `--stages soak`; the stage pins the town sector 1409,1314 itself, so no `--sector`): a leak check. One cycle opens and closes the windows I C L T W M and S
+  (the sleep window may refuse, which is counted, not a failure), takes a quick save (F7) and loads it (F8), then leaves the map by an exit and
+  comes back (two whole map loads); the cycles go on for `ARC_SOAK_STAGE_MINUTES` (6 by default, 4 to 120, so the verdict has readings after the 120 s warm-up; set it with `--stages soak --env ARC_SOAK_STAGE_MINUTES=30`, the only way: a shell variable
+  is dropped and `--env` does not go with `--zones`; the step's timeout and estimate follow it). Before each cycle a full collection runs and the counters are read (the same reading as the viewer's resource line, below);
+  at the end the stage prints `ARC-DEV-2279 soak summary: ...` (each counter's first and last reading after the first 120 s, the change, and the maximum)
+  and fails when a counter grew past its allowance (`ViewerSoakLimits` in `tools/terrain-viewer/Core/ViewerSoak.cs`: live .NET heap and Godot static memory
+  48 MiB, render textures and video memory 64 MiB, working set 256 MiB, objects 2000, resources and nodes 400, orphan nodes 20, threads 6, open files 16; loose on
+  purpose, the numbers to tune). The zone runs only when named: a diff never selects it and `complete` (the daily build) leaves it out. Window moves of the
+  main map are not in the loop (the `walk` stage walks them). A headless run prints `NONE`. The viewer's own log carries the resource line in every run
+  ([diagnosis](mac-crash-forensics.md#resource-line-in-the-log-and-the-bug-report-arc-dev-1398)).
 - **Resident art across map loads (ARC-DEV-375).** A map load keeps decoded frames and visual records for the next one ([design](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
   The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
   (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off

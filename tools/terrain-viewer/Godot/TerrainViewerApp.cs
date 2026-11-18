@@ -283,6 +283,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
                                 if (only?.Contains("perf-menu") == true) await RunAreaPerfMenuSmokeAsync();
+                                // ARC-DEV-1398: only when named, the soak: windows, quick save and load and map exits in a loop for ARC_SOAK_STAGE_MINUTES, the resource counters watched for growth (--hero, a sector with a map exit).
+                                if (only?.Contains("soak") == true) await RunAreaSoakSmokeAsync();
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-SCRIPT-1790 (HLR1-HLR11): only when named, an installed healer's talk (the h: reply) buys a spell: the quote is paid to the NPC, the cast starts through the AI host (free flag exactly when no PC leads it) and the hero's hit points rise with the talk open (--hero, the Crash Site).

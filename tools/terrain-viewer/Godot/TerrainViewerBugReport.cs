@@ -167,6 +167,7 @@ public partial class TerrainViewerApp
         other.Add(("Platform", $"{OS.GetName()} {OS.GetVersion()}, {Engine.GetArchitectureName()}, Godot {godot}, window {GetViewport().GetVisibleRect().Size}"));
         other.Add(("Debug mode", DebugMode ? "on (ARC-DEV-050)" : "off"));
         other.Add(("Report key", BugReportKeyName));
+        other.Add(("Resources", ResourceReportText())); // ARC-DEV-1398
         return new(build.IsPackage ? $"{build.Text} (commit {build.Commit})" : build.Text,
             session?.Rules.Mode.ToString() ?? "no game session",
             _readyArea is null ? "no map shown" : $"{SaveLocation()} (runtime map {CurrentAreaMap})", hero, combat, other);

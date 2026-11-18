@@ -100,6 +100,21 @@ column stays `Main`, and the run is no soak of the creation window. (The first l
 the IOAccelerator size the 2274 idle run quoted, which the in-process counters cannot read.) The unit tests of the settings and the
 summary are `ViewerSoakTests`; a one-minute trial with `ARC_SOAK_INTERVAL=5 ARC_SOAK_MINUTES=1` shows the window opening within seconds.
 
+### Resource line in the log and the bug report (ARC-DEV-1398)
+
+Every viewer run except a self-test prints one line every 30 s (the soak's interval when `ARC_SOAK_INTERVAL` is set) with the counters above in
+a form a person reads, `grep "ARC-DEV-1398 resources"` in the log:
+
+```
+ARC-DEV-1398 resources t=90s fps=59.9 texture=40.0MiB video=56.3MiB buffer=0.0MiB objects=3781 resources=22 nodes=378 orphans=0 godotStatic=44.0MiB gcLive=283.0MiB gcHeap=300.1MiB gc=8/3/2 workingSet=1200.0MiB threads=34 openFiles=61
+```
+
+`openFiles` is the number of file descriptors the process holds (the listing of `/dev/fd`, which counts its own descriptor: a constant one more; `?` on
+Windows, where there is no such folder). The bug report (Ctrl+B) carries the log's last 120 s, so four of these lines, and a fresh reading as its
+`Resources` fact. The CSV of the soak has the same numbers as the column `open_files` (the last one). A leak that the 2274 idle run could not see
+(a window that is opened and closed, a save and load, a map change) is looked for by the `soak` smoke stage
+([toolchain](toolchain.md)): it plays those steps in a loop for a chosen number of minutes and fails when a counter grows past its allowance.
+
 ### Soak results
 
 **2026-11-15, 15 minutes (stopped by hand to free the queue for another run).** Viewer from the

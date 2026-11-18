@@ -13,7 +13,7 @@ import unittest
 from unittest import mock
 
 from tools.local_dev import launch, run_queue, smoke, smoke_zones
-from tools.local_dev.smoke_zones import COMPLETE, CONTAINER_CLICK, CORE, CRASH_SITE, CENSUS, WALK
+from tools.local_dev.smoke_zones import COMPLETE, CONTAINER_CLICK, CORE, CRASH_SITE, CENSUS, SOAK, WALK
 from tools.local_dev.test_smoke import ENVIRON, parse
 
 REPO = Path(__file__).resolve().parents[2]
@@ -52,7 +52,7 @@ class ZoneTableTests(unittest.TestCase):
         self.assertEqual(sorted(zoned), sorted(known))  # no stage twice, none lost: 76 in all at this base
         for name, zone in smoke_zones.ZONES.items():
             self.assertTrue(set(zone.stages or ()) <= set(known), name)
-        self.assertEqual(smoke_zones.HEAVY, (WALK, CONTAINER_CLICK, CRASH_SITE, CENSUS))
+        self.assertEqual(smoke_zones.HEAVY, (WALK, CONTAINER_CLICK, CRASH_SITE, CENSUS, SOAK))
         self.assertEqual(smoke_zones.zone_stages(CRASH_SITE, known), ())  # the Crash Site smoke is a step, not a stage
         self.assertIn("map", smoke_zones.zone_stages(CORE, known))
         self.assertNotIn("walk", smoke_zones.zone_stages(CORE, known))
@@ -60,10 +60,12 @@ class ZoneTableTests(unittest.TestCase):
     def test_the_complete_run_lists_every_stage_but_the_two_the_batteries_vouch_for_the_heavy_ones_last(self) -> None:
         known = smoke.map_stages()
         stages = smoke_zones.complete_stages(known)
-        self.assertEqual(set(stages), set(known) - smoke_zones.IN_BATTERIES)
+        # ARC-DEV-1398: the soak zone runs only when named, so the complete run leaves it out
+        self.assertEqual(set(stages), set(known) - smoke_zones.IN_BATTERIES - {"soak"})
         self.assertEqual(stages[-3:], ("walk", "container-click", "census"))
         self.assertEqual(smoke_zones.stages_of((COMPLETE,), known), tuple(smoke_zones.stages_of(
-            tuple(smoke_zones.ZONES), known)))
+            tuple(name for name in smoke_zones.ZONES if name not in smoke_zones.ON_REQUEST), known)))
+        self.assertEqual(smoke_zones.stages_of((SOAK,), known), ("soak",))
 
     def test_the_trigger_table_is_well_formed_and_every_row_names_something_real(self) -> None:
         tracked = subprocess.run(("git", "ls-files"), cwd=REPO, capture_output=True, text=True, check=True).stdout.splitlines()
@@ -220,6 +222,22 @@ class ZonePlanTests(unittest.TestCase):
         self.assertEqual(len(steps), 2)
         self.assertEqual(self.plan("pr", "--zones", "census", "--no-build")[0].requires, ("census",))
 
+    def test_the_soak_zone_runs_on_request_only_with_a_timeout_that_follows_its_minutes(self) -> None:
+        # ARC-DEV-1398: the leak soak is never selected by a diff, `complete` leaves it out, and a named run gets a process of its own
+        # (the stage's own default minutes plus the tail; `--env ARC_SOAK_STAGE_MINUTES` moves the timeout with it).
+        steps = self.plan("pr", "--zones", "soak", "--no-build")
+        self.assertEqual(self.stages(steps), ["soak"])
+        self.assertEqual(steps[0].timeout, smoke.SOAK_DEFAULT_MINUTES + smoke.SOAK_TAIL_MINUTES)
+        self.assertEqual(steps[0].requires, ("soak",))
+        long = self.plan("pr", "--stages", "soak", "--env", "ARC_SOAK_STAGE_MINUTES=45", "--no-build")[0]
+        self.assertEqual(long.timeout, 45 + smoke.SOAK_TAIL_MINUTES)
+        self.assertIn("ARC_SOAK_STAGE_MINUTES=45", long.command)
+        self.assertGreaterEqual(long.estimate, 45 * 60)  # the declared seconds follow the minutes too
+        self.assertIsNone(self.plan("pr", "--stages", "cast", "--no-build")[0].timeout)
+        self.assertIsNone(smoke.soak_timeout(["soak"], (("ARC_SOAK_STAGE_MINUTES", "many"),)))  # the viewer refuses it itself
+        for touched in ("tools/terrain-viewer/Godot/TerrainViewerSoakSmoke.cs", "tools/terrain-viewer/Core/ViewerSoak.cs"):
+            self.assertNotIn(SOAK, smoke_zones.select_zones([touched]).zones)
+
     def test_the_crash_site_zone_is_the_crash_site_smoke_step_alone(self) -> None:
         steps = self.plan("pr", "--zones", "crash-site", "--no-build")
         self.assertEqual([step.name for step in steps], ["crash-site"])
@@ -248,7 +266,7 @@ class ZonePlanTests(unittest.TestCase):
         self.assertEqual(names[:5], ["crash-site", "main", "town", "wild", "ruins"])
         known = smoke.map_stages()
         self.assertEqual(sorted(self.stages(steps[5:])), sorted(smoke_zones.complete_stages(known)))
-        self.assertEqual(len(smoke_zones.complete_stages(known)) + 2, len(known))
+        self.assertEqual(len(smoke_zones.complete_stages(known)) + 3, len(known))  # the two batteries' and `soak`
         # the stages the batteries do not vouch for are all listed: 74 of the 76 at this base
         self.assertEqual(sorted(self.stages(steps[1:5])), ["map"] * 4 + ["resources"] * 4)
         self.assertTrue(names[-3:] == ["stages-main-walk", "stages-town-container-click", "stages-main-census"], names[-3:])
