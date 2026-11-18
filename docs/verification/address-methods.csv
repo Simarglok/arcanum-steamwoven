@@ -964,7 +964,9 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,ref
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,RepeatAttackClick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
+tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayAmmunitionRefusalSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
+tools/terrain-viewer/Godot/TerrainViewerAutoSwitch.cs,HeroThrowOutOfAmmunition,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
 tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,ArmedWalk,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,UnmovedArmedBodies,exempt,host

@@ -63,7 +63,7 @@ public sealed record SessionHeroThrowResult(GameSessionDisposition Disposition, 
     /// 0x4617F0), the removal's and the throw script's own changes kept. The result is <see cref="GameSessionDisposition.Changed"/> with no attack and no shot.</summary>
     public bool ScriptDeclined { get; init; }
     /// <summary>ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused the throw (the hero carries fewer units of the weapon's ammunition type than its consumption): the item left the hero's list and lies on the hero's cell still switched off
-    /// (<see cref="GameSessionOwner.QueryItemOff"/>, no flight, no give-back), no attack was made; the host shows message code 3 over the hero. The result is Changed with no attack and no shot.</summary>
+    /// (<see cref="GameSessionOwner.QueryItemOff"/>, no flight, no give-back), no attack was made; the host plays the weapon's out-of-ammunition sound on the hero and runs the hero's auto switch (ARC-COMBAT-2698; the original's "message code 3" is that sound). The result is Changed with no attack and no shot.</summary>
     public bool AmmunitionShort { get; init; }
     /// <summary>ARC-COMBAT-1955: the lines the removal and throw scripts printed, in order, for the host to post as it posts any script's printed line.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
@@ -401,7 +401,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-COMBAT-2415 (ledger TW8): the hero's throw of a weapon with an ammunition type whose units the hero lacks. The dispatcher refuses before any roll: nothing is rolled or spent, and the thrown item, which the
     /// original took out of the hero's list at the lift, is not given back: it stays on the hero's tile switched off (object flag 0x2, the field a script's toggle writes, so <see cref="QueryItemOff"/> reads it and no window lists it), in two revisions
-    /// (the item leaving its list, the off flag), after the hit-location roll the dispatcher draws first (<see cref="DrawHitLocationBeforeAmmunitionRefusal"/>). An inactive hero throws nothing (NoChange, as <see cref="ThrowAtLocation"/>). The host shows message code 3 over the hero (<see cref="SessionHeroThrowResult.AmmunitionShort"/>). NOT READY: the thrower's
+    /// (the item leaving its list, the off flag), after the hit-location roll the dispatcher draws first (<see cref="DrawHitLocationBeforeAmmunitionRefusal"/>). An inactive hero throws nothing (NoChange, as <see cref="ThrowAtLocation"/>). The host plays the out-of-ammunition sound on the hero (<see cref="SessionHeroThrowResult.AmmunitionShort"/>). NOT READY: the thrower's
     /// reaction (an NPC) and the weapon auto-switch that follow the refusal; a hero throw reaches neither here.
     /// </summary>
     private (GameSessionFailure Failure, SessionHeroThrowResult? Result) ThrowRefusedForAmmunition(GameSessionVersion expected, SessionHeroThrow request)
