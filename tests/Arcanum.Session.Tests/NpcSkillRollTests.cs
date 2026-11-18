@@ -63,7 +63,7 @@ public sealed class NpcSkillRollTests
             Assert.IsTrue(none.Check.Check.Effectiveness > strong.Check!.Check.Effectiveness, $"{skill}: a strong opponent lowers the chance");
             Assert.IsTrue(weak.Check!.Check.Effectiveness >= strong.Check.Check.Effectiveness);
             var expected = SkillCheckRules.Opposed(level, level + 9) + 10;
-            Assert.AreEqual(expected, strong.Check.Check.Effectiveness, $"{skill}: the table over the difference of {level} and {level + 9}, plus the intelligence term");
+            Assert.AreEqual(expected, strong.Check.Check.Effectiveness, $"{skill}: the table over the difference of {level} and {level + 9}, plus the +10 of the fixture sheet's extraordinary intelligence (every stat 20)");
         }
         using var plain = Owner(5);
         var melee = User(Skill.Melee, 20, SkillTraining.Master);
@@ -75,6 +75,8 @@ public sealed class NpcSkillRollTests
     public void An_opponent_stat_outside_the_limit_is_refused_and_rolls_nothing()
     {
         using var owner = Owner(5);
+        var edge = owner.RollNpcSkill(owner.Version, User(Skill.Persuasion, 10, SkillTraining.Master), Skill.Persuasion, opponentStat: GameSessionOwner.MaxPickPocketStat);
+        Assert.AreEqual(GameSessionDisposition.Changed, edge.Disposition, "the limit itself is accepted");
         var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
         foreach (var bad in new[] { GameSessionOwner.MaxPickPocketStat + 1, -GameSessionOwner.MaxPickPocketStat - 1 })
         {

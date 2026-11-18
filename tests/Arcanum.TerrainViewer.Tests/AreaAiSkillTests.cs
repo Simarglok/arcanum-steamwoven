@@ -412,11 +412,11 @@ public sealed class AreaAiSkillTests
             var opposedToNothing = SkillCheckRules.Opposed(0, 0);
             CollectionAssert.Contains(new[] { opposedToNothing, opposedToNothing + 10 }, onItem.Check!.Check.Effectiveness, $"{skill} on an item");
             // A target the host holds nothing of is refused and nothing is rolled.
-            var before = session.Version.Revision;
+            var before = (session.Version.Revision, session.QueryRandom().Draws);
             Assert.IsFalse(host.AttemptSkill(npc, Entity(9), (int)skill, null));
             Assert.IsNull(host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll);
             Assert.AreEqual($"skill {(int)skill} on {Entity(9)}: no target", host.TraceOf(npc)!.Skill);
-            Assert.AreEqual(before, session.Version.Revision, "nothing is rolled");
+            Assert.AreEqual(before, (session.Version.Revision, session.QueryRandom().Draws), "nothing is rolled");
         }
     }
 
