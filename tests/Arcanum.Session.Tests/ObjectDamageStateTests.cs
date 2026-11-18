@@ -101,9 +101,24 @@ public sealed class ObjectDamageStateTests
         var broke = owner.DamageObject(owner.Version, door, 6);
         Assert.AreEqual((true, ObjectBreak.Destroyed), (broke.Hit!.Broken, broke.Hit.Break));
         Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(door).Condition);
-        Assert.AreEqual(SessionObjectHostSteps.None, broke.Host, "a door has no destroy sound");
+        Assert.AreEqual(SessionObjectHostSteps.None, broke.Host, "a door has no destroy sound and no destroy step (the door host owns its runs)");
         var again = owner.DamageObject(owner.Version, door, 1);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ObjectUnavailable), (again.Disposition, again.Failure));
+    }
+
+    // ARC-SCRIPT-2620 (OD7-OD11, BS3c): a busted scenery broken again is destroyed and the host owes the end of its runs; the first break (busted, art swapped) owes none.
+    [TestMethod]
+    public void ASceneryBrokenAgainIsDestroyedAndNamesTheEndOfItsRuns()
+    {
+        using var owner = Owner();
+        var scenery = Target("sector:1:9", DamageableObjectKind.Scenery);
+        var busted = owner.DamageObject(owner.Version, scenery, 6);
+        Assert.AreEqual(ObjectBreak.SceneryBusted, busted.Hit!.Break);
+        Assert.IsFalse(busted.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed), "a busted scenery keeps its runs");
+        var destroyed = owner.DamageObject(owner.Version, scenery, 6);
+        Assert.AreEqual((true, ObjectBreak.Destroyed), (destroyed.Hit!.Broken, destroyed.Hit.Break));
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(scenery).Condition);
+        Assert.IsTrue(destroyed.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed | SessionObjectHostSteps.DestroySound));
     }
 
     [TestMethod]
@@ -113,7 +128,7 @@ public sealed class ObjectDamageStateTests
         var chest = Target("chest", DamageableObjectKind.Container, with: b => b with { Trapped = true });
         var broke = owner.DamageObject(owner.Version, chest, 100);
         Assert.AreEqual(ObjectBreak.ContainerSpilled, broke.Hit!.Break);
-        Assert.AreEqual(SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.SpillEyeCandy, broke.Host, "the trap is the host's, before the break");
+        Assert.AreEqual(SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectDestroyed, broke.Host, "the trap is the host's, before the break");
         Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(chest).Condition);
         var pile = owner.QueryMapInventory(Exterior)!.JunkPiles.Single();
         Assert.AreEqual(ChestCell, pile.Cell, "the items lie at the chest's cell, gathered into a pile");

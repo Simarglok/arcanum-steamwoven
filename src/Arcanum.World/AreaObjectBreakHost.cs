@@ -36,6 +36,9 @@ public sealed record AreaObjectBreakRun(string Entity, AreaTrapMeeting? Trap, Ar
 /// </summary>
 public static class AreaObjectBreakHost
 {
+    /// <summary>ARC-SCRIPT-2620 (ledger OD7–OD11, BS3c): the break destroyed a scenery, trap or container (0x43F1C0 → 0x43CCA0), so the host ends the object's goal runs and tells its spell runs (0x423FF0, 0x459740) as a script's destroy does.</summary>
+    public static bool EndsRuns(SessionObjectHostSteps steps) => (steps & SessionObjectHostSteps.ObjectDestroyed) != 0;
+
     /// <summary>Runs the trap and then the BUST script that <paramref name="steps"/> name for <paramref name="row"/>.</summary>
     /// <param name="traps">The shown map's trap host; null runs no trap.</param>
     /// <param name="byHero">The hero's attack broke the object (it is the BUST breaker).</param>

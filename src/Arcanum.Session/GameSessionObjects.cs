@@ -187,6 +187,9 @@ public enum SessionObjectHostSteps
     WitnessesHearAttack = 1 << 5,
     /// <summary>The witnesses of the object's break by such an attacker (0x4AEE50 with 0: possible hostility).</summary>
     WitnessesHearBreak = 1 << 6,
+    /// <summary>ARC-SCRIPT-2620 (ledger OD7–OD11, BS3c, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): the break destroyed a scenery, trap or container (a busted one broken again, a trap with no destroyed art, a container that spilled): the host ends the object's goal runs and tells its spell runs,
+    /// as a script's destroy does. A door or window is not named (the door host owns its runs); an item is deleted, not destroyed.</summary>
+    ObjectDestroyed = 1 << 7,
 }
 
 /// <summary>
@@ -685,6 +688,7 @@ public sealed partial class GameSessionOwner
         if (!hit.Broken) return SessionObjectHostSteps.WitnessesHearAttack;
         var steps = SessionObjectHostSteps.WitnessesHearBreak;
         if (baseline.Trapped) steps |= SessionObjectHostSteps.TrapFires;
+        if (hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled && baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectDestroyed;
         return steps | hit.Break switch
         {
             ObjectBreak.WindowBusted or ObjectBreak.SceneryRespawns => SessionObjectHostSteps.BustScript,
