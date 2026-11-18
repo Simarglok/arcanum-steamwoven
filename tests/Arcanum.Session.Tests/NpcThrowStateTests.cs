@@ -114,17 +114,7 @@ public sealed class NpcThrowStateTests
         }
     }
 
-    [TestMethod]
-    public void AThrowAtAnEmptyLocationLandsTheItemThereWithoutARoll()
-    {
-        using var owner = Owner();
-        var draws = owner.QueryRandom().Draws;
-        var tile = new CellCoord(98, 203);
-        var result = owner.ThrowByNpc(owner.Version, new(Combat(), Dagger, 15, ThrowerCell, tile) { ThrowerWorn = Wielded() });
-        Assert.AreEqual((GameSessionDisposition.Changed, (SessionAttackResult?)null, (CellCoord?)tile), (result.Disposition, result.Attack, result.Landed));
-        Assert.AreEqual(draws, owner.QueryRandom().Draws);
-        Assert.AreEqual(tile, Lying(owner, Dagger));
-    }
+    // ARC-COMBAT-2523: a throw at a location with no struck critter rolls (NpcThrowLocationTests).
 
     [TestMethod]
     public void AThrowAtAnotherNpcStrikesItWithTheThrowersSkill()
@@ -225,14 +215,23 @@ public sealed class NpcThrowStateTests
     [TestMethod]
     public void AGrenadeFliesAsAShotAndLandsWhereTheHostEndsIt()
     {
-        using var owner = Owner();
-        var draws = owner.QueryRandom().Draws;
         var tile = new CellCoord(98, 203);
-        var result = owner.ThrowByNpc(owner.Version, Lob(tile));
-        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (SessionAttackResult?)null, (CellCoord?)null, (CellCoord?)tile),
-            (result.Disposition, result.Failure, result.Attack, result.Landed, result.Destination));
+        // ARC-COMBAT-2523 (TW11): the lob rolls as a throw at a location; the seed is one whose lob hit, so the shot flies to the tile itself (a miss flies to its scatter tile, NpcThrowLocationTests).
+        GameSessionOwner? found = null;
+        SessionNpcThrowResult? first = null;
+        for (ulong seed = 1; seed <= 300 && found is null; seed++)
+        {
+            var candidate = Owner(seed);
+            var lobbed = candidate.ThrowByNpc(candidate.Version, Lob(tile));
+            if (lobbed.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) (found, first) = (candidate, lobbed);
+            else candidate.Dispose();
+        }
+        using var owner = found!;
+        var result = first!;
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (CellCoord?)null, (CellCoord?)tile),
+            (result.Disposition, result.Failure, result.Landed, result.Destination));
+        Assert.IsNotNull(result.Attack, "the roll's resolution is carried");
         var shot = result.Shots.Single();
-        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing is rolled: the dispatcher's check is not ready");
         Assert.IsTrue(owner.QueryItemInFlight(Grenade), "the grenade is hidden while it flies");
         Assert.AreEqual(shot, owner.QueryShotsInFlight().Single());
         var thrown = owner.QueryThrownShot(shot)!.Value;

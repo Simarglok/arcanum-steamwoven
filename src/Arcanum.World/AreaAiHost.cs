@@ -3381,7 +3381,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Struck = struck is { Who: { } who } && who != Pc ? Build(who) : null,
             StruckHero = hero,
             StruckCell = struck?.Cell,
-            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : null,
+            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : LocationLine(from, tile),
+            // ARC-COMBAT-2523 (TW11): a throw that names no struck critter rolls as a throw at the location: the light of the tile and the line of fire's cost are its terms.
+            TargetLight = Math.Clamp(CellLight(tile), 0, AttackRules.MaxLightLevel),
             ThrowerWorn = _scene.Combat.WornItems(_session, id),
             StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             DropMap = _scene.DropMap?.Invoke(),
@@ -3426,7 +3428,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 else
                 {
                     // ARC-COMBAT-1717 (PF1: no art, the hit resolves at once): a thrown weapon decided a hit strikes where the flight would have met it, then the item lands there.
-                    if (_session.QueryNpcShot(shot) is { Hit: true } decided) LandShot(id, shot, decided.Target == SessionNpcShotFacts.HeroTarget ? Pc : decided.Target);
+                    if (_session.QueryNpcShot(shot) is { Hit: true, Target: not SessionNpcShotFacts.LocationTarget } decided) LandShot(id, shot, decided.Target == SessionNpcShotFacts.HeroTarget ? Pc : decided.Target);
                     // A decided miss that resolves at once gives the victim its miss-path pass, as an unflown throw's did (ARC-DEV-292).
                     else if (attackedVictim is { } missed && _session.QueryNpcShot(shot) is not null) Struck(missed);
                     if (_session.LandThrownItem(_session.Version, shot, destination).Disposition == GameSessionDisposition.Rejected) { _session.EndShot(shot); outcome = "given up"; }
@@ -3450,6 +3452,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 && (Walks(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
         return null;
     }
+
+    // ARC-COMBAT-2523 (TW11): the line of fire to a throw's location with no struck critter (the blocker, if any, is no living critter, or it would be the struck one): its cost, never blocked, as the hero's.
+    private SessionLineOfFire LocationLine(CellCoord from, CellCoord to) =>
+        new(from != to && _scene.LineOfFire?.Invoke() is { } map ? Math.Min(LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat).Cost, AttackResolver.MaxMagnitude) : 0, false);
 
     // The line of fire to the struck critter's cell as the check reads it (the hero's attack's SessionLineOfFire): its cost and whether
     // an object other than the struck one stops it.

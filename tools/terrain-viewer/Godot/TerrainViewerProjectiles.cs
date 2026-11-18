@@ -286,7 +286,10 @@ public partial class TerrainViewerApp
         // An unchecked flight of a weapon (a throw at a location) is no size arc either: its parent item is a weapon (PF11).
         var isWeapon = weapon || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
         var hit = decided is { Hit: true };
-        var aimedId = hit ? decided!.Value.Target == SessionNpcShotFacts.HeroTarget ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : decided.Value.Target : null;
+        // ARC-COMBAT-2523 (TW11): a thrown weapon decided a hit at a location names no struck critter: it flies to the location and strikes nothing (the targetless hit shot, ProjectileRules.Cross).
+        var aimedId = hit && decided!.Value.Target != SessionNpcShotFacts.LocationTarget
+            ? decided.Value.Target == SessionNpcShotFacts.HeroTarget ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : decided.Value.Target : null;
+        var targetless = !hit || aimedId is null;
         var aimed = row;
         if (aimedId is not null && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc && !map.TryGetRow(aimedId, out aimed!)) return false;
         if (aimedId == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) aimed = HeroRow;
@@ -295,7 +298,7 @@ public partial class TerrainViewerApp
         var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = aimed, Thrower = row, Shooter = weapon ? row : null, Destination = destination, Art = art,
-            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, !hit, thrown.Range), Thrown = thrown, Targetless = !hit, SizeArc = !isWeapon,
+            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, targetless, thrown.Range), Thrown = thrown, Targetless = targetless, SizeArc = !isWeapon,
             Launched = new(aimedId ?? thrower, false, false, weapon ? thrower : null, thrower),
         };
         // A weapon's refused launch leaves its shot to the AI host (the hit strikes at once, the item lands); a generic item's ends it (the item stays on the thrower's cell).
