@@ -28,20 +28,25 @@ public sealed partial class GameSessionOwner
     /// its extraordinary intelligence, the game difficulty, its injuries; no local-PC term and no fate) with no write but the generator's draws (one revision). The answer is the check's success, which the host
     /// turns into the run's flag 0x40000. Skill gates: dodge answers neither success nor critical while <paramref name="incapable"/> (exe case 1: the actor unconscious (0x45D800), stoned (spell flag 0x10000) or stunned or paralysed (critter flags 0x60),
     /// as the host reads them, ARC-AI-2625);
+    /// ARC-AI-2652: prowling and persuasion are opposed by the target's effective perception or intelligence (<paramref name="opponentStat"/>: 0x4B0490 reads 0 for a target that is no critter; null is no target, an effectiveness of 100), a value outside ±<see cref="MaxPickPocketStat"/> is refused (<see cref="GameSessionFailure.InvalidSkill"/>);
     /// spot trap gets the master's second roll after a failure that is no critical (<see cref="TrapRules.SpotCase"/>); the trap's class from <paramref name="trap"/> is the target test 0x4BBDD0's answer (ARC-AI-2625: 2 is
     /// <see cref="TrapClass.Magical"/>, which refuses a success of an attempt below expert and clears the critical; a target that holds no trap, or the default, changes nothing); disarm traps is the roll alone (the goal never sets the invocation's trap flag, so nothing is disarmed). The other skills have no case: the roll is the
     /// whole attempt. Gambling is <see cref="RollNpcGambling"/>. NOT READY: repair (its own handler); heal, pick pocket and pick locks have their own. Refused: a skill that is none of <see cref="IsPlainNpcSkill"/>, a user the
     /// follower-skill rules refuse (<see cref="GameSessionFailure.SkillsUnavailable"/>), the version, the generator or the revision exhausted.
     /// </summary>
-    public SessionNpcSkillRoll RollNpcSkill(GameSessionVersion expected, SessionNpcSkillUser user, Skill skill, bool incapable = false, TrapClass trap = TrapClass.Nonmagical)
+    public SessionNpcSkillRoll RollNpcSkill(GameSessionVersion expected, SessionNpcSkillUser user, Skill skill, bool incapable = false, TrapClass trap = TrapClass.Nonmagical, int? opponentStat = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(user);
         if (!IsPlainNpcSkill(skill)) return RejectNpcSkillRoll(GameSessionFailure.SkillsUnavailable);
+        if (opponentStat is < -MaxPickPocketStat or > MaxPickPocketStat) return RejectNpcSkillRoll(GameSessionFailure.InvalidSkill);
         if (NpcSkillUserFailure(user, out var record, out _) != GameSessionFailure.None) return RejectNpcSkillRoll(GameSessionFailure.SkillsUnavailable);
         if (!IsCurrent(expected)) return RejectNpcSkillRoll(GameSessionFailure.StaleVersion);
         if (_revision == long.MaxValue) return RejectNpcSkillRoll(GameSessionFailure.RevisionExhausted);
         var request = NpcSkillRequest(user, skill, record, null);
+        // ARC-AI-2652 (0x4C6410): a skill the table flags as opposed by a stat (prowling: perception 0x10, persuasion: intelligence 0x20) reads the target's effective stat; no target reads 100.
+        if (SkillCheckRules.Opponent(skill) is SkillOpponent.Perception or SkillOpponent.Intelligence)
+            request = request with { Effectiveness = request.Effectiveness with { OpponentValue = opponentStat } };
         var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
         SkillCheckResult check;
         var success = false;
