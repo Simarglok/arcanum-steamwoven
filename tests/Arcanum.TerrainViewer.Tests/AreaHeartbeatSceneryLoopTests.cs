@@ -121,9 +121,9 @@ public sealed class AreaHeartbeatSceneryLoopTests
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.FloatLine));
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetReaction), "the host has no reaction answer");
         Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65));
-        // The dying set is built on it and the placed set already held all three; the use click's set is unchanged.
+        // The dying set is built on it and the placed set already held all three; the use click's set gained float line for script 2862 (ARC-RENDER-2197).
         Assert.IsTrue(AreaUseScriptHost.DyingAdmission.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity));
-        Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
     }
 
     [TestMethod]
