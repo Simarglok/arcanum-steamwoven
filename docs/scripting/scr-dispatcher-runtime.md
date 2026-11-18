@@ -271,6 +271,8 @@ conversation is not run).
 
 ## Skill commands (ARC-SKILLS-009, set S11)
 
+- ARC-SCRIPT-2752: the use host's set admits use item with skill (79); its hosts start the NPC source's goal 40 for pick locks (ledger [SX7](../research/ledger/skills.md#script-skill-commands-arc-skills-009)), and leave the run unapplied for any other request.
+
 - **`ScrAdmissionSet.S11`** is S10 plus get skill (47) and use item with skill (79); `ScrRunOptions` accepts any subset of S11 (now
   the interpreter's widest set; the default stays S5). A set with 47 needs a host that implements `IScrSkillQueries`, checked before
   any event runs. Read in the retail 1.0.7.4 executable by two independent readers: ledger

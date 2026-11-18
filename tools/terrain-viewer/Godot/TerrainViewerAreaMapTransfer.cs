@@ -327,7 +327,9 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y), flags, seconds)}");
             },
             // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
-            ObjectDestroyed: EndDestroyedObjectRuns);
+            ObjectDestroyed: EndDestroyedObjectRuns,
+            // ARC-SCRIPT-2752 (SX3): a script's use item with skill (79) starts the NPC's goal 40 in the AI host.
+            ScriptUseItemWithSkill: (npc, item, target, skill, modifier) => AreaAiHostNow()?.ScriptUseItemWithSkill(npc, item, target, skill, modifier) ?? "no AI host");
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

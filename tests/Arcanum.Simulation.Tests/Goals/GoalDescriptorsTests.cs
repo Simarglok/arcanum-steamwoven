@@ -31,15 +31,15 @@ public sealed class GoalDescriptorsTests
     }
 
     [TestMethod]
-    public void TheExecutorInterpretsFortyTwoGoalsEachWithADescriptor()
+    public void TheExecutorInterpretsFortyThreeGoalsEachWithADescriptor()
     {
-        // ARC-AI-1313 added the wander goals 65 and 66 (priority 3). ARC-AI-1315 added the please-move goal 68. ARC-DEV-231 (MIG13 S14a) added the script run to, goal 55. ARC-DEV-209 (MIG14 S3) added the four opener goals 11, 12, 49 and 50 a walker pushes at a closed door. ARC-DEV-134 (S4): the executor's former AiGoalType is gone; its 26 goals are GoalType values with the original's numbers; ARC-DEV-137 (S6) added the critter states 31, 57, 62 and 63; ARC-DEV-170 added the walk to a tile, 7.
+        // ARC-SCRIPT-2752 added the use-item-with-skill goal 40 (priority 3). ARC-AI-1313 added the wander goals 65 and 66 (priority 3). ARC-AI-1315 added the please-move goal 68. ARC-DEV-231 (MIG13 S14a) added the script run to, goal 55. ARC-DEV-209 (MIG14 S3) added the four opener goals 11, 12, 49 and 50 a walker pushes at a closed door. ARC-DEV-134 (S4): the executor's former AiGoalType is gone; its 26 goals are GoalType values with the original's numbers; ARC-DEV-137 (S6) added the critter states 31, 57, 62 and 63; ARC-DEV-170 added the walk to a tile, 7.
         var interpreted = AiExecutorRules.InterpretedGoals.Select(g => (int)g).Order().ToArray();
-        CollectionAssert.AreEqual(new[] { 0, 4, 5, 6, 7, 8, 11, 12, 15, 16, 18, 19, 24, 25, 26, 27, 31, 33, 34, 37, 39, 49, 50, 51, 52, 55, 56, 57, 60, 61, 62, 63, 65, 66, 67, 68, 69, 79, 80, 82, 83, 86 }, interpreted);
+        CollectionAssert.AreEqual(new[] { 0, 4, 5, 6, 7, 8, 11, 12, 15, 16, 18, 19, 24, 25, 26, 27, 31, 33, 34, 37, 39, 40, 49, 50, 51, 52, 55, 56, 57, 60, 61, 62, 63, 65, 66, 67, 68, 69, 79, 80, 82, 83, 86 }, interpreted);
         foreach (var goal in AiExecutorRules.InterpretedGoals) Assert.IsTrue(GoalDescriptors.Has(goal), $"goal {(int)goal} has a descriptor");
         // The AI host's former priority table (ARC-WORLD-092..109) equals the descriptors' for these goals: 4 for the attempted casts, 3 for the actions, 2 for the walks.
         var four = new[] { 27, 83 };
-        var three = new[] { 0, 51, 60, 11, 12, 49, 50, 15, 16, 18, 19, 25, 26, 33, 34, 37, 39, 62, 63, 65, 66, 67, 82, 86 };
+        var three = new[] { 0, 51, 60, 11, 12, 49, 50, 15, 16, 18, 19, 25, 26, 33, 34, 37, 39, 40, 62, 63, 65, 66, 67, 82, 86 };
         foreach (var goal in AiExecutorRules.InterpretedGoals)
             Assert.AreEqual((int)goal == 31 ? 5 : (int)goal == 57 ? 1 : four.Contains((int)goal) ? 4 : three.Contains((int)goal) ? 3 : 2, GoalDescriptors.Of(goal)!.Priority, $"goal {(int)goal}");
     }

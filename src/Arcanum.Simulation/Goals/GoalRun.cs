@@ -97,6 +97,8 @@ public sealed record GoalFrame
     public int FrameIndex { get; init; }
     /// <summary>ARC-DEV-137: the stun's countdown (parameter slot 18): how many plays or skipped turns the stun still lasts.</summary>
     public int Count { get; init; }
+    /// <summary>ARC-SCRIPT-2752 (ledger SX3, SX4): the invocation modifier of the use-item-with-skill goal 40, which the starter 0x4352C0 is handed and the node 0x428E10 reads. It shares <see cref="Count"/>'s slot (the stun goal never holds a skill), so a save keeps it with no new field.</summary>
+    public int Modifier { get => Count; init => Count = value; }
     /// <summary>ARC-DEV-139 (MIG13 S8): the straight-flight goals' path flag (the run's +0xC00 bit 0x1, GT58): set, the goal's next node 2 builds its line (the original sets it at the table's init, on every free and
     /// when a retarget writes a new destination); the line builder clears it. A goal 28 frame is built with it set.</summary>
     public bool PathPending { get; init; }

@@ -57,6 +57,22 @@ public static partial class AiExecutorRules
     }
 
     /// <summary>
+    /// ARC-SCRIPT-2752 (ledger SX3): the use-item-with-skill starter (0x4352C0) of <paramref name="npc"/> using <paramref name="skill"/> on <paramref name="target"/> with the tool <paramref name="item"/> (null: none) and the invocation
+    /// <paramref name="modifier"/>: a missing target refuses (nothing is queued); the start gate with <see cref="TurnBasedRules.UseItemCost"/> (it charges no action points: the gate only refuses an inactive source and applies the round
+    /// rules); goal 40 with the target, the item, the skill and the modifier, run flag 0x4000 and, for an NPC with current fatigue above 8, running. NOT READY: the original also turns running on for an always-run NPC.
+    /// </summary>
+    [OriginalFunction(0x4352C0, OriginalFunctionScope.Partial)]
+    public static AiPerformResult StartUseItemWithSkill(IAiPerformWorld world, string npc, string? target, string? item, int skill, int modifier, GoalRun? current)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(npc);
+        if (target is null) return new(AiPerformKind.UseItemWithSkill, current, AiStartRefusal.NoObject);
+        if (!StartGate(world, npc, TurnBasedRules.UseItemCost)) return new(AiPerformKind.UseItemWithSkill, current, AiStartRefusal.Gate);
+        var frame = new GoalFrame(GoalType.UseItemWithSkill, target) { Item = item, Skill = skill, Modifier = modifier };
+        return new(AiPerformKind.UseItemWithSkill, new GoalRun(npc, default, frame, ActionFlags(world, npc, running: true))) { Started = true };
+    }
+
+    /// <summary>
     /// The skill starter (0x4350F0) of <paramref name="npc"/> using <paramref name="skill"/> on <paramref name="target"/> with the
     /// tool <paramref name="item"/> (null: none): pick locks goes to its own starter (<see cref="StartPickLocks"/>); otherwise the start
     /// gate with <see cref="TurnBasedRules.UseSkillCost"/>; goal 33 with the target, the item and the skill, run flag 0x4000 and running
@@ -443,6 +459,30 @@ public static partial class AiExecutorRules
                 if (goal.Item is not { } item || world.ItemHolder(item) != owner) return End(AiExecutorReason.ItemNotHeld);
                 UseItemNow(world, owner, item, target);
                 return End(AiExecutorReason.ItemUsed);
+        }
+    }
+
+    // ---- the use of an item with a skill (40) ----
+
+    // Goal 40 (ledger SX4, PL3): range 1; within it with a clear first step → the node 0x428E10, else the walk near (goal 8), as the item use (39). The node refuses a target or an item that is gone (object flag 0x1 or 0x2) and an item
+    // the user does not hold directly (a null item is allowed), else runs the skill invocation once with the goal's modifier and no flags, with no animation and no action points; every path ends the run.
+    private static Transition UseItemWithSkillNode(string owner, GoalFrame goal, IAiGoalWorld world)
+    {
+        var target = goal.Target;
+        switch (goal.Node)
+        {
+            case 1:
+                return new(Move.Next, 2, Top: goal with { Range = 1 });
+            case 2:
+                if (target is null || world.Tile(target) is null) return End(AiExecutorReason.ObjectGone);
+                return Within(world, owner, target, goal.Range) && world.FirstStepClear(owner, target, false)
+                    ? Next(3)
+                    : new(Move.Push, Frame: Child(GoalType.MoveNear, goal), Reason: AiExecutorReason.ActionApproach);
+            default:
+                if (world.Gone(target!)) return End(AiExecutorReason.ObjectGone);
+                if (goal.Item is { } item && (world.Gone(item) || world.ItemHolder(item) != owner)) return End(AiExecutorReason.ItemNotHeld);
+                world.AttemptSkillWithItem(owner, target!, goal.Item, goal.Skill ?? -1, goal.Modifier);
+                return End(AiExecutorReason.SkillAttempted);
         }
     }
 

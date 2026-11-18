@@ -469,6 +469,7 @@ src/Arcanum.World/AreaAiHost.cs,Active,pending,
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
 src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
+src/Arcanum.World/AreaAiHost.cs,AttemptSkillWithItem,exempt,host
 src/Arcanum.World/AreaAiHost.cs,BackstabFacts,exempt,host
 src/Arcanum.World/AreaAiHost.cs,BeginAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,BlastRadius,pending,
@@ -546,6 +547,7 @@ src/Arcanum.World/AreaAiHost.cs,ScriptAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,ScriptCanHear,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ScriptCanSee,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ScriptReaction,exempt,host
+src/Arcanum.World/AreaAiHost.cs,ScriptUseItemWithSkill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SearchItems,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SeeToward,pending,
 src/Arcanum.World/AreaAiHost.cs,SetNoFlee,exempt,host
