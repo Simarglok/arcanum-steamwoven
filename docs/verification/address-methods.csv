@@ -618,6 +618,7 @@ src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
 src/Arcanum.World/AreaConversation.cs,PickClassLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,PickLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,SayFollowerLine,exempt,host
+src/Arcanum.World/AreaDoorHost.cs,ObjectBroken,exempt,host
 src/Arcanum.World/AreaDoorHost.cs,Open,pending,
 src/Arcanum.World/AreaDropMap.cs,HasCritter,pending,
 src/Arcanum.World/AreaDropMap.cs,Path,pending,

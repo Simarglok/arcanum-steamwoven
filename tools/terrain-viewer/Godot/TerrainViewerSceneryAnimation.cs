@@ -62,6 +62,7 @@ public partial class TerrainViewerApp
         var shownMap = new SessionMapId(area.Snapshot.RuntimeMap);
         _sceneryHost.RestartBroken(entity => session.QueryObjectCondition(shownMap, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Whole);
         RetryPendingRunEnds();
+        _areaDoors?.RetryPending();
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
         SyncCreatedSceneryLoops(session, _sceneryHost);
         changed |= _sceneryHost.TakeChanged();
@@ -95,7 +96,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-SCRIPT-2646 (ledger OD7, 0x43F1C0 → 0x424070 at level 5): a break of a container, scenery or trap of the shown map interrupts the object's goal runs before anything else of the break: a scenery's loop ends (the scenery host does it, and stops the voice),
+    /// ARC-SCRIPT-2646 (ledger OD7, 0x43F1C0 → 0x424070 at level 5): a break of a container, scenery, trap, door or window of the shown map interrupts the object's goal runs before anything else of the break: a scenery's loop ends (the scenery host does it, and stops the voice),
     /// its overlays stay (no-interrupt goals). An object of another map has no run in the shown session's table.
     /// </summary>
     private void InterruptBrokenObjectRuns(AreaObjectRecord row)
@@ -103,7 +104,9 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session || ShownObjectRef(row) is not { } obj || obj.Map != CurrentAreaMap) return;
         var castId = SpellCasterNow()?.CastIdOf(obj.Code);
         bool ended;
-        if (ShownSceneryHost is { } host) ended = host.ObjectBroken(obj.Code, castId);
+        // ARC-SCRIPT-2669: a door or window's runs (70, 71, 72) are the door host's: it interrupts them and runs the end nodes (a cut closing snaps the door shut).
+        if (_areaDoors is { } doors && ReferenceEquals(doors.Session, session) && doors.Owns(obj.Code)) ended = doors.ObjectBroken(obj.Code);
+        else if (ShownSceneryHost is { } host) ended = host.ObjectBroken(obj.Code, castId);
         else
         {
             ended = false;
