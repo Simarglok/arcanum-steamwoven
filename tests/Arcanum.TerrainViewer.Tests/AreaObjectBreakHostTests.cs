@@ -780,4 +780,58 @@ public sealed class AreaObjectBreakHostTests
             Assert.AreEqual(0, ran.Bust.Printed.Count, "and its run is its own");
         });
     }
+
+    // ARC-SCRIPT-2722 (TD2, OD12, 0x43F1C0 items case -> 0x43CCA0): an item's deleting break runs the item's destroy point (2) through the item gate; a skip default keeps the item, and the run (lines, awards) is kept for the viewer's break step.
+    [TestMethod]
+    public void An_items_deleting_break_runs_its_destroy_point_and_a_skip_default_keeps_the_item()
+    {
+        const int WeaponType = 5;
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var goes = Row(1, WeaponType, 0, 0, destroy: 834);
+            var stays = Row(2, WeaponType, 0, 0, destroy: 835);
+            var plain = Row(3, WeaponType, 0, 0);
+            var (host, _) = Hosts(session, content, new Probe(), true, goes, stays, plain);
+            Assert.IsTrue(host.ItemMayDestroy(AreaUseScriptHost.EntityId(goes)), "a point that does not skip the default lets the item go");
+            Assert.IsTrue(host.GlobalFlag(2303), "the point ran");
+            Assert.IsNotNull(host.TakeBreakDestroyRun());
+            Assert.IsFalse(host.ItemMayDestroy(AreaUseScriptHost.EntityId(stays)), "a skip default keeps the item");
+            Assert.IsTrue(host.GlobalFlag(2304));
+            Assert.IsNotNull(host.TakeBreakDestroyRun());
+            Assert.IsTrue(host.ItemMayDestroy(AreaUseScriptHost.EntityId(plain)), "no point, no run");
+            Assert.IsNull(host.TakeBreakDestroyRun());
+            Assert.IsTrue(host.ItemMayDestroy("not-a-row"), "an item the host holds no row for goes");
+        });
+    }
+
+    [TestMethod]
+    public void An_item_gate_leaves_other_objects_and_unrunnable_points_to_the_object_gate()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0, destroy: 835);
+            var item = Row(2, 5, 0, 0, destroy: 836);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue, item);
+            Assert.IsTrue(host.ItemMayDestroy(AreaUseScriptHost.EntityId(statue)), "a scenery is no item: its break has the object gate");
+            Assert.IsFalse(host.GlobalFlag(2304));
+            Assert.IsFalse(host.ItemMayDestroy(AreaUseScriptHost.EntityId(item)), "a point run that did not apply deletes nothing on a guess");
+        });
+    }
+
+    [TestMethod]
+    public void An_items_destroy_points_printed_lines_stay_with_the_gates_run()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = Row(1, 5, 0, 0, destroy: 843);
+            var (host, _) = Hosts(session, content, new Probe(), true, item);
+            Assert.IsFalse(host.ItemMayDestroy(AreaUseScriptHost.EntityId(item)));
+            var ran = host.TakeBreakDestroyRun();
+            Assert.IsNotNull(ran);
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "It holds.") }, ran.Printed.ToArray());
+        });
+    }
 }

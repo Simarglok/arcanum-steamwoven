@@ -85,7 +85,13 @@ public partial class TerrainViewerApp
         session.AttachItemNoDrop(prototype => PrototypeItems()?.Item(prototype)?.NoDrop == true);
         // ARC-SCRIPT-2644 (TD2): a break that destroys a door, container, trap or busted scenery runs the object's destroy point first, which can keep it.
         session.AttachObjectDestroyGate(target => ObjectBreakMayDestroy(session, target));
+        // ARC-SCRIPT-2722 (OD12, TD2): and an item's deleting break runs the item's destroy point first.
+        session.AttachItemDestroyGate(entity => ItemBreakMayDestroy(session, entity));
     }
+
+    /// <summary>ARC-SCRIPT-2722: the item break's destroy gate of the shown map's session, as <see cref="ObjectBreakMayDestroy"/>.</summary>
+    private bool ItemBreakMayDestroy(GameSessionOwner session, string entity) =>
+        !ReferenceEquals(_areaSession, session) || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host || host.ItemMayDestroy(entity);
 
     /// <summary>ARC-SCRIPT-2644: the break's destroy gate of the shown map's session (the host is built on first need); another session or no ready area lets the break destroy.</summary>
     private bool ObjectBreakMayDestroy(GameSessionOwner session, SessionObjectTarget target) =>
