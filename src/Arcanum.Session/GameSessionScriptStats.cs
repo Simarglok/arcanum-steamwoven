@@ -35,7 +35,6 @@ public sealed partial class GameSessionOwner
     /// the race and gender stand first, then the entries of <paramref name="entries"/>), clamped to the stat's range. A number without a rule has no changes.
     /// Null without a hero or for another stat.
     /// </summary>
-    [OriginalFunction(0x4B0490, OriginalFunctionScope.Partial)]
     private int? HeroLevelAlignmentStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
     {
         if (_hero is not { } hero || stat is not (ScriptStatLevel or ScriptStatAlignment)) return null;
