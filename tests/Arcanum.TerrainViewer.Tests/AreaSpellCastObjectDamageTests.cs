@@ -115,7 +115,7 @@ public sealed class AreaSpellCastObjectDamageTests
         var big = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 40) });
         Assert.IsTrue(f.Map.DamageObject(id, big, "oid:guard"));
         var broke = f.Map.TakeObjectHits().Single();
-        Assert.AreEqual(("oid:guard", true, SessionObjectHostSteps.WitnessesHearBreak), (broke.Actor, broke.Hit.Broken, broke.Host));
+        Assert.AreEqual(("oid:guard", true, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.ObjectBroken), (broke.Actor, broke.Hit.Broken, broke.Host));
         var other = f.Map.Id(f.Rows[1]);
         Assert.IsTrue(f.Caster.ApplyScriptDamage(other, 12, 0, unresistable: true).Applied);
         var script = f.Map.TakeObjectHits().Single();
