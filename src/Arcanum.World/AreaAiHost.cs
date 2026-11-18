@@ -3642,7 +3642,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ? caster.CastByScript(npc, choice.Spell, scriptTarget, script.Free, script.Unresistable)
             : caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
         if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
-        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal} {(attempt.Refusal == Arcanum.Simulation.Magic.SpellInvocationRefusal.None ? "" : "check " + attempt.Refusal)}";
+        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal} {(attempt.Refusal == Arcanum.Simulation.Magic.SpellInvocationRefusal.None ? "" : "check " + attempt.Refusal)} {attempt.RefusalNote}";
         if (attempt.RunId is not { } run) return new(null);
         var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
         if (RunOf(npc) is not { } held || held.Bottom.Goal is not (GoalType.CastSpell or GoalType.AttemptSpell))

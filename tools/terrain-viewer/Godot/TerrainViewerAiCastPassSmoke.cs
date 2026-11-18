@@ -53,6 +53,7 @@ public partial class TerrainViewerApp
         var heroBefore = session.QueryHeroLife()!.Record.State;
         var scaled = false;
         var baseline = new HashSet<int>();
+        var madeBefore = new HashSet<string>(StringComparer.Ordinal);
         (string Entity, SessionLifeTarget Life)? ally = null;
         try
         {
@@ -75,9 +76,11 @@ public partial class TerrainViewerApp
             for (var wait = 0; wait < 600 && SpellCasterNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var caster = SpellCasterNow();
             Require(caster is not null, "the map's cast host is built (spell data " + _spellData?.Status + ")");
+            caster!.RefusalDiagnostics = true;
             var host = AreaAiHostNow();
             Require(host is not null, "the AI host is built");
             foreach (var run in session.QuerySpellRuns().Runs) baseline.Add(run.Id);
+            foreach (var made in session.QueryCreatedObjects(new(map.RuntimeMap))) madeBefore.Add(made.Entity);
             // The flags the session holds on the three critters now: a spell's own writes (paralysis, stone, entangle, invisibility ...) outlive a run that is freed, so each pair starts from these.
             var flagsOf = new Dictionary<string, SessionObjectFlags>();
 
@@ -144,11 +147,18 @@ public partial class TerrainViewerApp
             {
                 foreach (var left in session.QuerySpellRuns().Runs.Select(r => r.Id).Where(id => !baseline.Contains(id)).ToArray()) caster!.Act(new(SessionSpellRunActionKind.ForceEnd, left));
             }
+            // ARC-MAGIC-2655: a Summon's creature (and a wall's pieces) outlives its freed run and, left standing, crowds the NPC's tiles until a later Summon at the NPC finds no empty tile in radius 2 (the check's own BEGIN-area fallback, 0x4564E0),
+            // so every object the pass made is destroyed again between two casts.
+            void DestroyMade()
+            {
+                foreach (var made in session.QueryCreatedObjects(new(map.RuntimeMap)).Where(m => !madeBefore.Contains(m.Entity)).ToArray())
+                    if (session.QueryCreatedObject(made.Entity) is not null) session.DestroyCreatedObject(session.Version, made.Entity);
+            }
             // Between two casts: every run the stage made (or an NPC's own AI cast in the meantime) ends, the NPC goes calm and idle, then the three critters are whole, alive and free of what the spells wrote on them.
             void Reset()
             {
                 var named = ally is { } held ? new[] { entity, held.Entity } : new[] { entity };
-                EndRuns(); CalmNpcsForSmoke(session, named);
+                EndRuns(); DestroyMade(); CalmNpcsForSmoke(session, named);
                 for (var idle = 0; idle < 900 && (host!.RunOf(entity) is not null || _spellGoal is not null || _spellMissiles.Count > 0); idle++) Frame();
                 EndRuns();
                 foreach (var id in named.Append(SessionSpellCaster.Hero)) RestoreFlags(id);
@@ -194,6 +204,7 @@ public partial class TerrainViewerApp
 
             int ran = 0, differs = 0, notRun = 0, refused = 0, notComparable = 0;
             var differing = new List<int>();
+            var unexplained = new List<int>();
             foreach (var (spell, kind, lists) in pairs)
             {
                 // Resurrect needs a dead ally; without one nearby the pair is not run.
@@ -209,11 +220,17 @@ public partial class TerrainViewerApp
 
                 // The NPC's own cast, at the target the chooser would give it (its run must settle and leave nothing); the comparison with the hero's cast is between the same target (the hero: a cast at self for a self spell), so
                 // that only the caster differs (a PC target and an NPC target are written differently, SO and XR5): an NPC cast at the hero too when its own target is another.
-                Reset(); Kill();
+                // ARC-MAGIC-2655: a healing or cure spell's area asks for a damaged or poisoned target (0x100000, 0x400000: the invocation check refuses a whole one), as the chooser's own pick would be, so its target is hurt first.
+                void Hurt(SessionLifeTarget life)
+                {
+                    if (lists.Contains("Healing", StringComparison.Ordinal)) session.ApplyDamage(session.Version, life, new LifeDamage { HitPoints = 10 });
+                    if (lists.Contains("CurePoison", StringComparison.Ordinal)) session.ApplyDamage(session.Version, life, new LifeDamage { Poison = 5 });
+                }
+                Reset(); Kill(); if (kind == "self") Hurt(npcLife);
                 var npc = NpcCast(kind == "self" ? entity : kind == "foe" ? AiSchedulerRules.Pc : ally!.Value.Entity);
                 AiCastPassSide npcAtHero = npc;
-                if (kind == "self") { Reset(); npcAtHero = NpcCast(AiSchedulerRules.Pc); }
-                Reset(); Kill();
+                if (kind == "self") { Reset(); Hurt(SessionLifeTarget.Hero); npcAtHero = NpcCast(AiSchedulerRules.Pc); }
+                Reset(); Kill(); if (kind == "self") Hurt(SessionLifeTarget.Hero);
                 var heroCast = Observe(SessionSpellCaster.Hero, spell, () => CastSpell(spell, HeroTarget(), SpellLocation.None, null, c => c.CastByScript(SessionSpellCaster.Hero, spell, HeroTarget(), true, false)),
                     () => _spellGoal is not null, () => _spellNotice + " | hero " + session.QueryHeroLife()?.Status);
                 FlushSpellLog(null);
@@ -225,7 +242,12 @@ public partial class TerrainViewerApp
                 string? apart = null;
                 var npcComponents = npcAtHero.Kinds.Keys.Where(k => !aside.Contains(k)).Any();
                 var heroComponents = heroCast.Kinds.Keys.Where(k => !aside.Contains(k)).Any();
-                if (!npcAtHero.Started && heroCast.Started && npcAtHero.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true) { apart = "NPC-REFUSED " + npcAtHero.Why.Split(" | ")[0].Trim(); refused++; }
+                if (!npcAtHero.Started && heroCast.Started && npcAtHero.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true)
+                {
+                    var reason = ExplainBeginRefusal(npcAtHero.Why);
+                    apart = "NPC-REFUSED (" + (reason ?? "UNEXPLAINED") + ") " + npcAtHero.Why.Split(" | ")[0].Trim(); refused++;
+                    if (reason is null) unexplained.Add(spell);
+                }
                 else if (npcAtHero.Started && heroCast.Started && npcComponents && !heroComponents) { apart = "HERO-NOT-COMPARABLE (its run was freed at the release's re-check with nothing done)"; notComparable++; }
                 else if (npcAtHero.Started != heroCast.Started) differences.Add($"started npc={npcAtHero.Started} hero={heroCast.Started}");
                 else if (npcAtHero.Started)
@@ -248,12 +270,14 @@ public partial class TerrainViewerApp
             var leftOver = session.QuerySpellRuns().Runs.Where(r => !baseline.Contains(r.Id)).Select(r => r.Id).ToArray();
             Require(leftOver.Length == 0, $"no run is left after the pass: {string.Join(",", leftOver)}");
             Require(ran > 0, "at least one pair ran");
+            Require(unexplained.Count == 0, $"every NPC refusal by the BEGIN-area test is explained by an area bit the original tests too (ARC-MAGIC-2655); not explained: {string.Join(",", unexplained)}");
             GD.Print("ARC-MAGIC-1835 native-smoke ai-cast-pass PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Pairs = pairs.Count, Ran = ran, NotRun = notRun, NpcRefused = refused, NotComparable = notComparable, DifferingPairs = differs, DifferingSpells = differing.Distinct(),
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
+            if (SpellCasterNow() is { } diagnosed) diagnosed.RefusalDiagnostics = false;
             foreach (var left in session.QuerySpellRuns().Runs.Select(r => r.Id).Where(id => !baseline.Contains(id)).ToArray()) SpellCasterNow()?.Act(new(SessionSpellRunActionKind.ForceEnd, left));
             session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (ally is { } friend) session.Heal(session.Version, friend.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
@@ -266,5 +290,24 @@ public partial class TerrainViewerApp
             PublishWorldSelection();
         }
         await Task.CompletedTask;
+    }
+    // ARC-MAGIC-2655: the invocation check (0x4564E0) tests a non-PC parent's target against the spell's BEGIN mask (IV6); the refusal note names the mask and the bits whose removal alone lets the target pass. The reasons below are rules of
+    // the area test (0x4F2D20) that the original applies to the same target: they explain a refusal; null is a refusal no listed bit explains.
+    private static string? ExplainBeginRefusal(string why)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(why, "begin-mask=([0-9A-F]+) failing=([0-9A-F]+)");
+        if (!match.Success) return null;
+        var mask = Convert.ToUInt64(match.Groups[1].Value, 16);
+        var failing = Convert.ToUInt64(match.Groups[2].Value, 16);
+        var reasons = new List<string>();
+        // A mask whose only object bit is the self bit (low 0x15 = 0x1) and that also holds tile bits (Flee 3) has no single bit to remove: with the self bit gone the tile tests fail on the missing tile, so the mask alone names the reason.
+        if ((failing & 0x1) != 0 || (failing == 0 && ((uint)mask & 0x15) == 0x1)) reasons.Add("self-only area, target is not the caster");
+        if ((failing & 0x20000000) != 0) reasons.Add("area excludes PCs, target is the PC");
+        if ((failing & (0xC000000UL << 32)) != 0) reasons.Add("party-only area, target has no PC leader");
+        if ((failing & 0x100000) != 0) reasons.Add("area needs a damaged target");
+        if ((failing & 0x400000) != 0) reasons.Add("area needs a poisoned target");
+        if ((failing & 0x200000) != 0) reasons.Add("area needs a damaged or poisoned target");
+        if ((failing & 0x1000000) != 0) reasons.Add("area needs a flesh target");
+        return reasons.Count == 0 ? null : string.Join("; ", reasons);
     }
 }
