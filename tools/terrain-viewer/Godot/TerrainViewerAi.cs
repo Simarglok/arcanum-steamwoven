@@ -856,6 +856,8 @@ public partial class TerrainViewerApp
         TouchAreaView();
         // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
         if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
+        // ARC-SCRIPT-2749: the destroy points a wear path asked (an item worn out under an attack, the critical "destroy weapon") show their lines and awards from the frame, as no wear caller takes them.
+        if (_useScriptHost is { } pointed) ShowDestroyPointRuns(pointed.Host, "wear");
         // ARC-DEV-371: the encounter creatures a tick destroyed are destroyed in the session here, from the frame, never from inside a tick.
         if (_areaSession is { } scriptedSession) { DrainEncounterDestroys(scriptedSession, host); TakeCreatedInventories(scriptedSession); }
         var steps = AiFrameParticipant.TakeSteps();
