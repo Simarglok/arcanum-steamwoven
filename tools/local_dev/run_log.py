@@ -73,6 +73,29 @@ PASS_LINE = re.compile(r"\bPASS\b")
 CRASH_SIGNALS = (signal.SIGSEGV, signal.SIGABRT, signal.SIGBUS, signal.SIGILL, signal.SIGFPE)
 
 
+# ARC-DEV-2412: Godot 4.7.2 .NET sometimes dies on the .NET finalizer thread inside a Godot type's Finalize (seen in
+# `Godot.StringName.Finalize` -> `DisposablesTracker.UnregisterDisposable`, as signal 11 or as an AccessViolationException),
+# only under load (about 1 in 4 of the cave smoke's runs with four Godot runs at once, never in 10 runs alone). The engine's
+# crash handler then also prints "The caller thread can't call the function `propagate_notification()`": that is the handler
+# itself, running on the finalizer thread; no viewer code calls the scene tree from another thread.
+CRASH_EVIDENCE = re.compile(r"handle_crash: Program crashed with signal|Fatal error\. System\.AccessViolationException")
+GODOT_FINALIZE = re.compile(r"\bGodot\.\w+\.Finalize\(\)")
+
+
+STAGE_FAILURE = re.compile(r"\bFAIL\b|\bfailure (?:mode|stage)=|[A-Z]_FAILED\b|\bfrontier=")
+
+
+def engine_finalizer_crash(lines: Sequence[str]) -> bool:
+    """True when the log shows a crash (the engine's crash handler or a fatal AccessViolationException) and a Godot type's
+    Finalize in the backtrace: the finalizer-thread crash of ARC-DEV-2412. A log that printed a failure of its own before
+    the crash (a `FAIL` line, `failure mode=`, `..._FAILED`, `frontier=`) is a real failure that happened to crash too, so
+    it is not this crash."""
+    crash = next((index for index, line in enumerate(lines) if CRASH_EVIDENCE.search(line)), None)
+    if crash is None or not any(GODOT_FINALIZE.search(line) for line in lines):
+        return False
+    return not any(STAGE_FAILURE.search(line) for line in lines[:crash])
+
+
 def signal_note(lines: Sequence[str], exit_code: int) -> str | None:
     """ARC-DEV-2360: a command a signal ended, with exit code -N (the command itself died on it) or 128+N (a shell or
     wrapper passing its child's status on), gets a `note:` line. For a crash signal (SIGSEGV, SIGABRT, SIGBUS, SIGILL,
@@ -89,6 +112,9 @@ def signal_note(lines: Sequence[str], exit_code: int) -> str | None:
         name = f"signal {number}"
     if crash is None:
         return f"note: ended by {name}, not a crash signal"
+    if engine_finalizer_crash(lines):
+        return (f"note: killed by {name} in a Godot type's Finalize on the .NET finalizer thread (ARC-DEV-2412, an engine crash "
+                "seen under load); `./arcanum smoke` runs such a step once more")
     passes = [index for index, line in enumerate(lines) if PASS_LINE.search(line)]
     if not passes:
         return f"note: killed by {name} and the log has no PASS line: a crash, not a shutdown crash"
