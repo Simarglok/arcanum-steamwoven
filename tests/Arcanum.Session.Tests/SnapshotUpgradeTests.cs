@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":104,\"world\"";
+    private const string Current = "\"schemaVersion\":105,\"world\"";
+    private const string Current104 = "\"schemaVersion\":104,\"world\"";
     private const string Current103 = "\"schemaVersion\":103,\"world\"";
     private const string Current102 = "\"schemaVersion\":102,\"world\"";
     private const string Current101 = "\"schemaVersion\":101,\"world\"";
@@ -330,10 +331,21 @@ public sealed class SnapshotUpgradeTests
     // ARC-MAGIC-2400: the schema 103 text of a schema 104 one: only the version differs when no recharge event is pending (the step that moves a pending one onto a map is tested on its own).
     internal static string Schema103(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema104(text);
+        StringAssert.Contains(text, Current104);
         Assert.IsFalse(text.Contains("\"kind\":\"item.recharge\""), "a text with a recharge event has no schema 103 form this helper writes");
-        return text.Replace(Current, Current103);
+        return text.Replace(Current104, Current103);
     }
+
+    // ARC-SCRIPT-2594: the schema 104 text of a schema 105 one in which the session dropped no item and took it up again: the inventory section loses its closing empty list of last-drop tiles. A text with a tile has no older literal: no build before saved one.
+    internal static string Schema104(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoLastDrops).Length - 1, "the inventory section ends with an empty list of last-drop tiles");
+        return text.Replace(NoLastDrops, "").Replace(Current, Current104);
+    }
+
+    internal const string NoLastDrops = ",\"lastDrops\":[]";
 
     // ARC-MAGIC-1658: the schema 98 text of a schema 99 one whose hero (if any) has no resistance written and no age read: the hero section loses its two closing keys. A text with a written resistance or a read age has no older literal:
     // no build before kept either.
@@ -764,6 +776,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":105,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":106,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

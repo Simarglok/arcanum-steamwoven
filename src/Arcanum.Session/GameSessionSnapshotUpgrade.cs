@@ -643,6 +643,8 @@ public static partial class GameSessionSnapshotCodec
                 if (node is JsonObject row && row["kind"]?.GetValue<string>() == SessionEventKinds.ItemRecharge && row["entities"] is JsonArray { Count: 1 } entities && entities[0] is JsonObject entity)
                     entity["map"] = map.DeepClone();
         },
+        // ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it and took it up again. An older save kept none, so the section starts empty (such an item keeps the tile its map data gives it, as before).
+        [104] = root => AddField(Section(root, "inventory"), "$.inventory", "lastDrops", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

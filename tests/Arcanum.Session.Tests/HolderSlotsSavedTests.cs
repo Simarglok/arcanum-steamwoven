@@ -66,7 +66,7 @@ public sealed class HolderSlotsSavedTests
     public void A_session_that_arranged_nothing_saves_an_empty_list()
     {
         using var owner = Owner();
-        StringAssert.Contains(GameSessionSnapshotCodec.Encode(owner.Capture()), ",\"itemFields\":[],\"holderSlots\":[]}");
+        StringAssert.Contains(GameSessionSnapshotCodec.Encode(owner.Capture()), ",\"itemFields\":[],\"holderSlots\":[],\"lastDrops\":[]}");
     }
 
     [TestMethod]

@@ -253,7 +253,7 @@ public sealed class GeneratedOnceStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, "}],\"generated\":[{\"map\":79,\"entity\":\"crate\"}],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[{\"holder\":\"crate\",\"slots\":[");
         // ARC-AI-1753: the items the generation made into the container keep the places the insert gave them.
-        StringAssert.Contains(text, "]}]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0},\"equipment\"");
+        StringAssert.Contains(text, "]}],\"lastDrops\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0},\"equipment\"");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.IsTrue(restored.QueryContainerGenerated(Exterior, "crate"));
