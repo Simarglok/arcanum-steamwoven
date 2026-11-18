@@ -134,6 +134,8 @@ public sealed class AreaCombatPointScriptTests
             // ARC-COMBAT-1973: 923 (a weapon's test of the victim, as 911 for a wall): sets a flag when the extra object is a wall (object type 0); 924 (a wall's taking-damage script): marks that it ran and skips the default.
             Write("scr/00923wall.scr", Program([.. FlagIfType(Extra, WallType, WallSeen, 0), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
             Write("scr/00924walldamage.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, WallDamaged), N(1))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // ARC-SCRIPT-1704: 930 (an area weapon's shape, as 30064): damages every critter in the vicinity of the attachee (focus kind 8) by 5.
+            Write("scr/00930vicinity.scr", Program(Do(new(ScrCatalogue.Action.Damage, (8, 0), N(5), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -722,6 +724,48 @@ public sealed class AreaCombatPointScriptTests
         Assert.IsFalse(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.AdjustStat));
         // ARC-SCRIPT-1733: obj is in combat and the critter-state conditions are in the placed set too since the set S53 (the three tail conditions since S54); adjust stat stays the combat points' alone.
         Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
+    }
+
+    // ARC-SCRIPT-1704 (CP14, IV2): the vicinity of a weapon is scanned around the weapon's own location field, never its holder's. A weapon row of the shown map (an NPC's) is centred on its row tile; the critters around it, not the far one, are damaged.
+    [TestMethod]
+    public void The_area_weapon_s_vicinity_is_the_tiles_around_the_weapon_s_own_location_not_the_holder_s()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var weapon = Row(1, WeaponType, 930, ScrPoint.Hit);   // tile (11, 20)
+            var near = Row(2, NpcType, 0, ScrPoint.Heartbeat);    // (12, 20)
+            var far = Row(20, NpcType, 0, ScrPoint.Heartbeat);    // (30, 20)
+            var holder = Row(21, NpcType, 0, ScrPoint.Heartbeat); // (31, 20): the wielder, far from the weapon's own location
+            var host = Host(session, content, damaged, weapon, near, far, holder);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(holder), Ref(near), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEquivalent(new[] { AreaUseScriptHost.EntityId(near) }, damaged.Select(d => d.Victim).ToArray(), "only the critter around the weapon's tile, not the far ones nor the holder");
+        });
+    }
+
+    // ARC-SCRIPT-1704: the hero's weapon is carried from the map it was taken on, so the combat point names it on that map (the viewer's weaponMap = the item's origin) while the run is on another shown map: the scan still centres on the row's stale tile
+    // and finds the critters of the shown map around it (the original scans the current map around the item's location field).
+    [TestMethod]
+    public void A_weapon_carried_from_another_map_scans_the_shown_map_around_its_own_location()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var weapon = Row(1, WeaponType, 930, ScrPoint.Hit);
+            var near = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var far = Row(20, NpcType, 0, ScrPoint.Heartbeat);
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ScriptDamage: (victim, amount, type, unresistable) => { damaged.Add((victim, amount, type)); return "damaged"; });
+            var host = new AreaUseScriptHost(session, 2, [near, far], [], content, world) { OtherMapRow = obj => obj.Map == 1 && obj.Code == AreaUseScriptHost.EntityId(weapon) ? weapon : null };
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(near), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, damaged.Select(d => d.Victim).ToArray());
+            // Outside the item's run an object of an unheld map has no centre (an empty scan), and a critter of another map is no centre either.
+            Assert.AreEqual(0, host.CrittersInVicinity(Ref(weapon)).Count);
+            Assert.AreEqual(0, host.CrittersInVicinity(Ref(near)).Count, "a critter named on another map than the shown one");
+        });
     }
 
     [TestMethod]
