@@ -433,7 +433,7 @@ public sealed class ActionGoalsTests
         world = Arena(1);
         world.Holder = "oid:chest";
         Assert.AreEqual(AiExecutorReason.ItemNotHeld, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!, world, Steamwoven)[^1].Reason, "lockpicks held elsewhere refuse");
-        CollectionAssert.DoesNotContain(world.Calls, $"pick locks {Foe}");
+        Assert.IsFalse(world.Calls.Any(call => call.StartsWith("skill ", StringComparison.Ordinal)), "no attempt for an item not held");
     }
 
     [TestMethod]
