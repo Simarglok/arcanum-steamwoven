@@ -183,6 +183,11 @@ public partial class TerrainViewerApp
             ClosedPortalsOf = step => _areaPortals is { } portals && _areaSession is { } shown ? [.. portals.CrossedClosed(shown, step).Select(p => p.Entity)] : [],
             SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
+            // ARC-AI-1605 (AW18, VBG9): the hero's and a companion's sight and sound lines start at the rest of the step they are walking (their anchor's offset inside the committed cell).
+            ObserverStep = id => id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc
+                ? _worldActor.Session is AreaGridSession walker ? AreaCritterLights.StepOffset(walker.State.Anchor.U, walker.State.Anchor.V, walker.State.CommittedCell) : null
+                : _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == id) is { } follower
+                    ? AreaCritterLights.StepOffset(follower.Grid.State.Anchor.U, follower.Grid.State.Anchor.V, follower.Grid.State.CommittedCell) : null,
             // ARC-SCRIPT-1773 (CS5): obj can see obj with the hero as the observer reads the hero's drawn facing (the octant of the object rotation, as the knockback host reads it).
             HeroRotation = () => _worldActor.Session is AreaGridSession ? _worldActor.State.Facing : null,
             Companions = () => _areaCompanions is { } group

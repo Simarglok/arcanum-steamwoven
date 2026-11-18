@@ -158,7 +158,10 @@ public partial class TerrainViewerApp
                 var area = panel.GridAreaForSelfTest;
                 Require(panel.ArtMode && area.ServiceLook && area.LookMode == AreaInventoryMode.Own && area.ServiceFrame is { Selected: null, Quote: "" },
                     $"the original look opened in the own window's frame (art {panel.ArtMode}, service {area.ServiceLook}, look {area.Look is not null}, mode {area.LookMode}, frame {area.ServiceFrame})");
-                Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" } && !panel.ButtonsForSelfTest[0].IsVisibleInTree(), "the switch below the frame, the list hidden");
+                Require(panel.LookToggleForSelfTest is { Visible: false } && !panel.ButtonsForSelfTest[0].IsVisibleInTree(), "ARC-UI-2764: no Diagnostic view switch in play, the list hidden");
+                panel.DiagnosticSwitch = true;
+                Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" }, "the debug switch below the frame");
+                panel.DiagnosticSwitch = false;
                 var sword = panel.ArtView!.Grid.Single(item => item.Entity == "kit:1");
                 area.PressAt(AreaInventoryGridArea.CellCentre(sword.Slot));
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -174,12 +177,14 @@ public partial class TerrainViewerApp
                 panel.Navigate(items.Count > 1 && items[0].Entity == "kit:1" ? 1 : -1);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(items.Count < 2 || area.ServiceFrame.Selected != "kit:1", "the pad moved to another item and quoted it: " + area.ServiceFrame.Selected);
+                panel.DiagnosticSwitch = true;
                 panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(!panel.ArtMode && panel.ButtonsForSelfTest.Count > 0 && panel.ButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic list");
                 panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(panel.ArtMode, "and the original look again");
+                panel.DiagnosticSwitch = false;
                 // ARC-UI-2071 (ledger DH10): the release of the reply click that opened the window (a press that began over the dialog, a release no press of the window began) reaches the window in both settings
                 // (an item quotes as a click on it, the round view's square closes); a release whose press did not begin over the dialog is no reply's.
                 {

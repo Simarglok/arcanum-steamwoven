@@ -347,10 +347,10 @@ public partial class TerrainViewerApp
     }
 
     // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none.
-    private WrittenDocument? SteamwovenReading()
+    private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null)
     {
         if (_areaSession is not { } session || _readingData?.Data is not { } data) return null;
-        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype))
+        return data.Prototypes.OrderBy(p => p.Key).Where(p => (only is not null || (!p.Value.UseScript && !p.Value.ItemSpell)) && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || (WrittenSubtype)p.Value.Subtype == only))
             .Select(p => (p.Value.Subtype, Document: session.QueryWrittenDocument(p.Value, data.Texts))).Where(p => p.Document is { Readable: true, Body.Count: > 0 })
             .OrderBy(p => p.Subtype != (int)WrittenSubtype.Book).Select(p => p.Document).FirstOrDefault();
     }
@@ -390,6 +390,12 @@ public partial class TerrainViewerApp
             new("newcharacter", () => SteamwovenOpenMenuWindow(421, require), () => _mainMenu is { Window: AreaMenuWindow.NewCharacter }, () => EndMainMenu("steamwoven smoke"),
                 () => _mainMenuPanel is { NewCharacterArtMode: true } m ? (m.NewCharacterArtForSelfTest.Position, m.NewCharacterArtForSelfTest.Scale.X) : null, ZoneScreen),
         };
+        // ARC-UI-2765: a local capture of the note as drawn, in the original's 497 and in each candidate face (ARC_AREA_READING_NOTE_FONTS); none in an ordinary run.
+        if (AreaReadingArtLayout.ExtraFontArts.Count > 0)
+            windows = [.. windows, .. AreaReadingArtLayout.ExtraFontArts.Select(font => (int?)font).Prepend(AreaReadingArtLayout.NoteFont).Prepend(null).Select(font => new SteamwovenWindowProbe(font is null ? "note-default" : "note-font" + font,
+                () => { AreaReadingArtView.NoteFontOverride = font; if (SteamwovenReading(WrittenSubtype.Note) is { } document) OpenReading(document, "steamwoven", replaceWindows: true); },
+                () => ReadingOpen, () => { CloseReadingByPlayer(); AreaReadingArtView.NoteFontOverride = null; },
+                () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading, SteamwovenBackdropFamily.Reading))];
         foreach (var window in windows)
         {
             var name = window.Name;
@@ -501,7 +507,7 @@ public partial class TerrainViewerApp
         foreach (var (edge, ratio) in seams)
         {
             GD.Print($"ARC-UI-2576 seam [{tag}] {name} {edge} R={(ratio is { } r ? r.ToString("F2") : "n/a")} zone={zone} band={band}");
-            // The windows' own look switch ("Diagnostic view", a wide button with a border) lies just below the zone's bottom edge, so that edge is printed and not gated.
+            // The windows' own look switch ("Diagnostic view", a wide button with a border; debug-only since ARC-UI-2764) lay just below the zone's bottom edge, so that edge is printed and not gated.
             if (ratio is { } measured && edge != "bottom") require(measured <= SteamwovenSeam.Limit, $"[{tag}] the {name} window's {edge} join of the zone has seam ratio {measured:F2} > {SteamwovenSeam.Limit}");
         }
     }

@@ -383,7 +383,10 @@ public partial class TerrainViewerApp
             var area = panel.GridAreaForSelfTest;
             Require(panel.ArtMode && area.BarterLook && area.LookMode == AreaInventoryMode.Barter && area.BarterFrame is { Background: 235, Name: "Smith" },
                 "the original look opened in mode 1 with background 235");
-            Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" } && !panel.SellButtonsForSelfTest[0].IsVisibleInTree(), "the switch below the frame");
+            Require(panel.LookToggleForSelfTest is { Visible: false } && !panel.SellButtonsForSelfTest[0].IsVisibleInTree(), "ARC-UI-2764: no Diagnostic view switch in play, the list hidden");
+            panel.DiagnosticSwitch = true;
+            Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" }, "the debug switch below the frame");
+            panel.DiagnosticSwitch = false;
             var view = panel.ArtView!;
             var sword = view.LootGrid.Single(item => item.Entity == "kit:1");
             var axe = view.Grid.Single(item => item.Entity == "axe");
@@ -575,12 +578,14 @@ public partial class TerrainViewerApp
             // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the window (mode 1): the cover and the hero's slots with the doll button, the grid again with the bag button.
             var heroToggle = HeroDollToggleForSelfTest(area, panel.ArtView!, "barter");
 
+            panel.DiagnosticSwitch = true;
             panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!panel.ArtMode && panel.BuyButtonsForSelfTest.Count > 0 && panel.BuyButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic window");
             panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(panel.ArtMode, "and the original look again");
+            panel.DiagnosticSwitch = false;
 
             var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Barter);
             area.ReleaseAt(new(holeX + 10, holeY + 10));
@@ -801,6 +806,7 @@ public partial class TerrainViewerApp
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 }
                 // The "before" of the graphics comparison: the diagnostic list behind the switch.
+                panel.DiagnosticSwitch = true;
                 panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -810,6 +816,7 @@ public partial class TerrainViewerApp
                 panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(panel.ArtMode, "the switch went back to the original look");
+                panel.DiagnosticSwitch = false;
             }
             parts.Add($"{name}: image {area.ServiceFrame!.Image?.ToString() ?? "none"}, portrait {area.ServiceFrame.Portrait?.ToString() ?? "none"}, items {view.Grid.Count}, quote '{quote}'");
             EndItemService();
