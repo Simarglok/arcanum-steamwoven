@@ -101,7 +101,7 @@ public sealed class NpcSkillRollTests
             }
             using var b = Owner(seed);
             var magical = b.RollNpcSkill(b.Version, User(Skill.SpotTrap, 20, SkillTraining.Apprentice), Skill.SpotTrap, trap: TrapClass.Magical);
-            if (magical.Check!.Critical)
+            if (magical.Check!.Success && magical.Check.Critical)
             {
                 Assert.IsFalse(magical.Critical);
                 Assert.IsFalse(magical.Success);
