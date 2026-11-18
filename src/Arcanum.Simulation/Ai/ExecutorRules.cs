@@ -569,6 +569,7 @@ public static partial class AiExecutorRules
                 if (!Check(world, owner, cost)) return new(Move.Kill, Reason: AiExecutorReason.Unpaid);
                 Consume(world, owner, cost);
                 var swing = world.BeginAttack(owner, target);
+                if (swing.Failed) return End(AiExecutorReason.AttackNoArt);
                 return Next(2, Math.Max(swing.ActionFrameMs, 1)) with { Top = goal with { RestMs = Math.Max(swing.RestMs, 0) } };
             case 2:
                 // The action frame: in reach → the hit step; out of reach → no hit, the action points are spent.
