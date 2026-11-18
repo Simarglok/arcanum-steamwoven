@@ -236,7 +236,8 @@ public sealed partial class GameSessionOwner
                 {
                     // The caller wrote the hit's damage before the break (0x4B4390 → 0x43D530), so the kept item stands at 0 hit points with the destroyed bit and the next hit breaks it again.
                     _durability.Records[entity] = outcome.Condition;
-                    if (slot is { } held) _equipment.Worn[held] = _equipment.Worn[held] with { Item = Conditioned(_equipment.Worn[held].Item, outcome.Condition) };
+                    // The point's script may have moved the item: its slot is read again.
+                    if (_equipment.SlotOf(entity) is { } held) _equipment.Worn[held] = _equipment.Worn[held] with { Item = Conditioned(_equipment.Worn[held].Item, outcome.Condition) };
                     Revise();
                     return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome.Condition, ItemBreakStep.Deleted, null, Version) { DestroyKept = true };
                 }

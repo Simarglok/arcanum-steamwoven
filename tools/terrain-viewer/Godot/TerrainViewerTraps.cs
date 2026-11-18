@@ -99,10 +99,6 @@ public partial class TerrainViewerApp
     private bool _objectBreakRunning;
 
     /// <summary>
-    /// ARC-SCRIPT-2686, ARC-SCRIPT-2723: what the host takes of one script run of an object's break (the destroy point, the ordinary trap script, the BUST script): the awards, floats and creations,
-    /// the printed lines to the message window (IS2, PW1) and the dialog action, which is queued as a heartbeat's is (opened once the pump that broke the object returned; the first one stands).
-    /// </summary>
-    /// <summary>
     /// ARC-SCRIPT-2749 (ledger BS3g): shows the destroy-point runs the item and object gates kept (awards, printed lines, dialog action), oldest first: the break steps take them at once, and the frame pump takes those of the wear paths
     /// (an armour or weapon worn out under an attack, the critical "destroy weapon"), whose callers show nothing of the run.
     /// </summary>
@@ -111,6 +107,10 @@ public partial class TerrainViewerApp
         foreach (var run in host.TakeDestroyPointRuns()) TakeBreakRunOutput(host, entity, run, "destroy point");
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2686, ARC-SCRIPT-2723: what the host takes of one script run of an object's break (the destroy point, the ordinary trap script, the BUST script): the awards, floats and creations,
+    /// the printed lines to the message window (IS2, PW1) and the dialog action, which is queued as a heartbeat's is (opened once the pump that broke the object returned; the first one stands).
+    /// </summary>
     private void TakeBreakRunOutput(AreaUseScriptHost host, string entity, AreaScriptedUse run, string kind)
     {
         Awarded(host, run);

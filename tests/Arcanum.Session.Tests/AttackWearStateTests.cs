@@ -207,6 +207,23 @@ public sealed class AttackWearStateTests
     }
 
     [TestMethod]
+    public void AHeroWeaponTheDestroyPointKeepsStaysWornAndADestroyPointThatDeletesItItselfLeavesNothingToWrite()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, Blade), (_, _) => true, Accept).Failure);
+        owner.AttachItemDestroyGate(_ => false);
+        var kept = Single(Apply(owner, Wear(DamageRecipient.Attacker, destroy: true)));
+        Assert.AreEqual((SessionWearStepKind.WeaponDestroy, SessionWearSkip.DestroyKept, (EquipmentSlot?)null), (kept.Kind, kept.Skip, kept.Item!.Value.Unworn));
+        CollectionAssert.AreEqual(new[] { EquipmentSlot.Weapon }, owner.QueryEquipment().Worn.Select(worn => worn.Slot).ToArray(), "the kept weapon stays in the hand");
+        Assert.IsFalse(owner.IsItemDestroyed("kit:1"));
+
+        owner.AttachItemDestroyGate(entity => { owner.DestroyItem(owner.Version, entity, new(20, 0, 0, false)); return true; });
+        var deleted = Single(Apply(owner, Wear(DamageRecipient.Attacker, destroy: true)));
+        Assert.AreEqual((ItemBreakStep.Deleted, false, SessionWearSkip.None), (deleted.Item!.Value.Break, deleted.Item.Value.DestroyKept, deleted.Skip));
+        Assert.IsTrue(owner.IsItemDestroyed("kit:1"));
+    }
+
+    [TestMethod]
     public void ACriticalSelfHitWearsTheAttackersOwnArmourAndWeapon()
     {
         using var owner = Owner();
