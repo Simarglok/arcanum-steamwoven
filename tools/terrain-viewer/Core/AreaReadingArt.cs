@@ -321,7 +321,8 @@ public static class AreaReadingFlow
     private static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, IReadOnlyList<int> noteFonts)
     {
         foreach (var number in noteFonts.Take(noteFonts.Count - 1))
-            if (FitText(fontOf(number), number, document.Joined, false, AreaReadingArtLayout.NoteText) is { Whole: true } fit) return fit.Lines;
+            // A word wider than the rectangle measures 0 high (a fit that draws nothing): it is no fit, so the next face is tried.
+            if (FitText(fontOf(number), number, document.Joined, false, AreaReadingArtLayout.NoteText) is { Whole: true, Lines.Count: > 0 } fit) return fit.Lines;
         var last = noteFonts[^1];
         return Draw(fontOf(last), last, document.Joined, AreaReadingArtLayout.NoteText, false);
     }

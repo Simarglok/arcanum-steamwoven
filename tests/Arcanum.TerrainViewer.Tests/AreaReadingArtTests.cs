@@ -13,8 +13,8 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaReadingArtTests
 {
     /// <summary>A font whose every glyph is 5 wide with an advance of 6 and a height of <paramref name="height"/> (frame 0 is character 31).</summary>
-    private static AreaArtFont Font(int height = 10) =>
-        new([.. Enumerable.Range(0, 225).Select(_ => new AreaInterfaceFrame(5, height, new byte[5 * height * 4], 6))]);
+    private static AreaArtFont Font(int height = 10, int width = 5) =>
+        new([.. Enumerable.Range(0, 225).Select(_ => new AreaInterfaceFrame(width, height, new byte[width * height * 4], width + 1))]);
 
     private static readonly Func<int, AreaArtFont> Fonts = _ => Font();
     private static AreaReadingMessage Message(string text, int font = 481, bool centred = false) => new(text, font, centred);
@@ -262,6 +262,9 @@ public sealed class AreaReadingArtTests
         var long4 = new AreaReadingArtDocument(WrittenSubtype.Note, 489, false, [], [Message("a\nb\nc\nd\n")], [], "a\nb\nc\nd\n");
         Assert.AreEqual(229, AreaReadingFlow.Single(long4, number => number == 840 ? Font(100) : Font(), AreaReadingArtLayout.NoteFontsFor(true))[0].Font);
         Assert.AreEqual(497, AreaReadingFlow.Single(long4, number => number == 497 ? Font() : Font(100), AreaReadingArtLayout.NoteFontsFor(true))[0].Font);
+        // A word wider than the rectangle (the first face's glyphs 300 wide) draws nothing there, so it is no fit: the second face takes the note.
+        var wide = new AreaReadingArtDocument(WrittenSubtype.Note, 489, false, [], [Message("abcdef\n")], [], "abcdef\n");
+        Assert.AreEqual(229, AreaReadingFlow.Single(wide, number => number == 840 ? Font(10, 300) : Font(), AreaReadingArtLayout.NoteFontsFor(true))[0].Font);
         foreach (var font in AreaReadingArtLayout.ReadableNoteFonts)
         {
             CollectionAssert.Contains(AreaReadingArtLayout.FontArts([]).ToArray(), font, "the window loads the readable face");
