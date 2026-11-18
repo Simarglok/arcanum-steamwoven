@@ -253,6 +253,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
+        // ARC-COMBAT-2524 (RH2, TW1, TW11): the attack start of a "default throws" weapon starts the throw goal at the critter's location instead of the attack goal.
+        if (TryDefaultThrowClick(target)) return true;
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30 (an equal goal is ignored with the auto attack option on, queued beneath the running attack with it off).
         if (_attack is { } running && running.Entity == target.Entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }

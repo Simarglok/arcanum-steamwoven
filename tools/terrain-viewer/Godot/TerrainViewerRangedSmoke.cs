@@ -430,8 +430,9 @@ public partial class TerrainViewerApp
         }
 
         // ARC-COMBAT-017: the lent bow becomes a throwing dagger (melee skill, "default throws", the installed 6072's weight 15) with the
-        // same projectile art. Each throw leaves the hand at the shot (the item lies hidden on the hero's cell and is not drawn), flies,
-        // and lands on the tile its projectile ends on (the struck target's, or the last one beyond the thrown range), drawn again and
+        // same projectile art. ARC-COMBAT-2524 (RH2, TW1, TW11): the combat click on the target starts the throw goal at the target's tile (no attack goal,
+        // the throw rolls as a throw at a location). Each throw leaves the hand at the shot (the item lies hidden on the hero's cell and is not drawn), flies,
+        // and lands on the tile its projectile ends on (the target's tile for a hit, which strikes nothing, or a miss's scattered tile), drawn again and
         // without decay; it is picked up and wielded again for the next throw. Throws until one has hit (at most 12; a hit is reported,
         // not required).
         async Task<object> Throws()
@@ -469,12 +470,15 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear(); _shotEndScriptsForSelfTest.Clear();
                 var unlaunched = _projectilesUnlaunchedForSelfTest;
-                var result = await ShootOnce(pick.Target, expectWalk: false);
+                var result = await ThrowClickOnce(pick.Target);
                 var heroCell = session.QueryActor().Cell;
+                // ARC-COMBAT-2524: the click named no critter: the throw is at the target's tile, never at the critter itself (the roll of a throw at a location).
+                Require(result is { Failure: GameSessionFailure.None, Attack.Resolution: not null }, $"the click threw the dagger at the location ({result?.Failure} {result?.Disposition})");
+                var shot = result!.Shots.Count == 1 ? result.Shots[0] : (SessionShot?)null;
                 // ARC-COMBAT-018: a miss that scatters back onto the hero's own cell has no line to fly and lands at once.
-                Require(result?.Shot is { } shot && (session.QueryThrownShot(shot) is { Item: var item } && item == wielded.Entity || result.Scatter == heroCell),
-                    $"the dagger is thrown ({result?.Failure} {result?.Resolution?.Outcome}, shot {result?.Shot?.Id}, scatter {result?.Scatter})");
-                Require(result!.Resolution!.Difficulty is not null && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
+                Require(shot is { } flying && session.QueryThrownShot(flying) is { Item: var item } && item == wielded.Entity || result.Destination == heroCell,
+                    $"the dagger is thrown ({result.Failure} {result.Attack?.Resolution?.Outcome}, shots {result.Shots.Count}, destination {result.Destination})");
+                Require(result.Attack!.Resolution!.Difficulty is not null && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
                     "the dagger left the hand at the shot");
                 if (_projectiles.Count == 1)
                 {
@@ -505,12 +509,12 @@ public partial class TerrainViewerApp
                         && _shotEndItemEventsForSelfTest[0].Spells.Contains(expected) && _shotEndItemEventsForSelfTest[0].Started >= 1, $"the throw's end fired and started the item's attacks-a-location spell {expected} at the landing tile ({_shotEndItemEventsForSelfTest.Count} events, end {end.Strike})");
                     shotEndEvents++;
                 }
-                hit = result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
-                if (hit) Require(end.Strike == ProjectileStrikeKind.Target && landing.Tile == World(pick.Target.Row), $"a hit lands on its target's tile ({end.Strike} {landing.Tile})");
-                // ARC-COMBAT-018: a missed throw flies to its scattered tile without a target and lands there unless it strikes on the way.
-                else Require(result.Scatter is { } scatter && end.Strike != ProjectileStrikeKind.Target
-                    && (end.Strike != ProjectileStrikeKind.DestinationEnd || landing.Tile == scatter), $"a miss scatters ({end.Strike} {landing.Tile} vs {result.Scatter})");
-                if (!hit) scatters.Add($"{result.Scatter!.Value.X},{result.Scatter.Value.Y}:{end.Strike}");
+                hit = result.Attack.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+                // ARC-COMBAT-2524 (TW10, TW11): a hit with no struck critter flies to the target's tile and lands there striking nothing (the line of fire never names the critter on the target's own tile).
+                if (hit) Require(end.Strike == ProjectileStrikeKind.DestinationEnd && landing.Tile == World(pick.Target.Row), $"a hit lands on its target's tile, striking nothing ({end.Strike} {landing.Tile})");
+                // ARC-COMBAT-018: a missed throw flies to its scattered tile and lands there unless it strikes a critter on the way.
+                else Require(result.Destination is { } scatter && (end.Strike != ProjectileStrikeKind.DestinationEnd || landing.Tile == scatter), $"a miss scatters ({end.Strike} {landing.Tile} vs {result.Destination})");
+                if (!hit) scatters.Add($"{result.Destination!.Value.X},{result.Destination.Value.Y}:{end.Strike}");
                 SyncAreaGroundBodies();
                 landings.Add($"{end.Strike}:{landing.Tile.X},{landing.Tile.Y}:drawn={_groundBodies.ContainsKey(PlacedKey(runtime, wielded.Entity))}");
                 // The viewer's wield passes the item-trigger host (ItemTriggersNow); a thrown dagger whose end spell (a Summon run) is still alive is not wielded without it.
@@ -719,6 +723,26 @@ public partial class TerrainViewerApp
             var healed = session.Heal(session.Version, pick.Target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (healed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-015 ranged smoke heal refused failure={healed.Failure}");
             SyncAreaCombatBodies();
+        }
+
+        // ARC-COMBAT-2524: the combat click on the target with the lent default-throw dagger wielded, run frame by frame until the throw goal's action frame threw the item: the session's throw (no attack goal is made).
+        async Task<SessionHeroThrowResult?> ThrowClickOnce(AreaCombatTarget target)
+        {
+            _lastHeldThrowForSelfTest = null;
+            CancelAreaAttack(null);
+            Require(AttackCritterClick(target, false, false), "the click belongs to combat");
+            Require(_attack is null && HeroRunsHost()?.ThrowRun is not null, $"the click starts the throw goal, no attack goal: {_attackNotice} {_heldThrowNotice}");
+            for (var frames = 0; frames < 4000 && _lastHeldThrowForSelfTest is null; frames++)
+            {
+                _areaSmokeTime++; SmokeTickHeroRuns();
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            var thrown = _lastHeldThrowForSelfTest;
+            // A critical miss stunned the hero: as ShootOnce, the smoke cuts the run so the next throw can start.
+            HeroRunsHost()?.LoseAll("SMOKE_STUN_CUT");
+            Require(thrown is not null, $"the throw goal threw ({_heldThrowNotice})");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            return thrown;
         }
 
         // One attack goal on the target, run frame by frame until its first hit (a walk first when expected).
