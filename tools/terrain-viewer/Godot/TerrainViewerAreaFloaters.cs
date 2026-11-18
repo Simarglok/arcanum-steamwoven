@@ -242,7 +242,7 @@ public partial class TerrainViewerApp
     {
         if (_floaters is { } layer) return layer;
         // ARC-DEV-156 (B28): the lines in the original's font art 229 when it read (the viewer's font without a game folder).
-        _floaters = new AreaFloaterLayer(TextFonts()?.Text) { Anchor = FloaterAnchor, BubbleAnchor = BubbleAnchorOf, BubbleView = () => new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size) };
+        _floaters = new AreaFloaterLayer(TextFonts()?.Text) { Anchor = FloaterAnchor, BubbleAnchor = BubbleAnchorOf, BubbleView = () => AreaGameBarPanel.FreeRect(GetViewport().GetVisibleRect().Size) };
         AddChild(_floaters);
         // First among the app's children: on its layer it draws under the diagnostic HUD.
         MoveChild(_floaters, 0);
