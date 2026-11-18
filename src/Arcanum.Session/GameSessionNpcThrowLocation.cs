@@ -20,7 +20,7 @@ public sealed partial class GameSessionOwner
     private SessionNpcThrowResult ThrowNpcAtLocation(GameSessionVersion expected, SessionNpcThrow request, bool generic, bool struck)
     {
         SessionNpcThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, Version);
-        // The thrower's own checks, as the attack's: its life record, its worn items, the wielded melee weapon (TW7); an inactive thrower throws nothing.
+        // The thrower's own checks, as the attack's: its life record, its worn items, the wielded weapon (TW7); an inactive thrower throws nothing.
         var resolved = Resolve(request.Thrower.Target, out var record, out var facts, out _);
         if (resolved != GameSessionFailure.None) return Refused(resolved);
         var throwerSide = new SessionWearSide { Life = request.Thrower.Target, Worn = request.ThrowerWorn };
@@ -47,7 +47,8 @@ public sealed partial class GameSessionOwner
             }
         }
         catch (ArgumentException) { return Refused(GameSessionFailure.InvalidAttack); }
-        if (values is not null && (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee || !values.Supported)) return Refused(GameSessionFailure.AttackUnsupported);
+        // ARC-COMBAT-2699 (TW7, TW8): the weapon's own skill is not asked (0x42AB90), only that the attack is supported (melee, bow or firearms): a bow or firearm reaches the ammunition check.
+        if (values is not null && (values.Weapon.Kind != WeaponKind.Weapon || !values.Supported)) return Refused(GameSessionFailure.AttackUnsupported);
         if (!status.IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         var distance = ProjectileRules.Distance(request.ThrowerCell, request.Target);
         if (distance < 0) return Refused(GameSessionFailure.InvalidAttack);
@@ -96,7 +97,7 @@ public sealed partial class GameSessionOwner
             if (resolution.Refusal == AttackRefusal.None && resolution.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit))
                 scatterRotation = rolls.Roll(CombatRollPurpose.ThrowScatter, 0, ThrowRules.ScatterDirections - 1);
         }
-        catch (TrialCombatRolls.ExhaustedException) { return ThrowNpcUnrolled(expected, request, generic); }
+        catch (TrialCombatRolls.ExhaustedException) { return ThrowNpcUnrolled(expected, request, generic, ammo); }
         catch (ArgumentException) { return Refused(GameSessionFailure.InvalidAttack); }
         if (resolution.Refusal != AttackRefusal.None) return Refused(GameSessionFailure.InvalidAttack);
         _random = rolls.Trial;
@@ -152,11 +153,24 @@ public sealed partial class GameSessionOwner
     }
 
     // The throw without its rolls (a random stream that cannot give them): a generic item flies to the location, a weapon flies there when the host can fly it, else lands on it, as before ARC-COMBAT-2523.
-    private SessionNpcThrowResult ThrowNpcUnrolled(GameSessionVersion expected, SessionNpcThrow request, bool generic)
+    // ARC-COMBAT-2699 (TW8): the ammunition a thrown weapon takes goes at the throw whether or not its rolls could be drawn, as the hero's unrolled throw spends it (the enough-units check came before).
+    private SessionNpcThrowResult ThrowNpcUnrolled(GameSessionVersion expected, SessionNpcThrow request, bool generic, (SessionAmmoHolder Holder, int Type, int Count, bool Short)? ammo)
     {
-        if (generic || request.Flight && ShotsInFlight <= MaxShotsInFlight - 1) return ThrowNpcGeneric(expected, request);
-        var failure = LandNpcItem(request.Item, request.Target);
-        return failure == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, null, request.Target, Version)
-            : new(GameSessionDisposition.Rejected, failure, null, null, Version);
+        SessionNpcThrowResult thrown;
+        if (generic || request.Flight && ShotsInFlight <= MaxShotsInFlight - 1) thrown = ThrowNpcGeneric(expected, request);
+        else
+        {
+            var failure = LandNpcItem(request.Item, request.Target);
+            thrown = failure == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, null, request.Target, Version)
+                : new(GameSessionDisposition.Rejected, failure, null, null, Version);
+        }
+        if (ammo is not { } spend || thrown.Disposition == GameSessionDisposition.Rejected) return thrown;
+        var spent = SpendAmmo(Version, spend.Holder, spend.Type, spend.Count);
+        var stepFailure = spent.Disposition == GameSessionDisposition.Rejected ? spent.Failure : GameSessionFailure.None;
+        return thrown with
+        {
+            Attack = new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, stepFailure, Version) { Ammunition = spent },
+            Version = Version,
+        };
     }
 }
