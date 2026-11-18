@@ -126,9 +126,29 @@ public partial class AreaCharacterSheetArtView : Control
         _tab = tab; QueueRedraw();
     }
 
+    // ARC-UI-2694: the lens shows the round view of the game under the window, so the window art leaves its square out (the original's copy replaces it, 0x550DA0 mode 1).
+    private bool _lensCut;
+
+    /// <summary>The lens's rectangle on the screen (the window's rectangle scaled and moved): the round view's square.</summary>
+    internal (Vector2 Origin, float Side) LensOnScreen
+    {
+        get
+        {
+            var (x, y, side) = AreaCharacterSheetArtLayout.Lens;
+            return (GetGlobalTransform() * new Vector2(x, y), side * GetGlobalTransform().Scale.X);
+        }
+    }
+
+    /// <summary>The round view is shown under the window: the window art leaves the lens's square out.</summary>
+    internal bool LensCut
+    {
+        get => _lensCut;
+        set { if (_lensCut == value) return; _lensCut = value; QueueRedraw(); }
+    }
+
     public void CloseView()
     {
-        Visible = false;
+        Visible = false; _lensCut = false;
         (_hovered, _pressed, _region, _view, _portrait) = (null, null, null, null, null);
     }
 
@@ -247,7 +267,22 @@ public partial class AreaCharacterSheetArtView : Control
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
         ClaimScale();
-        if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window) DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
+        if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
+        {
+            float width = window.GetWidth(), height = window.GetHeight();
+            if (!_lensCut) DrawTextureRect(window, new Rect2(0, 0, width, height), false);
+            else
+            {
+                // The lens's square is left out, so the round view under the window shows through (the four pieces around it).
+                var (lx, ly, edge) = AreaCharacterSheetArtLayout.Lens;
+                foreach (var (px, py, pw, ph) in new[] { (0f, 0f, width, (float)ly), (0f, ly + (float)edge, width, height - ly - edge), (0f, (float)ly, (float)lx, (float)edge),
+                    (lx + (float)edge, (float)ly, width - lx - edge, (float)edge) })
+                    if (pw > 0 && ph > 0) DrawTextureRectRegion(window, new Rect2(px, py, pw, ph), new Rect2(px, py, pw, ph));
+            }
+        }
+        // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
+        if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
+            DrawTextureRect(lens, new Rect2(AreaCharacterSheetArtLayout.Lens.X, AreaCharacterSheetArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);
         // ARC-UI-1791 (ledger CHW25): an NPC without a portrait to show has its icon blitted at the same place at its own size (0x559ABC); the hero never has one.

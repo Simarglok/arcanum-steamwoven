@@ -496,7 +496,8 @@ public static class InterfaceChromeRecipes
         List<ChromePart> window =
         [
             new ChromeSunk(680, 157, 94, 22, ChromeMaterial.Pit), new ChromeSunk(680, 189, 94, 22, ChromeMaterial.Pit),
-            new ChromeRoundView(69.5, 68.5, 44.5),
+            // ARC-UI-2694: the hole's square takes no rim of the window's own and no ring outside the circle: the lens art 198 carries the one ring (inside its square), a second one outside showed as cut arcs.
+            new ChromeBare(25, 24, 89, 89),
             new ChromeKeep(704, 51, 47, 47, true),
             new ChromeKeep(716, 26, 23, 23, true), new ChromeKeep(683, 63, 23, 23, true), new ChromeKeep(749, 63, 23, 23, true), new ChromeKeep(717, 97, 23, 23, true),
             new ChromeKeep(725, 13, 5, 15), new ChromeKeep(725, 119, 5, 33), new ChromeKeep(666, 72, 19, 5), new ChromeKeep(771, 72, 20, 5),
@@ -550,7 +551,7 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(497, 59, 244, 332, ChromeMaterial.Pit),
             new ChromeSunk(24, 278, 452, 113, ChromeMaterial.Pit),
             new ChromeKeep(308, 294, 3, 84),
-            new ChromeKeep(12, 10, 89, 89, true), new ChromeRoundView(56.5, 54.5, 44.5, false), // the medallion inside the lens 198 (kept) and the ring the lens carries in its corners
+            new ChromeKeep(12, 10, 89, 89, true), // the medallion under the lens 198 (kept; ARC-UI-2694: the lens's round view replaces it and the lens art draws the ring)
             new ChromeKeep(6, 131, 100, 100, true),
             new ChromeKeep(411, 127, 76, 56, true), new ChromeKeep(411, 197, 76, 56, true),
             new ChromeKeep(747, 60, 46, 330),

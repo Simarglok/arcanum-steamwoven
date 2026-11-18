@@ -394,7 +394,18 @@ public partial class TerrainViewerApp
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
             if (plan is not null) CheckBackdrop(tag, name, window.Family, plan, panel, require);
-            window.Close();
+            // ARC-UI-2694: the lens of the sheet and the map window is a close spot (a mouse-up in its square closes the window): a click on its centre, at the zone place, closes it.
+            if (plan is not null && name is "sheet" or "map")
+            {
+                var at = name == "sheet" ? _sheetPanel!.ArtViewForSelfTest!.PointForSelfTest(56.5, 54.5) : _worldMapPanel!.ArtViewForSelfTest!.WindowPointForSelfTest(69.5, 68.5);
+                foreach (var pressed in new[] { true, false })
+                {
+                    GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0 }, inLocalCoords: true);
+                    await frames(2);
+                }
+                require(!window.IsOpen(), $"[{tag}] a click on the lens of the {name} window at {at} closes it");
+            }
+            if (window.IsOpen()) window.Close();
             await frames(3);
         }
     }
@@ -422,7 +433,11 @@ public partial class TerrainViewerApp
         // round view's copy of the world), so the lens does not show wood.
         var lenses = AreaRoundView.VisibleRects();
         require(panel.BackdropHolesForSelfTest == Math.Min(2, lenses.Count), $"[{tag}] the {name} backdrop leaves out the {lenses.Count} round-view square(s) (got {panel.BackdropHolesForSelfTest})");
-        GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count}");
+        var unit = SteamwovenWindowZone.UnitScale(plan);
+        var places = string.Join(" ", lenses.Select(rect => $"({(rect.Position.X - plan.Layout.WindowZone.X) / unit:F2},{(rect.Position.Y - plan.Layout.WindowZone.Y) / unit:F2},{rect.Size.X / unit:F2})"));
+        // ARC-UI-2694: every lens is the same 89 units square (the cover art 198's) within a device pixel, at the same scale as the window.
+        foreach (var rect in lenses) require(Math.Abs(rect.Size.X - 89 * unit) <= 1 && Math.Abs(rect.Size.Y - 89 * unit) <= 1, $"[{tag}] the {name} lens is 89 units square ({rect.Size.X / unit:F2} x {rect.Size.Y / unit:F2})");
+        GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count} places(units from the zone corner)={places}");
         using var captured = GetViewport().GetTexture().GetImage();
         if (captured is null) return;
         captured.Convert(Image.Format.Rgba8);
