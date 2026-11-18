@@ -235,7 +235,7 @@ public partial class TerrainViewerApp
     /// rules make it the pickup goal 15 for an item (the hero walks onto its tile through goal 8 with range 0, then goal 16 takes it) or the use goal 81 for a container or a body (S11b: range 1, then the loot window). There is no walk-to-pick-up
     /// intent any more; the act is applied at the frame's next safe point (<see cref="ProcessUsePending"/>). ARC-INPUT-1946: Alt is passed as pressed; out of combat mode it is the immediate action 0x4445A0 (<see cref="AreaHeroPull"/>), which builds no goal and replaces nothing the hero does.
     /// </summary>
-    private bool TryAreaInventoryClick(Vector2 screen, bool alt, out bool immediate)
+    private bool TryAreaInventoryClick(Vector2 screen, bool alt, bool shift, out bool immediate)
     {
         immediate = false;
         if (InventoryOpen || ActorCell() is null || InventoryTargetAt(screen) is not { } target) return false;
@@ -253,7 +253,7 @@ public partial class TerrainViewerApp
         CancelTalkApproach("an item click replaced it"); CancelAreaUseApproach("an item click replaced it"); CancelInventoryApproach(null);
         _useOpenPending = null;
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
-        var request = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: alt));
+        var request = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: alt, Shift: shift));
         // ARC-DEV-304 (GT115, GT120): a body with the spoken-with-dead spell flag is talked to (goal 21); a body that is no dialog NPC has no window to open (the generic greeting line is not modelled).
         _inventoryStatus = request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Talk ? $"talking to a body spoken with by spell: goal 21 {(request.Outcome == HeroRequestOutcome.Done ? "started" : "refused")} (no dialog NPC, so no window)"
             : request.Click is not (Arcanum.Simulation.Goals.HeroClickGoal.Pickup or Arcanum.Simulation.Goals.HeroClickGoal.UseContainer) ? $"the click does nothing here ({request.Click})"
