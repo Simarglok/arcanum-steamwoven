@@ -109,6 +109,9 @@ public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int 
     /// <summary>ARC-COMBAT-1717: the projectile art of the weapon an NPC threw (its missile art field, a scenery art faced in the flight's direction), as the shot carried it; null for an arrow and for a weapon without one (the viewer flies the item's own art).</summary>
     public uint? ThrownArt { get; init; }
 
+    /// <summary>ARC-COMBAT-2693: the shot is a generic item's (a grenade: no weapon block, the damage of its weight, <see cref="WeaponKind.ThrownItem"/>); its check is carried for the stray strike only, and the viewer draws it on the size arc of an item that is no weapon.</summary>
+    public bool Generic { get; init; }
+
     /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
     public const string HeroTarget = "\0hero";
 
@@ -334,7 +337,7 @@ public sealed partial class GameSessionOwner
     public SessionNpcShotFacts? QueryNpcShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) { ThrownArt = arrow.ThrownArt } : null;
+        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) { ThrownArt = arrow.ThrownArt, Generic = arrow.Values.Weapon.Kind == WeaponKind.ThrownItem } : null;
     }
 
     private const string HeroArrowTarget = SessionNpcShotFacts.HeroTarget;
@@ -367,6 +370,9 @@ public sealed partial class GameSessionOwner
         if (strike is { } shotId && (!_npcArrows.TryGetValue(shotId, out arrow) || arrow.Shooter != attacker.Entity || !arrow.Hit && arrow.Target == targetKey))
             return RejectAttack(GameSessionFailure.InvalidAttack);
         SessionNpcAttackValues values;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's, not the wielded weapon's: the NPC's weapon takes no wear from it.
+        if (arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)
+            attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes.
         if (arrow is not null) values = arrow.Values;
         else

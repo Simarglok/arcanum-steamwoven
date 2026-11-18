@@ -16,6 +16,9 @@ public partial class TerrainViewerApp
     // ARC-DEV-1762: the NPC throws the viewer launched (shot, thrown item, the check's decided hit, thrower, the cells it flew between), for the npc-throw stage.
     private readonly List<(long Shot, string Item, bool Hit, string Thrower, CellCoord From, CellCoord To, bool InFlight, CellCoord? Lying)> _npcThrowLaunchesForSelfTest = [];
 
+    // ARC-COMBAT-2693: the critical misses of an NPC's throw the viewer noticed as the thrower's self-hit (the thrower, the damage the session dealt it, the floater lines it drew), for the npc-throw stage.
+    private readonly List<(string Thrower, int Damage, int Floaters, string Status)> _npcThrowSelfHitsForSelfTest = [];
+
     // ARC-DEV-1762 native observation (stage "npc-throw", only when named, map mode with --hero): a free NPC of the map whose wielded weapon is a seed item (the AI host throws no item the session added) is lent the
     // installed throwing dagger's own fields (prototype 6072, the "default throws" weapon with a projectile art; no NPC of the installed town wields one), and the hero stands four to six cells from it with a clear line;
     // the NPC is told of the hero's attack and fights. The attack starter throws the dagger (goal 37, ARC-COMBAT-1717) and the stage requires the whole chain through the real projectile host: the flight launches (the
@@ -89,7 +92,7 @@ public partial class TerrainViewerApp
                 Require(host!.ThrowableWeapon(entity) == dagger, $"throw {index}: the AI host answers the lent {dagger} as the thrower's throwable weapon ({host.ThrowableWeapon(entity)})");
                 session.Heal(session.Version, thrower.Target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 host.HeroAttacked(entity);
-                _npcThrowLaunchesForSelfTest.Clear(); _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear();
+                _npcThrowLaunchesForSelfTest.Clear(); _npcThrowSelfHitsForSelfTest.Clear(); _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear();
                 _areaSmokeTime *= 20; scaled = true; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
                 TickAreaClock(hostMs);
                 void Frame()
@@ -138,6 +141,11 @@ public partial class TerrainViewerApp
                 }
                 else
                     Require(obstructed || ProjectileRules.Distance(landing.Tile, launch.To) <= 6, $"throw {index}: a miss lands within its scatter of the hero's tile or where an obstruction stopped its flight (landed {landing.Tile.X},{landing.Tile.Y} aimed {launch.To.X},{launch.To.Y})");
+                // ARC-COMBAT-2693 (TW11): a critical miss of the throw turned on the thrower and the viewer noticed it as the thrower's self-hit (not as a plain throw); judged when the roll gave one (the unit tests pin the roll).
+                var selfHit = _npcThrowSelfHitsForSelfTest.FirstOrDefault(h => h.Thrower == entity);
+                if (selfHit.Thrower is not null)
+                    Require(selfHit.Status.Contains("critical miss", StringComparison.Ordinal) && !launch.Hit, $"throw {index}: the critical miss was noticed as the thrower's self-hit ({selfHit.Status}, hit {launch.Hit})");
+                GD.Print($"ARC-COMBAT-2693 npc-throw self-hit leg throw={index} judged={selfHit.Thrower is not null} damage={selfHit.Damage} floaters={selfHit.Floaters}");
                 GD.Print($"ARC-DEV-1962 npc-throw tile leg throw={index} struck=none heroLost={lost} hp={heroAtThrow}->{session.QueryHeroLife()!.Status.HitPoints}"
                     + $" hit={launch.Hit} landed={landing.Tile.X},{landing.Tile.Y} drawn={drawn}");
                 passLine = "ARC-DEV-1762 native-smoke npc-throw PASS " + System.Text.Json.JsonSerializer.Serialize(new {

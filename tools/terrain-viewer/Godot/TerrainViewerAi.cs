@@ -1059,12 +1059,38 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
+        // ARC-COMBAT-2693 (TW11, 0x4B3170): a critical miss of a throw turned on the thrower (the notice's target is none for a throw at a location, a blocking critter the line named for a grenade that flies on): its floaters, stun and fall are the self-hit's.
+        if (thrown.Attack is { Recipient: DamageRecipient.Attacker, Resolution.Refusal: AttackRefusal.None } selfHit)
+        {
+            AiThrowSelfHit(notice, selfHit);
+            return;
+        }
         if (notice.Target is not null && notice.Result is not null)
         {
             AiHit(notice);
             return;
         }
         _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.ScriptDeclined ? "the item's throw script refuses" : thrown.Shots.Count > 0 ? "it flies" : thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
+        SyncAreaCombatBodies();
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
+
+    // ARC-COMBAT-2693: the thrower's own damage of a critical miss at a location: the status line, the floaters over the thrower (the attacker's side), the near-death comment, a stun's end for the hero's follower
+    // that is the thrower, a fall or death animation of the thrower; the bodies and the inventory (the item's critical steps) follow.
+    private void AiThrowSelfHit(AreaAiNotice notice, SessionAttackResult result)
+    {
+        var owner = _areaSession!;
+        var life = _combatHost?.Build(owner, notice.Npc).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
+        _aiNotice = $"{AiName(notice.Npc)} throws: a critical miss turns on the thrower: " + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        FloatCritterAttack(result, notice.Npc, notice.Npc);
+        FollowerAttackComments(result, notice.Npc, notice.Npc);
+        GD.Print($"ARC-COMBAT-2693 ai-throw-self-hit npc={notice.Npc} disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome} recipient={result.Recipient}"
+            + $" damage={result.Life?.HitPointDamage} events={result.Life?.Events} hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} step={result.StepFailure}");
+        _npcThrowSelfHitsForSelfTest.Add((notice.Npc, result.Life?.HitPointDamage ?? 0, AreaCombatFloaters.Of(result, FloaterSideOf(notice.Npc), FloaterSideOf(notice.Npc)) is null ? 0 : 1, _aiNotice ?? ""));
+        if (_npcThrowSelfHitsForSelfTest.Count > 64) _npcThrowSelfHitsForSelfTest.RemoveAt(0);
+        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned) && notice.Npc == AiSchedulerRules.Pc) HeroStunned(owner);
+        if (result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, notice.Npc)] = DeathAnimationOf(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();
