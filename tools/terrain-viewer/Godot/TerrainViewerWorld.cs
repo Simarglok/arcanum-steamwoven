@@ -1034,7 +1034,7 @@ public partial class TerrainViewerApp
         if (HandleHeroDeathInput(input)) { GetViewport().SetInputAsHandled(); return; }
         // ARC-DEV-201: a right press on a bar closes the window the bar handler pops; the release that follows is part of that press.
         if (input is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } rightPress) _rightPressPoppedWindow = HandleRightPressOverWindow(rightPress.Position, rightPress.CtrlPressed);
-        if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); }
+        if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); TrackFollowerSkillModifiers(modifierKey); }
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
         if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)
         {

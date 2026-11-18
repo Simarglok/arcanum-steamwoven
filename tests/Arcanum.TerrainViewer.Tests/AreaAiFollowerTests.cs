@@ -1955,9 +1955,24 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(host.StartPickLocks(companion, "door:1", null), "the host does not run it");
         var (_, running, _, _, runner) = Open();
         Assert.IsNull(running.FirstLockpicks(runner), "it holds no lockpicks");
-        Assert.IsTrue(running.StartPickLocks(runner, "door:1", null), $"goal 33 with skill 14 starts: {running.TraceOf(runner)?.Perform}");
+        Assert.IsTrue(running.StartPickLocks(runner, "door:1", null), $"goal 40 with skill 14 starts: {running.TraceOf(runner)?.Perform}");
         var run = running.RunOf(runner);
-        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.UseSkill, "door:1", AiExecutorRules.PickLocksSkill), (run!.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill));
+        // ARC-COMBAT-1878 (0x571CB0 → 0x4352C0): both branches of the follower's lock pick are the use-item-with-skill goal (40), not the timed pick-lock goal 33; with no lockpicks it has no item.
+        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.UseItemWithSkill, "door:1", AiExecutorRules.PickLocksSkill, (string?)null), (run!.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill, run.Bottom.Item));
+    }
+
+    [TestMethod]
+    public void The_chooser_lists_the_followers_of_a_follower_after_the_direct_ones()
+    {
+        // ARC-COMBAT-1878 (0x441260): the all-followers list recurses into each follower's own array: an NPC under the companion is a candidate too, after the companion.
+        var scene = Open(enemyAt: new(4, 20));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        CollectionAssert.AreEqual(new[] { companion }, host.FollowerSkillUsers().Select(user => user.Loaded.Entity).ToArray(), "before the join only the companion");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        CollectionAssert.AreEqual(new[] { companion, enemy }, host.FollowerSkillUsers().Select(user => user.Loaded.Entity).ToArray(), "the direct follower, then its own follower");
+        Assert.IsFalse(host.FollowerSkillUsers().Single(user => user.Loaded.Entity == enemy).LedByPc, "the NPC under a companion is not led by the PC itself");
+        Assert.AreEqual(enemy, host.ChooseSkillUser(user => user is null ? 5 : user.Loaded.Entity == enemy ? 9 : 6)?.Loaded.Entity, "the follower of a follower can be the best");
+        Assert.IsTrue(host.StartPickLocks(enemy, "door:1", null), $"the host runs it as its own NPC: {host.TraceOf(enemy)?.Perform}");
     }
 
     // ARC-SCRIPT-1996 (ledger HLR7, HLR8, HLR10, HLR11): the healer talk's host answers for a companion, which the host runs through its follower list and not its NPC list.
