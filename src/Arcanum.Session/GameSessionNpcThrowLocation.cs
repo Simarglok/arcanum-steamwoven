@@ -20,7 +20,7 @@ public sealed partial class GameSessionOwner
     private SessionNpcThrowResult ThrowNpcAtLocation(GameSessionVersion expected, SessionNpcThrow request, bool generic, bool struck)
     {
         SessionNpcThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, Version);
-        // The thrower's own checks, as the attack's: its life record, its worn items, the wielded melee weapon (TW7); an inactive thrower throws nothing.
+        // The thrower's own checks, as the attack's: its life record, its worn items, the wielded weapon (TW7); an inactive thrower throws nothing.
         var resolved = Resolve(request.Thrower.Target, out var record, out var facts, out _);
         if (resolved != GameSessionFailure.None) return Refused(resolved);
         var throwerSide = new SessionWearSide { Life = request.Thrower.Target, Worn = request.ThrowerWorn };

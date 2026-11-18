@@ -272,4 +272,21 @@ public sealed class ThrowAmmunitionStateTests
                 Assert.IsTrue(short_.QueryItemOff(short_.QueryActor().Map, Dagger, dataOff: false), label + ": the weapon lies switched off");
             }
     }
+
+    [TestMethod]
+    public void AThrowingSkillWeaponAndABowOnAnExhaustedStreamBehaveAsTheirSupportAndAmmunitionSay()
+    {
+        foreach (var atHero in new[] { true, false })
+        {
+            using var boomerang = NpcOwner(companion: true, units: 5);
+            var refused = boomerang.ThrowByNpc(boomerang.Version, NpcThrow(2, atHero, CombatWeaponSkill.Throwing));
+            Assert.AreEqual(GameSessionFailure.AttackUnsupported, refused.Failure, $"atHero={atHero}: a throwing-skill weapon is no supported NPC attack");
+            Assert.AreEqual(5, Units(boomerang));
+        }
+        using var owner = NpcOwner(companion: true, units: 5);
+        Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        var thrown = owner.ThrowByNpc(owner.Version, NpcThrow(2, atHero: false, CombatWeaponSkill.Bow));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (thrown.Disposition, thrown.Failure));
+        Assert.AreEqual(3, Units(owner), "a bow thrown unrolled spends its arrows");
+    }
 }
