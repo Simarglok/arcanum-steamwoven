@@ -4093,7 +4093,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 Id = Pc, Kind = HostilityKind.Pc, Invulnerable = (ObjectFlagsOf(Pc, 0) & Invulnerable) != 0, Dead = hero.Status.IsDead, Unconscious = hero.Status.IsUnconscious,
                 Stunned = !hero.Status.IsActive && !hero.Status.IsDead && !hero.Status.IsUnconscious,
                 InCombatMode = _session.QueryCombatMode(SessionCombatant.Hero),
-                // ARC-AI-2750 (stat getter 0x4B0490, stats 17 and 19, the PC included): the stored level and alignment with the hero's effect list laid over them.
+                // ARC-AI-2155, ARC-AI-2750 (the stat getter for stats 17 and 19, the PC included): the stored level and alignment with the hero's effect list laid over them.
                 Level = _session.QueryHeroScriptStat(GameSessionOwner.ScriptStatLevel) ?? 0, Alignment = _session.QueryHeroScriptStat(GameSessionOwner.ScriptStatAlignment) ?? 0,
                 HealthPercent = Percent(hero.Status),
                 Perception = _session.QueryHeroAttack()?.Combatant.Perception ?? 0,
@@ -4113,6 +4113,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var leader = Leader(id);
         var pcLeader = PcLeader(id);
         var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
+        var effects = EffectsOf(id);
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
@@ -4131,7 +4132,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
-            Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
+            // ARC-AI-2155: every hostility, flee and party reader takes the level (stat 17) and alignment (stat 19) through the stat getter 0x4B0490, the effect list's changes included.
+            Level = LevelOf(id, effects) ?? build.Level, Alignment = AlignmentOf(id, effects) ?? 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = pcLeader,
             // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
             Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
@@ -4561,7 +4563,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (Build(leader) is not { } build || LifeState(leader) is not { } state || AlignmentOf(leader) is not { } alignment || NpcSkill(leader, Skill.Persuasion) is not { } persuasion) return null;
         var training = (PersuasionTraining)(int)persuasion.Training;
-        return (training, build.EffectiveStat(CharacterStat.Charisma, state), build.Level, alignment, build.MaxFollowers(state, training));
+        return (training, build.EffectiveStat(CharacterStat.Charisma, state), LevelOf(leader) ?? build.Level, alignment, build.MaxFollowers(state, training));
     }
 
     /// <summary>
@@ -4586,7 +4588,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var mind = (SpellFlagsOf(npc, fields.Object.SpellFlags) & MindControlledSpell) != 0;
         var (first, second) = MindControlAcceptance(mind, MindController(npc), leader, () => PcLeader(npc) is not null);
         return new(side.Persuasion, side.Alignment, side.Level, side.MaxFollowers, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
-            alignment, build.Level, first, second, side.Charisma);
+            alignment, LevelOf(npc) ?? build.Level, first, second, side.Charisma);
     }
 
     /// <summary>
