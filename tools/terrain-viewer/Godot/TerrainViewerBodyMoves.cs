@@ -212,13 +212,15 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-RENDER-038: the AI host's attack ART of an NPC's body (<see cref="AreaAiScene.AttackArt"/>), or null when the shown
-    /// map's overlay does not hold its body or the ART does not read.</summary>
+    /// map's overlay does not hold its body or the ART does not read; <see cref="AreaAiAttackArt.NoFile"/> when no file exists.</summary>
     private AreaAiAttackArt? NpcAttackArt(AreaAiNpc npc, AreaAiAttackArtRequest wanted)
     {
         if (_readyArea is not { } area) return null;
         AreaFrames();
         if (NpcT0Body(npc.Row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) return null;
         var load = ArmedArt(area, visual, npc.Entity, wanted.Animation, wanted.Weapon, wanted.Shield);
+        // ARC-COMBAT-1932: a file that exists nowhere (after the repair and the fallbacks) fails the attack's start; an unreadable one keeps the fixed timing.
+        if (load.Status == AreaBodyMoveStatus.ArtMissing) return AreaAiAttackArt.NoFile(wanted);
         return load.Art is { } art ? new(load.Animation, load.Weapon, load.Shield, art.FramesPerGroup, art.ActionFrame, art.FramesPerSecond) : null;
     }
 
