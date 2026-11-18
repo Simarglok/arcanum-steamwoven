@@ -34,6 +34,17 @@ public static class AreaCritterLights
     }
 
     /// <summary>
+    /// ARC-AI-1605 (ledger AW18, VBG9): the screen offset a walking critter has left inside its committed cell: the projected distance (the grid's 40 and 20 pixel steps, as <see cref="Stand"/> and the companions' pose project it)
+    /// from the cell's centre to its continuous anchor, which the original keeps in the object's pixel offset (fields 3 and 4) while a step is under way and zeroes at the end of the walk. (0, 0) for a critter at rest. The
+    /// anchor and the cell are in the same grid coordinates (an anchor at the cell's centre is the integer cell), so no chart conversion is needed.
+    /// </summary>
+    public static (int X, int Y) StepOffset(Arcanum.Simulation.Movement.ExactScalar anchorU, Arcanum.Simulation.Movement.ExactScalar anchorV, Arcanum.Simulation.Movement.CellCoord committed)
+    {
+        double du = GridActorMath.Seconds(anchorU) - committed.X, dv = GridActorMath.Seconds(anchorV) - committed.Y;
+        return ((int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero));
+    }
+
+    /// <summary>
     /// ARC-MAGIC-1229: where something that sits at <paramref name="baseX"/>, <paramref name="baseY"/> with the screen offsets of its T0 place stands once its critter has the
     /// <paramref name="pose"/> (null: still at its T0 place): the pose's cell and the offsets that put it the pose's shift away from the T0 anchor. The light of an eye candy on a
     /// critter (<see cref="AreaEyeCandyLights"/>) moves with the critter the same way as the critter's own light (LT10).
