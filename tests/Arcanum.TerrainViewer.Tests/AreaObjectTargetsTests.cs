@@ -215,6 +215,12 @@ public sealed class AreaObjectTargetsTests
             SessionObjectHostSteps.None, GameSessionFailure.None, default);
         Assert.AreEqual("hit: 4 damage", AreaObjectTargets.Describe(Hit(new(2, 6, false, ObjectBreak.None, 6))));
         Assert.AreEqual("hit: 4 damage, destroyed", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))));
+        // ARC-SCRIPT-2722: an item's deleting break that its destroy point refused.
+        SessionObjectAttackResult ItemHit(SessionObjectHostSteps host, bool kept) => new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null,
+            new ItemDurabilityResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Arcanum.Simulation.Items.ItemBreakStep.Deleted, null, default) { DestroyKept = kept }, null, null,
+            host, GameSessionFailure.None, default);
+        Assert.AreEqual("hit: the item is destroyed", AreaObjectTargets.Describe(ItemHit(SessionObjectHostSteps.DestroySound, false)));
+        Assert.AreEqual("hit: the destroy is refused, the item stays", AreaObjectTargets.Describe(ItemHit(SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.DestroyKept, true)));
         Assert.AreEqual("hit: 4 damage, the window is busted", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.WindowBusted, 12))));
         // ARC-COMBAT-011: a trapped object's break names the trap the viewer does not run.
         Assert.AreEqual("hit: 4 damage, destroyed — its trap goes off", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))
