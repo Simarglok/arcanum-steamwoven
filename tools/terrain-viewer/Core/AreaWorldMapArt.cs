@@ -58,7 +58,7 @@ public static class AreaWorldMapArtLayout
     /// <summary>ARC-UI-133 (WM36, WM140): the PC lens in the window's top left, the rectangle the view-window mode registers (0x550DA0, the struct built at
     /// 0x561376: the screen rectangle (25, 65, 89, 89) at 0x5C9AB8, y 24 in the window once the init (0x55F8D0) has taken the window's 41 rows off, the
     /// hole of the background art that ARC-UI-126 measured, x 25 up to 114 and y 24 up to 113, the far ends out). A left release inside it closes the window.</summary>
-    public static readonly (int X, int Y, int Side) Lens = (25, 24, AreaInventoryHole.Side);
+    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((25, 24)).X, AreaLensPlace.Corner((25, 24)).Y, AreaInventoryHole.Side); // ARC-UI-2714: the common place with the generated interface
 
     /// <summary>The lens's point test (0x551000 over the window's point): left and top edges in, right and bottom out; a square test, the round art is not
     /// consulted.</summary>

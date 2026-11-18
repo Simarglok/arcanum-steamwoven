@@ -34,7 +34,7 @@ public static class AreaReadingArtLayout
     public const float BookFold = 320f;
 
     /// <summary>The close hotspot and the lens (0x5CA4A8, 0x5CA4B0): 89 × 89 at (25, 24); a left release inside it closes the window (the callback 0x56BFC0 tests it with 0x551000).</summary>
-    public static (int X, int Y, int Side) Lens { get; } = (25, 24, 89);
+    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((25, 24)).X, AreaLensPlace.Corner((25, 24)).Y, 89); // ARC-UI-2714: the common place with the generated interface
 
     public static (int X, int Y) PreviousCorner { get; } = (213, 77);
     public static (int X, int Y) NextCorner { get; } = (675, 77);

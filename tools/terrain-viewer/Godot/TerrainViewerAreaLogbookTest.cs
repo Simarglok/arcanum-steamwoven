@@ -151,7 +151,7 @@ public partial class TerrainViewerApp
             _logbookPanel.HolderView = () => (new Vector2(400, 300), 1f);
             _logbookStamp = null; SyncAreaLogbook();
             var (origin, side) = book.LensOnScreen;
-            Require(_logbookPanel.RoundViewShown && book.LensCut && side == 89 * book.Scale.X && origin == book.GlobalPosition + new Vector2(25, 24) * book.Scale.X,
+            Require(_logbookPanel.RoundViewShown && book.LensCut && side == 89 * book.Scale.X && origin == book.GlobalPosition + new Vector2(AreaLogbookArtLayout.Lens.X, AreaLogbookArtLayout.Lens.Y) * book.Scale.X,
                 $"the lens shows the round view: shown={_logbookPanel.RoundViewShown} cut={book.LensCut} origin={origin} side={side}");
             // A press in the lens does nothing; the release closes the window (a left release is the first test of the callback, LB14).
             var inside = new Vector2(AreaLogbookArtLayout.Lens.X + 40, AreaLogbookArtLayout.Lens.Y + 40);

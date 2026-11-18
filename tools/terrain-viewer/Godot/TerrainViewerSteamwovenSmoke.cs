@@ -325,12 +325,8 @@ public partial class TerrainViewerApp
 
     private static SteamwovenWindowPlace ZoneBody(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, 800, 400);
     private static SteamwovenWindowPlace ZoneScreen(SteamwovenHudPlan plan) => SteamwovenWindowZone.Screen(plan, AreaShopArtLayout.Window.Y);
-    // The reading window is the screen's body: its top left is the body's, 41 units below the screen's.
-    private static SteamwovenWindowPlace ZoneReading(SteamwovenHudPlan plan)
-    {
-        var screen = ZoneScreen(plan);
-        return screen with { Y = Math.Round(screen.Y + AreaReadingArtLayout.Window.Y * screen.Scale, MidpointRounding.AwayFromZero) };
-    }
+    // ARC-UI-2714: the reading window stands in the zone like the others: its top left is the zone body's (its 800 x 399 under the body's top).
+    private static SteamwovenWindowPlace ZoneReading(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, AreaReadingArtLayout.Window.Width, AreaReadingArtLayout.Window.Height + 1);
 
     // ARC-UI-2614: a container of the map for the loot window (See Contents: no open attempt, a locked one shows its items too), null when the map has none.
     private AreaInventoryTarget? SteamwovenLootTarget()
@@ -465,6 +461,12 @@ public partial class TerrainViewerApp
         var places = string.Join(" ", lenses.Select(rect => $"({(rect.Position.X - plan.Layout.WindowZone.X) / unit:F2},{(rect.Position.Y - plan.Layout.WindowZone.Y) / unit:F2},{rect.Size.X / unit:F2})"));
         // ARC-UI-2694: every lens is the same 89 units square (the cover art 198's) within a device pixel, at the same scale as the window.
         foreach (var rect in lenses) require(Math.Abs(rect.Size.X - 89 * unit) <= 1 && Math.Abs(rect.Size.Y - 89 * unit) <= 1, $"[{tag}] the {name} lens is 89 units square ({rect.Size.X / unit:F2} x {rect.Size.Y / unit:F2})");
+        // ARC-UI-2714: every lens of the generated interface stands at the one common place (within a unit: the reading window's origin is a fraction of a unit off the zone's).
+        foreach (var rect in lenses)
+        {
+            var (lensX, lensY) = ((rect.Position.X - plan.Layout.WindowZone.X) / unit, (rect.Position.Y - plan.Layout.WindowZone.Y) / unit);
+            require(Math.Abs(lensX - AreaLensPlace.X) <= 1 / unit && Math.Abs(lensY - AreaLensPlace.Y) <= 1 / unit, $"[{tag}] the {name} lens stands at the common place ({AreaLensPlace.X}, {AreaLensPlace.Y}) (at {lensX:F2}, {lensY:F2})");
+        }
         GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count} places(units from the zone corner)={places}");
         using var captured = GetViewport().GetTexture().GetImage();
         if (captured is null) return;
