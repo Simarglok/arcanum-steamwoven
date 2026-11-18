@@ -1817,6 +1817,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
+    /// ARC-COMBAT-1878 (ledger TT5; 0x4BC7B0 → 0x4617F0): a new item of the prototype <paramref name="prototype"/> in the pack of the NPC <paramref name="npc"/> (<see cref="GameSessionOwner.AddItemToNpc"/>), as a follower's expert disarm makes the device for itself,
+    /// with the same weight, script and no-drop facts as <see cref="GiveHeroPrototypeItem"/>. Null when the world has no item data for the number. <paramref name="insertCheck"/> is the check of the NPC's pack (the viewer passes its diagnostic one, which accepts any item). A pack that refuses (no room, the insert check) is the result's refusal; the original's device then stays at the NPC's feet (not modelled).
+    /// </summary>
+    public InventoryMutationResult? GiveNpcPrototypeItem(string npc, int prototype, SessionInsertCheck insertCheck)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (_world?.Item(prototype) is not { } item) return null;
+        _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
+        _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+        _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
+        return _session.AddItemToNpc(_session.Version, npc, item.Kind, insertCheck);
+    }
+
+    /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD6): the ordinary trap script (the use slot, point 1) of <paramref name="row"/> run by the trap trigger (0x4BCB00)
     /// with <paramref name="triggerer"/> (null: none, a ranged attack or a damage with no attacker) as the triggerer and the object as the
     /// attachee, under <see cref="Admission"/>. Unlike a use it makes no spot attempt and no trap check first. Its slot is kept as map changes
