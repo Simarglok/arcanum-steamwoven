@@ -336,6 +336,8 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-316: an item taken on another map runs its use script on the row of its home map, read on demand.
             OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
+            // ARC-SCRIPT-1594 (VT8): a made or kit item's use script reads its power ratio from the prototype's complexity.
+            PrototypeComplexity = inventory is null ? null : inventory.PrototypeComplexity,
             // ARC-SCRIPT-1165 (E5-c): a script's add blessing and add curse take their effect from the module's tables.
             BlessingEffects = BlessingEffectOf,
             // ARC-SCRIPT-1164 (E5-b): a script's create item enters the holder's list under the inventory host's insert check.
