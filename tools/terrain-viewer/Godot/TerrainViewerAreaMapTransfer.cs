@@ -295,6 +295,8 @@ public partial class TerrainViewerApp
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
             // ARC-SCRIPT-2506 (TI5): the made critter of a script's transform takes the old NPC's hit-point and fatigue percentages through the session's life.
             CarryVitals: (entity, hitPointPercent, fatiguePercent) => CarryTransformVitals(owner, entity, hitPointPercent, fatiguePercent),
+            // ARC-SCRIPT-2519 (TI5c): the made critter of a script's transform takes the old NPC's facing (its mover's, else its map art's rotation).
+            NpcFacing: ScriptNpcFacing,
             // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
             ScriptAttack: (attacker, victim) =>
             {
@@ -323,7 +325,9 @@ public partial class TerrainViewerApp
                 if (AreaAiHostNow() is not { } ai) return;
                 var (flags, seconds) = AreaChangeOfPlace.Flags(teleport.Fade);
                 GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y), flags, seconds)}");
-            });
+            },
+            // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
+            ObjectDestroyed: EndDestroyedObjectRuns);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

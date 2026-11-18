@@ -251,6 +251,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("placement-census") == true) await RunAreaPlacementCensusSmokeAsync(result);
                                 // ARC-DEV-301 (triage T1): only when named, an NPC's death and its loss of consciousness end the spell runs it casts and take their eye candy off the hero (AI on, Crash Site window, --hero).
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
+                                // ARC-MAGIC-1835 (E1-f follow-up): only when named, one pass of the NPC cast over every spell with an AI list entry, each compared with the hero's cast of it (AI on, Crash Site window, --hero).
+                                if (only?.Contains("ai-cast-pass") == true) await RunAreaAiCastPassSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
                                 // ARC-DEV-1148 (magic audit leftover): only when named, spells 30 and 77 on the hero and 46 and 76 on an NPC add their effects, move the stats and take them off at the END (--hero, Crash Site).

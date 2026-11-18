@@ -676,9 +676,13 @@ public partial class TerrainViewerApp
     /// focus, Left and Right change the focused control, and the O key closes the menu from play (OP7).</summary>
     private void HandleMainMenuKey(InputEventKey key)
     {
-        if (!key.Pressed || key.Echo || _mainMenu is null) return;
+        if (key.Echo || _mainMenu is null) return;
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape(), cancels: true); return; }
+        // ARC-INPUT-2647 (menu handler 0x546EE0 and the yes/no box 0x51EBF0 act on a key event only when its key-state byte says
+        // released, ledger SF6): the menu's Escape (back, Continue, the root's exit, the quit box's no) acts on the release; the press
+        // does nothing, so the release of the press that opened the menu cannot reach it and a press never closes and reopens it.
+        if (routed == Key.Escape) { if (!key.Pressed) MainMenuCommand(() => _mainMenu.Escape(), cancels: true); return; }
+        if (!key.Pressed) return;
         // The quit box takes Return as yes, as the original's yes/no box (SF3).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
         // ARC-UI-034: Return in the character editor goes on as its Accept does (the menu's key handler, CM5).
@@ -853,7 +857,20 @@ public partial class TerrainViewerApp
             Require(_mainMenu.Window == AreaMenuWindow.SinglePlayer, "single player by its letter");
             Choose(52);
             Require(MainMenuOpen && ReferenceEquals(placeholder, _areaSession) && _mainMenu.Notice == "no save to continue from", "Last Save without a save stayed");
-            Choose(50); Choose(420);
+            Choose(50);
+            // ARC-UI-2489 (M03): the new-game window, as NAME-newgame.png beside ARC_AREA_MENU_CAPTURE's main window.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } newGameCapture)
+            {
+                Require(_mainMenu.Window == AreaMenuWindow.NewGame, "the new game window opened for its capture: " + _mainMenu.Window);
+                for (var i = 0; i < 2; i++)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                }
+                using var newGameShot = GetViewport().GetTexture().GetImage();
+                Require(newGameShot.SavePng(System.IO.Path.ChangeExtension(newGameCapture, null) + "-newgame.png") == Error.Ok, "the new game capture saved");
+            }
+            Choose(420);
             Require(_mainMenu.Window == AreaMenuWindow.PickCharacter, "the pre-made browser opened");
             // ARC-UI-066: the browser in the original's look, browsed by its arrows.
             await PremadeBrowserArtForSmoke(Require);

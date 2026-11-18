@@ -233,6 +233,8 @@ public partial class TerrainViewerApp
             ObjectFacts = AiObjectFacts,
             // ARC-COMBAT-1776 (0x42A4E0): the door, window or container a pick-locks goal's target string names, as the session picks it, at the light of its cell.
             PickLockTarget = AiPickLockTarget,
+            // ARC-AI-2625 (0x4C7160 case 7, target test 0x4BBDD0): the trap class of the object a spot-trap attempt names.
+            TargetTrapClass = target => _spellCastMap?.Row(target) is { } trapRow && AreaTrapsNow() is { } areaTraps ? areaTraps.TargetClass(trapRow) : Arcanum.Simulation.Traps.TrapClass.None,
             // ARC-AI-1636: an NPC's attack on the object it holds as its focus is the session's object attack on the map row the cast id names.
             ObjectAttackTarget = id => _areaSession is { } objectOwner && _spellCastMap?.Row(id) is { } objectRow && !IsAreaCompanion(objectRow.Key) ? ObjectTargets()?.Target(objectOwner, objectRow.Key, AreaTrapped) : null,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
@@ -276,7 +278,7 @@ public partial class TerrainViewerApp
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions
             .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
 
-        public bool Step(string entity, CellCoord next, bool running) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running) == true;
+        public bool Step(string entity, CellCoord next, bool running, bool sneaking = false) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running, sneaking) == true;
 
         public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
 
@@ -692,6 +694,15 @@ public partial class TerrainViewerApp
         return hit.Disposition != GameSessionDisposition.Rejected;
     }
 
+    /// <summary>ARC-SCRIPT-2519 (TI5c): the facing an NPC of the shown map stands in now: its mover's (the AI walked or turned it), else the rotation of its map art (its T0 body's nominal facing); null when the host does not hold it or its body is unknown.</summary>
+    private Arcanum.Simulation.Movement.NeighborDirection? ScriptNpcFacing(string entity)
+    {
+        if (AreaAiHostNow() is not { } host) return null;
+        if (host.Movers.Of(entity) is { } mover) return mover.Facing;
+        return host.Scene.Npcs.FirstOrDefault(npc => npc.Entity == entity) is { } held && NpcT0Body(held.Row.Key) is { } command && TryBodyVisual(command.Visual, out var visual) && visual.NominalFacing is >= 0 and <= 7
+            ? (Arcanum.Simulation.Movement.NeighborDirection)visual.NominalFacing : null;
+    }
+
     /// <summary>ARC-SCRIPT-1562 (WE2, CP7, CP8): the effective magick-tech aptitude (stat 16) of an NPC of the shown map for a combat-point script's magick-tech adjustments (91, 80): its combat values under its effect list and its poison and crippled legs
     /// (<see cref="SessionCritterCombat.EffectiveStat"/>), the stat getter's range clamp left to the callers; null without combat values.</summary>
     private int? ScriptAptitude(string npc)
@@ -708,7 +719,8 @@ public partial class TerrainViewerApp
         SessionLifeTarget? target = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionLifeTarget.Hero
             : _combatHost?.Build(session, CurrentAreaMap, victim).Combat?.Target;
         if (target is not { } who) return "no combat values";
-        var healed = session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
+        // ARC-SCRIPT-1593 (VT3): a negative heal poison amount raises the level by its size (the setter takes the level minus the amount).
+        var healed = poison < 0 ? session.RaisePoisonLevel(session.Version, who, -(long)poison) : session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
         GD.Print($"ARC-SCRIPT-1481 script-heal-life victim={victim} fatigue={fatigue} poison={poison} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
         RefreshAreaStatus();
         return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}"

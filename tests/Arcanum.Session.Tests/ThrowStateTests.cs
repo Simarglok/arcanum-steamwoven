@@ -457,6 +457,52 @@ public sealed class ThrowStateTests
             "a shot from behind deals the plain damage (0x4B2870 drops the builder's backstab flags)");
     }
 
+    // ARC-COMBAT-1947 (0x54ED30 → 0x462930): the item thrown is the first other item of the wielded weapon's prototype the hero holds, so the hand keeps its weapon while spares last.
+    private static GameSessionOwner SpareOwner(int prototype)
+    {
+        var kind = Kit[0].Kind with { Prototype = prototype };
+        var hero = HalfElf() with { Kit = [new(kind), new(kind), new(kind), Kit[2]] };
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = hero }).Owner!;
+        var dagger = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(2, 6) }, SpeedFactor = 10, Range = 15 },
+        };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(kind, [], false, dagger), (_, _) => true, Accept).Failure);
+        return owner;
+    }
+
+    [TestMethod]
+    public void ASpareOfTheWieldedPrototypeIsThrownAndTheHandKeepsItsWeapon()
+    {
+        using var owner = SpareOwner(6072);
+        var rat = Rat();
+        var first = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (first.Disposition, first.Failure));
+        Assert.AreEqual("kit:1", owner.QueryEquipment().Worn.Single(w => w.Slot == EquipmentSlot.Weapon).Entity, "the hand keeps its dagger");
+        Assert.AreEqual("kit:2", owner.QueryThrownShot(first.Shot!.Value)!.Value.Item, "the first other item of the prototype leaves the list");
+        Assert.AreEqual("kit:2", owner.QueryPlacedItems().Single().Entity);
+        Assert.IsFalse(owner.QueryItemInFlight("kit:1"));
+        var second = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, second.Failure);
+        Assert.AreEqual("kit:3", owner.QueryThrownShot(second.Shot!.Value)!.Value.Item, "the next spare");
+        Assert.IsTrue(Wields(owner));
+        var third = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, third.Failure);
+        Assert.AreEqual("kit:1", owner.QueryThrownShot(third.Shot!.Value)!.Value.Item, "no spare left: the wielded dagger goes");
+        Assert.IsFalse(Wields(owner));
+    }
+
+    [TestMethod]
+    public void TheWieldedDaggerIsThrownForThePrototypeWhoseDescriptionIs0x3AD9()
+    {
+        using var owner = SpareOwner(15085);
+        var shot = owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+        Assert.AreEqual("kit:1", owner.QueryThrownShot(shot.Shot!.Value)!.Value.Item, "0x462930 looks for no other item of prototype 15085");
+        Assert.IsFalse(Wields(owner));
+    }
+
     // A map where every step leaves it.
     private sealed class NoSteps : Arcanum.Simulation.Items.IDropMap
     {

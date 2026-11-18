@@ -552,6 +552,8 @@ public partial class AreaInventoryPanel : CanvasLayer
             // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
             // shows besides the frame (the switch, the message line, the quantity row; PROJECT: the original prints no message in the
             // window). ARC-UI-054: the message line is one line whether a message is shown or not, so a message keeps the scale.
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the switch, the message line and the quantity row hang around it).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
             {
@@ -563,7 +565,7 @@ public partial class AreaInventoryPanel : CanvasLayer
             }
             _panel.Size = new(frameWidth, 0);
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, size.Y));
-            _panel.Position = new((size.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - frameWidth) / 2, top);
             return;
         }
         var width = Math.Max(1, Math.Min(960, size.X - 48));
@@ -572,7 +574,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta)

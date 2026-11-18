@@ -1496,6 +1496,16 @@ public sealed partial class GameSessionOwner : IDisposable
         return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, level));
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1593 (VT3, heal poison with a negative amount): the original's setter takes the level minus the amount, so a negative amount raises the level by its size. The level read now
+    /// plus <paramref name="amount"/> goes through <see cref="SetPoisonLevel"/>'s write (clamped to 0..1000, 0 for a constitution of 20 or more, the timers of every positive write).
+    /// </summary>
+    public SessionLifeResult RaisePoisonLevel(GameSessionVersion expected, SessionLifeTarget target, long amount)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, state.PoisonLevel + amount));
+    }
+
     /// <summary>The stun animation ended or could not start (<see cref="LifeRules.ClearStun"/>).</summary>
     public SessionLifeResult ClearStun(GameSessionVersion expected, SessionLifeTarget target)
     {
@@ -1758,7 +1768,8 @@ public sealed partial class GameSessionOwner : IDisposable
                     (_, after) => after.PoisonLevel > 0 ? [LifeTimer.PoisonRecovery] : [], map, recoveryCopies: 2);
                 break;
             case LifeTimer.Resting:
-                if (hero || dead || _party.Get(target.Entity!).LedByPc) return GameEventHandlerOutcome.Completed;
+                // ARC-COMBAT-1927 (VC21): the original's gate walks the whole leader chain (0x45DDA0), so an NPC that follows a follower of the hero is not healed here either.
+                if (hero || dead || PcLeads(target.Entity!)) return GameEventHandlerOutcome.Completed;
                 result = Life(Version, target, scheduledAt <= now,
                     (s, f, _) => LifeRules.RestHeal(s, f, LifeRules.RestingHours(scheduledAt, now)),
                     (before, after) => RestingWrites(before, after), map);

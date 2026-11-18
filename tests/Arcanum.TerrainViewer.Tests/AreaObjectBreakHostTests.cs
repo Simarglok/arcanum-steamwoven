@@ -104,6 +104,7 @@ public sealed class AreaObjectBreakHostTests
     {
         public List<string> Order { get; } = [];
         public List<string> Damaged { get; } = [];
+        public List<string> Gone { get; } = [];
         public AreaUseScriptHost? Host { get; set; }
         public bool ApplyWithoutTriggerer { get; set; } = true;
         public AreaTrapEffects Effects => new((row, run, counters, flags) => { Order.Add($"trap-hero:{run.Script}:bust={Host!.GlobalFlag(BustFlag)}"); return SessionTrapEffectResult.None; }, 0)
@@ -117,7 +118,8 @@ public sealed class AreaObjectBreakHostTests
     private static (AreaUseScriptHost Host, AreaTraps Traps) Hosts(GameSessionOwner session, ScriptContent content, Probe probe, bool castHost, params AreaObjectRecord[] shown)
     {
         var host = new AreaUseScriptHost(session, 1, shown, [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
-            ScriptDamage: (victim, amount, type, unresistable) => { probe.Damaged.Add($"{victim}:{amount}"); return "damaged"; }));
+            ScriptDamage: (victim, amount, type, unresistable) => { probe.Damaged.Add($"{victim}:{amount}"); return "damaged"; },
+            ObjectDestroyed: obj => probe.Gone.Add($"{obj.Map}:{obj.Code}:{session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery)}")));
         probe.Host = host;
         var traps = new AreaTraps(session, host, shown, _ => false, () => castHost ? probe.Effects : null);
         host.Traps = traps.Use;
@@ -270,6 +272,27 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsTrue(host.GlobalFlag(2303), "the neighbour's destroy point ran");
             Assert.IsTrue(Destroyed(session, statue));
             Assert.IsFalse(Destroyed(session, lever));
+        });
+    }
+
+    // ARC-SCRIPT-2514 (BS3c, 0x43CCA0 -> 0x423FF0, 0x459740): the destroy tells the viewer's hosts once, after the session recorded it; an object left as it is (skip default, already destroyed) tells nothing.
+    [TestMethod]
+    public void A_script_destroy_tells_the_object_destroyed_hook_once_and_only_when_it_applied()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 0, destroy: 834);
+            var kept = Row(2, Scenery, 833, 0, destroy: 835);
+            var probe = new Probe();
+            var (host, _) = Hosts(session, content, probe, true, statue, kept);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(statue, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { $"1:{AreaUseScriptHost.EntityId(statue)}:Destroyed" }, probe.Gone, "the session already holds the object destroyed when the hook runs");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(statue, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(1, probe.Gone.Count, "an object already destroyed is not told again");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(kept, session.Rules.Scripts).Outcome);
+            Assert.IsFalse(Destroyed(session, kept));
+            Assert.AreEqual(1, probe.Gone.Count, "a destroy point that skipped the default tells nothing");
         });
     }
 
@@ -547,5 +570,15 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsNotNull(AreaObjectBreakHost.Run(host, traps, chest, SessionObjectHostSteps.TrapFires, true, false, rules).Trap, "with the hero it is");
             Assert.IsNull(AreaObjectBreakHost.Run(host, null, chest, SessionObjectHostSteps.TrapFires, true, false, rules).Trap, "no trap host");
         });
+    }
+
+    // ARC-SCRIPT-2620 (OD7-OD11, BS3c): the end of the runs follows the destroy step only: a bust, a witness, a sound or the trap alone end nothing.
+    [TestMethod]
+    public void Only_the_object_destroyed_step_ends_the_runs_of_a_break()
+    {
+        Assert.IsTrue(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.ObjectDestroyed));
+        Assert.IsTrue(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectDestroyed));
+        Assert.IsFalse(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.None));
+        Assert.IsFalse(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound | SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.TrapFires));
     }
 }

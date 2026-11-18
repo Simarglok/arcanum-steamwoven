@@ -273,6 +273,15 @@ public partial class AreaBarterPanel : CanvasLayer
             // ARC-UI-069: the window's 800 × 400 at the screen's (0, 41) of the menu's 800 × 600 screen, at the bars' whole factor (as the
             // shop's strips, AreaShopArtView).
             var screen = GetViewport().GetVisibleRect().Size;
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
+            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            {
+                var unit = (float)zone.Scale;
+                _area.FitScale(unit);
+                _panel.Size = new(AreaShopArtLayout.Window.Width * unit, AreaInventoryDrag.FrameHeight * unit);
+                _panel.Position = new(MathF.Round((float)zone.X + AreaShopArtLayout.Window.X * unit), MathF.Round((float)zone.Y + AreaShopArtLayout.Window.Y * unit));
+                return;
+            }
             var factor = AreaGameBarPanel.ScreenFactor(screen);
             _area.FitScale(factor);
             var (wx, wy, ww, _) = AreaShopArtLayout.Window;
@@ -285,6 +294,7 @@ public partial class AreaBarterPanel : CanvasLayer
         {
             // ARC-UI-064: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it
             // (as the inventory window's original look).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
@@ -296,7 +306,7 @@ public partial class AreaBarterPanel : CanvasLayer
                 _panel.Size = new(frameWidth, 0);
             }
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, free.Y));
-            _panel.Position = new((free.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (free.X - frameWidth) / 2, top);
             return;
         }
         var size = GetViewport().GetVisibleRect().Size;

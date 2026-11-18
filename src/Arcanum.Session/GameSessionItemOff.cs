@@ -26,4 +26,15 @@ public sealed partial class GameSessionOwner
         if (ItemInFlight(entity)) return true;
         return QueryObjectChange(map, SessionItemOff.Key(entity)) is { } value ? value == 1 : dataOff;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2324 (ledger OT8): whether the static object <paramref name="entity"/> (a scenery of a map's data) is switched off now: the record of its off flag when a script's toggle state (56) wrote one
+    /// (<see cref="SessionItemOff.Key"/>, the one field an item's and an NPC's toggle also use; 1 off, 0 on over a data that stores it off), else what its map data stores (<paramref name="dataOff"/>).
+    /// </summary>
+    public bool QueryObjectOff(SessionMapId map, string entity, bool dataOff)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return QueryObjectChange(map, SessionItemOff.Key(entity)) is { } value ? value == 1 : dataOff;
+    }
 }

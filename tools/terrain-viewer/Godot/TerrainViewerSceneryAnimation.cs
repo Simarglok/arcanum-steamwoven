@@ -1,4 +1,6 @@
 using Arcanum.Data.Area;
+using Arcanum.Scripting.Scr;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -44,6 +46,7 @@ public partial class TerrainViewerApp
             _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell, FireBurnerFor(session));
             // ARC-RENDER-1781: the sceneries with a changed art get their loops before the loops start (the original starts a loop with the art the object has).
             SyncSceneryArt(_sceneryHost, newHost: true);
+            DropDestroyedSceneryLoops(session, _sceneryHost, area.Snapshot.RuntimeMap);
             var started = _sceneryHost.Start();
             // A restamp drops the old map's bodies from the canvas too, even when no loop has stepped yet.
             if (_sceneryBodies.Count > 0) { _sceneryBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }
@@ -64,6 +67,36 @@ public partial class TerrainViewerApp
         if ((changed || _bedRevisionDrawn != _bedOccupancy.Revision) && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
         // A created scenery is a ground body drawn at its loop's frame: the ground is drawn again only when a created loop came, went or moved a frame.
         if (_sceneryHost.TakeCreatedChanged()) { _groundStamp = null; SyncAreaInventory(); }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2514 (ledger BS3c, 0x43CCA0 → 0x423FF0, 0x459740): a script destroyed a scenery or container of the shown map. Every goal run of the object ends (its loop, the eye-candy overlays and the hover: the scenery host does it with the loop,
+    /// the session's goal table alone for an object with no loop) and the spell runs aimed at or cast from it hear of the destroy in the cast host. An object of another map has no run in the shown session's table.
+    /// </summary>
+    private void EndDestroyedObjectRuns(ScrObjectRef obj)
+    {
+        if (_areaSession is not { } session || obj.Map != CurrentAreaMap) return;
+        var spells = SpellCasterNow();
+        var castId = spells?.CastIdOf(obj.Code);
+        bool ended;
+        if (ShownSceneryHost is { } host) ended = host.ObjectDestroyed(obj.Code, castId);
+        else
+        {
+            ended = false;
+            foreach (var owner in new[] { obj.Code, castId }.Where(o => o is not null).Distinct())
+                if (session.QueryGoals().RunsOf(owner!).Any(r => !r.Done) && session.KillGoals(owner!).Succeeded) ended = true;
+        }
+        spells?.ObjectGone(castId!);
+        GD.Print($"ARC-SCRIPT-2514 object-destroyed object={obj.Code} runs-ended={ended} spell-runs-told={spells is not null}");
+    }
+
+    /// <summary>ARC-SCRIPT-2514: a scenery the session holds destroyed gets no loop on a host built for a window or map shown again (the original's lists do not hold a destroyed object, so no loop starts for it).</summary>
+    private void DropDestroyedSceneryLoops(GameSessionOwner session, AreaSceneryHost host, int map)
+    {
+        foreach (var loop in host.Animation.Loops.ToArray())
+            if (AreaUseScriptHost.Destroyed(session, map, loop.Entity)
+                || session.QueryObjectCondition(new SessionMapId(map), loop.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
+                host.ObjectDestroyed(loop.Entity);
     }
 
     /// <summary>Drops the loops, their runs and their bodies (the shown map is cleared).</summary>

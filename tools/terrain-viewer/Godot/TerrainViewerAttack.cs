@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -18,8 +19,8 @@ namespace Arcanum.TerrainViewer;
 // frame runs the hit through the session (resolution, damage, experience), and with the auto-attack setting (on, the
 // original's default) the attack starts again 5 ms after it ends while the target lives. A click elsewhere, the stick, a
 // dialog, a quick load, the hero leaving combat mode (refused while the animation plays: the exit gate's attempt-attack test)
-// or losing the ability to act stop it; a refused hit ends it. Companions are not attacked yet (they move with their own
-// actor). The status line names the outcome; a killed NPC can be looted (Alt in combat mode, a plain click out of it).
+// or losing the ability to act stop it; a refused hit ends it. A companion (it moves with its own actor) is attacked like any
+// follower, with left Alt (ARC-COMBAT-1945). The status line names the outcome; a killed NPC can be looted (Alt in combat mode, a plain click out of it).
 public partial class TerrainViewerApp
 {
     private AreaCombatHost? _combatHost;
@@ -127,7 +128,9 @@ public partial class TerrainViewerApp
     }
 
     // A key-up lost to a focus change cannot leave left Alt held: Alt must still be down.
-    private bool LeftAltHeld => _leftAltHeld && Godot.Input.IsKeyPressed(Key.Alt);
+    private bool LeftAltHeld => _leftAltForSelfTest || _leftAltHeld && Godot.Input.IsKeyPressed(Key.Alt);
+    // Tests set the left Alt a native click would read from the keyboard.
+    private bool _leftAltForSelfTest;
 
     /// <summary>ARC-COMBAT-005: a companion of the shown map (it moves with its own actor); attacking one is not ready.</summary>
     private bool IsAreaCompanion(AreaObjectKey key) => _areaCompanions?.Companions.Any(c => c.Speaker.Row.Key == key) == true;
@@ -151,12 +154,75 @@ public partial class TerrainViewerApp
         _combatHost!.Target(_areaSession!, key)
         ?? (_areaCompanions?.Companions.FirstOrDefault(c => c.Key == key) is { } visitor ? _combatHost.Target(_areaSession!, visitor.Entity) : null);
 
+    /// <summary>
+    /// ARC-COMBAT-1944 (VC62): out of combat mode, a living NPC whose first run is an attack aimed at the hero or, through the leader chain, a follower puts the hero into combat mode
+    /// before the click resolves, even when the decision then builds nothing. The click rules decide (<see cref="HeroClickRules.Decide"/>: <c>EntersCombatMode</c>); the hero's own refusals (stoned, stunned, dead) keep it out.
+    /// True when the hero entered combat mode (the caller's attack branch then takes the press).
+    /// </summary>
+    // (The original does it before the type switch of its click decision, 0x54ED30.)
+    private bool EnterCombatModeForAttacker(Vector2 screen, bool alt, bool shift)
+    {
+        if (HeroInCombatMode || !AttackMapActive || _areaSession is not { } session || _combatHost is null || session.QueryHero() is null) return false;
+        if (AreaObjectAtScreen(screen) is not { } key || AreaTargetOf(key) is not { } target) return false;
+        var facts = new HeroClickFacts(HeroActing(session), false, false, false, false, HeroClickTarget.Critter, TargetDead: target.Dead,
+            TargetAttacksHero: NpcAttacksHero(session, target.Entity), Alt: alt, Shift: shift);
+        if (!HeroClickRules.Decide(facts).EntersCombatMode) return false;
+        ToggleCombatMode();
+        GD.Print($"ARC-COMBAT-1944 click on an attacker entered combat mode target={target.Entity} in={HeroInCombatMode}");
+        return HeroInCombatMode;
+    }
+
+    /// <summary>ARC-COMBAT-1943: the hero's Body of Air (spell flag 0x4) and polymorph (0x20000) flags the click rules read (what the spells wrote on the hero; false with no session).</summary>
+    private (bool BodyOfAir, bool Polymorphed) HeroClickSpells()
+    {
+        if (_areaSession is not { } session) return default;
+        var spell = session.QueryObjectFlags(SessionSpellCaster.Hero).Spell(0);
+        return ((spell & SessionSpellCaster.BodyOfAirSpellFlag) != 0, (spell & SessionSpellCaster.PolymorphedSpellFlag) != 0);
+    }
+
+    /// <summary>ARC-COMBAT-1943 (the hero click decision): a click that would attack while the hero is in Body of Air builds no goal and shows line 25 of intgame.mes in the message bar (text kind 6). True when the hero is in that form.</summary>
+    private bool RefuseAttackInBodyOfAir()
+    {
+        if (!HeroClickSpells().BodyOfAir) return false;
+        ShowBodyOfAirMessage();
+        return true;
+    }
+
+    /// <summary>The last line 25 shown for a refused attack (the smoke reads it: a hover-kind entry is not stored in the log).</summary>
+    private string? _bodyOfAirLine;
+
+    private void ShowBodyOfAirMessage()
+    {
+        var line = (_gameBarContent?.Texts ?? AreaGameBarTexts.Project("no game bar")).Text(AreaGameBarTexts.BodyOfAirMessage);
+        _bodyOfAirLine = line;
+        PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, line), "body of air");
+        GD.Print($"ARC-COMBAT-1943 body-of-air attack refused line=\"{line}\"");
+        RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-COMBAT-1944: the NPC's first run attacks the hero, or a creature whose chain of PC leaders ends at the hero (the goal table's first-run-attacks test, compared through the PC leader).</summary>
+    private static bool NpcAttacksHero(GameSessionOwner session, string npc) =>
+        session.QueryGoals().FirstRunAttacks(npc, AreaHeroRunsHost.Hero, id =>
+        {
+            try { return session.QueryPcLeader(id); }
+            catch (ArgumentException) { return null; } // an id that is no session entity has no leader
+        }) is not null;
+
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) in combat mode on an NPC: true when the press belongs to combat
     /// (an attack, a refused one). ARC-INPUT-1937: with no Alt key held the pick has already seen through the followers and the dead, so a corpse or follower reaches here only with an Alt key (a corpse with Alt is looted, a follower attacked with left Alt; right Alt gets the refusal below, FA2).</summary>
     private bool TryAreaAttack(Vector2 screen, bool alt, bool shift = false)
     {
         // ARC-COMBAT-008: an object is attacked only with Alt held (ledger OD14); without it the click uses the object as out of combat.
         if (CombatTargetAt(screen) is not { } target) return alt && TryAreaObjectAttack(screen, shift);
+        return AttackCritterClick(target, alt, shift);
+    }
+
+    /// <summary>
+    /// The combat-mode click on the NPC <paramref name="target"/> (a press on its body, or ARC-COMBAT-1945 the release over a follower's portrait, 0x56A9D0 → 0x54EA80 → 0x54ED30): true when the click belongs to combat (an attack, a
+    /// refused one). A follower, a companion that moves with its own actor included, is attacked only with left Alt held.
+    /// </summary>
+    private bool AttackCritterClick(AreaCombatTarget target, bool alt, bool shift)
+    {
         // FA6: a hero that cannot act (stoned, stunned, paralysed, unconscious, dead) does nothing with the click.
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
         {
@@ -178,12 +244,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
-        if (IsAreaCompanion(target.Row.Key))
-        {
-            _attackNotice = "attacking a companion is not ready";
-            RefreshAreaStatus();
-            return true;
-        }
+        // ARC-COMBAT-1943: the Body of Air test sits after the follower's Alt test, on the way to the attack goal.
+        if (RefuseAttackInBodyOfAir()) return true;
         if (target.Build.Combat is not { } combat)
         {
             _attackNotice = $"cannot attack: {target.Build.Failure}";
@@ -192,12 +254,29 @@ public partial class TerrainViewerApp
             return true;
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
-        // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
-        if (_attack is { } running && running.Entity == target.Entity && !running.Stop && running.NoWalk == shift) return true; // ARC-DEV-270: a Shift click on a plain attack's target (or the reverse) restarts it as the other goal
+        // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30 (an equal goal is ignored with the auto attack option on, queued beneath the running attack with it off).
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
         CancelAreaAttack(null);
         _attack = new(target, combat, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
         return true;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62): a left click on the target the hero already attacks. The click is an <see cref="ObjectClickRequest"/> like the first one: the start branch of 0x54ED30 ignores it with the auto attack option on (an equal
+    /// goal is queued; 18 and 19 count as equal, so a Shift click on a plain attack's target is ignored too), queues a repeated attack beneath the running one with the option off, or (the run's top goal being idle, or the run gone) restarts it,
+    /// which carries the click's Shift into the viewer's goal. The goal the viewer holds stays: its ports find it by the target.
+    /// </summary>
+    private void RepeatAttackClick(AttackGoal running, bool shift)
+    {
+        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(running), Alt: running.Object is not null || running.Wall, Shift: shift));
+        GD.Print($"ARC-COMBAT-1949 attack-repeat outcome={request.Outcome} start={request.Start} target={running.Entity}");
+        if (request.BodyOfAirMessage) ShowBodyOfAirMessage(); // ARC-COMBAT-1943: the hero turned into air under a running attack: the repeated click shows line 25.
+        // A run the click started again carries the click's Shift and begins from nothing (as StartAttackGoal sets the goal up); a queued attack or an ignored click leaves the goal as it is.
+        if (request.Outcome == HeroRequestOutcome.Done && request.Start is Arcanum.Simulation.Goals.HeroClickStart.InterruptAndStart or Arcanum.Simulation.Goals.HeroClickStart.Start)
+        {
+            running.NoWalk = shift; running.ClearShotStop = false; running.TestedCell = null;
+        }
     }
 
     // ARC-COMBAT-008: the attackable objects of the shown map, rebuilt when the map or its portals are bound again.
@@ -237,6 +316,9 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
+        // ARC-COMBAT-1943 (0x54ED30): a polymorphed hero's click on a container is refused silently before the Alt attack; Body of Air then refuses every attack goal with line 25.
+        if (target?.Kind == Arcanum.Simulation.Combat.DamageableObjectKind.Container && HeroClickSpells().Polymorphed) return true;
+        if (RefuseAttackInBodyOfAir()) return true;
         if (target?.Refusal is not null)
         {
             _attackNotice = $"cannot attack: {target.Refusal}";
@@ -246,8 +328,8 @@ public partial class TerrainViewerApp
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         var entity = target?.Entity ?? AttackGoal.WallEntity(wall!);
-        // ARC-COMBAT-1941: the same target clicked again keeps its goal, a Shift click on a plain attack's target (or the reverse) restarts it as the other goal (as for a creature, ARC-DEV-270).
-        if (_attack is { } running && running.Entity == entity && !running.Stop && running.NoWalk == shift) return true;
+        // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30, as for a creature.
+        if (_attack is { } running && running.Entity == entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
         CancelAreaAttack(null);
         _attack = target is not null ? new(target, HeldAim()) { NoWalk = shift } : new(wall!, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
@@ -471,7 +553,7 @@ public partial class TerrainViewerApp
         var (x, y) = LiveWorldCell(goal.Row);
         var tile = new CellCoord(checked((int)x), checked((int)y));
         // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
-        var now = goal.Combat is null ? null : _combatHost!.Target(owner, goal.Row.Key);
+        var now = goal.Combat is null ? null : AreaTargetOf(goal.Row.Key);
         var dead = goal.Wall ? false : goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
             : now?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
         return new(tile, dead);
@@ -577,7 +659,8 @@ public partial class TerrainViewerApp
         var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
             owner.QueryCombatRound() is not null, known is null, known is { Dead: true }, false, false, false, owner.QueryBoomerangInFlight()));
         GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");
-        if (!repeats) _attack = null;
+        // ARC-COMBAT-1949: a repeated click queued another attack beneath this one (the option off): the goal stays for the run's next frame, which swings at the same target.
+        if (!repeats && HeroRunsHost()?.AttackQueuedBeneath != true) _attack = null;
         PublishWorldSelection(); RefreshAreaStatus();
         return repeats;
     }
@@ -805,14 +888,15 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-012: the shot strikes the object that stopped the line of fire: an NPC through the critter attack (its own
     /// rolls), a door, window, container, scenery or trap through the object attack, and since ARC-COMBAT-015 a wall, which takes the
-    /// shot and nothing else (ledger RH5); striking a companion or an NPC without combat values is not ready, and the goal ends without
-    /// a hit. The goal's reach test (RH1) admits only a clear line, so a blocker shows up here only when the line changed after it.</summary>
+    /// shot and nothing else (ledger RH5); striking an NPC without combat values is not ready, and the goal ends without
+    /// a hit. A companion on the line is struck like any critter (ARC-COMBAT-2568, RH6). The goal's reach test (RH1) admits only a clear line, so a blocker shows up here only when the line changed after it.</summary>
     private void StrikeBlocker(AttackGoal goal, AreaObjectRecord blocker, AreaGridSession session, bool inBed = false)
     {
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var distance = (int)Chebyshev(blocker, (cell.X, cell.Y));
-        if (!IsAreaCompanion(blocker.Key) && _combatHost!.Target(owner, blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
+        // ARC-COMBAT-2568 (RH6, 0x4B3170, 0x4B2F60): a companion on the line of fire is struck like any critter (no leader or self test), by its identity and its live cell.
+        if (AreaTargetOf(blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
         {
             GD.Print($"ARC-COMBAT-012 line-of-fire strikes npc={npc.Entity} instead of {goal.Entity}");
             _lineOfFireStruck = npc.Entity;
@@ -830,14 +914,14 @@ public partial class TerrainViewerApp
         }
         if (blocker.Type == 0) { StrikeWall(goal, blocker, distance, true); return; }
         goal.Stop = true;
-        _attackNotice = $"the line of fire stops at {(IsAreaCompanion(blocker.Key) ? "a companion" : $"an object of type {blocker.Type}")}: striking it is not ready";
+        _attackNotice = $"the line of fire stops at {(IsAreaCompanion(blocker.Key) ? "a companion without combat values" : $"an object of type {blocker.Type}")}: striking it is not ready";
         GD.Print($"ARC-COMBAT-012 line-of-fire stopped type={blocker.Type} (not ready)");
         RefreshAreaStatus();
     }
 
     /// <summary>
     /// ARC-COMBAT-015, ARC-COMBAT-1941: the hit on a wall, the one the line of fire struck instead of the target (<paramref name="byLine"/>) or the one the click's goal targets: the session's wall attack, which takes nothing from the wall (OD1)
-    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The wall's own hit scripts (RH5: the weapon's hit script and the wall's points 26 and 23) are not run on this path.
+    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The weapon's hit scripts and the wall's taking-damage script run as for any struck object (ARC-COMBAT-1973, RH5).
     /// </summary>
     private void StrikeWall(AttackGoal goal, AreaObjectRecord wall, int distance, bool byLine)
     {
@@ -851,6 +935,9 @@ public partial class TerrainViewerApp
             Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
             // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
+            // ARC-COMBAT-1973 (RH5): the weapon's hit scripts (7, 34) with the wall as the extra object and the wall's taking-damage script (23), as for any struck object.
+            TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(wall), SessionSpellCaster.Hero),
+            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;

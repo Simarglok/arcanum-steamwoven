@@ -119,8 +119,8 @@ public enum SpellCastQueueOutcome { Queued, Refused, NoRun }
 /// check or the session: <see cref="SpellCastAttempt.Run"/>), or the run started and waits for its casting goal.</summary>
 public enum SpellCastAttemptOutcome { Nothing, CannotAfford, NoLineOfFire, Refused, Started }
 
-/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot.</summary>
-public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null);
+/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot; since ARC-MAGIC-1835 the invocation check's refusal when the AI's cast was refused by it (None otherwise).</summary>
+public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null, SpellInvocationRefusal Refusal = SpellInvocationRefusal.None);
 
 public enum SpellCastEventKind
 {

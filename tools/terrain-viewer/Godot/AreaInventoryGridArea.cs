@@ -222,6 +222,21 @@ public partial class AreaInventoryGridArea : Control
         QueueRedraw();
     }
 
+    /// <summary>
+    /// ARC-UI-2575: with the Steamwoven layout on, puts <paramref name="panel"/> (whose <paramref name="area"/> is the 800 × 400 frame) so the frame lies in the window zone at the layout's unit scale, whatever the panel
+    /// holds around the frame (the switch, the message and quantity rows); false while that layout is not in use (nothing is changed). The one placement of the inventory, loot and barter windows.
+    /// </summary>
+    public static bool PlaceInZone(PanelContainer panel, AreaInventoryGridArea area, Vector2 viewSize)
+    {
+        if (AreaGameBarPanel.ZoneWindow(viewSize, (int)AreaInventoryDrag.FrameWidth, (int)AreaInventoryDrag.FrameHeight) is not { } zone) return false;
+        area.FitScale((float)zone.Scale);
+        var offset = area.GlobalPosition - panel.GlobalPosition;
+        panel.Size = new((float)(AreaInventoryDrag.FrameWidth * zone.Scale) + offset.X * 2, 0);
+        panel.Size = new(panel.Size.X, panel.GetCombinedMinimumSize().Y);
+        panel.Position = new((float)zone.X - offset.X, (float)zone.Y - offset.Y);
+        return true;
+    }
+
     /// <summary>ARC-UI-051: sets the original look (null: the diagnostic shapes).</summary>
     public void SetLook(AreaInventoryArtLook? look)
     {
@@ -415,8 +430,16 @@ public partial class AreaInventoryGridArea : Control
         if (Mode == AreaInventoryMode.Contents && !ArrangeAt(frame)) { QueueRedraw(); return; }
         if (TargetPicking)
         {
-            // The own window's grid and doll only: the loot, steal and barter looks name their items by their own layouts (not ready for a target).
-            if (!BarterLook && !LootLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
+            // ARC-MAGIC-1336 (0x573850, IW44): the loot window (and the steal window, which the activation closes first) names the item under the pointer by its own layout, the holder's grid and doll
+            // and the hero's; its doll and bag buttons are the button system's and take the press first. The barter window is closed by the activation, so it has no target.
+            if (LootLook)
+            {
+                _toggleDown = ToggleAt(frame);
+                if (_toggleDown is not null) { QueueRedraw(); return; }
+                if (AreaLootArtLayout.Press(_view, LootHit(frame)) is { } lootPicked) Callable.From(() => ItemPicked?.Invoke(lootPicked)).CallDeferred();
+                return;
+            }
+            if (!BarterLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
                 Callable.From(() => ItemPicked?.Invoke(picked)).CallDeferred();
             return;
         }

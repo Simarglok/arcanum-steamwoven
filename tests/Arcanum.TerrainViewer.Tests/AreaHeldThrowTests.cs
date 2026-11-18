@@ -28,7 +28,9 @@ public sealed class AreaHeldThrowTests
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.Throw)));
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.RemoveItem)));
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Armor, false, SessionScriptPoint.WieldOff)));
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem)));
+        // ARC-COMBAT-2183: the give-back of a refusing throw script runs the insert-item script, so a throw script with one no longer refuses the lift (then the no-drop flag does).
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem)));
+        Assert.AreEqual(GameSessionFailure.ItemNotDroppable, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem)));
         Assert.AreEqual(GameSessionFailure.ItemNotDroppable, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true)));
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.ItemNotDroppable, "Ring"), "Ring cannot be dropped");
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.AttackUnsupported, "Coins"), "needs a count");

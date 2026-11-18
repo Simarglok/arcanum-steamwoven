@@ -133,7 +133,7 @@ public partial class TerrainViewerApp
         map.ObjectHitMade = LogObjectHits;
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
-            id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
+            id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id) ?? _combatHost.ContainerItemSpells(owner, id));
         // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
         var castCombat = new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts);
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, castCombat);
@@ -652,19 +652,21 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-MAGIC-1128 (0x57BC70, SU3): an activation whose BEGIN area has the inventory bit opens the caster's own inventory first: a loot or steal window leaves (the original leaves a loot window open and
-    /// closes the barter and steal ones, 0x573440; the viewer picks items of the own window only), and the window opens unless another one is open, which refuses it (the spell pane is a bar panel, the other windows replace it).
+    /// ARC-MAGIC-1128 (0x57BC70, SU3): an activation whose BEGIN area has the inventory bit opens the caster's own inventory first. ARC-MAGIC-1336 (read again in 0x57BC70): the barter (4) and steal (0xB) windows are
+    /// closed first (0x573440), a loot window (10) is kept and the cursor stands over it (its holder's items and the hero's are the targets), and the own window opens unless an inventory window is open
+    /// then; another window of the stack (the spell pane is a bar panel, the other windows replace it) refuses.
     /// </summary>
     private bool OpenInventoryForSpell()
     {
         if (!InventoryActive) { _spellNotice = "a spell on an inventory item needs the hero's inventory here"; return false; }
-        if (InventoryOpen && !WindowOpen(InterfaceMode.Inventory)) EndInventory();
+        if (WindowOpen(InterfaceMode.Barter)) EndBarter();
+        if (WindowOpen(InterfaceMode.Steal)) EndInventory();
         if (!InventoryOpen)
         {
             if (AnyWindowOpen) { _spellNotice = "targeting cancelled: a window is open"; GD.Print("ARC-MAGIC-1128 inventory-target not opened: a window is open"); return false; }
             OpenInventory();
         }
-        if (WindowOpen(InterfaceMode.Inventory)) return true;
+        if (WindowOpen(InterfaceMode.Inventory) || WindowOpen(InterfaceMode.Loot)) return true;
         _spellNotice = "the inventory did not open";
         return false;
     }
@@ -707,7 +709,11 @@ public partial class TerrainViewerApp
     private void CancelSpellTargeting(string? why)
     {
         if (_spellTargeting is null) return;
+        // ARC-MAGIC-1336: a cursor over a loot window takes the window with it when it leaves (SA38); the stack only hides the panel, so the loot window's close runs here (the lid, the junk pile, the theft).
+        var lootHolder = WindowOpen(InterfaceMode.Loot) ? _inventoryPanel?.Holder : null;
+        var lootOpen = WindowOpen(InterfaceMode.Loot);
         CloseTargetMode(InterfaceMode.SpellTarget);
+        if (lootOpen && !WindowOpen(InterfaceMode.Loot)) FinishInventoryClose(lootHolder);
         if (why is not null) { _spellNotice = "targeting cancelled: " + why; GD.Print("ARC-MAGIC-015 targeting-cancel " + why); }
     }
 

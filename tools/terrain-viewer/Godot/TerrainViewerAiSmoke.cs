@@ -182,10 +182,24 @@ public partial class TerrainViewerApp
             if (start is null) { GD.Print($"ARC-WORLD-092 native-smoke ai NO-TARGET map={map.RuntimeMap} (no animal the hero can stand near and see)"); return; }
             var entity = target.Holder.Entity;
             AreaSmokePlace(map, start.Value);
-            if (!HeroInCombatMode) ToggleCombatMode();
-            Require(HeroInCombatMode, "the hero is in combat mode");
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             PublishWorldSelection();
+            // ARC-COMBAT-1944 (0x54ED30): out of combat mode, a press on an NPC that is not attacking the hero leaves combat mode off; once its first run is an attack aimed at the hero, the same press enters combat mode.
+            var attackerClick = "skipped";
+            if (!HeroInCombatMode && AreaAiHostNow() is { } clickHost)
+            {
+                var clickPoint = await HoverPointAsync(this, commands[target.Row.Key]) ?? throw new InvalidOperationException("ARC-COMBAT-1944 smoke: target not visible");
+                Require(!EnterCombatModeForAttacker(clickPoint, false, false) && !HeroInCombatMode, "a press on an NPC that does not attack the hero leaves combat mode off");
+                clickHost.PerformAttack(entity, AiSchedulerRules.Pc);
+                var attackRun = clickHost.RunOf(entity);
+                Require(attackRun is { Bottom.Goal: GoalType.Attack or GoalType.AttemptAttack }, $"the NPC's first run attacks the hero: {attackRun?.Bottom.Goal} {clickHost.TraceOf(entity)?.Perform}");
+                Require(EnterCombatModeForAttacker(clickPoint, false, false) && HeroInCombatMode, "a press on an NPC about to attack the hero enters combat mode");
+                clickHost.InterruptAnimations(entity);
+                attackerClick = "entered";
+            }
+            GD.Print($"ARC-COMBAT-1944 attacker-click {attackerClick}");
+            if (!HeroInCombatMode) ToggleCombatMode();
+            Require(HeroInCombatMode, "the hero is in combat mode");
             var host = AreaAiHostNow();
             Require(host is not null, "the AI host is built");
             Require(session.QueryAiTick(entity) is not null, "the NPC has its AI tick");

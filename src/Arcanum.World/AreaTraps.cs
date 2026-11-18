@@ -309,6 +309,14 @@ public sealed class AreaTraps
 
     private const int TrapDifficultySlot = 37;
 
+    /// <summary>ARC-AI-2625 (the target test 0x4BBDD0 of the spot trap skill's attempt, ledger OD6): the trap class of a row's script at point 1 as the session holds it (<see cref="TrapClass.Magical"/> for header flag 0x2, <see cref="TrapClass.Nonmagical"/> for 0x1),
+    /// <see cref="TrapClass.None"/> for a row with no such script or a removed trap. The test asks no object type and no known-to-the-player state, and the destroyed row is read as it stands.</summary>
+    public TrapClass TargetClass(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return _host.TrapState(row) is { Trapped: true } state ? state.Class : TrapClass.None;
+    }
+
     /// <summary>The trap objects the player knows on <paramref name="cell"/> that the session has not destroyed, in snapshot order.</summary>
     public IReadOnlyList<AreaObjectRecord> KnownTrapObjectsOn(CellCoord cell) =>
         TrapObjectsOn(cell).Where(KnownTrap).ToArray();

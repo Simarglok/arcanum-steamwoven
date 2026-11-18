@@ -366,11 +366,19 @@ public partial class AreaWorldMapArtView : Control
     /// <summary>The window between the bars at the largest whole factor that fits (at least a quarter when it cannot).</summary>
     public void Place()
     {
+        // ARC-UI-2575: with the Steamwoven layout the window lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneWindow(GetViewportRect().Size, AreaWorldMapArtLayout.WindowWidth, AreaWorldMapArtLayout.WindowHeight) is { } zone)
+        {
+            Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+            Position = new Vector2((float)zone.X, (float)zone.Y);
+            RedrawOnScaleChange();
+            return;
+        }
         var (top, free) = AreaGameBarPanel.FreeArea(GetViewportRect().Size);
         var fit = MathF.Min(free.X / AreaWorldMapArtLayout.WindowWidth, free.Y / AreaWorldMapArtLayout.WindowHeight);
         var factor = fit >= 1 ? MathF.Floor(fit) : MathF.Max(.25f, fit);
         Scale = new Vector2(factor, factor);
-        Position = new Vector2(MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
+        Position = new Vector2(AreaGameBarPanel.FreeLeft + MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
             top + MathF.Round((free.Y - AreaWorldMapArtLayout.WindowHeight * factor) / 2));
         RedrawOnScaleChange();
     }

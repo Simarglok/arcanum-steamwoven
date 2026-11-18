@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Data.Area;
 using Arcanum.Data.Messages;
 using Arcanum.TerrainViewer.Core;
@@ -115,7 +116,28 @@ public partial class TerrainViewerApp
     {
         // The armed cursors and skills are other interface modes (the open spell and item cursors, lockpicks, pick pocket, disarm): they keep their own mask.
         if (altHeld || !AttackMapActive || !HeroInCombatMode || _spellTargeting is not null || _itemAiming is not null || _lockpickArmed is not null || PickPocketArmed || DisarmArmed) return null;
-        return key => IsAreaCompanion(key) || AreaTargetOf(key) is { } t && AreaHover.PickSeesThrough(true, false, t.Dead, t.Follower);
+        // ARC-INPUT-2517 (0x441260, 0x4411C0): the whole follower tree of the PC is hidden, followers of followers too (a follower of a follower waiting under its NPC leader is no entry of the leader's array).
+        var tree = _areaSession!.QueryFollowerTree(SessionEventKinds.PlayerEntity).ToHashSet(StringComparer.Ordinal);
+        var deadBox = DeadPickBox();
+        return key => IsAreaCompanion(key) || AreaTargetOf(key) is { } t
+            && AreaHover.PickSeesThrough(true, false, t.Dead && DeadInPickBox(deadBox, t.Row), tree.Contains(t.Entity));
+    }
+
+    private static bool DeadInPickBox(PickHideRules.Box? box, Arcanum.Data.Area.AreaObjectRecord row) =>
+        box is { } b && row.WorldX is { } x && row.WorldY is { } y && b.Contains(x, y);
+
+    /// <summary>ARC-INPUT-2517: the tile box of the dead critters the pick hides, from the view's centre point, its size and the hero's tile; null when the original lists none.</summary>
+    private PickHideRules.Box? DeadPickBox()
+    {
+        if (_worldActor.Session is not AreaGridSession session || _canvas is null) return null;
+        var view = GetViewport().GetVisibleRect().Size;
+        var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * (view / 2);
+        // The chart frame draws its tiles 40 px right of the source's projection (AreaGridSession.LocationOriginX) and counts cells from the chart origin.
+        var origin = session.Chart;
+        long centreX = (long)Math.Floor(chart.X) - AreaGridSession.LocationOriginX + 40 * (origin.OriginY - origin.OriginX);
+        long centreY = (long)Math.Floor(chart.Y) + 20 * (origin.OriginX + origin.OriginY);
+        var hero = session.Chart.ToWorld(session.State.CommittedCell);
+        return PickHideRules.DeadBox(hero.X, hero.Y, centreX, centreY, (int)view.X, (int)view.Y);
     }
 
     /// <summary>The frontmost pickable object with an opaque drawn pixel under the screen point. A wall drawn faded
@@ -194,7 +216,7 @@ public partial class TerrainViewerApp
                 if (foe.Dead) return Godot.Input.IsKeyPressed(Key.Alt) && InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } corpse
                     ? Chebyshev(corpse.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot
                     : AreaHoverAction.None;
-                if (foe.Follower && !LeftAltHeld || IsAreaCompanion(hit) || foe.Build.Combat is null) return AreaHoverAction.None;
+                if (foe.Follower && !LeftAltHeld || foe.Build.Combat is null) return AreaHoverAction.None;
                 if (_areaSession!.QueryHeroAttack() is not { Supported: true } hero || _areaSession.QueryHeroLife() is not { Status.IsActive: true })
                     return AreaHoverAction.None;
                 var reach = hero.Range;

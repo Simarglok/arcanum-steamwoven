@@ -231,6 +231,8 @@ public partial class AreaItemServicePanel : CanvasLayer
         if (ArtMode)
         {
             // ARC-UI-1765: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it (as the inventory and barter windows' original look).
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the loot window hides the bars; the zone is the layout's all the same).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
@@ -242,7 +244,7 @@ public partial class AreaItemServicePanel : CanvasLayer
                 _panel.Size = new(frameWidth, 0);
             }
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, free.Y));
-            _panel.Position = new((free.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (free.X - frameWidth) / 2, top);
             return;
         }
         var size = GetViewport().GetVisibleRect().Size;

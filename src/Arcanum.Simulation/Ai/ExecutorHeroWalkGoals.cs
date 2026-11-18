@@ -334,6 +334,8 @@ public static partial class AiExecutorRules
         // ARC-DEV-302 (GT148, D8): a held hero takes no step; the walk asks again in a frame and goes on to its destination when the hold ends.
         if (block == AiStepBlock.Held) return new(Move.Restart, Delay: HeroRoutePollMs, Reason: AiExecutorReason.StepHeld);
         if (block != AiStepBlock.Clear) return BlockedWalk(goal);
+        // ARC-COMBAT-2561 (GT148, GT213): the step start 0x42E9B0 answers false at once while run flag 0x100 (no-walk, a Shift click) is set, and a refusal ends the whole run (a click that added the flag to a walk run in a round stops it at its next step).
+        if ((state.Flags & GoalRunFlags.NoWalk) != 0) return End(AiExecutorReason.NoWalkStep);
         var ms = world.BeginStep(from, next, HeroRunning(state, world));
         if (ms <= 0) return BlockedWalk(goal);
         return new(Move.Next, 1, Delay: Math.Max(ms, 1), Top: goal with { PathIndex = index + 1 });

@@ -105,6 +105,14 @@ public sealed class AreaGreeting : IDialogGreetingPort
     /// <summary>The script number of <see cref="Overrides"/> (its voices are numbered by it), or null.</summary>
     public int? OverrideScriptNumber { get; }
 
+    /// <summary>
+    /// ARC-AI-1640 (VB4-1/-2/-4): the voice identity a line of <paramref name="origin"/> carries: an override line speaks with its own record's voice (the script number and the number of the record's condition
+    /// field), every other origin, a record this dialog lacks and a missing line have none (-1), as the comment builders write their voice id beside the text.
+    /// </summary>
+    public int OverrideVoice(DialogLineOrigin? origin) => origin is { Kind: DialogLineOriginKind.Override } line && Overrides is { } overrides && OverrideScriptNumber is { } script
+        && overrides.TryGetRecord(line.Number, out var own) && own is not null
+        ? Arcanum.Data.Audio.SoundCatalog.SpeechIdentity(script, Arcanum.Data.Audio.SoundCatalog.SpeechConditionField(own.Condition.Bytes)) : -1;
+
     /// <summary>The override script of a speaker: its SAP key 31 attachment's script number, or null without one.</summary>
     public static int? OverrideScript(AreaSpeaker speaker)
     {

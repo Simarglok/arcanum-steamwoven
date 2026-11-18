@@ -19,6 +19,7 @@ using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Items;
 
 namespace Arcanum.World;
 
@@ -142,6 +143,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-COMBAT-1776 (0x42A4E0): the lock a pick-locks goal's target names (a door, window or container of the shown map, by the goal's target string), as the session picks it: the object, its T0 lock facts, the lock's difficulty and the
     /// light at it; null (the provider, or its answer) for a target that is none or gone. Null delegate: no NPC picks a lock, and the attempt names it a gap.</summary>
     public Func<string, SessionPickLockTarget?>? PickLockTarget { get; init; }
+    /// <summary>ARC-AI-2625 (0x4C7160 case 7, the target test 0x4BBDD0): the trap class of the object a spot-trap attempt names (its script at point 1: magical for header flag 0x2, non-magical for 0x1; <see cref="TrapClass.None"/> for a target with no trap, the
+    /// hero, or one the shown map does not hold). Null delegate: every target holds no trap, so the attempt is the roll and the master's second roll alone.</summary>
+    public Func<string, TrapClass>? TargetTrapClass { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-AI-2084 (ledger GW5): a guard witness's catching-thief script (point 11, 0x4AEE50) after it saw or heard the actor at an act on a portal, container or scenery: the witness (the attachee), the actor (the triggerer; the hero is "pc") and the guarded object (the script's extra object); true when the witness goes on ("run default", or no script that runs), false when the script skipped the default and the witness is left out. Null: no script runs.</summary>
@@ -202,7 +206,7 @@ public interface IAreaAiFollowers
     IReadOnlyList<AreaAiNpc> Npcs { get; }
     /// <summary>Walks the companion one step onto the world cell <paramref name="next"/> (a neighbour of its cell); false when its walk
     /// refuses it.</summary>
-    bool Step(string entity, CellCoord next, bool running);
+    bool Step(string entity, CellCoord next, bool running, bool sneaking = false);
     /// <summary>Turns the companion toward the world cell <paramref name="toward"/>.</summary>
     void Face(string entity, CellCoord toward);
     /// <summary>ARC-DEV-105 (MIG9 S5): moves the companion onto the world cell <paramref name="cell"/> at once (the follower catch-up, 0x4AD4D0);
@@ -267,6 +271,10 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionHealResult? Heal { get; init; }
     /// <summary>ARC-DEV-246: what an NPC's pick pocket did (<see cref="AreaAiNoticeKind.Skill"/> with the pick pocket skill).</summary>
     public SessionNpcPickPocketResult? PickPocket { get; init; }
+    /// <summary>ARC-AI-1854: the session's plain roll of a skill with no handler of its own (the goal-33 attempt's remaining cases).</summary>
+    public SessionNpcSkillRoll? PlainRoll { get; init; }
+    /// <summary>ARC-AI-2622: the session's answer of an NPC's repair of an item (<see cref="GameSessionOwner.RepairByNpc"/>); null when the host did not ask it (no sheet or no repairable item).</summary>
+    public SessionNpcRepairResult? Repair { get; init; }
     /// <summary>ARC-COMBAT-1776 (<see cref="AreaAiNoticeKind.Skill"/> with the pick-locks skill): the session's answer of an NPC's pick of a lock (<see cref="GameSessionOwner.PickLockByNpc"/>); null when the host did not ask it (no sheet or no lock target).</summary>
     public SessionPickLockResult? PickLock { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
@@ -451,7 +459,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if ((only is not null && !only.Contains(place.Entity)) || !_npcs.TryGetValue(place.Entity, out var npc) || Gone(place.Entity)) continue;
             // A place the shown map cannot hold (outside the chart, not admitted: a window moved since, or a damaged value) or the hero's own cell is
             // not restored: the NPC stands on its map data's cell, as before the place was state.
-            if (!PlaceHeld(place.World))
+            // ARC-INPUT-1946: a body the hero pulled onto its own cell is restored there (only a dead NPC may lie on the hero's cell).
+            if (!PlaceHeld(place.World, Status(place.Entity) is { IsDead: true }))
             {
                 Trace(npc.Entity).Step = $"place {place.World.X},{place.World.Y} not restored";
                 continue;
@@ -1915,10 +1924,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiMoverFacts Mover(string id)
     {
         var status = Status(id);
+        var prowling = id != Pc && _session.IsConcealed(SessionCombatant.Critter(id));
         // ARC-AI-1653 (0x426E80): the goals' unconceal test reads the shown art (animation 5, the crouch), not the flag; the end nodes' standing art reads the flag (0x45EDE0).
         return new(Pc: id == Pc, KnockedDown: id != Pc && status is { IsDead: false, IsUnconscious: false } && ShownAnimation(id) == DyingAnimationRules.FallDown,
-            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)), Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
-            SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut);
+            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: prowling, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
+            SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut,
+            // ARC-AI-1711 (0x42EDC0, 0x4C60C0 with skill 6): a flagged critter runs only as a prowling master; no sheet reads as untrained.
+            ProwlingTraining: prowling ? NpcSkill(id, Skill.Prowling)?.Training ?? SkillTraining.None : SkillTraining.None);
     }
 
     /// <summary>The terrain step from the object's tile toward the other's: walls, doors and objects other than critters decide
@@ -2229,12 +2241,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _startedStep = null;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         if (InRound && RoundActor != id) OffTurnSteps++;
-        var gait = running ? MovementGait.Run : MovementGait.Walk;
+        // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk, a run wanted ignored (the goals' RunPermitted already refuses it).
+        var sneaking = id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)) && AiExecutorRules.Sneaks(Mover(id));
+        if (sneaking) running = false;
+        var gait = running ? MovementGait.Run : sneaking ? MovementGait.Sneak : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        if (_followers.ContainsKey(id)) { if (_scene.Followers!.Step(id, next, running)) _startedStep = id; else Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
-        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); _startedStep = id; }
+        if (_followers.ContainsKey(id)) { if (_scene.Followers!.Step(id, next, running, sneaking)) _startedStep = id; else Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
+        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running, sneaking: sneaking); RecordPlace(id); NoteEntered(id, next); _startedStep = id; }
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }
@@ -2397,7 +2412,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (!TryNpc(id, out var npc) || Values(id) is not { } values) return new(1, 1);
         if (NpcCombatMode(id) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(id), true, context);
-        if (target == Pc || _session.QueryCompanion(target).LedByPc && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
+        // ARC-COMBAT-2597 (VC38): the NPC target's leader is followed up the chain to the PC (0x45DDA0), not only the direct leader.
+        if (target == Pc || PcLeader(target) is not null && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
         Face(id, target);
         // ARC-RENDER-038: the attack ART of the animation and the weapon the attacker's body shows (WA1, WA4), its frames, action frame
         // and the rate of its weapon slot; an ART the viewer cannot read plays with the fixed human attack ART's timing.
@@ -3130,24 +3146,100 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
     /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
     /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
-    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). NOT READY: every other skill (the other skills a script might start), which does nothing and
+    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). ARC-AI-1854: the plain-roll skills are <see cref="PlainSkillAttempt"/>. ARC-AI-2623: gambling is <see cref="GamblingAttempt"/>. ARC-AI-2622: repair is <see cref="RepairAttempt"/>. Pick locks has its own attempt goal (67, <see cref="AttemptPickLocks"/>), so goal 34 never carries it. NOT READY: repair, which does nothing and
     /// answers false.
     /// </summary>
     [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
+        if (skill == (int)Skill.Repair) return RepairAttempt(id, target);
+        if (skill == (int)Skill.Gambling) return GamblingAttempt(id, target);
         if (skill != AiPassChoice.HealSkill)
-        {
-            Trace(id).Skill = $"skill {skill} on {target}: not ready";
-            _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill });
-            return false;
-        }
+            return PlainSkillAttempt(id, target, skill);
         var heal = HealByNpc(id, target, item, out var refusal);
         Trace(id).Skill = heal is null ? $"heal {target}: {refusal}"
             : $"heal {target} {heal.Disposition} {heal.Failure} success={heal.Check?.Success} hp={heal.Heal?.HitPoints} uses={heal.UsesLeft?.ToString() ?? "-"}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, Heal = heal });
         return heal is { Disposition: GameSessionDisposition.Changed, Check.Success: true };
+    }
+
+    /// <summary>
+    /// ARC-AI-1854 (0x4C7160, the cases with no world write): the skills that have no case of their own in the attempt (bow, melee, throwing, backstab, prowling, haggle, persuasion, firearms), dodge (its incapacity gate), spot trap
+    /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is
+    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. NOT READY: repair (its own handler: item damage), the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
+    /// outside the 16 answers false.
+    /// </summary>
+    private bool PlainSkillAttempt(string id, string target, int skill)
+    {
+        string? refusal = null;
+        SessionNpcSkillRoll? roll = null;
+        if (skill is < 0 or > (int)Skill.DisarmTraps || !GameSessionOwner.IsPlainNpcSkill((Skill)skill)) refusal = "not ready";
+        else if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else
+        {
+            var incapable = skill == (int)Skill.Dodge && DodgeRefused(id);
+            var trap = skill == (int)Skill.SpotTrap ? _scene.TargetTrapClass?.Invoke(target) ?? TrapClass.None : TrapClass.None;
+            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable, trap);
+        }
+        Trace(id).Skill = roll is null ? $"skill {skill} on {target}: {refusal}"
+            : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Critical} second={roll.SecondRoll}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, PlainRoll = roll });
+        return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
+    }
+
+    /// <summary>
+    /// ARC-AI-2623 (0x4C7160 with skill 8, the roll 0x4C6560): an NPC's gambling attempt, the session's <see cref="GameSessionOwner.RollNpcGambling"/> with the stored roll of the skill module. The skill is opposed by the target's
+    /// gambling level (0x4C6410 over 0x4C5EB0): the hero's, a map NPC's from its sheet, 0 for a target that is no critter. A target the host holds no fields of, or a critter with no sheet, is not read and the attempt does nothing. The answer is
+    /// the check's success (run flag 0x40000); the handler has no case of its own for the skill. NOT READY: the opponent of the other opposed skills (persuasion).
+    /// </summary>
+    private bool GamblingAttempt(string id, string target)
+    {
+        string? refusal = null;
+        SessionNpcSkillRoll? roll = null;
+        int? opponent = null;
+        if (target == Pc) { if (_session.QueryHeroSkills() is { } heroSkills) opponent = heroSkills[Skill.Gambling].Level; else refusal = "no hero"; }
+        else if (Fields(target) is not { } fields) refusal = "no target";
+        else if (fields.Critter is null) opponent = 0;
+        else if (_scene.NpcSheet?.Invoke(target) is { } targetSheet) opponent = _session.QueryNpcSkills(targetSheet.Loaded, targetSheet.Modifiers)[Skill.Gambling].Level;
+        else refusal = "no target sheet";
+        if (refusal is null)
+        {
+            if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+            else roll = _session.RollNpcGambling(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), opponent);
+        }
+        Trace(id).Skill = roll is null ? $"gambling on {target}: {refusal}"
+            : $"gambling on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} roll={roll.Check?.Check.Roll} next={roll.Check?.NextGamblingRoll}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = (int)Skill.Gambling, PlainRoll = roll });
+        return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
+    }
+
+    /// <summary>
+    /// ARC-AI-2622 (0x4C7160, repair case 12): the NPC repairs the item the goal names with the session's <see cref="GameSessionOwner.RepairByNpc"/>, on the item's own fields: an item it holds or one lying loose on the shown map
+    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>). The answer is the case's success, which sets the run's flag 0x40000. The original's repair has no target test, so a critter or a scenery target would be
+    /// "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). NOT READY: an item in a junk pile, an item of another holder (the hero's, another NPC's), the swap of a ground item's drawn art
+    /// after a master's broken-art clear, and the repair UI callbacks of the local player.
+    /// </summary>
+    private bool RepairAttempt(string id, string target)
+    {
+        string? refusal = null;
+        SessionNpcRepairResult? result = null;
+        if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else if (RepairBaseline(id, target) is not { } baseline) refusal = "no item to repair";
+        else result = _session.RepairByNpc(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), target, baseline);
+        Trace(id).Skill = result is null ? $"repair {target}: {refusal}"
+            : $"repair {target} {result.Disposition} {result.Failure} success={result.Success} check={result.Check?.Success} critical={result.Check?.Critical} status={result.Repair} amount={result.Amount}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = (int)Skill.Repair, Repair = result });
+        return result is { Disposition: GameSessionDisposition.Changed, Success: true };
+    }
+
+    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds or one lying loose on the shown map; null for any other target.
+    private ItemCondition? RepairBaseline(string id, string target)
+    {
+        var fields = _scene.Combat.HeldItemFields(_session, id, target);
+        if (fields is null && GroundView()?.Ground.FirstOrDefault(ground => ground.Item.Entity == target) is { } lying && !_session.IsItemDestroyed(target))
+            fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying.Item);
+        return fields is null ? null : SessionItemConditions.FromCombatFields(fields);
     }
 
     /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>
@@ -3229,6 +3321,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         }
         return _session.HealByNpc(_session.Version, new SessionNpcHeal(healer.Target, sheet.Loaded, sheet.Modifiers, life, healing));
     }
+
+    /// <summary>
+    /// ARC-AI-2625 (0x4C7160 case 1): the actor tests of the dodge attempt, in the exe's order: unconscious (0x45D800: fatigue at or below 0 and not undead), the spell flag 0x10000 (stoned), critter flags 0x60 (stunned 0x20 or paralysed
+    /// 0x40). Any of them forces the failure (no success, no critical). The attempt tests no death: a dead critter that none of these holds could dodge, and the object flag 0x10000 <see cref="CanAct"/> reads is not tested.
+    /// </summary>
+    private bool DodgeRefused(string id) => Unconscious(id) || Stoned(id) || Stunned(id) || Paralysed(id);
 
     // Object flag 0x10000 and a stunned or paralysed critter refuse an action's turn and start.
     private bool CanAct(string id)
@@ -3513,7 +3611,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ? caster.CastByScript(npc, choice.Spell, scriptTarget, script.Free, script.Unresistable)
             : caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
         if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
-        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
+        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal} {(attempt.Refusal == Arcanum.Simulation.Magic.SpellInvocationRefusal.None ? "" : "check " + attempt.Refusal)}";
         if (attempt.RunId is not { } run) return new(null);
         var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
         if (RunOf(npc) is not { } held || held.Bottom.Goal is not (GoalType.CastSpell or GoalType.AttemptSpell))
@@ -4038,11 +4136,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private const int ViewHalfTiles = 10;
 
     /// <summary>
-    /// ARC-WORLD-1160 (E3-a; ledger SWB9, the follower recursion): the life targets of the hero's followers the host runs, for the rest's heal (an NPC led by a follower is not a list this world
-    /// keeps: the original's recursion over the follower arrays reaches only the hero's own followers here).
+    /// ARC-WORLD-1160 (E3-a; ledger SWB9, the follower recursion), ARC-WORLD-2596: the life targets of the hero's follower tree the host runs, for the rest's heal, in the order of the original's follower walk (the
+    /// direct followers, then each one's own tree, <see cref="GameSessionOwner.QueryFollowerTree"/>): a follower of a follower (a companion's summon or a script group under a companion) is healed too. A critter the
+    /// host holds no record of is left out, as in <see cref="Followers"/>.
     /// </summary>
     public IReadOnlyList<SessionLifeTarget> FollowerLifeTargets() =>
-        [.. Followers(Pc).Select(RawBuild).Where(build => build is not null).Select(build => build!.Target)];
+        [.. _session.QueryFollowerTree(Pc).Where(id => Find(id) is not null).Select(RawBuild).Where(build => build is not null).Select(build => build!.Target)];
 
     /// <summary>
     /// ARC-COMBAT-1777 (0x441260, 0x4C9050; ledger OH4, PL5): the users the best-follower chooser scores after the PC, in the PC's all-followers list's order (<see cref="FollowerSkillRules.AllFollowers"/>): each follower of the hero this host
@@ -4245,7 +4344,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             record.HitBy is { } hit ? Id(hit) : null, record.Enemies.Select(Id).ToArray());
     }
 
-    public string? MindController(string npc) => null;
+    /// <summary>ARC-WORLD-2144 (0x459040, mask OSF_MIND_CONTROLLED): the controller of a mind-controlled NPC, the parent of the spell run that holds it (see <see cref="SessionSpellCaster.AiMindController"/>); null when the NPC is not mind controlled or no cast host is built.</summary>
+    public string? MindController(string npc) => _scene.Spells?.Invoke() is { } spells && Fields(npc)?.Object is { } o
+        ? spells.AiMindController(npc, unchecked((int)SpellFlagsOf(npc, o.SpellFlags))) : null;
 
     /// <summary>The critters of the square of half-size <paramref name="halfSize"/> around the object, in the map's scan order.</summary>
     public IReadOnlyList<string> Square(string npc, int halfSize) => Tile(npc) is { } center ? SquareAt(center, halfSize) : [];
@@ -4389,16 +4490,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-2127: the facts of the unforced unwait (0x4AA8C0 → 0x4AD950 with the NPC leader as the player) of a follower waiting under an NPC leader, read here: the leader's side, the follower's alignment,
-    /// level and the thresholds of its AI row, and the mind-control acceptance (no controller is tracked, so the first check accepts a mind-controlled follower whose chain of leaders reaches a player character,
-    /// the join's second check none). Null when the NPC has no NPC leader, no AI row or the leader's stats are not readable here.
+    /// level and the thresholds of its AI row, and the mind-control acceptance (a controller equal to the leader accepts both checks; with no controller record the first check accepts a mind-controlled follower whose chain of leaders reaches a player character,
+    /// the join's second check none; another controller accepts neither). Null when the NPC has no NPC leader, no AI row or the leader's stats are not readable here.
     /// </summary>
     internal NpcLeaderUnwaitFacts? LeaderUnwaitFacts(string npc)
     {
         if (Leader(npc) is not { } leader || leader == Pc || NpcLeaderSide(leader) is not { } side || Fields(npc) is not { } fields || AlignmentOf(npc) is not { } alignment || Row(npc) is not { } row || Build(npc) is not { } build) return null;
+        // ARC-WORLD-2144 (0x4AD950): a controller equal to the leader accepts in both checks; with no controller found the chain walk to a PC accepts the first check only (the handle is cleared at the second); another controller accepts neither.
         var mind = (SpellFlagsOf(npc, fields.Object.SpellFlags) & MindControlledSpell) != 0;
+        var (first, second) = MindControlAcceptance(mind, MindController(npc), leader, () => PcLeader(npc) is not null);
         return new(side.Persuasion, side.Alignment, side.Level, side.MaxFollowers, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
-            alignment, build.Level, mind && PcLeader(npc) is not null, false, side.Charisma);
+            alignment, build.Level, first, second, side.Charisma);
     }
+
+    /// <summary>
+    /// ARC-WORLD-2144 (0x4AD950's mind-control branch): whether a mind-controlled follower is accepted by the first check and by the join's second one (the handle is cleared, so the chain walk 0x45DDA0 cannot see a PC): a controller equal
+    /// to the leader accepts both; no controller record accepts the first when a PC leads it up its chain; another controller accepts neither (the ordinary tests follow). Not mind controlled: neither.
+    /// </summary>
+    internal static (bool First, bool Second) MindControlAcceptance(bool mindControlled, string? controller, string leader, Func<bool> pcChain) =>
+        !mindControlled ? (false, false) : controller is null ? (pcChain(), false) : (controller == leader, controller == leader);
 
     /// <summary>The unforced unwait of a follower waiting under an NPC leader with the facts read here (<see cref="LeaderUnwaitFacts"/>); null when they cannot be read.</summary>
     internal PartyMutationResult? UnwaitUnforced(string npc) =>

@@ -58,6 +58,17 @@ public sealed record UseItemRequest(string Item, string Target, bool Ctrl, bool 
 /// <summary>ARC-DEV-365 (T-g, ledger IA9, IA11): the item cursor's apply of a trap device on a tile: the goal 41 starts with the item and the tile (walks next to the tile, then uses the device).</summary>
 public sealed record UseItemOnTileRequest(string Item, CellCoord Tile) : HeroRequest;
 
+/// <summary>ARC-INPUT-1946: what the Alt action 0x4445A0 did to its target.</summary>
+public enum HeroImmediateResult
+{
+    /// <summary>The target is no item or body the action takes (an item in an inventory, nothing the viewer holds): nothing happened.</summary>
+    None,
+    /// <summary>The target was within one tile of the hero and was moved onto the hero's tile.</summary>
+    Moved,
+    /// <summary>The target lies farther than one tile away: the original tells its UI hook (0x4606C0, not modelled) and moves nothing.</summary>
+    TooFar,
+}
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -77,7 +88,9 @@ public enum HeroRequestOutcome
 /// <param name="Rotation">The rotation 0..7 of a turn the request started; null without one.</param>
 /// <param name="Verdict">The rotate starter's verdict where one was asked (a stop or a face), else <see cref="RotateStartVerdict.NoObject"/>.</param>
 /// <param name="Click">The goal an <see cref="ObjectClickRequest"/> decided on (<see cref="HeroClickGoal.None"/> for the other requests, and for a click the rules refuse).</param>
-public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = false, int? Rotation = null, RotateStartVerdict Verdict = RotateStartVerdict.NoObject, HeroClickGoal Click = HeroClickGoal.None);
+/// <param name="Start">ARC-COMBAT-1949: how an object click's goal started (the start branch of 0x54ED30); null for the other requests and for a click the rules refused first.</param>
+/// <param name="BodyOfAirMessage">ARC-COMBAT-1943: the click's attack was refused by the hero's Body of Air spell flag, whose line 25 of the interface message file the caller shows.</param>
+public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = false, int? Rotation = null, RotateStartVerdict Verdict = RotateStartVerdict.NoObject, HeroClickGoal Click = HeroClickGoal.None, HeroClickStart? Start = null, bool BodyOfAirMessage = false);
 
 /// <summary>What the hero is, and does, now (the facts the request rules read).</summary>
 /// <param name="Cell">The hero's cell on the map; null when it has none.</param>
@@ -89,7 +102,17 @@ public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = fa
 public readonly record struct HeroFacts(CellCoord? Cell, int Facing, bool Active, int HighestRunPriority, bool InRound, bool IsCurrentParticipant);
 
 /// <summary>The hero's input settings the always-run rule reads.</summary>
-public readonly record struct HeroInputOptions(bool AlwaysRunOption, bool NumLockRun);
+/// <param name="AutoAttack">ARC-COMBAT-1949: the "auto attack" option (0x4B8230), which the click's start branch reads outside a round.</param>
+public readonly record struct HeroInputOptions(bool AlwaysRunOption, bool NumLockRun, bool AutoAttack = false);
+
+/// <summary>
+/// ARC-COMBAT-1949 (VC62): what the click's start branch reads of the hero's runs for the goal it is about to start.
+/// </summary>
+/// <param name="EqualGoalQueued">An equal goal is queued (0x44E6F0): the bottom goal of a run of the hero is the goal or its alias, with the same objects.</param>
+/// <param name="MainDepth">The main run's current-goal index (its goal count minus one); 0 with no main run in the table.</param>
+/// <param name="MainTopIdle">The main run's top goal is 1 or 2 (0x4373F0).</param>
+/// <param name="FidgetMain">The hero's first run is its main run and its bottom goal is the fidget 2 (0x44E830).</param>
+public readonly record struct HeroStartContext(bool EqualGoalQueued, int MainDepth, bool MainTopIdle, bool FidgetMain);
 
 /// <summary>
 /// The hero's side of the request boundary: what a request needs from the world it is applied to. The viewer implements it over its
@@ -109,6 +132,8 @@ public interface IHeroActions
     bool EndHeldWalk();
     /// <summary>ARC-DEV-169: the facts of an object click on <paramref name="target"/> (the class of the object, the hero's and the target's state) for the click decision.</summary>
     HeroClickFacts ClickFacts(string target, bool alt, bool shift) => new(false, false, false, false, false, HeroClickTarget.Other);
+    /// <summary>ARC-INPUT-1946 (0x4445A0): the Alt click's immediate action on <paramref name="target"/>, a loose item or a body: within one tile of the hero (Chebyshev) it is moved onto the hero's tile with no offset, farther nothing moves; builds no goal and costs no action points.</summary>
+    HeroImmediateResult ImmediateAction(string target) => HeroImmediateResult.None;
     /// <summary>ARC-DEV-169: starts the hero's talk goal 21 at <paramref name="target"/>, running when <paramref name="run"/> (ARC-AI-1137: with <paramref name="noWalk"/>, the click had Shift, the run flag 0x100 is set and no approach steps: GT122); false when the movement gate or a run's refusal stopped it.</summary>
     bool StartTalk(string target, bool run, bool noWalk) => false;
     /// <summary>ARC-DEV-174: starts the hero's use goal 38 (<paramref name="container"/>: 81) at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
@@ -121,6 +146,12 @@ public interface IHeroActions
     bool StartAttemptAttack(string target) => false;
     /// <summary>ARC-DEV-182: starts the hero's throw goal 37 of <paramref name="item"/> at <paramref name="tile"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartThrow(string item, CellCoord tile) => false;
+    /// <summary>ARC-COMBAT-1949: what the start branch reads of the hero's runs for <paramref name="goal"/> at <paramref name="target"/> (the item: <paramref name="item"/> for a throw).</summary>
+    HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null) => default;
+    /// <summary>ARC-COMBAT-1949: queues the click's goal <paramref name="goal"/> at <paramref name="target"/> beneath the hero's main run (0x44DBE0 -> 0x44D9B0); false when there is no such run or the table refused (nothing changed).</summary>
+    bool QueueGoal(HeroClickGoal goal, string target) => false;
+    /// <summary>ARC-COMBAT-1949: applies the click's run flags to the hero's existing main run (label 0x54FB19): Shift sets the no-walk flag 0x100, otherwise running 0x40 (refused at encumbrance 4); <paramref name="nearOccupied"/> (use 38 and 81) adds 0x4000. No-op with no main run in the table.</summary>
+    void ApplyClickFlags(bool shift, bool nearOccupied) { }
     /// <summary>ARC-DEV-183: starts the hero's casting goal 26 for the magic run <paramref name="run"/>; false when a run's refusal stopped it.</summary>
     bool StartCast(int run, string? target) => false;
     /// <summary>ARC-DEV-184: starts the hero's skill goal 33 for a pick pocket (0x4350F0, skill 5); false when the gate or a run's refusal stopped it.</summary>
@@ -235,21 +266,48 @@ public sealed class HeroRequestHost
         var facts = _hero.Facts();
         // TT2: a hero that cannot act puts the item back (the viewer does that); the goal needs no walk, so the start is the click's (GS27): a hero with no main run starts at once, otherwise its runs are interrupted at level 3.
         if (!facts.Active) return new(HeroRequestOutcome.Ignored);
-        if (HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false) == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored);
-        return new(_hero.StartThrow(request.Item, request.Tile) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused);
+        // ARC-COMBAT-1949: the throw takes the click's start branch too (an equal throw already queued is ignored with the option on; its flags are the keyboard's at the press, which the request does not carry).
+        var context = _hero.StartContext(HeroClickGoal.None, null, request.Item);
+        var start = HeroClickRules.ClickStartOf(_hero.Options().AutoAttack, facts.InRound, facts.HighestRunPriority > 0, context.EqualGoalQueued, false, context.MainDepth, context.MainTopIdle, context.FidgetMain);
+        if (start is HeroClickStart.Ignored or HeroClickStart.FlagsOnly or HeroClickStart.QueueBeneath) return new(HeroRequestOutcome.Ignored, Start: start);
+        return new(_hero.StartThrow(request.Item, request.Tile) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, Start: start);
     }
+
+    /// <summary>ARC-COMBAT-1943: the click facts the rules would read for a press on <paramref name="target"/> now (the smoke reads the hero's spell flags through them).</summary>
+    public HeroClickFacts ClickFactsOf(string target, bool alt, bool shift) => _hero.ClickFacts(target, alt, shift);
+
+    /// <summary>ARC-INPUT-1946: the goal the click rules would decide for a press on <paramref name="target"/> now, so a caller can tell the Alt action (<see cref="HeroClickGoal.Immediate"/>, which replaces nothing the hero does) before it clears what a goal would replace.</summary>
+    public HeroClickGoal ClickGoalOf(string target, bool alt, bool shift) => HeroClickRules.Decide(_hero.ClickFacts(target, alt, shift)).Goal;
 
     private HeroRequestResult ObjectClick(ObjectClickRequest request)
     {
         var decision = HeroClickRules.Decide(_hero.ClickFacts(request.Target, request.Alt, request.Shift));
+        if (decision.BodyOfAirMessage) return new(HeroRequestOutcome.Ignored, Click: HeroClickGoal.None, BodyOfAirMessage: true);
+        // ARC-INPUT-1946 (0x4445A0): the Alt action builds no goal and runs no start branch; it moves the target at once.
+        if (decision.Goal == HeroClickGoal.Immediate)
+            return new(_hero.ImmediateAction(request.Target) == HeroImmediateResult.Moved ? HeroRequestOutcome.Done : HeroRequestOutcome.Ignored, Click: decision.Goal);
         if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup or HeroClickGoal.Attack or HeroClickGoal.AttemptAttack)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
         var facts = _hero.Facts();
         // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift sets the no-walk flag 0x100 instead (the attempt attack 19, ARC-DEV-270), and no run.
         // ARC-AI-1137 (GT122): the talk goal follows the same rule (the Shift branch replaces the running call).
         var run = decision.Goal != HeroClickGoal.AttemptAttack && !(decision.Goal == HeroClickGoal.Talk && request.Shift);
         // GS27 outside combat mode (a talk is never taken in a round: the click there is an attack): the goal starts at once without a main run, otherwise the hero's runs are interrupted at level 3 first, and the new goal starts.
-        var start = HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false);
-        if (start == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
+        // ARC-COMBAT-1949 (VC62): the start branch reads the auto attack option, the equal goal queued and the main run's depth and top goal.
+        var attack = decision.Goal is HeroClickGoal.Attack or HeroClickGoal.AttemptAttack;
+        var context = _hero.StartContext(decision.Goal, request.Target);
+        var start = HeroClickRules.ClickStartOf(_hero.Options().AutoAttack, facts.InRound, facts.HighestRunPriority > 0, context.EqualGoalQueued, attack, context.MainDepth, context.MainTopIdle, context.FidgetMain);
+        if (start == HeroClickStart.QueueBeneath)
+        {
+            if (_hero.QueueGoal(decision.Goal, request.Target)) return new(HeroRequestOutcome.Done, run, Click: decision.Goal, Start: start);
+            // The table refused (a full stack, the run being stepped) or the hero has no main run in the table to queue under (a route the viewer follows): nothing new is added, as when the stack is deep.
+            start = HeroClickStart.FlagsOnly;
+        }
+        if (start == HeroClickStart.FlagsOnly)
+        {
+            _hero.ApplyClickFlags(request.Shift, decision.Goal is HeroClickGoal.UseObject or HeroClickGoal.UseContainer);
+            return new(HeroRequestOutcome.Ignored, Click: decision.Goal, Start: start);
+        }
+        if (start == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored, Click: decision.Goal, Start: start);
         var started = decision.Goal switch
         {
             HeroClickGoal.Talk => _hero.StartTalk(request.Target, run, request.Shift),
@@ -258,7 +316,7 @@ public sealed class HeroRequestHost
             HeroClickGoal.AttemptAttack => _hero.StartAttemptAttack(request.Target),
             _ => _hero.StartUse(request.Target, decision.Goal == HeroClickGoal.UseContainer, run),
         };
-        return new(started ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run, Click: decision.Goal);
+        return new(started ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run, Click: decision.Goal, Start: start);
     }
 
     private HeroRequestResult Release() =>

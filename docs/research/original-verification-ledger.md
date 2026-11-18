@@ -237,6 +237,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
 | <a id="npc-ai-turn-based-host-tail-arc-world-099"></a>[NPC AI turn-based host tail (ARC-WORLD-099)](ledger/npc-ai.md#npc-ai-turn-based-host-tail-arc-world-099) | [NPC AI](ledger/npc-ai.md) | TH7–TH10 |
 | <a id="npc-ai-casting-host-arc-world-102"></a>[NPC AI casting host (ARC-WORLD-102)](ledger/npc-ai.md#npc-ai-casting-host-arc-world-102) | [NPC AI](ledger/npc-ai.md) | AC1–AC4 |
+| <a id="ai-cast-pass-arc-magic-1835"></a>[AI cast pass (ARC-MAGIC-1835)](ledger/npc-ai.md#ai-cast-pass-arc-magic-1835) | [NPC AI](ledger/npc-ai.md) | AP1–AP7 |
 | <a id="npc-ai-queued-cast-arc-world-104"></a>[NPC AI queued cast (ARC-WORLD-104)](ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104) | [NPC AI](ledger/npc-ai.md) | AC5–AC7 |
 | <a id="npc-ai-spell-missile-arc-world-105"></a>[NPC AI spell missile (ARC-WORLD-105)](ledger/npc-ai.md#npc-ai-spell-missile-arc-world-105) | [NPC AI](ledger/npc-ai.md) | AC8 |
 | <a id="npc-ai-skill-goals-host-arc-world-109"></a>[NPC AI skill goals host (ARC-WORLD-109)](ledger/npc-ai.md#npc-ai-skill-goals-host-arc-world-109) | [NPC AI](ledger/npc-ai.md) | AK1–AK3 |

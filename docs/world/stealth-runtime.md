@@ -36,14 +36,17 @@ refuses the hero's flag without a hero, a concealed NPC without a hero, and an e
 
 The palette's **Prowl (stealth) on/off** stands for the original's skill-bar prowling button and toggles the session hero's
 concealment. While the hero is concealed, its steps follow the stealth gait: a run becomes a walk unless the hero is a master of
-prowling with fatigue left; the movement status names it. The crouch and the stealth walk animations are not drawn (the ordinary
-stand and walk are). Followers keep their ordinary follow gait in the viewer: the stealth gait applies to the hero's steps only.
+prowling with fatigue left; the movement status names it. Since ARC-RENDER-2539 a concealed hero below prowling expert steps the stealth walk
+(`MovementGait.Sneak`, the gait function 0x42EDC0): the step is timed at the stealth rate (10 frames per second at Speed 8, research L6) and drawn with
+the stealth ART (animation 3, `ActorDiagnosticAction.Sneak`; a body without it draws the walk), a run wanted is ignored, an expert walks, a master
+runs while fatigue is left. The AI host gives a concealed follower or NPC below expert the same step (`AiExecutorRules.Sneaks`). The crouch animation is not
+drawn for the hero (the stand is).
 
 ## Boundaries (NOT READY)
 
 - The observers: the AI host's sight and hearing checks ask `HeroProwlingMargin` for a concealed hero (ARC-AI-1518, so the target scan, witnesses and the unseen master prowler rule see it); a concealed follower asks `NpcProwlingMargin` (ARC-AI-1560: its own prowling level and training from the sheet the session levelled it to, its own light and worn armour's silent-move terms, its blindness and crippled limbs; not the local PC's effectiveness) and carries the concealed and master-prowler facts (the original's 0x45EDE0 takes any critter); worn armour's silent-move adjustments are not saved, so a restored hero's armour counts as silent (issue #1578); the examine lines (ST6)
   and script condition 51 are not wired.
-- Not modelled: the crouch art and its missing-art refusal (ST1), the hotkey's refusal of a stunned or paralysed PC (ST1, one reader only), the followers' stealth gait in the viewer, summoned NPCs created concealed (ST2), the right-click and goal
+- Not modelled: the crouch art and its missing-art refusal (ST1), the hotkey's refusal of a stunned or paralysed PC (ST1, one reader only), the stealth gait of a follower the AI host does not hold, summoned NPCs created concealed (ST2), the right-click and goal
   54 ends (ST4), NPC attacks on the hero (no NPC attack path yet), the 2 action points per step in a turn-based round and the light
   avoidance of the path search (ST3), the shadow (ST6), the multiplayer records.
 

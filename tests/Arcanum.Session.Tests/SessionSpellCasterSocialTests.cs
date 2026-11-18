@@ -197,10 +197,15 @@ public sealed class SessionSpellCasterSocialTests
         Assert.IsTrue(companion.Forced, "forced join (0x45DE90 with force 1)");
         Assert.IsTrue(owner.QueryDanger(Target).Flags.HasFlag(DangerFlags.NoFlee), "no-flee for good (0x4AF1D0)");
         CollectionAssert.AreEqual(new[] { SessionSpellCaster.SocialReaction, SessionSpellCaster.SocialJoin, SessionSpellCaster.SocialNoFlee }, Social_(caster).Select(e => e.Value).ToArray(), Trail(caster));
+        // ARC-WORLD-2144 (0x459040): the controller is the run's parent, found while the run holds the flag; none without the object's own flag bit or for another object.
+        Assert.AreEqual(Hero, caster.AiMindController(Target, MindControlled), "the hero cast it");
+        Assert.IsNull(caster.AiMindController(Target, 0), "the NPC's own spell flags lack the bit");
+        Assert.IsNull(caster.AiMindController(Hero, MindControlled), "no run holds the hero");
         // The end: the flag off, a forced leave; the reaction is not given back and no-flee stays.
         host.Calls.Clear();
         EndComponent(owner, caster, run);
         Assert.IsTrue(owner.QueryObjectFlags(Target).IsEmpty);
+        Assert.IsNull(caster.AiMindController(Target, owner.QueryObjectFlags(Target).SpellSet), "the end cleared the NPC's flag: the gate of 0x459040 answers none");
         Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Target).Standing);
         Assert.AreEqual(0, host.Calls.Count, "no reaction at the end");
         Assert.IsTrue(owner.QueryDanger(Target).Flags.HasFlag(DangerFlags.NoFlee));
