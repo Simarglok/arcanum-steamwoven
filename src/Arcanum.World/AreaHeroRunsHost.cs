@@ -429,7 +429,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>
     /// ARC-DEV-174 (MIG13 S11b, GS26 and GS27): the object click's use goal 38 (<paramref name="container"/>: 81), started as the talk is (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the
-    /// hero's runs, so a repeated click restarts the run), the run flag on. The goal's frame carries the target; node 1 writes the range. False when the gate or a run's refusal stopped it.
+    /// hero's runs, so a repeated click restarts the run), the run flag on (<paramref name="run"/>), 0x4000 always and the no-walk flag 0x100 when <paramref name="noWalk"/> (ARC-COMBAT-1948). The goal's frame carries the target; node 1 writes the range. False when the gate or a run's refusal stopped it.
     /// </summary>
     public bool Use(string target, bool container, bool run, bool noWalk = false)
     {
