@@ -269,8 +269,10 @@ public partial class TerrainViewerApp
                 // never casts it from the Offensive list), and a party-only Flee spell is cast by an NPC that follows the hero.
                 var extra = "";
                 var firstRefusal = (kind == "self" ? npc : npcAtHero) is { Started: false, Why: { } firstWhy } && firstWhy.Contains("check NoValidTarget", StringComparison.Ordinal) ? ExplainBeginRefusal(firstWhy) : null;
-                if (kind == "foe" && firstRefusal is not null && foe is { } foeNpc)
+                if (kind == "foe" && firstRefusal is not null)
                 {
+                    Require(foe is not null, $"spell {spell} is refused at the hero for its area, so an NPC foe must be cast at, but the map has no other NPC");
+                    var foeNpc = foe!.Value;
                     Reset();
                     var atFoe = NpcCast(foeNpc.Entity); foeLegs++;
                     Reset();
@@ -282,7 +284,6 @@ public partial class TerrainViewerApp
                     {
                         // The nearest other NPC of the map is the foe, whatever it is and wherever it stands, so it may still fail the range or an animal bit (the area test's other bits); what the pass pins is that the PC-excluding bit no longer refuses it.
                         Require(atFoeRefusal?.Contains("excludes PCs", StringComparison.Ordinal) != true, $"spell {spell} excludes PCs, which an NPC foe is not: {Show(atFoe)}");
-                        if (!atFoe.Started && atFoeRefusal is null && atFoe.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true) unexplained.Add(spell);
                     }
                 }
                 else if (kind == "self" && firstRefusal?.Contains("party-only", StringComparison.Ordinal) == true)
@@ -290,10 +291,11 @@ public partial class TerrainViewerApp
                     Reset();
                     var join = session.ForceJoinParty(session.Version, entity);
                     Require(join.Disposition != GameSessionDisposition.Rejected, "the NPC joined the party for the party-only spell: " + join.Failure);
-                    AiCastPassSide led;
+                    AiCastPassSide led; GameSessionMutationResult leftParty;
                     // The cast runs while the NPC follows (the party-only area asks for a PC at the top of its leader chain); the calm goes after the NPC has left again.
                     try { led = NpcCast(entity, false); ledLegs++; }
-                    finally { session.LeaveParty(session.Version, entity, new PartyLeave(Force: true)); }
+                    finally { leftParty = session.LeaveParty(session.Version, entity, new PartyLeave(Force: true)); }
+                    Require(leftParty.Disposition != GameSessionDisposition.Rejected && session.QueryCompanion(entity).Standing == CompanionStanding.Free, $"the NPC left the party again after spell {spell}: {leftParty.Failure}");
                     Reset();
                     var ledRefusal = !led.Started && led.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true ? ExplainBeginRefusal(led.Why) : null;
                     extra = " | npc led by the hero: " + Show(led) + (ledRefusal is not null ? " | NPC-REFUSED (" + ledRefusal + ")" : "");
@@ -349,7 +351,7 @@ public partial class TerrainViewerApp
             session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (ally is { } friend) session.Heal(session.Version, friend.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (foe is { } hurtFoe) session.Heal(session.Version, hurtFoe.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            CalmNpcsForSmoke(session, [entity]);
+            CalmNpcsForSmoke(session, foe is { } calmFoe ? new[] { entity, calmFoe.Entity } : new[] { entity });
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             RestoreHeroForSmoke(session, heroBefore);
