@@ -1701,19 +1701,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private bool DestroyScenery(ScrObjectRef obj)
     {
         if (AlreadyDestroyed(obj) || _destroyingScenery.Contains(obj.Code)) return true;
-        if (Slot(obj, ScrPoint.Destroy) is { Script: > 0 })
+        switch (RunDestroyPointGate(obj))
         {
-            _destroyingScenery.Add(obj.Code);
-            try
-            {
-                var ran = RunDestroyPoint(obj.Code, _lastRules ?? ScrRuleProfile.Steamwoven);
-                // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
-                if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return false;
-                if (DyingStops(ran)) return true;
-            }
-            finally { _destroyingScenery.Remove(obj.Code); }
-            if (AlreadyDestroyed(obj)) return true;
+            case DestroyPointFate.Failed: return false;
+            case DestroyPointFate.Kept: return true;
         }
+        if (AlreadyDestroyed(obj)) return true;
         // ARC-WORLD-2502 (0x43CCA0 → 0x4639E0): a container's invulnerable items are dropped on its cell with the destroy (a junk pile only destroyed, a never generated 0x200 container regenerated first).
         var applied = ShownContainer(obj) && Place(obj) is { } cell
             ? _session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj)).Disposition != GameSessionDisposition.Rejected
@@ -1725,6 +1718,55 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     private readonly HashSet<string> _destroyingScenery = new(StringComparer.Ordinal);
+
+    private enum DestroyPointFate { Proceed, Kept, Failed }
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 / ARC-SCRIPT-2644 (TD2): runs the destroy point (2) of <paramref name="obj"/> as the first step of its object destroy (0x43CCA0) and says what follows: <see cref="DestroyPointFate.Proceed"/> (no point, or it answered to go on, or the point's run
+    /// destroyed the object itself), <see cref="DestroyPointFate.Kept"/> (the point answered 0), <see cref="DestroyPointFate.Failed"/> (the run did not apply: nothing is destroyed on a guess). The object's own destroy that the point raises again is left to the running one.
+    /// </summary>
+    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj)
+    {
+        if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 }) return DestroyPointFate.Proceed;
+        _destroyingScenery.Add(obj.Code);
+        try
+        {
+            var ran = RunDestroyPoint(obj.Code, _lastRules ?? _session.Rules.Scripts);
+            LastDestroyPointRun = ran;
+            // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
+            if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return DestroyPointFate.Failed;
+            if (DyingStops(ran)) return DestroyPointFate.Kept;
+        }
+        finally { _destroyingScenery.Remove(obj.Code); }
+        return DestroyPointFate.Proceed;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2644 (ledger TD2, OD7–OD11): the session's gate for the break's object destroy (<see cref="GameSessionOwner.AttachObjectDestroyGate"/>): a door, container (after its drop), trap or busted scenery of the shown map that the break is about to destroy runs its destroy point (2) first
+    /// (0x43F1C0 → 0x43CCA0, the object as the triggerer and the attachee), and the answer 0 (or a run that did not apply) keeps it. False: the object stays. An object of another map, one with no destroy point, or one whose point is already running (it destroyed itself) answers true.
+    /// </summary>
+    public bool BreakMayDestroy(SessionObjectTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.Map.RuntimeMap != _shownMap) return true;
+        var obj = new ScrObjectRef(_shownMap, target.Entity);
+        // The row's own entity id is the code the scripts and the guard use (the viewer names a container by its inventory holder id).
+        if (_content is null || Row(obj) is not { } row) return true;
+        obj = new ScrObjectRef(_shownMap, EntityId(row));
+        if (_destroyingScenery.Contains(obj.Code)) return true;
+        return RunDestroyPointGate(obj) == DestroyPointFate.Proceed;
+    }
+
+    /// <summary>ARC-SCRIPT-2644: the run of the destroy point a break's gate made last (its award, message and float queues belong to the viewer's break step); taken once, null when none ran since.</summary>
+    public AreaScriptedUse? TakeBreakDestroyRun()
+    {
+        var ran = LastDestroyPointRun;
+        LastDestroyPointRun = null;
+        return ran;
+    }
+
+    private AreaScriptedUse? LastDestroyPointRun { get; set; }
+
 
     // ARC-SCRIPT-2501: a scenery of the shown map.
     private bool ShownScenery(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.SceneryType };

@@ -136,6 +136,109 @@ public sealed class ObjectDamageStateTests
         CollectionAssert.AreEqual(new[] { "knife", "cup" }, pile.Items.Select(item => item.Entity).ToArray());
     }
 
+    // ARC-SCRIPT-2644 (TD2, OD7-OD11): the break's destroy branches ask the host's destroy point first; a refusal keeps the object (the hit's damage and a container's spill are written all the same).
+    [TestMethod]
+    public void AContainerWhoseDestroyPointRefusesSpillsButStaysAndEndsNoRuns()
+    {
+        using var owner = Owner();
+        var asked = new List<string>();
+        owner.AttachObjectDestroyGate(target => { asked.Add(target.Entity); return false; });
+        var chest = Target("chest", DamageableObjectKind.Container);
+        var broke = owner.DamageObject(owner.Version, chest, 100);
+        Assert.AreEqual(GameSessionDisposition.Changed, broke.Disposition);
+        Assert.AreEqual(ObjectBreak.ContainerSpilled, broke.Hit!.Break);
+        CollectionAssert.AreEqual(new[] { "chest" }, asked);
+        Assert.AreEqual(SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectBroken, broke.Host, "no destroy, but the spill eye candy still plays");
+        Assert.IsFalse(broke.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed));
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(chest).Condition, "the object stays");
+        Assert.AreEqual(100, owner.QueryObject(chest).Damage, "the damage is written");
+        var pile = owner.QueryMapInventory(Exterior)!.JunkPiles.Single();
+        Assert.AreEqual(ChestCell, pile.Cell, "the items were dropped before the destroy point answered");
+        Assert.AreEqual(2, pile.Items.Count);
+        Assert.AreEqual(0, owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "chest").Items.Count, "the kept chest is empty");
+        // A second hit asks again and the gate may now let it go.
+        owner.AttachObjectDestroyGate(_ => true);
+        var again = owner.DamageObject(owner.Version, chest, 1);
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(chest).Condition);
+        Assert.IsTrue(again.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed));
+    }
+
+    [TestMethod]
+    public void ADestroyPointThatBreaksItsOwnContainerLeavesTheOuterBreakNothingToWrite()
+    {
+        using var owner = Owner();
+        var inside = false;
+        var calls = 0;
+        owner.AttachObjectDestroyGate(target =>
+        {
+            calls++;
+            if (inside) return true;
+            inside = true;
+            owner.DamageObject(owner.Version, target, 50);
+            return false;
+        });
+        var chest = Target("chest", DamageableObjectKind.Container);
+        var broke = owner.DamageObject(owner.Version, chest, 100);
+        Assert.AreEqual(GameSessionDisposition.Changed, broke.Disposition);
+        Assert.AreEqual(2, calls, "the nested break asked once more, the outer wrote nothing after");
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(chest).Condition);
+        Assert.IsTrue(broke.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed), "the nested break destroyed it");
+        var pile = owner.QueryMapInventory(Exterior)!.JunkPiles.Single();
+        CollectionAssert.AreEqual(new[] { "knife", "cup" }, pile.Items.Select(item => item.Entity).ToArray(), "each item dropped once");
+    }
+
+    [TestMethod]
+    public void AGateThatAllowsOrIsAbsentDestroysAsBefore()
+    {
+        foreach (var gate in new Func<SessionObjectTarget, bool>?[] { null, _ => true })
+        {
+            using var owner = Owner();
+            owner.AttachObjectDestroyGate(gate);
+            var trap = Target("sector:1:3", DamageableObjectKind.Trap, with: b => b with { HasDestroyedArt = false });
+            var broke = owner.DamageObject(owner.Version, trap, 6);
+            Assert.AreEqual(ObjectBreak.Destroyed, broke.Hit!.Break);
+            Assert.IsTrue(broke.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed | SessionObjectHostSteps.DestroySound));
+            Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(trap).Condition);
+        }
+    }
+
+    [TestMethod]
+    public void ARefusedDestroyOfATrapOrADoorKeepsTheObjectAndTheSoundStillPlays()
+    {
+        using var owner = Owner();
+        var asked = new List<string>();
+        owner.AttachObjectDestroyGate(target => { asked.Add(target.Entity); return false; });
+        var trap = Target("sector:1:3", DamageableObjectKind.Trap, with: b => b with { HasDestroyedArt = false });
+        var broke = owner.DamageObject(owner.Version, trap, 6);
+        Assert.AreEqual(SessionObjectHostSteps.DestroySound, broke.Host & (SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.ObjectDestroyed));
+        Assert.AreEqual(new SessionObjectState(6, 0, SessionObjectCondition.Whole), owner.QueryObject(trap), "damage written, condition kept");
+        var door = Target("sector:1:7", DamageableObjectKind.Portal);
+        var shut = owner.DamageObject(owner.Version, door, 6);
+        Assert.AreEqual(ObjectBreak.Destroyed, shut.Hit!.Break);
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(door).Condition, "the refused door stays");
+        CollectionAssert.AreEqual(new[] { "sector:1:3", "sector:1:7" }, asked);
+        // The refusal is the object's own: a fresh hit on the kept trap breaks again and asks again.
+        Assert.AreEqual(ObjectBreak.Destroyed, owner.DamageObject(owner.Version, trap, 1).Hit!.Break);
+        Assert.AreEqual(3, asked.Count);
+    }
+
+    [TestMethod]
+    public void ABreakThatDestroysNothingNeverAsksTheGate()
+    {
+        using var owner = Owner();
+        var asked = 0;
+        owner.AttachObjectDestroyGate(_ => { asked++; return false; });
+        var crate = Target("sector:1:9", DamageableObjectKind.Scenery);
+        Assert.AreEqual(ObjectBreak.SceneryBusted, owner.DamageObject(owner.Version, crate, 6).Hit!.Break);
+        Assert.AreEqual(SessionObjectCondition.Busted, owner.QueryObject(crate).Condition);
+        var window = Target("sector:1:8", DamageableObjectKind.Portal, with: b => b with { Window = true, Openable = new(OpenableKind.Portal, 0, 0, 1) });
+        Assert.AreEqual(ObjectBreak.WindowBusted, owner.DamageObject(owner.Version, window, 6).Hit!.Break);
+        Assert.AreEqual(0, asked, "a bust or a window's bust is no destroy");
+        // A busted scenery broken again takes the destroy branch (0x43F4xx), and the gate answers.
+        Assert.AreEqual(ObjectBreak.Destroyed, owner.DamageObject(owner.Version, crate, 1).Hit!.Break);
+        Assert.AreEqual(1, asked);
+    }
+
     [TestMethod]
     public void AWindowBustsThroughTheLockDomainAndBustsAgainOnEveryHit()
     {
