@@ -381,8 +381,9 @@ public sealed partial class GameSessionOwner
         var reach = values.Weapon.Kind == WeaponKind.Unarmed ? (int?)null : values.Range;
         if (throwing is not null)
         {
-            // TW7: the only installed "default throws" weapon is a melee one; another skill's would follow other rules.
-            if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee) return RejectAttack(GameSessionFailure.AttackUnsupported);
+            // TW7, ARC-COMBAT-2699 (TW8, 0x42AB90 asks nothing of the weapon's skill, the check is the throwing skill's): any wielded weapon the attack supports (a melee, bow or firearms one) is thrown, so a bow or firearm
+            // reaches the ammunition check too; a throwing-skill weapon (a boomerang) is not a supported NPC attack and is refused with the others.
+            if (values.Weapon.Kind != WeaponKind.Weapon) return RejectAttack(GameSessionFailure.AttackUnsupported);
             var (level, training) = Levelled(attacker).SkillValues(CombatSkill.Throwing, attackerRecord.State);
             values = values with
             {
