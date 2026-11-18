@@ -514,6 +514,17 @@ public sealed class AreaConversationHost
             if (loaded.Status == AreaConversationStartStatus.SourceChanged) return new(loaded.Status, null, speaker, loaded.Detail);
         }
         token.ThrowIfCancellationRequested();
+        // ARC-SCRIPT-2760 (0x447220 case 4 -> 0x567460, ledger X11): the dialog action's attachee is the NPC the conversation opens with, which is the NPC whose script ran the action. A resumed
+        // script that called another NPC's dialog point (Virgil's whisper at the Crash Site: the agent's 1714 calls Virgil's point 9) opens with that NPC, not with the one whose conversation just
+        // closed; the resume that follows then runs the new speaker's slot. A named attachee that is no speaker of this host leaves the run unapplied whole (as RunCall's), none keeps the caller's.
+        var talker = speaker;
+        if (result.Effects.Dialog is { Npc: { } named })
+        {
+            if (named.Code == AreaConversationState.EntityId(speaker.Row)) talker = speaker;
+            else if (Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == named.Code) is not { } found)
+                return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {result.Script}: a conversation of script {result.Effects.Dialog.Script} with {named.Code}, which is no dialog NPC of this host, is not modelled");
+            else talker = found;
+        }
         if (!Scripts.Apply(result.Effects))
             return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
         if (result.Effects.Dialog is not { } dialog)
@@ -524,9 +535,11 @@ public sealed class AreaConversationHost
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         // ARC-SCRIPT-1598 (X11, SU11): the dialog action stores the slot and then calls the start (0x567460), which refuses a dead or unconscious PC and an NPC that cannot speak (a damage action of the same run may have
         // killed either): silent, the run's earlier effects stay.
-        if (startRefused?.Invoke(speaker) == true) return new(AreaConversationStartStatus.DialogStartRefused, null, speaker, $"script {result.Script}: the dialog start refused after the run's effects");
-        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
-        return Open(speaker, dialog, loaded.Document!);
+        if (startRefused?.Invoke(talker) == true) return new(AreaConversationStartStatus.DialogStartRefused, null, talker, $"script {result.Script}: the dialog start refused after the run's effects");
+        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, talker, loaded.Detail);
+        // The new speaker's local flags and counters (its dialog slot, as the run's call left them) are the ones the DLG's LF and LC read.
+        if (!ReferenceEquals(talker, speaker)) State.Bind(talker.Index, AreaScriptHost.LoadedSlot(talker)?.LocalFlags ?? 0, AreaScriptHost.LoadedSlot(talker)?.Counters ?? 0);
+        return Open(talker, dialog, loaded.Document!);
     }
 
     // ARC-DEV-324 (B24, GT219): a talk request whose dialog point ran default shows the generic greeting: the greeting builder's line over the NPC as a floating line (0x57CC70

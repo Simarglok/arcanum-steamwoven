@@ -364,8 +364,19 @@ public partial class TerrainViewerApp
         // opens once the event pump that ran this tick returned (OpenHeartbeatConversation).
         if (ran.Dialog is { } talk)
         {
-            _heartbeatDialog ??= talk;
-            GD.Print($"ARC-SCRIPT-047 heartbeat-talk npc={npc} point={scrPoint} script={ran.Run!.Script} dialog={talk.Script} line={talk.Line} node={talk.Node}");
+            // ARC-SCRIPT-2760 (0x567460, the dialog UI mode 3 test at 0x40D9F0/0x551A00): a dialog start while a conversation is open returns silently, it is not kept for later; the run's other effects stay.
+            // Logged once per NPC and dialog (the heartbeat repeats every ~110 ms for as long as the conversation stays open).
+            if (ConversationOpen)
+            {
+                if (_heartbeatRefusalsLogged.Add($"{npc}|talk-dropped|{talk.Script}"))
+                    GD.Print($"ARC-SCRIPT-2760 heartbeat-talk dropped: a conversation is open npc={npc} script={ran.Run!.Script} dialog={talk.Script}");
+            }
+            else
+            {
+                _heartbeatRefusalsLogged.Remove($"{npc}|talk-dropped|{talk.Script}");
+                _heartbeatDialog ??= talk;
+                GD.Print($"ARC-SCRIPT-047 heartbeat-talk npc={npc} point={scrPoint} script={ran.Run!.Script} dialog={talk.Script} line={talk.Line} node={talk.Node}");
+            }
         }
         var states = ran.Run!.Effects.ObjectStates;
         // A skip default (the script's return, or one by rule: a missing script, the end of the script, the line budget) stops the
@@ -399,13 +410,13 @@ public partial class TerrainViewerApp
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
-    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open).
+    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open, except while a conversation is open: dropped, ARC-SCRIPT-2760).
     private Arcanum.Scripting.Scr.ScrDialogStart? _heartbeatDialog;
 
     /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100) after the event
-    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk that cannot open yet (a conversation
-    /// or a panel outside the stack is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's
-    /// behaviour in those states is not read (audit U5). An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
+    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk asked for while a conversation is open
+    /// is dropped (the original's start callback returns silently in dialog mode, ARC-SCRIPT-2760, audit U5); one that cannot open yet for another reason (a panel outside the stack is open, the hero is under attack)
+    /// stays pending and opens once it can: a project choice, the original's behaviour there is not read. An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
     private void OpenHeartbeatConversation()
     {
         if (_heartbeatDialog is not { } talk) return;
@@ -415,8 +426,15 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-SCRIPT-047 heartbeat-talk dropped: the NPC {talk.Npc?.Code} is not on the shown map");
             return;
         }
-        // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack and a dialog still do.
-        if (ConversationOpen || ProgrammaticOpenBlocked) return;
+        // ARC-SCRIPT-2760: a conversation that opened since the talk was asked refuses it as the original's start callback does (mode 3): dropped, never queued behind the open one.
+        if (ConversationOpen)
+        {
+            _heartbeatDialog = null;
+            GD.Print($"ARC-SCRIPT-2760 heartbeat-talk dropped: a conversation is open script={talk.Script}");
+            return;
+        }
+        // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack still do.
+        if (ProgrammaticOpenBlocked) return;
         // ARC-COMBAT-1935: a hero held in combat mode by the exit gate keeps the talk pending quietly (no log line and no notice on every frame pump); the talk opens once the gate lets go.
         if (HeroInCombatMode && !_areaSession!.QueryCanExitCombatMode(CombatExitFacts())) return;
         if (!LeaveCombatModeForDialog()) return;
@@ -833,6 +851,8 @@ public partial class TerrainViewerApp
         TouchAreaView();
         // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
         if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
+        // ARC-SCRIPT-2749: the destroy points a wear path asked (an item worn out under an attack, the critical "destroy weapon") show their lines and awards from the frame, as no wear caller takes them.
+        if (_useScriptHost is { } pointed) ShowDestroyPointRuns(pointed.Host, "wear");
         // ARC-DEV-371: the encounter creatures a tick destroyed are destroyed in the session here, from the frame, never from inside a tick.
         if (_areaSession is { } scriptedSession) { DrainEncounterDestroys(scriptedSession, host); TakeCreatedInventories(scriptedSession); }
         var steps = AiFrameParticipant.TakeSteps();
