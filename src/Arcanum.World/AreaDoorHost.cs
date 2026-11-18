@@ -100,6 +100,40 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
         AiExecutorRules.EndDoorRun(end.Run, this);
     }
 
+    /// <summary>The level of the break's interrupt of the door's runs (0x43F1C0 → 0x424070 with level 5; the same as <see cref="AreaSceneryHost.BreakInterruptLevel"/>).</summary>
+    public const int BreakInterruptLevel = AreaSceneryHost.BreakInterruptLevel;
+
+    /// <summary>
+    /// ARC-SCRIPT-2669 (ledger OD7, BS3c, 0x43F1C0 → 0x424070, rule 0x44E2C0): a break of a door or window that is not already destroyed starts with the interrupt of the object's goal runs at level 5, before the type dispatch (0x4F06E0), so before the BUST script.
+    /// The door's runs (70 opening, 72 pending close, 71 closing) have priority 3 and are not no-interrupt, so the walk ends them in slot order; a closing that was cut short snaps the door shut by its end node (0x42B6F0, as any interrupt of it does), an
+    /// opening or a pending close leaves it where it stands. The attempt goals 12 and 50 are no-interrupt and belong to the opener, not the door, so they are not on this owner. A call the session refuses for a pass in progress is tried again by <see cref="RetryPending"/>. True when a run of the door ended.
+    /// </summary>
+    public bool ObjectBroken(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!Owns(entity)) return false;
+        var change = _session.InterruptGoals(entity, BreakInterruptLevel);
+        if (change.Failure == SessionGoalFailure.PassInProgress) { _pendingInterrupt.Add(entity); return false; }
+        var ended = false;
+        foreach (var end in change.Ended) { ended = true; EndNodes(end); }
+        return ended;
+    }
+
+    /// <summary>ARC-SCRIPT-2669: the breaks whose interrupt the session refused for a pass in progress are tried again (the viewer calls it each frame). Returns how many doors had a run end.</summary>
+    public int RetryPending()
+    {
+        if (_pendingInterrupt.Count == 0) return 0;
+        var ended = 0;
+        foreach (var entity in _pendingInterrupt.ToArray())
+        {
+            _pendingInterrupt.Remove(entity);
+            if (ObjectBroken(entity)) ended++;
+        }
+        return ended;
+    }
+
+    private readonly HashSet<string> _pendingInterrupt = new(StringComparer.Ordinal);
+
     /// <inheritdoc />
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {

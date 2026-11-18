@@ -24,6 +24,15 @@ public sealed class AreaCharacterSheetArtTests
     private static int Measure(AreaSheetFont font, string text) => text.Length * 5;
 
     [TestMethod]
+    public void The_lens_is_the_close_square_with_the_cover_art_loaded_and_no_reason_for_the_diagnostic_window()
+    {
+        // ARC-UI-2694 (CHW9, 0x5597C0 turning the view-window mode 1 on with art 198): the live lens lies in the close rectangle.
+        Assert.AreEqual((12, 10, 89), AreaCharacterSheetArtLayout.Lens, "the close rectangle (12, 10, 89, 89) of CHW9");
+        CollectionAssert.Contains(AreaCharacterSheetArtLayout.AllArtNumbers.ToArray(), AreaCharacterSheetArtLayout.LensArt);
+        CollectionAssert.DoesNotContain(AreaCharacterSheetArtLayout.ArtNumbers.ToArray(), AreaCharacterSheetArtLayout.LensArt, "the cover is optional: the sheet's look does not wait for it");
+    }
+
+    [TestMethod]
     public void The_window_reads_its_arts_and_the_tabs_and_buttons_stand_where_the_tables_put_them()
     {
         CollectionAssert.AreEqual(new[] { 22, 23, 24, 34, 35, 36, 254, 255, 27, 229, 171 }, AreaCharacterSheetArtLayout.ArtNumbers.ToArray());

@@ -37,6 +37,12 @@ public static class AreaCharacterSheetArtLayout
     public const int Width = 800, Height = 400, WindowTop = 41;
     public const int BackgroundArt = 22, MinusArt = 23, PlusArt = 24, SkillsTabArt = 34, TechTabArt = 35, SpellsTabArt = 36, SchemesTabArt = 568,
         AlignmentArt = 254, AptitudeArt = 255, LabelFontArt = 27, FlareFontArt = 229, CloisterFontArt = 171;
+    /// <summary>ARC-UI-2694 (ledger CHW9, 0x5597C0 turning on the view-window mode 0x550DA0 with art 198 `PCWinCvr`): the lens at the top left, a live round view of the game around the hero under the cover art 198, the same square (12, 10, 89, 89) in which a mouse-up closes the sheet.</summary>
+    public const int LensArt = 198;
+
+    /// <summary>The lens's square: left, top and side in window units (the close rectangle).</summary>
+    public static (int X, int Y, int Side) Lens { get; } = (12, 10, 89);
+
     /// <summary>The right-hand panel's place and size (the four panel windows at the screen's (503, 104), 0x55BAF5; art 29..31, 567: 235 × 325).</summary>
     public static (int X, int Y, int Width, int Height) Panel { get; } = (503, 63, 235, 325);
 
@@ -64,7 +70,7 @@ public static class AreaCharacterSheetArtLayout
 
     public static IReadOnlyList<int> AllArtNumbers { get; } =
         [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers)
-            .Concat(AreaCharacterSheetSchemesLayout.ArtNumbers).Concat(AreaCharacterSheetIcon.ArtNumbers).Distinct()];
+            .Concat(AreaCharacterSheetSchemesLayout.ArtNumbers).Concat(AreaCharacterSheetIcon.ArtNumbers).Concat([LensArt]).Distinct()];
 
     /// <summary>The colour of a font colour (the init indexes the channel tables with these 0..255 values).</summary>
     public static (byte R, byte G, byte B) Rgb(AreaSheetColour colour) => colour switch
