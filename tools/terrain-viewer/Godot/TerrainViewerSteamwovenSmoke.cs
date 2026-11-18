@@ -373,6 +373,11 @@ public partial class TerrainViewerApp
             require(shown[i].Position == new Vector2(pieces[i].Rect.X, pieces[i].Rect.Y) && shown[i].Pixels == new Vector2I(pieces[i].Rect.Width, pieces[i].Rect.Height),
                 $"[{tag}] the {name} backdrop piece {i} fills {pieces[i].Rect} one texel per pixel (at {shown[i].Position}, pixels {shown[i].Pixels})");
         if (pieces.Count == 2) require(pieces[0].Rect.Right == pieces[1].Rect.X, $"[{tag}] the {name} backdrop parts meet at the split {pieces[0].Rect.Right} / {pieces[1].Rect.X}");
+        // A window with a lens (the round view of the hero, the logbook's, the schematics', the reading window's, the inventory's) shows the game view in its square: the backdrop leaves the square out (it lies above the
+        // round view's copy of the world), so the lens does not show wood.
+        var lenses = AreaRoundView.VisibleRects();
+        require(panel.BackdropHolesForSelfTest == Math.Min(2, lenses.Count), $"[{tag}] the {name} backdrop leaves out the {lenses.Count} round-view square(s) (got {panel.BackdropHolesForSelfTest})");
+        GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count}");
         using var captured = GetViewport().GetTexture().GetImage();
         if (captured is null) return;
         captured.Convert(Image.Format.Rgba8);

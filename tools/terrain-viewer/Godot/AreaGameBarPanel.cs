@@ -265,6 +265,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         AddChild(_backdropLayer);
         GetViewport().SizeChanged += Place;
         InterfaceHd.Changed += Place;
+        AreaRoundView.RectsChanged += ApplyBackdropHoles;
         VisibilityChanged += OnVisibilityChanged;
         RenderingServer.Singleton.FramePostDraw += RecordDownDraw;
         Place();
@@ -452,6 +453,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2576: the family the backdrop is for (null: none asked) and the views of its pieces that show now, with the pixel size of each one's painted texture.</summary>
     internal (SteamwovenBackdropFamily? Family, IReadOnlyList<(Vector2 Position, Vector2I Pixels)> Shown) BackdropForSelfTest =>
         (_backdropFamily, [.. _backdrops.Where(backdrop => backdrop.Visible).Select(backdrop => (backdrop.Position, backdrop.PixelSizeForSelfTest))]);
+    /// <summary>ARC-UI-2576: how many round-view squares the first backdrop piece leaves out.</summary>
+    internal int BackdropHolesForSelfTest => _backdrops[0].HoleCount;
     internal IReadOnlyList<ColorRect> BarsForSelfTest => _barRects;
     internal bool BoardsShownForSelfTest => _boards.Visible;
 
@@ -682,6 +685,8 @@ public partial class AreaGameBarPanel : CanvasLayer
             _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
         }
         _backdropLayer.Visible = pieces.Count > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible);
+        // Holes follow the lens squares now showing; a hidden layer clears them (no stale holes for the next menu).
+        if (_backdropLayer.Visible) ApplyBackdropHoles(); else foreach (var backdrop in _backdrops) backdrop.SetHoles([]);
     }
 
     private static void SetBar(ColorRect bar, int x, int y, int width, int height)
@@ -697,8 +702,17 @@ public partial class AreaGameBarPanel : CanvasLayer
         InsetsChanged?.Invoke();
     }
 
+    // ARC-UI-2576: the open menu's backdrop leaves out the squares of the round views (the lens of the logbook, schematics, reading, inventory and barter windows), in the frame a lens is placed.
+    private void ApplyBackdropHoles()
+    {
+        if (!_backdropLayer.Visible) return;
+        var holes = AreaRoundView.VisibleRects();
+        foreach (var backdrop in _backdrops) backdrop.SetHoles(holes);
+    }
+
     public override void _ExitTree()
     {
+        AreaRoundView.RectsChanged -= ApplyBackdropHoles;
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;
         InterfaceHd.Changed -= Place;
