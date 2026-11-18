@@ -304,9 +304,13 @@ public partial class TerrainViewerApp
     /// <summary>ARC-COMBAT-008: a guarded left press with Alt in combat mode on a door, window, container, scenery or (ARC-COMBAT-1941) a wall, Shift picking the attempt attack without a walk: the original's click
     /// gives these the attack goal (ledger OD14; an item on the ground is picked up and a trap walked to, as without combat mode): true
     /// when the press belongs to combat.</summary>
-    private bool TryAreaObjectAttack(Vector2 screen, bool shift = false)
+    private bool TryAreaObjectAttack(Vector2 screen, bool shift = false) =>
+        AttackMapActive && HeroInCombatMode && AreaObjectAtScreen(screen) is { } key && AreaObjectAttackClick(key, shift);
+
+    /// <summary>The Alt attack click on the object <paramref name="key"/> once the press picked it (<see cref="TryAreaObjectAttack"/>): true when the click belongs to combat.</summary>
+    private bool AreaObjectAttackClick(AreaObjectKey key, bool shift)
     {
-        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key) return false;
+        if (!AttackMapActive || !HeroInCombatMode) return false;
         AreaObjectAttackTarget? target = ObjectTargets()?.Target(_areaSession!, key, AreaTrapped);
         // ARC-COMBAT-1941 (VC62): a wall is no object target (it has no damage baseline) but takes the attack goal all the same.
         var wall = target is null && _readyArea?.Snapshot.Objects.FirstOrDefault(o => o.Key == key) is { Type: 0, WorldX: not null, WorldY: not null } row ? row : null;
@@ -321,6 +325,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-1943 (0x54ED30): a polymorphed hero's click on a container is refused silently before the Alt attack; Body of Air then refuses every attack goal with line 25.
         if (target?.Kind == Arcanum.Simulation.Combat.DamageableObjectKind.Container && HeroClickSpells().Polymorphed) return true;
         if (RefuseAttackInBodyOfAir()) return true;
+        // ARC-COMBAT-2735 (RH2, TW1): a "default throws" weapon throws at the object's location, never at the object (the attack start builds the throw goal for any attacker target).
+        if (TryDefaultThrowObjectClick(target?.Row ?? wall!, target?.Entity ?? AttackGoal.WallEntity(wall!))) return true;
         if (target?.Refusal is not null)
         {
             _attackNotice = $"cannot attack: {target.Refusal}";
