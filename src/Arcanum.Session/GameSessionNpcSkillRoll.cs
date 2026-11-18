@@ -64,7 +64,6 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.InvalidSkill"/>), the version, the generator or the revision exhausted.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x4C6560, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    [Arcanum.Simulation.OriginalFunction(0x4C7160, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionNpcSkillRoll RollNpcGambling(GameSessionVersion expected, SessionNpcSkillUser user, int? opponentLevel)
     {
         ThrowIfDisposed();
