@@ -2561,6 +2561,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private void NeedsAmmunition(string npc, AttackResolution? resolution)
     {
         if (resolution?.Refusal != AttackRefusal.OutOfAmmunition) return;
+        NeedsAmmunition(npc);
+    }
+
+    // ARC-COMBAT-2415 (0x4B65D0 → 0x4ADFF0): the same marks for a thrown weapon the ammunition check refused (a throw at a location makes no attack to read the refusal from).
+    private void NeedsAmmunition(string npc)
+    {
         var set = _session.SetAiSupportBits(_session.Version, npc, DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.CheckWeapon);
         Trace(npc).Item = $"out of ammunition {set.Disposition} {set.Failure}";
     }
@@ -3447,6 +3453,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
         if (result.ScriptDeclined) Trace(id).Throw += " script-declined";
+        if (result.AmmunitionShort) { Trace(id).Throw += " out-of-ammunition"; NeedsAmmunition(id); }
         _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack, Messages = result.Messages, EyeCandies = result.EyeCandies });
         // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
         // ARC-COMBAT-2523: a grenade flies to the location whatever the line names, so its roll is the location's and no critter is its victim.

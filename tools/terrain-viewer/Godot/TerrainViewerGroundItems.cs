@@ -144,6 +144,8 @@ public partial class TerrainViewerApp
                 if (!overlay.Bodies.TryGetValue(key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)
                     || area.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is not { Type: SceneryType or TrapType } row) continue;
                 if (Number(row, DestroyedArtSlot) is not { } destroyed || AreaDataOwner.NamesNoArt(destroyed) || destroyed == visual.RawArt) continue;
+                // ARC-SCRIPT-2670: a busted scenery whose destroyed ART is read as a scenery art is drawn from its loop's frames (SyncSceneryBodies), not from this still frame 0.
+                if (row.Type == SceneryType && _sceneryArt.TryGetValue(AreaUseScriptHost.EntityId(row), out var animated) && animated.Art == destroyed) continue;
                 if (Frame(destroyed, "destroyed") is not { } frame) continue;
                 bodies[key] = AreaScenePlan.Repose(command, row, visual, frame.Key, frame.Frame.Width, frame.Frame.Height, frame.Visual.HotX, frame.Visual.HotY);
             }
