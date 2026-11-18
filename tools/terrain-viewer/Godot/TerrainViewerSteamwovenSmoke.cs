@@ -232,6 +232,9 @@ public partial class TerrainViewerApp
                     var otherOrigin = new Vector2(other.StripLeft, other.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * other.StripScale, MidpointRounding.AwayFromZero));
                     require(Math.Abs(floaters.DrawScale - otherScale) < 1e-4f && portraits.OriginForSelfTest == otherOrigin && Math.Abs(portraits.ScaleForSelfTest - otherScale) < 1e-4f,
                         $"[{tag}] the floaters and the portraits follow a new layout by themselves: scale {otherScale}, origin {otherOrigin} (got {floaters.DrawScale}, {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
+                    var otherFree = AreaGameBarPanel.FreeRect(winSize);
+                    require(Math.Abs(spellPane.PanelRectForSelfTest.Position.X - (otherFree.Position.X + 12)) <= 1e-2f && Math.Abs(combatHud.PlacementForSelfTest.List.End.X - (otherFree.End.X - 8)) <= 1e-2f,
+                        $"[{tag}] the spell pane and the combat list follow a new layout by themselves (ARC-UI-2604)");
                     require((sleep.Position - (otherOrigin + new Vector2(AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY) * otherScale)).Length() <= 1e-2f
                         && (fate.Position - (otherOrigin + new Vector2(AreaFateLayout.ScreenX, AreaFateLayout.ScreenY) * otherScale)).Length() <= 1e-2f, $"[{tag}] the sleep and fate views follow a new layout by themselves");
                 }
