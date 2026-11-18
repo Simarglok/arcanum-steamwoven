@@ -441,9 +441,9 @@ public sealed record AreaGameBarContent(IReadOnlyDictionary<int, AreaInterfaceAr
 {
     /// <summary>Every interface art number read for the bars: theirs (<see cref="AreaGameBarLayout.ArtNumbers"/>), the message
     /// window's (<see cref="AreaMessageLayout.ArtNumbers"/>, ARC-UI-023) and the maintain bar's slots
-    /// (<see cref="AreaMaintainBarLayout.ArtNumbers"/>, ARC-MAGIC-026) and the combat lamp panel's (<see cref="AreaCombatLampLayout.ArtNumbers"/>, ARC-UI-1888).</summary>
+    /// (<see cref="AreaMaintainBarLayout.ArtNumbers"/>, ARC-MAGIC-026) the combat lamp panel's (<see cref="AreaCombatLampLayout.ArtNumbers"/>, ARC-UI-1888) and the window arts whose wood the Steamwoven backdrops take their tone from (<see cref="SteamwovenBackdrops.ToneArts"/>, ARC-UI-2643).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Concat(AreaMaintainBarLayout.ArtNumbers).Concat(AreaCombatLampLayout.ArtNumbers).Distinct()];
+        [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Concat(AreaMaintainBarLayout.ArtNumbers).Concat(AreaCombatLampLayout.ArtNumbers).Concat(SteamwovenBackdrops.ToneArts).Distinct()];
 
     /// <summary>True when every art number of <see cref="ArtNumbers"/> read.</summary>
     public bool ArtReady => ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);
