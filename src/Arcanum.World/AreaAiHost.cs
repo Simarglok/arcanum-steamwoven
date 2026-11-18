@@ -2417,12 +2417,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (NpcCombatMode(id) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(id), true, context);
         // ARC-COMBAT-2597 (VC38): the NPC target's leader is followed up the chain to the PC (0x45DDA0), not only the direct leader.
         if (target == Pc || PcLeader(target) is not null && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
-        Face(id, target);
         // ARC-RENDER-038: the attack ART of the animation and the weapon the attacker's body shows (WA1, WA4), its frames, action frame
         // and the rate of its weapon slot; an ART the viewer cannot read plays with the fixed human attack ART's timing.
         var wanted = AttackRequest(id, target);
-        var art = _scene.AttackArt?.Invoke(npc, wanted) is { Frames: >= 1 and <= RealTimeCombatRules.MaxFrames, ActionFrame: >= 0 and <= RealTimeCombatRules.MaxFrames } read
-            ? read : null;
+        var answer = _scene.AttackArt?.Invoke(npc, wanted);
+        // ARC-COMBAT-1932 (VC38, 0x42B9C0): an ART that exists in no file after the missing-art repair fails the node, which has only entered
+        // combat mode so far (it does not turn the attacker): the goal ends with no swing, no bark, no begin effect and no hit.
+        if (answer is { Missing: true }) return AiAttackSwing.NoArt;
+        Face(id, target);
+        var art = answer is { Frames: >= 1 and <= RealTimeCombatRules.MaxFrames, ActionFrame: >= 0 and <= RealTimeCombatRules.MaxFrames } read ? read : null;
         var (frames, actionFrame, rate, weapon) = art is null
             ? (FixedAttackArt.Frames, FixedAttackArt.ActionFrame, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed,
                 Math.Clamp(values.Speed, 1, RealTimeCombatRules.MaxStat), FixedAttackArt.RawFramesPerSecond), AttackArtWeapon.Unarmed)
