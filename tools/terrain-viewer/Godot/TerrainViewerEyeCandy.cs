@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -58,6 +59,14 @@ public partial class TerrainViewerApp
         EyeCandyList.Weapon => _spellData?.WeaponEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         _ => null,
     };
+    /// <summary>
+    /// ARC-RENDER-2035 (ledger RH10, PF4; the flight start): the steps a flight takes in one tick for <paramref name="weaponPrototype"/>, the prototype number of the flight's weapon (a launcher for a shot, the thrown item for a throw;
+    /// null when none, or when it is no weapon object, type 5: the original reads the entry only for a weapon): the <c>Proj Speed:</c> of the weapon list's kind-2 entry (<see cref="WeaponHitEffectRules.Projectile"/>), 4 for none.
+    /// </summary>
+    private int WeaponFlightSteps(int? weaponPrototype) =>
+        weaponPrototype is { } prototype && WeaponHitEffectRules.Index(prototype, WeaponHitEffectRules.Projectile) is { } index && _spellData?.WeaponEyeCandy is { } list
+            ? WeaponHitEffectRules.StepsPerTick(list.At(index).ProjectileSpeed) : ProjectileRules.DefaultStepsPerTick;
+
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;
 
     /// <summary>Whether the object has a free slot in every list the parts go to (0x4CCF70: a full list places nothing): the cast eye candies and the overlay runs it shows count.</summary>
