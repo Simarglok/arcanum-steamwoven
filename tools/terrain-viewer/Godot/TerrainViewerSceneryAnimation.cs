@@ -58,6 +58,10 @@ public partial class TerrainViewerApp
         changed |= SyncSceneryArt(_sceneryHost, newHost: false);
         // A start that found the table held by a pass is tried again (the loops already running stay).
         if (_sceneryHost.StartPending) _sceneryHost.Start();
+        // ARC-SCRIPT-2646 (0x43F5F0 → 0x43D280 → 0x43F710): a scenery a break switched off and the respawn switched on gets its loop back.
+        var shownMap = new SessionMapId(area.Snapshot.RuntimeMap);
+        _sceneryHost.RestartBroken(entity => session.QueryObjectCondition(shownMap, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Whole);
+        RetryPendingRunEnds();
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
         SyncCreatedSceneryLoops(session, _sceneryHost);
         changed |= _sceneryHost.TakeChanged();
@@ -84,10 +88,48 @@ public partial class TerrainViewerApp
         {
             ended = false;
             foreach (var owner in new[] { obj.Code, castId }.Where(o => o is not null).Distinct())
-                if (session.QueryGoals().RunsOf(owner!).Any(r => !r.Done) && session.KillGoals(owner!).Succeeded) ended = true;
+                if (session.QueryGoals().RunsOf(owner!).Any(r => !r.Done)) ended |= EndRunsOfOwner(session, owner!, kill: true);
         }
         spells?.ObjectGone(castId!);
         GD.Print($"ARC-SCRIPT-2514 object-destroyed object={obj.Code} runs-ended={ended} spell-runs-told={spells is not null}");
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2646 (ledger OD7, 0x43F1C0 → 0x424070 at level 5): a break of a container, scenery or trap of the shown map interrupts the object's goal runs before anything else of the break: a scenery's loop ends (the scenery host does it, and stops the voice),
+    /// its overlays stay (no-interrupt goals). An object of another map has no run in the shown session's table.
+    /// </summary>
+    private void InterruptBrokenObjectRuns(AreaObjectRecord row)
+    {
+        if (_areaSession is not { } session || ShownObjectRef(row) is not { } obj || obj.Map != CurrentAreaMap) return;
+        var castId = SpellCasterNow()?.CastIdOf(obj.Code);
+        bool ended;
+        if (ShownSceneryHost is { } host) ended = host.ObjectBroken(obj.Code, castId);
+        else
+        {
+            ended = false;
+            foreach (var owner in new[] { obj.Code, castId }.Where(o => o is not null).Distinct())
+                ended |= EndRunsOfOwner(session, owner!, kill: false);
+        }
+        GD.Print($"ARC-SCRIPT-2646 object-broken object={obj.Code} loop-ended={ended}");
+    }
+
+    // The scenery host's own retry is not there when the host belongs to a replaced session: a refusal for a pass in progress is tried again on the next frames.
+    private readonly List<(GameSessionOwner Session, string Owner, bool Kill)> _pendingRunEnds = [];
+
+    private bool EndRunsOfOwner(GameSessionOwner session, string owner, bool kill)
+    {
+        var change = kill ? session.KillGoals(owner) : session.InterruptGoals(owner, AreaSceneryHost.BreakInterruptLevel);
+        if (change.Failure == SessionGoalFailure.PassInProgress) { _pendingRunEnds.Add((session, owner, kill)); return false; }
+        return kill ? change.Succeeded : change.Ended.Any();
+    }
+
+    private void RetryPendingRunEnds()
+    {
+        if (_pendingRunEnds.Count == 0) return;
+        var due = _pendingRunEnds.ToArray();
+        _pendingRunEnds.Clear();
+        foreach (var (session, owner, kill) in due)
+            if (ReferenceEquals(session, _areaSession)) EndRunsOfOwner(session, owner, kill);
     }
 
     /// <summary>ARC-SCRIPT-2514: a scenery the session holds destroyed gets no loop on a host built for a window or map shown again (the original's lists do not hold a destroyed object, so no loop starts for it).</summary>

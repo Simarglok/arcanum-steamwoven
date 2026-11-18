@@ -397,4 +397,56 @@ public sealed class AreaSceneryAnimationTests
         Assert.AreEqual(0, f.Session.QueryGoals().RunsOf(cast).Count(r => !r.Done), "the overlay owned by the cast id ended");
         Assert.AreEqual(0, f.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done));
     }
+
+    [TestMethod]
+    public void A_break_interrupts_the_loop_at_level_five_and_leaves_the_overlay_running()
+    {
+        // ARC-SCRIPT-2646 (OD7, 0x43F1C0 -> 0x424070 at level 5): goal 1 is priority 1 and ends, the hover (a no-interrupt goal) stays; the loop is no run until the object is started again.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        var eye = new AreaEyeCandyHost(f.Session, _ => null, (art, parts) => new EyeCandyFacts(4, 2, 100, 0, true, true), (low, high) => low);
+        f.Host.Start();
+        f.Run(300);
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(eye.StartHover(entity));
+        Assert.IsTrue(f.Host.ObjectBroken(entity));
+        var left = f.Session.QueryGoals().RunsOf(entity).Where(r => !r.Done).ToArray();
+        Assert.AreEqual(1, left.Length, "only the overlay is left");
+        Assert.AreEqual(GoalType.Floating, left[0].Top.Goal);
+        Assert.AreEqual(1, f.Animation.Loops.Count, "the scenery keeps its loop and the frame it shows");
+        CollectionAssert.AreEqual(new[] { entity }, f.Host.TakeKilledByArt().ToArray(), "the end node stops the looping voice");
+        Assert.IsTrue(f.Host.TakeChanged());
+        Assert.IsFalse(f.Host.ObjectBroken(entity), "a second break has no loop to end");
+    }
+
+    [TestMethod]
+    public void A_broken_loop_waits_for_the_object_to_come_back_and_a_sweep_leaves_it()
+    {
+        // ARC-SCRIPT-2646 (0x43F5F0 -> 0x43D280 -> 0x43F710): a busted scenery stays still (a sweep's start skips it); a respawned one gets its loop back.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        f.Host.Start();
+        f.Run(200);
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(f.Host.ObjectBroken(entity));
+        Assert.AreEqual(0, f.Host.Start(), "the sweep starts nothing for the broken loop");
+        Assert.AreEqual(0, f.Host.RestartBroken(_ => false), "still busted or off: it waits");
+        Assert.AreEqual(0, f.Host.Running);
+        Assert.AreEqual(1, f.Host.RestartBroken(e => e == entity), "switched on again: the loop starts");
+        Assert.AreEqual(1, f.Host.Running);
+        Assert.AreEqual(0, f.Host.RestartBroken(_ => true), "the mark is gone");
+    }
+
+    [TestMethod]
+    public void A_destroy_after_the_break_leaves_nothing_to_restart()
+    {
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        f.Host.Start();
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(f.Host.ObjectBroken(entity));
+        Assert.IsTrue(f.Host.ObjectDestroyed(entity), "the destroy that follows gives the loop up");
+        Assert.AreEqual(0, f.Host.RestartBroken(_ => true), "a destroyed object has no loop to start");
+        Assert.AreEqual(0, f.Host.Running);
+    }
 }
