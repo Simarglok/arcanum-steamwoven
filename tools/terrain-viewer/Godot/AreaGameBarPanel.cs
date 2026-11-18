@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -28,6 +29,16 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
     private AreaExperienceStripView _experience = null!;
     private int? _experienceProgress;
+    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the boards that continue the two strips to the frame's
+    // sides, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
+    private SteamwovenHudPlan? _plan;
+    private Control _boards = null!, _bars = null!;
+    private SteamwovenBoardView _topBoard = null!, _bottomBoard = null!;
+    // ARC-UI-2576: the backdrop of the open menu window's family: one view per piece (two for a two-part window, SWI-BDR-5).
+    private readonly SteamwovenBoardView[] _backdrops = new SteamwovenBoardView[2];
+    private CanvasLayer _backdropLayer = null!;
+    private readonly ColorRect[] _barRects = [new() { Name = "BarLeft" }, new() { Name = "BarRight" }, new() { Name = "BarTop" }, new() { Name = "BarBottom" }];
+    private SteamwovenBackdropFamily? _backdropFamily;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -56,8 +67,53 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>Raised after the insets changed (the bars shown, hidden or scaled): the panels placed by them place themselves again.</summary>
     public static event Action? InsetsChanged;
 
-    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
-    public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
+    /// <summary>ARC-UI-2510: the left edge of the frame the Steamwoven layout lays the play screen out in, while the bars are shown (0 otherwise, and in a window with no pillarbox bar).</summary>
+    public static float FreeLeft { get; private set; }
+    private static float _freeWidth;
+
+    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size. ARC-UI-2510: in the Steamwoven layout the free width is the frame's (a window wider than the
+    /// 16:9 frame has a pillarbox bar on each side, which a window must not lie under); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
+    public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(_freeWidth > 0 ? _freeWidth : size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
+
+    /// <summary>ARC-UI-2603: the rectangle in window pixels the strips and the pillarbox bars leave free, for what must stay clear of them (a text bubble's placement). In the Steamwoven layout it is
+    /// the frame's width from <see cref="FreeLeft"/> between the strips; without the layout (the generated interface off) the strips are the original's and the whole window stands, as before.</summary>
+    public static Rect2 FreeRect(Vector2 size)
+    {
+        if (_freeWidth <= 0) return new Rect2(Vector2.Zero, size);
+        var (top, free) = FreeArea(size);
+        return new Rect2(FreeLeft, top, free.X, free.Y);
+    }
+
+    /// <summary>ARC-UI-2510: where the original's 800 × 600 screen lies for what hangs from its top strip (the follower portraits and their buttons): the screen's top left, the strips' scale, and
+    /// the window y of the bottom strip's bottom edge (the screen's bottom edge). Null while the layout is not the Steamwoven one or the bars are hidden: the whole-factor screen centred at the
+    /// window's top stands. <see cref="ScreenFrame"/> is the same screen with its origin counted from the bottom strip (for what sits on that strip).</summary>
+    public static (Vector2 Origin, float Scale, float BottomEdge)? TopScreen { get; private set; }
+
+    /// <summary>ARC-UI-2510: raised after <see cref="TopScreen"/> changed (the layout turned on or off, a new window size): parts placed by it place themselves again.</summary>
+    public static event Action? TopScreenChanged;
+
+    private static void SetTopScreen((Vector2, float, float)? next)
+    {
+        if (TopScreen == next) return;
+        TopScreen = next;
+        TopScreenChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// ARC-UI-2510: where a window of the original's screen that keeps its own whole scale (the sleep and fate views) lies: its top left at (<paramref name="screenX"/>, <paramref name="screenY"/>)
+    /// of the screen where the strips put it, and the whole factor as its scale (the strips' fractional scale is theirs: the window's textures are painted at the window's own).
+    /// Without the Steamwoven layout: the whole-factor screen centred at the window's top.
+    /// </summary>
+    public static (Vector2 Position, float Scale) OwnScaleWindow(Vector2 size, int screenX, int screenY)
+    {
+        var factor = ScreenFactor(size);
+        return TopScreen is { } screen
+            ? (screen.Origin + new Vector2(screenX, screenY) * screen.Scale, factor)
+            : (new Vector2(ScreenLeft(size, factor) + screenX * factor, screenY * factor), factor);
+    }
+
+    /// <summary>ARC-UI-2510: the scale the original's screen pixels (floating lines, text bubbles, the follower portraits) are drawn at: the strips' scale in the Steamwoven layout, else the whole factor.</summary>
+    public static float ScreenScale(Vector2 size) => TopScreen?.Scale ?? ScreenFactor(size);
     internal string HoverTextForSelfTest => _messageLog.HoverTextForSelfTest;
     /// <summary>The message window's hovered portrait (its texture, null none).</summary>
     internal (Texture2D? Image, Rect2 Rect) HoverPortraitForSelfTest => (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverImage.GetGlobalRect());
@@ -84,12 +140,28 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// </summary>
     public static (float Scale, Vector2 Position) FittedWindow(Vector2 size, int widthUnits, int heightUnits, bool fractional)
     {
+        // ARC-UI-2575: the Steamwoven layout puts every window in the window zone at the layout's unit scale, bars shown or not.
+        if (ZoneWindow(size, widthUnits, heightUnits) is { } zone) return ((float)zone.Scale, new Vector2((float)zone.X, (float)zone.Y));
         var factor = ScreenFactor(size);
         if (BottomInset <= 0) return (factor, new Vector2(ScreenLeft(size, factor), TopInset));
-        var fit = MathF.Min((size.Y - TopInset - BottomInset) / heightUnits, size.X / widthUnits);
+        // ARC-UI-2510: the free width is the frame's, from its left edge.
+        var (_, free) = FreeArea(size);
+        var fit = MathF.Min((size.Y - TopInset - BottomInset) / heightUnits, free.X / widthUnits);
         var scale = MathF.Max(factor, fractional ? fit : MathF.Floor(fit));
-        return (scale, new Vector2(MathF.Round((size.X - widthUnits * scale) / 2), DockedWindowTop(size, scale, heightUnits)));
+        return (scale, new Vector2(FreeLeft + MathF.Round((free.X - widthUnits * scale) / 2), DockedWindowTop(size, scale, heightUnits)));
     }
+
+    /// <summary>
+    /// ARC-UI-2575: the place of a menu window of <paramref name="widthUnits"/> × <paramref name="heightUnits"/> original units in the window zone of the Steamwoven layout (at the layout's unit scale `f · 3.6`),
+    /// or null while that layout is not in use (the HD option or the generated interface off: the window keeps its own whole or fitted scale). The one hook every menu window reads; it does not
+    /// depend on whether the bars show, so the windows that hide them (loot, barter, reading, save and load) follow the same zone.
+    /// </summary>
+    public static SteamwovenWindowPlace? ZoneWindow(Vector2 size, int widthUnits, int heightUnits) =>
+        SteamwovenOn ? SteamwovenWindowZone.Body((int)size.X, (int)size.Y, widthUnits, heightUnits) : null;
+
+    /// <summary>ARC-UI-2575: the place of an 800 × 600 original screen whose 800 × 400 body (at <paramref name="bodyTopUnits"/> from its top) lies in the window zone, or null (see <see cref="ZoneWindow"/>).</summary>
+    public static SteamwovenWindowPlace? ZoneScreen(Vector2 size, int bodyTopUnits) =>
+        SteamwovenOn ? SteamwovenWindowZone.Screen((int)size.X, (int)size.Y, bodyTopUnits) : null;
 
     /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
     public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
@@ -139,6 +211,11 @@ public partial class AreaGameBarPanel : CanvasLayer
             _strips[strip] = root;
             AddChild(root);
         }
+        // ARC-UI-2452: under the strips, the boards of the Steamwoven layout (shown only while that layout is in use).
+        _boards = new Control { Name = "Boards", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _topBoard = new SteamwovenBoardView { Name = "TopBoard" }; _bottomBoard = new SteamwovenBoardView { Name = "BottomBoard" };
+        _boards.AddChild(_topBoard); _boards.AddChild(_bottomBoard);
+        AddChild(_boards); MoveChild(_boards, 0);
         // Under the buttons: the message window's scroll areas lie between them (ARC-UI-023).
         _messageLog = new AreaMessageLogView();
         _strips[AreaBarStrip.Bottom].AddChild(_messageLog);
@@ -169,7 +246,21 @@ public partial class AreaGameBarPanel : CanvasLayer
             Size = new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize), Visible = false,
         };
         _strips[AreaBarStrip.Bottom].AddChild(_hoverImage);
+        // ARC-UI-2452: over everything of the panel, the bars that leave the world out of the frame; a menu's backdrop is its own layer under the windows (layer 3).
+        _bars = new Control { Name = "Bars", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        foreach (var bar in _barRects) { bar.Color = Colors.Black; bar.MouseFilter = Control.MouseFilterEnum.Stop; _bars.AddChild(bar); }
+        AddChild(_bars);
+        _backdropLayer = new CanvasLayer { Name = "MenuBackdrop", Layer = 3, Visible = false };
+        for (var i = 0; i < _backdrops.Length; i++)
+        {
+            _backdrops[i] = new SteamwovenBoardView { Name = i == 0 ? "Backdrop" : "BackdropRight", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+            _backdropLayer.AddChild(_backdrops[i]);
+            _backdrops[i].Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
+        }
+        AddChild(_backdropLayer);
         GetViewport().SizeChanged += Place;
+        InterfaceHd.Changed += Place;
+        AreaRoundView.RectsChanged += ApplyBackdropHoles;
         VisibilityChanged += OnVisibilityChanged;
         RenderingServer.Singleton.FramePostDraw += RecordDownDraw;
         Place();
@@ -325,11 +416,64 @@ public partial class AreaGameBarPanel : CanvasLayer
         RenderClock();
         _experience.Set(_experienceProgress, _art);
         _messageLog.Render();
+        if (_plan is { } plan) UpdateSteamwovenParts(plan);
     }
+
+    /// <summary>ARC-UI-2452: true while the Steamwoven layout (the layout model of docs/ui/steamwoven-interface-trd.md) is the one in use: the HD option with the generated interface on.</summary>
+    public static bool SteamwovenOn => InterfaceHd.Enabled && InterfaceHd.Generated && !SteamwovenHud.Suspended;
+
+    /// <summary>
+    /// ARC-UI-2452: where the original's 800 × 600 screen lies while the bars are shown, for the gauges and lamps drawn over the strips in their coordinates: its top left and its scale
+    /// (the whole factor with the screen centred and standing on the window's bottom, or the Steamwoven strip scale with the screen where the strips put it).
+    /// </summary>
+    public (Vector2 Origin, float Scale) ScreenFrame(Vector2 size)
+    {
+        if (_plan is { } plan)
+        {
+            var scale = (float)plan.StripScale;
+            return (new Vector2(plan.StripLeft, plan.BottomStripY - AreaGameBarLayout.BottomTop * scale), scale);
+        }
+        return (new Vector2(ScreenLeft(size, Factor), size.Y - AreaGameBarLayout.ScreenHeight * Factor), Factor);
+    }
+
+    /// <summary>ARC-UI-2452: the plan the panel is laid out by now (null: the original's whole-factor layout).</summary>
+    internal SteamwovenHudPlan? PlanForSelfTest => _plan;
+    /// <summary>The scale the strips are drawn at, the same in both strips (the whole <see cref="Factor"/> unless the Steamwoven layout is on).</summary>
+    public float StripScale => _strips[AreaBarStrip.Top].Scale.X;
+    /// <summary>True while a board of the Steamwoven layout is painted on a worker.</summary>
+    internal bool BoardsPendingForSelfTest => _topBoard.Pending || _bottomBoard.Pending || _backdrops.Any(backdrop => backdrop.Pending);
+    internal (SteamwovenBoardView Top, SteamwovenBoardView Bottom, bool BackdropShown) BoardsForSelfTest => (_topBoard, _bottomBoard, _backdropLayer.Visible);
+    /// <summary>ARC-UI-2576: the family the backdrop is for (null: none asked) and the views of its pieces that show now, with the pixel size of each one's painted texture.</summary>
+    internal (SteamwovenBackdropFamily? Family, IReadOnlyList<(Vector2 Position, Vector2I Pixels)> Shown) BackdropForSelfTest =>
+        (_backdropFamily, [.. _backdrops.Where(backdrop => backdrop.Visible).Select(backdrop => (backdrop.Position, backdrop.PixelSizeForSelfTest))]);
+    /// <summary>ARC-UI-2576: how many round-view squares the first backdrop piece leaves out.</summary>
+    internal int BackdropHolesForSelfTest => _backdrops[0].HoleCount;
+    internal IReadOnlyList<ColorRect> BarsForSelfTest => _barRects;
+    internal bool BoardsShownForSelfTest => _boards.Visible;
+
+    /// <summary>ARC-UI-2452, ARC-UI-2576: an open menu window gets the generated backdrop of its family over the whole middle band (layer 3, under the windows); null for no menu window. The host says it every frame.</summary>
+    public void SetMenuBackdrop(SteamwovenBackdropFamily? family)
+    {
+        if (_backdropFamily == family) return;
+        _backdropFamily = family;
+        if (_plan is { } plan) UpdateSteamwovenParts(plan); else _backdropLayer.Visible = false;
+    }
+
+    /// <summary>ARC-UI-2452: places the bars again (the self-test turned the Steamwoven layout on or off, or gave it other panel heights).</summary>
+    internal void Relayout() => Place();
 
     private void Place()
     {
         var size = GetViewport().GetVisibleRect().Size;
+        // Only while the bars show: windows that hide them (the full-screen views) keep the whole-factor scale for their own textures.
+        var plan = SteamwovenOn && Visible ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
+        _plan = plan;
+        if (plan is not null) { PlaceSteamwoven(size, plan); return; }
+        // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
+        InterfaceHd.SetFractionalScale(null);
+        SetTopScreen(null);
+        if (_boards.Visible) { _boards.Visible = false; _bars.Visible = false; _backdropLayer.Visible = false; }
+        foreach (var strip in _strips.Values) strip.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
         Factor = ScreenFactor(size);
         var left = ScreenLeft(size, Factor);
         _strips[AreaBarStrip.Top].Position = new Vector2(left, 0);
@@ -341,20 +485,105 @@ public partial class AreaGameBarPanel : CanvasLayer
         _sideLeft = left / Factor; _sideRight = (size.X - left - AreaGameBarLayout.ScreenWidth * Factor) / Factor;
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, _sideLeft, _sideRight);
-        SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0);
+        SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0, 0, 0);
     }
 
-    private static void SetInsets(float top, float bottom)
+    /// <summary>
+    /// ARC-UI-2452: the strips on the layout model: one fractional scale for both (<see cref="SteamwovenHudPlan.StripScale"/>), the top strip on the bottom edge of the top band and the bottom strip
+    /// hanging from the top edge of the bottom band, both centred; the insets are the middle band's, so every window that docks between the strips docks in the middle band.
+    /// </summary>
+    private void PlaceSteamwoven(Vector2 size, SteamwovenHudPlan plan)
     {
-        if (TopInset == top && BottomInset == bottom) return;
-        TopInset = top; BottomInset = bottom;
+        Factor = ScreenFactor(size);
+        var scale = (float)plan.StripScale;
+        InterfaceHd.SetFractionalScale(plan.StripScale * GetViewport().GetFinalTransform().Scale.X);
+        _strips[AreaBarStrip.Top].Position = new Vector2(plan.StripLeft, plan.TopStripY);
+        _strips[AreaBarStrip.Bottom].Position = new Vector2(plan.StripLeft, plan.BottomStripY);
+        foreach (var strip in _strips.Values) { strip.Scale = new Vector2(scale, scale); strip.TextureFilter = CanvasItem.TextureFilterEnum.Linear; }
+        // The sides beside a strip are the boards' (no strip tiles).
+        _sideLeft = 0; _sideRight = 0;
+        foreach (var strip in _strips)
+            strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, 0, 0);
+        // ARC-UI-2510: the screen the portraits hang in (the top strip's top left, its bottom edge) and the frame the windows are centred in.
+        SetTopScreen((new Vector2(plan.StripLeft, plan.TopStripY), scale, plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale));
+        SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? plan.Layout.Frame.X : 0, Visible ? plan.Layout.Frame.Width : 0);
+        UpdateSteamwovenParts(plan);
+    }
+
+    private (ChromeRecipe? Recipe, byte[]? Legacy, int Width, int Height) ToneOf(AreaBarStrip strip)
+    {
+        var frame = (ArtFrame(AreaGameBarLayout.StripArt(strip)) as HdInterfaceTexture)?.FrameForBoard;
+        var recipe = frame?.Hd is { } query ? InterfaceChromeRecipes.For(query) : null;
+        return (recipe, frame?.Rgba, frame?.Width ?? 0, frame?.Height ?? 0);
+    }
+
+    private static Rect2I Device(PixelRect rect) => new(rect.X, rect.Y, rect.Width, rect.Height);
+
+    private void UpdateSteamwovenParts(SteamwovenHudPlan plan)
+    {
+        _boards.Visible = Visible;
+        _bars.Visible = Visible;
+        var layout = plan.Layout;
+        var scale = plan.StripScale;
+        // The grain continues the strips': a board's top left is where the strip's own top left lies, in units, from the strip (negative to its left and above).
+        var originX = (layout.Frame.X - plan.StripLeft) / scale;
+        var (topRecipe, topLegacy, topW, topH) = ToneOf(AreaBarStrip.Top);
+        var (bottomRecipe, bottomLegacy, bottomW, bottomH) = ToneOf(AreaBarStrip.Bottom);
+        var top = layout.Top.Band; var bottom = layout.Bottom.Band; var middle = layout.Middle.Band;
+        if (top.Height > 0)
+            _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Bottom, Device(top), scale, originX, (top.Y - plan.TopStripY) / scale, topRecipe, topLegacy, topW, topH));
+        if (bottom.Height > 0)
+            _bottomBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Top, Device(bottom), scale, originX, (bottom.Y - plan.BottomStripY) / scale, bottomRecipe, bottomLegacy, bottomW, bottomH));
+        var bars = layout.Bars; var (width, height) = ((int)GetViewport().GetVisibleRect().Size.X, (int)GetViewport().GetVisibleRect().Size.Y);
+        SetBar(_barRects[0], 0, 0, bars.Left, height);
+        SetBar(_barRects[1], width - bars.Right, 0, bars.Right, height);
+        SetBar(_barRects[2], bars.Left, 0, width - bars.Left - bars.Right, bars.Top);
+        SetBar(_barRects[3], bars.Left, height - bars.Bottom, width - bars.Left - bars.Right, bars.Bottom);
+        // ARC-UI-2576: the open menu's family backdrop: one piece, or the two parts of a two-part window that meet at the split (SWI-BDR-5). It is shown once every piece's first paint is in (an unpainted
+        // piece would show the world through for the paint time), and a piece the family does not use stays hidden.
+        var pieces = _backdropFamily is { } family && Visible && middle.Height > 0 ? SteamwovenBackdrops.Pieces(family, plan) : [];
+        var unit = SteamwovenWindowZone.UnitScale(plan);
+        for (var i = 0; i < _backdrops.Length; i++)
+        {
+            if (i >= pieces.Count) { _backdrops[i].Visible = false; continue; }
+            var piece = pieces[i];
+            _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, bottomRecipe, bottomLegacy, bottomW, bottomH));
+            _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
+        }
+        _backdropLayer.Visible = pieces.Count > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible);
+        // Holes follow the lens squares now showing; a hidden layer clears them (no stale holes for the next menu).
+        if (_backdropLayer.Visible) ApplyBackdropHoles(); else foreach (var backdrop in _backdrops) backdrop.SetHoles([]);
+    }
+
+    private static void SetBar(ColorRect bar, int x, int y, int width, int height)
+    {
+        bar.Visible = width > 0 && height > 0;
+        bar.Position = new Vector2(x, y); bar.Size = new Vector2(Math.Max(0, width), Math.Max(0, height));
+    }
+
+    private static void SetInsets(float top, float bottom, float left, float width)
+    {
+        if (TopInset == top && BottomInset == bottom && FreeLeft == left && _freeWidth == width) return;
+        TopInset = top; BottomInset = bottom; FreeLeft = left; _freeWidth = width;
         InsetsChanged?.Invoke();
+    }
+
+    // ARC-UI-2576: the open menu's backdrop leaves out the squares of the round views (the lens of the logbook, schematics, reading, inventory and barter windows), in the frame a lens is placed.
+    private void ApplyBackdropHoles()
+    {
+        if (!_backdropLayer.Visible) return;
+        var holes = AreaRoundView.VisibleRects();
+        foreach (var backdrop in _backdrops) backdrop.SetHoles(holes);
     }
 
     public override void _ExitTree()
     {
+        AreaRoundView.RectsChanged -= ApplyBackdropHoles;
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;
-        SetInsets(0, 0);
+        InterfaceHd.Changed -= Place;
+        if (_plan is not null) InterfaceHd.SetFractionalScale(null);
+        SetTopScreen(null);
+        SetInsets(0, 0, 0, 0);
     }
 }

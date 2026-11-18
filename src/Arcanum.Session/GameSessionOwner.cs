@@ -1279,7 +1279,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         // ARC-DEV-087 (MIG6e): the holder is the NPC's wherever it stands: a companion carried here lists on its home map's seed.
         if (!NpcHolderSeed(npc, out var map, out var seed, out var row)) return RejectItem(UnseededHolder());
-        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
+        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => QueryItemName(entry.Entity, entry.Facts.Kind.Name) == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
         // ARC-WORLD-1131: the dialog's IN runs the room test like every take; an item the insert check refuses (room, weight, Technophobia) is laid on the PC's tile (0x415BA0).
@@ -1494,6 +1494,16 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, level));
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1593 (VT3, heal poison with a negative amount): the original's setter takes the level minus the amount, so a negative amount raises the level by its size. The level read now
+    /// plus <paramref name="amount"/> goes through <see cref="SetPoisonLevel"/>'s write (clamped to 0..1000, 0 for a constitution of 20 or more, the timers of every positive write).
+    /// </summary>
+    public SessionLifeResult RaisePoisonLevel(GameSessionVersion expected, SessionLifeTarget target, long amount)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, state.PoisonLevel + amount));
     }
 
     /// <summary>The stun animation ended or could not start (<see cref="LifeRules.ClearStun"/>).</summary>
@@ -1758,7 +1768,8 @@ public sealed partial class GameSessionOwner : IDisposable
                     (_, after) => after.PoisonLevel > 0 ? [LifeTimer.PoisonRecovery] : [], map, recoveryCopies: 2);
                 break;
             case LifeTimer.Resting:
-                if (hero || dead || _party.Get(target.Entity!).LedByPc) return GameEventHandlerOutcome.Completed;
+                // ARC-COMBAT-1927 (VC21): the original's gate walks the whole leader chain (0x45DDA0), so an NPC that follows a follower of the hero is not healed here either.
+                if (hero || dead || PcLeads(target.Entity!)) return GameEventHandlerOutcome.Completed;
                 result = Life(Version, target, scheduledAt <= now,
                     (s, f, _) => LifeRules.RestHeal(s, f, LifeRules.RestingHours(scheduledAt, now)),
                     (before, after) => RestingWrites(before, after), map);

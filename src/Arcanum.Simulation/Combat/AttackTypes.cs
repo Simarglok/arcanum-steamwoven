@@ -306,6 +306,13 @@ public sealed record AttackRequest
     /// (<see cref="AttackResolver.LandHit"/>), so the resolution of a hit has no damage packet; a miss and a critical miss resolve as
     /// usual (the critical-miss procedure runs at the shot).</summary>
     public bool DeferHit { get; init; }
+
+    /// <summary>
+    /// ARC-COMBAT-2435 (ledger TW11, 0x4C7160 with no defender): a throw at a location holds no struck object. The hit roll drops every term of a defender (its armour class, conditions, awareness, aim, the dodge) and keeps the distance
+    /// (above the thrown range a certain miss), the line of fire's cost, the light at the location (<see cref="Target"/>'s <see cref="Combatant.LightLevel"/>, the only field of it read) and the thrower's own flags; the critical roll is made for a hit and a miss
+    /// alike, no dodge follows, and a hit has no damage packet (it flies to the location and strikes nothing). <see cref="Target"/> is a placeholder combatant.
+    /// </summary>
+    public bool NoDefender { get; init; }
 }
 
 /// <summary>Why the resolver refused the attack: before any roll (ARC-RES-030 C11, C16), or after the hit location's roll for want of

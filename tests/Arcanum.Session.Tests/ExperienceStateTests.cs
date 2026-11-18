@@ -20,6 +20,11 @@ public sealed class ExperienceStateTests
         ExperienceTable.Create(Enumerable.Range(1, 51).Select(T).ToArray()),
         new Dictionary<int, int> { [1] = 700, [5] = 1300 }, new Dictionary<int, int> { [1003] = 5 })!;
 
+    /// <summary>The same level table with small quest experience (level 1 gives 100, level 5 gives 1300): several awards of a move stay under level 2 (1010).</summary>
+    internal static SessionExperienceRules SmallQuestRules() => SessionExperienceRules.Create(
+        ExperienceTable.Create(Enumerable.Range(1, 51).Select(T).ToArray()),
+        new Dictionary<int, int> { [1] = 100, [5] = 1300 }, new Dictionary<int, int> { [1003] = 5 })!;
+
     private static GameSessionOwner Owner(SessionHeroDefinition? hero = null, bool rules = true, GameSessionLimits? limits = null,
         GameDifficulty difficulty = GameDifficulty.Normal)
     {

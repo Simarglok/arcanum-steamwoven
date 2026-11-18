@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -18,7 +19,7 @@ public partial class TerrainViewerApp
     /// opening for both), and binds the art.</summary>
     private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers)
     {
-        LoadPortraits(followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Distinct().ToArray());
+        LoadPortraits(followers.Select(c => ShownPortrait(c.Speaker.Row)).OfType<int>().Distinct().ToArray());
         // ARC-UI-2284: content read before the panel existed (a save window's portraits, a warm-up) has the panel bound the first time the panel meets it.
         BindPanelArt();
         // ARC-UI-1786: the order menu's words come from the same load (mes\follower_ui.mes).
@@ -56,7 +57,23 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>A follower's portrait texture (its stored portrait's small image), or null when it has none or it did not read.</summary>
-    private Texture2D? FollowerPortrait(AreaCompanion companion) => AreaPortraits.Stored(companion.Speaker.Row) is { } id ? PortraitTexture(id) : null;
+    private Texture2D? FollowerPortrait(AreaCompanion companion) => ShownPortrait(companion.Speaker.Row) is { } id ? PortraitTexture(id) : null;
+
+    /// <summary>ARC-UI-2444 (ledger PO10, 0x4CEB80): the portrait number a draw shows for a critter row: its stored one, but an NPC that stores the
+    /// local PC's own portrait shows the catalogue's next or previous one. Reads the catalogue on first use.</summary>
+    private int? ShownPortrait(AreaObjectRecord row)
+    {
+        var player = _areaSession?.QueryHero()?.Portrait;
+        // The catalogue is read only when a clash is possible (an NPC storing the PC's own portrait).
+        return AreaPortraits.Shown(row, AreaPortraits.Stored(row) is { } stored && stored == player ? PortraitCatalogueNow() : null, player, _areaSession);
+    }
+
+    /// <summary>ARC-UI-2444: the portrait catalogue (read with the panel content on first use); null with no game folder.</summary>
+    private PortraitCatalogue? PortraitCatalogueNow()
+    {
+        if (_portraitContent is null) LoadPortraits([]);
+        return _portraitContent?.Catalogue;
+    }
 
     /// <summary>ARC-UI-067: a save's portrait for the save window's info display: its small image (PO3's size 0 draws the image at its
     /// own size from the catalogue's path, the small file), read on first use.</summary>
@@ -65,6 +82,9 @@ public partial class TerrainViewerApp
         LoadPortraits([id]);
         return PortraitTexture(id);
     }
+
+    /// <summary>ARC-UI-1908: a holder's stored portrait for the item windows (the small image at its own size, read on first use).</summary>
+    private Texture2D? HolderPortraitTexture(int id) => SavePortrait(id);
 
     /// <summary>A read portrait's texture, made once; null when it did not read or decode.</summary>
     private Texture2D? PortraitTexture(int id)

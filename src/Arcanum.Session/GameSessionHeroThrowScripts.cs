@@ -19,7 +19,7 @@ public sealed partial class GameSessionOwner
     /// hero's list (0x466E00 → 0x467860: the wield-off script (25) of an item the hero wears, then its remove-item script (28)), and the throw (0x4B3C00) runs the item's throw script (point 6, 0x441980) with the hero as the triggerer, the item as the
     /// attachee and no other object (the press throws at a location, TT2: the target object is none). Steamwoven takes the item out at the throw, so all three run here, in that order, under <see cref="SessionItemScripts.Admission"/> with the hero as the
     /// triggerer, each reading what the earlier runs did (<see cref="ItemScriptRuns"/>); a run the session cannot apply (a script outside the set, an effect or an object it does not model, a printed line whose gender text the host cannot choose) refuses the
-    /// throw before any effect. A throw script that answers skip default (the original's 0) throws nothing: the removal's and the script's own changes stay, a worn item is worn no more and lies in the hero's list again (the original puts it on the hero's tile,
+    /// throw before any effect. A throw script that answers skip default (the original's 0) throws nothing (ARC-COMBAT-2183: the give-back's insertion then runs the item's insert-item script, 21, after it): the removal's and the script's own changes stay, a worn item is worn no more and lies in the hero's list again (the original puts it on the hero's tile,
     /// 0x4415C0, and inserts it back, 0x4617F0) and the result is <see cref="SessionHeroThrowResult.ScriptDeclined"/> with the removal's spell steps (a worn item's unwear, then the removal's). Otherwise the runs' changes are applied in a revision of
     /// their own and the throw goes on from the new version. Refused before any effect: the hero's worn items, an inactive hero (NoChange), the shot budget, the version, the revision, a worn item the hero's list has no room for when the throw script could
     /// give it back, and the runs above. ARC-COMBAT-2176: with a struck critter the refusals of the attack on it (<see cref="StruckThrowPreflight"/>) are checked first too. ARC-COMBAT-2390: a refusal of the attack on the struck critter after the scripts ran that this check cannot foresee (the hero's values a script changed, the random sequence a host callback used) is made by <see cref="ThrowHeroItem"/>: the item is thrown at the location (the original's throw flies in any case, ledger TW8; a dead critter is thrown at itself, ARC-COMBAT-2392).
@@ -35,6 +35,8 @@ public sealed partial class GameSessionOwner
         var splitEntity = split ? NextObjectEntity(SessionObjectOrigin.Made) : null;
         if (split && (splitEntity is null || request.SplitKind is null)) return Stop(Refused(GameSessionFailure.BudgetExceeded));
         var attachee = splitEntity ?? item;
+        // ARC-COMBAT-2424: the lift's whole-pile test is made on the pile as it was lifted, before any run.
+        var wholeGold = split && item == SessionHeroGrid.GoldEntity && request.Count == _inventory.Gold;
         // The refusals of the throw that no script changes are made before any script runs, so a refused throw leaves nothing applied.
         if (!ValidWear(new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn }, new SessionWearSide(), targetBroken: false, wear: null)) return Stop(Refused(GameSessionFailure.InvalidWear));
         var life = _life.Hero!.Value.State;
@@ -59,6 +61,11 @@ public sealed partial class GameSessionOwner
             if (runs.Failure == GameSessionFailure.None && !split && points.Contains(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, attachee, SessionEventKinds.PlayerEntity, null);
             ScrRunResult? answer = null;
             if (runs.Failure == GameSessionFailure.None && throwScript) answer = runs.Run(SessionScriptPoint.Throw, attachee, SessionEventKinds.PlayerEntity, null);
+            // ARC-COMBAT-2183 (0x4617F0 → 0x461810 → 0x466640, ledger TW3): a refusing throw script gives the item back through the item transfer, whose insertion runs the item's insert-item script (21) after the throw script, the hero as
+            // the triggerer and its answer ignored. Run it here with the rest, before they are applied. (The give-back's own get script (point 16) is not run: the exe read of the gate is ARC-COMBAT-2183's leftover.)
+            if (runs.Failure == GameSessionFailure.None && answer?.Outcome == ScrOutcome.SkipDefault && !split
+                && (points.Contains(SessionScriptPoint.InsertItem) || request.Facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem)))
+                runs.Run(SessionScriptPoint.InsertItem, attachee, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();
             // A host callback changed nothing the throw rests on: the revision, the attached seeds, the shown map, (for the runs that read them) the flags and the item (a split stack: the source holds on and the planned entity is still the next made one).
             if (_revision != revision || _actor.Map != map || _inventory.SeedGeneration != seeds || _flags.Version != flagVersion
@@ -68,7 +75,8 @@ public sealed partial class GameSessionOwner
             if (answer?.Outcome == ScrOutcome.SkipDefault)
             {
                 // The throw script refused: nothing is thrown, the item is back in the hero's list, not worn (0x4617F0 inserts it, it does not wield it). A split stack's units go back to the stack they came from (the insertion merges them, 0x466640) and the
-                // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped.
+                // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped. ARC-COMBAT-2413: the lift of a whole ammunition stack destroyed the source (0x4658E0) and made the new object,
+                // which the insertion finds no other stack to merge into, so it stays: the new entity, with the slots and calls the runs left on it, is the list's stack and the source and its own slots are gone.
                 runs.Commit();
                 var wornBefore = worn is not null;
                 if (worn is not null)
@@ -76,7 +84,11 @@ public sealed partial class GameSessionOwner
                     _equipment.Worn.Remove(worn.Slot);
                     PlaceInGrid(item, null);
                 }
-                if (split) ForgetNeverMadeThrowItem(splitEntity!);
+                if (split && !RemakeWholeAmmoStack(request, splitEntity!))
+                {
+                    ForgetNeverMadeThrowItem(splitEntity!);
+                    RefitWholeGoldPile(wholeGold);
+                }
                 Revise();
                 var spells = request.ItemTriggers is { } triggers && !split ? RemovalSpellSteps(triggers, item, wornBefore) : [];
                 return Stop(new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Version)
@@ -94,6 +106,33 @@ public sealed partial class GameSessionOwner
         {
             _pendingThrowMade = null;
         }
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2413 (ledger TW3, QW5, AM2): a declined throw of a whole ammunition stack. The lift made a new object for the units and destroyed the source (exactly the count), so the insertion of the new object back finds no other stack of its
+    /// prototype and keeps it: it is appended to the hero's list at the first cell it fits, keeps the slots and calls the runs left on it and the source, with its own slots, is gone. Returns false (nothing done) for a part of a stack, where the units merge
+    /// back into the stack that remains, and for the gold pile, which the session keeps as one counter and entity (see <see cref="RefitWholeGoldPile"/>).
+    /// </summary>
+    private bool RemakeWholeAmmoStack(SessionHeroThrow request, string splitEntity)
+    {
+        if (request.Item == SessionHeroGrid.GoldEntity || request.SplitKind is not { } kind || !_inventory.Ammo.TryGetValue(request.Item, out var source) || source.Units != request.Count) return false;
+        var made = SplitAmmoForThrow(request.Item, source.Units, kind);
+        if (made != splitEntity) throw new InvalidOperationException("The planned entity of a split must be the one it makes.");
+        // The source left the list first, so its cells count free for the first-fit scan (and its grid record goes).
+        PlaceInGrid(made, request.Item);
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2424 (ledger TW3, QW5; the exe addresses are in docs/world/hero-attack-runtime.md): a declined throw of the whole gold pile. The lift destroyed the pile and made a new gold object that merges into no other pile, so the original inserts it at the first
+    /// cell it fits (the cells the destroyed pile left count free). The pile's entity stays the one fixed <see cref="SessionHeroGrid.GoldEntity"/> (the coins are the session's counter, the owner's ARC-UI-090 model: a pile carries no script slots of its
+    /// own, and no installed gold carries a throw script), so only the grid cell is remade; the slots the runs wrote for the never-made object are dropped by the caller (Steamwoven difference, #2424). A part of the pile merges back into what remains and
+    /// changes nothing here.
+    /// </summary>
+    private void RefitWholeGoldPile(bool wholePile)
+    {
+        if (!wholePile || !_inventory.Grid.ContainsKey(SessionHeroGrid.GoldEntity)) return;
+        PlaceInGrid(SessionHeroGrid.GoldEntity, null);
     }
 
     /// <summary>ARC-COMBAT-2182: drops what the throw script's runs left for the item of a split that is never made (a skipped throw, a later refusal): the script slots they wrote and the deferred calls they scheduled with it as the attachee, so the next

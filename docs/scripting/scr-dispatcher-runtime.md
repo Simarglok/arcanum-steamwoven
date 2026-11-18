@@ -415,9 +415,11 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   slot the run itself changes). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
   `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack; the deepest literal call chain in the installed scripts is 8, and four scripts are on call cycles; kept at 16 by the owner's decision of 2026-10-21, [rule modes](../world/rule-modes.md)) or more than `MaxCallDepth` ×
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
-  top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
-  applied to a callee, so a dialog-point event never runs call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
+  top run's (empty for a refused callee, whose number the result names). The callee runs at the caller's point (0x44B030 copies it into the invocation, then the event runner 0x4449B0), so at the dialog point its attachee meets the dialog gates (E6: dead without the callee's death-speech flag or surrendered without its surrender-speech flag runs nothing, mind-controlled runs 2188; ARC-SCRIPT-2198; the hosts answer all three states for an NPC of the shown map, the session's danger record and spell flag 0x8000000 for the last two, ARC-SCRIPT-2464), and a dialog-point event may run call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
   attachee pair of two groups.
+- **Transform of the attachee (ARC-SCRIPT-2440, ledger TI5b/TI5c)**: transform (40) adds its request as before; when the host says `IScrHost.RebindsTransformedAttachee` the interpreter also hands the later actions of the run (and the scripts it calls) the placeholder
+  `ScrTransformedObject.Placeholder` (`transformed:N`) as the attachee, as the original writes the new handle into the run's own record. The host makes the object and rebinds the placeholder with `ScrEffects.Rebind` before it applies the later requests; the run's own writeback stays
+  the old attachee's. A host that returns false (the default: the use, tile, thrown-item and other hosts) sees no change.
 - **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
   from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use
@@ -724,7 +726,8 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
   object stops the run (`MissingObject`).
 - **The viewer.** Only the AREA dialog host (`AreaScriptHost.TalkAdmission` and `SkillTalkAdmission`) holds the action: it answers for one of its
   speakers toward the PC from the session's reaction query, the one the dialog's `re` condition reads, so a script and a reply see the same value.
-  Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
+  ARC-SCRIPT-2505: any other NPC of the shown map toward the PC (Kerghan's script 1105 line 57 loop) is the use host's `ReactionOf`, the AI host's standard reaction through
+  `AreaScriptWorld.StandardReaction`, and a first object that is no NPC (the PC among them) gives 50. Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
 - **Tests.** `ScrReactionTests` (the interpreter, a fake host), `AreaTalkQueryTests` (the viewer's host), `WorldTravelTests` (`NearestArea`,
   `AreaAt`), `AreaWorldMapTests` (the town maps of the shown sectors and of the area table).
 
@@ -837,10 +840,10 @@ runs at most S43. Ledger [VT1–VT8](../research/ledger/scripts.md#vitals-comman
 
 The area use host (`AreaUseScriptHost.Admission`, with the placed and dying sets built on it) holds the three commands and heal hit points (75), heal fatigue (76), the magick-tech adjustment (91), play script eye candy (120) and destroy (68), so the food use script
 30282 is admitted whole. The host answers the PC from the session's life and an NPC of the shown map from `AreaScriptWorld.Vitals`; get stat 24 reads the same poison level (0 to 1000). Heal poison and the hero's heal fatigue go through `AreaScriptWorld.ScriptHealLife`
-(the viewer's `HealLifeByScript`: the session's heal with the fatigue and poison amounts); a negative heal poison amount leaves the run unapplied. Destroy of the **item in use** (`RunItemUse`) takes the food out of the hero's list through the session's used-item
+(the viewer's `HealLifeByScript`: the session's heal with the fatigue and poison amounts); a negative heal poison amount raises the level by its size (ARC-SCRIPT-1593: the life step is asked with the negative amount, the viewer writes the level plus the amount through `GameSessionOwner.RaisePoisonLevel`). Destroy of the **item in use** (`RunItemUse`) takes the food out of the hero's list through the session's used-item
 destruction; destroy of any other non-NPC object stays refused. `RunItemUse(…, target: entity)` makes that object (the PC, or an NPC of the shown map) the extra object (the use's target, ledger IU2); the viewer passes the use's target. Tests: `ScrVitalTests` (the interpreter and the sets),
 `AreaVitalScriptTests` (the host over a session, an NPC's vitals, the self-destroying item and, with `DAT_ROOT`, the installed 30282 admitted and a whole hero leaving the potion alone). Under S43 the census (`--script-refusal-census --set S43`) admits 1,575 attached scripts
-on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats. Script eye candy is played by the viewer since ARC-SCRIPT-1592 ([ledger VT9](../research/ledger/scripts.md)).
+on 6,856 placed sites (S38: 1,558 on 6,113). An NPC of the shown map that eats runs the script since ARC-SCRIPT-1590 ([ledger VT10](../research/ledger/scripts.md)). Script eye candy is played by the viewer since ARC-SCRIPT-1592 ([ledger VT9](../research/ledger/scripts.md)).
 
 ## Newspaper commands (ARC-SCRIPT-1764, set S59)
 

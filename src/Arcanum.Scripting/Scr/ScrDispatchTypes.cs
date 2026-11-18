@@ -101,6 +101,22 @@ public interface IScrHost
     bool IsJilted(ScrObjectRef critter);
     /// <summary>A player character (the dialog action starts a conversation only for one).</summary>
     bool IsPc(ScrObjectRef critter);
+    /// <summary>ARC-SCRIPT-2440 (ledger TI5, F11): whether the host applies a transform (40) of the run's attachee so that the later actions of the same run name the new object (the original writes the new handle into the run's own record). When true the
+    /// interpreter hands the later actions the placeholder <see cref="ScrTransformedObject.Placeholder"/> instead of the old attachee, and the host rebinds it to the made object (<see cref="ScrEffects.Rebind"/>) when it applies the request; a host that
+    /// returns false (the default) keeps the old attachee, and reads the object after the transform itself.</summary>
+    bool RebindsTransformedAttachee => false;
+}
+
+/// <summary>ARC-SCRIPT-2440: the stand-in a run names for the object its transform (40) makes, before any host has made it.</summary>
+public static class ScrTransformedObject
+{
+    private const string Prefix = "transformed:";
+
+    /// <summary>The placeholder of the <paramref name="number"/>th transform (from 1) of a run, on the map of the object that was transformed.</summary>
+    public static ScrObjectRef Placeholder(int map, int number) => new(map, Prefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>Whether the object is the placeholder of a transform's result.</summary>
+    public static bool Is(ScrObjectRef obj) => obj.Code.StartsWith(Prefix, StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -195,6 +211,16 @@ public interface IScrSkillQueries
     /// critter's melee 20) plus the effects' changes, clamped to 0..20 and capped by the key stat; never the points or the training.
     /// 0 for an object that is not a PC or an NPC.</summary>
     int SkillLevel(ScrObjectRef obj, int skill);
+}
+
+/// <summary>
+/// ARC-SCRIPT-2410 (ledger IV20): optional for a host that applies a run's quest requests as the run goes, as the original does (set PC quest state, 0x4C4D20, and give quest experience, 0x45F110, act at once): the interpreter
+/// tells the host each such request as the action makes it (a call-ex callee's too, in the order the actions run), so the run's later quest reads (<see cref="IScrObjectQueries.QuestState"/>) answer what the earlier writes left. The request
+/// is still collected in <see cref="ScrEffects.States"/>; a host that implements this does not apply it a second time.
+/// </summary>
+public interface IScrQuestWrites
+{
+    void QuestRequested(ScrStateRequest request);
 }
 
 /// <summary>
@@ -1050,6 +1076,43 @@ public sealed class ScrEffects
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
         && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0 && Slides.Count == 0 && Newspapers.Count == 0;
+
+    /// <summary>ARC-SCRIPT-2440: whether any request of the run names <paramref name="obj"/> (the run's own <see cref="Writeback"/> and <see cref="DestroyTrapObject"/> are the event's attachee and are not asked).</summary>
+    public bool Names(ScrObjectRef obj)
+    {
+        var found = false;
+        Rewrite(o => { if (o == obj) found = true; return o; }, false);
+        return found;
+    }
+
+    /// <summary>ARC-SCRIPT-2440 (ledger TI5, F11): the same effects with every request that names <paramref name="from"/> naming <paramref name="to"/>: a host that applies a transform (<see cref="IScrHost.RebindsTransformedAttachee"/>) rebinds the
+    /// placeholder of the made object to it before it applies the later requests. The run's own <see cref="Writeback"/> (the old attachee's slot, which the original writes back to the old object) and <see cref="DestroyTrapObject"/> stay as they are.</summary>
+    public ScrEffects Rebind(ScrObjectRef from, ScrObjectRef to) => Rewrite(o => o == from ? to : o, true);
+
+    private ScrEffects Rewrite(Func<ScrObjectRef, ScrObjectRef> map, bool build)
+    {
+        ScrObjectRef? Opt(ScrObjectRef? o) => o is { } value ? map(value) : null;
+        var calls = Calls.Select(c => c with { Triggerer = Opt(c.Triggerer), Attachee = Opt(c.Attachee) }).ToArray();
+        var sounds = Sounds.Select(c => c with { Object = Opt(c.Object) }).ToArray();
+        var teleports = Teleports.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var schemes = Schemes.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var schematics = Schematics.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var readings = Readings.Select(c => c with { Viewer = map(c.Viewer) }).ToArray();
+        var skillUses = SkillUses.Select(c => c with { Source = map(c.Source), Item = Opt(c.Item), Target = map(c.Target) }).ToArray();
+        var states = States.Select(c => c with { Object = Opt(c.Object), Giver = Opt(c.Giver) }).ToArray();
+        var effectChanges = EffectChanges.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var eyeCandies = EyeCandies.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var slotWrites = SlotWrites.Select(c => c with { Attachee = Opt(c.Attachee) }).ToArray();
+        var creations = Creations.Select(c => c with { Near = map(c.Near) }).ToArray();
+        var objectStates = ObjectStates.Select(c => c with { Object = map(c.Object), Other = Opt(c.Other) }).ToArray();
+        var floats = Floats.Select(c => c with { Speaker = map(c.Speaker), Pc = map(c.Pc) }).ToArray();
+        var ammoUses = AmmoUses.Select(c => c with { Holder = map(c.Holder) }).ToArray();
+        var newspapers = Newspapers.Select(c => c with { Speaker = Opt(c.Speaker), Listener = Opt(c.Listener) }).ToArray();
+        var dialog = Dialog is null ? null : Dialog with { Pc = map(Dialog.Pc), Npc = Opt(Dialog.Npc) };
+        if (!build) return this;
+        return new ScrEffects(Writeback, DestroyTrapObject, GlobalFlags, StoryState, dialog, calls, Lines, sounds, teleports, schemes, schematics, readings, skillUses, states, effectChanges, eyeCandies, slotWrites, creations,
+            objectStates, floats, new ScrStoreWrites(GlobalVariables, PcVariables, PcFlags), TownMaps, ammoUses, Fades, WorldChanges, Slides, newspapers);
+    }
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went

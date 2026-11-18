@@ -67,7 +67,7 @@ from line 0, static.
 | 20 | leader killing | 0x45DB95 | **none** | 0 | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |
-| 23 | taking damage | 0x4B446B (ARC-DEV-254: 0x4B47F8 is points 34/35, not 23) | script damage, attacks, throws, spell damage, burns, traps, knockback bumps (`AreaUseScriptHost.RunTakingDamage`, ARC-DEV-261; not the kill, poison tick, acid) | 1 (1) | heartbeat set |
+| 23 | taking damage | 0x4B446B (ARC-DEV-254: 0x4B47F8 is points 34/35, not 23) | script damage, attacks, throws, spell damage, burns, traps, knockback bumps (`AreaUseScriptHost.RunTakingDamage`, ARC-DEV-261; not the kill, poison tick, acid) | 1 (1) | taking-damage set (heartbeat set plus 120 and 68, ARC-SCRIPT-2513) |
 | 24 | wield on | 0x46558E, 0x467847 | hero's item moves | 98 (29) | 92 |
 | 25 | wield off | 0x46557D, 0x467D49 | hero's item moves | 92 (28) | 91 |
 | 26 | critter hits | 0x4B3003, 0x4B37FC | the attacker NPC's script before the damage of every resolved hit (`RunCombatPoint`, ARC-SCRIPT-1483; the hero has no script data here) | 18 (2) | 18 under the placed set |
@@ -179,8 +179,9 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
   kinds are admitted in actions only.
 - **U3** Whether mode 1 of the location change (same tile, TS2) really re-runs the tile script on every sub-tile offset change was
   not observed in the running game.
-- **U4** The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
-  dialog gates never trigger there.
+- **U4** ~~The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
+  dialog gates never trigger there.~~ Closed by ARC-SCRIPT-2464: the use host and the talk host answer dead, surrendered (the session's danger record) and
+  mind-controlled (spell flag 0x8000000) for an NPC of the shown map.
 - **U5** What the original does with a heartbeat's talk while the PC is in another dialog, a window is open or the PC is under
   attack is not read (the dialog start refuses a second dialog of the PC, G3, but whether the talk is lost or retried is not known);
   Steamwoven keeps it pending until it can open.

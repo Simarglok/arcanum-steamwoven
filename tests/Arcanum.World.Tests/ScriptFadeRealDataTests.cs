@@ -45,12 +45,20 @@ public sealed class ScriptFadeRealDataTests
             var whole = ScrAdmission.Admit(program, ScrAdmissionSet.S35);
             Assert.AreEqual(firstRefusal[number], whole.Refusal?.Type, $"script {number}: first refusal of S35 {whole.Refusal?.Code}");
         }
-        // 1093 and 1109 only call back into the dialog script that called them (call script, 7): the use and dying sets admit them, the dialog set does not (a call from a dialog run is outside it).
+        // 1093 and 1109 only call back into the dialog script that called them (call script, 7): the use and dying sets admit them, and since ARC-SCRIPT-2198 so does the dialog set (the callee meets the dialog gates of its attachee,
+        // as the original's call-script runner sends it through the event runner at the caller's point).
         foreach (var number in new[] { 1093, 1109 })
         {
             var program = Load(stack, number);
             Assert.IsTrue(ScrAdmission.Admit(program, AreaUseScriptHost.Admission).IsAdmitted && ScrAdmission.Admit(program, AreaUseScriptHost.DyingAdmission).IsAdmitted, $"script {number}");
-            Assert.AreEqual(ScrCatalogue.Action.CallScript, ScrAdmission.Admit(program, AreaScriptHost.TalkAdmission).Refusal?.Type, $"script {number}");
+            Assert.IsTrue(ScrAdmission.Admit(program, AreaScriptHost.TalkAdmission).IsAdmitted, $"script {number}: the dialog set admits it whole");
+        }
+        // ARC-SCRIPT-2198: Kerghan's dialog script 1105 is admitted whole by the dialog sets (loops, change script, disband, create item, transform, call script and call-ex, play eye candy) while a use host answers.
+        var kerghan = Load(stack, 1105);
+        foreach (var set in new[] { AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+        {
+            var admitted = ScrAdmission.Admit(kerghan, set);
+            Assert.IsTrue(admitted.IsAdmitted, $"script 1105 under {set.Id}: {admitted.Refusal?.Code} type {admitted.Refusal?.Type} line {admitted.Refusal?.Line}");
         }
     }
 }

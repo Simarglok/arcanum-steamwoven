@@ -127,15 +127,16 @@ public static class SpellTargetStage
     public static bool EnvironmentAllows(int mask, int? playerSpellFlags, bool playerPerceptionExtraordinary) =>
         playerSpellFlags is { } flags && ((flags & mask) == mask || (mask == DetectingInvisible && playerPerceptionExtraordinary));
 
-    /// <summary>The caster of a full reflection (or any flag set) on <paramref name="target"/> (0x459040): when the target carries
-    /// any flag of <paramref name="mask"/>, the parent of the first run (in slot order) with a source whose target object it is
-    /// and whose components set those flags; null otherwise. The run's object lists (+0x130, +0x134) are not modelled.</summary>
-    [OriginalFunction(0x459040, OriginalFunctionScope.Partial)]
-    public static SpellRunObject? FlagCaster(SpellRunTable table, SpellRunObject target, int targetSpellFlags, int mask)
+    /// <summary>The caster of a flag set on an object (0x459040, ARC-WORLD-2144 in full; the reflection's caster and the mind-control controller): the run's whole holder test: <paramref name="holds"/> answers whether the object is the run's target, in its object list (+0x130) or in its summoned list (+0x134).
+    /// The first run in slot order with a source (the active bit is not tested) whose set-flags word (<paramref name="setFlags"/>: the run's +0x138, or what the host derives it from) holds every bit of <paramref name="mask"/> and that holds the object gives its parent, the controller; null when the object's
+    /// spell flags share no bit with the mask or no run answers. A run whose parent is gone answers null too (the original writes the parent handle as it is).</summary>
+    [OriginalFunction(0x459040, OriginalFunctionScope.Full)]
+    public static SpellRunObject? FlagCaster(SpellRunTable table, Func<SpellRun, bool> holds, Func<SpellRun, int> setFlags, int targetSpellFlags, int mask)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(holds);
+        ArgumentNullException.ThrowIfNull(setFlags);
         if (mask == 0 || (targetSpellFlags & mask) == 0) return null;
-        return table.Runs.FirstOrDefault(r => r.Source is not null && r.Target?.Id == target.Id && (r.SetSpellFlags & mask) == mask)?.Parent;
+        return table.Runs.FirstOrDefault(r => r.Source is not null && (setFlags(r) & mask) == mask && holds(r))?.Parent;
     }
 }

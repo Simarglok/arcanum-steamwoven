@@ -133,4 +133,25 @@ public sealed class RangedAttackStateTests
         var refused = owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2 });
         Assert.AreEqual((AttackRefusal.OutOfAmmunition, (SessionAmmoUse?)null), (refused.Resolution!.Refusal, refused.Ammunition));
     }
+
+    [TestMethod]
+    public void AShotIntoAWallOffersTheWeaponsHitScriptsAndTheWallsTakingDamageScript()
+    {
+        // ARC-COMBAT-1973 (ledger RH5): the hit step offers the weapon's hit script and the damage step the struck object's taking-damage script before it leaves for a wall; the answer changes nothing.
+        using var owner = Owner(Weapon(CombatSkill.Bow), arrows: 3);
+        var heard = new List<SessionHitScriptEvent>();
+        var asked = 0;
+        var wall = owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2, HitScripts = heard.Add, TakingDamage = () => { asked++; return false; } });
+        Assert.AreEqual((1, 1), (heard.Count, asked), "both scripts are offered once");
+        Assert.IsFalse(heard[0].Critical || heard[0].Projectile);
+        Assert.AreEqual((AttackOutcome.Hit, DamagePrevention.Wall, SessionObjectHostSteps.None), (wall.Resolution!.Outcome, wall.Resolution.Damage!.Prevented, wall.Host));
+        Assert.IsFalse(wall.Vetoed, "a wall takes nothing whatever the script says");
+        // A refused shot (no arrows) offers nothing.
+        owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2 });
+        owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2 });
+        var before = (heard.Count, asked);
+        var refused = owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2, HitScripts = heard.Add, TakingDamage = () => { asked++; return true; } });
+        Assert.AreEqual(AttackRefusal.OutOfAmmunition, refused.Resolution!.Refusal);
+        Assert.AreEqual(before, (heard.Count, asked));
+    }
 }

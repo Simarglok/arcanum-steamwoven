@@ -97,6 +97,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
+    /// <summary>ARC-UI-1908 (IW27): the stored portrait the item windows draw for the holder in place of <see cref="HolderImage"/> (<see cref="AreaLootArtLayout.HolderPortrait"/>:
+    /// a critter the observing PC leads, directly or through its followers, that stores one); null when the art decides.</summary>
+    public int? HolderPortrait { get; init; }
     /// <summary>ARC-UI-052: the looted holder is a container (a junk pile too): its grid scrolls further.</summary>
     public bool HolderContainer { get; init; }
 }
@@ -113,6 +116,10 @@ public sealed class AreaInventoryHost
     /// range 1 (the source's 0x428930); the pickup goal's own move-near range is not pinned, so pickup
     /// uses the same reach (project choice).</summary>
     public const int Reach = 1;
+
+    /// <summary>ARC-UI-2444: where the item windows find the portrait catalogue for the clash rule of 0x4CEB80 (the viewer reads it from the game
+    /// folder on first use); null or an answer of null: no catalogue, the stored portrait shows as it is.</summary>
+    public Func<PortraitCatalogue?>? PortraitCatalogueSource { get; set; }
 
     /// <summary>PROJECT diagnostic insert check: every item fits. Carry weight, Technophobia and grid room need the
     /// created character, which the viewer does not have yet (NOT READY).</summary>
@@ -368,6 +375,9 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-UI-2138: an NPC as the wearer of the wear test 0x464D20 (race, gender, crippled arms, in its current life state), asked before a hero's item is sold onto a slot of a merchant's doll; null: the host does not know it (the item goes back).</summary>
     public Func<SessionMapId, string, Arcanum.Simulation.Equipment.EquipmentWearer?>? NpcWearerFacts { get; set; }
 
+    /// <summary>ARC-UI-2159: the weight test of an item put on a wear slot of an NPC (a merchant's doll in a barter window, 0x466510 of the wear 0x466640), or null when the host cannot say (the sale then takes the diagnostic check).</summary>
+    public Func<string, SessionInsertCheck?>? NpcSlotInsertCheck { get; set; }
+
     /// <summary>The dialog's negative IN through the session (<see cref="SessionDialogInventoryPort"/>) with this insert check.</summary>
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session), entity => AttachHolderMap(session, entity), entity => NpcWearer?.Invoke(session.QueryActor().Map, entity));
@@ -572,7 +582,7 @@ public sealed class AreaInventoryHost
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
             : HolderLook(runtimeMap, holder);
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image,
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image, HolderPortrait = pile is not null ? null : HolderPortrait(session, runtimeMap, holder),
               HolderContainer = container, BodyDoll = bodyDoll };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
@@ -588,15 +598,35 @@ public sealed class AreaInventoryHost
     /// row or fields do not read.</summary>
     public int? HolderImage(int runtimeMap, string holder) => HolderLook(runtimeMap, holder ?? throw new ArgumentNullException(nameof(holder))).Image;
 
+    /// <summary>ARC-UI-1908 (IW27): the portrait the item windows draw for a seed holder instead of its image: the stored portrait of a
+    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>); null for any other holder or row. ARC-UI-2444: the
+    /// portrait is the one 0x4CEB80 shows (<see cref="AreaLootArtLayout.ShownPortrait"/>): an NPC that stores the PC's own portrait shows another,
+    /// found with <see cref="PortraitCatalogueSource"/> (none: the stored one).</summary>
+    public int? HolderPortrait(GameSessionOwner session, int runtimeMap, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(holder);
+        var row = HolderRow(runtimeMap, holder);
+        if (row is null || row.Type is not (CombatFieldReader.PcType or CombatFieldReader.NpcType)) return null;
+        var player = session.QueryHero()?.Portrait;
+        // The catalogue is asked for only when a clash is possible (a cold start reads it from the game folder).
+        var catalogue = AreaLootArtLayout.StoredPortrait(row) is { } stored && stored == player ? PortraitCatalogueSource?.Invoke() : null;
+        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.ShownPortrait(row, catalogue, player, session));
+    }
+
+    private AreaObjectRecord? HolderRow(int runtimeMap, string holder)
+    {
+        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) return own;
+        return _resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made) ? made : null;
+    }
+
     /// <summary>ARC-UI-052: the loot window's image of a seed holder (<see cref="AreaLootArtLayout.HolderImage"/>) from its object row: a
     /// critter's flags and race, a container's description (its prototype file less 20, as the session's junk piles count it); and whether
     /// it is a container. No image when its row or fields do not read.</summary>
 
     private (int? Image, bool Container) HolderLook(int runtimeMap, string holder)
     {
-        AreaObjectRecord? row = null;
-        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) row = own;
-        else if (_resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made)) row = made;
+        var row = HolderRow(runtimeMap, holder);
         if (row is null) return (null, false);
         var container = row.Type == CombatFieldReader.ContainerType;
         if (container) return (AreaLootArtLayout.HolderImage(row.Type, 0, -1, row.PrototypeNumber - 20), true);

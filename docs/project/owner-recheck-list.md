@@ -375,7 +375,7 @@ Compare in both games with the same hero (Divination college: See Contents 6, Re
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick picks an item of the hero's own inventory window only; an item of a loot, steal or barter window is not a target (ARC-MAGIC-1128).
+- Divine Magick picks an item of the hero's own inventory window or of a loot window kept open (ARC-MAGIC-1336); the original closes a barter or steal window when a spell on an inventory item starts, so their items are not targets (0x57BC70).
 
 ## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
 
@@ -1127,7 +1127,7 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 
 ## ARC-SCRIPT-1481 — food that heals and cures poison (2026-11-13)
 
-The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click).
+The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click). Since ARC-SCRIPT-1590 an NPC that holds such a food and chooses an AI-action item to heal itself runs the same script (heals, cures, loses the food); watch for the `ARC-SCRIPT-1590 item-use` lines in the viewer output.
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |

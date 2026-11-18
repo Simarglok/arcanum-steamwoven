@@ -53,6 +53,8 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// script element, or null when it has none (a well-formed element has three words).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
+        // ARC-SCRIPT-2432 (IV40): a critter's attachment is the use host's reading (the loaded element under the session's map changes: a change script of an earlier move may have replaced a number); an item's is the loaded row's.
+        if (_shown?.Invoke() is { } shown && shown.IsCritterRow(attachee)) return shown.Slot(attachee, point);
         var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == attachee.Map);
         if (map is null || !map.TryGetRow(attachee.Code, out var row)) return null;
         var element = row.EffectiveFields.SingleOrDefault(field => field.Slot == 31)?.Elements.SingleOrDefault(e => e.Key == point);
@@ -103,6 +105,25 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return row.EffectiveFields.FirstOrDefault(field => field.Slot == ObjectFlagsSlot) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } ? (flags & AreaUseScriptHost.OffObjectFlagBit) != 0 : false;
     }
 
+    /// <summary>ARC-SCRIPT-2375 (IV30): the item's own name number (field 22) in the loaded maps' rows, without a script's rename; null for an item no loaded row names (a made item).</summary>
+    public int? ItemNameInData(ScrObjectRef item)
+    {
+        var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == item.Map);
+        return map is not null && map.TryGetRow(item.Code, out var row) ? AreaUseScriptHost.NameOf(row) : null;
+    }
+
+    /// <summary>ARC-SCRIPT-2426 (IV36–IV39): the location field of an object as the shown map's use host places it (the hero's cell, a critter's live tile, a row's tile, an item's own stale tile); null for an object it has no row or place for.</summary>
+    public (long X, long Y)? LocationOf(ScrObjectRef obj) => _shown?.Invoke()?.LocationOfObject(obj);
+
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ1): an NPC's social class from the shown map's rows (0 for the hero and any other object type, as the use host reads it); null for an object that host has no row for.</summary>
+    public int? SocialClassOf(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.SocialClassOf(obj) : null;
+
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ2): an NPC's origin as it is now from the shown map's use host (0 for the hero and any other object type); null for an object that host has no row for.</summary>
+    public int? OriginOf(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.OriginOf(obj) : null;
+
+    /// <summary>ARC-SCRIPT-2432 (IV40): the use host's map changes for a change script of a critter of the shown map; null for any other object.</summary>
+    public IReadOnlyList<MapChangeEdit>? PlanObjectSlot(ScrWriteback write) => _shown?.Invoke()?.PlanCritterSlot(write);
+
     /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
     public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);
 
@@ -118,8 +139,8 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_ITEM_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>Never asked: <see cref="SessionItemScripts.Admission"/> leaves out the story-state actions.</summary>
-    public int StoryState() => throw new InvalidOperationException("AREA_ITEM_SCRIPT_STORY_STATE_NOT_BOUND");
+    /// <summary>ARC-SCRIPT-2375 (IV28): the session's story-state number. The session's run host answers its own reads (the move's earlier runs may have raised it), so the session does not ask this.</summary>
+    public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;

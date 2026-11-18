@@ -35,6 +35,18 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual(HeroBody.HumanFemale, HeroBody.For(CharacterRace.Human, CharacterGender.Female));
     }
 
+    // ARC-RENDER-2539 (MA2, 0x41D510): the stealth walk (animation 3) keeps the weapon and shield of the stand, but weapon 1 becomes weapon 0.
+    [TestMethod]
+    public void TheStealthWalkKeepsTheWeaponAndShieldAndWeaponOneBecomesZero()
+    {
+        var elf = HeroBody.For(CharacterRace.Elf, CharacterGender.Male)!.Value;
+        Assert.AreEqual(0x2C0000C0u, elf.Selector(ActorDiagnosticProfile.HumanSneakSelector));
+        Assert.AreEqual(0x2C0000C3u, (elf with { Weapon = 3 }).Selector(ActorDiagnosticProfile.HumanSneakSelector), "a weapon stays");
+        Assert.AreEqual(0x2C0000C0u, (elf with { Weapon = 1 }).Selector(ActorDiagnosticProfile.HumanSneakSelector), "weapon 1 becomes 0");
+        Assert.AreEqual(0x2C0800C3u, (elf with { Weapon = 3, Shield = 1 }).Selector(ActorDiagnosticProfile.HumanSneakSelector), "the shield stays");
+        Assert.AreEqual("art/critter/EFM/EFMUWXAd.art", elf.ArtPath(elf.Selector(ActorDiagnosticProfile.HumanSneakSelector)));
+    }
+
     [TestMethod]
     public void TheBodyRewritesOnlyTheBodyAndGenderBitsOfTheHumanSelectors()
     {
@@ -308,6 +320,23 @@ public sealed class HeroBodyArtTests
             Assert.AreEqual(ActorDiagnosticAction.SeveredLeg, profile.DyingArt(19)!.Value.Action);
             Assert.AreEqual(ActorDiagnosticAction.FallDown, profile.DyingArt(7)!.Value.Action);
         }
+    }
+
+    // ARC-RENDER-2564: the stealth walk ART (animation 3, the body's weapon part) of a species is read when it has one; a species without it draws the walk at the stealth rate.
+    [TestMethod]
+    public void AMonsterBodyReadsTheStealthWalkArtWhenTheSpeciesHasItAndOtherwiseDrawsTheWalk()
+    {
+        using var with = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["ad"] = [0], ["bd"] = [0] });
+        foreach (var combat in new[] { false, true })
+        {
+            var body = HeroBody.Monster(28, 0, combat ? 1 : 0);
+            var profile = HeroBodyArt.LoadMonster([with], body, Name).Profile;
+            Assert.AreEqual(body.MonsterSelector(3), profile.Sneak!.Selector, $"stealth walk combat={combat}");
+            Assert.AreEqual(ActorDiagnosticAction.Sneak, profile.ActionFor(profile.Sneak.Selector));
+            Assert.IsNotNull(profile.Sneak.Stride, "the stealth walk keeps its stride");
+        }
+        using var without = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0] });
+        Assert.IsNull(HeroBodyArt.LoadMonster([without], HeroBody.Monster(28, 0), Name).Profile.Sneak, "no species file: the walk is drawn at the stealth rate");
     }
 
     [TestMethod]

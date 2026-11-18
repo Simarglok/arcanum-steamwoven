@@ -16,6 +16,8 @@ public sealed record AreaAiMover(string Entity, AreaObjectKey Key, CellCoord Ori
     public int StepMs { get; init; }
     /// <summary>ARC-WORLD-111: whether the step is run (drawn with the run ART), else walked.</summary>
     public bool Running { get; init; }
+    /// <summary>ARC-RENDER-2539: whether the step is the stealth walk (drawn with the stealth ART, animation 3), a concealed NPC below prowling expert (0x42EDC0).</summary>
+    public bool Sneaking { get; init; }
 
     /// <summary>ARC-WORLD-111: whether the NPC is on its way at <paramref name="nowMs"/> (drawn walking or running).</summary>
     public bool Stepping(long nowMs) => From is not null && Progress(nowMs) < 1;
@@ -47,12 +49,12 @@ public sealed class AreaAiMovers
     public NeighborDirection FacingOf(string entity, NeighborDirection facing) => _movers.TryGetValue(entity, out var mover) ? mover.Facing : facing;
 
     /// <summary>Starts the NPC's step to <paramref name="next"/> (a neighbour of its cell), facing it unless <paramref name="keepFacing"/>, run when <paramref name="running"/>.</summary>
-    public void Step(string entity, AreaObjectKey key, CellCoord origin, CellCoord next, long nowMs, int stepMs, bool running = false, bool keepFacing = false)
+    public void Step(string entity, AreaObjectKey key, CellCoord origin, CellCoord next, long nowMs, int stepMs, bool running = false, bool keepFacing = false, bool sneaking = false)
     {
         var from = CellOf(entity, origin);
         // ARC-DEV-141: a pushed NPC slides without turning (the knockback step moves the object and sets no rotation, GT61).
         var facing = keepFacing ? FacingOf(entity, NeighborDirection.XPlus) : AreaCombatHost.Facing(from, next) ?? FacingOf(entity, NeighborDirection.XPlus);
-        _movers[entity] = new AreaAiMover(entity, key, origin, next, facing) { From = from, StepStartMs = nowMs, StepMs = stepMs, Running = running };
+        _movers[entity] = new AreaAiMover(entity, key, origin, next, facing) { From = from, StepStartMs = nowMs, StepMs = stepMs, Running = running, Sneaking = sneaking && !running };
         Version++;
     }
 

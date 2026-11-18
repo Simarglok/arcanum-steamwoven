@@ -110,6 +110,38 @@ public sealed class AreaAiHostInterruptTests
     }
 
     [TestMethod]
+    public void An_attack_on_a_follower_of_a_follower_of_the_hero_puts_the_hero_into_combat_mode()
+    {
+        // ARC-COMBAT-2597 (ledger VC38, 0x42B9C0 via 0x4B3F50): the node follows the target's leader chain to the PC (0x45DDA0), not only the direct leader (0x45DE00).
+        var (f, host) = Open();
+        using var fixture = f;
+        var session = host.Session;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, f.B, "virgil").Disposition);
+        Assert.IsFalse(session.QueryCompanion(f.B).LedByPc, "the target follows a follower, not the hero directly");
+
+        host.BeginAttack(f.A, f.B);
+
+        Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Critter(f.A)), "the attacker enters combat mode");
+        Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Hero), "and the hero, the PC at the end of the target's leader chain");
+    }
+
+    [TestMethod]
+    public void An_attack_on_a_free_NPC_or_a_follower_of_a_free_NPC_leaves_the_hero_out_of_combat_mode()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        var session = host.Session;
+        host.BeginAttack(f.A, f.B);
+        Assert.IsFalse(session.QueryCombatMode(SessionCombatant.Hero), "a free target");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, f.B, "stranger").Disposition);
+
+        host.BeginAttack(f.A, f.B);
+
+        Assert.IsFalse(session.QueryCombatMode(SessionCombatant.Hero), "a leader chain that ends at a free NPC never reaches the hero");
+    }
+
+    [TestMethod]
     public void The_far_path_interrupts_at_level_4_which_ends_a_walk_and_leaves_a_spell_attempt()
     {
         var (f, host) = Open();

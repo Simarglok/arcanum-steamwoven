@@ -183,13 +183,18 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         var typing = _saveListPanel!.TypingDescription;
+        // ARC-INPUT-2647 (save and load lists are the menu handler's windows 7 and 8, 0x546EE0, ledger SF6): Escape acts on the
+        // release; its press does nothing.
+        if (routed == Key.Escape)
+        {
+            if (key.Pressed || key.Echo) return true;
+            if (!_saveList!.Cancel()) EndSaveList();
+            else _saveListPanel.Render(_saveList, SelectedPreview());
+            return true;
+        }
         if (!key.Pressed) return !typing;
         switch (routed)
         {
-            case Key.Escape:
-                if (!key.Echo && !_saveList!.Cancel()) EndSaveList();
-                else _saveListPanel.Render(_saveList!, SelectedPreview());
-                return true;
             case Key.Up: SaveListCommand(() => { _saveList!.Move(-1); return AreaSaveCommand.Nothing; }); return true;
             case Key.Down: SaveListCommand(() => { _saveList!.Move(1); return AreaSaveCommand.Nothing; }); return true;
             case Key.Enter or Key.KpEnter:

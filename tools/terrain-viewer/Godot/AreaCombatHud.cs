@@ -212,8 +212,10 @@ public partial class AreaCombatHud : CanvasLayer
         // As the PC's gauges: over the bars (layer 6) when they are shown, else under the hover tooltip and the windows.
         Layer = _inBars ? 6 : 2;
         var factor = _inBars ? _bars!.Factor : AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2452: in the Steamwoven layout the screen lies where the strips put it, at the strips' fractional scale.
+        var (origin, scale) = _inBars ? _bars!.ScreenFrame(size) : (new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor), (float)factor);
+        _root.Position = origin;
+        _root.Scale = new(scale, scale);
         if (_artShown)
         {
             // ARC-UI-1888: the original's places (table 0x5CAA48 and the window table 0x5CAA38).
@@ -237,7 +239,9 @@ public partial class AreaCombatHud : CanvasLayer
             }
         }
         // The list under the top strip at the right (the follower portraits stand at the left edge), unscaled (its text is a normal label).
+        // ARC-UI-2604: at the frame's right edge, not under a pillarbox bar; without the layout FreeRect is the whole window, as before.
         _list.ResetSize();
-        _list.Position = new(Math.Max(0, size.X - _list.GetCombinedMinimumSize().X - 8), AreaGameBarPanel.TopInset + 8);
+        var free = AreaGameBarPanel.FreeRect(size);
+        _list.Position = new(Math.Max(free.Position.X, free.End.X - _list.GetCombinedMinimumSize().X - 8), AreaGameBarPanel.TopInset + 8);
     }
 }

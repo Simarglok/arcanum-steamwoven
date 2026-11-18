@@ -121,6 +121,7 @@ src/Arcanum.Session/GameSessionHeroInnate.cs,QueryHeroEffectiveAge,exempt,host
 src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
+src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowAtLocation,exempt,host
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
 src/Arcanum.Session/GameSessionHeroThrowScripts.cs,RunHeroThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
@@ -172,6 +173,9 @@ src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
 src/Arcanum.Session/GameSessionNpcPickup.cs,PickUpItemByNpc,exempt,host
+src/Arcanum.Session/GameSessionNpcRepair.cs,RepairByNpc,exempt,host
+src/Arcanum.Session/GameSessionNpcSkillRoll.cs,IsPlainNpcSkill,exempt,reference
+src/Arcanum.Session/GameSessionNpcSkillRoll.cs,RollNpcSkill,exempt,host
 src/Arcanum.Session/GameSessionNpcThrowScripts.cs,RunNpcThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
@@ -266,6 +270,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiFailChance,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiFreeMaintainSlots,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiItemFailChance,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiKnows,pending,
+src/Arcanum.Session/SessionSpellCasterAi.cs,AiMindController,exempt,host
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
@@ -394,6 +399,7 @@ src/Arcanum.Simulation/Equipment/WeaponArtRules.cs,WeaponPart,pending,
 src/Arcanum.Simulation/Goals/GoalDescriptors.cs,IsSameActivity,pending,
 src/Arcanum.Simulation/Goals/GoalRunTable.cs,InsertAtBottom,pending,
 src/Arcanum.Simulation/Goals/GoalRunTable.cs,RetargetDestination,pending,
+src/Arcanum.Simulation/Goals/HeroClickRules.cs,ClickStartOf,exempt,host
 src/Arcanum.Simulation/Goals/HeroInputRules.cs,RightReleaseTailOf,pending,
 src/Arcanum.Simulation/Hotkeys/HotkeyRules.cs,EntryOfScancode,pending,
 src/Arcanum.Simulation/Hotkeys/HotkeyRules.cs,PcCanActivate,pending,
@@ -470,6 +476,7 @@ src/Arcanum.World/AreaAiHost.cs,CastActionFrame,pending,
 src/Arcanum.World/AreaAiHost.cs,CatchUp,pending,
 src/Arcanum.World/AreaAiHost.cs,ChooseSkillUser,exempt,host
 src/Arcanum.World/AreaAiHost.cs,DeadCritter,exempt,reference
+src/Arcanum.World/AreaAiHost.cs,DodgeRefused,exempt,host
 src/Arcanum.World/AreaAiHost.cs,DyingRunning,pending,
 src/Arcanum.World/AreaAiHost.cs,EndCast,pending,
 src/Arcanum.World/AreaAiHost.cs,FaceCast,pending,
@@ -477,6 +484,7 @@ src/Arcanum.World/AreaAiHost.cs,FactionSame,pending,
 src/Arcanum.World/AreaAiHost.cs,FirstLockpicks,exempt,host
 src/Arcanum.World/AreaAiHost.cs,FirstStepClear,pending,
 src/Arcanum.World/AreaAiHost.cs,FollowerSkillUsers,exempt,host
+src/Arcanum.World/AreaAiHost.cs,GamblingAttempt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Gone,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,Grenade,pending,
 src/Arcanum.World/AreaAiHost.cs,HasSkillArt,pending,
@@ -508,6 +516,9 @@ src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
 src/Arcanum.World/AreaAiHost.cs,List,pending,
+src/Arcanum.World/AreaAiHost.cs,ManaStoreEmptied,exempt,host
+src/Arcanum.World/AreaAiHost.cs,MindControlAcceptance,exempt,host
+src/Arcanum.World/AreaAiHost.cs,MindController,exempt,host
 src/Arcanum.World/AreaAiHost.cs,MoveToLeader,pending,
 src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
@@ -520,8 +531,10 @@ src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformSkill,pending,
 src/Arcanum.World/AreaAiHost.cs,PickPocketAttempt,pending,
+src/Arcanum.World/AreaAiHost.cs,PlainSkillAttempt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ReWield,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ReleaseCast,pending,
+src/Arcanum.World/AreaAiHost.cs,RepairAttempt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,RunRoutine,pending,
 src/Arcanum.World/AreaAiHost.cs,RunUseScript,pending,
 src/Arcanum.World/AreaAiHost.cs,RunsOf,pending,
@@ -566,6 +579,7 @@ src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,ItemOff,exempt,reference
 src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
+src/Arcanum.World/AreaAiHostGround.cs,SlotInsertCheck,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
@@ -575,6 +589,7 @@ src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLedConsent,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLoyaltyStep,exempt,host
 src/Arcanum.World/AreaAiHostRedirect.cs,SpellRedirect,exempt,host
 src/Arcanum.World/AreaAiHostRedirect.cs,Vicinity,exempt,host
+src/Arcanum.World/AreaAiHostRoutes.cs,PlaceBody,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -613,6 +628,8 @@ src/Arcanum.World/AreaGreeting.cs,FactsFor,pending,
 src/Arcanum.World/AreaHeldThrow.cs,Lift,pending,
 src/Arcanum.World/AreaHeroDeath.cs,BeginShow,exempt,reference
 src/Arcanum.World/AreaHeroDeath.cs,StartCredits,exempt,reference
+src/Arcanum.World/AreaHeroPull.cs,Distance,exempt,reference
+src/Arcanum.World/AreaHeroRunsHost.cs,ApplyClickFlags,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,Attack,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Cast,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,IdleRestart,pending,
@@ -625,6 +642,8 @@ src/Arcanum.World/AreaHeroRunsHost.cs,PickPocket,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickUpObject,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Pickup,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,QueueCast,pending,
+src/Arcanum.World/AreaHeroRunsHost.cs,QueueGoal,exempt,host
+src/Arcanum.World/AreaHeroRunsHost.cs,StartContext,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,StepTurn,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Turn,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Use,pending,
@@ -632,6 +651,7 @@ src/Arcanum.World/AreaHeroRunsHost.cs,UseItem,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,UseItemOnTile,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,UseObject,pending,
 src/Arcanum.World/AreaInventoryArtLayout.cs,Place,pending,
+src/Arcanum.World/AreaInventoryHost.cs,HolderPortrait,exempt,host
 src/Arcanum.World/AreaInventoryHost.cs,Name,pending,
 src/Arcanum.World/AreaInventoryHost.cs,SubstituteContainer,pending,
 src/Arcanum.World/AreaItemAiming.cs,ApplyOnTile,pending,
@@ -643,8 +663,10 @@ src/Arcanum.World/AreaLifeBars.cs,Unconscious,pending,
 src/Arcanum.World/AreaLineOfFire.cs,Step,pending,
 src/Arcanum.World/AreaLootArt.cs,Arrange,pending,
 src/Arcanum.World/AreaLootArt.cs,HolderImage,pending,
+src/Arcanum.World/AreaLootArt.cs,HolderPortrait,exempt,host
 src/Arcanum.World/AreaLootArt.cs,Release,pending,
 src/Arcanum.World/AreaLootArt.cs,RightRelease,pending,
+src/Arcanum.World/AreaLootArt.cs,ShownPortrait,exempt,host
 src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
@@ -664,6 +686,7 @@ src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
 src/Arcanum.World/AreaRestock.cs,Wielder,pending,
 src/Arcanum.World/AreaScenePlan.cs,BodyRanks,pending,
 src/Arcanum.World/AreaSceneryHost.cs,AddCreated,pending,
+src/Arcanum.World/AreaSceneryHost.cs,ObjectDestroyed,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Reframe,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
 src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
@@ -680,6 +703,7 @@ src/Arcanum.World/AreaTraps.cs,DisarmByNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,Step,pending,
 src/Arcanum.World/AreaTraps.cs,StepEndsWalk,exempt,host
 src/Arcanum.World/AreaTraps.cs,StepNpc,exempt,host
+src/Arcanum.World/AreaTraps.cs,TargetClass,exempt,host
 src/Arcanum.World/AreaTraps.cs,Use,pending,
 src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,WalkCheck,pending,
@@ -690,6 +714,7 @@ src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,DestroyScenery,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,FactionOf,exempt,host
@@ -710,6 +735,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RunDestroyPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
@@ -720,6 +746,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,SocialClassOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
+src/Arcanum.World/AreaUseScripts.cs,TransformDamage,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,UseStops,exempt,host
 src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
 src/Arcanum.World/DiagnosticGridSession.cs,Relocate,pending,
@@ -727,6 +754,8 @@ src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,
 src/Arcanum.World/HeroBody.cs,Armed,pending,
 src/Arcanum.World/HeroBody.cs,Wearing,pending,
+src/Arcanum.World/HeroRequests.cs,ImmediateAction,exempt,host
+src/Arcanum.World/HeroRequests.cs,QueueGoal,exempt,host
 src/Arcanum.World/HeroRequests.cs,StartPickPocket,pending,
 src/Arcanum.World/InterfaceModes.cs,LeavePutsHeldItemBack,pending,
 src/Arcanum.World/InterfaceModes.cs,OpenerRefuses,pending,
@@ -800,6 +829,7 @@ tools/terrain-viewer/Core/AreaMessageLog.cs,ShowTransient,pending,
 tools/terrain-viewer/Core/AreaMessageLog.cs,public,pending,
 tools/terrain-viewer/Core/AreaNewCharacterArt.cs,Hover,pending,
 tools/terrain-viewer/Core/AreaNewCharacterArt.cs,NameLine,pending,
+tools/terrain-viewer/Core/AreaPanelArt.cs,Shown,exempt,host
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Break,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Button,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Centred,pending,
@@ -860,7 +890,9 @@ tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,CancelNoteEdit,exempt,host
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,SetNoteText,exempt,host
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiItemUseScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,CarryTransformVitals,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
@@ -878,6 +910,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,HandleFateKey,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,RouteFateKey,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,ToggleFate,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaHover.cs,PressPickSpared,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,DescribeObject,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,ArmLockpick,pending,
@@ -888,10 +921,13 @@ tools/terrain-viewer/Godot/TerrainViewerAreaInventoryTest.cs,StillPointerForSmok
 tools/terrain-viewer/Godot/TerrainViewerAreaItemUse.cs,DropToGround,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,OpenInPlayMenuOverWindows,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,RouteOptionsKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaMapCompanionSmoke.cs,RequireCompanionAttackClick,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaMapCompanionSmoke.cs,RequireCompanionOnLineOfFire,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,NoteScriptCreations,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,QueueCreationNotice,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,ShownPortrait,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
@@ -913,10 +949,12 @@ tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackApproachCell,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackCritterClick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,BedOccupantGoal,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,RepeatAttackClick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
@@ -952,6 +990,7 @@ tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerCanSpeak,exe
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerHurt,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SayFollowerLine,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SpeakerCanSpeakFacts,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerHeldMouse.cs,PollHeldMouse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,GameCursorPress,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroBeginThrow,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroThrowItem,pending,
@@ -1008,6 +1047,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,EndDestroyedObjectRuns,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host

@@ -166,7 +166,7 @@ public sealed partial class AreaAiHost
         if (cell.X < 0 || cell.Y < 0) return "outside the cell range";
         var request = new GoalStartRequest(npc, GoalStarters.Generic, new GoalFrame(run ? GoalType.RunNearTile : GoalType.MoveNearTile, tile: cell, range: ScriptWalkRange));
         if (!StartGatePasses(request)) return "refused by the movement gate";
-        var turnsRun = run && Mover(npc).Encumbrance < AiExecutorRules.RunRefusedEncumbrance;
+        var turnsRun = run && AiExecutorRules.RunPermitted(Mover(npc));
         if (_session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is { } running)
         {
             if (turnsRun && (running.Flags & GoalRunFlags.Running) == 0) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Running);
@@ -362,13 +362,27 @@ public sealed partial class AreaAiHost
     /// ARC-WORLD-1837 (ledger TT20, FM1): why a script's teleport of <paramref name="npc"/> to <paramref name="cell"/> of the shown map cannot be requested, or null. The NPC must be one this host runs on its own: the hero's followers go with the party's transfer
     /// (the session refuses a party member as a mover, GR15), so they are not modelled here; the shown map must hold the cell (as a route's relocation requires, <see cref="Relocate"/>).
     /// </summary>
-    public string? ScriptTeleportRefusal(string npc, CellCoord cell)
+    public string? ScriptTeleportRefusal(string npc, CellCoord cell) => ScriptTeleportRefusal(npc, _scene.RuntimeMap, cell);
+
+    /// <summary>
+    /// ARC-WORLD-2039 (ledger TT20, FM1): <see cref="ScriptTeleportRefusal(string, CellCoord)"/> for a destination map that may be another one. The NPC leaves the shown scene when the map is another (the original moves its record alone, FM1: it opens no map), so the
+    /// destination must be one the viewer lists (<see cref="AreaAiScene.MapListed"/>) and the cell must fit the placement packing (<see cref="SessionNpcPlacement"/>); the shown map's own cell test (<see cref="PlaceHeld"/>) does not apply to a cell of a map the host does not hold.
+    /// A map of -1 is the shown map.
+    /// </summary>
+    public string? ScriptTeleportRefusal(string npc, int map, CellCoord cell)
     {
         ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (map == -1) map = _scene.RuntimeMap;
         if (!_npcs.ContainsKey(npc)) return _followers.ContainsKey(npc) ? $"{npc} follows the hero: a follower's teleport by a script is not modelled" : $"{npc} is not an NPC the AI host runs here";
         if (PcLeader(npc) is not null) return $"{npc} follows the hero: a follower's teleport by a script is not modelled";
         if (cell.X < 0 || cell.Y < 0) return $"target {cell.X},{cell.Y} outside the cell range";
-        return PlaceHeld(cell) ? null : $"target {cell.X},{cell.Y} not held by the shown map";
+        // An NPC a script already sent to another map no longer stands here (review of ARC-WORLD-2039: a second move would clear the wrong map's placement); its record moves again only when its own map's host runs it.
+        if (_session.QueryMapChange(new SessionMapId(_scene.RuntimeMap), AreaCompanionPlacement.MapKey(npc)) is { } away and >= 1 && away != _scene.RuntimeMap) return $"{npc} already stands on map {away}: a second script teleport of it is not modelled";
+        if (map == _scene.RuntimeMap) return PlaceHeld(cell) ? null : $"target {cell.X},{cell.Y} not held by the shown map";
+        // Another map: the NPC's record moves there; a created critter has no home map data to name (its edits are the session's own, not built for a script's departure).
+        if (_created.Contains(npc)) return $"{npc} is a created critter: its departure to another map by a script is not modelled";
+        if (cell.X >= SessionNpcPlacement.Axis || cell.Y >= SessionNpcPlacement.Axis) return $"target {cell.X},{cell.Y} outside the placement range";
+        return (_scene.MapListed ?? (m => m == _scene.RuntimeMap))(map) ? null : $"map {map} is not one the viewer lists";
     }
 
     /// <summary>
@@ -376,13 +390,30 @@ public sealed partial class AreaAiHost
     /// <see cref="GameSessionOwner.ProcessChangeOfPlace"/>, whose payload the viewer completes with <see cref="PlaceTeleported"/>). Original: made at once, the slot keeps the last request; Steamwoven: queued, one request per frame (the homecomings' rule, VA18).
     /// Returns what became of it, for the NPC's trace.
     /// </summary>
-    public string RequestScriptTeleport(string npc, CellCoord cell, ChangeOfPlaceFlags flags, int seconds)
+    public string RequestScriptTeleport(string npc, CellCoord cell, ChangeOfPlaceFlags flags, int seconds) => RequestScriptTeleport(npc, _scene.RuntimeMap, cell, flags, seconds);
+
+    /// <summary>ARC-WORLD-2039: <see cref="RequestScriptTeleport(string, CellCoord, ChangeOfPlaceFlags, int)"/> to a cell of a map that may be another one (-1 is the shown map; the ping carries the record to the other map, <see cref="ScriptDepartureEdits"/>).</summary>
+    public string RequestScriptTeleport(string npc, int map, CellCoord cell, ChangeOfPlaceFlags flags, int seconds)
     {
         ArgumentException.ThrowIfNullOrEmpty(npc);
-        if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, _scene.RuntimeMap, cell, ChangeOfPlaceCaller.Script, flags, seconds).Text;
+        if (map == -1) map = _scene.RuntimeMap;
+        if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, map, cell, ChangeOfPlaceCaller.Script, flags, seconds).Text;
         _scriptTeleports.RemoveAll(t => t.Npc == npc);
-        _scriptTeleports.Add((npc, _scene.RuntimeMap, cell, flags, seconds));
+        _scriptTeleports.Add((npc, map, cell, flags, seconds));
         return "queued";
+    }
+
+    /// <summary>
+    /// ARC-WORLD-2039 (ledger TT20, FM1, FM3): the session changes that record a free NPC of the shown map standing on <paramref name="destination"/> at <paramref name="arrival"/> after a script's teleport to another map: its placement on the shown map cleared, the
+    /// destination cell, its home map's stored cell and its away change (the shown map is its home), and the original's teleported mark on the destination cell (<see cref="AreaCompanionGroup.Arrive(string, SessionMapId, CellCoord, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/>,
+    /// as a former follower sent home alone or a follower that travels). Null for an NPC the host does not hold or one without a stored cell.
+    /// </summary>
+    public IReadOnlyList<MapChangeEdit>? ScriptDepartureEdits(string npc, SessionMapId destination, CellCoord arrival)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (!_npcs.TryGetValue(npc, out var row) || row.Row.WorldX is not { } x || row.Row.WorldY is not { } y || x is < 0 or >= SessionNpcPlacement.Axis || y is < 0 or >= SessionNpcPlacement.Axis) return null;
+        var home = new SessionMapId(_scene.RuntimeMap);
+        return AreaCompanionGroup.Arrive(npc, home, new((int)x, (int)y), home, destination, arrival, Movers.FacingOf(npc, NeighborDirection.XPlus));
     }
 
     /// <summary>ARC-WORLD-1837: the placement a processed script teleport leaves to the host (the session's payload wrote nothing for the NPC's body): the NPC's run ends and it stands on the cell, as a route's relocation does (<see cref="Relocate"/>).</summary>
@@ -393,6 +424,20 @@ public sealed partial class AreaAiHost
         // The NPC may have died or been removed between the request and the ping: a body is not stood up, and no tile's script is told for it.
         if (Gone(npc) || DeadCritter(npc)) return $"{npc} is gone or dead";
         return PlaceAt(npc, row, cell);
+    }
+
+    /// <summary>
+    /// ARC-INPUT-1946 (0x4445A0, the ordinary object move 0x43E770 with no offset): stands the body of the dead NPC <paramref name="npc"/> on <paramref name="cell"/>, the hero's own cell included (the hero's click pulls it there), and records the place in the session.
+    /// No tile script is told: a dead body is no walker, and the original's move notification for a corpse is not read (issue #2563). False for an NPC the host does not hold, one that is gone or not dead, or a cell the shown map does not hold.
+    /// </summary>
+    public bool PlaceBody(string npc, CellCoord cell)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (!_npcs.TryGetValue(npc, out var row) || Gone(npc) || Status(npc) is not { IsDead: true } || Tile(npc) is not { } from || !PlaceHeld(cell, heroCellHeld: true)) return false;
+        if (from == cell) return true;
+        Movers.Restore(npc, row.Row.Key, row.Origin, cell, Movers.FacingOf(npc, NeighborDirection.XPlus));
+        RecordPlace(npc);
+        return true;
     }
 
     // A companion of the shown map is a route NPC: its row is its home map's, its teleport map the session's. Its relocation is its walk's jump.
@@ -537,6 +582,7 @@ public sealed partial class AreaAiHost
 
     // Whether the shown map holds a resident on this world cell: it lies on the chart (a map with a loaded-sector chart, the main map's windows: anywhere on the map, ARC-DEV-119),
     // its tile is admitted and the hero is not on it.
-    private bool PlaceHeld(CellCoord world) =>
-        (_scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world))) && Admitted(new AreaStepCell(world.X, world.Y)) && _scene.HeroCell() != world;
+    // ARC-INPUT-1946: heroCellHeld = the hero's own cell counts as held (a body pulled onto it by the Alt click).
+    private bool PlaceHeld(CellCoord world, bool heroCellHeld = false) =>
+        (_scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world))) && Admitted(new AreaStepCell(world.X, world.Y)) && (heroCellHeld || _scene.HeroCell() != world);
 }

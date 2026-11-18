@@ -998,8 +998,7 @@ the frame's art, place and portrait, with the bars the vials' art numbers (17 wh
 portrait and name in the message window when it has one (since ARC-UI-057 also the window's bars and another NPC's
 window). NOT READY: frames past six (the original scrolls them with its arrow buttons), the 50 % draw of the critter art
 the window shows for a follower without a portrait (the art by race or flags is drawn since ARC-UI-057), the PC's
-portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
-portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
+portrait (it is not session state, and the PC is not a hover target), the hovered panel's art for anyone else, and the original's hide
 toggle. Original visual parity NOT VERIFIED.
 
 ### Combat action points and turn order (ARC-UI-1114)
@@ -1671,7 +1670,7 @@ with Always Run on); Num Lock flips the always-run lock; the palette's **Always 
 (the `always run` line of `user://arcanum.cfg`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
 Virgil runs while he is farther than range + 2. Since ARC-SKILLS-008 the palette's **Prowl (stealth) on/off** toggles the
 hero's and its followers' concealment ([stealth](../world/stealth-runtime.md)); while concealed, a run becomes a walk unless the
-hero is a master of prowling with fatigue left (the crouch and the stealth walk animations are not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
+hero is a master of prowling with fatigue left (since ARC-RENDER-2539 a concealed hero below prowling expert steps the stealth walk, animation 3, at the stealth rate; the crouch is not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
 current gait …` (with `prowling: walks only` or `prowling: a master, runs allowed` while concealed) (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
 Ctrl+click arrives as a right press with Ctrl held and counts as Ctrl+LMB. Native smoke `ARC-WORLD-020 native-smoke run PASS` (after the quick-save phase, before the follow
 stage; `ARC_AREA_RUN_CAPTURE=PATH.png`). ARC-WORLD-021 adds the window vault (a window step takes 1.125 s and draws the
@@ -1729,8 +1728,8 @@ In combat mode (R, `--hero`) a left click on a living NPC attacks it, on the ext
 [FA1–FA10](../research/ledger/combat.md#hero-attack-arc-combat-005)): the hero walks (running) within its
 weapon's reach, turns to the target and plays its bare-handed attack ART at the rate of its Speed; the frame that shows the
 action frame resolves the hit through the session, and the attack repeats (auto attack) until the target dies. Shift makes
-it the attempt-attack goal 19 with run flag 0x100 (ARC-DEV-270: from where the hero stands, no approach walk); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
-head, an arm or a leg; a corpse is looted only with Alt, a plain click on it does nothing. The cursor over a living NPC is the
+it the attempt-attack goal 19 with run flag 0x100 (ARC-DEV-270: from where the hero stands, no approach walk); a follower is attacked only with left Alt held (without any Alt the press and the hover pick see through followers and corpses to the object or tile behind, ARC-INPUT-1937); held `,` `.` `/` aim at the
+head, an arm or a leg; a corpse is looted only with Alt, a plain click walks to the tile behind it. The cursor over a living NPC is the
 closed hand (`attack`, `walk to attack`). The status line names the outcome, damage, the target's hit points, a knockout or
 kill and the experience paid. A killed or unconscious NPC plays its dying or fall-down animation, read on demand from the
 archive its body came from, and keeps its last frame (ARC-RENDER-040; a body already lying when the map is shown holds it); out of combat mode a plain click loots the corpse. The stick, another
@@ -1964,7 +1963,7 @@ list keeps its place while the sheet stays open. The NPC sheet (mode 2) names th
 The creation editor (window 14) shows the same tab in the original look (ARC-UI-1792, ALP8): a release on a row writes the scheme into the draft hero (`AreaCreationEditor.PressScheme`), the choice is kept in `AreaNewCharacter.Scheme` and written into the started session by `ApplyChoices` (no cost, no points spent: the original ran its scheme before the editor, so it counts from the next level step); the diagnostic panel of an editor without the game's art keeps the NOT READY note. The age line and the race icon are built since ARC-UI-1791 (the creation editor's sheet gets the age line when the draft stores one). Native smoke: the sheet art stage (`--stages map`), the
 item-aim stage (NPC page) and the menu stage (the creation editor's page) print `PASS` lines for the page.
 
-**Not yet in the original's look:** the age is the stored base (no effect on stat 25 is modelled), the NPC icon reads the race the sheet names with no effects and the clash rule of an NPC portrait (0x4CEB80) is not built; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) in the diagnostic look (its art did not read) shows the schemes tab's NOT READY note. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
+**Not yet in the original's look:** the age is the stored base (no effect on stat 25 is modelled), the NPC icon reads the race the sheet names with no effects (the clash rule of an NPC portrait, 0x4CEB80, is built, ARC-UI-2444: an NPC that stores the PC's own portrait shows the catalogue's next or previous one in the follower frames, the hover, this sheet and the item windows); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) in the diagnostic look (its art did not read) shows the schemes tab's NOT READY note. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).
 
@@ -2215,7 +2214,7 @@ and layout (below), the other windows the project's.
   pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The editor window keeps
   the project's panel (plan); ARC-DEV-334: the in-play quit question is the original's dialog box (below, with the death load box); the synthetic self-tests (no game folder) keep the panel for every window. The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
-  opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
+  opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path. ARC-UI-2577: `ARC_AREA_MENU_STEAMWOVEN=1` adds the Steamwoven full-screen layout check at the TRD sizes (see the [TRD](../ui/steamwoven-interface-trd.md#prototype-of-the-play-screen-arc-ui-2452)).
 - **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
   `AreaArtTextRules`, `AreaArtFontFace`, `AreaArtTextDraw`): every art-font text of the menus, the options controls, the save and
   load windows, the pre-made and new-character windows and the dialog box goes through one draw that blends as the original's
@@ -2421,7 +2420,7 @@ actions (131) give the slide numbers (up to 100), which the table `rules\slide.m
   (the dying run the kill makes, 0x45DA57); both movies play from the installed table through the real decoder (800 × 400) with the session clocks standing still and no slide beginning under them; then the
   show starts and shows script 997's queue for the game's flags (46, 20, 33, 39 and 44 for a new game), each installed 800 × 600 picture fading in over about 2 s with the slides' music and its voice, a key
   release ending it and a 2 s fade-out; then the start map loads again with a fresh session without a hero and the main menu fades in. Without ffmpeg the movies are passed over (said in the log) and
-  the rest runs. `ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a frame of each movie, each slide and the reopened menu as PNG for a graphics report (never committed).
+  the rest runs. ARC-RENDER-2197: three more endings follow, each from a new game: the Vendigroth underground's use script 2862 used with the item named 6711 it tests its extra object for (movies 3 and 5, then 132) with global flag 2053 set, which script 997 answers with slide 3 alone, and the end game asked for with flag 2632 (slide 1) and with flag 2050 (slide 4), each with its picture, fades, voice, reset and menu fade-in. `ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a frame of each movie, each slide and the reopened menu as PNG for a graphics report (never committed).
 
 ### Options window (ARC-UI-013)
 

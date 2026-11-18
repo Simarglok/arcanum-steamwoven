@@ -62,9 +62,14 @@ public partial class TerrainViewerApp
             InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
             await Frames();
             Require(MainMenuOpen && LogbookOpen, "the Escape release opened the menu over the logbook: " + State());
-            await Press(Key.Escape);
-            Require(!MainMenuOpen && LogbookOpen, "Escape pressed and released closed the menu and the release did not reopen it: " + State());
-            steps.Add("Escape acts on the release");
+            // ARC-INPUT-2647 (menu handler 0x546EE0, key up): the menu's own Escape press keeps it open; the release continues play.
+            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+            await Frames();
+            Require(MainMenuOpen && LogbookOpen, "the menu's own Escape press closed it: " + State());
+            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
+            await Frames();
+            Require(!MainMenuOpen && LogbookOpen, "the menu's Escape release closed the menu and did not reopen it: " + State());
+            steps.Add("Escape acts on the release (the in-play route and the menu's own)");
 
             // Escape opens the menu over the logbook, which stays; Continue returns to it (0x541180, 0x5412D0).
             await Press(Key.Escape);

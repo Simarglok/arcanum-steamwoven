@@ -187,6 +187,9 @@ public enum SessionObjectHostSteps
     WitnessesHearAttack = 1 << 5,
     /// <summary>The witnesses of the object's break by such an attacker (0x4AEE50 with 0: possible hostility).</summary>
     WitnessesHearBreak = 1 << 6,
+    /// <summary>ARC-SCRIPT-2620 (ledger OD7–OD11, BS3c, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): the break destroyed a scenery, trap or container (a busted one broken again, a trap with no destroyed art, a container that spilled): the host ends the object's goal runs and tells its spell runs,
+    /// as a script's destroy does. A door or window is not named (the door host owns its runs); an item is deleted, not destroyed.</summary>
+    ObjectDestroyed = 1 << 7,
 }
 
 /// <summary>
@@ -463,10 +466,11 @@ public sealed partial class GameSessionOwner
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step, at the landing for a shot that flew.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
+        // ARC-COMBAT-1973 (RH5): a wall's hit offers them too (the weapon's scripts with the wall as the extra object), as any struck object's.
+        if (resolution.Refusal == AttackRefusal.None && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
             attack.HitScripts?.Invoke(new(pending is null ? WieldedEntity() : pending.WeaponItem, resolution.Outcome == AttackOutcome.CriticalHit, pending is not null, pending?.Thrown is not null));
-        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); a wall has none, and the answer cannot change the outcome.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
+        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); ARC-COMBAT-1973 (RH5): so is a wall's (the damage step offers point 23 before it leaves for a wall), and the answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
                 null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying };
@@ -684,6 +688,7 @@ public sealed partial class GameSessionOwner
         if (!hit.Broken) return SessionObjectHostSteps.WitnessesHearAttack;
         var steps = SessionObjectHostSteps.WitnessesHearBreak;
         if (baseline.Trapped) steps |= SessionObjectHostSteps.TrapFires;
+        if (hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled && baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectDestroyed;
         return steps | hit.Break switch
         {
             ObjectBreak.WindowBusted or ObjectBreak.SceneryRespawns => SessionObjectHostSteps.BustScript,

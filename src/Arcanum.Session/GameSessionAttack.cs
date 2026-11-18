@@ -142,6 +142,11 @@ public sealed class SessionCritterCombat
     private CharacterStatContext StatContext(LifeState state) => new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
         state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: SpeedShift);
 
+    /// <summary>ARC-COMBAT-1832: the same NPC with the invulnerable trait (object flag 0x400000) set or cleared as the session's written flags have it over the map data's.</summary>
+    internal SessionCritterCombat WithInvulnerable(bool on) => on == Facts.Traits.HasFlag(LifeTraits.Invulnerable) ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
+        _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts with { Traits = on ? Facts.Traits | LifeTraits.Invulnerable : Facts.Traits & ~LifeTraits.Invulnerable },
+        Loaded, Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
+
     internal SessionCritterCombat WithUnarmedBody(UnarmedBodySpell body) => body == UnarmedBody ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
         _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
@@ -412,7 +417,7 @@ public sealed class SessionCritterCombat
             DamageBonus = snapshot.GetEffective(CharacterStat.DamageBonus),
             MagickTechAptitude = aptitude,
             ArmorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
-                value => value, profile),
+                value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), profile),
             Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances),
             Conditions = CombatantRules.Conditions(status, state, Facts.Traits, _flags),
             LightEmission = _ownLight,
@@ -483,7 +488,8 @@ public sealed class SessionCritterCombat
         EquipmentItem Shown(EquipmentItem item, bool known) => known || item.MagickTechComplexity <= 0 || item.Armor is not { } armor ? item
             : item with { Armor = armor with { MagicAcAdjustment = 0, MagicResistances = EquipmentResistances.None } };
         var equipment = EquipmentRules.Evaluate(worn.ToDictionary(pair => pair.Key, pair => Shown(pair.Value, identified(pair.Key))), aptitude, SkillTraining.None);
-        var armorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value, profile);
+        var armorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
+            value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), profile);
         var resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances);
         var magic = CombatantRules.MagicResistance(storedMagicResistance, equipment.Resistances.Magic, Monstrous, _effectResistances.Magic);
         var armour = DollRatings.Armour(armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic);
@@ -745,8 +751,8 @@ public sealed partial class GameSessionOwner
             ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
             DamageBonus = snapshot.GetEffective(CharacterStat.DamageBonus),
             MagickTechAptitude = aptitude,
-            ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value,
-                _rules.Combat),
+            ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
+                value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), _rules.Combat),
             // ARC-MAGIC-027: the hero's durable effects' resistance changes, under the innate effects' (ARC-MAGIC-1700).
             Resistances = CombatantRules.Resistances(HeroStoredResistances().Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
                 HeroEffectResistances()),

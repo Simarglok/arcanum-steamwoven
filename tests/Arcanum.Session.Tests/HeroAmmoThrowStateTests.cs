@@ -38,11 +38,12 @@ public sealed class HeroAmmoThrowStateTests
         Assert.AreEqual(("made:3", 18, 12), (owner.QueryThrownShot(shot)!.Value.Item, owner.QueryAmmo("made:2")!.Value.Units, owner.QueryAmmo("made:3")!.Value.Units),
             "the new stack flies, the rest stays in the hero's list");
         CollectionAssert.AreEqual(new[] { "made:2" }, owner.QueryHeroAmmo().Select(stack => stack.Entity).ToArray());
-        Assert.AreEqual(At(owner, 3), thrown.Destination);
+        // ARC-COMBAT-2435: a throw at a tile rolls as a throw at a location, so it lands on the tile or, after a miss, on its scattered tile.
+        var landing = thrown.Destination!.Value;
         // It lands where its flight ends, with its units, as a placed made item.
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, At(owner, 3)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, landing).Disposition);
         var placed = owner.QueryPlacedItems().Single(item => item.Entity == "made:3");
-        Assert.AreEqual((At(owner, 3), 12), (placed.Cell, owner.QueryAmmo("made:3")!.Value.Units));
+        Assert.AreEqual((landing, 12), (placed.Cell, owner.QueryAmmo("made:3")!.Value.Units));
     }
 
     [TestMethod]

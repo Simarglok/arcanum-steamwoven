@@ -34,6 +34,34 @@ public sealed class AreaWorldMapArtTests
     }
 
     [TestMethod]
+    public void A_note_label_has_the_colour_of_its_marker_types_font_row_and_the_place_of_an_area_label()
+    {
+        // ARC-UI-2445 (WM45, WM142, WM49): rows 0-3 of the marker font table: note white, skull red, chest yellow, question green; a type outside keeps the question row.
+        Assert.AreEqual(((byte)255, (byte)255, (byte)255), AreaWorldMapArtLayout.NoteLabelColourOf(0));
+        Assert.AreEqual(((byte)255, (byte)0, (byte)0), AreaWorldMapArtLayout.NoteLabelColourOf(1));
+        Assert.AreEqual(((byte)255, (byte)255, (byte)0), AreaWorldMapArtLayout.NoteLabelColourOf(2));
+        Assert.AreEqual(((byte)0, (byte)255, (byte)0), AreaWorldMapArtLayout.NoteLabelColourOf(AreaTownNotes.QuestionType));
+        Assert.AreEqual(AreaWorldMapArtLayout.NoteLabelColourOf(3), AreaWorldMapArtLayout.NoteLabelColourOf(-1));
+        Assert.AreEqual(AreaWorldMapArtLayout.NoteLabelColourOf(3), AreaWorldMapArtLayout.NoteLabelColourOf(9));
+        Assert.AreEqual(AreaWorldMapArtLayout.NoteTypeArts.Count, AreaWorldMapArtLayout.NoteLabelColours.Count, "one colour per note art row");
+        // A note has no name offset: its text starts 12 right and 10 above the pixel, in view coordinates.
+        Assert.AreEqual((700 - 100 + 12, 400 - 50 - 10), AreaWorldMapArtLayout.LabelAt(700, 400, (100, 50), 0, 0));
+    }
+
+    [TestMethod]
+    public void A_note_is_drawn_with_the_art_of_its_marker_type()
+    {
+        // ARC-UI-2330 (BM4d table 0x5C9160 rows 0-2, WM79, WM132): 0 note 142, 1 skull 144, 2 chest 141, 3 question 143 (scenery notes); anything else keeps 143.
+        Assert.AreEqual(142, AreaWorldMapArtLayout.NoteArtOf(0));
+        Assert.AreEqual(144, AreaWorldMapArtLayout.NoteArtOf(1));
+        Assert.AreEqual(141, AreaWorldMapArtLayout.NoteArtOf(2));
+        Assert.AreEqual(143, AreaWorldMapArtLayout.NoteArtOf(AreaTownNotes.QuestionType));
+        Assert.AreEqual(143, AreaWorldMapArtLayout.NoteArtOf(-1));
+        Assert.AreEqual(143, AreaWorldMapArtLayout.NoteArtOf(4));
+        CollectionAssert.IsSubsetOf(AreaWorldMapArtLayout.NoteTypeArts.ToArray(), AreaWorldMapArtLayout.ArtNumbers.ToArray(), "the view reads every note art");
+    }
+
+    [TestMethod]
     public void The_lens_is_the_square_hole_of_the_background_art_and_its_test_is_half_open()
     {
         // ARC-UI-133 (WM36): the registered rectangle (25, 65, 89, 89) of the screen is (25, 24) in the window; 0x551000 keeps the left and top edges

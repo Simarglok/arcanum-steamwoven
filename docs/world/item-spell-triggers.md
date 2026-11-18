@@ -68,10 +68,15 @@ and saves the charges the spells spend. The other events are later slices (see [
   and wield (it never marks, skipping items with spells) and a critical drop (step `ItemSpellsUnsupported`). A first break still
   takes it off without its unwear (not ready).
 - **Batches.** The notes of an event pass are applied after the pass, so two charge payments of one pass are both made against the
-  count before it; one that then finds no charge left spends nothing, where the original would refuse it. A spend the session
-  refuses (a full record budget) is logged as `ChargeNotSaved`.
+  count before it; one that then finds no charge left spends nothing, where the original would refuse it.
+- **Always written (ARC-MAGIC-2434).** The original's payment writes field 105 of the source it is given, so `SpendItemCharge` asks
+  no tracked item (the host's item lookup names the item, whatever map seed the session has attached) and no shared budget: the
+  counts have a budget of their own (`GameSessionLimits.MaxItemCharges`, 65,536), no longer part of the durability records, so a
+  full durability budget cannot lose a spend. A spend is refused (and logged as `ChargeNotSaved`) only for a deleted item, the
+  65,537th count or an exhausted revision counter. `RechargeItemCharges` writes the same counts and the same budget (ARC-MAGIC-2443: the recharge
+  asks no tracked item either; it is refused only for a deleted item, the charge budget or an exhausted revision counter).
 - Both are in snapshot schema 49 ([game session](game-session-runtime.md#snapshot-schema-62)): `durability.charges` (`entity`,
-  `charges` 0..1,000,000, ordinal order, within the durability budget) and each worn item's `itemSpells`.
+  `charges` 0..1,000,000, ordinal order, within the charge budget of its own) and each worn item's `itemSpells`.
 
 ## Item use (ARC-MAGIC-022)
 

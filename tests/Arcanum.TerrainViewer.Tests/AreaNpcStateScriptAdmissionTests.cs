@@ -20,9 +20,12 @@ public sealed class AreaNpcStateScriptAdmissionTests
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
             Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
         }
-        // The dialog host does not apply the requests yet: its sets stay without them.
-        foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+        // The dialog host applies two of them while the shown map's use host answers (ARC-SCRIPT-2198: critter disband through the party, change script through the use host's slot writes): its bare sets stay without the nine, its talk sets hold those two.
+        foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
             foreach (var action in ScrAdmissionSet.NpcStateActions) Assert.IsFalse(set.Actions.Contains(action), $"{set.Id}: action {action}");
+        foreach (var set in new[] { AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+            foreach (var action in ScrAdmissionSet.NpcStateActions)
+                Assert.AreEqual(action is ScrCatalogue.Action.CritterDisband or ScrCatalogue.Action.ChangeScript, set.Actions.Contains(action), $"{set.Id}: action {action}");
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -61,6 +64,6 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // target it cannot draw with another art before anything applies.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 160, from 98).
         // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64) on main with the group and container focus kinds (S61, S62) and toggle state in the use set: the any-scenery focus kind (16) alone moves one script into each of the use, placed, heartbeat and dying counts; the other moves since the numbers above came with the sets merged since (issue #1846).
-        Assert.AreEqual((270, 208, 97, 187, 183, 235), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((270, 208, 102, 187, 183, 235), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

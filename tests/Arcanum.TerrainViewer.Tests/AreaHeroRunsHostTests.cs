@@ -1123,6 +1123,78 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
     }
 
+    // ARC-COMBAT-1949 (VC62): the start branch's reads and the repeated attack queued beneath the main run.
+    [TestMethod]
+    public void TheStartContextSeesAnEqualAttackAndItsAliasAndNothingOnAnotherTarget()
+    {
+        using var f = new Fixture();
+        Assert.IsFalse(f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1").EqualGoalQueued, "no run");
+        f.Host.Attack("atk:npc:1", run: true);
+        var context = f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1");
+        Assert.IsTrue(context.EqualGoalQueued);
+        Assert.AreEqual(0, context.MainDepth);
+        Assert.IsFalse(context.MainTopIdle);
+        Assert.IsTrue(f.Host.StartContext(HeroClickGoal.AttemptAttack, "atk:npc:1").EqualGoalQueued, "goals 18 and 19 are the same activity (0x44E710)");
+        Assert.IsFalse(f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:2").EqualGoalQueued);
+        Assert.IsFalse(f.Host.StartContext(HeroClickGoal.Talk, "atk:npc:1").EqualGoalQueued, "another goal type");
+    }
+
+    [TestMethod]
+    public void ARepeatedAttackIsQueuedAtTheBottomOfTheRunningOnesStackAndNothingIsQueuedWithoutAMainRun()
+    {
+        using var f = new Fixture();
+        Assert.IsFalse(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"), "no main run to queue under");
+        f.Host.Attack("atk:npc:1", run: true);
+        var handle = f.Host.AttackRun!.Handle;
+        Assert.IsTrue(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"));
+        var run = f.Host.AttackRun!;
+        Assert.AreEqual(handle, run.Handle, "the run stays");
+        Assert.AreEqual(2, run.Depth);
+        Assert.AreEqual(GoalType.Attack, run.Bottom.Goal);
+        Assert.AreEqual(1, f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1").MainDepth);
+    }
+
+    [TestMethod]
+    public void AQueuedRepeatAttackSwingsAgainWhenTheFirstSwingIsOverAndThenTheRunEnds()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        Assert.IsTrue(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"));
+        Assert.IsTrue(f.Host.AttackQueuedBeneath);
+        f.Run(2500);
+        CollectionAssert.AreEqual(new[] { "swing", "hit", "swing", "hit" }, f.Feet.Attacks, "the queued attack plays after the first one pops");
+        Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
+        Assert.IsFalse(f.Host.AttackQueuedBeneath);
+    }
+
+    [TestMethod]
+    public void TheClicksFlagsGoOntoTheExistingMainRunShiftAsNoWalkOtherwiseRunningAndUseAsNearOccupied()
+    {
+        using var f = new Fixture();
+        f.Host.ApplyClickFlags(shift: true, nearOccupied: false); // no main run: nothing
+        f.Host.Attack("atk:npc:1", run: false);
+        Assert.AreEqual(GoalRunFlags.None, f.Host.AttackRun!.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied));
+        f.Host.ApplyClickFlags(shift: true, nearOccupied: false);
+        Assert.AreEqual(GoalRunFlags.NoWalk, f.Host.AttackRun!.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running));
+        f.Host.ApplyClickFlags(shift: false, nearOccupied: true);
+        Assert.AreEqual(GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied, f.Host.AttackRun!.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied));
+    }
+
+    [TestMethod]
+    public void TheClicksRunningFlagIsRefusedAtEncumbranceFour()
+    {
+        using var f = new Fixture();
+        f.Host.Attack("atk:npc:1", run: false);
+        f.Feet.Encumbrance = 4;
+        f.Host.ApplyClickFlags(shift: false, nearOccupied: false);
+        Assert.AreEqual(GoalRunFlags.None, f.Host.AttackRun!.Flags & GoalRunFlags.Running);
+        f.Feet.Encumbrance = 3;
+        f.Host.ApplyClickFlags(shift: false, nearOccupied: false);
+        Assert.AreEqual(GoalRunFlags.Running, f.Host.AttackRun!.Flags & GoalRunFlags.Running);
+    }
+
     // ARC-DEV-270: the Shift click's attempt attack 19 with run flag 0x100 (GS26, GS27).
     [TestMethod]
     public void AnAttemptAttackStartsGoalNineteenWithTheNoWalkFlagAndSwingsFromWhereTheHeroStands()

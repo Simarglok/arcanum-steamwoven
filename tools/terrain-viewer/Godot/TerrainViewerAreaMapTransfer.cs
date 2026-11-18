@@ -293,6 +293,10 @@ public partial class TerrainViewerApp
             ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
             // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
+            // ARC-SCRIPT-2506 (TI5): the made critter of a script's transform takes the old NPC's hit-point and fatigue percentages through the session's life.
+            CarryVitals: (entity, hitPointPercent, fatiguePercent) => CarryTransformVitals(owner, entity, hitPointPercent, fatiguePercent),
+            // ARC-SCRIPT-2519 (TI5c): the made critter of a script's transform takes the old NPC's facing (its mover's, else its map art's rotation).
+            NpcFacing: ScriptNpcFacing,
             // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
             ScriptAttack: (attacker, victim) =>
             {
@@ -312,14 +316,18 @@ public partial class TerrainViewerApp
             BodyArmorUseArt: () => _areaSession is { } armorSession ? WornBodyArmorUseArt(armorSession) : null,
             // ARC-SCRIPT-2342 (AR2, AR7): get armor of an NPC the session dressed reads the use art of the body armour it wears now from the AI host's combat reads.
             NpcBodyArmor: npc => AreaAiHostNow()?.WornBodyArmor(npc),
+            // ARC-SCRIPT-2505: get reaction of an NPC that is no dialog speaker reads the AI host's standard reaction toward the hero.
+            StandardReaction: npc => AreaAiHostNow()?.StandardReaction(npc),
             // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map is a request in the session's one slot; the AI host's relocation carries it out at the next ping (PingNpcChangeOfPlace).
-            NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, new(teleport.X, teleport.Y)) : "no AI host",
+            NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y)) : "no AI host",
             RequestNpcTeleport: teleport =>
             {
                 if (AreaAiHostNow() is not { } ai) return;
                 var (flags, seconds) = AreaChangeOfPlace.Flags(teleport.Fade);
-                GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, new(teleport.X, teleport.Y), flags, seconds)}");
-            });
+                GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y), flags, seconds)}");
+            },
+            // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
+            ObjectDestroyed: EndDestroyedObjectRuns);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

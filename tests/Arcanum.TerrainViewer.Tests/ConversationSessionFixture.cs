@@ -20,9 +20,9 @@ internal static class ConversationSessionFixture
     }
 
     /// <summary>ARC-UI-088: a session with a hero (an invented half-elf male, every primary stat 8, level 1), as the viewer's hero start makes.</summary>
-    internal static GameSessionOwner CreateWithHero(int runtimeMap = 1)
+    internal static GameSessionOwner CreateWithHero(int runtimeMap = 1, int portrait = 0)
     {
-        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 0, 0, null, null, 385, []);
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 0, 0, null, null, 385, []) { Portrait = portrait };
         var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
         return AreaTransitionCoordinator.CreateSession(Clock, Guid.NewGuid(), Guid.NewGuid(), AreaGridSession.Cell(AreaGridSession.Spawn), runtimeMap, load).Owner
             ?? throw new InvalidOperationException("SESSION_HERO");

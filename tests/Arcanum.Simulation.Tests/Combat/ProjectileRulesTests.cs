@@ -232,7 +232,11 @@ public sealed class ProjectileRulesTests
         Assert.AreEqual(ProjectileStrikeKind.Obstruction, ProjectileRules.Cross(free, new(new(5, 5), new(6, 6), 2), destination, null, Hero, map, NoRolls).Strike);
         // Without a target a shot is a miss flying free (the scatter sets flag 0x20).
         Assert.ThrowsExactly<ArgumentException>(() => ProjectileRules.Cross(new ProjectileShot(false, false, 3), new(new(4, 4), new(5, 5), 2), destination, null, Hero, map, NoRolls));
-        Assert.ThrowsExactly<ArgumentException>(() => ProjectileRules.Cross(new ProjectileShot(true, true, 3), new(new(4, 4), new(5, 5), 2), destination, null, Hero, map, NoRolls));
+        // ARC-COMBAT-2435 (TW11): a throw at a location that hit has no target either and strikes nothing on the way (no stray roll, no obstruction test); it ends on leaving its destination.
+        var located = new ProjectileShot(true, true, 3);
+        Assert.AreEqual(ProjectileStrikeKind.None, ProjectileRules.Cross(located, new(new(4, 4), new(5, 5), 2), destination, null, Hero, map, NoRolls).Strike);
+        Assert.AreEqual(ProjectileStrikeKind.None, ProjectileRules.Cross(located, new(new(5, 5), new(6, 6), 2), destination, null, Hero, map, NoRolls).Strike, "the door on the way is not met");
+        Assert.AreEqual(ProjectileStrikeKind.DestinationEnd, ProjectileRules.Cross(located, new(destination, new(7, 7), 6), destination, null, Hero, map, NoRolls).Strike);
         // A shot with a target still flies on past its destination as a miss.
         var past = ProjectileRules.Cross(new ProjectileShot(false, false, 10), new(destination, new(7, 7), 6), destination, Target, Hero, new Map(), NoRolls);
         Assert.AreEqual((ProjectileStrikeKind.None, true), (past.Strike, past.Shot.FreeFlight));

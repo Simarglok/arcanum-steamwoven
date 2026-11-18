@@ -309,7 +309,7 @@ public sealed partial class GameSessionOwner
     // identify marks the moved item identified in the same revision (a barter window's sale, BT5); without triggers (ARC-MAGIC-022) an
     // item that is the source of a spell run is refused.
     private InventoryMutationResult GiveItemTo(string npc, SessionHolderKind kind, string item, SessionInsertCheck insertCheck, bool identify,
-        ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null)
+        ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null, NpcWearer? slotWearer = null, IReadOnlyList<int>? slotPoints = null)
     {
         if (HeroListed(item) is not { } held) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (HolderHasScript(npc, kind, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
@@ -321,11 +321,13 @@ public sealed partial class GameSessionOwner
         // item) and remove item (28) with the hero as the triggerer, the insertion insert item (21) with the recipient as the triggerer; without a script host an item with any of them is refused.
         var wornPoints = _equipment.SlotOf(item) is { } wornIn ? _equipment.Worn[wornIn].ScriptPoints : [];
         SessionSeedItem? listed = held.Origin is { } originMap && _inventory.Seeds.TryGetValue(originMap, out var originSeed) && originSeed.Items.TryGetValue(item, out var givenRow) ? givenRow : null;
-        bool Has(int point) => wornPoints.Contains(point) || listed?.Facts.HasScript(point) == true;
+        // ARC-UI-2159 (IE3, IE4, IE6, BW5): a sale onto a slot of a merchant's doll (slotWearer is the merchant as the wearer) also meets the item's own points the host listed (slotPoints: a kit or made item has no seed row) and its wield on (24).
+        bool Has(int point) => wornPoints.Contains(point) || listed?.Facts.HasScript(point) == true || slotPoints?.Contains(point) == true;
         var (wieldOff, removeOwn, insertOwn) = (worn && Has(SessionScriptPoint.WieldOff), Has(SessionScriptPoint.RemoveItem), Has(SessionScriptPoint.InsertItem));
-        if (scripts is null && (wornPoints.Count > 0 || wieldOff || removeOwn || insertOwn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        var wieldOn = slotWearer is not null && Has(SessionScriptPoint.WieldOn);
+        if (scripts is null && (wornPoints.Count > 0 || wieldOff || removeOwn || insertOwn || wieldOn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // The script host answers for the shown map's rows, so the scripts of an item whose row is another map's seed row are not run: refused, never moved with a script skipped.
-        if (held.Origin is { } rowMap && rowMap != _actor.Map && (wieldOff || removeOwn || insertOwn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (held.Origin is { } rowMap && rowMap != _actor.Map && (wieldOff || removeOwn || insertOwn || wieldOn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-MAGIC-022: a worn item with the item spells mark would leave without its unwear (0x4CBFC0).
         if (_equipment.SlotOf(item) is { } markedIn && _equipment.Worn[markedIn].ItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         // ARC-MAGIC-022: the removal ends the item's runs and runs its drop (IU9) only through an item trigger host.
@@ -358,9 +360,9 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
-        ItemScriptRuns? runs = null;
+        ItemScriptRuns? runs = null, wearRuns = null;
         ScrRunResult? insertRun = null;
-        if (scripts is not null && (wieldOff || removeOwn || insertOwn))
+        if (scripts is not null && (wieldOff || removeOwn || insertOwn || wieldOn))
         {
             // The original moves the item first and then runs these scripts, whose results it ignores (IE3, IE4, IF10); the admitted commands read nothing the move changes, so the runs are made
             // before the commit and applied with it, or the whole move is refused.
@@ -370,11 +372,21 @@ public sealed partial class GameSessionOwner
             if (runs.Failure == GameSessionFailure.None && removeOwn) runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null);
             // The insertion's triggerer is the recipient: an NPC reads its own printed line variant; a container is no critter, so its run keeps the hero's reading.
             runs.NpcTriggerer = kind == SessionHolderKind.Npc;
-            if (runs.Failure == GameSessionFailure.None && insertOwn) insertRun = runs.Run(SessionScriptPoint.InsertItem, item, npc, null);
+            // ARC-UI-2159 (IE4): an item put on the merchant's slot is wielded by the merchant (wield on 24, then insert item 21): those runs are the merchant's (its effect list the runs change, its stats they read), planned after the hero's removal.
+            if (slotWearer is not null && runs.Failure == GameSessionFailure.None && (wieldOn || insertOwn))
+            {
+                wearRuns = new ItemScriptRuns(this, scripts, shown.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity }, slotWearer) { NpcTriggerer = true };
+                if (wieldOn) wearRuns.Run(SessionScriptPoint.WieldOn, item, npc, null);
+                if (wearRuns.Failure == GameSessionFailure.None && insertOwn) insertRun = wearRuns.Run(SessionScriptPoint.InsertItem, item, npc, null);
+            }
+            else if (runs.Failure == GameSessionFailure.None && insertOwn) insertRun = runs.Run(SessionScriptPoint.InsertItem, item, npc, null);
             ThrowIfDisposed();
-            if (_revision != revision || _actor.Map != shown || _flags.Version != flagVersion) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            var made = wearRuns is null ? runs.Runs : [.. runs.Runs, .. wearRuns.Runs];
+            if (_revision != revision || _actor.Map != shown || _flags.Version != flagVersion) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = made };
             runs.Prepare();
-            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            wearRuns?.Prepare();
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = made };
+            if (wearRuns is not null && wearRuns.Failure != GameSessionFailure.None) return RejectItem(wearRuns.Failure, verdict) with { InsertScript = insertRun, Scripts = made };
         }
         // ARC-MAGIC-2252: a dry run (QueryNamedItemTransfer) ends where the move would apply: every run is made and prepared, nothing is applied.
         if (_transferDryRun) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, item, verdict, Version);
@@ -404,10 +416,11 @@ public sealed partial class GameSessionOwner
             if (identify) _inventory.Identified.Add(item);
         }
         runs?.Commit();
+        wearRuns?.Commit();
         if (into is not null) DestroyObject(item);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version)
-            { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
+            { InsertScript = insertRun, Scripts = wearRuns is null ? runs?.Runs ?? [] : [.. runs!.Runs, .. wearRuns.Runs], Messages = wearRuns is null ? runs?.Messages ?? [] : [.. runs!.Messages, .. wearRuns.Messages] };
     }
 
     /// <summary>
@@ -419,7 +432,7 @@ public sealed partial class GameSessionOwner
     /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// gold (<see cref="TakeGoldFromNpc"/>) or, for a session without a hero, a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>; a key otherwise folds into the hero's key list, ARC-WORLD-123), and the rules of
     /// <see cref="LootItem"/>. One revision. ARC-UI-1926: a worn item is refused unless <paramref name="unwield"/> takes it off its slot as the loot of a body does (the barter window's doll
-    /// view: 0x575200 → 0x5788C0 → 0x461CA0, whose removal 0x466E00 → 0x467860 unwields), over the NPC's own wield context when <paramref name="npcWearer"/> gives it. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
+    /// view: 0x575200 → 0x5788C0 → 0x461CA0, whose removal 0x466E00 → 0x467860 unwields; ARC-DEV-1338: the pick-pocket steal), over the NPC's own wield context when <paramref name="npcWearer"/> gives it. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
     /// (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,

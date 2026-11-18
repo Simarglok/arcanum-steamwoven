@@ -50,14 +50,18 @@ public sealed class AreaAiRouteTests
             Field(78, At(day.X, day.Y)), Field(79, At(night.X, night.Y)), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0), Array(92),
         ], true, true, true);
 
-    internal sealed record Scene(GameSessionOwner Session, AreaAiHost Host, AreaEventWorld Events, Func<AreaAiHost> Rebuild, string Npc, Walks Walks);
+    internal sealed record Scene(GameSessionOwner Session, AreaAiHost Host, AreaEventWorld Events, Func<AreaAiHost> Rebuild, string Npc, Walks Walks)
+    {
+        /// <summary>ARC-INPUT-1946: the combat host the scene's NPC builds its life from (a test kills it through <see cref="GameSessionOwner.Kill"/>).</summary>
+        public AreaCombatHost? Combat { get; init; }
+    }
 
     /// <summary>ARC-DEV-116: the companion's own walk as the host sees it (a jump moves it at once).</summary>
     internal sealed class Walks(AreaAiNpc companion) : IAreaAiFollowers
     {
         public readonly Dictionary<string, CellCoord> Cells = new() { [companion.Entity] = companion.Origin };
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = [companion];
-        public bool Step(string entity, CellCoord next, bool running) { Cells[entity] = next; return true; }
+        public bool Step(string entity, CellCoord next, bool running, bool sneaking = false) { Cells[entity] = next; return true; }
         public void Face(string entity, CellCoord toward) { }
         public bool Jump(string entity, CellCoord cell) { Cells[entity] = cell; return true; }
     }
@@ -99,7 +103,30 @@ public sealed class AreaAiRouteTests
         var events = new AreaEventWorld(() => combat, () => null, ai: () => host);
         AreaAiHost Build() => new(session, scene, events, new AreaCombatWorld(Map, () => [], _ => null));
         host = Build();
-        return new(session, host, events, Build, Entity(0), walks);
+        return new(session, host, events, Build, Entity(0), walks) { Combat = combat };
+    }
+
+    // ARC-INPUT-1946 (0x4445A0): the AI host stands the body of a dead NPC on the hero's own cell (a live one and a far cell are refused), records the place, and a host built again keeps the body there.
+    [TestMethod]
+    public void The_hero_pulls_a_dead_npcs_body_onto_its_own_cell_and_a_rebuilt_host_keeps_it_there()
+    {
+        var scene = Open(Npc(0, [], 0, (1, 1), (1, 1)));
+        Assert.IsFalse(scene.Host.PlaceBody(scene.Npc, HeroCell), "a living NPC is not pulled");
+        var target = scene.Combat!.Build(scene.Session, scene.Npc).Combat?.Target ?? throw new AssertFailedException("the NPC has no combat build");
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.Kill(scene.Session.Version, target).Disposition);
+        Assert.IsFalse(scene.Host.PlaceBody(scene.Npc, new(99, 99)), "a cell the map does not hold is refused");
+        Assert.IsFalse(scene.Host.PlaceBody(Entity(7), HeroCell), "an id the host does not hold");
+        Assert.AreEqual(HeroImmediateResult.TooFar, AreaHeroPull.PullBody(scene.Host, scene.Npc, HeroCell), "four tiles away");
+        Assert.AreEqual(NpcCell, Cell(scene));
+        var near = new CellCoord(13, 21);
+        Assert.IsTrue(scene.Host.PlaceBody(scene.Npc, near), "the body of the dead NPC may lie anywhere the map holds");
+        scene.Host.DrainNotices();
+        Assert.AreEqual(HeroImmediateResult.Moved, AreaHeroPull.PullBody(scene.Host, scene.Npc, HeroCell));
+        Assert.AreEqual(HeroCell, Cell(scene), "the hero's own cell holds the body");
+        Assert.AreEqual(HeroCell, scene.Session.QueryNpcPlace(scene.Npc)!.Value.World, "the place is the session's");
+        Assert.IsFalse(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered), "no tile script is told for a body");
+        Assert.AreEqual(HeroCell, scene.Rebuild().Tile(scene.Npc), "a host built again restores the body on the hero's cell");
+        Assert.AreEqual(HeroImmediateResult.None, AreaHeroPull.PullBody(null, scene.Npc, HeroCell), "no AI host, no body");
     }
 
     private static CellCoord Cell(Scene scene) => scene.Host.Tile(scene.Npc)!.Value;
@@ -271,6 +298,55 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(target, scene.Session.QueryNpcPlace(scene.Npc)!.Value.World, "the place is the session's");
         Assert.IsTrue(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered && n.Npc == scene.Npc && n.Cell == target), "the tile's script is told");
         StringAssert.Contains(scene.Host.PlaceTeleported(scene.Npc, target), "already on");
+    }
+
+    // ARC-WORLD-2039 (ledger TT20, FM1, FM3): a script's teleport of a free NPC to another map moves its record alone; the shown map no longer lists it.
+    [TestMethod]
+    public void A_scripts_teleport_of_a_free_npc_to_another_map_records_it_there_and_names_that_map_as_its_away_change()
+    {
+        var scene = Open(Npc(0, [], 0, (1, 1), (1, 1)), mapListed: map => map is Map or 9);
+        var far = new CellCoord(500, 600);
+        Assert.IsNull(scene.Host.ScriptTeleportRefusal(scene.Npc, 9, far));
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(scene.Npc, 8, far)!, "not one the viewer lists");
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(scene.Npc, 9, new((int)SessionNpcPlacement.Axis, 0))!, "placement range");
+        Assert.IsNull(scene.Host.ScriptTeleportRefusal(scene.Npc, -1, new(20, 20)), "-1 is the shown map");
+        Assert.AreEqual("queued", scene.Host.RequestScriptTeleport(scene.Npc, 9, far, ChangeOfPlaceFlags.None, 0));
+        Assert.IsTrue(scene.Host.FlushHomecomings());
+        var request = scene.Session.QueryChangeOfPlace()!;
+        Assert.AreEqual((scene.Npc, ChangeOfPlaceCaller.Script, 9, far), (request.Entity, request.Caller, request.DestinationMap, request.Destination));
+        var run = scene.Session.ProcessChangeOfPlace(new OtherMapPing(scene.Host));
+        Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, run.Status, run.Failure.ToString());
+        var there = new SessionMapId(9);
+        Assert.AreEqual(AreaCompanionPlacement.Encode(far, NeighborDirection.XPlus), scene.Session.QueryMapChange(there, AreaCompanionPlacement.Key(scene.Npc)));
+        Assert.AreEqual(9L, scene.Session.QueryMapChange(new SessionMapId(Map), AreaCompanionPlacement.MapKey(scene.Npc)), "the home map names where it stands");
+        Assert.AreEqual((int?)Map, EntityHomes.HomeOf(scene.Session, scene.Npc));
+        Assert.IsNotNull(scene.Session.QueryMapChange(there, SessionTeleportedMark.Key(scene.Npc)), "the open of that map notifies it");
+        // A second script teleport of the NPC that already stands on another map is refused (its departure would clear the wrong map's placement).
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(scene.Npc, 9, new(5, 5))!, "already stands on map 9");
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(scene.Npc, Map, new(5, 5))!, "already stands on map 9");
+    }
+
+    [TestMethod]
+    public void A_scripts_teleport_of_an_unknown_npc_to_another_map_is_refused_and_the_original_setting_requests_it_at_once()
+    {
+        var scene = Open(Npc(0, [], 0, (1, 1), (1, 1)), mapListed: map => map is Map or 9);
+        StringAssert.Contains(scene.Host.ScriptTeleportRefusal(Entity(7), 9, new(5, 5))!, "not an NPC the AI host runs");
+        Assert.IsNull(scene.Host.ScriptDepartureEdits(Entity(7), new(9), new(5, 5)));
+        Assert.IsNotNull(scene.Host.ScriptDepartureEdits(scene.Npc, new(9), new(5, 5)));
+        var original = Open(Npc(0, [], 0, (1, 1), (1, 1)), rules: RuleMode.Original, mapListed: map => map is Map or 9);
+        Assert.AreEqual("Stored", original.Host.RequestScriptTeleport(original.Npc, 9, new(5, 5), ChangeOfPlaceFlags.None, 0));
+        Assert.AreEqual(9, original.Session.QueryChangeOfPlace()!.DestinationMap);
+    }
+
+    // The viewer's host for the ping of a free NPC a script sends to another map: the AI host's departure edits (FM3), nothing to ready.
+    private sealed class OtherMapPing(AreaAiHost host) : IChangeOfPlaceHost
+    {
+        public bool DestinationListed(int map) => true;
+        public SessionTransferFacts TransferFacts(ChangeOfPlaceRequest request) => new();
+        public ChangeOfPlaceReadiness ReadyDestination(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList) => ChangeOfPlaceReadiness.Ready;
+        public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList) =>
+            new(request.Destination, NeighborDirection.XPlus, host.ScriptDepartureEdits(request.Entity, destination, request.Destination)?.ToArray()!);
+        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => true;
     }
 
     [TestMethod]

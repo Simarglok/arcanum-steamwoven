@@ -35,6 +35,8 @@ public partial class AreaItemServicePanel : CanvasLayer
     public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-1765: the window's holder (the hero) on the screen for the round view: its foot point in canvas units and the game view's zoom; null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1908: the stored portraits' small images the frame draws where the original's image function answers a portrait.</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get => _area.PortraitTextures; set => _area.PortraitTextures = value; }
     // ARC-UI-1765: the original look: the art, the owner's choice of the diagnostic view, the switch between them, the frame, the round view, the panel's two backgrounds and the frame's view.
     private AreaInventoryArtLook? _look;
     private bool _diagnosticChosen;
@@ -229,6 +231,8 @@ public partial class AreaItemServicePanel : CanvasLayer
         if (ArtMode)
         {
             // ARC-UI-1765: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it (as the inventory and barter windows' original look).
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the loot window hides the bars; the zone is the layout's all the same).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
@@ -240,7 +244,7 @@ public partial class AreaItemServicePanel : CanvasLayer
                 _panel.Size = new(frameWidth, 0);
             }
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, free.Y));
-            _panel.Position = new((free.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (free.X - frameWidth) / 2, top);
             return;
         }
         var size = GetViewport().GetVisibleRect().Size;

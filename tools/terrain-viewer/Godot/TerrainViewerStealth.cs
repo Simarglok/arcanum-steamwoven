@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-SKILLS-008: prowling in the AREA view. The palette's Prowl action stands for the original's skill-bar prowling button: it
 // toggles the session hero's concealment and its followers' (no check, no action points). While the hero is concealed its
 // steps follow the stealth gait (ledger ST3): below master it never runs, a master runs while it has fatigue. The viewer draws
-// the ordinary walk and stand (the crouch and the stealth walk animations are not drawn).
+// the stand and, ARC-RENDER-2539, the stealth walk (animation 3) below prowling expert; the crouch (animation 5) is still not drawn for the hero.
 public partial class TerrainViewerApp
 {
     private string? _prowlNotice;
@@ -30,6 +30,10 @@ public partial class TerrainViewerApp
     // A concealed hero runs only as a master of prowling with fatigue left (ST3).
     private bool StealthAllowsRun() => !HeroConcealed || _areaSession!.QueryHeroSkills() is { } skills
         && StealthRules.Gait(skills[Skill.Prowling].Training, HeroFatigue() is > 0).CanRun;
+
+    // ARC-RENDER-2539 (0x42EDC0): the concealment flag is set and the prowling training is below expert (none or apprentice).
+    private bool HeroSneaks() => HeroConcealed && _areaSession!.QueryHeroSkills() is { } skills
+        && StealthRules.Gait(skills[Skill.Prowling].Training, true).Walk == StealthWalk.StealthWalk;
 
     private string StealthSummary() => !HeroConcealed ? "" : StealthAllowsRun() ? "; prowling: a master, runs allowed" : "; prowling: walks only";
 }

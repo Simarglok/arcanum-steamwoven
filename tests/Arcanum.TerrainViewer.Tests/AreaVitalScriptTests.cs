@@ -79,7 +79,7 @@ public sealed class AreaVitalScriptTests
                 Do(new(ScrCatalogue.Action.GetStat, N(24), (Extra, -1), (Local, 1))),
                 Do(new(ScrCatalogue.Action.HealPoison, (Extra, -1), (Local, 1))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
-            // 813: a negative amount raises the poison level in the original, which the host does not model.
+            // 813: a negative amount raises the poison level in the original (ARC-SCRIPT-1593): the life step is asked with the negative amount.
             Write("scr/00813negative.scr", Program(Do(new(ScrCatalogue.Action.HealPoison, (Extra, -1), N(-4))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 814: heal poison of the attachee by 6 only.
             Write("scr/00814poison.scr", Program(Do(new(ScrCatalogue.Action.HealPoison, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
@@ -146,7 +146,7 @@ public sealed class AreaVitalScriptTests
     }
 
     [TestMethod]
-    public void A_heal_without_the_life_step_or_a_negative_heal_poison_leaves_the_run_unapplied_and_a_vitals_question_about_another_object_is_not_modelled()
+    public void A_heal_without_the_life_step_leaves_the_run_unapplied_and_a_vitals_question_about_another_object_is_not_modelled()
     {
         WithContent(content =>
         {
@@ -156,11 +156,26 @@ public sealed class AreaVitalScriptTests
             var door = Row(5, 3, ReadScript);
             var host = Host(session, content, World(null, (_, _, _) => "healed"), negative, poison, door);
             var pc = host.Pc;
-            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunUseScript(AreaUseScriptHost.EntityId(negative), pc, pc, session.Rules.Scripts).Outcome, "a negative amount");
             var none = Host(session, content, World(null, null), poison);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, none.RunUseScript(AreaUseScriptHost.EntityId(poison), pc, pc, session.Rules.Scripts).Outcome, "no life step");
             // A door has no vitals the host knows: the dispatch ends as not modelled, nothing applied.
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunUseScript(AreaUseScriptHost.EntityId(door), pc, pc, session.Rules.Scripts).Outcome, "a door's hit points");
+        });
+    }
+
+    [TestMethod]
+    public void A_negative_heal_poison_amount_goes_to_the_life_step_as_it_is_to_raise_the_level()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var negative = Row(3, 2, NegativeScript);
+            var healed = new List<(string Victim, int Fatigue, int Poison)>();
+            var host = Host(session, content, World(null, (victim, fatigue, poison) => { healed.Add((victim, fatigue, poison)); return "healed"; }), negative);
+            var pc = host.Pc;
+            var ran = host.RunUseScript(AreaUseScriptHost.EntityId(negative), pc, pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 0, -4) }, healed);
         });
     }
 
@@ -216,6 +231,59 @@ public sealed class AreaVitalScriptTests
             var secondHost = new AreaUseScriptHost(second, 2, [], [other], content, world);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, secondHost.RunItemUse(1, Entity(6), second.Rules.Scripts, target: AreaScriptHost.PcCode).Outcome, "destroy of the extra object (the PC)");
             Assert.IsFalse(second.IsItemDestroyed(Entity(6)));
+        });
+    }
+
+    // ARC-SCRIPT-1590 (VT8): the food an NPC (row 1, a human of the shown map 1) holds in its own list, row 6.
+    private static (AreaInventoryMap Map, AreaObjectRecord Npc) NpcFood(int script, bool holds = true)
+    {
+        var npc = Row(1, 16, ReadScript);
+        var food = Row(6, 9, script);
+        var map = new AreaInventoryMap(1, new([new SessionSeedHolder(Entity(1), SessionHolderKind.Npc, false, false, [], holds ? [Entity(6)] : [])],
+            [new SessionSeedItem(Entity(6), new(new(SessionItemType.Food, 4060, 60, 160), 1, 0, 0, null, []), holds ? null : new CellCoord(16, 20))]),
+            new[] { npc, food }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+        return (map, npc);
+    }
+
+    [TestMethod]
+    public void An_npc_that_eats_runs_the_use_script_as_the_triggerer_and_its_food_leaves_its_own_list()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var (map, npc) = NpcFood(EatScript);
+            Assert.AreEqual(GameSessionFailure.None, new AreaInventoryHost([map]).Attach(session));
+            var hp = new List<(string Victim, int Amount)>();
+            var healed = new List<(string Victim, int Fatigue, int Poison)>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, Vitals: code => code == Entity(1) ? new AreaScriptVitals(4, 9, 2, 7, 11) : null,
+                ScriptHeal: (victim, amount) => { hp.Add((victim, amount)); return "healed"; }, ScriptHealLife: (victim, fatigue, poison) => { healed.Add((victim, fatigue, poison)); return "healed"; });
+            var host = new AreaUseScriptHost(session, 1, [npc], [map], content, world);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, Entity(1), new(1, Entity(1)));
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            Assert.IsTrue(session.IsItemDestroyed(Entity(6)), "the food left the NPC's list");
+            CollectionAssert.AreEqual(new[] { (Entity(1), 4) }, hp);
+            CollectionAssert.AreEqual(new[] { (Entity(1), 0, 7) }, healed);
+        });
+    }
+
+    [TestMethod]
+    public void An_npcs_use_is_refused_before_any_effect_for_a_user_that_is_no_npc_of_the_shown_map_or_food_its_list_does_not_hold()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var (map, npc) = NpcFood(EatScript, holds: false);
+            Assert.AreEqual(GameSessionFailure.None, new AreaInventoryHost([map]).Attach(session));
+            var hp = new List<(string, int)>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, Vitals: code => code == Entity(1) ? new AreaScriptVitals(4, 9, 2, 7, 11) : null,
+                ScriptHeal: (victim, amount) => { hp.Add((victim, amount)); return "healed"; }, ScriptHealLife: (_, _, _) => "healed");
+            var host = new AreaUseScriptHost(session, 1, [npc], [map], content, world);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(6), session.Rules.Scripts, Entity(1), new(1, Entity(1))).Outcome, "the NPC does not hold the food");
+            Assert.AreEqual(GameSessionFailure.ItemNotAvailable, session.NpcItemRemovalRefusal(Entity(1), Entity(6)));
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(1, Entity(6), session.Rules.Scripts, Entity(1), new(2, Entity(1))).Outcome, "an NPC of another map");
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(1, Entity(6), session.Rules.Scripts, Entity(1), new(1, Entity(9))).Outcome, "no row for the user");
+            Assert.IsFalse(session.IsItemDestroyed(Entity(6)));
+            Assert.AreEqual(0, hp.Count, "nothing healed");
         });
     }
 

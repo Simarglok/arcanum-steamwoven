@@ -348,6 +348,28 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
+    // ARC-SCRIPT-2408 (IV32): the held and wielded item readers follow a script's rename of an item: the item is found by its new number and no longer by the prototype's.
+    [TestMethod]
+    public void A_renamed_item_is_held_and_wielded_by_its_new_name_and_no_longer_by_the_old_one()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var inventory = new AreaInventoryHost([Inventory()]);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            var host = Host(session, content, Gate(702));
+            var npc = new ScrObjectRef(1, Entity(9));
+            Assert.IsTrue(host.HoldsItemNamed(npc, 70));
+            Assert.AreEqual(70, host.WieldedItemName(npc, 1004));
+            var written = session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemName.Key(Entity(5)), 71)]);
+            Assert.AreNotEqual(GameSessionDisposition.Rejected, written.Disposition);
+            Assert.IsTrue(host.HoldsItemNamed(npc, 71), "found by the renamed number");
+            Assert.IsFalse(host.HoldsItemNamed(npc, 70), "no longer by the old one");
+            Assert.AreEqual(71, host.WieldedItemName(npc, 1004), "the worn item answers its renamed number");
+            Assert.IsTrue(host.HoldsItemNamed(npc, 71) && !host.HoldsItemNamed(npc, 50), "an unrelated number still finds nothing");
+        });
+    }
+
     [TestMethod]
     public void A_reading_action_for_the_pc_is_kept_and_one_for_another_viewer_is_not()
     {
@@ -849,7 +871,7 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
-    // ARC-DEV-298 (B20): float line (23) is in the tile and sector set, not in a use click's: a tile script floats its line over the PC and the host hands it out once.
+    // ARC-DEV-298 (B20): a tile script floats its line over the PC and the host hands it out once (ARC-RENDER-2197: float line is in the use click's set too, for the Vendigroth underground's use script 2862).
     [TestMethod]
     public void A_tile_script_floats_a_line_over_the_pc_and_hands_it_out_once()
     {
@@ -858,7 +880,7 @@ public sealed class AreaUseScriptHostTests
             using var session = ConversationSessionFixture.Create();
             var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 775);
             Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.FloatLine));
-            Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine), "a use click's set is unchanged");
+            Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine), "a use click's set holds float line too (ARC-RENDER-2197)");
             var host = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null));
             var ran = host.RunPlaced(tile, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);

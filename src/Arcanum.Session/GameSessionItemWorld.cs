@@ -42,6 +42,19 @@ public interface ISessionItemWorldHost
     /// <summary>ARC-SCRIPT-2346 (IV9): whether the map data of the item stores its off flag (object flag 0x2) set, or null when the host has no row for it (an item made at run time has none: the host answers false for it); the session then refuses a toggle state on it.</summary>
     bool? ItemOffInData(ScrObjectRef item);
 
+    /// <summary>
+    /// ARC-SCRIPT-2375 (IV30): the name number (object field 0x16) the map data gives <paramref name="item"/>, without any rename a script wrote (<see cref="ISessionItemWorldHost.NameOf"/> includes it), or null when the host has no row for it (an item made at run
+    /// time has none): the session then refuses a rename of it. A host that does not answer leaves a rename unanswerable.
+    /// </summary>
+    int? ItemNameInData(ScrObjectRef item) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2432 (IV40): the map changes that keep a run's change script (99) of an object that is not an item of the move: <paramref name="write"/> is the object's attachment point with the whole slot it ends in (the number replaced, the flags and
+    /// counters as the object held them). The shown map's use host plans it as a use run keeps a critter's slot (the loaded element under the session's map changes, a part back at its loaded value clears its record); null for an object it cannot keep (no
+    /// row, not a critter, no loaded element at the point, a point it does not keep): the session then refuses the move. The keys of the edits are the object's own.
+    /// </summary>
+    IReadOnlyList<MapChangeEdit>? PlanObjectSlot(ScrWriteback write) => null;
+
     /// <summary>The plan of a change art number of the object to <paramref name="number"/> (the host's reading of the art files and of the object's lock identity); null when the host cannot plan it (the move is refused).</summary>
     SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number);
 
@@ -56,6 +69,21 @@ public interface ISessionItemWorldHost
 
     /// <summary>ARC-SCRIPT-2347 (IV14, HW1): the obj is dead condition (22) as the use host reads it (the hero's death, an NPC's death as the session holds it), or null for any other object and one the host reads no row for (the move is refused).</summary>
     bool? IsDead(ScrObjectRef obj);
+
+    /// <summary>
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): an object's location field (field 2, the tile) as distance between reads it from any object type, without a null test: a critter's live tile, the hero's cell, a placed object's tile and, for an item, the stale tile
+    /// of its own location field (IV2: where the map put it, or the tile a dropped item lies on; never the holder's). Null for an object the host cannot place: the session then refuses the move. The default places nothing.
+    /// </summary>
+    (long X, long Y)? LocationOf(ScrObjectRef obj) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2377 (IV45, CQ1): get social class (38): an NPC's social class (field 0x128, the map data's), 0 for the hero and any other object type, as the use host reads it. Null for an object the host reads no row for: the session then refuses the move.
+    /// The default answers nothing.
+    /// </summary>
+    int? SocialClassOf(ScrObjectRef obj) => null;
+
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ2): get origin (39): an NPC's origin as it is now (a dialog action's set origin over the map data's), 0 for the hero and any other object type. Null for an object the host reads no row for: the session then refuses the move.</summary>
+    int? OriginOf(ScrObjectRef obj) => null;
 }
 
 /// <summary>

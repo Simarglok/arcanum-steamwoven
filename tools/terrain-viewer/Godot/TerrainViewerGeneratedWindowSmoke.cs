@@ -48,6 +48,7 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the {mode} interface needs ARC_HD_PACK");
                 throw new InvalidOperationException("ARC-UI-1194 window art smoke: HD verification needs ARC_HD_PACK");
             }
+            SteamwovenHud.Suspended = true; // ARC-UI-2452: these checks measure the whole-factor geometry
             _gameSettings = _gameSettings with { HdInterface = mode != "legacy", GeneratedInterface = mode == "generated" };
             SyncInterfaceHd();
             await Frames(3);
@@ -78,6 +79,7 @@ public partial class TerrainViewerApp
         {
             _gameSettings = saved;
             SyncInterfaceHd();
+            SteamwovenHud.Suspended = false; _gameBarPanel?.Relayout();
             await Frames(2);
         }
     }
@@ -103,6 +105,7 @@ public partial class TerrainViewerApp
         {
             if (InventoryOpen) EndInventory();
             if (LogbookOpen) CloseLogbookByPlayer();
+            SteamwovenHud.Suspended = true; // ARC-UI-2452: these checks measure the whole-factor geometry
             _gameSettings = _gameSettings with { HdInterface = mode != "legacy", GeneratedInterface = mode == "generated" };
             SyncInterfaceHd();
             // The logbook builds its textures when its art is read: drop them so the book is read again in the mode under test.
@@ -150,6 +153,7 @@ public partial class TerrainViewerApp
             if (LogbookOpen) CloseLogbookByPlayer();
             _gameSettings = saved;
             SyncInterfaceHd();
+            SteamwovenHud.Suspended = false; _gameBarPanel?.Relayout();
             _logbookArtContent = null; _logbookArtTextures = null;
             await Frames(2);
         }

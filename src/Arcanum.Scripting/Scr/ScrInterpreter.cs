@@ -24,6 +24,8 @@ internal sealed class ScrInterpreter
     private sealed class Shared
     {
         public ScrDialogStart? Dialog;
+        // ARC-SCRIPT-2440: the transforms (40) of the dispatch so far, which number the placeholders of the objects they make.
+        public int Transforms;
         public readonly List<ScrCallRequest> Calls = new();
         public readonly List<ScrPrintLine> Lines = new();
         public readonly List<ScrSound> Sounds = new();
@@ -409,7 +411,7 @@ internal sealed class ScrInterpreter
             {
                 // SS2: the object operand 0 names, then the quest and the state; the run's attachee is the quest's giver.
                 var quest = Get(a, 1); var state = Get(a, 2);
-                foreach (var obj in Objects(a, 0)) _states.Add(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
+                foreach (var obj in Objects(a, 0)) AddQuestRequest(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MarkMapLocation:
@@ -742,7 +744,13 @@ internal sealed class ScrInterpreter
                 // TI5: the run's attachee becomes a new object of the basic prototype of operand 0. The host applies it and reads the attachee in the later requests of the run as that object; an absent attachee changes nothing (a project choice:
                 // the original reads the null handle's location).
                 var prototype = Get(a, 0);
-                if (_roles.Attachee is { } attachee) _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                if (_roles.Attachee is { } attachee)
+                {
+                    _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                    // ARC-SCRIPT-2440 (TI5, F11): the original writes the new handle into the run's own record, so the later actions of the run (and of the scripts it calls) name the new object. A host that applies the transform
+                    // (IScrHost.RebindsTransformedAttachee) rebinds this placeholder to it; the other hosts keep the old attachee, which they read after the transform themselves.
+                    if (_host.RebindsTransformedAttachee) _roles = _roles with { Attachee = ScrTransformedObject.Placeholder(attachee.Map, ++_shared.Transforms) };
+                }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MakeFollow:
@@ -1107,7 +1115,7 @@ internal sealed class ScrInterpreter
                 // does with the quest's own level), given to a PC (0x45F110). An absent object asks for nothing.
                 var who = OptionalObject(a, 0);
                 var level = Get(a, 1);
-                if (who is { } pc) _states.Add(new(ScrStateKind.QuestExperience, pc, level));
+                if (who is { } pc) AddQuestRequest(new(ScrStateKind.QuestExperience, pc, level));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GrantFatePoint:
@@ -1175,10 +1183,31 @@ internal sealed class ScrInterpreter
         // The runner's gates (E4, E5): a trap script and a monster generator attachee run nothing.
         if (ScrDispatcher.IsTrapScript(script, program)) return;
         if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
+        var number = script;
+        var fresh = new ScrSlot(script, program.InitialLocalFlags, program.InitialCounters);
+        // ARC-SCRIPT-2198 (exe read, 0x44B030 -> 0x4449B0): the callee runs through the event runner at the caller's point, so at the dialog point it meets the dialog gates on its attachee (E6) as an event does: a dead NPC without
+        // the callee's death-speech file flag or a surrendered one without its surrender-speech flag runs nothing, a mind-controlled one runs 2188 in place of the callee (the callee's own flags and counters kept).
+        if (_point == ScrPoint.Dialog && attachee is { } gated)
+        {
+            var state = _host.DialogState(gated);
+            if ((state & ScrDialogState.Dead) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) == 0) return;
+            if ((state & ScrDialogState.Surrendered) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.SurrenderSpeech) == 0) return;
+            if ((state & ScrDialogState.MindControlled) != 0)
+            {
+                number = ScrDispatcher.MindControlScript;
+                var swapped = _host.Script(number);
+                if (ScrDispatcher.Unavailable(swapped) is { } absent)
+                {
+                    if (absent == ScrStop.MissingScript) return;
+                    throw new CallRefusedStop(null, number, ScrStop.UnreadableScript);
+                }
+                program = swapped.Program!;
+            }
+        }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
-        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
+        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
         // ARC-SCRIPT-046: the callee runs at the caller's point (0x44B030 copies it), where its dialog action stores its flags.
-        new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
+        new ScrInterpreter(admission.Admitted!, number, fresh with { Script = number }, program.FileFlags,
             new(triggerer, attachee, null), _host, _options, _shared, _depth + 1, _point).Run(line);
     }
 
@@ -1214,6 +1243,7 @@ internal sealed class ScrInterpreter
     private void CallEx(ScrObjectRef? attachee, int point, int line, ScrObjectRef? triggerer, int at)
     {
         if (attachee is not { } obj) throw new MissingObjectStop(at);
+        if (ScrTransformedObject.Is(obj)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);   // ARC-SCRIPT-2440: the made object has no slot yet
         if (point is < 0 or >= ScrPoint.Count || point == ScrPoint.DialogOverride) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
         if (point == ScrPoint.Use)
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
@@ -1251,7 +1281,6 @@ internal sealed class ScrInterpreter
         }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
-        if (point == ScrPoint.Dialog) RefuseCallScriptIn(admission.Admitted!, number);
         var writes = _shared.SlotWrites.Count;
         var ran = new ScrInterpreter(admission.Admitted!, number, own, ownFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
         // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
@@ -1264,19 +1293,6 @@ internal sealed class ScrInterpreter
         for (var i = _shared.SlotWrites.Count - 1; i >= writes; i--)
             if (_shared.SlotWrites[i] is { Source: ScrSource.Object, Point: var p } w && p == point && w.Attachee == obj) _shared.SlotWrites.RemoveAt(i);
         _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
-    }
-
-    // As RunObject refuses a dialog-point event whose set holds call script, a call-ex of the dialog point refuses a callee that
-    // reaches one: the called script would run at the dialog point without the runner's dialog gates (E6), which call script skips.
-    private static void RefuseCallScriptIn(ScrAdmittedProgram admitted, int script)
-    {
-        foreach (var at in admitted.Region)
-        {
-            var row = admitted.Program.Lines[at];
-            var side = row.OnTrue.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnTrue
-                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
-            if (side is { } call) throw new CallRefusedStop(new(at, call, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScript), script, ScrStop.Refused);
-        }
     }
 
     [OriginalFunction(0x44BA70, OriginalFunctionScope.Partial)]
@@ -1351,6 +1367,13 @@ internal sealed class ScrInterpreter
     {
         var obj = FocusObject((ScrFocusKind)(packed >> 16), 0) ?? throw new MissingObjectStop(_line);
         return _host.IsPc(obj) ? (obj, packed & 0xFFFF) : null;
+    }
+
+    // ARC-SCRIPT-2410: a quest request is collected and, for a host that applies them as the run goes, told to it at once.
+    private void AddQuestRequest(ScrStateRequest request)
+    {
+        _states.Add(request);
+        (_host as IScrQuestWrites)?.QuestRequested(request);
     }
 
     private IScrStoreQueries Stores => _host as IScrStoreQueries
@@ -1452,6 +1475,8 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Vicinity(ScrFocusKind kind)
     {
         if (_roles.Attachee is not { } centre) return [];
+        // ARC-SCRIPT-2440: around the object a transform made (not made yet while the run is read) is not answerable; the run stops rather than loop over nobody.
+        if (ScrTransformedObject.Is(centre)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
         var list = (kind is ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : kind is ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity ? Containers.ContainersInVicinity(centre) : World.CrittersInVicinity(centre))
             ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;

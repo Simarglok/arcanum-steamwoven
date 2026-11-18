@@ -537,8 +537,9 @@ public partial class TerrainViewerApp
             return ProjectileCrossResult.Ended;
         }
         ProjectileCrossResult end;
-        if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
-                : _combatHost!.Target(owner, map, struck.Key) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
+        // ARC-COMBAT-2568 (RH6, 0x4B2F60): a companion the shot meets is struck like any critter (its identity, its live cell).
+        if ((struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
+                : (IsAreaCompanion(struck.Key) ? AreaTargetOf(struck.Key) : _combatHost!.Target(owner, map, struck.Key)) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
         {
             var result = owner.LandShot(owner.Version, projectile.Shot, CritterAttack(goal, 1, null));
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
@@ -564,9 +565,15 @@ public partial class TerrainViewerApp
         else if (struck.Type == 0)
         {
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
+                new SessionObjectAttack
+                {
+                    Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
+                    // ARC-COMBAT-1973 (RH5): the strike offers the weapon's hit scripts and the wall's taking-damage script as any object's.
+                    TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(struck), SessionSpellCaster.Hero), HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(struck)),
+                });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
-            end = StruckEnd(projectile);
+            // ARC-COMBAT-1973 (RH5): a wall is hit without a roll, so a thrown item's hit script (not its miss script) ends the flight, with the wall as the target.
+            end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, AreaUseScriptHost.EntityId(struck));
             if (result.Disposition != GameSessionDisposition.Rejected)
             {
                 _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
@@ -833,7 +840,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The shown map as a projectile crosses it: the shot's target where it stands (an NPC at its map cell, a companion at
     /// its live cell, an object at its cell), the living PCs and NPCs on a tile (the hero, the companions and the map's living NPCs in
-    /// row order), and the obstruction of a free flight's step (the line of fire's step cost, <see cref="LineOfFireRules.StepCost{T}"/>).</summary>
+    /// row order), and the obstruction of a free flight's step (the step cost with the projectile's flags 0x0D: the line of fire's step plus a closed portal stopping it, <see cref="LineOfFireRules.StepCost{T}"/>).</summary>
     private sealed class ProjectileMap(TerrainViewerApp app, GameSessionOwner owner, AreaProjectile projectile, AreaLineOfFire lineMap) : IProjectileMap<AreaObjectRecord>
     {
         public CellCoord? TargetTile => app.LiveCell(owner, projectile.Target);
@@ -861,7 +868,7 @@ public partial class TerrainViewerApp
         private AreaObjectRecord Same(AreaObjectRecord row) => row.Key == projectile.Target.Key ? projectile.Target : row;
 
         public AreaObjectRecord? Obstruction(CellCoord from, int rotation) =>
-            LineOfFireRules.StepCost(from, rotation, false, lineMap, owner.Rules.Combat).Blocker;
+            LineOfFireRules.StepCost(from, rotation, false, lineMap, owner.Rules.Combat, portalsBlock: true).Blocker;
     }
 
     private CellCoord HeroCellNow(AreaGridSession session)

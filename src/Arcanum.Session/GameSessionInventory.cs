@@ -64,6 +64,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-1299: the item flag 0x10 (field 0x57) "no display": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
     public bool NoDisplay { get; init; }
 
+    /// <summary>ARC-WORLD-2493: the object flag 0x400000 (field 0x13) "invulnerable" of the item's data: the one thing the original's inventory-on-destroy (0x4639E0) asks of an item, which it takes out of a destroyed holder and drops. A seed that does not say reads as clear.</summary>
+    public bool Invulnerable { get; init; }
+
     /// <summary>ARC-WORLD-1299: the spell flag 0x4000 (field 0x14) "summoned": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
     public bool Summoned { get; init; }
 
@@ -425,7 +428,7 @@ public static class SessionItemScripts
 {
     /// <summary>
     /// The commands an item event's script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
-    /// conversation starts from a transfer) and the story-state actions (the session has no story-state number); ARC-MAGIC-041 (TI8) keeps the
+    /// conversation starts from a transfer), with the story-state actions (get and set story state, 42 and 43, ARC-SCRIPT-2375: the session's story-state number, raised in the move's revision), set rumor (50) and rename (92, an item of the move); ARC-MAGIC-041 (TI8) keeps the
     /// deferred calls, call script in (54) and remove script call (125), which the move schedules and removes in the session's event queue as it
     /// commits (<c>ItemScriptRuns.Commit</c>); use ammunition units (135) stays out, since the only script that uses it runs it from a deferred call
     /// (a host of its own), never from the event; ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
@@ -440,16 +443,23 @@ public static class SessionItemScripts
     /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2374 (IV18–IV21) adds set PC quest state (16) and give quest experience (63), which the session applies in the move's own revision
     /// (a request for a PC only; at most one experience award, which may raise a level: the host takes its level-up messages and follower step, ARC-SCRIPT-2394, and a stat or power ratio read after it refuses the move).; ARC-SCRIPT-2376 (IV25) adds the scenery and critter vicinity kinds (15, 16, 8, 9: loop for and the like, the scan around the attachee item's location, answered by the same part)
     /// with call script in (54), already kept, into a dialog script. A script outside it refuses the move.
+    /// ARC-SCRIPT-2378 (IV32–IV35) adds toggle monster generator (110), which the session applies to its generator table in the move's own revision.
+    /// ARC-SCRIPT-2426 (IV36–IV39) adds distance between (71), which the host's world part answers by the locations of its two objects (<see cref="ISessionItemWorldHost.LocationOf"/>); an object it cannot place refuses the move.
+    /// ARC-SCRIPT-2432 (IV40–IV43) adds change script (99): the run's own attachee and point are the run's result as before; any other object's slot is kept by the host's plan (<see cref="ISessionItemWorldHost.PlanObjectSlot"/>: a critter of the shown map with the loaded
+    /// element), planned in the move's own revision, and a move that changes an object the host cannot keep is refused.
+    /// ARC-SCRIPT-2375 (ledger IV28–IV31) adds get story state (42), set story state (43), set rumor (50) and rename (92), which the runs plan in the move (the story number and the rumor the PC learns, the name number of an item of the move).
+    /// ARC-SCRIPT-2377 (ledger IV44–IV46) adds random (37, drawn from the session's own generator in the move: the draws are kept with the move), get social class and get origin (38, 39: the host's world part answers them from the object's row) and grant fate point (117: the hero's
+    /// point, raised in the move's own revision). Destroy (68) stays out (IV47: the original removes an item already inserted).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed,
             ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.MonsterGenDisabled]),
-        ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
-            or ScrCatalogue.Action.SetStoryState))
-            .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
+        ScrAdmissionSet.S6.Actions.Where(action => action is not ScrCatalogue.Action.Dialog)
+            .Concat([ScrCatalogue.Action.SetRumor, ScrCatalogue.Action.Rename, ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ToggleState,
-                ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience]),
+                ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience, ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.ChangeScript, ScrCatalogue.Action.DistanceBetween,
+                ScrCatalogue.Action.Random, ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GrantFatePoint]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity,
             ScrFocusKind.LocalObject, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower,
@@ -752,7 +762,8 @@ internal sealed class InventoryDomain
             // (Placed below); only a save made before that fix can still hold some in a spilled container's list, and they stay hidden.
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
                 spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, moved?.Invoke(item.Entity) ?? cell)) : []))
-            .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
+            // ARC-WORLD-2502: a container's seed items the script destroy of the container took out (0x4639E0) lie where they dropped, as an NPC's do.
+            .Concat(seed.Source.Holders.Where(holder => holder.Kind is SessionHolderKind.Npc or SessionHolderKind.Container).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
                 .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), moved?.Invoke(entity) ?? dropped(entity)!.Value))))
             .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, PlacedComplexity(item)))), item.Cell)))

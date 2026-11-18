@@ -426,7 +426,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; _optionsKeyArmed = false; CancelArmedLockpicks("the window lost focus"); }
+            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; _optionsKeyArmed = false; _movieSkipKey = Key.None; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -641,6 +641,8 @@ public partial class TerrainViewerApp
         ProcessHeroKnockdown();
         // ARC-DEV-145: the hero's rotate goal (53) steps on the world clock.
         ProcessHeroTurn();
+        // ARC-INPUT-1938: the polled mouse reposts a held left button's press every 250 ms (GT106).
+        PollHeldMouse();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
@@ -832,13 +834,17 @@ public partial class TerrainViewerApp
         if (!IsWorld || !_worldInitialized || _exiting || ReportModalOpen) return;
         TraceMousePress(@event, MousePressTrace.Stage.Unhandled);
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
-            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
+        {
+            _pressFromInput = true; // ARC-INPUT-1938: the mode-0 press stamps the held button (NoteLeftPress); an armed cursor's press does not.
+            try { WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed)); }
+            finally { _pressFromInput = false; }
+        }
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
         // press has no action of its own, so it is the original's Ctrl+LMB (its release is taken with it).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
         {
             _rightPressTaken = true;
-            WorldObservation(() => WorldRouteClick(ctrlClick.Position, true));
+            WorldObservation(() => WorldRouteClick(ctrlClick.Position, true, ctrlClick.AltPressed, ctrlClick.ShiftPressed));
         }
         // ARC-MAGIC-015: a right press closes the spell's targeting cursor (0x57BFF0).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && (_spellTargeting is not null || _itemAiming is not null || DisarmArmed))
@@ -860,7 +866,7 @@ public partial class TerrainViewerApp
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && GameViewModeOpen && !WorldUiFocus && _readyActorPlan is not null
         && _worldGate.IsOpen && _worldLifecycleSession is null;
-    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false)
+    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false, bool repeat = false)
     {
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
         if (!WorldClickInputOpen)
@@ -898,12 +904,26 @@ public partial class TerrainViewerApp
             RefreshReadyStatus(); return;
         }
         // ARC-UI-063: an item on the game cursor takes the press: it is thrown, or goes back for a hero that cannot act (TT2, TT6).
-        if (_gameCursorItem is not null) { _worldRouteClick = "throw"; GameCursorPress(screen); return; }
+        // ARC-INPUT-1937: the throw's pick is the mode-0 press pick too (0x551F80 runs before it): it sees through the followers and the dead as the press does.
+        if (_gameCursorItem is not null)
+        {
+            _worldRouteClick = "throw";
+            _pressSpared = PressPickSpared(alt);
+            try { GameCursorPress(screen); } finally { _pressSpared = null; }
+            return;
+        }
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
         if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; RefreshReadyStatus(); return; }
         if (TryPendingOrder(screen)) return;
+        // ARC-INPUT-1936 (GT107): a press on bare ground with a Shift key held does nothing at all: it replaces no walk, door approach, attack or throw. A press on an object is the object click's (it takes Shift below),
+        // and the open item cursor, lockpicks, pick pocket and disarm are other interface modes that take every press.
+        if (shift && _itemAiming is null && _lockpickArmed is null && !PickPocketArmed && !DisarmArmed && AreaObjectAtScreen(screen, spared: PressPickSpared(alt)) is null)
+        {
+            _worldRouteClick = "ignored (Shift held on the ground)";
+            RefreshReadyStatus(); return;
+        }
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it", keepArmed: true);
         // ARC-DEV-365: the open item cursor takes the press (the original's interface mode 16, IA6).
@@ -934,6 +954,29 @@ public partial class TerrainViewerApp
             DisarmPress(screen);
             return;
         }
+        // ARC-INPUT-1937 (0x551F80, 0x4F28A0): the mode-0 press picks through the followers and the dead in combat mode without Alt.
+        _pressSpared = PressPickSpared(alt);
+        try { WorldRouteClickMode0(screen, route, ctrl, alt, shift, repeat); }
+        finally { _pressSpared = null; }
+    }
+
+    /// <summary>The mode-0 left press on the world once no armed cursor or skill took it: combat, talk, use, door, inventory, then the ground (ARC-INPUT-1937: the pick is <see cref="_pressSpared"/>'s).</summary>
+    private void WorldRouteClickMode0(Vector2 screen, RouteFollower route, bool ctrl, bool alt, bool shift, bool repeat = false)
+    {
+        if (_pressFromInput) NoteLeftPress();
+        // ARC-INPUT-1938 (GT108, 0x54E05E): while the held flag is 1 (a tile walk press, the button still down) a press on an object is ignored: dragging over an object does nothing.
+        if (_heldWalkFlag && AreaObjectAtScreen(screen, spared: _pressSpared) is not null)
+        {
+            _worldRouteClick = "ignored (held walk over an object)";
+            return;
+        }
+        // ARC-COMBAT-1944 (0x54ED30): out of combat mode, a press on an NPC about to attack the hero or a follower enters combat mode first, so the press below is an attack.
+        // A round the entry started (turn-based) may open on another participant's subturn: the press waits as the guard above makes it wait.
+        if (EnterCombatModeForAttacker(screen, alt, shift) && _areaSession?.QueryCombatRound() is { } entered && !entered.Actor.IsHero)
+        {
+            _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
+            RefreshReadyStatus(); return;
+        }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
         if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");
@@ -944,14 +987,19 @@ public partial class TerrainViewerApp
         // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
         if (TryAreaPortalUse(screen, alt)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
-        if (TryAreaInventoryClick(screen, alt)) { SetObjectApproachGait(); return; }
-        var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
+        // ARC-INPUT-1946: the Alt action (immediate) builds no goal, so it sets no approach gait.
+        if (TryAreaInventoryClick(screen, alt, out var immediate)) { if (!immediate) SetObjectApproachGait(); return; }
+        var chart = _canvas!.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
-        var accepted = HeroRequests.Apply(new WalkRequest(cell, ctrl)).Outcome == HeroRequestOutcome.Done;
+        // ARC-INPUT-1936 (GT107): with a Shift key held the tile press does nothing; the host answers Ignored and the hero stays as it was.
+        // ARC-INPUT-1938 (GT109): the first press does not mark the run 0x400, every repeat (a press while the held flag is 1) does; the tail sets the flag whether the starter succeeded or not.
+        var walk = HeroRequests.Apply(new WalkRequest(cell, ctrl, Held: _heldWalkFlag, Shift: shift));
+        if (!shift && _leftStampMs is not null) _heldWalkFlag = true;
+        var accepted = walk.Outcome == HeroRequestOutcome.Done;
         _worldRouteDiagnostic = DescribeWorldRoute(route);
-        _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
-        GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
+        _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : walk.Outcome == HeroRequestOutcome.Ignored ? "ignored (Shift held)" : "same goal kept")}";
+        if (!repeat) GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
         RefreshReadyStatus();
     }
     private static WorldKeyModifiers KeyModifiers(InputEventKey key)
@@ -970,6 +1018,8 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         NoteWorldPointer(input);
+        // ARC-INPUT-1938: a left release clears the held flag at once (the frame poll is the backstop), whichever window took it.
+        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }) NoteLeftRelease();
         TraceMousePress(input, MousePressTrace.Stage.Input);
         // ARC-UI-2071 (DH10): the release of the click that chose a dialog reply reaches the window the reply opened (Original).
         if (TrackReplyRelease(input)) { GetViewport().SetInputAsHandled(); return; }

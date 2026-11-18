@@ -1,5 +1,7 @@
+using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
@@ -110,6 +112,8 @@ public partial class TerrainViewerApp
                 + "; visible with its key " + string.Join(",", _canvas.AreaVisibleCommands.Where(c => c.Identity == companion.Key).Select(c => $"{c.MapX},{c.MapY}"))
                 + $"; companions map {_areaCompanions?.Map.RuntimeMap} shown {_readyArea?.Snapshot.RuntimeMap}");
             RecordAreaCompanions("smoke");
+            RequireCompanionAttackClick(companion, Require);
+            RequireCompanionOnLineOfFire(companion, Require);
             _smokeCompanion = template.Entity;
             GD.Print("ARC-WORLD-037 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, template.Speaker.ScriptId, Prototype = template.Speaker.Row.PrototypeNumber, template.Facts.Level, template.Facts.Thresholds,
@@ -120,6 +124,95 @@ public partial class TerrainViewerApp
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
+        }
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1945 (0x54ED30, 0x54EFDA): in combat mode a click on a companion that moves with its own actor (here the release over its portrait, the body click takes the same branch) is an attack only with left Alt held; the attack
+    /// goal names the companion and reads its live cell, not its T0 cell. The goal is cancelled before any frame, so the companion stays unhurt and the hero stays put for the transfer smoke that follows.
+    /// </summary>
+    private void RequireCompanionAttackClick(AreaCompanion companion, Action<bool, string> require)
+    {
+        var wasInCombat = HeroInCombatMode;
+        if (!wasInCombat) ToggleCombatMode();
+        try
+        {
+            require(HeroInCombatMode, "the hero is in combat mode for the companion attack click");
+            _leftAltForSelfTest = false;
+            FollowerPortraitClick(companion.Entity);
+            require(_attack is null, "a companion click in combat mode without left Alt attacks nothing: " + _companionNotice);
+            _leftAltForSelfTest = true;
+            FollowerPortraitClick(companion.Entity);
+            require(_attack is { } goal && goal.Entity == companion.Entity, "a companion click with left Alt starts the attack goal on it: " + _companionNotice + " / " + _attackNotice);
+            var (x, y) = _areaCompanions!.WorldCell(companion.Speaker);
+            var live = new CellCoord(checked((int)x), checked((int)y));
+            require(LiveWorldCell(companion.Speaker.Row) == (x, y) && (x, y) != (companion.Speaker.WorldX, companion.Speaker.WorldY), "the attack reads the companion's live cell, not its T0 cell");
+            var aimed = HeroAttackTarget(AttackTargetOf(_attack!));
+            require(aimed is { Dead: false } && aimed.Value.Tile == live, $"the goal's target is the companion on its live cell {live}: {aimed} life={_areaSession!.QueryLife(_attack!.Combat!.Target).View?.Status} target={AreaTargetOf(companion.Key)?.Dead}");
+            GD.Print($"ARC-COMBAT-1945 native-smoke companion-attack PASS target={companion.Entity} live={live} t0={companion.Speaker.WorldX},{companion.Speaker.WorldY}");
+        }
+        finally
+        {
+            _leftAltForSelfTest = false;
+            CancelAreaAttack(null);
+            HeroRequests.Apply(new StopRequest(null));
+            if (HeroInCombatMode && !wasInCombat) ToggleCombatMode();
+        }
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2568 (RH6, 0x4B3170, 0x4B2F60): a companion that stops the hero's ranged line of fire is struck like any critter. The check hands the attack on a far NPC to the strike of the line's blocker with the companion as the blocker
+    /// (the goal's own reach test admits only a clear line, so the strike is called as when the line changed after it): the hit is the companion's (the status line and the strike name it, the dice roll), the far NPC keeps its hit points,
+    /// and the companion is healed back so the transfer smoke that follows sees it unhurt.
+    /// </summary>
+    private void RequireCompanionOnLineOfFire(AreaCompanion companion, Action<bool, string> require)
+    {
+        if (_areaSession is not { } session || _combatHost is null || _readyArea is not { } area || _worldActor.Session is not AreaGridSession grid) return;
+        var runtime = CurrentAreaMap;
+        var far = area.Snapshot.Objects.Where(row => row.Type == 16 && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && !IsAreaCompanion(row.Key))
+            .Select(row => _combatHost.Target(session, runtime, row.Key))
+            .FirstOrDefault(t => t is { Dead: false, Follower: false, Build.Combat: not null } && session.QueryLife(t.Build.Combat!.Target).View?.Status.IsDead != true);
+        if (far is null || AreaTargetOf(companion.Key) is not { Dead: false, Build.Combat: { } combat } struck)
+        { GD.Print($"ARC-COMBAT-2568 native-smoke companion-on-line NONE map={_readyMapName} (no living NPC with combat values, or the companion is no combat target)"); return; }
+        // The session's reach test passes the strike only up to the weapon's range, so the hero stands next to the companion (the strike's distance is the hero's to the blocker); it goes back afterwards.
+        var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
+        var home = grid.State.CommittedCell;
+        var (cx, cy) = _areaCompanions!.WorldCell(companion.Speaker);
+        if (ApproachCell(grid, cx, cy, 1) is not { } beside) { GD.Print($"ARC-COMBAT-2568 native-smoke companion-on-line NONE map={_readyMapName} (no cell next to the companion)"); return; }
+        var wasInCombat = HeroInCombatMode;
+        var life = session.QueryLife(combat.Target).View!.Status;
+        var farLife = session.QueryLife(far.Build.Combat!.Target).View!.Status;
+        int distance;
+        try
+        {
+            AreaSmokePlace(map, beside);
+            if (!HeroInCombatMode) ToggleCombatMode();
+            var here = (AreaGridSession)_worldActor.Session!;
+            var cell = here.Chart.ToWorld(here.State.CommittedCell);
+            var (x, y) = _areaCompanions!.WorldCell(companion.Speaker);
+            distance = (int)Math.Max(Math.Abs(x - cell.X), Math.Abs(y - cell.Y));
+            require(distance == 1, $"the hero stands next to the companion (distance {distance})");
+            _lineOfFireStruck = null; _lastCritterAttackForSelfTest = null;
+            var draws = session.QueryRandom().Draws;
+            var goal = new AttackGoal(far, far.Build.Combat!, null);
+            StrikeBlocker(goal, companion.Speaker.Row, here);
+            require(_lineOfFireStruck == companion.Entity, $"the line of fire's strike is the companion's ({_lineOfFireStruck} for {companion.Entity}): {_attackNotice}");
+            require(session.QueryRandom().Draws > draws && _lastCritterAttackForSelfTest is { Disposition: not GameSessionDisposition.Rejected, Shot: null }, $"the strike rolled and resolved as an attack on a critter: {_lastCritterAttackForSelfTest?.Disposition} {_lastCritterAttackForSelfTest?.Failure}");
+            require(session.QueryLife(far.Build.Combat!.Target).View!.Status.HitPoints == farLife.HitPoints, "the far NPC keeps its hit points");
+            var after = session.QueryLife(combat.Target).View!.Status.HitPoints;
+            require(_lastCritterAttackForSelfTest?.Resolution?.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit) || after < life.HitPoints, $"a hit lowers the companion's hit points ({life.HitPoints} to {after})");
+            GD.Print($"ARC-COMBAT-2568 native-smoke companion-on-line PASS target={companion.Entity} far={far.Entity} distance={distance} hp={life.HitPoints}->{session.QueryLife(combat.Target).View!.Status.HitPoints} outcome={_lastCritterAttackForSelfTest?.Resolution?.Outcome}");
+        }
+        finally
+        {
+            _lineOfFireStruck = null;
+            CancelAreaAttack(null);
+            var healed = session.Heal(session.Version, combat.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            if (healed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-2568 companion-on-line heal refused failure={healed.Failure}");
+            if (HeroInCombatMode && !wasInCombat) ToggleCombatMode();
+            AreaSmokePlace(map, home);
+            for (var frames = 0; frames < 600 && (companion.Grid.State.Phase != MovementPhase.Settled
+                || FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, home) > FollowDistanceRules.Range); frames++) AreaSmokeFrame();
         }
     }
 

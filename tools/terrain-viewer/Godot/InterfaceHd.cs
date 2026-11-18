@@ -90,6 +90,21 @@ public static class InterfaceHd
         return true;
     }
 
+    /// <summary>ARC-UI-2452: the fractional device scale the strips of the Steamwoven layout are drawn at (null: the bars' whole <see cref="GeneratedScale"/>). Strip textures that claim no
+    /// scale source paint at this scale (<see cref="PaintScale"/>) and are sampled Linear unless the scale is whole and the sizes come out in whole device pixels.</summary>
+    public static double? FractionalScale { get; private set; }
+
+    /// <summary>ARC-UI-2452: sets or clears <see cref="FractionalScale"/>; generated textures paint again for a new scale. Returns whether it changed.</summary>
+    public static bool SetFractionalScale(double? deviceScale)
+    {
+        var next = deviceScale is { } value && double.IsFinite(value) && value > 0 ? Math.Round(value, 3) : (double?)null;
+        if (FractionalScale == next) return false;
+        FractionalScale = next;
+        if (Generated) { RefreshTextures(); Changed?.Invoke(); }
+        GD.Print($"ARC-UI-2452 steamwoven strip scale={(next is { } shown ? shown.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) : "off")}");
+        return true;
+    }
+
     /// <summary>One painted frame: straight RGBA at (Legacy size × <see cref="Scale"/>), kept per Legacy frame so a greyed copy and a rebuilt texture
     /// reuse it. <see cref="Pixels"/> is null while it is painted (<see cref="Failed"/> when painting threw).</summary>
     internal sealed class GeneratedFrameEntry(HdPack? pack, bool hdOn, double scale)
@@ -381,6 +396,9 @@ public partial class HdInterfaceTexture : Texture2D
 
     internal int HdScale => _activeScale;
 
+    /// <summary>ARC-UI-2452: the Legacy frame behind the texture (its RGBA and art identity), null before it is bound.</summary>
+    internal AreaInterfaceFrame? FrameForBoard => _frame;
+
     /// <summary>True when the HD image is premultiplied for an art-font (PremultAlpha) canvas.</summary>
     internal bool Premultiplied => _premultipliedAlpha;
 
@@ -457,8 +475,10 @@ public partial class HdInterfaceTexture : Texture2D
     private CanvasTexture? GeneratedCanvas(ChromeRecipe recipe, HdSpriteQuery query, out bool painting)
     {
         painting = false;
-        var device = ScaleSource is { } source ? source() : (double)InterfaceHd.GeneratedScale;
-        var scale = ScaleSource is null ? InterfaceHd.GeneratedScale : InterfaceHd.PaintScale(device);
+        // ARC-UI-2452: a fractional strip scale paints like a window's own scale (no scale source: the strips').
+        var bySource = ScaleSource is not null || InterfaceHd.FractionalScale is not null;
+        var device = ScaleSource is { } source ? source() : InterfaceHd.FractionalScale ?? (double)InterfaceHd.GeneratedScale;
+        var scale = !bySource ? InterfaceHd.GeneratedScale : InterfaceHd.PaintScale(device);
         var entry = InterfaceHd.GeneratedFor(_frame, query, recipe, scale);
         if (entry.Failed) return null; // drawn as HD or Legacy
         if (entry.Pixels is not { } pixels)
@@ -476,7 +496,7 @@ public partial class HdInterfaceTexture : Texture2D
         _generatedFrom = entry;
         // One texel per device pixel (Nearest) only when the painted size is exactly what the window shows: the bars' whole scale, or a window whose
         // device scale is the painted one and whose frame sizes come out in whole device pixels.
-        var exact = ScaleSource is null ? InterfaceHd.GeneratedExact
+        var exact = !bySource ? InterfaceHd.GeneratedExact
             : Math.Abs(device - scale) < 0.001 && Math.Abs(_frame.Width * scale - pixelWidth) < 0.001 && Math.Abs(_frame.Height * scale - pixelHeight) < 0.001;
         _generatedCanvas = new CanvasTexture { DiffuseTexture = _generated, TextureFilter = exact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear };
         return _generatedCanvas;

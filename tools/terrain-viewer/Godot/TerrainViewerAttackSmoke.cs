@@ -10,10 +10,13 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    // ARC-COMBAT-2435: the random seed the held-throw smoke starts from (a throw of the smoke hero at its tile hits at it; the 4th draw of the seed, the hit roll, is 1; ARC_SMOKE_THROW_SEED overrides it).
+    private const ulong ThrowSmokeSeed = 727;
+
     // Native observation (ARC-COMBAT-005) with --hero, after the combat-mode stage, on the exterior or a whole map: in combat mode
     // the hero clicks the living NPC with the fewest hit points from a few cells away, walks within reach, plays its attack
     // ART, and the auto-attack repeats until the NPC dies; the session then holds its death, the experience it paid and makes it
-    // lootable, its body is drawn fallen, and a click on the corpse in combat mode without Alt does nothing. A map without a
+    // lootable, its body is drawn fallen, and a click on the corpse in combat mode without Alt walks to the tile behind it (ARC-INPUT-1937). A map without a
     // living NPC that has combat values reports that and passes nothing.
     private async Task RunAreaAttackSmokeAsync(TerrainLoadResult? mapMode = null)
     {
@@ -150,14 +153,25 @@ public partial class TerrainViewerApp
             RequireDyingAnimation(session, map.RuntimeMap, target.Holder.Entity, key);
             await RequireBloodPoolAsync(session, map.RuntimeMap, target.Holder.Entity);
 
-            // A corpse clicked in combat mode without Alt does nothing.
+            // ARC-INPUT-1937 (0x551F80): a corpse in combat mode without Alt is clicked through: the press is the ground's (the hero walks to the tile under the pointer) and the hover shows
+            // the walk, not the corpse; with Alt the corpse is picked and looted.
             point = await HoverPointAsync(this, _fallenBodies[key]) ?? throw new InvalidOperationException("ARC-COMBAT-005 smoke: corpse not visible");
+            Require(AreaObjectAtScreen(point) is { } picked && picked == key, "the corpse is picked where it is drawn (Alt held)");
+            Require(AreaObjectAtScreen(point, spared: PressPickSpared(false)) != key, "the pick without Alt sees through the corpse");
             HoverAtForSelfTest(point);
             var corpseHover = HoverActionForSelfTest;
-            Require(corpseHover == AreaHoverAction.None, "corpse hover " + corpseHover);
-            var route = _worldRoute?.Target;
+            Require(corpseHover is AreaHoverAction.Walk or AreaHoverAction.NoRoute && HoverKeyForSelfTest != key, "corpse hover without Alt is the ground's: " + corpseHover);
             AreaSmokeClick(point);
-            Require(_attack is null && !InventoryOpen && _worldRoute?.Target == route, "a corpse click without Alt does nothing");
+            Require(_attack is null && !InventoryOpen && _worldRouteClick.Contains("goal set", StringComparison.Ordinal) && _attackNotice?.Contains("corpse", StringComparison.Ordinal) != true,
+                "a corpse click without Alt walks to the tile behind it: " + _worldRouteClick);
+            CancelAreaAttack(null);
+            HeroRequests.Apply(new Arcanum.World.StopRequest(null));
+            _worldRouteClick = "none";
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
+            Require(_attack is null && !_worldRouteClick.Contains("goal set", StringComparison.Ordinal) && _inventoryStatus.Contains("goal 81 started", StringComparison.Ordinal),
+                "a corpse click with Alt is the loot (goal 81), not a walk: " + _worldRouteClick + " / " + _inventoryStatus);
+            CancelInventoryApproach("smoke: the loot click is shown");
+            HeroRequests.Apply(new Arcanum.World.StopRequest(null));
             ToggleCombatMode();
             HoverReleaseForSelfTest();
             // Out of combat mode the hero shows no weapon again (WA1, WA3).
@@ -295,12 +309,16 @@ public partial class TerrainViewerApp
             bool Throwing(GameSessionOwner owner) => owner.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Top is { Goal: Arcanum.Simulation.Goals.GoalType.ThrowItem, Node: 2 });
             for (var i = 0; i < 200 && !Throwing(loaded) && HeroRunsHost() is { ThrowRun: not null }; i++) Frame();
             require(Throwing(loaded), "the throw's swing began");
+            // ARC-COMBAT-2435: a throw at a tile rolls as a throw at a location, so a miss would scatter the item to a tile the pickup below may not reach: the session's random stream starts at a seed whose throw hits (the smoke checks the outcome below).
+            require(loaded.RestoreRandom(new SessionRandomState(ulong.TryParse(System.Environment.GetEnvironmentVariable("ARC_SMOKE_THROW_SEED"), out var envSeed) ? envSeed : ThrowSmokeSeed, 0)), "the throw's random seed was set");
+            GD.Print($"ARC-COMBAT-2435 smoke throw-seed draws={loaded.QueryRandom().Draws}");
             QuickKey(Key.F7);
             require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the throwing hero: " + _quickSaveStatus);
             for (var i = 0; i < 1500 && (HeroRunsHost() is { ThrowRun: not null } || _projectiles.Count > 0); i++) Frame();
             CellCoord? Landed(GameSessionOwner owner) => owner.QueryPlacedItems().FirstOrDefault(p => p.Entity == item)?.Cell;
             var liveLanding = Landed(loaded);
             require(liveLanding is not null, "the live throw landed the item");
+            require(liveLanding == aim, $"the throw hit and landed on its tile ({liveLanding} for {aim}; the seed of the smoke's throw may need another)");
             QuickKey(Key.F8);
             require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded the throwing hero: " + _quickSaveStatus);
             if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);

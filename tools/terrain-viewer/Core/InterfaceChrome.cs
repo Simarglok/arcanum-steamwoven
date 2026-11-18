@@ -704,6 +704,46 @@ public static class InterfaceChromeRenderer
         return output;
     }
 
+    /// <summary>
+    /// ARC-UI-2452: a plain board of <paramref name="material"/> of exactly <paramref name="boardWidth"/> × <paramref name="boardHeight"/> device pixels (RGBA, all opaque), the Steamwoven
+    /// prototype's sides of the two panels and menu backdrop. The wood takes the colours of the strip frame <paramref name="tone"/> (its Legacy RGBA and recipe, as the strip's own wood is tuned)
+    /// so the sides match the centre; the material is sampled at <paramref name="scale"/> device pixels per unit from (<paramref name="originX"/>, <paramref name="originY"/>) units at the board's
+    /// top left, so a board beside the strip continues the strip's grain. <paramref name="rim"/> is <see cref="ChromeSides.Top"/> or <see cref="ChromeSides.Bottom"/> (or none): the brass rim the strip has
+    /// on the edge that faces the play view, on the board's own edge.
+    /// </summary>
+    public static byte[] RenderBoard(ChromeMaterial material, ChromeSides rim, int boardWidth, int boardHeight, double scale, double originX, double originY,
+        ChromeRecipe? tone, ReadOnlySpan<byte> toneLegacy, int toneWidth, int toneHeight)
+    {
+        if (boardWidth is < 1 or > MaxSide * 8 || boardHeight is < 1 or > MaxSide * 8) throw new ArgumentOutOfRangeException(nameof(boardWidth), $"{boardWidth}x{boardHeight}");
+        if (!(scale >= 0.25 && scale <= MaxScale)) throw new ArgumentOutOfRangeException(nameof(scale), scale.ToString());
+        if ((rim & ~(ChromeSides.Top | ChromeSides.Bottom)) != 0) throw new ArgumentOutOfRangeException(nameof(rim), rim.ToString());
+        var legacyW = (int)Math.Ceiling(boardWidth / scale) + 1;
+        var legacyH = (int)Math.Ceiling(boardHeight / scale) + 1;
+        var opaque = new byte[legacyW * legacyH * 4];
+        Array.Fill(opaque, (byte)255);
+        var canvas = new Canvas(legacyW, legacyH, opaque, null, scale);
+        if (tone is not null && toneLegacy.Length == toneWidth * toneHeight * 4)
+        {
+            var toneCanvas = new Canvas(toneWidth, toneHeight, toneLegacy.ToArray(), null, 1);
+            TuneWood(toneCanvas, tone);
+            canvas.WoodLow = toneCanvas.WoodLow; canvas.WoodHigh = toneCanvas.WoodHigh;
+        }
+        // A board that hangs from its top keeps the canvas's top rows, one that stands on its bottom keeps the bottom rows (so the rim lies on the kept edge).
+        var skipRows = rim == ChromeSides.Bottom ? canvas.H - boardHeight : 0;
+        canvas.OriginX = originX; canvas.OriginY = originY - skipRows / scale;
+        Fill(canvas, 0, 0, canvas.W, canvas.H, material);
+        Rim(canvas, rim);
+        var output = new byte[boardWidth * boardHeight * 4];
+        for (var y = 0; y < boardHeight; y++)
+        for (var x = 0; x < boardWidth; x++)
+        {
+            var c = canvas.Color[(y + skipRows) * canvas.W + x];
+            var o = (y * boardWidth + x) * 4;
+            output[o] = ToByte(c.R); output[o + 1] = ToByte(c.G); output[o + 2] = ToByte(c.B); output[o + 3] = 255;
+        }
+        return output;
+    }
+
     /// <summary>ARC-UI-148: the pixel size of a frame of <paramref name="width"/> × <paramref name="height"/> Legacy pixels painted at <paramref name="scale"/>
     /// (each edge is <c>round(size × scale)</c>, so a whole scale gives exactly size × scale).</summary>
     public static (int Width, int Height) PixelSize(int width, int height, double scale) =>

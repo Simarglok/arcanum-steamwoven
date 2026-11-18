@@ -78,7 +78,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   diagnostic layer.
 - **Follower portraits** (`AreaFollowerPortraits`; since ARC-UI-024 the original's frames down the left edge, [panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)): one frame per follower in the array (in its order, at most six; none for a waiting
   one), each opening, **on the right button's release** over it (ARC-DEV-280, B33, [OL34](../research/ledger/social.md)), the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode no attack yet: the original attacks with left Alt held). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
+  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode the attack goal with left Alt held, ARC-COMBAT-1945, nothing without). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
   health ([health and fatigue bars](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)). The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
   window's focus, which stops the PC's route and refuses the choice); a second right click or a left click on a portrait, a right release
   anywhere else, any key other than a bare modifier, or a press on the ground that the world accepts closes it (that press does nothing
@@ -90,8 +90,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   AI host the orders run each follower's AI pass ([AI host](ai-host.md#followers-in-combat-arc-world-115)); F2's target is the
   object under the pointer at the release. The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's rows draw the
-  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares (`AreaCompanionOrders.Label`) is still the viewer's own
-  lower-case word (the original joins the follower's name with the file's text).
+  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares is the same message (`AreaCompanionOrders.OrderLabel`,
+  ARC-UI-1975; the original joins the follower's name with the file's text, FP10): a row whose message is missing sends no order, and without the file the project's English words stand
+  in. `AreaCompanionOrders.Label` stays the viewer's own lower-case word for its notices and log only.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
   the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`. The PC side
   of both is the session hero with `--hero` (ARC-WORLD-067, [party runtime](party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)),
