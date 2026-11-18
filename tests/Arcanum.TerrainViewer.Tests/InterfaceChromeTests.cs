@@ -797,6 +797,23 @@ public sealed class InterfaceChromeTests
     }
 
     [TestMethod]
+    public void The_inventory_family_frames_draw_no_ring_of_their_own_around_the_lens_so_the_lens_art_carries_the_one_ring()
+    {
+        // ARC-UI-2762: a second ring outside the circle (painted on the frame) showed as arcs at the four sides of the lens in the inventory, loot and barter windows.
+        foreach (var file in new[] { "pdoll.art", "loot.art", "barter.art", "barter_follower.art", "mapmain.art" })
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(0, recipe.Parts.OfType<ChromeRoundView>().Count(), $"{file} draws no ring around the lens");
+            Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (AreaLensPlace.X, AreaLensPlace.Y, 89, 89)), $"{file}: the lens's square at the common place takes no rim");
+            Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < AreaLensPlace.X + 89 && keep.Y < AreaLensPlace.Y + 89 && keep.X + keep.Width > AreaLensPlace.X - 4 && keep.Y + keep.Height > AreaLensPlace.Y - 4 && keep.Round),
+                $"{file}: no kept round picture brings the old ring around the lens");
+        }
+        // The lens arts carry the one ring, inside their square.
+        foreach (var file in new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" })
+            CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5, Inward: true) }, Recipe(file).Parts.ToArray(), file);
+    }
+
+    [TestMethod]
     public void Every_part_of_the_map_recipe_lies_inside_its_frame_and_a_kept_picture_never_covers_a_generated_box()
     {
         var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
