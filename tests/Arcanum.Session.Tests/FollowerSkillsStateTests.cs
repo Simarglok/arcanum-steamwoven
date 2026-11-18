@@ -102,6 +102,17 @@ public sealed class FollowerSkillsStateTests
     }
 
     [TestMethod]
+    public void The_use_item_with_skill_modifier_enters_the_check_as_its_invocation_modifier()
+    {
+        // ARC-SCRIPT-2752 (ledger SX4): the goal 40's modifier is the invocation modifier of the check (SC12's second count is the rules' own flag); 0 is the plain pick.
+        using var owner = Owner();
+        var plain = owner.PickLockByNpc(owner.Version, User(5, SkillTraining.None), Target(difficulty: 40), null);
+        var five = owner.PickLockByNpc(owner.Version, User(5, SkillTraining.None), Target(difficulty: 40), null, modifier: 5);
+        var minusTen = owner.PickLockByNpc(owner.Version, User(5, SkillTraining.None), Target(difficulty: 40), null, modifier: -10);
+        Assert.AreEqual((5, -10), (five.Check!.Check.Difficulty - plain.Check!.Check.Difficulty, minusTen.Check!.Check.Difficulty - plain.Check.Check.Difficulty), "the modifier is the check's invocation modifier");
+    }
+
+    [TestMethod]
     public void An_untrained_npcs_critical_failure_jams_the_lock_for_a_day()
     {
         for (ulong seed = 0; seed < 400; seed++)

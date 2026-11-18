@@ -87,6 +87,7 @@ public sealed class ActionGoalsTests
         public AiActionSwing BeginAction(string id, AiActionAnimation animation) { Calls.Add($"animate {animation}"); return ActionSwing; }
         public bool AttemptSkill(string id, string target, int skill, string? item) { Calls.Add($"skill {skill} on {target} with {item}"); return SkipsAnimation; }
         public void AttemptPickLocks(string id, string target, string? item) => Calls.Add($"pick locks {target}");
+        public void AttemptSkillWithItem(string id, string target, string? item, int skill, int modifier) => Calls.Add($"skill {skill} modifier {modifier} on {target} with {item ?? "none"}");
         public bool ThrowItem(string id, string item, CellCoord tile) { Calls.Add($"throw {item} at {tile.X},{tile.Y}"); return Throws; }
         public void PickUp(string id, string item) => Calls.Add($"pick up {item}");
         public string? ItemHolder(string item) => Holder;
@@ -330,6 +331,57 @@ public sealed class ActionGoalsTests
         Assert.AreEqual(AiStartRefusal.Gate, AiExecutorRules.StartUseItem(world, Npc, Foe, Kit, null).Refusal, "4 above 3 points, fatigue 7 of 20");
     }
 
+    // ---- the use of an item with a skill (ARC-SCRIPT-2752, ledger SX3, SX4) ----
+
+    [TestMethod]
+    public void TheUseItemWithSkillStarterNeedsATargetPassesTheGateWithFourAndKeepsTheModifier()
+    {
+        var world = Arena(3);
+        Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartUseItemWithSkill(world, Npc, null, 14, Kit, null, 5).Refusal, "nothing is queued for a null target");
+        var started = AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 5);
+        Assert.AreEqual((AiPerformKind.UseSkill, GoalType.UseItemWithSkill, Foe, Kit, 14, 5, GoalRunFlags.NearOccupied | GoalRunFlags.Running),
+            (started.Kind, started.Run!.Bottom.Goal, started.Run.Bottom.Target, started.Run.Bottom.Item, started.Run.Bottom.Skill, started.Run.Bottom.Modifier, started.Run.Flags));
+        Assert.IsTrue(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, null, null, -10).Started, "a null item is allowed");
+        world.Movers[Npc] = new(Fatigue: 8, MaxFatigue: 20);
+        Assert.AreEqual(GoalRunFlags.NearOccupied, AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 0).Run!.Flags, "running only above 8");
+        InRound(world, 3);
+        world.Movers[Npc] = new(Fatigue: 7, MaxFatigue: 20);
+        Assert.AreEqual(AiStartRefusal.Gate, AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 0).Refusal, "4 above 3 points, fatigue 7 of 20");
+        InRound(world, 4);
+        Assert.IsTrue(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 0).Started);
+        Assert.IsFalse(world.Calls.Any(c => c.StartsWith("ap ", StringComparison.Ordinal)), "the starter charges no action points");
+    }
+
+    [TestMethod]
+    public void TheUseItemWithSkillGoalWalksNearThenRunsTheInvocationOnceAndEnds()
+    {
+        var world = Arena(4);
+        var run = AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 5).Run!;
+        var steps = Drive(run, world, Steamwoven);
+        Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.SkillAttempted), (steps[^1].End, steps[^1].Reason));
+        CollectionAssert.AreEqual(new[] { "plan Near run near-occupied", "step 11,10 run", "step 12,10 run", "step 13,10 run", $"skill 14 modifier 5 on {Foe} with {Kit}" }, world.Calls,
+            "the walk keeps the goal's frame, so the modifier survives it, and the invocation is one call");
+
+        world = Arena(1);
+        Assert.AreEqual(AiExecutorReason.SkillAttempted, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, null, null, -7).Run!, world, Steamwoven)[^1].Reason);
+        CollectionAssert.Contains(world.Calls, $"skill 14 modifier -7 on {Foe} with none");
+    }
+
+    [TestMethod]
+    public void TheUseItemWithSkillGoalRefusesAGoneTargetAnItemGoneOrNotHeldAndRunsNoInvocation()
+    {
+        var world = Arena(1);
+        world.GoneSet.Add(Foe);
+        Assert.AreEqual(AiExecutorReason.ObjectGone, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 5).Run!, world, Steamwoven)[^1].Reason);
+        world = Arena(1);
+        world.GoneSet.Add(Kit);
+        Assert.AreEqual(AiExecutorReason.ItemNotHeld, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 5).Run!, world, Steamwoven)[^1].Reason);
+        world = Arena(1);
+        world.Holder = "oid:chest";
+        Assert.AreEqual(AiExecutorReason.ItemNotHeld, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, 14, Kit, null, 5).Run!, world, Steamwoven)[^1].Reason, "an item the user does not hold directly");
+        Assert.IsFalse(world.Calls.Any(c => c.StartsWith("skill ", StringComparison.Ordinal)));
+    }
+
     [TestMethod]
     public void TheItemUseGoalWalksNearRunningThenUsesTheItemAndEnds()
     {
@@ -372,16 +424,16 @@ public sealed class ActionGoalsTests
         var steps = Drive(run, world, Steamwoven);
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.SkillAttempted), (steps[^1].End, steps[^1].Reason));
         Assert.IsFalse(world.Calls.Any(call => call.StartsWith("animate", StringComparison.Ordinal) || call.StartsWith("turn", StringComparison.Ordinal)), "no animation node and no turn");
-        Assert.AreEqual($"pick locks {Foe}", world.Calls[^1], "the attempt is the shared pick-locks check, with no item");
+        Assert.AreEqual($"skill 14 modifier 0 on {Foe} with none", world.Calls[^1], "the attempt is the shared pick-locks check, with no item");
 
         world = Arena(4);
         Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!, world, Steamwoven);
-        Assert.AreEqual($"pick locks {Foe}", world.Calls[^1], "its own lockpicks, held directly");
+        Assert.AreEqual($"skill 14 modifier 0 on {Foe} with {Kit}", world.Calls[^1], "its own lockpicks, held directly");
 
         world = Arena(1);
         world.Holder = "oid:chest";
         Assert.AreEqual(AiExecutorReason.ItemNotHeld, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!, world, Steamwoven)[^1].Reason, "lockpicks held elsewhere refuse");
-        CollectionAssert.DoesNotContain(world.Calls, $"pick locks {Foe}");
+        Assert.IsFalse(world.Calls.Any(call => call.StartsWith("skill ", StringComparison.Ordinal)), "no attempt for an item not held");
     }
 
     [TestMethod]

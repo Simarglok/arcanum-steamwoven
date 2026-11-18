@@ -67,7 +67,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
     Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
-    Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null);
+    Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null,
+    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -212,7 +213,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.UseItemWithSkill, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
@@ -2139,6 +2140,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-WORLD-114: likewise a toggle state or kill the viewer cannot apply.
         if (ObjectStateRefusal(effects) is { } refusedState)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedState}");
+        // ARC-SCRIPT-2752 (ledger SX3): likewise a use item with skill the AI host cannot start.
+        if (SkillUseRefusal(effects) is { } refusedSkill)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedSkill}");
         // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map; such a run applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
         // ARC-WORLD-2358 (ledger TT20): the hero's teleport of the same run is allowed (the dialog opens inside the run and ends it, the ping takes the request at the next frame), a teleport of an NPC together with the conversation
         // is not (the speaker may be the one that moves): that pair stays refused.
@@ -2441,6 +2445,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // runs changed, as map changes.
         foreach (var stored in effects.SlotWrites)
             if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
+        // ARC-SCRIPT-2752 (SX3): the use-item-with-skill starter of each request in order, after the run's other effects (SkillUseRefusal checked them; a slot write that fails after it leaves the goal started); the original ignores the starter's answer, so a refusal of the gate or the table goes on.
+        foreach (var use in effects.SkillUses)
+            LastSkillUse = _world!.ScriptUseItemWithSkill!(use.Source.Code, use.Item?.Code, use.Target.Code, use.Skill, use.Modifier);
         // ARC-SCRIPT-1481: the item in use that the run destroyed keeps no slot (a counter raised after the destroy would be an orphan map change).
         if (_itemUse is { } gone && _session.IsItemDestroyed(gone.Code)) return true;
         return effects.Writeback is not { } writeback || writeSlot(writeback);
@@ -2815,6 +2822,27 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (stop.Disposition == GameSessionDisposition.Rejected) return false;
         foreach (var step in stop.Steps) _world?.Stopped?.Invoke(step);
         return true;
+    }
+
+    /// <summary>The answer of the last use item with skill (79) a run applied (<see cref="AreaScriptWorld.ScriptUseItemWithSkill"/>), for the tests and the log.</summary>
+    public string? LastSkillUse { get; private set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2752 (ledger SX3, SX4; the lockpicks' and the skeleton key's use scripts carry it): a use item with skill (79) is applied for an NPC of the shown map as the source, with the pick-locks skill (14: the
+    /// check takes the modifier) on a portal of the shown map; the AI host starts the goal 40. The refusal text of any other request, which leaves the run unapplied whole: no AI host, the hero as the source (its goal runs
+    /// are the hero host's), a source that is no NPC of the shown map, another skill, a target that is no portal of the shown map (a container's lock is not wired).
+    /// </summary>
+    private string? SkillUseRefusal(ScrEffects effects)
+    {
+        foreach (var use in effects.SkillUses)
+        {
+            if (_world?.ScriptUseItemWithSkill is null) return "use item with skill needs the AI host";
+            if (IsPc(use.Source)) return "use item with skill by the hero is not modelled (the hero's goal 40 is the hero host's)";
+            if (!ShownNpc(use.Source)) return $"use item with skill by {use.Source.Code}, which is no NPC of the shown map, is not modelled";
+            if (use.Skill != Arcanum.Simulation.Ai.AiExecutorRules.PickLocksSkill) return $"use item with skill {use.Skill} is not modelled (only pick locks takes the modifier)";
+            if (use.Target.Map != _shownMap || _world.Openable?.Invoke(use.Target) is not { Art: not null }) return $"use item with skill on {use.Target.Code}, which is no portal of the shown map, is not modelled";
+        }
+        return null;
     }
 
     // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
