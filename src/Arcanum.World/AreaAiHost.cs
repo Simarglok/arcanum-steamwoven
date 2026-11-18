@@ -2637,10 +2637,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var struck = info?.Object;
         if (Build(id) is not { } attacker) return null;
         var weapon = WieldedPrototype(id);
+        // ARC-COMBAT-2538 (RH5): the victim a script names: the object's entity, or a wall's row (a wall's scripts are offered like any struck object's).
+        var victim = struck?.Entity ?? (info is null ? AreaUseScriptHost.EntityId(blocker) : null);
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck), HitScripts = HitScriptsOf(id, struck?.Entity),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim),
         });
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2652,7 +2654,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var shot in result.Shots)
             if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
             {
-                if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                if (LandShotOnObject(id, shot, struck, struck is null, blocker) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
                 _session.EndShot(shot);
             }
         return result;
@@ -2717,22 +2719,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result is { Disposition: not GameSessionDisposition.Rejected } && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
-    private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>
-        _scene.TakingDamage is { } asks && target is not null ? () => asks(target.Entity, attacker) : null;
+    private Func<bool>? TakingDamageOfObject(string attacker, string? victim) =>
+        _scene.TakingDamage is { } asks && victim is not null ? () => asks(victim, attacker) : null;
 
     /// <summary>
     /// ARC-COMBAT-1140 (PF8, RH5, OD1–OD5; tail T4e): an arrow or bullet of <paramref name="shooter"/> reached an object it met: the one the shot was decided for (<see cref="HitBlockingObject"/>) takes the carried hit, another
     /// object or wall past its destination a forced hit (<see cref="GameSessionOwner.LandNpcShotOnObject"/>); the object's taking-damage script is asked with the shooter as the attacker. A door, window, container,
-    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
+    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>), named by its row <paramref name="wallRow"/> for the scripts it is offered (ARC-COMBAT-2538: the weapon's hit scripts and the wall's
+    /// taking-damage script, as for any struck object). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
     /// Null when the shooter has no combat values (the shot is gone either way).
     /// </summary>
-    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
+    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall, AreaObjectRecord? wallRow = null)
     {
+        // ARC-COMBAT-2538 (RH5): a wall's row names it for the hit scripts and its taking-damage script (a wall without a row offers none).
+        var victim = target?.Entity ?? (wall && wallRow is not null ? AreaUseScriptHost.EntityId(wallRow) : null);
         if (Build(shooter) is not { } attacker) { EndStruckShot(shot); return null; }
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, target), HitScripts = HitScriptsOf(shooter, target?.Entity),
+            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim),
         });
         EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
@@ -3167,20 +3172,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-AI-1854 (0x4C7160, the cases with no world write): the skills that have no case of their own in the attempt (bow, melee, throwing, backstab, prowling, haggle, persuasion, firearms), dodge (its incapacity gate), spot trap
     /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is
-    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. NOT READY: repair (its own handler: item damage), the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
+    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. The opposed skills read the target's stat (<see cref="OpposedStat"/>, ARC-AI-2652). NOT READY: the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
     /// outside the 16 answers false.
     /// </summary>
     private bool PlainSkillAttempt(string id, string target, int skill)
     {
         string? refusal = null;
         SessionNpcSkillRoll? roll = null;
+        int? opponent = null;
         if (skill is < 0 or > (int)Skill.DisarmTraps || !GameSessionOwner.IsPlainNpcSkill((Skill)skill)) refusal = "not ready";
+        else if (!OpposedStat(target, (Skill)skill, out opponent, out refusal)) { }
         else if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
         else
         {
             var incapable = skill == (int)Skill.Dodge && DodgeRefused(id);
             var trap = skill == (int)Skill.SpotTrap ? _scene.TargetTrapClass?.Invoke(target) ?? TrapClass.None : TrapClass.None;
-            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable, trap);
+            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable, trap, opponent);
         }
         Trace(id).Skill = roll is null ? $"skill {skill} on {target}: {refusal}"
             : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Critical} second={roll.SecondRoll}";
@@ -3189,9 +3196,33 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-2652 (0x4C6410): the value a plain attempt's effectiveness is opposed by. A skill the table 0x5B6F64 flags as opposed by perception (0x10: prowling) or intelligence (0x20: persuasion) reads the target's effective
+    /// stat through the getter 0x4B0490 (5 or 4): the hero's through the session, a critter of the shown map from its sheet and effects (<see cref="Find"/>), 0 for a target that is no critter (the getter answers 0 for any
+    /// object but a critter). No target (an empty id) is no opponent (an effectiveness of 100); the other plain skills have none. A target the host holds no fields of, or a critter it holds no facts of, is refused and the attempt does nothing.
+    /// </summary>
+    private bool OpposedStat(string target, Skill skill, out int? value, out string? refusal)
+    {
+        value = null;
+        refusal = null;
+        var kind = SkillCheckRules.Opponent(skill);
+        if (kind is not (SkillOpponent.Perception or SkillOpponent.Intelligence) || string.IsNullOrEmpty(target)) return true;
+        var perception = kind == SkillOpponent.Perception;
+        if (target == Pc)
+        {
+            value = _session.QueryHeroScriptStat(perception ? (int)CharacterStat.Perception : (int)CharacterStat.Intelligence);
+            if (value is null) refusal = "no hero";
+        }
+        else if (Fields(target) is not { } fields) refusal = "no target";
+        else if (fields.Critter is null) value = 0;
+        else if (Find(target) is { } critter) value = perception ? critter.Perception : critter.Intelligence;
+        else refusal = "no target sheet";
+        return refusal is null;
+    }
+
+    /// <summary>
     /// ARC-AI-2623 (0x4C7160 with skill 8, the roll 0x4C6560): an NPC's gambling attempt, the session's <see cref="GameSessionOwner.RollNpcGambling"/> with the stored roll of the skill module. The skill is opposed by the target's
     /// gambling level (0x4C6410 over 0x4C5EB0): the hero's, a map NPC's from its sheet, 0 for a target that is no critter. A target the host holds no fields of, or a critter with no sheet, is not read and the attempt does nothing. The answer is
-    /// the check's success (run flag 0x40000); the handler has no case of its own for the skill. NOT READY: the opponent of the other opposed skills (persuasion).
+    /// the check's success (run flag 0x40000); the handler has no case of its own for the skill. The other opposed skills (prowling, persuasion) read a stat of the target: <see cref="OpposedStat"/> (ARC-AI-2652).
     /// </summary>
     private bool GamblingAttempt(string id, string target)
     {

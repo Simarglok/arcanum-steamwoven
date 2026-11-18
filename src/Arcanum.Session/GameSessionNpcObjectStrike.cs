@@ -172,10 +172,11 @@ public sealed partial class GameSessionOwner
             flying = shots;
         }
         // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step; a shot that flies asks at its strike.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && !flies && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
+        // ARC-COMBAT-2538 (RH5): a wall's hit offers them too (the weapon's scripts with the wall as the extra object), as the hero's does (ARC-COMBAT-1973).
+        if (resolution.Refusal == AttackRefusal.None && !flies && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
             attack.HitScripts?.Invoke(new(arrow?.WeaponItem ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, resolution.Outcome == AttackOutcome.CriticalHit, arrow is not null));
-        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (before the invulnerable gate); a wall has none.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
+        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (before the invulnerable gate); ARC-COMBAT-2538 (RH5): so is a wall's (point 23 comes before the damage step leaves for a wall), and the answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(Disposition(changed), GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = spentAmmo, Shots = flying };
 

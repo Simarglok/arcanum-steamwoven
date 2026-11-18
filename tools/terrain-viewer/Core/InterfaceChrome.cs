@@ -46,8 +46,10 @@ public sealed record ChromeGrid(int X, int Y, int Columns, int Rows, int Cell, b
 /// (<see cref="InterfaceChromeRenderer"/>'s socket ring) around the circle at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="Radius"/>,
 /// painted on the opaque pixels of the frame, and the square rim a square hole would get is not drawn. The lens arts (231-233) fill the circle's box with the same ring.
 /// <paramref name="Shape"/> (the default) also gives the circle's edge (the pixels within a unit and a half inside it) an anti-aliased alpha instead of the Legacy stairs;
-/// deeper inside the Legacy alpha is untouched. A frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.</summary>
-public sealed record ChromeRoundView(double CenterX, double CenterY, double Radius, bool Shape = true) : ChromePart;
+/// deeper inside the Legacy alpha is untouched. A frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.
+/// ARC-UI-2645: <paramref name="Inward"/> (the lens arts, whose box is the circle's box: the circle touches the four sides, so a ring outside it has no room there and was cut at the sides) lays the ring inside the circle
+/// instead, over the live view's outermost three units.</summary>
+public sealed record ChromeRoundView(double CenterX, double CenterY, double Radius, bool Shape = true, bool Inward = false) : ChromePart;
 
 /// <summary>ARC-UI-1196: a picture's printed or drawn marks (a glyph, an arrow) on the generated ground under it. In the rectangle the Legacy pixels are compared with the
 /// rectangle's median colour; where they are darker or lighter than the median by more than a tenth the difference is multiplied onto the generated colour, so the marks
@@ -465,7 +467,7 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(231, 303, 110, 97),
         ], Holes: ChromeHoles.None); // the cover's four clear columns at the right edge (x 337 to 340) show the pack under it: not a hole, so no brass rim runs down them
         // The lenses (231 barter, 232 loot, 233 own window; ARC-UI-1810: 198 `PCWinCvr`, the character sheet's, the logbook's and the map window's) are the round view's ring around the live game view's circle.
-        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
+        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5, Inward: true)]));
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
             "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art",
             // ARC-UI-1195: the character sheet's buttons (the + and − of the stats, skills, technology and spells pages, the page tabs, the skill group and discipline buttons).
@@ -1352,6 +1354,22 @@ public static class InterfaceChromeRenderer
     {
         float cx = (float)(view.CenterX * c.Scale), cy = (float)(view.CenterY * c.Scale), r = (float)(view.Radius * c.Scale);
         var reach = (int)(r + 2);
+        if (view.Inward)
+        {
+            // The ring takes the three outermost units of the circle: those pixels become opaque (an anti-aliased inner edge), then the brass band is laid on them from the inner radius out to the circle's edge.
+            var inner = r - 3 * c.S;
+            for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
+            for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
+            {
+                float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
+                if (d < inner - 0.5f || d >= r + 0.5f) continue;
+                var i = y * c.W + x;
+                c.Alpha[i] = Math.Clamp(d - inner + 0.5f, 0, 1);
+                c.Color[i] = Ink;
+            }
+            RingBand(c, cx, cy, inner);
+            return;
+        }
         for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
         for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
         {

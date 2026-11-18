@@ -393,6 +393,34 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
+    public void A_persuasion_or_prowling_attempt_is_opposed_by_the_targets_intelligence_or_perception_and_a_target_the_host_does_not_hold_changes_nothing()
+    {
+        // ARC-AI-2652 (0x4C62E0 → 0x4C6410, skill flags 0x20 and 0x10): the opposed effectiveness reads the target's effective stat (0x4B0490 kind 4 or 5), 0 for a target that is no critter.
+        var (session, host, npc, item) = Open(hero: true);
+        foreach (var (skill, stat) in new[] { (Skill.Persuasion, 4), (Skill.Prowling, 5) })
+        {
+            var heroStat = session.QueryHeroScriptStat(stat) ?? throw new AssertFailedException("no hero stat");
+            var opposedToHero = SkillCheckRules.Opposed(0, heroStat);
+            Assert.AreNotEqual(100, opposedToHero, "the fixture hero's stat must matter");
+            host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)skill, null);
+            var roll = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no roll");
+            CollectionAssert.Contains(new[] { Math.Min(opposedToHero, SkillCheckRules.EffectivenessCap), Math.Min(opposedToHero + 10, SkillCheckRules.EffectivenessCap), opposedToHero, opposedToHero + 10 }, roll.Check!.Check.Effectiveness,
+                $"{skill}: opposed by the hero's stat {stat} = {heroStat} (the NPC has no points), plus the intelligence term at most");
+            // A map item is no critter: the getter reads 0.
+            host.AttemptSkill(npc, item, (int)skill, null);
+            var onItem = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll!;
+            var opposedToNothing = SkillCheckRules.Opposed(0, 0);
+            CollectionAssert.Contains(new[] { opposedToNothing, opposedToNothing + 10 }, onItem.Check!.Check.Effectiveness, $"{skill} on an item");
+            // A target the host holds nothing of is refused and nothing is rolled.
+            var before = (session.Version.Revision, session.QueryRandom().Draws);
+            Assert.IsFalse(host.AttemptSkill(npc, Entity(9), (int)skill, null));
+            Assert.IsNull(host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll);
+            Assert.AreEqual($"skill {(int)skill} on {Entity(9)}: no target", host.TraceOf(npc)!.Skill);
+            Assert.AreEqual(before, (session.Version.Revision, session.QueryRandom().Draws), "nothing is rolled");
+        }
+    }
+
+    [TestMethod]
     public void An_npc_gambling_attempt_uses_the_stored_roll_against_the_targets_level_and_a_target_the_host_does_not_hold_changes_nothing()
     {
         // ARC-AI-2623 (0x4C7160 with skill 8 and the roll 0x4C6560): the shared check on the module's stored roll, opposed by the target's gambling level; the answer is the check's success.
