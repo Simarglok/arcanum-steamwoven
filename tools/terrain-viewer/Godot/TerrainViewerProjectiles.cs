@@ -282,9 +282,11 @@ public partial class TerrainViewerApp
         art = owner.QueryObjectArt(new SessionMapId(CurrentAreaMap), thrown.Item) ?? art;
         // ARC-COMBAT-1717: a thrown weapon carries the check decided at the throw; the hit's target is the struck critter (the hero, or an NPC of the shown map).
         var decided = owner.QueryNpcShot(shot);
+        // ARC-COMBAT-2693: a grenade's flight carries its check too (a stray strike), but its parent item is no weapon: it keeps the size arc and its own art.
+        var generic = decided is { Generic: true };
         var weapon = decided is not null;
         // An unchecked flight of a weapon (a throw at a location) is no size arc either: its parent item is a weapon (PF11).
-        var isWeapon = weapon || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
+        var isWeapon = weapon && !generic || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
         var hit = decided is { Hit: true };
         // ARC-COMBAT-2523 (TW11): a thrown weapon decided a hit at a location names no struck critter: it flies to the location and strikes nothing (the targetless hit shot, ProjectileRules.Cross).
         var aimedId = hit && decided!.Value.Target != SessionNpcShotFacts.LocationTarget
@@ -294,7 +296,7 @@ public partial class TerrainViewerApp
         if (aimedId is not null && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc && !map.TryGetRow(aimedId, out aimed!)) return false;
         if (aimedId == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) aimed = HeroRow;
         // PF14: the weapon's projectile art is a scenery art faced in the flight's direction (the hero's thrown dagger flies so); without one the item's own art flies as it lies.
-        if (weapon && decided!.Value.ThrownArt is { } missile) art = ProjectileRules.FacedArt(missile, direction) ?? art;
+        if (weapon && !generic && decided!.Value.ThrownArt is { } missile) art = ProjectileRules.FacedArt(missile, direction) ?? art;
         var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = aimed, Thrower = row, Shooter = weapon ? row : null, Destination = destination, Art = art,
@@ -302,7 +304,7 @@ public partial class TerrainViewerApp
             Launched = new(aimedId ?? thrower, false, false, weapon ? thrower : null, thrower),
         };
         // A weapon's refused launch leaves its shot to the AI host (the hit strikes at once, the item lands); a generic item's ends it (the item stays on the thrower's cell).
-        _npcShotLaunching = weapon ? shot.Id : null;
+        _npcShotLaunching = weapon && !generic ? shot.Id : null;
         bool launched;
         try { launched = ProjectileHost().Launch(projectile, from, hit && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? aimedId : null); }
         finally { _npcShotLaunching = null; }

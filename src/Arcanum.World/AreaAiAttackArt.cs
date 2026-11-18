@@ -14,7 +14,17 @@ public sealed record AreaAiAttackArtRequest(int Animation, int Weapon, int Shiel
 /// ARC-RENDER-038: the attack ART an NPC's body has for a request: the animation, weapon part and shield of the file read (after the
 /// missing-art repair, MA1, and the viewer's fallbacks) and its frames, action frame and own frame rate.
 /// </summary>
-public sealed record AreaAiAttackArt(int Animation, int Weapon, int Shield, int Frames, int ActionFrame, int RawFramesPerSecond);
+public sealed record AreaAiAttackArt(int Animation, int Weapon, int Shield, int Frames, int ActionFrame, int RawFramesPerSecond)
+{
+    /// <summary>
+    /// ARC-COMBAT-1932: the answer for a body whose ART file exists nowhere after the missing-art repair (as opposed to a file that cannot
+    /// be read, which the scene answers with null): the original's attack-animation node (goal 19, node 5) then logs "Missing art" and fails.
+    /// </summary>
+    public static AreaAiAttackArt NoFile(AreaAiAttackArtRequest wanted) => new(wanted.Animation, wanted.Weapon, wanted.Shield, 0, 0, 0) { Missing = true };
+
+    /// <summary>True for <see cref="NoFile"/>.</summary>
+    public bool Missing { get; init; }
+}
 
 /// <summary>
 /// ARC-RENDER-038: one NPC attack animation as the AI host started it: at <see cref="StartMs"/> on the host's animation clock, for

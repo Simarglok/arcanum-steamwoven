@@ -135,9 +135,11 @@ public enum ChromeKind
 /// <remarks>ARC-UI-1196: <paramref name="Holes"/> says what the holes of the Legacy frame get; <paramref name="OriginX"/> and <paramref name="OriginY"/> are where the art's corner lies in the
 /// window's larger picture (the logbook's book), in Legacy pixels: the materials are sampled at that offset, so a tab or a page button painted on its own continues the page or the
 /// stack it lies on without a seam. ARC-UI-1784: <paramref name="KeepFace"/> (a button only) keeps the art's whole picture inside the generated rim (a ball whose colour tells the college
-/// apart), where a plain button keeps only the glyph on a generated brass face. ARC-UI-1199: <paramref name="TabPaper"/> is the material of a tab's paper bookmark.</remarks>
+/// apart), where a plain button keeps only the glyph on a generated brass face. ARC-UI-1199: <paramref name="TabPaper"/> is the material of a tab's paper bookmark. ARC-UI-2720: <paramref name="FoldX"/> is the x of the fold
+/// the Parchment material shades, in the same coordinates as the materials (the art's own plus <paramref name="OriginX"/>): the logbook's book has it at its 286, the reading window's book at the
+/// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, ChromeLensFrom? LensFrom = null)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -208,13 +210,14 @@ public static class InterfaceChromeRecipes
             new ChromePlate(x, y, width, 1, ChromeMaterial.Dark, Bevel: false), new ChromePlate(x, y + height - 1, width, 1, ChromeMaterial.Dark, Bevel: false),
             new ChromePlate(x, y, 1, height, ChromeMaterial.Dark, Bevel: false), new ChromePlate(x + width - 1, y, 1, height, ChromeMaterial.Dark, Bevel: false),
         ];
+        // ARC-UI-2720: the materials are sampled in window coordinates, so the fold the pages' shade follows is the book art's 320 plus its corner.
         yield return Table("BookBackground.ART",
             new ChromePlate(40, 23, 556, 352, ChromeMaterial.Cloth),
             new ChromePlate(50, 30, 27, 337, ChromeMaterial.PageEdge, Bevel: false),
             new ChromePlate(564, 30, 29, 337, ChromeMaterial.PageEdge, Bevel: false),
             new ChromePlate(77, 30, 243, 337, ChromeMaterial.Parchment, Bevel: false),
             new ChromePlate(320, 30, 244, 337, ChromeMaterial.Parchment, Bevel: false),
-            new ChromePlate(289, 21, 62, 9, ChromeMaterial.Iron), new ChromePlate(289, 371, 62, 9, ChromeMaterial.Iron));
+            new ChromePlate(289, 21, 62, 9, ChromeMaterial.Iron), new ChromePlate(289, 371, 62, 9, ChromeMaterial.Iron)) with { FoldX = ox + AreaReadingArtLayout.BookFold };
         yield return Table("NoteBackground.ART", new ChromePlate(188, 25, 278, 352, ChromeMaterial.Parchment));
         yield return Table("TeleBackground.ART", [new ChromePlate(178, 25, 283, 352, ChromeMaterial.Parchment),
             .. Outline(186, 34, 49, 49), .. Outline(405, 34, 49, 49),
@@ -636,6 +639,8 @@ public static class InterfaceChromeRenderer
         public Rgb WoodLow = InterfaceChromeRenderer.WoodLowDefault, WoodHigh = InterfaceChromeRenderer.WoodHighDefault;
         /// <summary>ARC-UI-1196: where the art's corner lies in the window's larger picture (<see cref="ChromeRecipe.OriginX"/>): the materials are sampled at that offset.</summary>
         public double OriginX, OriginY;
+        /// <summary>ARC-UI-2720: the x, in the materials' coordinates, of the fold the Parchment material shades (<see cref="ChromeRecipe.FoldX"/>).</summary>
+        public float FoldX = InterfaceChromeRenderer.LogbookFold;
         /// <summary>ARC-UI-1810: the frame being painted is the recipe's down frame (a <see cref="ChromeBall"/> turns its light to the other side).</summary>
         public bool Down;
 
@@ -700,7 +705,7 @@ public static class InterfaceChromeRenderer
         var legacyPixels = legacy.ToArray();
         var picturePixels = picture.IsEmpty ? null : picture.ToArray();
         if (recipe.LensFrom is { } lensFrom) MoveLens(lensFrom, legacyPixels, width, height, picturePixels, pixelWidth, pixelHeight, scale);
-        var canvas = new Canvas(width, height, legacyPixels, picturePixels, scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, Down = frameIndex == recipe.DownFrame };
+        var canvas = new Canvas(width, height, legacyPixels, picturePixels, scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, FoldX = recipe.FoldX, Down = frameIndex == recipe.DownFrame };
         if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);
@@ -1108,7 +1113,7 @@ public static class InterfaceChromeRenderer
         ChromeMaterial.Slate => Rgb.Lerp(SlateLow, SlateHigh, Math.Clamp(0.15f + 0.75f * Fbm(u * 0.18f, v * 0.18f, 13), 0, 1)),
         ChromeMaterial.Dark => Rgb.Lerp(DarkFill, new Rgb(16, 16, 26), Fbm(u * 0.05f, v * 0.05f, 11)),
         ChromeMaterial.Cloth => ClothAt(u, v),
-        ChromeMaterial.Parchment => ParchmentAt(u, v),
+        ChromeMaterial.Parchment => ParchmentAt(u, v, c.FoldX),
         ChromeMaterial.Paper => PaperAt(u, v),
         ChromeMaterial.PageEdge => PageEdgeAt(u, v),
         ChromeMaterial.Brass => BrassAt(u, v),
@@ -1131,8 +1136,8 @@ public static class InterfaceChromeRenderer
     private static readonly Rgb ParchmentLow = new(132, 126, 110), ParchmentHigh = new(176, 170, 152), PaperLow = new(172, 150, 108), PaperHigh = new(222, 200, 154);
     private static readonly Rgb PageEdgeLow = new(70, 63, 56), PageEdgeHigh = new(136, 128, 116);
 
-    /// <summary>The x, in the book's Legacy pixels, of the fold between the two pages (the book art's 286: the left page ends and the right one starts).</summary>
-    private const float Fold = 286f;
+    /// <summary>The x, in the book's Legacy pixels, of the fold between the two pages (the logbook's book art's 286: the left page ends and the right one starts).</summary>
+    public const float LogbookFold = 286f;
 
     private static Rgb ClothAt(float u, float v)
     {
@@ -1149,13 +1154,13 @@ public static class InterfaceChromeRenderer
         return Rgb.Lerp(PaperLow, PaperHigh, Math.Clamp(0.35f + 0.55f * mottle + 0.1f * (grain - 0.5f), 0, 1));
     }
 
-    private static Rgb ParchmentAt(float u, float v)
+    private static Rgb ParchmentAt(float u, float v, float fold)
     {
         var mottle = Fbm(u * 0.035f, v * 0.04f, 21);
         var grain = Fbm(u * 0.4f, v * 0.4f, 22);
         var colour = Rgb.Lerp(ParchmentLow, ParchmentHigh, Math.Clamp(0.35f + 0.55f * mottle + 0.1f * (grain - 0.5f), 0, 1));
         // The pages sink toward the fold: a soft shade on both sides and a dark line on the fold itself.
-        var d = MathF.Abs(u - Fold);
+        var d = MathF.Abs(u - fold);
         return colour.Times(1 - 0.4f * MathF.Exp(-d / 20f) - (d < 1.2f ? 0.3f : 0));
     }
 

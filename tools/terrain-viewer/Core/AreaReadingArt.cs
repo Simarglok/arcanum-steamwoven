@@ -30,6 +30,9 @@ public static class AreaReadingArtLayout
     public const int FrameArt = WrittenTexts.FrameArt, LensArt = 231, PreviousArt = WrittenTexts.BookPreviousArt, NextArt = WrittenTexts.BookNextArt;
     public static (int X, int Y) BackgroundCorner { get; } = (132, 0);
 
+    /// <summary>ARC-UI-2720: the x, in the book background's own pixels, of the fold the generated look draws: where the two page plates meet (the pages' 227 + 200 and 476 lie 49 apart in the window, so their middle is the window's 451.5, the art's 319.5).</summary>
+    public const float BookFold = 320f;
+
     /// <summary>The close hotspot and the lens (0x5CA4A8, 0x5CA4B0): 89 × 89 at (25, 24); a left release inside it closes the window (the callback 0x56BFC0 tests it with 0x551000).</summary>
     public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((25, 24)).X, AreaLensPlace.Corner((25, 24)).Y, 89); // ARC-UI-2714: the common place with the generated interface
 

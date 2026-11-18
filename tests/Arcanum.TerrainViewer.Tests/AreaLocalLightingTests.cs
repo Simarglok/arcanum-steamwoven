@@ -60,6 +60,39 @@ public sealed class AreaLocalLightingTests
     }
 
     [TestMethod]
+    public void A_scenerys_toggle_state_switches_its_lights_off_and_on()
+    {
+        // ARC-SCRIPT-2585 (ledger OT10): the lights of a toggled object follow its off flag; a light of another owner and every stationary light stand as loaded.
+        AreaObjectKey Owner(int index) => new(Digest, 5000, AreaSourceKind.Static, 1, index, index * 100L, "owner" + index, 10);
+        StationaryLight Held(AreaObjectKey? owner, StationaryLightFlags flags = StationaryLightFlags.None, long x = 92929) =>
+            Light(x, 82560, 0, 0) with { Flags = flags, Owner = owner };
+        var scenery = Owner(1); var other = Owner(2);
+        // A lit scenery, a lit object of another owner and a stationary light, all on the outdoor cell; and a scenery stored off.
+        var local = Local([], Held(scenery), Held(other, x: 92928), Held(null, x: 92929), Held(Owner(3), StationaryLightFlags.Off));
+        var plain = Local([]).LightLevel(92929, 82560, Pair);
+        var lit = local.LightLevel(92929, 82560, Pair);
+        Assert.IsTrue(lit > plain);
+        Assert.AreSame(local, local.WithObjectsOff(new Dictionary<AreaObjectKey, bool>()), "no state: this lighting");
+        Assert.AreSame(local, local.WithObjectsOff(new Dictionary<AreaObjectKey, bool> { [scenery] = false }), "a light already on stays on");
+        var off = local.WithObjectsOff(new Dictionary<AreaObjectKey, bool> { [scenery] = true });
+        Assert.AreEqual(4, off.LightCount, "the light stays in the map, only its OFF bit changes");
+        Assert.AreEqual(1, off.Field.Source.Lights.Count(l => l.Owner == scenery && (l.Flags & StationaryLightFlags.Off) != 0));
+        Assert.AreEqual(1, off.Field.Source.Lights.Count(l => l.Owner == other && (l.Flags & StationaryLightFlags.Off) == 0), "another owner's light is untouched");
+        Assert.AreEqual(1, off.Field.Source.Lights.Count(l => l.Owner is null && (l.Flags & StationaryLightFlags.Off) == 0), "a stationary light is untouched");
+        Assert.IsTrue(off.LightLevel(92929, 82560, Pair) < lit, "the cell is darker with the scenery's light off, the stationary light still adds");
+        Assert.IsTrue(off.LightLevel(92929, 82560, Pair) > plain);
+        // On again (a scenery the map data stores off, a script switched on): its light shines.
+        var on = local.WithObjectsOff(new Dictionary<AreaObjectKey, bool> { [Owner(3)] = false });
+        Assert.AreEqual(0, on.Field.Source.Lights.Count(l => l.Owner == Owner(3) && (l.Flags & StationaryLightFlags.Off) != 0));
+        Assert.IsTrue(on.LightLevel(92929, 82560, Pair) > lit);
+        Assert.AreEqual(lit, local.LightLevel(92929, 82560, Pair), "the loaded lighting is untouched");
+        // A view made of the lighting is refused, the loaded one only is switched.
+        var frame = AreaStationaryLightSource.Create(5000, [], [Uniform(1, 400, 400, 200, 200, 100)]).Frames[1];
+        var carried = local.WithCarried(frame, [new CarriedLight(92929, 82560, 0, 0, CarriedLightSize.Large)]);
+        Assert.ThrowsExactly<InvalidOperationException>(() => carried.WithObjectsOff(new Dictionary<AreaObjectKey, bool> { [scenery] = true }));
+    }
+
+    [TestMethod]
     public void A_body_on_a_cell_without_a_tile_is_lit_by_the_plain_ambient_of_its_art_channel()
     {
         // ARC-RENDER-1831: a ground or companion body outside the loaded window (the resources stage sweeps the view) used to throw
