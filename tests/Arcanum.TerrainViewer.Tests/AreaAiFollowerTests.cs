@@ -437,6 +437,25 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual((140, -1000, 12), (facts.LeaderAlignment, facts.NpcAlignment, facts.LeaderCharisma));
     }
 
+    // ARC-AI-2155 (0x4B0490 for stats 0x11 and 0x13, every hostility reader): the facts the kill-on-sight, good-follower, target-choice and morale readers take carry the NPC's level and alignment with the effect list
+    // laid over the stored values (clamped), and the hero's carry its stored alignment instead of 0.
+    [TestMethod]
+    public void Hostility_facts_carry_the_level_and_alignment_the_stat_getter_gives()
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: 12, companionAlignment: 40, table: ParameterAt(8, 5));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        var before = host.Find(companion) ?? throw new AssertFailedException("no facts");
+        Assert.AreEqual(40, before.Alignment, "the stored base");
+        var target = scene.Combat.Build(session, companion).Combat?.Target ?? throw new AssertFailedException("the companion has no combat build");
+        EffectChange Change(int stat, EffectChangeOperator op, int value) => new(EffectAttributeKind.Stat, stat, op, value);
+        Assert.AreEqual(GameSessionFailure.None, session.AddNpcEffect(session.Version, target,
+            new SessionEffectDefinition(152, [Change(AreaCompanionData.AlignmentStat, EffectChangeOperator.Add, 100), Change(AreaCompanionData.LevelStat, EffectChangeOperator.Add, 3)]), EffectCause.Spell).Failure);
+        var after = host.Find(companion) ?? throw new AssertFailedException("no facts");
+        Assert.AreEqual((140, before.Level + 3), (after.Alignment, after.Level), "base plus the effect");
+        Assert.AreEqual(session.QueryHero()?.Alignment ?? 0, host.Find(Pc)?.Alignment, "the hero's stored alignment, not 0");
+        Assert.AreEqual(host.AlignmentOf(enemy), host.Find(enemy)?.Alignment);
+    }
+
     // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any
     // critter, one faction holds a leader and its followers, and a leave of an NPC leader ends the follower's run as the hero's leave does.
     [TestMethod]
