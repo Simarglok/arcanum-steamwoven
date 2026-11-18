@@ -53,6 +53,7 @@ public partial class TerrainViewerApp
         var heroBefore = session.QueryHeroLife()!.Record.State;
         var scaled = false;
         var baseline = new HashSet<int>();
+        (string Entity, SessionLifeTarget Life)? ally = null;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -81,7 +82,6 @@ public partial class TerrainViewerApp
             var flagsOf = new Dictionary<string, SessionObjectFlags>();
 
             // The dead ally of the Resurrect list: the nearest other NPC of the map within eight cells of the caster, if any.
-            (string Entity, SessionLifeTarget Life)? ally = null;
             {
                 var best = int.MaxValue;
                 foreach (var other in npcs.Where(c => c.Holder.Entity != entity))
@@ -123,10 +123,14 @@ public partial class TerrainViewerApp
             {
                 if (!flagsOf.TryGetValue(id, out var was)) { flagsOf[id] = session.QueryObjectFlags(id); return; }
                 var now = session.QueryObjectFlags(id);
+                // An extra set bit is off again (the data lacks it unless the baseline had it cleared, which the write then keeps); an extra cleared bit is on again (the data has it unless the baseline had it set): with the data's
+                // value given, the write drops the change instead of leaving a record of the opposite write, so the critter's written flags end as they began.
                 void Field(SessionObjectFlagField field, int nowSet, int nowCleared, int wasSet, int wasCleared)
                 {
-                    if ((nowSet & ~wasSet) is not 0 and var extraSet) session.WriteObjectFlag(session.Version, id, field, extraSet, false);
-                    if ((nowCleared & ~wasCleared) is not 0 and var extraCleared) session.WriteObjectFlag(session.Version, id, field, extraCleared, true);
+                    if ((nowSet & ~wasSet & ~wasCleared) is not 0 and var setOff) session.WriteObjectFlag(session.Version, id, field, setOff, false, false);
+                    if ((nowSet & ~wasSet & wasCleared) is not 0 and var setOffKept) session.WriteObjectFlag(session.Version, id, field, setOffKept, false);
+                    if ((nowCleared & ~wasCleared & ~wasSet) is not 0 and var clearedOn) session.WriteObjectFlag(session.Version, id, field, clearedOn, true, true);
+                    if ((nowCleared & ~wasCleared & wasSet) is not 0 and var clearedOnKept) session.WriteObjectFlag(session.Version, id, field, clearedOnKept, true);
                 }
                 Field(SessionObjectFlagField.Spell, now.SpellSet, now.SpellCleared, was.SpellSet, was.SpellCleared);
                 Field(SessionObjectFlagField.Critter, now.CritterSet, now.CritterCleared, was.CritterSet, was.CritterCleared);
@@ -172,10 +176,12 @@ public partial class TerrainViewerApp
                 for (var settle = 0; settle < 20; settle++) Frame();
                 var kinds = new SortedDictionary<string, int>(StringComparer.Ordinal);
                 var paid = 0;
+                // Run numbers are reused once a run is freed (the NPC's own AI casts in the same frames take the number again), so the run's events end with its first Freed.
                 foreach (var e in caster.Log.Skip(logAt).Where(e => e.Run == id))
                 {
                     kinds[e.Kind.ToString()] = kinds.GetValueOrDefault(e.Kind.ToString()) + 1;
                     if (e.Kind == SpellCastEventKind.FatiguePaid) paid += e.Value;
+                    if (e.Kind == SpellCastEventKind.Freed) break;
                 }
                 return new(true, null, frames, stuck, kinds, paid, session.QuerySpellRuns()[id] is not null, session.QueryMaintainBar().SlotOf(id) is not null);
             }
@@ -186,7 +192,7 @@ public partial class TerrainViewerApp
                 ? $"started frames={s.Frames}{(s.Stuck ? " STUCK" : "")} alive={s.Alive} maintained={s.Maintained} paid={s.Paid} [{string.Join(",", s.Kinds.Select(k => $"{k.Key}:{k.Value}"))}]"
                 : "no run (" + s.Why + ")";
 
-            int ran = 0, differs = 0, notRun = 0, stuckCasts = 0, refused = 0, notComparable = 0;
+            int ran = 0, differs = 0, notRun = 0, refused = 0, notComparable = 0;
             var differing = new List<int>();
             foreach (var (spell, kind, lists) in pairs)
             {
@@ -198,7 +204,7 @@ public partial class TerrainViewerApp
                 {
                     host!.HeroAttacked(entity);
                     return Observe(entity, spell, () => host.PerformChoice(entity, new AiPassChoice(AiPassAction.Cast, spell, 0, null, at)),
-                        () => host.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true, () => host.TraceOf(entity)?.Cast);
+                        () => host.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true, () => host.TraceOf(entity)?.Cast is { } trace && trace.StartsWith($"cast {spell} ", StringComparison.Ordinal) ? trace : "no cast of this spell in the trace (the perform did not reach the cast)");
                 }
 
                 // The NPC's own cast, at the target the chooser would give it (its run must settle and leave nothing); the comparison with the hero's cast is between the same target (the hero: a cast at self for a self spell), so
@@ -219,7 +225,7 @@ public partial class TerrainViewerApp
                 string? apart = null;
                 var npcComponents = npcAtHero.Kinds.Keys.Where(k => !aside.Contains(k)).Any();
                 var heroComponents = heroCast.Kinds.Keys.Where(k => !aside.Contains(k)).Any();
-                if (!npcAtHero.Started && heroCast.Started) { apart = "NPC-REFUSED " + npcAtHero.Why?.Split(" | ")[0].Trim(); refused++; }
+                if (!npcAtHero.Started && heroCast.Started && npcAtHero.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true) { apart = "NPC-REFUSED " + npcAtHero.Why.Split(" | ")[0].Trim(); refused++; }
                 else if (npcAtHero.Started && heroCast.Started && npcComponents && !heroComponents) { apart = "HERO-NOT-COMPARABLE (its run was freed at the release's re-check with nothing done)"; notComparable++; }
                 else if (npcAtHero.Started != heroCast.Started) differences.Add($"started npc={npcAtHero.Started} hero={heroCast.Started}");
                 else if (npcAtHero.Started)
@@ -232,7 +238,6 @@ public partial class TerrainViewerApp
                     if (npcAtHero.Alive != heroCast.Alive || npcAtHero.Maintained != heroCast.Maintained) differences.Add($"after the cast alive npc={npcAtHero.Alive} hero={heroCast.Alive}, maintained npc={npcAtHero.Maintained} hero={heroCast.Maintained}");
                 }
                 ran++;
-                if (npc.Stuck || npcAtHero.Stuck || heroCast.Stuck) stuckCasts++;
                 if (differences.Count > 0) { differs++; differing.Add(spell); }
                 GD.Print($"ARC-MAGIC-1835 ai-cast-pass spell={spell} lists={lists} target={kind} npc: {Show(npc)}" + (ReferenceEquals(npc, npcAtHero) ? "" : " | npc at the hero: " + Show(npcAtHero))
                     + " | hero: " + Show(heroCast) + (apart is not null ? " | " + apart : "") + (differences.Count > 0 ? " | DIFF " + string.Join("; ", differences) : ""));
@@ -244,13 +249,14 @@ public partial class TerrainViewerApp
             Require(leftOver.Length == 0, $"no run is left after the pass: {string.Join(",", leftOver)}");
             Require(ran > 0, "at least one pair ran");
             GD.Print("ARC-MAGIC-1835 native-smoke ai-cast-pass PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Caster = target.Row.PrototypeNumber, Pairs = pairs.Count, Ran = ran, NotRun = notRun, NpcRefused = refused, NotComparable = notComparable, Differing = differs, DifferingSpells = differing, Stuck = stuckCasts,
+                map.RuntimeMap, Caster = target.Row.PrototypeNumber, Pairs = pairs.Count, Ran = ran, NotRun = notRun, NpcRefused = refused, NotComparable = notComparable, DifferingPairs = differs, DifferingSpells = differing.Distinct(),
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
             foreach (var left in session.QuerySpellRuns().Runs.Select(r => r.Id).Where(id => !baseline.Contains(id)).ToArray()) SpellCasterNow()?.Act(new(SessionSpellRunActionKind.ForceEnd, left));
             session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            if (ally is { } friend) session.Heal(session.Version, friend.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             CalmNpcsForSmoke(session, [entity]);
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
