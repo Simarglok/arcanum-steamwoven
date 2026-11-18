@@ -482,6 +482,7 @@ src/Arcanum.World/AreaAiHost.cs,FactionSame,pending,
 src/Arcanum.World/AreaAiHost.cs,FirstLockpicks,exempt,host
 src/Arcanum.World/AreaAiHost.cs,FirstStepClear,pending,
 src/Arcanum.World/AreaAiHost.cs,FollowerSkillUsers,exempt,host
+src/Arcanum.World/AreaAiHost.cs,GamblingAttempt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Gone,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,Grenade,pending,
 src/Arcanum.World/AreaAiHost.cs,HasSkillArt,pending,
