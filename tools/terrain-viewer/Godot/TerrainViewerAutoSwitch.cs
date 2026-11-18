@@ -29,8 +29,15 @@ public partial class TerrainViewerApp
     /// ARC-COMBAT-1738 (OH3 case a, the attack dispatcher's no-ammunition branch): the hero's attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, the ammunition test answers
     /// 0) wields the best weapon for the struck object when the setting is on. Returns the entity wielded, or null.
     /// </summary>
-    private string? HeroOutOfAmmunition(AttackRefusal? refusal, AreaObjectRecord struck, bool magneticInversion) =>
+    private string? HeroOutOfAmmunition(AttackRefusal? refusal, AreaObjectRecord? struck, bool magneticInversion) =>
         _gameSettings.AutoSwitchWeapons && refusal == AttackRefusal.OutOfAmmunition ? HeroWieldBest("no-ammunition", struck, magneticInversion) : null;
+
+    /// <summary>
+    /// ARC-COMBAT-2698 (0x4B3170, 0x4B83E0): the hero's throw of a weapon the ammunition check refused (<see cref="SessionHeroThrowResult.AmmunitionShort"/>) runs the same auto switch as an attack the check refused,
+    /// with the aimed critter (if any) as the hint; the thrown weapon already lies on the hero's tile, so the choice never counts it. Returns the entity wielded, or null.
+    /// </summary>
+    private string? HeroThrowOutOfAmmunition(SessionHeroThrowResult result, AreaObjectRecord? aimed) =>
+        result.AmmunitionShort ? HeroOutOfAmmunition(AttackRefusal.OutOfAmmunition, aimed, false) : null;
 
     /// <summary>
     /// ARC-COMBAT-1738 (OH3 case c, the damage step's item-loss branches, messages 19, 22 and 23): an attack that struck the hero (an NPC's hit, an arrow, a throw) and took its

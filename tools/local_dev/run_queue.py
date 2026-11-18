@@ -173,8 +173,111 @@ def playing_file() -> Path:
     return folder() / PLAYING_NAME
 
 
-def playing_state() -> dict[str, Any] | None:
-    """The playing ticket ({"since", "until" (epoch seconds or None), "by"}) while the mode is on, else None. A file nobody
+# ARC-DEV-2291: the automatic mode. While a process of the packaged game runs (its executable under a game root: by default
+# `artifacts/packages/macos` of the main checkout, the folder `./arcanum package mac` installs into), the queue treats the mode as
+# on and releases it when the game quits. It is the same synthetic playing ticket as the manual one, made in memory by tickets()
+# (no file, no holder process: the game's own process is the state), so every reader (the wait loop, the status, the smoke, `daily`,
+# `main-smoke`) sees one rule. The check reads the process table through libproc (proc_listpids, proc_pidpath), spawns nothing, and
+# is cached for GAME_CACHE_SECONDS per process. The manual switch and its limit stay for a game started from another path; a manual
+# ticket beside a running game counts once. Off where libproc is missing, under ARCANUM_LOCAL_HOME (the tests' own queue folder:
+# a game of the owner must not reach a test) unless GAME_ROOTS_ENV names the roots, and with AUTO_PLAYING_ENV=0 (this process only).
+AUTO_PLAYING_ENV = "ARCANUM_QUEUE_AUTO_PLAYING"  # 0/off/no/false: this process does not read the game as the playing mode
+GAME_ROOTS_ENV = "ARCANUM_QUEUE_GAME_ROOTS"  # folders (os.pathsep list) whose programs are the packaged game; tests, other installs
+GAME_CACHE_SECONDS = 2.0
+PROC_ALL_PIDS = 1
+PROC_PIDPATHINFO_MAXSIZE = 4096
+_GAME_CACHE: dict[str, Any] = {"at": None, "key": None, "since": None}
+_OFF_VALUES = frozenset({"0", "off", "no", "false"})
+
+
+def _main_checkout(root: Path) -> Path:
+    """The main checkout of a checkout or worktree (`artifacts/` lives there), read from the `.git` file and its `commondir`; no
+    process is run. A folder this cannot read counts as its own main checkout."""
+    try:
+        dot = root / ".git"
+        if dot.is_dir():
+            return root
+        text = dot.read_text().strip()
+        if text.startswith("gitdir:"):
+            git_dir = root / text[len("gitdir:"):].strip()  # an absolute path replaces the checkout's
+            common = (git_dir / (git_dir / "commondir").read_text().strip()).resolve()
+            return common.parent
+    except (OSError, ValueError):
+        pass
+    return root
+
+
+def game_roots(environment: dict[str, str] | None = None) -> list[str]:
+    """The folders whose programs count as the packaged game (resolved, no trailing slash); empty when the automatic mode is off."""
+    environment = os.environ if environment is None else environment
+    if environment.get(AUTO_PLAYING_ENV, "").strip().lower() in _OFF_VALUES or _LIBPROC is None:
+        return []
+    named = environment.get(GAME_ROOTS_ENV)
+    if named is None and environment.get("ARCANUM_LOCAL_HOME"):
+        return []
+    folders = [Path(part) for part in named.split(os.pathsep) if part] if named is not None else \
+        [_main_checkout(Path(__file__).resolve().parents[2]) / "artifacts" / "packages" / "macos"]
+    return [str(Path(os.path.realpath(item))).rstrip("/") for item in folders]
+
+
+def _process_started(pid: int) -> int | None:
+    """The start time (epoch seconds) of a process through proc_pidinfo, None when it cannot be read."""
+    info = _ProcBsdInfo()
+    size = _LIBPROC.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, ctypes.byref(info), ctypes.sizeof(info))
+    return int(info.pbi_start_tvsec) if size == ctypes.sizeof(info) and info.pbi_pid == pid and info.pbi_start_tvsec else None
+
+
+def find_game(roots: Sequence[str]) -> float | None:
+    """The start time of the oldest process whose program is under one of the roots, None when none runs (or none can be listed)."""
+    if not roots or _LIBPROC is None:
+        return None
+    wanted = tuple(root + "/" for root in roots)
+    count = _LIBPROC.proc_listpids(PROC_ALL_PIDS, 0, None, 0)
+    if count <= 0:
+        return None
+    pids = (ctypes.c_int * (count // ctypes.sizeof(ctypes.c_int) + 64))()  # room for the processes started since the size call
+    got = _LIBPROC.proc_listpids(PROC_ALL_PIDS, 0, pids, ctypes.sizeof(pids))
+    path = ctypes.create_string_buffer(PROC_PIDPATHINFO_MAXSIZE)
+    started: list[int] = []
+    for pid in pids[:max(0, got) // ctypes.sizeof(ctypes.c_int)]:
+        if pid <= 0:
+            continue
+        length = _LIBPROC.proc_pidpath(pid, path, PROC_PIDPATHINFO_MAXSIZE)
+        if length > 0 and path.raw[:length].decode("utf-8", "surrogateescape").startswith(wanted):
+            moment = _process_started(pid)
+            started.append(moment if moment is not None else int(time.time()))
+    return float(min(started)) if started else None
+
+
+def game_running_since() -> float | None:
+    """When the packaged game started, None when it does not run (or the automatic mode is off). Cached for GAME_CACHE_SECONDS."""
+    roots = game_roots()
+    if not roots:
+        return None
+    now = time.monotonic()
+    if _GAME_CACHE["key"] == roots and _GAME_CACHE["at"] is not None and now - _GAME_CACHE["at"] < GAME_CACHE_SECONDS:
+        return _GAME_CACHE["since"]
+    try:
+        since = find_game(roots)
+    except (OSError, ValueError, ctypes.ArgumentError):  # the process table could not be read: not playing
+        since = None
+    _GAME_CACHE.update(at=now, key=roots, since=since)
+    return since
+
+
+def game_ticket(now: float | None = None) -> dict[str, Any] | None:
+    """The automatic playing ticket (in memory only) while the packaged game runs, else None."""
+    since = game_running_since()
+    if since is None:
+        return None
+    now = time.time() if now is None else now
+    return {"schema": SCHEMA, "seq": 0, "kind": "window", "lane": SINGLE, "label": "owner is playing", "priority": FRONT,
+            "command": "packaged game running", "enqueuedAt": now, "startedAt": now, "playing": True, "auto": True,
+            "since": since, "until": None, "by": "game"}
+
+
+def manual_playing_state() -> dict[str, Any] | None:
+    """The manual playing ticket ({"since", "until" (epoch seconds or None), "by"}) while the switch is on, else None. A file nobody
     holds, or one past its deadline, is stale and does not count."""
     path = playing_file()
     if not _locked(path):
@@ -188,17 +291,33 @@ def playing_state() -> dict[str, Any] | None:
     return ticket
 
 
+def playing_state() -> dict[str, Any] | None:
+    """The playing ticket while the mode is on, else None: the manual switch's, or (ARC-DEV-2291) the automatic one of a running
+    packaged game."""
+    return manual_playing_state() or game_ticket()
+
+
+def playing_hint(ticket: dict[str, Any] | None = None) -> str:
+    """What ends the mode, for the lines that say a window run waits for it."""
+    return "quit the game" if ticket is not None and ticket.get("auto") else "./arcanum queue --not-playing"
+
+
 def playing_text(ticket: dict[str, Any], now: float | None = None) -> str:
     """How long the mode has lasted and when it ends, for the waiting lines and ./arcanum queue."""
     now = time.time() if now is None else now
     since, until = ticket.get("since"), ticket.get("until")
+    auto = bool(ticket.get("auto"))
     def span(seconds: float) -> str:
         seconds = max(0, math.ceil(seconds))
         return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m" if seconds >= 3600 else _age(seconds)
 
     parts = []
     if isinstance(since, (int, float)):
-        parts.append(f"for {span(now - since)}")
+        parts.append(f"game running for {span(now - since)}" if auto else f"for {span(now - since)}")
+    elif auto:
+        parts.append("game running")
+    if auto:  # it ends with the game: no limit to name
+        return ", ".join(parts)
     parts.append(f"ends in {span(until - now)}" if isinstance(until, (int, float)) and not isinstance(until, bool)
                  else "no time limit")
     return ", ".join(parts)
@@ -210,7 +329,7 @@ def set_playing(on: bool, minutes: float = DEFAULT_PLAYING_MINUTES, by: str = "c
     base = _open_folder()
     path = base / PLAYING_NAME
     if not on:
-        was = playing_state() is not None
+        was = manual_playing_state() is not None
         path.unlink(missing_ok=True)  # also a stale file nobody holds
         return was
     if not math.isfinite(minutes) or minutes < 0:
@@ -317,6 +436,10 @@ def _load_libproc() -> Any:
         lib = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
         lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
         lib.proc_pidinfo.restype = ctypes.c_int
+        lib.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]  # ARC-DEV-2291
+        lib.proc_listpids.restype = ctypes.c_int
+        lib.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+        lib.proc_pidpath.restype = ctypes.c_int
     except (OSError, AttributeError):
         return None
     return lib
@@ -465,6 +588,10 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
                     pass
     order = order_of([item for _, item in result])
     result.sort(key=lambda item: order(item[1]))
+    if not any(is_playing(item, now) for _, item in result):  # ARC-DEV-2291: a running packaged game is the mode, unless the switch already is
+        game = game_ticket(now)
+        if game is not None:
+            result.insert(0, (playing_file(), game))
     return result
 
 
@@ -736,7 +863,7 @@ def _describe(ticket: dict[str, Any]) -> str:
     if ticket.get("paused"):
         return "queue PAUSED (./arcanum queue --resume)"
     if ticket.get("playing"):
-        return f"owner playing ({playing_text(ticket)}; no window run starts, headless/quick/dotnet go on; ./arcanum queue --not-playing)"
+        return f"owner playing ({playing_text(ticket)}; no window run starts, headless/quick/dotnet go on; {playing_hint(ticket)})"
     lane = lane_of(ticket)
     code = task_code(ticket)
     return (f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name}"
@@ -1247,7 +1374,7 @@ def status(history: int = 0) -> list[str]:
     result = []
     if playing is not None:  # ARC-DEV-2272
         result.append(f"PLAYING: the owner is playing, no window run starts ({playing_text(playing, now)}); headless, quick and dotnet "
-                      "runs go on; ./arcanum queue --not-playing")
+                      f"runs go on; {playing_hint(playing)}")
     if pause is not None:
         state = pause_state() or {}
         since = state.get("since")
