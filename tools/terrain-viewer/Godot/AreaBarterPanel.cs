@@ -55,6 +55,7 @@ public partial class AreaBarterPanel : CanvasLayer
     // view, the panel's two backgrounds and the frame's view (the hero's side and the shown object's grid) with the window's own parts.
     private AreaInventoryArtLook? _look;
     private bool _diagnosticChosen;
+    private bool _diagnosticSwitch;
     private Button _lookToggle = null!;
     private AreaInventoryGridArea _area = null!;
     private AreaRoundView _roundView = null!;
@@ -82,6 +83,13 @@ public partial class AreaBarterPanel : CanvasLayer
     internal string HeaderForSelfTest => _header.Text;
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
+
+    /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
+    public bool DiagnosticSwitch
+    {
+        get => _diagnosticSwitch;
+        set { _diagnosticSwitch = value; if (!value) _diagnosticChosen = false; if (View is { } view && IsOpen) Render(view, _message.Text, _art); }
+    }
     internal bool RoundViewShown => _roundView.Visible;
 
     /// <summary>ARC-UI-064: the window shows the original barter window: the barter arts read, a shown object and the diagnostic view not
@@ -188,7 +196,7 @@ public partial class AreaBarterPanel : CanvasLayer
             + "PROJECT diagnostic window: no grid, paperdoll, count dialog or quote lines; original UI parity NOT_VERIFIED";
         ApplyLook();
         var enabled = Focusable();
-        enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
+        if (enabled.Count > 0) enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel(); UpdateRoundView();
     }
 
@@ -203,7 +211,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _hint }) control.Visible = !art;
         _close.Visible = !art && !_docked;
-        _lookToggle.Visible = _look is { BarterReady: true } && _art is not null && !_docked;
+        _lookToggle.Visible = _diagnosticSwitch && _look is { BarterReady: true } && _art is not null && !_docked;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
@@ -245,7 +253,7 @@ public partial class AreaBarterPanel : CanvasLayer
     private List<Button> Focusable()
     {
         // ARC-UI-064: in the original look the switch to the diagnostic buttons is the one focusable control.
-        if (ArtMode) return [_lookToggle];
+        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
         var list = _sellButtons.Concat(_buyButtons).Where(button => !button.Disabled).ToList();
         list.Add(_close);
         if (_lookToggle.Visible) list.Add(_lookToggle);
@@ -255,6 +263,7 @@ public partial class AreaBarterPanel : CanvasLayer
     public void Navigate(int direction)
     {
         var enabled = Focusable();
+        if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
     }

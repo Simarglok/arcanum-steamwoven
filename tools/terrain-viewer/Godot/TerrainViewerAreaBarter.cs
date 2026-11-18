@@ -151,7 +151,7 @@ public partial class TerrainViewerApp
         _barter = barter;
         if (_barterPanel is null)
         {
-            _barterPanel = new AreaBarterPanel(); AddChild(_barterPanel);
+            _barterPanel = new AreaBarterPanel(); AddChild(_barterPanel); _barterPanel.DiagnosticSwitch = DebugMode;
             _barterPanel.CloseRequested += CloseBarterByPlayer;
             _barterPanel.SellRequested += SellToMerchant;
             _barterPanel.BuyRequested += BuyFromMerchant;

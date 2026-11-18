@@ -40,6 +40,7 @@ public partial class AreaItemServicePanel : CanvasLayer
     // ARC-UI-1765: the original look: the art, the owner's choice of the diagnostic view, the switch between them, the frame, the round view, the panel's two backgrounds and the frame's view.
     private AreaInventoryArtLook? _look;
     private bool _diagnosticChosen;
+    private bool _diagnosticSwitch;
     private Button _lookToggle = null!;
     private AreaInventoryGridArea _area = null!;
     private AreaRoundView _roundView = null!;
@@ -50,6 +51,13 @@ public partial class AreaItemServicePanel : CanvasLayer
     public AreaItemServiceView? View { get; private set; }
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
+
+    /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
+    public bool DiagnosticSwitch
+    {
+        get => _diagnosticSwitch;
+        set { _diagnosticSwitch = value; if (!value) _diagnosticChosen = false; if (View is { } view && IsOpen) Render(view, _art); }
+    }
     internal bool RoundViewShown => _roundView.Visible;
 
     /// <summary>ARC-UI-1765: the window shows the original look: the inventory art read, the hero's frame view given and the diagnostic view not chosen.</summary>
@@ -138,7 +146,7 @@ public partial class AreaItemServicePanel : CanvasLayer
             + "PROJECT diagnostic window: no grid, paperdoll or original-look quote line; original UI parity NOT_VERIFIED";
         ApplyLook();
         var enabled = Focusable();
-        enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
+        if (enabled.Count > 0) enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel(); UpdateRoundView();
     }
 
@@ -149,7 +157,7 @@ public partial class AreaItemServicePanel : CanvasLayer
         _area.SetLook(art ? _look : null);
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _close, _hint }) control.Visible = !art;
-        _lookToggle.Visible = _look is not null && _art is not null;
+        _lookToggle.Visible = _diagnosticSwitch && _look is not null && _art is not null;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
@@ -188,7 +196,7 @@ public partial class AreaItemServicePanel : CanvasLayer
     private List<Button> Focusable()
     {
         // ARC-UI-1765: in the original look the switch to the diagnostic buttons is the one focusable control.
-        if (ArtMode) return [_lookToggle];
+        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
         var list = _buttons.ToList();
         list.Add(_close);
         if (_lookToggle.Visible) list.Add(_lookToggle);
@@ -210,6 +218,7 @@ public partial class AreaItemServicePanel : CanvasLayer
     {
         if (ArtMode) { PadMove(direction); return; }
         var enabled = Focusable();
+        if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
     }
