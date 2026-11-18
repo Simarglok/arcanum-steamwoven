@@ -17,7 +17,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaVitalScriptTests
 {
     private const byte Attachee = 1, Local = 2, Number = 3, Extra = 12;
-    private const int ReadScript = 811, PcScript = 812, NegativeScript = 813, PoisonScript = 814, EatScript = 815, KeepScript = 816, EatAndCountScript = 817;
+    private const int ReadScript = 811, PcScript = 812, NegativeScript = 813, PoisonScript = 814, EatScript = 815, KeepScript = 816, EatAndCountScript = 817, CountOnlyScript = 818;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
     private static AreaObjectRecord Row(int index, int type, int script)
@@ -97,6 +97,8 @@ public sealed class AreaVitalScriptTests
                 Do(new(ScrCatalogue.Action.Destroy, (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.Assign, (0, 1), N(2))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // 818 (ARC-SCRIPT-1594): raises counter 1 of its attachee and lets the use go on (a made item's slot write, no destroy).
+            Write("scr/00818countonly.scr", Program(Do(new(ScrCatalogue.Action.Assign, (0, 1), N(2))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -204,6 +206,78 @@ public sealed class AreaVitalScriptTests
             var pcId = Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
             CollectionAssert.AreEqual(new[] { (pcId, 4) }, hp);
             CollectionAssert.AreEqual(new[] { (pcId, 0, 7) }, healed);
+        });
+    }
+
+    // ARC-SCRIPT-1594 (VT8): a food the session made for the hero (no object row, no origin map): its prototype's array holds the use script, and the host asks the prototype for the complexity.
+    private static (AreaUseScriptHost Host, string Entity, GameSessionOwner Session, List<(string Victim, int Amount)> Healed) MadeFoodHost(ScriptContent content, int script, params SessionPrototypeScript[] extra)
+    {
+        var session = ConversationSessionFixture.CreateWithHero();
+        var items = Food(EatScript);
+        var inventory = new AreaInventoryHost([items]);
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        session.AttachItemScripts(prototype => prototype == 4060 ? [new(ScrPoint.Use, script, 0, 0), .. extra] : null);
+        var made = session.CreateItemForHero(session.Version, new(SessionItemType.Food, 4060, 60, 160), inventory.InsertCheck);
+        Assert.AreEqual(GameSessionDisposition.Changed, made.Disposition, made.Failure.ToString());
+        var entity = session.QueryMadeItems().Single().Entity;
+        var hp = new List<(string Victim, int Amount)>();
+        var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ScriptHeal: (victim, amount) => { hp.Add((victim, amount)); return "healed"; }, ScriptHealLife: (_, _, _) => "healed");
+        return (new AreaUseScriptHost(session, 2, [], [items], content, world) { PrototypeComplexity = prototype => prototype == 4060 ? 30 : null }, entity, session, hp);
+    }
+
+    [TestMethod]
+    public void A_made_food_runs_the_use_script_of_its_prototype_and_leaves_the_pcs_list_when_the_script_eats_it()
+    {
+        WithContent(content =>
+        {
+            var (host, entity, session, hp) = MadeFoodHost(content, EatScript);
+            using var _ = session;
+            // The origin map is whatever the caller names: a made item has none, and the host names it by the shown map.
+            var ran = host.RunItemUse(1, entity, session.Rules.Scripts, target: AreaScriptHost.PcCode);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            Assert.IsTrue(session.IsItemDestroyed(entity), "the made food left the hero's list");
+            CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 4) }, hp);
+            Assert.AreEqual(0, session.QueryItemScriptSlots().Count, "a destroyed item keeps no slot");
+        });
+    }
+
+    [TestMethod]
+    public void A_made_items_slot_written_by_its_use_script_is_kept_by_the_session_with_the_rest_of_the_prototypes_array()
+    {
+        WithContent(content =>
+        {
+            var (host, entity, session, _) = MadeFoodHost(content, CountOnlyScript, new SessionPrototypeScript(SessionScriptPoint.Drop, 5, 0, 7));
+            using var _ = session;
+            Assert.AreEqual(0, session.QueryItemScriptSlots().Count, "nothing is copied before the first write");
+            var ran = host.RunItemUse(1, entity, session.Rules.Scripts, target: AreaScriptHost.PcCode);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            Assert.IsFalse(session.IsItemDestroyed(entity));
+            var use = session.QueryItemScriptSlot(entity, SessionScriptPoint.Use)!;
+            Assert.AreEqual(CountOnlyScript, use.Script);
+            Assert.AreNotEqual(0u, use.Counters, "counter 1 was raised");
+            Assert.AreEqual(new SessionItemScriptSlot(entity, SessionScriptPoint.Drop, 5, 0, 7), session.QueryItemScriptSlot(entity, SessionScriptPoint.Drop), "the first write copied the whole array");
+            Assert.AreEqual(2, session.QueryItemScriptSlots().Count);
+            // The same run again changes the counter once more; a slot equal to what the item reads changes nothing.
+            Assert.AreEqual(GameSessionDisposition.NoChange, session.StoreItemScriptSlot(session.Version, use).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Rejected, session.StoreItemScriptSlot(session.Version, use with { Entity = "made:99" }).Disposition, "no such made item");
+            Assert.AreEqual(GameSessionDisposition.Rejected, session.StoreItemScriptSlot(session.Version, use with { Point = 99 }).Disposition, "a point outside the store");
+        });
+    }
+
+    [TestMethod]
+    public void A_made_foods_power_ratio_comes_from_its_prototypes_complexity_and_an_item_nobody_holds_is_refused()
+    {
+        WithContent(content =>
+        {
+            var (host, entity, session, _) = MadeFoodHost(content, EatScript);
+            using var _ = session;
+            var item = new ScrObjectRef(2, entity);
+            var aptitude = session.QueryHeroScriptStat(GameSessionOwner.ScriptStatAptitude)!.Value;
+            var expected = Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(30, Math.Clamp(aptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude));
+            Assert.AreEqual(expected, host.PowerRatio(item, host.Pc));
+            host.PrototypeComplexity = null;
+            Assert.IsNull(host.PowerRatio(item, host.Pc), "no prototype source: the ratio is not known (the run stops as not modelled)");
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(1, "made:99", session.Rules.Scripts, target: AreaScriptHost.PcCode).Outcome, "neither a row nor a made item");
         });
     }
 
