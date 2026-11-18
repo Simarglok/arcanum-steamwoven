@@ -164,6 +164,7 @@ public partial class TerrainViewerApp
             "without the generated interface the whole-factor layout stands");
         Require(AreaGameBarPanel.TopScreen is null && AreaGameBarPanel.FreeLeft == 0 && AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size).Size.X == GetViewport().GetVisibleRect().Size.X,
             "without the layout the screen is the whole-factor one and the free width is the whole window's (ARC-UI-2510)");
+        Require(AreaGameBarPanel.FreeRect(GetViewport().GetVisibleRect().Size) == new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size), "without the layout the bubbles' view is the whole window (ARC-UI-2603)");
         _gameSettings = _gameSettings with { GeneratedInterface = true };
         SyncInterfaceHd();
         SteamwovenHud.Suspended = true; panel.Relayout();
@@ -179,6 +180,10 @@ public partial class TerrainViewerApp
         var frame = plan.Layout.Frame;
         var (freeTop, free) = AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y));
         require(free.X == frame.Width && AreaGameBarPanel.FreeLeft == frame.X && freeTop == plan.TopInset, $"[{tag}] the free width is the frame's {frame.Width} at x {frame.X} (got {free.X} at {AreaGameBarPanel.FreeLeft})");
+        // ARC-UI-2603: a text bubble is placed inside what the strips and pillarbox bars leave free, not the whole window.
+        var winSize = new Vector2(size.X, size.Y);
+        require(AreaGameBarPanel.FreeRect(winSize) == new Rect2(frame.X, plan.TopInset, frame.Width, free.Y) && FloaterLayer().BubbleView?.Invoke() == AreaGameBarPanel.FreeRect(GetViewport().GetVisibleRect().Size),
+            $"[{tag}] the bubbles' view is the free rect {AreaGameBarPanel.FreeRect(winSize)}, not the whole window");
         var scale = (float)plan.StripScale;
         require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * plan.StripScale, MidpointRounding.AwayFromZero)) && Math.Abs(screen.Scale - scale) < 1e-4f
             && Math.Abs(screen.BottomEdge - plan.Layout.Bottom.Band.Bottom) < 1e-2f, $"[{tag}] the screen hangs from the top frame at the HUD's unit scale and ends at the bottom band's lower edge ({AreaGameBarPanel.TopScreen})");

@@ -146,4 +146,82 @@ public sealed class NpcSkillRollTests
         var late = owner.RollNpcSkill(stale, user, Skill.Melee);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion), (late.Disposition, late.Failure));
     }
+
+    // ARC-AI-2623 (0x4C7160 with skill 8, 0x4C6560): the gambling attempt uses the stored roll of the skill module and stores its own draw.
+    [TestMethod]
+    public void A_gambling_attempt_uses_the_stored_roll_and_stores_the_checks_own_draw_in_one_revision()
+    {
+        using var owner = Owner(7);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EnsureGamblingRoll(owner.Version).Disposition);
+        var stored = owner.QueryGamblingRoll()!.Value;
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        var result = owner.RollNpcGambling(owner.Version, User(Skill.Gambling, 20, SkillTraining.Master), 0);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.AreEqual(stored, result.Check!.Check.Roll, "the check reads the roll stored before");
+        Assert.AreEqual(result.Check.NextGamblingRoll, owner.QueryGamblingRoll(), "its own draw is stored for the next check");
+        Assert.AreEqual(result.Check.Success, result.Success);
+        Assert.AreEqual((revision + 1, draws + 2), (owner.Version.Revision, owner.QueryRandom().Draws), "the check roll and the critical roll");
+    }
+
+    [TestMethod]
+    public void A_gambling_attempt_chains_on_the_roll_the_last_check_stored()
+    {
+        using var owner = Owner(11);
+        owner.EnsureGamblingRoll(owner.Version);
+        var first = owner.RollNpcGambling(owner.Version, User(Skill.Gambling, 10, SkillTraining.Expert), 5);
+        var second = owner.RollNpcGambling(owner.Version, User(Skill.Gambling, 10, SkillTraining.Expert), 5);
+        Assert.AreEqual(first.Check!.NextGamblingRoll, second.Check!.Check.Roll, "the module keeps one stored roll, whoever checked");
+        Assert.AreEqual(second.Check.NextGamblingRoll, owner.QueryGamblingRoll());
+    }
+
+    [TestMethod]
+    public void A_gambling_attempt_of_a_session_with_no_stored_roll_throws_it_first_in_the_same_revision()
+    {
+        using var owner = Owner(5);
+        Assert.IsNull(owner.QueryGamblingRoll());
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        var result = owner.RollNpcGambling(owner.Version, User(Skill.Gambling, 10, SkillTraining.Expert), 5);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        Assert.AreEqual((revision + 1, draws + 3), (owner.Version.Revision, owner.QueryRandom().Draws), "the first roll, the check's draw and the critical roll");
+        Assert.AreEqual(result.Check!.NextGamblingRoll, owner.QueryGamblingRoll());
+    }
+
+    [TestMethod]
+    public void The_gambling_effectiveness_is_opposed_by_the_targets_level_and_a_missing_target_is_a_hundred()
+    {
+        var user = User(Skill.Gambling, 10, SkillTraining.Expert);
+        int Effectiveness(int? opponent)
+        {
+            using var owner = Owner(3);
+            return owner.RollNpcGambling(owner.Version, user, opponent).Check!.Check.Effectiveness;
+        }
+        using var reader = Owner(3);
+        var level = reader.QueryNpcSkills(user.Loaded, user.Modifiers)[Skill.Gambling].Level;
+        var bonus = Effectiveness(level) - SkillCheckRules.Opposed(level, level);
+        Assert.IsTrue(bonus is 0 or 10, "the extraordinary-intelligence term is 0 or 10");
+        foreach (var opponent in new[] { 0, level, 20 })
+            Assert.AreEqual(Math.Min(SkillCheckRules.Opposed(level, opponent) + bonus, SkillCheckRules.EffectivenessCap), Effectiveness(opponent), $"opponent {opponent}");
+        Assert.AreEqual(Math.Min(100 + bonus, SkillCheckRules.EffectivenessCap), Effectiveness(null), "no target: 100");
+        Assert.IsTrue(Effectiveness(0) >= Effectiveness(level) && Effectiveness(level) >= Effectiveness(20));
+    }
+
+    [TestMethod]
+    public void A_gambling_attempt_refuses_a_bad_opponent_a_hero_a_foreign_sheet_and_a_stale_version_before_anything_is_rolled()
+    {
+        using var owner = Owner(2);
+        owner.EnsureGamblingRoll(owner.Version);
+        var (revision, draws, roll) = (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll());
+        var user = User(Skill.Gambling, 10, SkillTraining.Expert);
+        Assert.AreEqual(GameSessionFailure.InvalidSkill, owner.RollNpcGambling(owner.Version, user, -1).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidSkill, owner.RollNpcGambling(owner.Version, user, SkillRules.MaxLevel + 1).Failure);
+        Assert.AreEqual(GameSessionFailure.SkillsUnavailable, owner.RollNpcGambling(owner.Version, user with { User = SessionLifeTarget.Hero }, 0).Failure);
+        Assert.AreEqual(GameSessionFailure.SkillsUnavailable, owner.RollNpcGambling(owner.Version, user with { Loaded = User(Skill.Gambling, 10, SkillTraining.Expert, entity: "other").Loaded }, 0).Failure);
+        Assert.AreEqual((revision, draws, roll), (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll()), "a refusal writes nothing");
+        var stale = owner.Version;
+        Assert.AreEqual(GameSessionFailure.None, owner.RollNpcGambling(owner.Version, user, 0).Failure);
+        var (afterRevision, afterDraws, afterRoll) = (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll());
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RollNpcGambling(stale, user, 0).Failure);
+        Assert.AreEqual((afterRevision, afterDraws, afterRoll), (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll()), "a stale attempt writes nothing");
+        Assert.AreEqual((revision + 1, draws + 2), (afterRevision, afterDraws), "only the one accepted attempt rolled");
+    }
 }
