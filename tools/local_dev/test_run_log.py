@@ -100,6 +100,24 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(lines[2], "first error at line 3 of 5 (1 error line(s)):")  # the usual failure lines still follow
         self.assertEqual(self.summary(text, 139)[1], lines[1])  # a wrapper's 128 + 11 is the same signal
 
+    def test_a_finalizer_thread_crash_of_godot_dotnet_is_named_an_engine_crash(self) -> None:  # ARC-DEV-2412
+        handler = ("ERROR: /root: The caller thread can't call the function `propagate_notification()` on this node.\n"
+                   "   C# backtrace (most recent call first):\n       [1] void Godot.StringName.Dispose(bool) (StringName.cs:39)\n"
+                   "       [2] void Godot.StringName.Finalize() (StringName.cs:24)\n"
+                   "handle_crash: Program crashed with signal 11\n")
+        text = "ARC-UI-006 smoke PASS ok\n" + handler
+        lines = self.summary(text, -6)
+        self.assertTrue(lines[1].startswith("note: killed by SIGABRT in a Godot type's Finalize on the .NET finalizer thread (ARC-DEV-2412"), lines[1])
+        self.assertTrue(run_log.engine_finalizer_crash(text.splitlines()))
+        # the .NET runtime's own fatal error, with the same backtrace
+        dotnet = ("Fatal error. System.AccessViolationException: Attempted to read or write protected memory.\n"
+                  "   at Godot.DisposablesTracker.UnregisterDisposable(System.WeakReference`1<System.IDisposable>)\n"
+                  "   at Godot.StringName.Finalize()\n")
+        self.assertTrue(run_log.engine_finalizer_crash(dotnet.splitlines()))
+        # a crash without a Godot Finalize, and a Finalize without a crash, are not this crash
+        self.assertFalse(run_log.engine_finalizer_crash("handle_crash: Program crashed with signal 11\n   at MyApp.Foo()\n".splitlines()))
+        self.assertFalse(run_log.engine_finalizer_crash("   at Godot.StringName.Finalize()\nARC-UI-006 smoke PASS ok\n".splitlines()))
+
     def test_a_signal_note_claims_no_more_than_the_log_shows(self) -> None:
         self.assertEqual(self.summary("start\nstage 1\n", -11)[1],
                          "note: killed by SIGSEGV and the log has no PASS line: a crash, not a shutdown crash")

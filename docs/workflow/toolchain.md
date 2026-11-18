@@ -975,6 +975,29 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   cause is not found: that log held two leaked `InputEventKey` objects (F8, the self-test's quick-key route) reported
   by the mono module at exit and none of the 30 other logs did, which fits a Godot shutdown crash but is a
   hypothesis, so the issue is recorded as not reproducible.
+- **Godot finalizer-thread crash (ARC-DEV-2412).** Godot 4.7.2 .NET sometimes dies on the .NET finalizer thread inside a
+  Godot type's `Finalize` (the log's C# backtrace ends `Godot.StringName.Dispose` / `Godot.StringName.Finalize`, once with
+  `Godot.DisposablesTracker.UnregisterDisposable` after a fatal `System.AccessViolationException`), as `handle_crash:
+  Program crashed with signal 11` and exit `-6`. It was seen once in a `pr --auto` run on the cave stage (#2405 merge,
+  2026-11-16), then reproduced: the cave stage (`./arcanum smoke map "crash site cave" --stages tile-ghost,route-barrel,
+  grenade`) alone passed 10 of 10, and with four such loops running at once it crashed in 5 of 16 runs, then in 3 of
+  16 and 3 of 10 in later batches (at different points of the stage, from 26 s to 80 s in; the stage's checks are not at
+  fault). The line `The caller thread can't call the function propagate_notification() on this node` that precedes the
+  crash is the engine's crash handler itself (it notifies the scene tree from the crashing thread, here the finalizer
+  thread); no viewer code calls the scene tree off the main thread (the viewer's background work is the HD frame decode,
+  the chunk composes and the window art warm-up, all plain managed code or Godot `Image` objects). The viewer has no
+  `unsafe` code and creates no `StringName` itself (every one is the implicit string conversion of an engine call). The
+  .NET settings that did not remove it in the same stress: a one-gigabyte first-generation budget
+  (`DOTNET_GCgen0size`), `DOTNET_gcConcurrent=0`, `DOTNET_TieredPGO=0`, `DOTNET_TieredCompilation=0` (each 0 to 1 crash in
+  8 to 16 runs against about 3 in 10 without it, too few runs to tell a small effect). Note that .NET reads
+  `DOTNET_*` names case-sensitively (`DOTNET_GCgen0size`, not `DOTNET_GCGEN0SIZE`), and `smoke --env` accepts upper-case names
+  only, so an upper-case form of such a name is ignored without a message. The root cause is in the engine or the .NET
+  runtime, so the smoke runner works around it: a step whose log shows a crash (the crash handler's line or a fatal
+  `AccessViolationException`) together with a Godot type's `Finalize` in the backtrace is run once more, says so as
+  `engine crash: STEP died in Godot's finalizer thread ... and ran once more: PASS|FAIL` in the summary, and a second crash
+  is a failure like any other. The run summary's `note:` line also names this crash. Reproduce it with four parallel
+  loops of the stage command above (`--no-build` after the first run), and keep the stage's own checks as the failing
+  evidence: a crash without a Godot `Finalize` in its backtrace is not retried.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
 - **`--verbose`** streams the command's output to the terminal as before, with no log file, no summary and no

@@ -534,6 +534,51 @@ class ExecuteTests(unittest.TestCase):
         self.assertEqual(smoke.execute([group], runner, lines.append, known), 0)
         self.assertFalse(any("only known failures" in line for line in lines))  # listed as order-dependent, not as a known failure
 
+    def test_a_finalizer_thread_engine_crash_runs_the_step_once_more(self) -> None:  # ARC-DEV-2412
+        crash = ("handle_crash: Program crashed with signal 11\n       [2] void Godot.StringName.Finalize() (StringName.cs:24)\n")
+        step = smoke.Step("stages-crash-site-cave", "window", ("g",), "^A$")
+        runs: list[int] = []
+
+        def runner(kind, command, *, label, timeout, quiet, start, log_sink, **rest) -> int:
+            path = Path(self.temp.name) / f"run{len(runs)}.log"
+            path.write_text(crash if len(runs) == 0 else "ARC-X PASS\n", encoding="utf-8")
+            log_sink(path)
+            runs.append(len(runs))
+            return -6 if len(runs) == 1 else 0
+
+        lines: list[str] = []
+        self.assertEqual(smoke.execute([step], runner, lines.append, []), 0)
+        self.assertEqual(len(runs), 2)  # run once more
+        self.assertIn("  engine crash: stages-crash-site-cave died in Godot's finalizer thread (exit=-6, ARC-DEV-2412) and ran once more: PASS", lines)
+        self.assertEqual(lines[-1], "SMOKE PASS 1 of 1 steps passed")
+        # a second crash is a failure, and only one more run is made
+        runs.clear()
+        again = smoke.Step("stages-crash-site-cave", "window", ("g",), "^A$")
+
+        def always(kind, command, *, label, timeout, quiet, start, log_sink, **rest) -> int:
+            path = Path(self.temp.name) / f"all{len(runs)}.log"
+            path.write_text(crash, encoding="utf-8")
+            log_sink(path)
+            runs.append(0)
+            return -6
+
+        lines = []
+        self.assertEqual(smoke.execute([again], always, lines.append, []), 1)
+        self.assertEqual(len(runs), 2)
+        self.assertIn("  engine crash: stages-crash-site-cave died in Godot's finalizer thread (exit=-6, ARC-DEV-2412) and ran once more: FAIL exit=-6", lines)
+        # a crash without the Godot finalizer is retried by nobody
+        runs.clear()
+
+        def plain(kind, command, *, label, timeout, quiet, start, log_sink, **rest) -> int:
+            path = Path(self.temp.name) / f"plain{len(runs)}.log"
+            path.write_text("handle_crash: Program crashed with signal 11\n", encoding="utf-8")
+            log_sink(path)
+            runs.append(0)
+            return -6
+
+        self.assertEqual(smoke.execute([again], plain, lambda line: None, []), 1)
+        self.assertEqual(len(runs), 1)
+
     def test_a_failed_build_or_a_stopped_run_ends_the_chain(self) -> None:
         steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("crash-site", "window", ("g",)),
                  smoke.Step("main", "window", ("g",))]

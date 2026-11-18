@@ -27,7 +27,7 @@ import sys
 import tempfile
 from typing import Callable, Mapping, Sequence
 
-from . import config, focus_guard, launch, red_flag, run_queue, smoke_history, smoke_zones, start_check
+from . import config, focus_guard, launch, red_flag, run_log, run_queue, smoke_history, smoke_zones, start_check
 
 ROOT = Path(__file__).resolve().parents[2]
 VIEWER = Path("tools/terrain-viewer/Godot")
@@ -652,6 +652,14 @@ def shown(command: Sequence[str]) -> str:
                     for part in command)
 
 
+def run_log_crash(log: Path) -> bool:
+    """ARC-DEV-2412: whether the step's log ends in the finalizer-thread crash of Godot's .NET runtime."""
+    try:
+        return run_log.engine_finalizer_crash(log.read_text(errors="replace").splitlines())
+    except OSError:
+        return False
+
+
 def stages_not_run(log: Path | None, stages: Sequence[str]) -> tuple[list[str], list[str]]:
     """The requested stages whose PASS line (or an also-required line, STAGE_ALSO_PASS) the log lacks, and up to three NONE/SKIP lines of the log (the viewer's
     reasons), those with a missing stage's task code first."""
@@ -779,10 +787,19 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         return code, logs[-1] if logs else None
 
     order_dependent: dict[str, list[str]] = {}  # ARC-DEV-396: a failed group whose every unfinished stage passed alone
+    engine_retried: list[tuple[str, int, int]] = []  # ARC-DEV-2412: (step, first exit, exit of the one more run)
     done = 0
     for step in steps:
         code, log = run_step(step)
         done += 1
+        # ARC-DEV-2412: a step that died in the finalizer thread of Godot's .NET runtime (an engine crash under load, none of
+        # its stages failed) runs once more; the summary names it, and a second crash is a failure like any other.
+        if 0 != code < STOPPED and log is not None and run_log_crash(log):
+            say(f"  {step.name}: Godot crashed in a type's Finalize on the .NET finalizer thread (ARC-DEV-2412, exit={code}); running the step once more")
+            results.pop()
+            first = code
+            code, log = run_step(step)
+            engine_retried.append((step.name, first, code))
         if code >= STOPPED or (code != 0 and step.gate):
             break
         # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
@@ -811,6 +828,9 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     say("SMOKE summary")
     for name, code in results:
         say(f"  {name:<{width}}  {'ORDER' if name in order_dependent else 'PASS' if code == 0 else 'FAIL'} exit={code}")
+    for name, first, again_code in engine_retried:  # ARC-DEV-2412: said in the summary, never hidden
+        say(f"  engine crash: {name} died in Godot's finalizer thread (exit={first}, ARC-DEV-2412) and ran once more: "
+            + ("PASS" if again_code == 0 else f"FAIL exit={again_code}"))
     for name, stages in order_dependent.items():  # a warning, not a failure: every stage passed alone (owner decision 2026-11-12)
         say(f"  order-dependent: {name} (fails only after other stages of its process; each of {', '.join(stages)} passes alone)")
     skipped = [step.name for step in steps[done:]]
