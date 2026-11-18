@@ -588,6 +588,7 @@ src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,AlignmentOf,exempt,host
+src/Arcanum.World/AreaAiHostLoyalty.cs,LevelOf,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,LoyaltyCheck,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLedConsent,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLoyaltyStep,exempt,host
