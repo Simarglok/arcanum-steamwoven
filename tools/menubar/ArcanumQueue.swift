@@ -467,6 +467,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func togglePlaying() {  // ARC-DEV-2272: no window run starts while the owner plays; ends by itself after 4 h
+        if queue.playing() == nil && queue.gameStart() != nil { return }  // ARC-DEV-2291: the game holds the mode; quit it (a click would only add a 4 h switch)
         queue.setPlaying(queue.playing() == nil)
         refresh(force: true)
     }

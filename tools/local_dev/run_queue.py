@@ -588,7 +588,7 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
                     pass
     order = order_of([item for _, item in result])
     result.sort(key=lambda item: order(item[1]))
-    if not any(item.get("playing") for _, item in result):  # ARC-DEV-2291: a running packaged game is the mode, unless the switch already is
+    if not any(is_playing(item, now) for _, item in result):  # ARC-DEV-2291: a running packaged game is the mode, unless the switch already is
         game = game_ticket(now)
         if game is not None:
             result.insert(0, (playing_file(), game))

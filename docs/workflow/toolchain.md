@@ -589,7 +589,7 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
   (the command says so); quit the game. `ARCANUM_QUEUE_AUTO_PLAYING=0` turns it off for a command or wrapper it is set on, and
   `ARCANUM_QUEUE_GAME_ROOTS` (a `:` list of folders) names other game folders; both are for tests and rare cases. Under
   `ARCANUM_LOCAL_HOME` (the tests' own queue folder) the mode reads nothing unless the roots are named. The menu-bar app reads the
-  same process (`--game-root`, given by `menubar.py`) and shows `OWNER PLAYING (game running)`; `ArcanumQueue --game-root DIR --game-status`
+  same process (`--game-root`, given by `menubar.py` and `queue --app`; the roots are fixed when the app starts) and shows `OWNER PLAYING (game running)` (its menu item does nothing while only the game holds the mode); `ArcanumQueue --game-root DIR --game-status`
   prints `game since <epoch>` or `no game`. A game started from another path (a copy, another machine) is not seen: use the manual switch.
   A wrapper from before this change does not see the automatic mode (it is in memory, not a file) and runs window runs as before.
 

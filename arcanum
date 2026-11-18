@@ -351,7 +351,8 @@ def queue(args: argparse.Namespace) -> int:
         if menubar.running():
             print("menu-bar app already running")
         else:
-            subprocess.Popen([str(target), *(["--open-menu"] if args.open_menu else [])], start_new_session=True,
+            roots = [item for root in run_queue.game_roots() for item in ("--game-root", root)]  # ARC-DEV-2291
+            subprocess.Popen([str(target), *roots, *(["--open-menu"] if args.open_menu else [])], start_new_session=True,
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print("menu-bar app started")
         return 0
