@@ -3365,7 +3365,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// and the hand-over line are the viewer's: the notice carries the answer. NOT READY: the NPC's lock pick without a scene that names the lock does nothing, and the NPC's wear of its lockpicks is none (PL4).
     /// </summary>
     [OriginalFunction(0x42A4E0, OriginalFunctionScope.Partial)]
-    public void AttemptPickLocks(string id, string target, string? item)
+    public void AttemptPickLocks(string id, string target, string? item) => PickLocksAttempt(id, target, item, 0, usedBy: false);
+
+    // The shared body of the pick-locks attempt: <paramref name="modifier"/> is the invocation modifier of the use-item-with-skill goal (0 for the timed goal), and <paramref name="usedBy"/> says the lockpicks are those goal 40's use
+    // script handed over (ARC-SCRIPT-2752): their own use script has run, so it does not refuse the check (the session runs none).
+    private void PickLocksAttempt(string id, string target, string? item, int modifier, bool usedBy)
     {
         string? refusal = null;
         SessionPickLockResult? result = null;
@@ -3374,11 +3378,38 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         else
         {
             var lockpick = item is not null && _scene.Combat.HeldItemFields(_session, id, item) is { } fields ? AreaLockpicks.From(item, fields) : null;
-            result = _session.PickLockByNpc(_session.Version, new SessionNpcSkillUser(picker.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), lockTarget, lockpick);
+            if (usedBy && lockpick is not null) lockpick = AreaLockpicks.WithoutUseScript(lockpick);
+            result = _session.PickLockByNpc(_session.Version, new SessionNpcSkillUser(picker.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), lockTarget, lockpick, modifier);
         }
         Trace(id).Skill = result is null ? $"pick locks {target}: {refusal}"
             : $"pick locks {target} {result.Disposition} {result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} result={result.Outcome?.Result}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickLocksSkill, PickLock = result });
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2752 (0x428E10, ledger SX4): the skill invocation of the use-item-with-skill goal 40 once its refusals passed: the user, target and tool item with the goal's <paramref name="modifier"/> and no flags, no animation and no
+    /// action points. Pick locks (14) is <see cref="PickLocksAttempt"/> with the modifier (the check runs at once, not as the timed goal 33 does); NOT READY: every other skill runs as the skill attempt of goal 34 does
+    /// (<see cref="AttemptSkill"/>), whose checks take no modifier yet.
+    /// </summary>
+    public void AttemptSkillWithItem(string id, string target, string? item, int skill, int modifier)
+    {
+        if (skill == AiExecutorRules.PickLocksSkill) PickLocksAttempt(id, target, item, modifier, usedBy: true);
+        else AttemptSkill(id, target, skill, item);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2752 (script action 79, ledger SX3): the use-item-with-skill starter (0x4352C0) for <paramref name="npc"/>, an NPC or companion of the shown map this host runs: goal 40 on <paramref name="target"/> (an entity or a
+    /// container's "inv:" string) with the tool <paramref name="item"/> (null: none), <paramref name="skill"/> and <paramref name="modifier"/>. The answer is the text the use host reports: "started", or why not (the starter's refusal, the
+    /// table's, or that the NPC is not run here). The original ignores the starter's answer, so a refusal changes nothing else. A start from a node of the NPC's own run being stepped (an item use whose script asks it) is not checked here: see #2751.
+    /// </summary>
+    public string ScriptUseItemWithSkill(string npc, string? item, string target, int skill, int modifier)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        ArgumentNullException.ThrowIfNull(target);
+        if (npc == Pc || !Walks(npc) || Unresolved(npc)) return "not an NPC of this host";
+        var current = RunOf(npc);
+        var result = AiExecutorRules.StartUseItemWithSkill(this, npc, target, skill, item, current, modifier);
+        return Started(npc, current, result) ? "started" : $"not started: {(result.Refusal == AiStartRefusal.None ? "the table refused it" : result.Refusal)}";
     }
 
     // The heal: the healer's sheet, the target's life and the held healing item; null with the refusal when the session is not asked.
