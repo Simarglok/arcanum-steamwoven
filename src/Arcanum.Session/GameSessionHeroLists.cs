@@ -33,6 +33,14 @@ internal sealed class HeroLists
     /// <summary>Puts a saved last-drop tile back (the restore); false for an entity that already has one.</summary>
     internal bool RestoreLastDrop(string entity, Arcanum.Simulation.Movement.CellCoord cell) => _lastDrops.TryAdd(entity, cell);
 
+    /// <summary>ARC-SCRIPT-2701 (IV8): remembers the tile a map-data item lay loose on when the hero took it up (dropped by an NPC, spilled, thrown, pushed); false when the bound is spent.</summary>
+    internal bool NoteLastDrop(string entity, Arcanum.Simulation.Movement.CellCoord cell)
+    {
+        if (_lastDrops.Count >= MaxLastDrops && !_lastDrops.ContainsKey(entity)) return false;
+        _lastDrops[entity] = cell;
+        return true;
+    }
+
     /// <summary>Forgets the last-drop tile of an item that ceased to exist.</summary>
     internal void ForgetLastDrop(string entity) => _lastDrops.Remove(entity);
 

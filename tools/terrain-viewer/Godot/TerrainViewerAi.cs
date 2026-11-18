@@ -1054,6 +1054,12 @@ public partial class TerrainViewerApp
         if (thrown.AmmunitionShort)
         {
             _aiNotice = $"{AiName(notice.Npc)} cannot throw: no ammunition for the weapon (it lies switched off on its tile)";
+            // ARC-COMBAT-2698 (0x4B3170): the refusal's out-of-ammunition sound on the thrower (the thrown weapon's sound base + 7); an NPC gets no auto switch (0x4ADFF0 marks it, ARC-COMBAT-2415).
+            if (_aiHost is { } throwHost && NpcOf(throwHost, notice.Npc) is { } thrower && thrower.Row.WorldX is not null && notice.Item is { } refusedItem)
+            {
+                var (sx, sy) = LiveWorldCell(thrower.Row);
+                PlayAmmunitionRefusalSound(EntitySounds(refusedItem, notice.Npc), sx, sy);
+            }
             SyncAreaCombatBodies();
             SyncAreaInventory();
             RefreshAreaStatus();

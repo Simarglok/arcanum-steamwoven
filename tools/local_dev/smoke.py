@@ -744,7 +744,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             playing = run_queue.playing_state()
             if playing is not None:
                 say(f"SMOKE waiting: owner is playing ({run_queue.playing_text(playing)}); the window starts when it ends: "
-                    "./arcanum queue --not-playing")
+                    + run_queue.playing_hint(playing))
         before = smoke_history.work_tree()  # ARC-DEV-2223: the files the step starts on (an edit while it waits or runs is not covered)
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
