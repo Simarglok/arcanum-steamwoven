@@ -131,6 +131,8 @@ public partial class TerrainViewerApp
             AreaDropMapNow);
         // ARC-AI-2124 (GW9): a spell's damage on an object runs its hit steps (damage line, break, guard witnesses) inside that damage step, as the original's damage end does, not when the cast log is flushed.
         map.ObjectHitMade = LogObjectHits;
+        // ARC-COMBAT-1934 (0x4ADE00): an NPC caster's line of fire starts at its pixel offset, as the AI host reads it for sight.
+        map.ParentOffset = id => _aiHost?.ShooterOffset(id) ?? (0, 0);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id) ?? _combatHost.ContainerItemSpells(owner, id));
@@ -992,7 +994,7 @@ public partial class TerrainViewerApp
                     RunObjectBreakSteps(row, hit.Host, false, false);
                 }
                 // ARC-SCRIPT-2722: an item with no map row has no break steps to run; show the destroy point's run its gate left (the host runs the point only for an item of the shown map's rows, so this is rare and drains a stale run).
-                else ShowBreakDestroyRun(hit.Id);
+                else if (_readyArea is { } itemArea && UseScriptHost(itemArea.Snapshot) is { } itemHost && itemHost.TakeBreakDestroyRun() is { } itemRun) TakeBreakRunOutput(itemHost, hit.Id, itemRun, "destroy point");
             }
         }
         if (!any) return;

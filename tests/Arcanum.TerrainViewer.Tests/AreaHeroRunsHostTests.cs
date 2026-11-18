@@ -1183,6 +1183,23 @@ public sealed class AreaHeroRunsHostTests
     }
 
     [TestMethod]
+    public void TheUseGoalsCarryRunFlag0x4000AndShiftAddsTheNoWalkFlagForUseAndPickup()
+    {
+        // ARC-COMBAT-1948 (0x436ED0, 0x436C50): use 38 and loot 81 always carry 0x4000; Shift gives 0x100 and no running; the pickup carries no 0x4000.
+        const GoalRunFlags Mask = GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied;
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: true));
+        Assert.AreEqual(GoalRunFlags.Running | GoalRunFlags.NearOccupied, f.Host.UseRun!.Flags & Mask);
+        Assert.IsTrue(f.Host.Use("obj:1", container: true, run: false, noWalk: true));
+        Assert.AreEqual(GoalType.UseContainer, f.Host.UseRun!.Bottom.Goal);
+        Assert.AreEqual(GoalRunFlags.NoWalk | GoalRunFlags.NearOccupied, f.Host.UseRun.Flags & Mask);
+        Assert.IsTrue(f.Host.Pickup("obj:2", run: false, noWalk: true));
+        Assert.AreEqual(GoalRunFlags.NoWalk, f.Host.PickupRun!.Flags & Mask);
+        Assert.IsTrue(f.Host.Pickup("obj:2", run: true));
+        Assert.AreEqual(GoalRunFlags.Running, f.Host.PickupRun!.Flags & Mask);
+    }
+
+    [TestMethod]
     public void TheClicksRunningFlagIsRefusedAtEncumbranceFour()
     {
         using var f = new Fixture();

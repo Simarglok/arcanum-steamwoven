@@ -503,6 +503,27 @@ public sealed class ThrowStateTests
         Assert.IsFalse(Wields(owner));
     }
 
+    // ARC-COMBAT-2524 (RH2, TW1, TW11, 0x434B00): the click on a critter starts the throw goal at the critter's location with the item the session names (a spare of the prototype, else the wielded weapon).
+    [TestMethod]
+    public void TheDefaultThrowClickNamesTheSpareElseTheWieldedWeapon()
+    {
+        using var owner = SpareOwner(6072);
+        Assert.AreEqual("kit:2", owner.QueryDefaultThrowItem(Dagger), "the first other item of the wielded prototype");
+        using var noLookup = SpareOwner(15085);
+        Assert.AreEqual("kit:1", noLookup.QueryDefaultThrowItem(Dagger), "prototype 15085 has no spare lookup: the wielded weapon");
+        using var lone = Owner();
+        Assert.AreEqual("kit:1", lone.QueryDefaultThrowItem(Dagger), "no spare: the wielded dagger");
+    }
+
+    [TestMethod]
+    public void TheDefaultThrowClickLeavesTheWeaponInTheHandWhenNothingCanBeThrown()
+    {
+        using var owner = Owner();
+        Assert.IsNull(owner.QueryDefaultThrowItem(new(ThrowRules.MaxWeight + 1)), "a weight outside the thrown range table");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Unequip(owner.Version, EquipmentSlot.Weapon, Accept).Disposition);
+        Assert.IsNull(owner.QueryDefaultThrowItem(Dagger), "no wielded weapon");
+    }
+
     // A map where every step leaves it.
     private sealed class NoSteps : Arcanum.Simulation.Items.IDropMap
     {
