@@ -959,6 +959,14 @@ public sealed class InterfaceChromeTests
             var (pw, _) = InterfaceChromeRenderer.PixelSize(89, 89, scale);
             Assert.AreEqual(0, Pixel(a, pw, pw / 2, pw / 2).A, $"the lens is clear in the middle at {scale}");
             Assert.AreEqual(255, Pixel(a, pw, 1, 1).A, $"and opaque in the corner at {scale}");
+            // ARC-UI-2645: the circle touches the frame's four sides, so the ring lies inside it: at the middle of each side the ring is there (opaque, brass), not cut off by the box.
+            foreach (var (x, y) in new[] { (pw / 2, 1), (pw / 2, pw - 2), (1, pw / 2), (pw - 2, pw / 2) })
+            {
+                var edge = Pixel(a, pw, x, y);
+                Assert.AreEqual(255, edge.A, $"the ring is whole at ({x}, {y}) at {scale}");
+                Assert.IsTrue(edge.R > edge.B, $"the ring is brass at ({x}, {y}) at {scale}: {edge}");
+            }
+            Assert.IsTrue(Pixel(a, pw, pw / 2, (int)(pw * 0.2)).A < 255, $"the view is clear inside the ring at {scale}");
         }
     }
 
@@ -1127,7 +1135,7 @@ public sealed class InterfaceChromeTests
         Assert.AreEqual(ChromeHoles.Cloth, Recipe("book_quests.art").Holes);
         // ARC-UI-1810: the lens art (pcwincvr, 198) is shared with the character sheet and the world map; its recipe is the round view's ring (the lenses 231 to 233's), found by the lowercase name.
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("PCWinCvr.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
-        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5) }, Recipe("PCWinCvr.ART").Parts.ToArray());
+        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5, Inward: true) }, Recipe("PCWinCvr.ART").Parts.ToArray());
         var tabs = new[] { "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art" };
         for (var i = 0; i < tabs.Length; i++)
         {
