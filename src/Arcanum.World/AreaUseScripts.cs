@@ -546,13 +546,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
     public IReadOnlyList<ScrObjectRef>? CrittersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? CrittersAround(cell) : null;
 
-    // The item's own location field as the host reads it (IV2): the placed cell of a session-dropped item, else the tile of its map data or of the carried item's row; null for an item of another map, or one without a tile.
+    // The item's own location field as the host reads it (IV2, IV8): the placed cell of a session-dropped item lying on the ground, else the tile it last lay on after the session dropped it and took it up again (a held item keeps that stale
+    // location field in the original, also on another map: the scan is of the shown map around those coordinates), else the tile of its map data or of the carried item's row; null for an item of another map with no drop, or one without a tile.
+    // ARC-SCRIPT-1704: with <paramref name="anyMap"/> (a vicinity scan, whose centre is the location field whichever map the reference names) an item named on another map reads its row by identity too, and a dropped item matches on its origin map.
     private CellCoord? ItemCentre(ScrObjectRef item, bool anyMap = false)
     {
+        if ((item.Map == _shownMap || anyMap) && _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && (p.Map.RuntimeMap == item.Map || anyMap && p.Origin?.RuntimeMap == item.Map)) is { } placed) return placed.Cell;
+        if (_session.QueryItemLastDrop(item.Code) is { } dropped) return dropped;
         if (item.Map != _shownMap && !anyMap) return null;
-        var placed = _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && (p.Map.RuntimeMap == item.Map || anyMap && p.Origin?.RuntimeMap == item.Map));
         // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
-        return placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
+        return (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
     }
 
     private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
@@ -943,7 +946,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public (long X, long Y)? Location(ScrObjectRef obj) => Place(obj) is { } cell ? (cell.X, cell.Y) : null;
 
     /// <summary>
-    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile of its map data or the carried item's row: the same centre as
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile it last lay on after a pickup (IV8), else the tile of its map data or the carried item's row: the same centre as
     /// the vicinity scans of the run, <see cref="ContainersNearItem"/>, IV2), any other object its place as <see cref="Location"/> gives it. Null for an object without a place (an item of another map, one with no tile).
     /// </summary>
     public (long X, long Y)? LocationOfObject(ScrObjectRef obj)
@@ -955,7 +958,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
     private bool IsItemObject(ScrObjectRef obj) =>
         Row(obj) is { } row ? row.Type is >= FirstItemType and <= LastItemType
-        : CarriedItemRow(obj) is not null || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && (p.Map.RuntimeMap == obj.Map || p.Origin?.RuntimeMap == obj.Map));
+        : CarriedItemRow(obj) is not null || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && (p.Map.RuntimeMap == obj.Map || p.Origin?.RuntimeMap == obj.Map)) || _session.QueryItemLastDrop(obj.Code) is not null;
 
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>

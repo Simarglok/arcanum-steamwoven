@@ -211,6 +211,9 @@ public sealed record SessionItemFieldRecord(string Entity, SessionItemFieldWrite
 /// <summary>ARC-RES-1441: the slot (a cell of the holder's grid, 0..959) the arrangement at a window's open gave one item of a seed holder's list.</summary>
 public readonly record struct SessionHolderSlot(string Item, int Slot);
 
+/// <summary>ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it, kept after a pickup (the item's location field).</summary>
+public sealed record SessionItemDrop(string Entity, Arcanum.Simulation.Movement.CellCoord Cell);
+
 /// <summary>ARC-RES-1441 (schema 95): the arranged slots of one seed holder (a container or an NPC of a map's seed) in a save, by item entity in ordinal order; never empty.</summary>
 public sealed record SessionHolderSlots(string Holder, IReadOnlyList<SessionHolderSlot> Slots);
 
@@ -284,6 +287,9 @@ public sealed class SessionInventoryState
 
     /// <summary>ARC-SCRIPT-1279: how many items carry written fields at once (two full lists, many times over).</summary>
     public const int MaxItemFields = 16384;
+
+    /// <summary>ARC-SCRIPT-2594 (schema 105, ledger IV8): the tile of each item the session put on the ground and a pickup took up again, by entity in ordinal order (its location field in the original).</summary>
+    public IReadOnlyList<SessionItemDrop> LastDrops { get; init; } = [];
 
     /// <summary>ARC-RES-1441 (schema 95): the slots the arrangement at the open of a loot, steal or See Contents window gave the items of seed holders, by holder entity in ordinal order
     /// (<c>InventoryDomain.HolderSlots</c>); no row is empty.</summary>
@@ -701,6 +707,7 @@ internal sealed class InventoryDomain
         NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray())
         {
             ItemFields = ItemFields.Select(pair => new SessionItemFieldRecord(pair.Key, pair.Value)).ToArray(),
+            LastDrops = Hero.LastDrops.Select(pair => new SessionItemDrop(pair.Key, pair.Value)).ToArray(),
             HolderSlots = HolderSlots.Where(pair => pair.Value.Count > 0)
                 .Select(pair => new SessionHolderSlots(pair.Key, Array.AsReadOnly(pair.Value.Select(slot => new SessionHolderSlot(slot.Key, slot.Value)).ToArray()))).ToArray(),
         };

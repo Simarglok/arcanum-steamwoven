@@ -121,7 +121,7 @@ public sealed class ManaRechargeMapTests
         var current = GameSessionSnapshotCodec.Encode(owner.Capture());
         var entity = $"\"map\":{Exterior.RuntimeMap},\"entity\":\"{Staff}\"";
         StringAssert.Contains(current, entity);
-        var older = current.Replace(entity, $"\"map\":1,\"entity\":\"{Staff}\"").Replace($"\"schemaVersion\":{GameSessionSnapshot.CurrentSchemaVersion},\"world\"", "\"schemaVersion\":103,\"world\"");
+        var older = current.Replace(entity, $"\"map\":1,\"entity\":\"{Staff}\"").Replace($"\"schemaVersion\":{GameSessionSnapshot.CurrentSchemaVersion},\"world\"", "\"schemaVersion\":103,\"world\"").Replace(SnapshotUpgradeTests.NoLastDrops, "");
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.IsNotNull(upgraded.Snapshot, $"{upgraded.Failure} {upgraded.Path}");
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.Snapshot.SchemaVersion);
