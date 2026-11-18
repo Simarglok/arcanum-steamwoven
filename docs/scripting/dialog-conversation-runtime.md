@@ -314,7 +314,7 @@ With the optional `IDialogStatPort` (`DialogConversationPorts.Stats`) Player con
   `int.MinValue` and a `+` sign are damage here.
 - **Port.** `Stat(pc, stat number)` answers the PC's stat as the original's getter does (null when the owner does not hold the stat: the conversation fails with `InvalidQueryResult`; a
   throwing port fails it with `QueryException`). `SessionDialogStatPort` over `QueryHeroScriptStat` (strength to charisma and the aptitude with the life's poison and crippled
-  legs, the stored level and alignment); the AREA viewer offers it only with a session hero (the diagnostic PC has no stats), like the skill gates.
+  legs, the level and alignment with the hero's effect list laid over the stored values); the AREA viewer offers it only with a session hero (the diagnostic PC has no stats), like the skill gates.
 - **Limits.** The getter's other effects (Tempus Fugit, the follower bonus, the background adjustments) are not modelled in the session (ledger row 0x4B0490), so a condition
   can differ from the original where they matter.
 - **Installed data.** `CH` 478, `MA` 418, `TA` 88, `NA` 69, `LE` 44, `AL` 31 and `PE` 11 Player condition fields; all parse, none stops on these codes. Both rule settings behave
