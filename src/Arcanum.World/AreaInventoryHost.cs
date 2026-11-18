@@ -164,6 +164,9 @@ public sealed class AreaInventoryHost
         return made.Entity is not null && _prototypeFields(made.Kind.Prototype) is { } fields ? (made.Kind, fields) : null;
     }
 
+    /// <summary>ARC-SCRIPT-1594 (VT8): the magick-tech complexity a prototype's item fields hold (the value a made or kit item reads until something writes it); null without the prototype source or when the prototype does not read as an item.</summary>
+    public int? PrototypeComplexity(int prototype) => _prototypeFields?.Invoke(prototype)?.Item?.MagickTechComplexity;
+
     /// <summary>ARC-DEV-072 (MIG1, TM3): the record resolver over this host's maps: an object's base record by identity, from these
     /// maps or from the home map it reads on demand.</summary>
     public RecordResolver Resolver => _resolver;
