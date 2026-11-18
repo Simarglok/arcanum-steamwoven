@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
     // the start map with a fresh session and the main menu reopened, which fades in. No box asks and no slide of the default death is queued (end game, not death).
     // ARC-RENDER-2197: three further endings follow, each from a new game of its own (the menu reopened by the reset): the Vendigroth underground's use script 2862 (movies 3 and 5, then the end
     // game) with global flag 2053, which script 997 answers with slide 3 alone (used with the item named 6711 that the script tests its extra object for), and the end game asked for with flag 2632 (slide 1) and with flag 2050 (slide 4), each with the installed picture,
-    // fades and voice, the reset and the menu fade-in as above. The deeper endings (2928 and the scripts under it) are pinned by the opt-in test AreaEndingQueuesRealDataTests.
+    // fades and voice, the reset and the menu fade-in as above. ARC-RENDER-2660: a fifth ending walks the chain under script 2928 (quest 1058 completed and flag 1016: slides 6, 10, 20, 33, 39, 44) from Kerghan's second dying script 3061; the other chain rows stay pinned by the opt-in test AreaEndingQueuesRealDataTests.
     // ARC_AREA_SLIDES_CAPTURE=FOLDER saves a frame of each movie, each slide and the reopened menu as PNG for the graphics report (original art: keep it out of git).
     private async Task RunAreaSlidesSmokeAsync()
     {
@@ -241,6 +241,28 @@ public partial class TerrainViewerApp
                 var shownN = (await Show(gameN, expectedN, label)).Shown;
                 endings.Add(new { Name = label, Queue = expectedN.Slides, Slides = shownN.Select(s => s.Id) });
             }
+            // 4. ARC-RENDER-2660: a multi-slide chain ending down script 2928 other than the new game's, and Kerghan's second dying script 3061: a new game whose quest 1058 is completed and flag 1016 set, which
+            // the chain answers with slides 6 and 10 in front of the common tail (20, 33, 39, 44); the end game comes from the installed dying script 3061 (movies 2 and 5), as for 2863.
+            var game4 = await NewGame();
+            SetFlag(game4, 1016);
+            var quest = game4.SetQuestState(game4.Version, 1058, SessionQuestState.Completed);
+            Require(quest.Disposition == GameSessionDisposition.Changed, $"quest 1058 was completed ({quest.Disposition} {quest.Failure})");
+            var expected4 = Expect(game4, "dying script 3061 with quest 1058 completed and flag 1016");
+            Require(expected4.Slides.SequenceEqual([6, 10, 20, 33, 39, 44]), $"quest 1058 completed and flag 1016 queue the chain 6,10,20,33,39,44 ({string.Join(",", expected4.Slides)})");
+            _moviesForSelfTest = true;
+            var row4 = ScriptedRow(CurrentAreaMap, ScrPoint.Dying, 3061);
+            var host4 = new AreaUseScriptHost(game4, CurrentAreaMap, [row4], [], content!, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+            var ran4 = host4.RunDying(AreaUseScriptHost.EntityId(row4), host4.Pc, game4.Rules.Scripts);
+            Require(ran4.Outcome == AreaScriptedUseOutcome.NoTeleport && ran4.Run is { Outcome: not ScrOutcome.Refused }, $"the dying script 3061 ran: {ran4.Outcome} {ran4.Detail}");
+            (playedBefore, failedBefore) = (_scriptFadesPlayed, _moviesFailed);
+            AdoptScriptRun(host4);
+            Require(_scriptFades.Select(fade => fade.Movie).SequenceEqual([2, 5]) && _endGameAsked, $"the run of 3061 asked for movies 2 and 5 and the end game ({_scriptFades.Count} fades, end game {_endGameAsked})");
+            Require(_heroDeath.Stage == AreaDeathStage.Watching, "the end game waits for the movies of 3061");
+            await PlayMovies(game4, "dying-3061", 2, playedBefore, failedBefore);
+            _moviesForSelfTest = false;
+            var shown4 = (await Show(game4, expected4, "dying-3061-chain")).Shown;
+            Require(shown4.Count >= 2, $"the chain ending showed several slides ({shown4.Count})");
+            endings.Add(new { Name = "dying-3061-quest-1058-flag-1016", Queue = expected4.Slides, Slides = shown4.Select(slide => slide.Id) });
             GD.Print("ARC-RENDER-1879 native-smoke slides PASS " + System.Text.Json.JsonSerializer.Serialize(new
             {
                 Start = start, Movies = movies, MovieFrames = frameSizes.Select(size => size.ToString()), Queue = expected.Slides, EndGameWaitMs = waitMs,
