@@ -229,7 +229,7 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.LessOrEqual => Get(c, 0) <= Get(c, 1),
         ScrCatalogue.Condition.GlobalFlag => Flag(GlobalFlag(Get(c, 0), line)),
         // Following: the first object's leader is the second object (both single objects in the set).
-        ScrCatalogue.Condition.FollowingPc => LeaderOf(Object(c, 0, line)) is { } leader && _host.SameObject(leader, Object(c, 1, line)),
+        ScrCatalogue.Condition.FollowingPc => FollowsObject(Object(c, 0, line), Object(c, 1, line)),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
         // GF9, FK5 (SG1–SG6): a guard condition on a group or follower focus kind tests each object of the list by the list rule (kind 13 every one, kind 14 one is enough).
         ScrCatalogue.Condition.PcQuestState or ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
@@ -1463,6 +1463,9 @@ internal sealed class ScrInterpreter
         if (_roles.Triggerer is not { } leader) return [];
         return [.. DirectFollowers(leader), leader];
     }
+
+    // ARC-SCRIPT-1899: both operands are read first (a missing second object stops the run as before), then the leader is compared with the second object by the host's identity test.
+    private bool FollowsObject(ScrObjectRef critter, ScrObjectRef leader) => LeaderOf(critter) is { } found && _host.SameObject(found, leader);
 
     // ARC-SCRIPT-1899: the critter's leader as the run has left it: the last make follow or disband of the dispatch on the same object (told by the host's identity test), else the host's own answer.
     private ScrObjectRef? LeaderOf(ScrObjectRef critter)
