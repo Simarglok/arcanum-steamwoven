@@ -290,7 +290,7 @@ def main_smoke(*, root: Path, folder: Path, fetch: bool, force: bool, keep_work:
     playing = run_queue.playing_state()  # ARC-DEV-2272: the core smoke opens windows; --force does not override the owner
     if playing is not None and not dry_run:
         say(f"SKIP owner is playing ({run_queue.playing_text(playing)}): the smoke opens windows, so it was not run and nothing "
-            "is recorded (no green, no red); it runs when the mode has ended (./arcanum queue --not-playing)")
+            f"is recorded (no green, no red); it runs when the mode has ended ({run_queue.playing_hint(playing)})")
         return PASS
     if dry_run:
         say(f"dry run: would check out {sha[:10]} into a fresh worktree and run there (limit {SMOKE_MINUTES:g} minutes): "
