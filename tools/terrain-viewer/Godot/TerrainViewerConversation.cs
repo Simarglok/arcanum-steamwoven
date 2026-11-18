@@ -609,6 +609,8 @@ public partial class TerrainViewerApp
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
+            // ARC-SCRIPT-2760: the resumed script may name a carried companion as the next speaker; admission is on demand (as BeginScriptedConversation's).
+            AdmitCompanionSpeakers();
             try { resumed = talkHost.Resume(speaker, line, startRefused: DialogStartRefused); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
             {
@@ -616,7 +618,15 @@ public partial class TerrainViewerApp
             }
             GD.Print($"ARC-SCRIPT-009 script resumed line={line.Value} status={resumed.Status} detail={resumed.Detail}");
             // ARC-UI-2028: a resumed script that lands on the NPC's last line ends at its start as well (no window).
-            if (resumed.Status == AreaConversationStartStatus.Started) { if (!EndsAtStart(speaker, resumed, scripted: false)) OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
+            // ARC-SCRIPT-2760: the resumed script may have called another NPC's dialog point (the dialog action's attachee), and the conversation opens with that NPC; its own "return to script" end resumes its slot.
+            if (resumed.Status == AreaConversationStartStatus.Started)
+            {
+                var next = resumed.Speaker ?? speaker;
+                if (!ReferenceEquals(next, speaker)) _areaCompanions?.InterruptGoals(next.Row.Key);
+                if (!EndsAtStart(next, resumed, scripted: false)) OpenConversation(next, resumed);
+                RefreshReadyStatus();
+                return;
+            }
             _conversationNotice = $"script continued: {resumed.Status}: {resumed.Detail}";
         }
         QuarantineWorld(); RefreshReadyStatus();

@@ -25,6 +25,9 @@ public static partial class TerrainViewerSelfTest
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
     // ARC-UI-2027: one reply whose action is a final line (FL 10): the dialog ends on the NPC's line of node 10.
+    // ARC-SCRIPT-2761: one reply that returns to the script (response -2).
+    internal const string ReturnToScriptDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{-2}{}";
+
     internal const string FinalLineDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{FL 10}{10}{Fine.}{}{}{}{}{}";
 
     // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
@@ -234,6 +237,24 @@ public static partial class TerrainViewerSelfTest
             panel.Choose(1);
             Require(finalConversation.End?.Kind == DialogEndKind.NpcFinalLine && AreaConversationText.EndsWithNpcLine(finalConversation) && finalConversation.NpcLine?.Text == "Fine." && closed == closedBefore + 1 && !panel.IsOpen,
                 "the final line ends the dialog and closes the window at once");
+            // ARC-SCRIPT-2761 (0x567E30 → 0x5678D0): a reply that returns to the script (-N) closes the window at once in the original's setting (the script's next conversation follows the player's line); the diagnostic chrome keeps the finished dialog and its Close.
+            foreach (var hidden in new[] { true, false })
+            {
+                var returning = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(ReturnToScriptDialog)),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, session.Flags, state));
+                panel.DiagnosticChromeHidden = hidden;
+                panel.Open("Synthetic NPC", returning);
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                var closedAt = closed;
+                panel.Choose(1);
+                Require(returning.End?.Kind == DialogEndKind.ReturnToScript && (hidden ? closed == closedAt + 1 && !panel.IsOpen : closed == closedAt && panel.IsOpen && panel.LeaveOfferedForSelfTest),
+                    $"a reply back to the script {(hidden ? "closes the window at once" : "keeps the diagnostic Close")}");
+                if (panel.IsOpen) panel.Leave();
+            }
+            panel.DiagnosticChromeHidden = false;
             GD.Print("ARC-SCRIPT-005 self-test PASS synthetic conversation panel; original runtime parity NOT_VERIFIED");
         }
         finally { panel.QueueFree(); }
