@@ -863,13 +863,13 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-DEV-366: <see cref="QueryHeroScriptStat"/> with the hero's effect list replaced by <paramref name="entries"/> (a move's earlier runs
-    /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values
-    /// (effects on them are not read, GS3); null for a stat the session does not hold and without a hero.
+    /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values with the
+    /// changes of that stat in the trial list laid over them (ARC-AI-2750); null for a stat the session does not hold and without a hero.
     /// </summary>
     private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, IReadOnlyList<int>? stored = null)
     {
         if (_hero is null) return null;
-        if (stat is ScriptStatLevel or ScriptStatAlignment) return QueryHeroScriptStat(stat);
+        if (stat is ScriptStatLevel or ScriptStatAlignment) return HeroLevelAlignmentStat(stat, entries, definitions);
         if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || QueryHeroLife() is not { } life) return null;
         var trial = TrialHero(stored);
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
