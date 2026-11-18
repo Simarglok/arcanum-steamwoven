@@ -235,7 +235,7 @@ public partial class TerrainViewerApp
             CancelPortalApproach("a follower click replaced it", keepArmed: true);
             if (_pendingOrder is not null) CancelPendingOrder("a follower attack replaced it");
             if (AttackMapActive && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } attacked && AreaTargetOf(attacked.Key) is { } follower
-                && AttackCritterClick(follower, true, Godot.Input.IsKeyPressed(Key.Shift)) && _attack is not null) { _companionNotice = "follower click in combat mode: attack"; return; }
+                && AttackCritterClick(follower, true, Godot.Input.IsKeyPressed(Key.Shift)) && (_attack is not null || HeroRunsHost()?.ThrowRun is not null)) { _companionNotice = "follower click in combat mode: attack"; return; }
             _companionNotice = "follower click in combat mode: no attack started";
             RefreshReadyStatus();
             return;

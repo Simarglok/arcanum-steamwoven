@@ -236,23 +236,29 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11; 0x434B00, 0x434F80): a combat click on a critter with the hero's wielded weapon "default throwing" starts the throw goal 37 at the critter's <b>tile</b>, never at the critter itself (the
+    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11): a combat click on a critter with the hero's wielded weapon "default throwing" starts the throw goal 37 at the critter's <b>tile</b>, never at the critter itself (the
     /// builder writes the item and a location only), so the throw rolls as a throw at a location: the line of fire names only a living, non-shoot-through blocker before the tile, and a hit lands on the tile striking nothing. The item
     /// is the session's choice (<see cref="GameSessionOwner.QueryDefaultThrowItem"/>: a spare of the weapon's prototype, else the wielded one); the throw goal needs no walk and takes the throw's points (<see cref="BeginThrowSwing"/>). True
     /// when the click was taken (a throw started, or refused with its notice); false when the weapon stays in the hand and the attack goal starts as without the flag.
     /// </summary>
     private bool TryDefaultThrowClick(AreaCombatTarget target)
     {
-        if (_gameCursorItem is not null || _areaSession is not { } owner || _inventoryHost is null || HeroRunsHost() is null || _worldActor.Session is not AreaGridSession) return false;
+        if (_areaSession is not { } owner || _inventoryHost is null || HeroRunsHost() is null || _worldActor.Session is not AreaGridSession) return false;
+        // A click while the weapon waits on the cursor for the throw goal's first node is a repeat click: the goal is pending, the click is taken (the original's start branch ignores an equal goal).
+        if (_gameCursorItem is { } waiting) return waiting.Item == _defaultThrowCursorItem && HeroRunsHost()?.ThrowRun is not null;
         if (HeroDefaultThrowWeight() is not { } weight || owner.QueryDefaultThrowItem(new(weight)) is not { } item) return false;
         var tile = NpcCell(target.Row);
         _gameCursorItem = new GameCursorItem(item, _inventoryHost.ItemName(owner, item, _hoverNames?.Catalog), owner, CurrentAreaMap);
+        _defaultThrowCursorItem = item;
         var started = ThrowGameCursorItem(tile);
-        // A throw that did not start leaves the weapon where it is: the cursor holds it only for the throw goal's first node.
-        if (!started) _gameCursorItem = null;
+        // A throw that did not start leaves the weapon where it is: the cursor holds it only until the throw goal's first node (HeroThrowEnds clears it when that node refuses).
+        if (!started) { _gameCursorItem = null; _defaultThrowCursorItem = null; }
         GD.Print($"ARC-COMBAT-2524 default-throw-click item={item} target={target.Entity} tile={tile.X},{tile.Y} started={started}");
         return true;
     }
+
+    // ARC-COMBAT-2524: the wielded weapon the default-throw click put on the cursor for the throw goal (null when none waits).
+    private string? _defaultThrowCursorItem;
 
     // The throw run in progress: the item, its tile and name while the hero's swing plays (the cursor is empty from the swing's start, TT2).
     private sealed record HeroThrowSwing(GameCursorItem Held, CellCoord Tile, AreaAttackPlayer Player, ActorDiagnosticAction Action, int Octant)
@@ -362,6 +368,12 @@ public partial class TerrainViewerApp
     internal void HeroThrowEnds(string item, Arcanum.Simulation.Ai.AiExecutorReason reason)
     {
         _throwPressed = null;
+        // ARC-COMBAT-2524: a default throw whose first node refused (no points, no throw ART) leaves the weapon in the hand: the cursor it waited on is emptied.
+        if (_defaultThrowCursorItem == item)
+        {
+            _defaultThrowCursorItem = null;
+            if (_gameCursorItem?.Item == item) _gameCursorItem = null;
+        }
         // A throw that never began (unpaid, no ART) has said why; one cut after the item left has nothing to say; only a swing cut before it left leaves the item in the pack.
         if (_throwSwing is { } swing && swing.Held.Item == item)
         {

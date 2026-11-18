@@ -261,10 +261,10 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11, 0x434B00): the item a click on a critter throws when the hero's wielded weapon "default throws" (<paramref name="requested"/>, the host's facts of it): the attack start builds the throw
+    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11): the item a click on a critter throws when the hero's wielded weapon "default throws" (<paramref name="requested"/>, the host's facts of it): the attack start builds the throw
     /// goal 37 with the item and the target's location, never the critter, so the host starts the location throw (<see cref="ThrowHeroItem"/> with no struck critter) with this item instead of the attack goal. The item is the first other
-    /// item of the wielded weapon's prototype the hero holds (<see cref="SameKindSpare"/>, 0x462930), else the wielded one. Null (the attack goal starts, the weapon stays in the hand, as <see cref="ThrowingHero"/> leaves it): no hero or
-    /// no wielded weapon, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>, a wielded item that is no melee weapon (the session's own limit, TW7), a weapon the remove check refuses (0x466DA0), or an item switched off.
+    /// item of the wielded weapon's prototype the hero holds (<see cref="SameKindSpare"/>), else the wielded one. Null (the attack goal starts, the weapon stays in the hand, as <see cref="ThrowingHero"/> leaves it): no hero or
+    /// no wielded weapon, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>, a wielded item that is no melee weapon (the session's own limit, TW7), a weapon the remove check refuses, or an item switched off.
     /// </summary>
     public string? QueryDefaultThrowItem(SessionThrow requested)
     {
