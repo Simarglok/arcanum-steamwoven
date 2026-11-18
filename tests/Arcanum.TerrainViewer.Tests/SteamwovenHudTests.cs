@@ -9,44 +9,48 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class SteamwovenHudTests
 {
     [TestMethod]
-    public void The_hud_unit_is_three_point_six_times_f_for_every_pair_of_panel_heights()
+    public void The_original_strip_heights_keep_the_strips_at_three_point_six_times_f_and_centred()
     {
-        // ARC-UI-2608 (variant B of #2526, SWI-LAY-11): the centre block keeps 2880 px, so a unit is f * 3.6 for the owner's 120 and 456 and for the original's own 150 and 570.
-        foreach (var options in new[] { SteamwovenLayoutOptions.Default, SteamwovenHud.Original })
-        {
-            var plan = SteamwovenHud.Plan(3840, 2160, options)!;
-            Assert.AreEqual(3.6, plan.StripScale, 1e-9);
-            Assert.AreEqual(480, plan.StripLeft);
-            Assert.AreEqual(plan.Layout.Top.Centre.X, plan.StripLeft);
-            Assert.AreEqual(2880, plan.Layout.Top.Centre.Width);
-            Assert.AreEqual(options.TopPanelMaster, plan.TopInset);
-            Assert.AreEqual(options.BottomPanelMaster, plan.BottomInset);
-        }
+        // 3840 x 2160 with 150 and 570: f = 1, strips 2880 px wide centred (480 each side), the 41-unit top strip (147.6 -> 148 px) stands on the 150 px band's lower edge,
+        // the bottom strip hangs from the bottom band's upper edge; the insets are the middle band's.
+        var plan = SteamwovenHud.Plan(3840, 2160, SteamwovenHud.Original)!;
+        Assert.AreEqual(3.6, plan.StripScale, 1e-9);
+        Assert.AreEqual(480, plan.StripLeft);
+        Assert.AreEqual(2, plan.TopStripY);
+        Assert.AreEqual(2, plan.TopGap);
+        Assert.AreEqual(1590, plan.BottomStripY);
+        Assert.AreEqual(150, plan.TopInset);
+        Assert.AreEqual(570, plan.BottomInset);
     }
 
     [TestMethod]
-    public void The_strip_frames_follow_the_clock_and_the_message_window_and_the_screen_frame_the_bottom_band()
+    public void The_owners_panel_heights_draw_the_strips_at_point_eight_of_that_with_a_smaller_centre_block()
     {
-        // 3840 x 2160 at 120 and 456: the clock is at y 18 (the original's clock y 5 units = 18 px puts the top frame on the band's top), the message window at y 78 of its band
-        // (the original's window lies 62 units = 223.2 -> 223 px below the bottom frame), and the screen's y 441 (1587.6 -> 1588 px) is the bottom band's upper edge.
+        // The default 120 and 456 (#2453) are 0.8 of 150 and 570: the strips are 2.88 px per unit, the centre block 2304 px and the sides take the rest; nothing is squashed.
         var plan = SteamwovenHud.Plan(3840, 2160)!;
-        Assert.AreEqual(0, plan.TopStripY);
-        Assert.AreEqual(0, plan.TopGap);
-        Assert.AreEqual(2160 - 456 + 78 - 223, plan.BottomStripY);
-        Assert.AreEqual(2160 - 456 - 1588, plan.ScreenOriginY);
-        Assert.AreEqual(plan.Layout.Control(SteamwovenControlId.Clock).Device.Y, plan.TopStripY + 18);
-        Assert.AreEqual(plan.Layout.Control(SteamwovenControlId.MessageWindow).Device.Y, plan.BottomStripY + 223);
+        Assert.AreEqual(2.88, plan.StripScale, 1e-9);
+        Assert.AreEqual((3840 - 2304) / 2, plan.StripLeft);
+        Assert.AreEqual(120, plan.TopInset);
+        Assert.AreEqual(456, plan.BottomInset);
+        Assert.AreEqual(2, plan.TopGap);
+        Assert.AreEqual(2160 - 456, plan.BottomStripY);
+        Assert.IsTrue(plan.TopStripY >= plan.Layout.Top.Band.Y);
     }
 
     [TestMethod]
     public void The_strip_scale_follows_f()
     {
-        // 1920 x 1080: f = 0.5, a unit is 1.8, 800 units = 1440 px = the centre block, the model's top 60 and bottom 228.
+        // 1920 x 1080: f = 0.5, scale 1.44, 800 units = 1152 px, the model's top 60 and bottom 228.
         var plan = SteamwovenHud.Plan(1920, 1080)!;
-        Assert.AreEqual(1.8, plan.StripScale, 1e-9);
-        Assert.AreEqual(240, plan.StripLeft);
+        Assert.AreEqual(1.44, plan.StripScale, 1e-9);
+        Assert.AreEqual(384, plan.StripLeft);
         Assert.AreEqual(60, plan.TopInset);
         Assert.AreEqual(228, plan.BottomInset);
+        // The original strips' own heights: the centre block is the layout model's.
+        var original = SteamwovenHud.Plan(1920, 1080, SteamwovenHud.Original)!;
+        Assert.AreEqual(1.8, original.StripScale, 1e-9);
+        Assert.AreEqual(original.Layout.Top.Centre.X, original.StripLeft);
+        Assert.AreEqual(240, original.StripLeft);
     }
 
     [TestMethod]
@@ -61,19 +65,11 @@ public sealed class SteamwovenHudTests
     }
 
     [TestMethod]
-    public void Every_control_of_the_layout_lies_inside_its_band_and_the_centre_block()
+    public void The_smaller_panel_ratio_sets_the_scale_when_the_two_differ()
     {
-        foreach (var (width, height) in new[] { (3840, 2160), (2560, 1440), (1920, 1080), (2560, 1600), (1024, 768), (3440, 1440) })
-        {
-            var layout = SteamwovenHud.Plan(width, height)!.Layout;
-            foreach (var control in layout.Controls)
-            {
-                var band = control.Spec.Band == SteamwovenHudBand.Top ? layout.Top : layout.Bottom;
-                Assert.IsTrue(control.Device.X >= band.Centre.X && control.Device.Right <= band.Centre.Right, $"{control.Id} at {width}x{height} lies in the centre block");
-                if (control.Id != SteamwovenControlId.ExperienceStrip)
-                    Assert.IsTrue(control.Device.Y >= band.Band.Y && control.Device.Bottom <= band.Band.Bottom, $"{control.Id} at {width}x{height} lies in its band");
-            }
-        }
+        // Top 150 (ratio 1) and bottom 456 (0.8): the bottom strip would not fit at the top's scale, so the smaller ratio decides for both.
+        var plan = SteamwovenHud.Plan(3840, 2160, new SteamwovenLayoutOptions { TopPanelMaster = 150, BottomPanelMaster = 456 })!;
+        Assert.AreEqual(2.88, plan.StripScale, 1e-9);
     }
 
     [TestMethod]

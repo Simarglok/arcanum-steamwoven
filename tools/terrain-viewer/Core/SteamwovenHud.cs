@@ -3,20 +3,21 @@ using Arcanum.Presentation.Steamwoven;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
-/// ARC-UI-2452, ARC-UI-2608: where the play screen's parts go in the Steamwoven layout (docs/ui/steamwoven-interface-trd.md SWI-LAY): the layout of
-/// <see cref="SteamwovenLayoutBuilder"/> for the window, the one scale of the HUD's units and the places of the two strips' unit frames. Godot-free, so the viewer reads rectangles.
+/// ARC-UI-2452: where the play screen's parts go in the Steamwoven layout (docs/ui/steamwoven-interface-trd.md SWI-LAY): the layout of
+/// <see cref="SteamwovenLayoutBuilder"/> for the window, the scale of the two strips and their places on it. Godot-free, so the viewer reads rectangles.
 /// </summary>
 /// <remarks>
-/// Variant B of the owner's choice of #2526 (SWI-LAY-11): the centre block keeps 2880 px, so a HUD unit (the original's 800-unit layout) is `f · 3.6` device pixels for every pair of
-/// panel heights, and the HUD text has the windows' text scale. The controls (buttons, vials, clock, message window, experience strip and the hover image) are placed by
-/// <see cref="SteamwovenLayout.Controls"/>; each strip's frame is the place of the original's own unit coordinates, which the panes drawn over the strips (spell, skill and weapon panes,
-/// hot keys, counters) still use: the top frame stands where the clock window of the model lies (the original's clock y), the bottom frame where the message window lies (its original y),
-/// so the panes follow their window. <see cref="ScreenOriginY"/> is the frame of the whole 800 × 600 screen the combat lamps use: its y 441 is the bottom band's upper edge.
+/// The strips keep the original's 800-unit layout: one scale <see cref="StripScale"/> = `f · 3.6 · k` for both, where `k` is 1 for the original strips' own heights (150 and 570 master px)
+/// and the smaller of the two panel ratios for another pair (0.8 for the default 120 and 456, the owner's choice of #2453), so a thinner panel gives a smaller centre block with wider sides, never
+/// a squashed strip: the prototype's stand-in for the art that will be drawn to fit the panel. The top strip stands on the bottom edge of the top band and the bottom strip hangs from the top edge of the bottom band, so each strip's
+/// rim meets the rim of the board that continues it at the sides; at k = 1 the strip is 147.6 · f high in a 150 · f band (the board shows above it) and 572.4 · f in
+/// a 570 · f band (its last 2.4 · f px lie beyond the frame's bottom edge); at k = 0.8 it is 118.1 · f in 120 · f and 457.9 · f in 456 · f.
+/// This scale is the prototype's stand-in only: the owner's choice of #2526 (TRD SWI-LAY-11) is a centre block of 2880 px with the controls placed by <see cref="SteamwovenLayout.Controls"/>.
 /// </remarks>
 public sealed record SteamwovenHudPlan(
-    SteamwovenLayout Layout, SteamwovenLayoutOptions Options, double StripScale, int StripLeft, int TopStripY, int BottomStripY, int TopInset, int BottomInset, int ScreenOriginY)
+    SteamwovenLayout Layout, SteamwovenLayoutOptions Options, double StripScale, int StripLeft, int TopStripY, int BottomStripY, int TopInset, int BottomInset)
 {
-    /// <summary>The device-pixel gap of the top band above the top frame (negative: the frame starts above the band).</summary>
+    /// <summary>The device-pixel gap of the top band above the top strip's art (the board shows there).</summary>
     public int TopGap => TopStripY - Layout.Top.Band.Y;
 }
 
@@ -48,13 +49,15 @@ public static class SteamwovenHud
         options ??= Options;
         var result = SteamwovenLayoutBuilder.Compute(width, height, options);
         if (result.Layout is not { } layout) return null;
-        var unit = layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator);
-        var stripLeft = layout.Top.Centre.X;
-        var clock = layout.Control(SteamwovenControlId.Clock).Device;
-        var message = layout.Control(SteamwovenControlId.MessageWindow).Device;
-        var topStripY = clock.Y - (unit * AreaClockLayout.WindowY).RoundHalfUp();
-        var bottomStripY = message.Y - (unit * (AreaMessageLayout.Window.Y - AreaGameBarLayout.BottomTop)).RoundHalfUp();
-        var screenOriginY = layout.Bottom.Band.Y - (unit * AreaGameBarLayout.BottomTop).RoundHalfUp();
-        return new SteamwovenHudPlan(layout, options, unit.ToDouble(), stripLeft, topStripY, bottomStripY, layout.Middle.Band.Y, height - layout.Middle.Band.Bottom, screenOriginY);
+        // k = min(top / 150, bottom / 570), exact: the strips fit both bands at one scale.
+        var topK = new Ratio(options.TopPanelMaster, SteamwovenGrid.StripTopPanel);
+        var bottomK = new Ratio(options.BottomPanelMaster, SteamwovenGrid.StripBottomPanel);
+        var k = topK < bottomK ? topK : bottomK;
+        var unit = layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator) * k;
+        var stripWidth = unit * AreaGameBarLayout.ScreenWidth;
+        var stripLeft = layout.Frame.X + (((Ratio)layout.Frame.Width - stripWidth) / 2).RoundHalfUp();
+        var topStripY = layout.Top.Band.Bottom - (unit * AreaGameBarLayout.TopHeight).RoundHalfUp();
+        var bottomStripY = layout.Bottom.Band.Y;
+        return new SteamwovenHudPlan(layout, options, unit.ToDouble(), stripLeft, topStripY, bottomStripY, layout.Middle.Band.Y, height - layout.Middle.Band.Bottom);
     }
 }
