@@ -309,7 +309,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         var offset = had ? (old!.Loop.OffsetX, old.Loop.OffsetY) : _resting.GetValueOrDefault(entity);
         if (decision == SceneryRestart.Kill)
         {
-            _session.KillGoals(entity);
+            // A kill the session refuses for a pass in progress is tried again by TakeChanged (the overlays of the object must not outlive the art write).
+            if (_session.KillGoals(entity).Failure == SessionGoalFailure.PassInProgress) _pendingKill.Add(entity);
             if (_byEntity.Remove(entity)) { _animation.Remove(entity); _resting[entity] = offset; _killedByArt.Add(entity); }
             _changed = true;
         }
