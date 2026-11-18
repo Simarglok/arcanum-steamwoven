@@ -571,4 +571,14 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsNull(AreaObjectBreakHost.Run(host, null, chest, SessionObjectHostSteps.TrapFires, true, false, rules).Trap, "no trap host");
         });
     }
+
+    // ARC-SCRIPT-2620 (OD7-OD11, BS3c): the end of the runs follows the destroy step only: a bust, a witness, a sound or the trap alone end nothing.
+    [TestMethod]
+    public void Only_the_object_destroyed_step_ends_the_runs_of_a_break()
+    {
+        Assert.IsTrue(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.ObjectDestroyed));
+        Assert.IsTrue(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectDestroyed));
+        Assert.IsFalse(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.None));
+        Assert.IsFalse(AreaObjectBreakHost.EndsRuns(SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound | SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.TrapFires));
+    }
 }
