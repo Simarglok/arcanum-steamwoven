@@ -16,6 +16,8 @@ public partial class TerrainViewerApp
     // (default "thin,original": SWI-LAY-10's 120 and 456 master px, and the original strips' 150 and 570), with and without an open menu. The window is not resized (a Mac screen may be smaller than 3840 x 2160): the root
     // viewport is given the size as its logical render target (content scale mode Viewport), so the captures have exactly the requested size.
     // ARC_AREA_BAR_CAPTURE=PREFIX saves PREFIX-hud-steamwoven-VARIANT-WxH[-menu].png (local, never in git).
+    // ARC-DEV-2672: the variant "legacy" is the Original look (the HD option off: Legacy textures, no plan, the whole-factor layout) at the same sizes and windows, for side-by-side comparison with the Steamwoven
+    // layout; its pass makes no layout checks (only that the HD option is off) and restores the settings after it. The names are PREFIX-hud-steamwoven-legacy-WxH[-menu|-WINDOW].png.
     private static IReadOnlyList<Vector2I> SteamwovenSizes()
     {
         var text = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_SIZES");
@@ -33,8 +35,8 @@ public partial class TerrainViewerApp
         foreach (var name in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             // "before" is the whole-factor layout of the generated interface as it was (captured for the owner's comparison; no layout checks).
-            var options = name switch { "thin" or "before" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
-            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, before or TOP-BOTTOM master px");
+            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
+            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, before, legacy or TOP-BOTTOM master px");
             list.Add((name, options));
         }
         return list;
@@ -63,6 +65,12 @@ public partial class TerrainViewerApp
             {
                 SteamwovenHud.Options = options;
                 panel.Relayout();
+                if (variant == "legacy")
+                {
+                    await CaptureSteamwovenLegacyAsync(panel, window, frames, Require);
+                    SteamwovenHud.Options = options;
+                    continue;
+                }
                 foreach (var size in SteamwovenSizes())
                 {
                     window.ContentScaleSize = size;
@@ -156,6 +164,59 @@ public partial class TerrainViewerApp
         await frames(3);
         await WaitBarArtGeneratedAsync(panel, frames);
         GD.Print($"ARC-UI-2452 native steamwoven layout PASS sizes={checkedSizes}");
+    }
+
+    // ARC-DEV-2672: the Original look for comparison: the HD option off (Legacy textures, no plan, the whole factor), every size of ARC_STEAMWOVEN_SIZES through the same logical render target, the inventory open and
+    // every window probe of VerifySteamwovenWindowsAsync, saved as steamwoven-legacy-WxH[-menu|-WINDOW]. No layout checks; the pass asserts the HD option is off and puts the settings back after it.
+    private async Task CaptureSteamwovenLegacyAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
+    {
+        var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        try
+        {
+            // As the settings stand with the HD option off: the generated interface goes with it (GeneratedInterface && HdInterface).
+            _gameSettings = _gameSettings with { HdInterface = false, GeneratedInterface = false };
+            SteamwovenHud.Suspended = false;
+            SyncInterfaceHd();
+            panel.Relayout();
+            await frames(3);
+            async Task WaitSettledAsync()
+            {
+                for (var wait = 0; wait < 1800 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+                await frames(2);
+            }
+            foreach (var size in SteamwovenSizes())
+            {
+                window.ContentScaleSize = size;
+                for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
+                require((Vector2I)window.GetVisibleRect().Size == size, $"[legacy] the viewport is {size}, got {window.GetVisibleRect().Size}");
+                await WaitSettledAsync();
+                var tag = $"legacy-{size.X}x{size.Y}";
+                // The HD option is off: Legacy textures on the strips, no plan, no boards, the strips at the whole factor, the old insets.
+                require(!InterfaceHd.Enabled && !AreaGameBarPanel.SteamwovenOn && panel.PlanForSelfTest is null && !panel.BoardsShownForSelfTest && InterfaceHd.FractionalScale is null,
+                    $"[{tag}] the HD option is off: no Steamwoven layout, no plan");
+                require(Math.Abs(panel.StripScale - panel.Factor) < 1e-4f && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * panel.Factor && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * panel.Factor,
+                    $"[{tag}] the strips are at the whole factor {panel.Factor}, got {panel.StripScale}");
+                foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+                    require(panel.GetNode<TextureRect>($"{strip}Strip/Art").Texture is { } art && art is not HdInterfaceTexture { IsHd: true }, $"[{tag}] the {strip} strip is drawn with Legacy art");
+                await CaptureHudAsync("steamwoven-" + tag, frames);
+                OpenInventory(); await frames(3); await WaitSettledAsync();
+                await CaptureHudAsync("steamwoven-" + tag + "-menu", frames);
+                EndInventory(); await frames(3);
+                await VerifySteamwovenWindowsAsync(tag, null, panel, frames, WaitSettledAsync, require);
+                GD.Print($"ARC-DEV-2672 steamwoven legacy {tag} factor={panel.Factor}");
+            }
+        }
+        finally
+        {
+            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            SyncInterfaceHd();
+            SteamwovenHud.Suspended = savedSuspended;
+            panel.Relayout();
+            await frames(3);
+            for (var wait = 0; wait < 1800 && (InterfaceHd.GeneratedPending > 0 || panel.BoardsPendingForSelfTest || !AllStripArtGenerated(panel)); wait++) await frames(1);
+            await frames(2);
+        }
+        require(InterfaceHd.Enabled && InterfaceHd.Generated, "[legacy] the HD option is back on after the Original-look pass");
     }
 
     // ARC-UI-2510: the parts the layout model leaves to the screen's own units follow the strips: the free area is the frame's, the screen the follower portraits hang in and the floaters' scale are where the strips

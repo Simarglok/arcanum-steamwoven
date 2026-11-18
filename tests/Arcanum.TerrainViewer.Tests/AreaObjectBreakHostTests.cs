@@ -572,6 +572,30 @@ public sealed class AreaObjectBreakHostTests
         });
     }
 
+    // ARC-SCRIPT-2646 (OD7, 0x43F1C0 -> 0x424070): the interrupt of the object's runs follows the object-broken step, and it runs after the trap and before the BUST script.
+    [TestMethod]
+    public void The_interrupt_runs_after_the_trap_and_before_the_bust_script_and_only_for_its_step()
+    {
+        Assert.IsTrue(AreaObjectBreakHost.Interrupts(SessionObjectHostSteps.ObjectBroken));
+        Assert.IsFalse(AreaObjectBreakHost.Interrupts(SessionObjectHostSteps.BustScript | SessionObjectHostSteps.ObjectDestroyed));
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, Container, 30001, 830);
+            var probe = new Probe();
+            var (host, traps) = Hosts(session, content, probe, true, chest);
+            var seen = new List<string>();
+            var steps = SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.ObjectBroken;
+            var ran = AreaObjectBreakHost.Run(host, traps, chest, steps, true, false, session.Rules.Scripts, interrupt: () => seen.Add($"interrupt:trap={probe.Order.Count}:bust={host.GlobalFlag(BustFlag)}"));
+            CollectionAssert.AreEqual(new[] { "interrupt:trap=1:bust=False" }, seen, "the trap ran, the BUST script did not yet");
+            Assert.IsTrue(host.GlobalFlag(BustFlag));
+            Assert.IsNotNull(ran.Bust?.Run);
+            seen.Clear();
+            AreaObjectBreakHost.Run(host, traps, chest, SessionObjectHostSteps.BustScript, true, false, session.Rules.Scripts, interrupt: () => seen.Add("x"));
+            Assert.AreEqual(0, seen.Count, "no step, no interrupt");
+        });
+    }
+
     // ARC-SCRIPT-2620 (OD7-OD11, BS3c): the end of the runs follows the destroy step only: a bust, a witness, a sound or the trap alone end nothing.
     [TestMethod]
     public void Only_the_object_destroyed_step_ends_the_runs_of_a_break()

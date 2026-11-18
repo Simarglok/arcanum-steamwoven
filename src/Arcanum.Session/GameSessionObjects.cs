@@ -190,6 +190,9 @@ public enum SessionObjectHostSteps
     /// <summary>ARC-SCRIPT-2620 (ledger OD7–OD11, BS3c, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): the break destroyed a scenery, trap or container (a busted one broken again, a trap with no destroyed art, a container that spilled): the host ends the object's goal runs and tells its spell runs,
     /// as a script's destroy does. A door or window is not named (the door host owns its runs); an item is deleted, not destroyed.</summary>
     ObjectDestroyed = 1 << 7,
+    /// <summary>ARC-SCRIPT-2646 (ledger OD7, BS3c, 0x43F1C0 → 0x424070): a break of a container, scenery or trap starts with the per-owner interrupt of the object's goal runs at level 5, whatever branch follows: a scenery's loop (goal 1 or 77, priority 1)
+    /// ends, its overlays (no-interrupt goals) stay. The host runs it before the BUST script and, for a destroying break, before the kill that <see cref="ObjectDestroyed"/> names. A door or window is not named (the door host owns its runs, issue #2669).</summary>
+    ObjectBroken = 1 << 8,
 }
 
 /// <summary>
@@ -707,6 +710,7 @@ public sealed partial class GameSessionOwner
     {
         if (!hit.Broken) return SessionObjectHostSteps.WitnessesHearAttack;
         var steps = SessionObjectHostSteps.WitnessesHearBreak;
+        if (baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectBroken;
         if (baseline.Trapped) steps |= SessionObjectHostSteps.TrapFires;
         if (!kept && hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled && baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectDestroyed;
         return steps | hit.Break switch

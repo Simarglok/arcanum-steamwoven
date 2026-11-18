@@ -62,14 +62,18 @@ public partial class TerrainViewerApp
     {
         // ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs below take their own).
         if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost && gateHost.TakeBreakDestroyRun() is { } destroyRun) Awarded(gateHost, destroyRun);
-        RunObjectBreakScripts(row, steps, byHero, ranged, breaker);
-        // ARC-SCRIPT-2620 (OD7–OD11, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): a scenery, trap or container the break destroyed ends its goal runs and tells its spell runs, as a script's destroy does (the trap fired before the break, the sound plays after).
+        // ARC-SCRIPT-2646 (OD7, 0x43F1C0 → 0x424070): the break first interrupts the object's goal runs at level 5, after the trap and before the BUST script.
+        var interrupted = false;
+        void Interrupt() { if (interrupted) return; interrupted = true; InterruptBrokenObjectRuns(row); }
+        RunObjectBreakScripts(row, steps, byHero, ranged, breaker, Interrupt);
+        if (AreaObjectBreakHost.Interrupts(steps)) Interrupt();
+        // ARC-SCRIPT-2620 (OD7–OD11, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): a scenery, trap or container the break destroyed ends its goal runs and tells its spell runs, as a script's destroy does (the trap fired before the break, the interrupt first).
         if (AreaObjectBreakHost.EndsRuns(steps) && ShownObjectRef(row) is { } destroyed) EndDestroyedObjectRuns(destroyed);
         // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.
         PlayObjectBreakSounds(row, steps);
     }
 
-    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
+    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null, Action? interrupt = null)
     {
         if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
         if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
@@ -78,7 +82,7 @@ public partial class TerrainViewerApp
         var outer = _objectBreakRunning;
         _objectBreakRunning = true;
         AreaObjectBreakRun ran;
-        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts, breaker); }
+        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts, breaker, interrupt); }
         finally { _objectBreakRunning = outer; }
         if ((ran.Bust ?? ran.TrapScript) is { } scripted) Awarded(host, scripted);
         if (!ran.Any) return;

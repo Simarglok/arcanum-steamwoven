@@ -197,6 +197,8 @@ public partial class TerrainViewerApp
             // ARC-WORLD-1157 (SZ6): a generator's off-screen option reads the game window and the generator's drawn rectangle.
             Screen = () => new RestockScreen(this),
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
+            // ARC-AI-2673 (ledger DSV5): an NPC's repair of an item the PC holds; a kit item's baseline lives in the hero load, not in the session.
+            HeroItemCondition = entity => _inventoryHost?.RepairBaseline(session, entity, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
             // ARC-DEV-287 (MIG13 tail T6): the hero is pushed by the knockback through its grid actor.
             HeroPush = new ViewerHeroPush(this),
