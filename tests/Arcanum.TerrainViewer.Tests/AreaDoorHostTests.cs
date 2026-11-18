@@ -235,6 +235,18 @@ public sealed class AreaDoorHostTests
     }
 
     [TestMethod]
+    public void ABreakDuringTheClosingOfAMagicallyHeldDoorEndsTheRunButDoesNotSnapItShut()
+    {
+        using var f = Open(flagsA: LockRules.MagicallyHeldBit);
+        f.Host.Open(f.A, "hero");
+        for (var i = 0; i < 400 && !(f.Host.GoalOf(f.A) == GoalType.AnimateDoorClosed && f.FrameOf(f.A) == 2); i++) f.Step.AdvanceHost(20);
+        if (f.Host.GoalOf(f.A) != GoalType.AnimateDoorClosed) { Assert.Inconclusive("a held door has no closing run here"); return; }
+        var frame = f.FrameOf(f.A);
+        Assert.IsTrue(f.Host.ObjectBroken(DoorA));
+        Assert.AreEqual(frame, f.FrameOf(f.A), "0x42B6F0 closes only a door that is not held");
+    }
+
+    [TestMethod]
     public void ABreakLeavesAnotherDoorsRunsAndAnEntityThatIsNotADoorAlone()
     {
         using var f = Open();

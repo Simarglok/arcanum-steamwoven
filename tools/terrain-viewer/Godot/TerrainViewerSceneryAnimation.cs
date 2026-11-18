@@ -62,7 +62,7 @@ public partial class TerrainViewerApp
         var shownMap = new SessionMapId(area.Snapshot.RuntimeMap);
         _sceneryHost.RestartBroken(entity => session.QueryObjectCondition(shownMap, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Whole);
         RetryPendingRunEnds();
-        _areaDoors?.RetryPending();
+        if (_areaDoors is { } retryDoors && ReferenceEquals(retryDoors.Session, session)) retryDoors.RetryPending();
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
         SyncCreatedSceneryLoops(session, _sceneryHost);
         changed |= _sceneryHost.TakeChanged();
@@ -113,7 +113,7 @@ public partial class TerrainViewerApp
             foreach (var owner in new[] { obj.Code, castId }.Where(o => o is not null).Distinct())
                 ended |= EndRunsOfOwner(session, owner!, kill: false);
         }
-        GD.Print($"ARC-SCRIPT-2646 object-broken object={obj.Code} loop-ended={ended}");
+        GD.Print($"ARC-SCRIPT-2646 object-broken object={obj.Code} runs-ended={ended}");
     }
 
     // The scenery host's own retry is not there when the host belongs to a replaced session: a refusal for a pass in progress is tried again on the next frames.

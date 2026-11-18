@@ -191,7 +191,7 @@ public enum SessionObjectHostSteps
     /// as a script's destroy does. A door or window is not named (the door host owns its runs); an item is deleted, not destroyed.</summary>
     ObjectDestroyed = 1 << 7,
     /// <summary>ARC-SCRIPT-2646, ARC-SCRIPT-2669 (ledger OD7, BS3c, 0x43F1C0 → 0x424070): a break of a container, scenery, trap, door or window starts with the per-owner interrupt of the object's goal runs at level 5, whatever branch follows: a scenery's loop (goal 1 or 77, priority 1)
-    /// ends, its overlays (no-interrupt goals) stay; a door's runs (70, 71, 72, priority 3) end, its attempt goals (12, 50, no-interrupt) stay. The host runs it before the BUST script and, for a destroying break, before the kill that <see cref="ObjectDestroyed"/> names (the door host owns a door's runs).</summary>
+    /// ends, its overlays (no-interrupt goals) stay; a door's runs (70, 71, 72, priority 3) end, its attempt goals (12, 50) are the opener's runs and no-interrupt. The host runs it before the BUST script and, for a destroying break, before the kill that <see cref="ObjectDestroyed"/> names (the door host owns a door's runs).</summary>
     ObjectBroken = 1 << 8,
 }
 

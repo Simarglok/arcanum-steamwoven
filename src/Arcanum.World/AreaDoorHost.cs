@@ -106,7 +106,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     /// <summary>
     /// ARC-SCRIPT-2669 (ledger OD7, BS3c, 0x43F1C0 → 0x424070, rule 0x44E2C0): a break of a door or window that is not already destroyed starts with the interrupt of the object's goal runs at level 5, before the type dispatch (0x4F06E0), so before the BUST script.
     /// The door's runs (70 opening, 72 pending close, 71 closing) have priority 3 and are not no-interrupt, so the walk ends them in slot order; a closing that was cut short snaps the door shut by its end node (0x42B6F0, as any interrupt of it does), an
-    /// opening or a pending close leaves it where it stands. The attempt goals 12 and 50 are no-interrupt and stay. A call the session refuses for a pass in progress is tried again by <see cref="RetryPending"/>. True when a run of the door ended.
+    /// opening or a pending close leaves it where it stands. The attempt goals 12 and 50 are no-interrupt and belong to the opener, not the door, so they are not on this owner. A call the session refuses for a pass in progress is tried again by <see cref="RetryPending"/>. True when a run of the door ended.
     /// </summary>
     public bool ObjectBroken(string entity)
     {
