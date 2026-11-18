@@ -2582,7 +2582,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private string LineOfFireStruck(string id, string target)
     {
         if (Distance(id, target) <= 1 || Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return target;
-        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        var trace = ShooterTrace(id, from, to, map);
         if (trace.Blocker is not { Type: 15 or 16 } blocker || blocker.Key == Key(target)) return target;
         var other = AreaConversationState.EntityId(blocker);
         // The host must know where the blocker stands (a critter it neither walks nor runs as a companion would be hit point-blank with no line of its own).
@@ -2631,7 +2631,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool HitBlockingObject(string id, string target)
     {
         if (_scene.ObjectTarget is not { } objectOf || Distance(id, target) <= 1 || Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return false;
-        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        var trace = ShooterTrace(id, from, to, map);
         if (trace.Blocker is not { } blocker || blocker.Type is 15 or 16 || blocker.Key == Key(target) || blocker.WorldX is not { } bx || blocker.WorldY is not { } by) return false;
         AreaObjectAttackTarget? info = null;
         // A wall (type 0) is struck without a target; another blocker must be an object the session damages (an item or a projectile keeps the target, whose check the blocked line fails).
@@ -2785,7 +2785,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-MAGIC-1188: the damage step's item events (the NPC's worn items fire as any attacker's, 0x4B4390) through the cast host's trigger host.
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
-            LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
+            LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(id, from, to, Key(target), map) : null,
             Flight = flight,
             // ARC-COMBAT-1942 (0x4B2210): the backstab bit is built for the clicked target (a bed is no PC or NPC) before 0x4B3170 retargets, so an occupant pulled out of a bed is no backstab.
             Backstab = inBed ? null : BackstabFacts(id, target),
@@ -3440,7 +3440,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Struck = struck is { Who: { } who } && who != Pc ? Build(who) : null,
             StruckHero = hero,
             StruckCell = struck?.Cell,
-            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : LocationLine(from, tile),
+            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(id, from, s.Cell, s.Key, map) : LocationLine(id, from, tile),
             // ARC-COMBAT-2523 (TW11): a throw that names no struck critter rolls as a throw at the location: the light of the tile and the line of fire's cost are its terms.
             TargetLight = Math.Clamp(CellLight(tile), 0, AttackRules.MaxLightLevel),
             ThrowerWorn = _scene.Combat.WornItems(_session, id),
@@ -3508,21 +3508,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// the item then lands on the tile, striking nothing.</summary>
     private (string Who, CellCoord Cell, AreaObjectKey? Key)? StruckAt(string id, CellCoord from, CellCoord tile)
     {
-        if (_scene.LineOfFire?.Invoke() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, _session.Rules.Combat).Blocker is { } row)
+        if (_scene.LineOfFire?.Invoke() is { } map && ShooterTrace(id, from, tile, map).Blocker is { } row)
             return EntityOf(row.Key) is { } blocker && blocker != id && Tile(blocker) is { } at && !DeadCritter(blocker)
                 && (Walks(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
         return null;
     }
 
     // ARC-COMBAT-2523 (TW11): the line of fire to a throw's location with no struck critter (the blocker, if any, is no living critter, or it would be the struck one): its cost, never blocked, as the hero's.
-    private SessionLineOfFire LocationLine(CellCoord from, CellCoord to) =>
-        new(from != to && _scene.LineOfFire?.Invoke() is { } map ? Math.Min(LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat).Cost, AttackResolver.MaxMagnitude) : 0, false);
+    private SessionLineOfFire LocationLine(string id, CellCoord from, CellCoord to) =>
+        new(from != to && _scene.LineOfFire?.Invoke() is { } map ? Math.Min(ShooterTrace(id, from, to, map).Cost, AttackResolver.MaxMagnitude) : 0, false);
 
     // The line of fire to the struck critter's cell as the check reads it (the hero's attack's SessionLineOfFire): its cost and whether
     // an object other than the struck one stops it.
-    private SessionLineOfFire LineTo(CellCoord from, CellCoord to, AreaObjectKey? struck, ILineOfFireMap<AreaObjectRecord> map)
+    private SessionLineOfFire LineTo(string id, CellCoord from, CellCoord to, AreaObjectKey? struck, ILineOfFireMap<AreaObjectRecord> map)
     {
-        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        var trace = ShooterTrace(id, from, to, map);
         return new(Math.Min(trace.Cost, AttackResolver.MaxMagnitude), trace.Blocker is { } b && b.Key != struck);
     }
 
@@ -4387,6 +4387,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return (stood.OffsetX, stood.OffsetY);
     }
 
+    /// <summary>ARC-COMBAT-1934: the pixel offset a shooter's or caster's line of fire starts at (<see cref="ObserverOffset"/>); (0, 0) for the hero and an NPC this host does not walk.</summary>
+    public (int X, int Y) ShooterOffset(string id) => ObserverOffset(id);
+
     public AwarenessResult Hear(string observer, string target, Loudness loudness)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
@@ -4669,7 +4672,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         targetRow = TryNpc(target, out var npc) ? npc.Row : null;
         if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return null;
-        return LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        return ShooterTrace(id, from, to, map);
+    }
+
+    /// <summary>ARC-COMBAT-1934 (0x4ADE00, ledger RA7, AW18, VC56): the line of fire of an attack or throw starts at the shooter's tile screen point plus the shooter's own pixel offset
+    /// (<see cref="ObserverOffset"/>, as the sight and sound lines): a non-zero offset shifts the whole trace, so it can name another blocker or a different cover sum. The hero and an NPC
+    /// the host does not walk stand at their cell centre (0, 0).</summary>
+    private LineOfFireTrace<AreaObjectRecord> ShooterTrace(string id, CellCoord from, CellCoord to, ILineOfFireMap<AreaObjectRecord> map)
+    {
+        var (offsetX, offsetY) = ObserverOffset(id);
+        return LineOfFireRules.Trace(from, offsetX, offsetY, to, map, _session.Rules.Combat);
     }
 
     private CellCoord ToChart(CellCoord world) => _scene.Chart.ToChart(new AreaStepCell(world.X, world.Y));

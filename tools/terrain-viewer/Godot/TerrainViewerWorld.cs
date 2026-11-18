@@ -983,12 +983,12 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
         if (TryAreaTalk(screen, shift)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
-        if (TryAreaUse(screen)) { SetObjectApproachGait(); return; }
+        if (TryAreaUse(screen, shift)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
-        if (TryAreaPortalUse(screen, alt)) { SetObjectApproachGait(); return; }
+        if (TryAreaPortalUse(screen, alt, shift)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
         // ARC-INPUT-1946: the Alt action (immediate) builds no goal, so it sets no approach gait.
-        if (TryAreaInventoryClick(screen, alt, out var immediate)) { if (!immediate) SetObjectApproachGait(); return; }
+        if (TryAreaInventoryClick(screen, alt, shift, out var immediate)) { if (!immediate) SetObjectApproachGait(); return; }
         var chart = _canvas!.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
