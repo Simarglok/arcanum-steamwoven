@@ -60,6 +60,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
     {
+        // ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs below take their own).
+        if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost && gateHost.TakeBreakDestroyRun() is { } destroyRun) Awarded(gateHost, destroyRun);
         // ARC-SCRIPT-2646 (OD7, 0x43F1C0 → 0x424070): the break first interrupts the object's goal runs at level 5, after the trap and before the BUST script.
         var interrupted = false;
         void Interrupt() { if (interrupted) return; interrupted = true; InterruptBrokenObjectRuns(row); }

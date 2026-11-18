@@ -351,9 +351,9 @@ public sealed partial class GameSessionOwner
         if (_revision >= long.MaxValue) return RejectDamage(GameSessionFailure.RevisionExhausted);
         if (target.Baseline is { Kind: DamageableObjectKind.Scenery, Respawning: true } && !RespawnFits()) return RejectDamage(GameSessionFailure.EventBudgetExceeded);
         var hit = ObjectDamageRules.Hit(Facts(target.Baseline, state.Condition), state.Damage, Math.Min(amount, ItemDurabilityLimits.MaxDamageStep));
-        var write = ObjectWrite(target, hit);
+        var write = ObjectWrite(target, hit, out var kept);
         if (write.Disposition == GameSessionDisposition.Rejected) return RejectDamage(write.Failure);
-        var host = HostSteps(target.Baseline, hit);
+        var host = HostSteps(target.Baseline, hit, kept);
         if (!attacked) host &= ~(SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, hit, host, Version);
     }
@@ -510,12 +510,12 @@ public sealed partial class GameSessionOwner
             var state = ObjectState(struck);
             var facts = Facts(struck.Baseline, state.Condition);
             hit = ObjectDamageRules.Hit(facts, state.Damage, amount);
-            var write = ObjectWrite(struck, hit);
+            var write = ObjectWrite(struck, hit, out var kept);
             if (write.Disposition == GameSessionDisposition.Rejected)
                 return new(Disposition(changed), GameSessionFailure.None, resolution, hit, null, null, null, SessionObjectHostSteps.None, write.Failure, Version)
                 { Ammunition = ammunition, Shots = flying };
             broken = hit.Broken;
-            host = HostSteps(struck.Baseline, hit);
+            host = HostSteps(struck.Baseline, hit, kept);
         }
         else
         {
@@ -569,8 +569,9 @@ public sealed partial class GameSessionOwner
         seed.HolderOf.TryGetValue(item, out var holder) ? SpillCell(map, seed, holder) : null;
 
     [OriginalFunction(0x463730, OriginalFunctionScope.Partial)]
-    private GameSessionMutationResult ObjectWrite(SessionObjectTarget target, ObjectHitOutcome hit)
+    private GameSessionMutationResult ObjectWrite(SessionObjectTarget target, ObjectHitOutcome hit, out bool kept)
     {
+        kept = false;
         var condition = hit.Break switch
         {
             ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled => SessionObjectCondition.Destroyed,
@@ -581,8 +582,6 @@ public sealed partial class GameSessionOwner
         var edits = new List<MapChangeEdit>
         {
             new(target.Map, MapChangeKey.ForEntity(target.Entity, ObjectDamageProperty), hit.DamageAfterBreak),
-            new(target.Map, MapChangeKey.ForEntity(target.Entity, ObjectConditionProperty),
-                condition == SessionObjectCondition.Whole ? null : (long)condition | (hit.Break == ObjectBreak.ContainerSpilled ? SpillValue(target.Baseline.Cell) : 0)),
         };
         // A busted window: the lock domain's busted bit on frame 0, as SetOpenableBusted writes it (ledger LK12).
         if (hit.Break == ObjectBreak.WindowBusted && target.Baseline.Openable is { } openableBaseline)
@@ -607,6 +606,27 @@ public sealed partial class GameSessionOwner
             walk = SpillWalk(planSeed, planned, target.Map, target.Baseline.Cell, out var refusal);
             if (walk is null) return new(GameSessionDisposition.Rejected, refusal, Version);
         }
+        // ARC-SCRIPT-2644 (TD2): the destroy branches of the break call the object destroy (0x43CCA0), whose destroy point (2) can answer 0: the object then stays as it was
+        // (a container has spilled all the same, its items are on the ground, and the sound or eye candy still plays).
+        var beforeGate = ObjectState(target);
+        var mayDestroy = BreakMayDestroy(target, hit);
+        // The destroy point may itself hurt, spill or destroy its own object (its nested break wrote the state already): the planned hit and walk are stale then, so the outer break writes nothing more.
+        if (ObjectState(target) != beforeGate)
+        {
+            kept = ObjectState(target).Condition != SessionObjectCondition.Destroyed;
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+        }
+        if (!mayDestroy)
+        {
+            kept = true;
+            condition = beforeGate.Condition;
+        }
+        // The kept container is no spilled one: its seed items lie loose where the break dropped them (the item.dropped change, as the script destroy of a container writes it).
+        if (kept && walk is not null)
+            foreach (var step in walk)
+                if (step.Fate == SpillFate.Seed) edits.Add(new(target.Map, MapChangeKey.ForEntity(step.Entity, ItemDroppedProperty), DroppedValue(target.Baseline.Cell)));
+        edits.Add(new(target.Map, MapChangeKey.ForEntity(target.Entity, ObjectConditionProperty),
+            condition == SessionObjectCondition.Whole ? null : (long)condition | (hit.Break == ObjectBreak.ContainerSpilled && !kept ? SpillValue(target.Baseline.Cell) : 0)));
         var applied = ApplyChanges(Version, null, edits);
         // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7);
         // ARC-WORLD-063: one by one, the last first (0x463730 walks the list down), so from the second item on they gather into a
@@ -686,13 +706,13 @@ public sealed partial class GameSessionOwner
             _events.Count < _events.Limits.MaxPending && _events.NextSequence < long.MaxValue && now <= long.MaxValue - SessionEventKinds.MaxRespawnDelayMs;
     }
 
-    private static SessionObjectHostSteps HostSteps(SessionObjectBaseline baseline, ObjectHitOutcome hit)
+    private static SessionObjectHostSteps HostSteps(SessionObjectBaseline baseline, ObjectHitOutcome hit, bool kept = false)
     {
         if (!hit.Broken) return SessionObjectHostSteps.WitnessesHearAttack;
         var steps = SessionObjectHostSteps.WitnessesHearBreak;
         if (baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectBroken;
         if (baseline.Trapped) steps |= SessionObjectHostSteps.TrapFires;
-        if (hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled && baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectDestroyed;
+        if (!kept && hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled && baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectDestroyed;
         return steps | hit.Break switch
         {
             ObjectBreak.WindowBusted or ObjectBreak.SceneryRespawns => SessionObjectHostSteps.BustScript,
