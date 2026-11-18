@@ -993,6 +993,8 @@ public partial class TerrainViewerApp
                     FloatObjectDamage(hit.Id, row, AreaCombatFloaters.Of(hit));
                     RunObjectBreakSteps(row, hit.Host, false, false);
                 }
+                // ARC-SCRIPT-2722: an item with no map row has no break steps to run; show the destroy point's run its gate left (the host runs the point only for an item of the shown map's rows, so this is rare and drains a stale run).
+                else if (_readyArea is { } itemArea && UseScriptHost(itemArea.Snapshot) is { } itemHost && itemHost.TakeBreakDestroyRun() is { } itemRun) TakeBreakRunOutput(itemHost, hit.Id, itemRun, "destroy point");
             }
         }
         if (!any) return;
