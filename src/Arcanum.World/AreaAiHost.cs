@@ -103,6 +103,9 @@ public sealed record AreaAiScene
     public Func<IAreaRestockScreen?>? Screen { get; init; }
     /// <summary>The hero's worn items with their durability values, or null.</summary>
     public Func<IReadOnlyDictionary<EquipmentSlot, SessionWearItem>?>? HeroWorn { get; init; }
+    /// <summary>ARC-AI-2673 (ledger DSV5): the condition baseline (hp_pts, hp_adj, hp_damage, destroyed bits) of an item the PC holds: a kit item's comes from the hero load (the viewer's kit durability), a taken or made item's from its own fields
+    /// (<see cref="AreaInventoryHost.RepairBaseline"/>); null for an item the PC does not hold. An NPC's repair of such an item reads it. Null provider: the PC's items are not repairable by an NPC.</summary>
+    public Func<string, ItemCondition?>? HeroItemCondition { get; init; }
     /// <summary>The NPC the hero talks with, or null.</summary>
     public Func<string?>? ConversationPartner { get; init; }
     /// <summary>ARC-DEV-177 (MIG13 S11e): the dialog-end callback the AI gate calls (0x5678D0 through 0x5F848C): the viewer ends the PC's conversation with this NPC at its next safe point (in the viewer a barter has already closed the dialog, so nothing is open to end).</summary>
@@ -2637,10 +2640,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var struck = info?.Object;
         if (Build(id) is not { } attacker) return null;
         var weapon = WieldedPrototype(id);
+        // ARC-COMBAT-2538 (RH5): the victim a script names: the object's entity, or a wall's row (a wall's scripts are offered like any struck object's).
+        var victim = struck?.Entity ?? (info is null ? AreaUseScriptHost.EntityId(blocker) : null);
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck), HitScripts = HitScriptsOf(id, struck?.Entity),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim),
         });
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2652,7 +2657,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var shot in result.Shots)
             if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
             {
-                if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                if (LandShotOnObject(id, shot, struck, struck is null, blocker) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
                 _session.EndShot(shot);
             }
         return result;
@@ -2717,22 +2722,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result is { Disposition: not GameSessionDisposition.Rejected } && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
-    private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>
-        _scene.TakingDamage is { } asks && target is not null ? () => asks(target.Entity, attacker) : null;
+    private Func<bool>? TakingDamageOfObject(string attacker, string? victim) =>
+        _scene.TakingDamage is { } asks && victim is not null ? () => asks(victim, attacker) : null;
 
     /// <summary>
     /// ARC-COMBAT-1140 (PF8, RH5, OD1–OD5; tail T4e): an arrow or bullet of <paramref name="shooter"/> reached an object it met: the one the shot was decided for (<see cref="HitBlockingObject"/>) takes the carried hit, another
     /// object or wall past its destination a forced hit (<see cref="GameSessionOwner.LandNpcShotOnObject"/>); the object's taking-damage script is asked with the shooter as the attacker. A door, window, container,
-    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
+    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>), named by its row <paramref name="wallRow"/> for the scripts it is offered (ARC-COMBAT-2538: the weapon's hit scripts and the wall's
+    /// taking-damage script, as for any struck object). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
     /// Null when the shooter has no combat values (the shot is gone either way).
     /// </summary>
-    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
+    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall, AreaObjectRecord? wallRow = null)
     {
+        // ARC-COMBAT-2538 (RH5): a wall's row names it for the hit scripts and its taking-damage script (a wall without a row offers none).
+        var victim = target?.Entity ?? (wall && wallRow is not null ? AreaUseScriptHost.EntityId(wallRow) : null);
         if (Build(shooter) is not { } attacker) { EndStruckShot(shot); return null; }
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, target), HitScripts = HitScriptsOf(shooter, target?.Entity),
+            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim),
         });
         EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
@@ -3243,8 +3251,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-AI-2622 (0x4C7160, repair case 12): the NPC repairs the item the goal names with the session's <see cref="GameSessionOwner.RepairByNpc"/>, on the item's own fields: an item it holds or one lying loose on the shown map
     /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>). The answer is the case's success, which sets the run's flag 0x40000. The original's repair has no target test, so a critter or a scenery target would be
-    /// "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). NOT READY: an item in a junk pile, an item of another holder (the hero's, another NPC's), the swap of a ground item's drawn art
-    /// after a master's broken-art clear, and the repair UI callbacks of the local player.
+    /// "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). NOT READY: an item in a junk pile, an item of another NPC, the swap of a ground item's drawn art
+    /// after a master's broken-art clear, and the repair UI callbacks of the local player. The items the PC holds (kit, taken, made) are repaired through <see cref="AreaAiScene.HeroItemCondition"/> (ARC-AI-2673).
     /// </summary>
     private bool RepairAttempt(string id, string target)
     {
@@ -3259,13 +3267,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
 
-    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds or one lying loose on the shown map; null for any other target.
+    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds, one lying loose on the shown map, or (ARC-AI-2673) one the PC holds, whose baseline the viewer
+    // supplies (a kit item's lives in the hero load, not in the session); null for any other target.
     private ItemCondition? RepairBaseline(string id, string target)
     {
         var fields = _scene.Combat.HeldItemFields(_session, id, target);
         if (fields is null && GroundView()?.Ground.FirstOrDefault(ground => ground.Item.Entity == target) is { } lying && !_session.IsItemDestroyed(target))
             fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying.Item);
-        return fields is null ? null : SessionItemConditions.FromCombatFields(fields);
+        return fields is null ? _scene.HeroItemCondition?.Invoke(target) : SessionItemConditions.FromCombatFields(fields);
     }
 
     /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>

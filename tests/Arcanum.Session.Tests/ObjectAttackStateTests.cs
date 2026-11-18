@@ -198,7 +198,7 @@ public sealed class ObjectAttackStateTests
         var statue = Target("statue", DamageableObjectKind.Scenery, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = statue });
         Assert.AreEqual(ObjectBreak.SceneryBusted, busted.Object!.Break);
-        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound, busted.Host);
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.ObjectBroken | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound, busted.Host);
         Assert.AreEqual(new SessionObjectState(6, 0, SessionObjectCondition.Busted), owner.QueryObject(statue), "damage set to the maximum");
         var again = owner.AttackObject(owner.Version, new() { Target = statue });
         Assert.AreEqual(DamagePrevention.Invulnerable, again.Resolution!.Damage!.Prevented, "a busted scenery is invulnerable");
@@ -227,7 +227,7 @@ public sealed class ObjectAttackStateTests
     {
         using var owner = Owner();
         var plain = BreakIt(owner, new() { Target = Target("trap-a", DamageableObjectKind.Trap) });
-        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.ObjectDestroyed), (plain.Object!.Break, plain.Host));
+        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.ObjectBroken | SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.ObjectDestroyed), (plain.Object!.Break, plain.Host));
         var art = Target("trap-b", DamageableObjectKind.Trap, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = art });
         Assert.AreEqual(ObjectBreak.TrapBusted, busted.Object!.Break);

@@ -126,12 +126,17 @@ public sealed class AreaAiShotTests
         private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
         public bool Contains(CellCoord tile) => tile.X >= 0 && tile.Y >= 0 && tile.X < 32 && tile.Y < 32;
         public CellCoord? Step(CellCoord from, int rotation) => new CellCoord(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y) is var next && Contains(next) ? next : null;
-        public IEnumerable<LineOfFirePiece<AreaObjectRecord>> Edge(CellCoord tile, int edge) => [];
-        public IEnumerable<LineOfFireObject<AreaObjectRecord>> Objects(CellCoord tile) => blocker is not null && tile == BystanderCell ? [new(blocker, false, 0)] : [];
+        // A wall (type 0) is an edge piece of the bystander's tile that stops the line (ARC-COMBAT-2538); any other blocker is an object on the tile.
+        public IEnumerable<LineOfFirePiece<AreaObjectRecord>> Edge(CellCoord tile, int edge) => blocker is { Type: 0 } && tile == BystanderCell ? [new(blocker, LineOfFirePieceKind.Solid, 0)] : [];
+        public IEnumerable<LineOfFireObject<AreaObjectRecord>> Objects(CellCoord tile) => blocker is { Type: not 0 } && tile == BystanderCell ? [new(blocker, false, 0)] : [];
     }
 
     // ARC-COMBAT-1140: a container (type 2) on the bystander's cell that stops the line of fire.
     private static AreaObjectRecord Chest() => new(Key(5), 0, 2, 9999, "p", "p", "r", "s", AreaScope.Core, null, BystanderCell.X, BystanderCell.Y,
+        Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+
+    // ARC-COMBAT-2538: a wall (type 0) on the bystander's cell that stops the line of fire.
+    private static AreaObjectRecord Wall() => new(Key(6), 0, 0, 9999, "p", "p", "r", "s", AreaScope.Core, null, BystanderCell.X, BystanderCell.Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
 
     private static AreaObjectAttackTarget ChestTarget(AreaObjectRecord row, int points = 6) => new("sector:1:5", row, DamageableObjectKind.Container,
@@ -146,7 +151,7 @@ public sealed class AreaAiShotTests
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
         IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true,
         bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, ISessionItemScriptHost? itemScripts = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null,
-        int[]? slabRows = null, long bowToHit = 0)
+        int[]? slabRows = null, long bowToHit = 0, Action<string, string, SessionHitScriptEvent>? hitScripts = null, Func<string, string?, bool>? takingDamage = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -190,7 +195,7 @@ public sealed class AreaAiShotTests
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST") { MinimumCell = -64, MaximumCell = 127 }, Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0, null, faction), NpcCell), new(Entity(3), Npc(3, BystanderCell, faction), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
             LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander && bystanderOnLine ? () => new Line(Npc(3, BystanderCell)) : null,
-            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck, LootWindowOpen = lootWindowOpen, ItemScripts = itemScripts is null ? null : () => itemScripts,
+            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck, HitScripts = hitScripts, TakingDamage = takingDamage, LootWindowOpen = lootWindowOpen, ItemScripts = itemScripts is null ? null : () => itemScripts,
         };
         // ARC-AI-1139: the restock host answers the NPC wield the AI gate's re-wield asks for (no barter data: the map's own rows are the items).
         var restock = new AreaRestockHost(session, inventory, null, new NoScreen());
@@ -458,6 +463,44 @@ public sealed class AreaAiShotTests
         Assert.IsTrue(session.QueryObject(target.Object!).Damage > 0);
         Assert.AreEqual(0, session.QueryShotsInFlight().Count);
         Assert.AreEqual(heroHp, session.QueryHeroLife()!.Status.HitPoints);
+    }
+
+    // ARC-COMBAT-2538 (RH5): a wall that stops the line of fire is struck without a roll and offers the weapon's hit scripts and its own taking-damage script, named by the wall's row, as the hero's strike on a wall does; the
+    // arrow's strike (LandShotOnObject with the wall's row) offers them once more, at the landing, and a wall takes nothing whatever the script answers.
+    [TestMethod]
+    public void A_wall_in_the_line_of_fire_is_offered_the_hit_scripts_and_the_taking_damage_script()
+    {
+        var wall = Wall();
+        var wallEntity = AreaUseScriptHost.EntityId(wall);
+        var hits = new List<(string Attacker, string Victim, SessionHitScriptEvent Hit)>();
+        var asked = new List<(string Victim, string? Attacker)>();
+        var launched = new List<SessionShot>();
+        var (session, host, npc, _) = Open((_, _, _, _, _) => true, blockerRow: wall, objectTarget: _ => null, launchAtObject: (_, _, shot, _, _) => { launched.Add(shot); return true; },
+            hitScripts: (attacker, victim, hit) => hits.Add((attacker, victim, hit)), takingDamage: (victim, attacker) => { asked.Add((victim, attacker)); return false; });
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual(0, hits.Count + asked.Count, "a shot that flies asks at its strike");
+
+        var landed = host.LandShotOnObject(npc, launched[0], null, wall: true, wallRow: wall);
+        Assert.AreEqual(DamagePrevention.Wall, landed?.Resolution?.Damage?.Prevented, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual(1, hits.Count);
+        Assert.AreEqual((npc, wallEntity), (hits[0].Attacker, hits[0].Victim));
+        Assert.IsTrue(hits[0].Hit.Projectile);
+        Assert.AreEqual(1, asked.Count);
+        Assert.AreEqual((wallEntity, (string?)npc), asked[0]);
+        Assert.IsFalse(landed!.Vetoed, "a wall takes nothing whatever the script says");
+    }
+
+    [TestMethod]
+    public void A_wall_struck_at_once_is_offered_the_scripts_and_a_wall_with_no_row_none()
+    {
+        var wall = Wall();
+        var hits = new List<string>();
+        var asked = new List<string>();
+        var (_, host, npc, _) = Open((_, _, _, _, _) => true, blockerRow: wall, objectTarget: _ => null, hitScripts: (_, victim, _) => hits.Add(victim), takingDamage: (victim, _) => { asked.Add(victim); return true; });
+        for (var attempt = 0; attempt < 5 && hits.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual((1, 1), (hits.Count, asked.Count), host.TraceOf(npc)?.Hit);
+        Assert.AreEqual((AreaUseScriptHost.EntityId(wall), AreaUseScriptHost.EntityId(wall)), (hits[0], asked[0]));
     }
 
     [TestMethod]
