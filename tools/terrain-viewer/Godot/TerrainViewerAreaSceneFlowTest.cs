@@ -83,7 +83,8 @@ public partial class TerrainViewerApp
             Require(!MainMenuOpen && _mainMenu is null, "no menu at a launch without --main-menu");
             var running = _areaSession;
             // ARC-INPUT-1124 (main loop 0x401705, key up): the press alone opens nothing, the release opens the menu; a release with no press
-            // before it (taken by another owner) opens nothing; the menu's own Escape press closes it and its release does not reopen it.
+            // before it (taken by another owner) opens nothing. ARC-INPUT-2647 (menu handler 0x546EE0, key up, ledger SF6): the menu's own
+            // Escape press does nothing, its release closes the menu and is not passed on, so it does not reopen it.
             static InputEventKey EscapeEvent(bool pressed, bool echo = false) => new() { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = pressed, Echo = echo };
             InputWorld(EscapeEvent(true));
             Require(!MainMenuOpen && _mainMenu is null, "an Escape press alone opened the menu (the original acts on the release)");
@@ -92,9 +93,11 @@ public partial class TerrainViewerApp
             InputWorld(EscapeEvent(false));
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay, "the Escape release opened the in-play menu");
             InputWorld(EscapeEvent(true));
-            Require(!MainMenuOpen && _mainMenu is null, "the menu's own Escape press closed it");
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay, "the menu's own Escape press closed it (the original acts on the release)");
+            InputWorld(EscapeEvent(true, echo: true));
+            Require(MainMenuOpen, "an Escape echo closed the menu");
             InputWorld(EscapeEvent(false));
-            Require(!MainMenuOpen && _mainMenu is null, "the release of the closing press reopened the menu");
+            Require(!MainMenuOpen && _mainMenu is null, "the menu's own Escape release did not close it, or the release reopened the menu");
             InputWorld(EscapeEvent(false));
             Require(!MainMenuOpen && _mainMenu is null, "a release with no press before it opened the menu");
             InputWorld(EscapeEvent(true)); InputWorld(EscapeEvent(false));
@@ -119,7 +122,9 @@ public partial class TerrainViewerApp
             // Load Game: closing the window unused brings the in-play window back.
             InventoryKey(Key.Escape); Letter('l');
             Require(SaveListOpen && _saveList!.Mode == AreaSaveListMode.Load && _mainMenu is not null, "Load Game opened the load window");
-            InventoryKey(Key.Escape);
+            InputWorld(EscapeEvent(true));
+            Require(SaveListOpen && !MainMenuOpen, "the load window's Escape press closed it (the original acts on the release)");
+            InputWorld(EscapeEvent(false));
             Require(!SaveListOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay, "closing it unused brought the in-play menu back");
 
             // Quit asks first: N and Escape keep playing; Y ends the game for the start scene and the reopened main menu.
@@ -127,7 +132,9 @@ public partial class TerrainViewerApp
             Require(_mainMenu!.QuitPending && Buttons().SequenceEqual(["Yes  (Y)", "No  (N)"]), "the quit box asks: " + string.Join("|", Buttons()));
             Letter('n');
             Require(MainMenuOpen && !_mainMenu!.QuitPending && ReferenceEquals(running, _areaSession), "N kept playing");
-            Letter('q'); InventoryKey(Key.Escape);
+            Letter('q'); InputWorld(EscapeEvent(true));
+            Require(MainMenuOpen && _mainMenu!.QuitPending, "the quit box's Escape press answered (the yes/no box 0x51EBF0 acts on the release)");
+            InputWorld(EscapeEvent(false));
             Require(MainMenuOpen && !_mainMenu!.QuitPending && _mainMenu.Window == AreaMenuWindow.InPlay, "Escape answered no");
             InventoryKey(Key.Escape);
             Require(!MainMenuOpen && ReferenceEquals(running, _areaSession), "Escape continued play");
