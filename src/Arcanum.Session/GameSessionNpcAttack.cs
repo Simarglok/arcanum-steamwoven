@@ -141,7 +141,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.AttackUnavailable"/>), a cell outside 0 .. 2^24 − 1, a weight outside 0 ..
     /// <see cref="ThrowRules.MaxWeight"/>, a struck critter without its cell or both struck kinds, a no-drop item
     /// (<see cref="GameSessionFailure.InvalidAttack"/>), an item not in the NPC's seed list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// an item with a script the session does not run (<see cref="GameSessionFailure.ItemScriptUnsupported"/>: another point, or a removal or throw script without a host or one it cannot apply), an item that is not the wielded melee weapon
+    /// an item with a script the session does not run (<see cref="GameSessionFailure.ItemScriptUnsupported"/>: another point, or a removal or throw script without a host or one it cannot apply), an item that is not the wielded weapon, or one the NPC attack does not support (a throwing-skill weapon)
     /// (<see cref="GameSessionFailure.AttackUnsupported"/>), then <see cref="AttackByNpc"/>'s refusals (without a struck critter the
     /// thrower's: its life record, its worn items), the version, the revision. A resolver refusal throws nothing (NoChange, as the
     /// hero's), as does an inactive thrower without a struck critter.
@@ -381,8 +381,9 @@ public sealed partial class GameSessionOwner
         var reach = values.Weapon.Kind == WeaponKind.Unarmed ? (int?)null : values.Range;
         if (throwing is not null)
         {
-            // TW7: the only installed "default throws" weapon is a melee one; another skill's would follow other rules.
-            if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee) return RejectAttack(GameSessionFailure.AttackUnsupported);
+            // TW7, ARC-COMBAT-2699 (TW8, 0x42AB90 asks nothing of the weapon's skill, the check is the throwing skill's): any wielded weapon the attack supports (a melee, bow or firearms one) is thrown, so a bow or firearm
+            // reaches the ammunition check too; a throwing-skill weapon (a boomerang) is not a supported NPC attack and is refused with the others.
+            if (values.Weapon.Kind != WeaponKind.Weapon) return RejectAttack(GameSessionFailure.AttackUnsupported);
             var (level, training) = Levelled(attacker).SkillValues(CombatSkill.Throwing, attackerRecord.State);
             values = values with
             {

@@ -2241,6 +2241,18 @@ public sealed partial class GameSessionOwner : IDisposable
         return _inventory.Hero.LastDrops.TryGetValue(entity, out var cell) ? cell : null;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2701 (ledger IV8): the tile a map-data item of the hero's map lies loose on now when that is not the tile its map data holds (a spilled container's, where a critical dropped it or a push left it), or null for an item on its own
+    /// data tile, held, taken, destroyed, in flight or not on the map's ground. Before its pickup commits this is the item's location field the insert-item run's scans centre on. A read of the current state, in no revision.
+    /// </summary>
+    public Arcanum.Simulation.Movement.CellCoord? QueryItemLooseCell(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
+        return _inventory.Seeds.TryGetValue(_actor.Map, out var seed) && seed.Items.TryGetValue(entity, out var row) && LooseCell(_actor.Map, seed, entity) is { } cell && cell != row.Cell ? cell : null;
+    }
+
     // The insertion (0x466640): since ARC-WORLD-066 its merge of ammunition into a held stack of the same prototype. ARC-SCRIPT-041:
     // the item events of the two transfers in the original's order (ledger IE1–IE4): from the ground (0x461810) the item's get
     // script, which can cancel, then the insert check, then the insertion's insert-item script; from a holder (0x461CA0) the
@@ -2399,6 +2411,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         else
         {
+            // ARC-SCRIPT-2701 (IV8): a map-data item that lay loose on another tile than its data holds (an NPC's critical drop, a spill, a throw's landing, a push) keeps that tile as its location field.
+            if (seed.Items.TryGetValue(item.Entity, out var seeded) && LooseCell(origin, seed, item.Entity) is { } lying && lying != seeded.Cell) _inventory.Hero.NoteLastDrop(item.Entity, lying);
             _inventory.Add(new SessionPcItem(item.Entity, origin, facts.Kind));
             // ARC-WORLD-085: the item keeps its seed's weight facts wherever it goes.
             _inventory.SetWeight(item.Entity, facts.WeightFacts);

@@ -546,7 +546,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
     public IReadOnlyList<ScrObjectRef>? CrittersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? CrittersAround(cell) : null;
 
-    // The item's own location field as the host reads it (IV2, IV8): the placed cell of a session-dropped item lying on the ground, else the tile it last lay on after the session dropped it and took it up again (a held item keeps that stale
+    // The item's own location field as the host reads it (IV2, IV8): the placed cell of a session-dropped item lying on the ground, else the tile it last lay on after the session dropped it and took it up again or a pickup took it from the ground where an NPC dropped it, a container spilled it or a push left it (a held item keeps that stale
     // location field in the original, also on another map: the scan is of the shown map around those coordinates), else the tile of its map data or of the carried item's row; null for an item of another map with no drop, or one without a tile.
     // ARC-SCRIPT-1704: with <paramref name="anyMap"/> (a vicinity scan, whose centre is the location field whichever map the reference names) an item named on another map reads its row by identity too, and a dropped item matches on its origin map.
     private CellCoord? ItemCentre(ScrObjectRef item, bool anyMap = false)
@@ -554,6 +554,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if ((item.Map == _shownMap || anyMap) && _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && (p.Map.RuntimeMap == item.Map || anyMap && p.Origin?.RuntimeMap == item.Map)) is { } placed) return placed.Cell;
         if (_session.QueryItemLastDrop(item.Code) is { } dropped) return dropped;
         if (item.Map != _shownMap && !anyMap) return null;
+        // ARC-SCRIPT-2701 (IV8): a map-data item lying loose on another tile than its data holds (a drop of an NPC, a spill, a throw's landing, a push) reads that tile, also in the insert-item run of its own pickup.
+        if (_session.QueryItemLooseCell(item.Code) is { } loose) return loose;
         // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
         return (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
     }

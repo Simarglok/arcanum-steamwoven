@@ -461,6 +461,7 @@ public partial class TerrainViewerApp
 
     // ARC-WORLD-039: a line per pump call that took events (identifiers and counts only).
     private int _loggedCallRefusals;
+    private readonly SessionEventLogThrottle _sessionEventLog = new();
 
     private void LogAreaEvents(AreaAmbientDriver driver) => LogAreaEvents(driver.Events);
 
@@ -469,9 +470,15 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-047: a heartbeat's talk, asked for during the pump that just returned.
         OpenHeartbeatConversation();
         if (frame?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        // ARC-DEV-1397: the counts reach the log when something notable happened, else summed at most once a second (one line per frame filled the report's window).
+        var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
+        _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
+        var tally = _sessionEventLog.Offer(_clockHostMs, last.Fired, last.Dropped, last.ScriptCalls, last.ScriptCallsRun, last.Waits.Count, last.Decays.Count, last.Restocks.Count,
+            notable: last.Dropped > 0 || last.Waits.Count > 0 || last.Decays.Count > 0 || last.Restocks.Count > 0 || last.Coalesced || last.BudgetLeft || refused);
         // ARC-DEV-051: the session events that came due, for the bug report's log.
-        BugReportLog.Process.Add(BugReportLineKind.Event, $"session events fired={last.Fired} dropped={last.Dropped} scripts={last.ScriptCallsRun}/{last.ScriptCalls}"
-            + $" waits={last.Waits.Count} decays={last.Decays.Count} restocks={last.Restocks.Count}");
+        if (tally is not null)
+            BugReportLog.Process.Add(BugReportLineKind.Event, $"session events frames={tally.Frames} fired={tally.Fired} dropped={tally.Dropped} scripts={tally.ScriptCallsRun}/{tally.ScriptCalls}"
+                + $" waits={tally.Waits} decays={tally.Decays} restocks={tally.Restocks}");
         ReportCompanionWaits(last.Waits);
         // ARC-WORLD-062: a decayed item leaves the ground (the map's inventory and its drawn body).
         if (last.Decays.Count > 0)
@@ -494,9 +501,8 @@ public partial class TerrainViewerApp
                 // ARC-MAGIC-1830: and the eye candy those scripts made.
                 QueueScriptEyeCandies(regeneration.Wield?.EyeCandies ?? []);
             }
-        var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
-        _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
-        GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"
+        if (tally is null) return;
+        GD.Print($"ARC-WORLD-039 events frames={tally.Frames} steps={last.Steps} passes={last.Passes} fired={tally.Fired} dropped={tally.Dropped} calls={tally.ScriptCallsRun}/{tally.ScriptCalls}"
             + $" late={last.Coalesced} budgetLeft={last.BudgetLeft} pending={last.Pending}"
             + (refused ? $" refusal={_areaEventWorld!.LastCallRefusal}" : ""));
     }
