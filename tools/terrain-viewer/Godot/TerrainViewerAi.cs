@@ -233,6 +233,8 @@ public partial class TerrainViewerApp
             ObjectFacts = AiObjectFacts,
             // ARC-COMBAT-1776 (0x42A4E0): the door, window or container a pick-locks goal's target string names, as the session picks it, at the light of its cell.
             PickLockTarget = AiPickLockTarget,
+            // ARC-AI-2625 (0x4C7160 case 7, target test 0x4BBDD0): the trap class of the object a spot-trap attempt names.
+            TargetTrapClass = target => _spellCastMap?.Row(target) is { } trapRow && AreaTrapsNow() is { } areaTraps ? areaTraps.TargetClass(trapRow) : Arcanum.Simulation.Traps.TrapClass.None,
             // ARC-AI-1636: an NPC's attack on the object it holds as its focus is the session's object attack on the map row the cast id names.
             ObjectAttackTarget = id => _areaSession is { } objectOwner && _spellCastMap?.Row(id) is { } objectRow && !IsAreaCompanion(objectRow.Key) ? ObjectTargets()?.Target(objectOwner, objectRow.Key, AreaTrapped) : null,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
