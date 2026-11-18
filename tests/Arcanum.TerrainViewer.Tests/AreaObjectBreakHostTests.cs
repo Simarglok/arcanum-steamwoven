@@ -98,6 +98,10 @@ public sealed class AreaObjectBreakHostTests
             Write("dlg/00842print.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{The statue crumbles.}{}{}{}{}{}"));
             Write("scr/00843printstays.scr", Program(0, Do(new(ScrCatalogue.Action.PrintLine, N(1), N(6))), Do(new(skip))));
             Write("dlg/00843printstays.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{It holds.}{}{}{}{}{}"));
+            // ARC-SCRIPT-2723: 844 is an ordinary trap script that prints a line (entry 1, type 6) and runs the default; 845 is a BUST script that sets global flag 2301 (the BUST set holds no print line command).
+            Write("scr/00844trapprint.scr", Program(0x1, Do(new(ScrCatalogue.Action.PrintLine, N(1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("dlg/00844trapprint.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{The trap clicks.}{}{}{}{}{}"));
+            Write("scr/00845bustflag.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(BustFlag))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00831local.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -755,6 +759,25 @@ public sealed class AreaObjectBreakHostTests
             session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
             session.DamageObject(session.Version, BreakTarget(plain, kind), 10);
             Assert.IsNull(host.TakeBreakDestroyRun(), "the second break had no point and the first run is gone");
+        });
+    }
+
+    // ARC-SCRIPT-2723 (IS2, PW1): the break's ordinary trap script keeps its printed line with its own run, and the BUST script of the same break runs too, so the viewer's break step can take both (a trapped window runs both), not only one of them.
+    [TestMethod]
+    public void The_trap_scripts_printed_line_stays_with_its_run_beside_the_bust_scripts_of_one_break()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var window = Row(1, Scenery, 844, 845);
+            var probe = new Probe();
+            var (host, traps) = Hosts(session, content, probe, false, window);
+            var ran = AreaObjectBreakHost.Run(host, traps, window, Both, byHero: true, ranged: false, session.Rules.Scripts);
+            Assert.AreEqual(844, ran.TrapScript!.Run!.Script);
+            Assert.AreEqual(845, ran.Bust!.Run!.Script);
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "The trap clicks.") }, ran.TrapScript.Printed.ToArray());
+            Assert.IsTrue(host.GlobalFlag(BustFlag), "the BUST script ran too, after the trap script");
+            Assert.AreEqual(0, ran.Bust.Printed.Count, "and its run is its own");
         });
     }
 }
