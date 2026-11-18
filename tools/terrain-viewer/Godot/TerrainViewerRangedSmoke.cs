@@ -524,6 +524,37 @@ public partial class TerrainViewerApp
             }
             // The pre-made heroes barely train throwing: a hit is reported, not required (the session's tests strike with one).
             Require(hiddenChecked, $"a throw was seen in flight ({string.Join(",", landings)})");
+            // ARC-COMBAT-2735 (RH2, TW1): the Alt attack click on an object (a door, container, scenery or wall) with the default-throw weapon starts the throw goal at the object's tile, no attack goal and no object strike.
+            if (ObjectTargets() is { } objectTargets)
+            {
+                var heroAt = new CellCoord(pick.Hero.X, pick.Hero.Y);
+                var objectRow = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.Type is 1 or 2 or 3 && row.WorldX is not null && row.WorldY is not null
+                        && objectTargets.Target(session, row.Key, AreaTrapped) is { Refusal: null, Kind: DamageableObjectKind.Portal or DamageableObjectKind.Container or DamageableObjectKind.Scenery }
+                        && LiveCell(session, row) is { } c && c != heroAt && Math.Max(Math.Abs(c.X - heroAt.X), Math.Abs(c.Y - heroAt.Y)) is >= 2 and <= LentBowRange)
+                    .OrderBy(row => Math.Max(Math.Abs(row.WorldX!.Value - heroAt.X), Math.Abs(row.WorldY!.Value - heroAt.Y))).ThenBy(row => row.Key.Offset).FirstOrDefault();
+                if (objectRow is null) GD.Print($"ARC-COMBAT-2735 native-smoke object-throw NONE map={_readyMapName} (no attackable object 2..{LentBowRange} cells from the hero)");
+                else
+                {
+                    Heal();
+                    AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+                    _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                    PublishWorldSelection();
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    var result = await ThrowClickOnceBy(() => AreaObjectAttackClick(objectRow.Key, false));
+                    Require(result is { Failure: GameSessionFailure.None, Attack: not null } && _attack is null, $"the click on the object threw the item at its tile ({result?.Failure} {result?.Disposition})");
+                    GD.Print($"ARC-COMBAT-2735 native-smoke object-throw PASS map={_readyMapName} object={World(objectRow)} destination={result!.Destination} outcome={result.Attack!.Resolution?.Outcome}");
+                    for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
+                    {
+                        _areaSmokeTime++;
+                        SpellSmokeTick();
+                        WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                    }
+                    SyncAreaGroundBodies();
+                    Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
+                        && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, dagger), (_, _) => true,
+                            _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow()).Disposition == GameSessionDisposition.Changed, "the dagger is picked up and wielded again after the object throw");
+                }
+            }
             _lentThrowWeightForSelfTest = null; _lentItemSpellsForSelfTest = null;
             GD.Print(lentSpell is null ? "ARC-DEV-140 native-smoke shot-end-item-event NONE (no installed spell record carries the attacks-a-location trigger)"
                 : $"ARC-DEV-140 native-smoke shot-end-item-event PASS map={_readyMapName} spell={lentSpell} events={shotEndEvents}");
@@ -734,11 +765,13 @@ public partial class TerrainViewerApp
         }
 
         // ARC-COMBAT-2524: the combat click on the target with the lent default-throw dagger wielded, run frame by frame until the throw goal's action frame threw the item: the session's throw (no attack goal is made).
-        async Task<SessionHeroThrowResult?> ThrowClickOnce(AreaCombatTarget target)
+        async Task<SessionHeroThrowResult?> ThrowClickOnce(AreaCombatTarget target) => await ThrowClickOnceBy(() => AttackCritterClick(target, false, false));
+
+        async Task<SessionHeroThrowResult?> ThrowClickOnceBy(Func<bool> click)
         {
             _lastHeldThrowForSelfTest = null;
             CancelAreaAttack(null);
-            Require(AttackCritterClick(target, false, false), "the click belongs to combat");
+            Require(click(), "the click belongs to combat");
             Require(_attack is null && HeroRunsHost()?.ThrowRun is not null, $"the click starts the throw goal, no attack goal: {_attackNotice} {_heldThrowNotice}");
             for (var frames = 0; frames < 4000 && _lastHeldThrowForSelfTest is null; frames++)
             {

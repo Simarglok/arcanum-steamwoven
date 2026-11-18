@@ -241,19 +241,27 @@ public partial class TerrainViewerApp
     /// is the session's choice (<see cref="GameSessionOwner.QueryDefaultThrowItem"/>: a spare of the weapon's prototype, else the wielded one); the throw goal needs no walk and takes the throw's points (<see cref="BeginThrowSwing"/>). True
     /// when the click was taken (a throw started, or refused with its notice); false when the weapon stays in the hand and the attack goal starts as without the flag.
     /// </summary>
-    private bool TryDefaultThrowClick(AreaCombatTarget target)
+    private bool TryDefaultThrowClick(AreaCombatTarget target) => TryDefaultThrowAt(NpcCell(target.Row), target.Entity);
+
+    /// <summary>
+    /// ARC-COMBAT-2735 (ledger RH2, TW1): the Alt attack on a door, window, container, scenery or wall with a "default throws" weapon wielded: the attack start builds the throw goal with the object's <b>location</b> as for any
+    /// attacker target, so the click throws at the object's tile and strikes no object unless the line of fire names a blocker. True when the click was taken; false when the weapon stays in the hand.
+    /// </summary>
+    private bool TryDefaultThrowObjectClick(AreaObjectRecord row, string entity) =>
+        _areaSession is { } owner && LiveCell(owner, row) is { } tile && TryDefaultThrowAt(tile, entity);
+
+    private bool TryDefaultThrowAt(CellCoord tile, string targetName)
     {
         if (_areaSession is not { } owner || _inventoryHost is null || HeroRunsHost() is null || _worldActor.Session is not AreaGridSession) return false;
         // A click while the weapon waits on the cursor for the throw goal's first node is a repeat click: the goal is pending, the click is taken (the original's start branch ignores an equal goal).
         if (_gameCursorItem is { } waiting) return waiting.Item == _defaultThrowCursorItem && HeroRunsHost()?.ThrowRun is not null;
         if (HeroDefaultThrowWeight() is not { } weight || owner.QueryDefaultThrowItem(new(weight)) is not { } item) return false;
-        var tile = NpcCell(target.Row);
         _gameCursorItem = new GameCursorItem(item, _inventoryHost.ItemName(owner, item, _hoverNames?.Catalog), owner, CurrentAreaMap);
         _defaultThrowCursorItem = item;
         var started = ThrowGameCursorItem(tile);
         // A throw that did not start leaves the weapon where it is: the cursor holds it only until the throw goal's first node (HeroThrowEnds clears it when that node refuses).
         if (!started) { _gameCursorItem = null; _defaultThrowCursorItem = null; }
-        GD.Print($"ARC-COMBAT-2524 default-throw-click item={item} target={target.Entity} tile={tile.X},{tile.Y} started={started}");
+        GD.Print($"ARC-COMBAT-2524 default-throw-click item={item} target={targetName} tile={tile.X},{tile.Y} started={started}");
         return true;
     }
 
