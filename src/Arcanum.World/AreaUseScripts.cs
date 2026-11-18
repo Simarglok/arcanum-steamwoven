@@ -197,7 +197,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>, which leaves the run's loop over the vicinity early.
     /// ARC-MAGIC-030 (MT21b, ledger SC1–SC6): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49) of
     /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
-    /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
+    /// ARC-RENDER-2197: plus float line (23) of <see cref="ScrAdmissionSet.S19"/>, which the use script 2862 of the Vendigroth underground carries after its end game (it floats its line 1 over its attachee, handed out through <see cref="TakeFloats"/> as a tile script's is). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
     /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
     /// ARC-SCRIPT-1620 (TI6): plus attack (36, 0x447D2F), which raises the attack event of the first object of operand 1 on each object of operand 0 through the AI host (<see cref="AreaScriptWorld.ScriptAttack"/>); 79 installed scripts use it (111 clauses), and the heartbeat set admits it too.
     /// ARC-SCRIPT-1764 (NP9–NP12): plus queue newspaper (85) and float newspaper headline (86) of <see cref="ScrAdmissionSet.S59"/> (<see cref="AreaScriptNewspaper"/>; the headline floats through <see cref="TakeFloats"/>), which the placed, dying and combat-point sets and the heartbeat set admit too.
@@ -212,7 +212,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
@@ -250,7 +250,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.FloatLine, .. CastActions, .. StopSpellActions, .. DamageActions]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, .. CastActions, .. StopSpellActions, .. DamageActions]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
