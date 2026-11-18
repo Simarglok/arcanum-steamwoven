@@ -33,9 +33,7 @@ public partial class AreaRoundView : CanvasLayer
 
     public AreaRoundView()
     {
-        // ARC-UI-2576: layer 2, under the Steamwoven menu backdrop (layer 3, which leaves the lens's square out), so the copy reads the world and not the backdrop; the windows (layer 4) draw the lens ring over it.
-        Name = "RoundViewLayer"; Layer = 2; Visible = false;
-        lock (Live) Live.Add(this);
+        Name = "RoundViewLayer"; Layer = 3; Visible = false;
         _material = new ShaderMaterial { Shader = new Shader { Code = HoleShader } };
         _hole = new ColorRect { Name = "RoundView", MouseFilter = Control.MouseFilterEnum.Ignore, Material = _material };
         AddChild(_hole);
@@ -46,6 +44,11 @@ public partial class AreaRoundView : CanvasLayer
     {
         lock (Live) return [.. Live.Where(view => view.Visible && view._hole.Size.X > 0).Select(view => new Rect2(view._hole.Position, view._hole.Size))];
     }
+
+    /// <summary>ARC-UI-2576: raised on the main thread when a round view was placed or hidden (the backdrop leaves the squares out in the same frame).</summary>
+    public static event Action? RectsChanged;
+
+    public override void _EnterTree() { lock (Live) { if (!Live.Contains(this)) Live.Add(this); } }
 
     public override void _ExitTree() { lock (Live) Live.Remove(this); }
 
@@ -63,13 +66,19 @@ public partial class AreaRoundView : CanvasLayer
     /// corner is <paramref name="origin"/> (the logbook's lens, ledger LB23), or hides it (null).</summary>
     public void Update(Vector2 origin, float side, (Vector2 Foot, float Zoom)? holder)
     {
+        // ARC-UI-2576: with the Steamwoven layout the copy lies on layer 2, under the menu backdrop (layer 3), which leaves the lens's square out, so the copy reads the world and not the backdrop; the windows (layer 4)
+        // draw the lens ring over it. Otherwise the layer stays 3, as it was (the copy reads the spell pane and the layer-3 parts).
+        var layer = AreaGameBarPanel.SteamwovenOn ? 2 : 3;
+        if (Layer != layer) Layer = layer;
+        var wasVisible = Visible;
         Visible = holder is not null;
-        if (holder is not { } shown) return;
+        if (holder is not { } shown) { if (wasVisible) RectsChanged?.Invoke(); return; }
         _hole.Position = origin; _hole.Size = new(side, side);
         var source = AreaInventoryHole.Source(shown.Foot.X, shown.Foot.Y, shown.Zoom);
         _material.SetShaderParameter("hole_origin", origin);
         _material.SetShaderParameter("hole_side", side);
         _material.SetShaderParameter("source_origin", new Vector2(source.X, source.Y));
         _material.SetShaderParameter("source_side", source.Side);
+        RectsChanged?.Invoke();
     }
 }
