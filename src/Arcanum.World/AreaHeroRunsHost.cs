@@ -431,10 +431,11 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// ARC-DEV-174 (MIG13 S11b, GS26 and GS27): the object click's use goal 38 (<paramref name="container"/>: 81), started as the talk is (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the
     /// hero's runs, so a repeated click restarts the run), the run flag on. The goal's frame carries the target; node 1 writes the range. False when the gate or a run's refusal stopped it.
     /// </summary>
-    public bool Use(string target, bool container, bool run)
+    public bool Use(string target, bool container, bool run, bool noWalk = false)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(container ? GoalType.UseContainer : GoalType.UseObject, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        // ARC-COMBAT-1948 (0x436ED0, 0x436C50): the click's use goals always carry run flag 0x4000, and Shift adds the no-walk flag 0x100 (no running then).
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(container ? GoalType.UseContainer : GoalType.UseObject, target), GoalRunFlags.NearOccupied | (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None));
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_USE");
         return started.Started;
@@ -444,10 +445,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// ARC-DEV-175 (MIG13 S11c, GS26 and GS27): the object click's pickup goal 15, started as the talk and the use are (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the hero's
     /// runs, so a repeated click restarts the run), the run flag on. False when the gate or a run's refusal stopped it.
     /// </summary>
-    public bool Pickup(string target, bool run)
+    public bool Pickup(string target, bool run, bool noWalk = false)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.PickupItem, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.PickupItem, target), (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None));
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_PICKUP");
         return started.Started;
