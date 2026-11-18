@@ -64,7 +64,7 @@ public sealed class AreaEndingScriptsRealDataTests
     }
 
     /// <summary>ARC-RENDER-2197: the Vendigroth underground's use script 2862 (use point 1 of a type-14 object) is admitted whole by the use set (float line, 23, included) and runs through the use host (<see cref="AreaUseScriptHost.RunUseScript"/>): used with the item
-    /// it tests its extra object for (name 6711) it plays its movies 3 and 5 and asks for the end of the game (script action 132); used with nothing it only floats its line 1 over the object. Numbers only; no picture, movie or text is read or printed.</summary>
+    /// it tests its extra object for (name 6711) it plays its movies 3 and 5 and asks for the end of the game (script action 132); used with nothing it plays none (its float line 1 finds no dialog file in the installed game and floats nothing). Numbers only; no picture, movie or text is read or printed.</summary>
     [TestMethod, TestCategory("RealData")]
     public void The_Vendigroth_use_script_2862_plays_movies_3_and_5_and_asks_for_the_end_of_the_game_when_used_with_its_item()
     {
@@ -79,22 +79,28 @@ public sealed class AreaEndingScriptsRealDataTests
         using var session = ConversationSessionFixture.CreateWithHero();
         var row = Scripted(1, ScrPoint.Use, 2862);
         var item = VendigrothItem(2);
-        var host = new AreaUseScriptHost(session, 1, [row, item], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+        var host = new AreaUseScriptHost(session, 1, [row, item], [], content, new AreaScriptWorld(() => new(11, 20), _ => false, _ => null, () => null));
         var ran = host.RunUseScript(AreaUseScriptHost.EntityId(row), host.Pc, new ScrObjectRef(1, AreaUseScriptHost.EntityId(item)), session.Rules.Scripts);
         var fades = host.TakeFades();
         var endGame = host.TakeEndGame();
-        Console.WriteLine($"script 2862 with the item: outcome {ran.Outcome}, run {ran.Run?.Outcome}/{ran.Run?.Stop}, fades {string.Join(",", fades.Select(f => $"movie {f.Movie} track {f.Track} advance {f.AdvanceMs}"))}, end game {endGame}, floats {host.TakeFloats().Count}");
+        var floats = host.TakeFloats();
+        Console.WriteLine($"script 2862 with the item: outcome {ran.Outcome}, run {ran.Run?.Outcome}/{ran.Run?.Stop}, fades {string.Join(",", fades.Select(f => $"movie {f.Movie} track {f.Track} advance {f.AdvanceMs}"))}, end game {endGame}, floats {floats.Count}");
         Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
         CollectionAssert.AreEqual(new[] { 3, 5 }, fades.Select(f => f.Movie).ToArray(), "movies in order");
         Assert.IsTrue(endGame, "script 2862 asks for the end of the game");
         Assert.IsFalse(host.TakeEndGame(), "taken once");
+        // Its float line (23) asks for line 1 of the script's own dialog file; the installed game holds none readable for 2862, so (as in the original, whose load fails) nothing floats.
+        Assert.AreNotEqual(Arcanum.Data.Scripts.ScriptContentStatus.Read, content.Dialog(2862, session.Rules.Data).Status, "no readable dialog file for script 2862");
+        Assert.AreEqual(0, floats.Count, "nothing floats: no dialog file");
 
         // Used with nothing, the extra object is missing and the script floats its hint line instead: no movie, no end of the game.
         using var plain = ConversationSessionFixture.CreateWithHero();
-        var plainHost = new AreaUseScriptHost(plain, 1, [row], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+        var plainHost = new AreaUseScriptHost(plain, 1, [row], [], content, new AreaScriptWorld(() => new(11, 20), _ => false, _ => null, () => null));
         var ranPlain = plainHost.Run(row, plain.Rules.Scripts);
         Console.WriteLine($"script 2862 plain: outcome {ranPlain.Outcome}, run {ranPlain.Run?.Outcome}/{ranPlain.Run?.Stop}");
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ranPlain.Outcome, ranPlain.Detail);
         Assert.AreEqual(0, plainHost.TakeFades().Count, "no movie without the item");
+        Assert.AreEqual(0, plainHost.TakeFloats().Count, "nothing floats: no dialog file");
         Assert.IsFalse(plainHost.TakeEndGame(), "no end of the game without the item");
     }
 
@@ -119,7 +125,7 @@ public sealed class AreaEndingScriptsRealDataTests
             var speaker = new AreaSpeaker(0, row, 1105, row.WorldX!.Value, row.WorldY!.Value);
             var map = new SessionMapId(1);
             var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
-            var use = new AreaUseScriptHost(session, 1, [row], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+            var use = new AreaUseScriptHost(session, 1, [row], [], content, new AreaScriptWorld(() => new(11, 20), _ => false, _ => null, () => null));
             var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
             Assert.AreSame(AreaScriptHost.SkillTalkAdmission, host.RunAdmission);
             var admission = ScrAdmission.Admit(content.Script(1105).Program!, host.RunAdmission);
