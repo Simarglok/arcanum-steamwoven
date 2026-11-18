@@ -2637,10 +2637,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var struck = info?.Object;
         if (Build(id) is not { } attacker) return null;
         var weapon = WieldedPrototype(id);
+        // ARC-COMBAT-2538 (RH5): the victim a script names: the object's entity, or a wall's row (a wall's scripts are offered like any struck object's).
+        var victim = struck?.Entity ?? (info is null ? AreaUseScriptHost.EntityId(blocker) : null);
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck), HitScripts = HitScriptsOf(id, struck?.Entity),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim),
         });
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2652,7 +2654,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var shot in result.Shots)
             if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
             {
-                if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                if (LandShotOnObject(id, shot, struck, struck is null, blocker) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
                 _session.EndShot(shot);
             }
         return result;
@@ -2717,22 +2719,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result is { Disposition: not GameSessionDisposition.Rejected } && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
-    private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>
-        _scene.TakingDamage is { } asks && target is not null ? () => asks(target.Entity, attacker) : null;
+    private Func<bool>? TakingDamageOfObject(string attacker, string? victim) =>
+        _scene.TakingDamage is { } asks && victim is not null ? () => asks(victim, attacker) : null;
 
     /// <summary>
     /// ARC-COMBAT-1140 (PF8, RH5, OD1–OD5; tail T4e): an arrow or bullet of <paramref name="shooter"/> reached an object it met: the one the shot was decided for (<see cref="HitBlockingObject"/>) takes the carried hit, another
     /// object or wall past its destination a forced hit (<see cref="GameSessionOwner.LandNpcShotOnObject"/>); the object's taking-damage script is asked with the shooter as the attacker. A door, window, container,
-    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
+    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>), named by its row <paramref name="wallRow"/> for the scripts it is offered (ARC-COMBAT-2538: the weapon's hit scripts and the wall's
+    /// taking-damage script, as for any struck object). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
     /// Null when the shooter has no combat values (the shot is gone either way).
     /// </summary>
-    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
+    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall, AreaObjectRecord? wallRow = null)
     {
+        // ARC-COMBAT-2538 (RH5): a wall's row names it for the hit scripts and its taking-damage script (a wall without a row offers none).
+        var victim = target?.Entity ?? (wall && wallRow is not null ? AreaUseScriptHost.EntityId(wallRow) : null);
         if (Build(shooter) is not { } attacker) { EndStruckShot(shot); return null; }
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, target), HitScripts = HitScriptsOf(shooter, target?.Entity),
+            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim),
         });
         EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
