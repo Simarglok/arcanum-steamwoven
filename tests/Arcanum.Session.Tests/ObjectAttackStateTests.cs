@@ -227,7 +227,7 @@ public sealed class ObjectAttackStateTests
     {
         using var owner = Owner();
         var plain = BreakIt(owner, new() { Target = Target("trap-a", DamageableObjectKind.Trap) });
-        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.DestroySound), (plain.Object!.Break, plain.Host));
+        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.ObjectDestroyed), (plain.Object!.Break, plain.Host));
         var art = Target("trap-b", DamageableObjectKind.Trap, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = art });
         Assert.AreEqual(ObjectBreak.TrapBusted, busted.Object!.Break);
