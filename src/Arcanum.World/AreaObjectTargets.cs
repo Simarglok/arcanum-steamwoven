@@ -149,6 +149,26 @@ public sealed class AreaObjectTargets
     private bool SceneryOff(GameSessionOwner session, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind) found) =>
         found.Kind == DamageableObjectKind.Scenery && session.QueryObjectOff(_map, found.Entity, DataOff(found.Row));
 
+    private (GameSessionVersion Version, IReadOnlyDictionary<AreaObjectKey, bool> States)? _sceneryOff;
+
+    /// <summary>
+    /// ARC-SCRIPT-2585 (ledger OT10): the sceneries of the shown map that a script's toggle state (56) changed, by their key: true for off, false for on over a data that stores it off. The lights of these sceneries follow the state
+    /// (<see cref="AreaLocalLighting.WithObjectsOff"/>); a scenery no script toggled is not listed, so its lights stand as the map data loaded them. The same dictionary is returned while the session's version is unchanged, and
+    /// across revisions that change nothing here.
+    /// </summary>
+    public IReadOnlyDictionary<AreaObjectKey, bool> SceneryOffStates(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var version = session.Version;
+        if (_sceneryOff is { } known && known.Version == version) return known.States;
+        var states = new Dictionary<AreaObjectKey, bool>();
+        foreach (var pair in _objects)
+            if (pair.Value.Kind == DamageableObjectKind.Scenery && session.QueryObjectOffRecord(_map, pair.Value.Entity) is { } off) states[pair.Key] = off;
+        IReadOnlyDictionary<AreaObjectKey, bool> result = _sceneryOff is { } previous && previous.States.Count == states.Count && !states.Except(previous.States).Any() ? previous.States : states;
+        _sceneryOff = (version, result);
+        return result;
+    }
+
     /// <summary>ARC-SCRIPT-2324: the object flag "off" (0x2) of a row's map data.</summary>
     internal static bool DataOff(AreaObjectRecord row) =>
         row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags and >= int.MinValue and <= uint.MaxValue } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
@@ -234,7 +254,7 @@ public sealed class AreaObjectTargets
         if (result.Life is { } life) return $"critical miss: the hero takes {life.HitPointDamage} damage";
         var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap goes off" : "";
         if (result.Object is { } hit)
-            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {Broke(hit.Break)}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
+            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {(result.Host.HasFlag(SessionObjectHostSteps.DestroyKept) ? KeptBroke(hit.Break) : Broke(hit.Break))}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
         if (result.Item is { } item) return item.Break switch
         {
             Arcanum.Simulation.Items.ItemBreakStep.Broken => "hit: the item breaks",
@@ -243,6 +263,13 @@ public sealed class AreaObjectTargets
         } + trap;
         return "attack: no damage";
     }
+
+    // ARC-SCRIPT-2686: a destroy the object's destroy point refused (the object stays, the break's other effects stand).
+    private static string KeptBroke(ObjectBreak kind) => kind switch
+    {
+        ObjectBreak.ContainerSpilled => "the container breaks, but it is not destroyed",
+        _ => "the destroy is refused, the object stays",
+    };
 
     private static string Broke(ObjectBreak kind) => kind switch
     {

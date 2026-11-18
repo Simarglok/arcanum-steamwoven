@@ -1817,6 +1817,26 @@ public sealed class InterfaceChromeTests
         }
     }
 
+    [TestMethod]
+    public void The_reading_books_fold_shade_lies_where_the_two_pages_meet_at_every_scale()
+    {
+        Assert.AreEqual((int)AreaReadingArtLayout.BookFold, Recipe("BookBackground.ART").Parts.OfType<ChromePlate>().Single(p => p.X == 320).X, "the fold is where the right page starts");
+        // ARC-UI-2720: the shade of the fold is sampled in window coordinates, so the book (at (132, 0)) must carry its own fold x; the darkest column of the page rows is the fold.
+        foreach (var scale in new[] { 1.0, 2.0, 3.0 })
+        {
+            var pixels = InterfaceChromeRenderer.Render(Recipe("BookBackground.ART"), ReadingBackgroundWidth, ReadingBackgroundHeight, Flat(ReadingBackgroundWidth, ReadingBackgroundHeight, (150, 120, 90)), [], 0, scale);
+            var width = InterfaceChromeRenderer.PixelSize(ReadingBackgroundWidth, ReadingBackgroundHeight, scale).Item1;
+            var best = 0; var bestLuma = double.MaxValue;
+            for (var x = (int)(100 * scale); x < (int)(540 * scale); x++)
+            {
+                double sum = 0;
+                for (var y = (int)(60 * scale); y < (int)(340 * scale); y += (int)scale) sum += Luma(Pixel(pixels, width, x, y));
+                if (sum < bestLuma) { bestLuma = sum; best = x; }
+            }
+            Assert.AreEqual(AreaReadingArtLayout.BookFold, best / scale, 1.0, $"the fold of the book lies at its page join at {scale}");
+        }
+    }
+
     // ARC-UI-1818: the quantity pane (298 `MultiMove_Base`, 416 x 112) and its five buttons (299 `Sm_RightArrow` 23 x 23, 805 `OldChar_Plus` and 804 `OldChar_Minus` 13 x 10, 33 `Done_Big` and 32 `Cncl_Big` 38 x 37; the 13 x 10 pair stay pictures);
     // synthetic stand-ins, no game art. The places are the pane's (`QuantityPaneRules`, screen coordinates less the background's (196, 492)).
     private const int QuantityWidth = 416, QuantityHeight = 112;

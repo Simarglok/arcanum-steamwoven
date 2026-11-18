@@ -62,12 +62,12 @@ public sealed class AreaAiThrowTests
 
     // ARC-DEV-258 (MIG13 S14n): a grenade, a generic item (type 14) the NPC carries in its list (no inventory location).
     private static readonly SessionItemKind GrenadeKind = new(SessionItemType.Generic, 5640, 4102, 4103);
-    private static AreaObjectRecord Grenade(int index, long genericFlags = 0x1) => new(Key(index), 0, 14, 5640, "p", "p", "r", "s",
+    private static AreaObjectRecord Grenade(int index, long genericFlags = 0x1, long weight = 3) => new(Key(index), 0, 14, 5640, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, 0), Field(38, 3), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
+            Field(36, 0), Field(38, weight), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
             Field(59, genericFlags), Field(60, 0), Field(61, 1),
         ], true, true, true);
@@ -86,7 +86,7 @@ public sealed class AreaAiThrowTests
     }
 
     private static Scene Open(uint weaponFlags = 0x200, bool grenade = false, long grenadeFlags = 0x1, Func<string, SessionShot, CellCoord, CellCoord, bool>? launch = null, ulong seed = 0, long weight = 15,
-        ISessionItemScriptHost? itemScripts = null, int[]? daggerScripts = null, bool victim = false)
+        ISessionItemScriptHost? itemScripts = null, int[]? daggerScripts = null, bool victim = false, long grenadeWeight = 3)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -94,10 +94,10 @@ public sealed class AreaAiThrowTests
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero) { RandomSeed = seed });
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
         var victimRow = Npc(3, VictimCell);
-        var rows = (grenade ? new[] { Npc(0), Item(1, weaponFlags, weight), Grenade(2, grenadeFlags) } : new[] { Npc(0), Item(1, weaponFlags, weight) }).Concat(victim ? [victimRow] : []).ToArray();
+        var rows = (grenade ? new[] { Npc(0), Item(1, weaponFlags, weight), Grenade(2, grenadeFlags, grenadeWeight) } : new[] { Npc(0), Item(1, weaponFlags, weight) }).Concat(victim ? [victimRow] : []).ToArray();
         var map = new AreaInventoryMap(1,
             new([new SessionSeedHolder(Entity(0), SessionHolderKind.Npc, false, false, [], grenade ? [Entity(1), Entity(2)] : [Entity(1)]), .. victim ? [new SessionSeedHolder(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : new SessionSeedHolder[0]],
-                grenade ? [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, daggerScripts ?? []), null), new SessionSeedItem(Entity(2), new(GrenadeKind, 3, 0, 0, null, []), null)]
+                grenade ? [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, daggerScripts ?? []), null), new SessionSeedItem(Entity(2), new(GrenadeKind, (int)grenadeWeight, 0, 0, null, []), null)]
                     : [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, daggerScripts ?? []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
@@ -217,7 +217,7 @@ public sealed class AreaAiThrowTests
         var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
         var shot = thrown.Throw!.Shots.Single();
         Assert.AreEqual((npc, shot, NpcCell, tile), launched.Single(), "the viewer is asked to fly the shot from the thrower's tile to the location");
-        Assert.AreEqual((AttackOutcome?)AttackOutcome.Hit, thrown.Throw.Attack?.Resolution?.Outcome, "the location roll decided a hit; the grenade's flight carries no check (ARC-COMBAT-2523, TW11)");
+        Assert.AreEqual((AttackOutcome?)AttackOutcome.Hit, thrown.Throw.Attack?.Resolution?.Outcome, "the location roll decided a hit; the grenade's flight carries the check for a stray strike (ARC-COMBAT-2523, TW11; ARC-COMBAT-2693)");
         Assert.IsTrue(session.QueryRandom().Draws > draws, "the location roll draws from the stream");
         Assert.IsTrue(session.QueryItemInFlight(grenade), "the grenade flies, hidden");
         // ARC-SCRIPT-2386 (IV15, 0x4B3C00 sets the off flag, 0x4B2690 clears it): the flight is the flag, with no record written.
@@ -344,6 +344,47 @@ public sealed class AreaAiThrowTests
         Assert.IsTrue(session.QueryItemInFlight(dagger), "the struck throw waits for the landing (LandShot does not end it)");
         Assert.AreEqual(GameSessionDisposition.Changed, session.LandThrownItem(session.Version, shot, VictimCell).Disposition);
         Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+    }
+
+    // ARC-COMBAT-2693: the throw of a grenade at the hero's tile for the first seed whose location roll gives the wanted outcome; the scene it opened.
+    private static Scene OpenGrenadeThrow(Func<AttackOutcome, bool> wanted, Func<string, SessionShot, CellCoord, CellCoord, bool> launch)
+    {
+        for (ulong seed = 1; seed <= 600; seed++)
+        {
+            // A weight that makes the thrown range 1 makes the throw at four tiles a sure miss (RH4).
+            var probe = Open(grenade: true, launch: (_, _, _, _) => true, seed: seed, victim: true, grenadeWeight: ThrowRules.MaxWeight);
+            Assert.IsTrue(probe.Host.ThrowItem(probe.Npc, Entity(2), HeroCell));
+            if (probe.Host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw).Throw!.Attack is { Resolution.Outcome: var outcome } && wanted(outcome))
+                return Open(grenade: true, launch: launch, seed: seed, victim: true, grenadeWeight: ThrowRules.MaxWeight);
+        }
+        throw new AssertFailedException("no seed gave the wanted outcome");
+    }
+
+    [TestMethod]
+    public void A_missed_grenade_carries_its_check_and_the_critter_it_meets_takes_a_forced_hit_of_the_item()
+    {
+        var (session, host, npc, _) = OpenGrenadeThrow(outcome => outcome == AttackOutcome.Miss, (_, _, _, _) => true);
+        var grenade = Entity(2);
+        Assert.IsTrue(host.ThrowItem(npc, grenade, HeroCell), host.TraceOf(npc)?.Throw);
+        var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
+        var shot = thrown.Throw!.Shots.Single();
+        Assert.AreEqual((false, true), (session.QueryNpcShot(shot)!.Value.Hit, session.QueryNpcShot(shot)!.Value.Generic), "the grenade's flight carries the decided miss (ARC-COMBAT-2693)");
+        // The viewer's flight meets the victim on the way: the AI host's strike is a forced hit of the missed shot; the grenade lands where the flight ends.
+        var struck = host.LandShot(npc, shot, Entity(3));
+        Assert.AreEqual((GameSessionDisposition.Changed, AttackOutcome.Hit), (struck?.Disposition, struck?.Resolution?.Outcome), "a stray strike of a missed grenade is a hit");
+        Assert.IsNull(session.QueryNpcShot(shot), "the shot's check ended with the strike");
+        Assert.IsTrue(host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Target == Entity(3)), "the strike is noticed as a hit on the victim");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.LandThrownItem(session.Version, shot, VictimCell).Disposition);
+    }
+
+    [TestMethod]
+    public void A_critical_miss_of_a_grenade_lob_is_a_throw_notice_with_the_self_hit_of_the_thrower()
+    {
+        var (session, host, npc, _) = OpenGrenadeThrow(outcome => outcome == AttackOutcome.CriticalMiss, (_, _, _, _) => true);
+        Assert.IsTrue(host.ThrowItem(npc, Entity(2), HeroCell), host.TraceOf(npc)?.Throw);
+        var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
+        Assert.AreEqual((DamageRecipient.Attacker, true), (thrown.Throw!.Attack!.Recipient, thrown.Throw.Attack.Life is not null), "the critical miss turns on the thrower: the viewer shows it as the thrower's self-hit");
+        Assert.AreEqual(1, session.QueryShotsInFlight().Count, "the grenade still flies");
     }
 
     [TestMethod]

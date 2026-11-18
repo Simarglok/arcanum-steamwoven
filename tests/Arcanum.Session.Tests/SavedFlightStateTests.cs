@@ -217,12 +217,15 @@ public sealed class SavedFlightStateTests
         using var owner = NpcThrowStateTests.Owner();
         var tile = new CellCoord(98, 203);
         var shot = owner.ThrowByNpc(owner.Version, NpcThrowStateTests.Lob(tile)).Shots.Single();
-        Fly(owner, shot, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
+        // ARC-COMBAT-2693: a grenade lobbed at a location carries its check as a weapon does (a stray strike), so its flight names its shooter and the arrow is saved with the throw.
+        Fly(owner, shot, NpcThrowStateTests.Thrower, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
         var capture = owner.Capture();
-        Assert.AreEqual((1, 0, 0), (capture.Flights.NpcThrows.Count, capture.Flights.HeroShots.Count, capture.Flights.NpcArrows.Count));
+        Assert.AreEqual((1, 0, 1), (capture.Flights.NpcThrows.Count, capture.Flights.HeroShots.Count, capture.Flights.NpcArrows.Count));
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
         Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcThrowStateTests.Seed()).Failure);
         Assert.AreEqual(owner.QueryThrownShot(shot), restored.QueryThrownShot(shot));
+        Assert.AreEqual(owner.QueryNpcShot(shot), restored.QueryNpcShot(shot), "the restored grenade's check is still a generic item's (ARC-COMBAT-2693)");
+        Assert.IsTrue(restored.QueryNpcShot(shot)!.Value.Generic);
         Assert.IsTrue(restored.QueryItemInFlight(NpcThrowStateTests.Grenade), "the grenade stays hidden while it flies");
         Assert.AreEqual(owner.QueryShotEndItemEvents(shot, tile).Single().Event, restored.QueryShotEndItemEvents(shot, tile).Single().Event, "it still goes off where it ends");
     }
