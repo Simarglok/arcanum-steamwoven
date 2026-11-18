@@ -135,17 +135,17 @@ public sealed class ThrowAmmunitionStateTests
 
     private const string Thrower = NpcThrowStateTests.Thrower, Dagger = NpcThrowStateTests.Dagger, Quiver = "thrower-arrows";
 
-    private static CombatFields ThrownBowFields(int consumption) =>
+    private static CombatFields ThrownBowFields(int consumption, CombatWeaponSkill skill = CombatWeaponSkill.Melee) =>
         new(CombatFieldOrigin.AreaObject, new CombatObjectFields(5, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
             new CombatItemFields(0, 15, 1, 0, 0, 0, (int)EquipmentSlot.Weapon, [10000, 10000, 10000, 10000, 10000], 0, 0, CombatItemArt.ItemArtType << 28, 0),
-            new CombatWeaponFields(CombatWeaponFlags.DefaultThrows, CombatWeaponSkill.Melee, 0, 0, [new(2, 6), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
+            new CombatWeaponFields(CombatWeaponFlags.DefaultThrows, skill, 0, 0, [new(2, 6), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
                 [0, 0, 0, 0, 0], 10, 0, 1, 0, 0, 0, 0, consumption, 0, 0, 0, 0, 0, 0), null, null, null, null, null);
 
-    private static SessionCritterCombat NpcCombat(int consumption)
+    private static SessionCritterCombat NpcCombat(int consumption, CombatWeaponSkill skill = CombatWeaponSkill.Melee)
     {
         var skills = new int[12];
         skills[(int)BasicCombatSkill.Throwing] = 5;
-        var build = SessionCritterCombat.From(Thrower, Npc(skills: skills), [ThrownBowFields(consumption)]);
+        var build = SessionCritterCombat.From(Thrower, Npc(skills: skills), [ThrownBowFields(consumption, skill)]);
         Assert.AreEqual(SessionCritterCombatFailure.None, build.Failure);
         return build.Combat!;
     }
@@ -161,7 +161,7 @@ public sealed class ThrowAmmunitionStateTests
         return owner;
     }
 
-    private static SessionNpcThrow NpcThrow(int consumption, bool atHero) => new(NpcCombat(consumption), Dagger, 15, NpcThrowStateTests.ThrowerCell, atHero ? NpcThrowStateTests.HeroCell : new CellCoord(95, 205))
+    private static SessionNpcThrow NpcThrow(int consumption, bool atHero, CombatWeaponSkill skill = CombatWeaponSkill.Melee) => new(NpcCombat(consumption, skill), Dagger, 15, NpcThrowStateTests.ThrowerCell, atHero ? NpcThrowStateTests.HeroCell : new CellCoord(95, 205))
     {
         StruckHero = atHero, StruckCell = atHero ? NpcThrowStateTests.HeroCell : null, ThrowerWorn = NpcThrowStateTests.Wielded(),
     };
@@ -210,5 +210,83 @@ public sealed class ThrowAmmunitionStateTests
             Assert.IsNull(thrown.Attack?.Ammunition);
             Assert.AreEqual(GameSessionDisposition.Changed, thrown.Disposition, "the throw went on");
         }
+    }
+
+    // ---- ARC-COMBAT-2699: the unrolled stream and a non-melee thrower ----
+
+    [TestMethod]
+    public void ACompanionsThrowOnAnExhaustedStreamStillSpendsItsArrows()
+    {
+        foreach (var flight in new[] { false, true })
+        {
+            using var owner = NpcOwner(companion: true, units: 5);
+            Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+            var thrown = owner.ThrowByNpc(owner.Version, NpcThrow(2, atHero: false) with { Flight = flight });
+            var label = $"flight={flight}";
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, false), (thrown.Disposition, thrown.Failure, thrown.AmmunitionShort), label);
+            Assert.IsNull(thrown.Attack!.Resolution, label + ": nothing was rolled");
+            Assert.AreEqual(GameSessionFailure.None, thrown.Attack.StepFailure, label);
+            Assert.AreEqual(3, Units(owner), label + ": two arrows a throw");
+            Assert.AreEqual(3, thrown.Attack.Ammunition!.Value.UnitsAfter, label);
+            Assert.AreEqual(thrown.Version, owner.Version, label + ": the result names the version after the spend");
+        }
+    }
+
+    [TestMethod]
+    public void AnUnrolledThrowOfAThrowerWithNoPcLeaderSpendsNothing()
+    {
+        using var owner = NpcOwner(companion: false, units: 5);
+        Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        var thrown = owner.ThrowByNpc(owner.Version, NpcThrow(2, atHero: false));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (thrown.Disposition, thrown.Failure));
+        Assert.IsNull(thrown.Attack);
+        Assert.AreEqual(5, Units(owner));
+    }
+
+    [TestMethod]
+    public void ACompanionWithTooFewArrowsRefusesAnUnrolledThrowAsWell()
+    {
+        using var owner = NpcOwner(companion: true, units: 1);
+        Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        var thrown = owner.ThrowByNpc(owner.Version, NpcThrow(2, atHero: false));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (thrown.Disposition, thrown.Failure, thrown.AmmunitionShort));
+        Assert.AreEqual(1, Units(owner));
+    }
+
+    [TestMethod]
+    public void ABowOrFirearmWieldedByACompanionIsThrownAndReachesTheAmmunitionCheck()
+    {
+        foreach (var skill in new[] { CombatWeaponSkill.Bow, CombatWeaponSkill.Firearms })
+            foreach (var atHero in new[] { true, false })
+            {
+                var label = $"{skill}, atHero={atHero}";
+                using var enough = NpcOwner(companion: true, units: 5);
+                var thrown = enough.ThrowByNpc(enough.Version, NpcThrow(2, atHero, skill));
+                Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, false), (thrown.Disposition, thrown.Failure, thrown.AmmunitionShort), label);
+                Assert.AreEqual(3, Units(enough), label + ": two arrows a throw");
+
+                using var short_ = NpcOwner(companion: true, units: 1);
+                var refused = short_.ThrowByNpc(short_.Version, NpcThrow(2, atHero, skill));
+                Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (refused.Disposition, refused.Failure, refused.AmmunitionShort), label);
+                Assert.AreEqual(1, Units(short_), label + ": nothing was spent");
+                Assert.IsTrue(short_.QueryItemOff(short_.QueryActor().Map, Dagger, dataOff: false), label + ": the weapon lies switched off");
+            }
+    }
+
+    [TestMethod]
+    public void AThrowingSkillWeaponAndABowOnAnExhaustedStreamBehaveAsTheirSupportAndAmmunitionSay()
+    {
+        foreach (var atHero in new[] { true, false })
+        {
+            using var boomerang = NpcOwner(companion: true, units: 5);
+            var refused = boomerang.ThrowByNpc(boomerang.Version, NpcThrow(2, atHero, CombatWeaponSkill.Throwing));
+            Assert.AreEqual(GameSessionFailure.AttackUnsupported, refused.Failure, $"atHero={atHero}: a throwing-skill weapon is no supported NPC attack");
+            Assert.AreEqual(5, Units(boomerang));
+        }
+        using var owner = NpcOwner(companion: true, units: 5);
+        Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        var thrown = owner.ThrowByNpc(owner.Version, NpcThrow(2, atHero: false, CombatWeaponSkill.Bow));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (thrown.Disposition, thrown.Failure));
+        Assert.AreEqual(3, Units(owner), "a bow thrown unrolled spends its arrows");
     }
 }
