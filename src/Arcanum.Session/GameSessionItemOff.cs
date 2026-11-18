@@ -37,4 +37,15 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(entity);
         return QueryObjectChange(map, SessionItemOff.Key(entity)) is { } value ? value == 1 : dataOff;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2585 (ledger OT10): the record of a script's toggle state on the static object <paramref name="entity"/>: true for off, false for on, null when no script toggled it (the map data's flag stands). The same record
+    /// <see cref="QueryObjectOff"/> reads; a reader that needs only the objects a script changed (the lights of a scenery) asks this.
+    /// </summary>
+    public bool? QueryObjectOffRecord(SessionMapId map, string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return QueryObjectChange(map, SessionItemOff.Key(entity)) is { } value ? value == 1 : null;
+    }
 }

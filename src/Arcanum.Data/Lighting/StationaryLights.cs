@@ -127,6 +127,29 @@ public sealed class AreaStationaryLightSource
         return new(catalogueMap, null, list, new Dictionary<int, StationaryLightFrame>(frames));
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2585 (ledger OT2, OT10): this source with the lights of the objects in <paramref name="states"/> switched off (true: the light's OFF bit set) or on (false: cleared), as the original's toggle
+    /// setters do for every light field of the object (0x43D0E0 ends the lit flag light and marks the lights off through 0x4DCEA0; 0x43D280 marks them on through 0x4DCF60). A light of any other owner and every
+    /// stationary light stay as they are; this source itself when nothing changes.
+    /// </summary>
+    public AreaStationaryLightSource WithObjectsOff(IReadOnlyDictionary<AreaObjectKey, bool> states)
+    {
+        ArgumentNullException.ThrowIfNull(states);
+        if (states.Count == 0) return this;
+        var changed = false;
+        var lights = new List<StationaryLight>(Lights.Count);
+        foreach (var light in Lights)
+        {
+            if (light.Owner is { } owner && states.TryGetValue(owner, out var off))
+            {
+                var flags = off ? light.Flags | StationaryLightFlags.Off : light.Flags & ~StationaryLightFlags.Off;
+                if (flags != light.Flags) { lights.Add(light with { Flags = flags }); changed = true; continue; }
+            }
+            lights.Add(light);
+        }
+        return changed ? new(CatalogueMap, NamesSha256, lights, new Dictionary<int, StationaryLightFrame>(Frames)) : this;
+    }
+
     public int CatalogueMap { get; }
     /// <summary>SHA-256 of <c>art/light/light.mes</c>; null for synthetic sources.</summary>
     public string? NamesSha256 { get; }
