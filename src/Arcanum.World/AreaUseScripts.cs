@@ -488,7 +488,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-WORLD-081 (PG3): the shown map's scenery within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
-    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place.
+    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : SceneryAround(at);
 
@@ -501,7 +501,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2041 (PV1–PV3): the shown map's portals within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, open, closed or locked alike, in snapshot order
-    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place.
+    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre)
     {
@@ -526,7 +526,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2322 (CV1–CV3): the shown map's containers within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, in snapshot order (the portals' rule with the
-    /// container type). Empty for a centre of another map or without a place.
+    /// container type). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
     {
@@ -574,7 +574,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-047 (TG4): the shown map's PCs and NPCs within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
     /// destroyed or switched off, the centre itself and the dead included: the NPC rows in snapshot order at their live cells
     /// (<see cref="AreaScriptWorld.CritterCell"/>, else the row's), then the PC at its live cell (the original's list order is not read).
-    /// Empty for a centre of another map or without a place.
+    /// Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     [OriginalFunction(0x440FF0, OriginalFunctionScope.Partial)]
     public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : CrittersAround(at);
@@ -954,7 +954,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
     private bool IsItemObject(ScrObjectRef obj) =>
-        (Row(obj) ?? CarriedItemRow(obj)) is { Type: >= FirstItemType and <= LastItemType } || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && p.Map.RuntimeMap == obj.Map);
+        Row(obj) is { } row ? row.Type is >= FirstItemType and <= LastItemType
+        : CarriedItemRow(obj) is not null || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && (p.Map.RuntimeMap == obj.Map || p.Origin?.RuntimeMap == obj.Map));
 
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>

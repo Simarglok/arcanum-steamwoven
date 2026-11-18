@@ -742,6 +742,9 @@ public sealed class AreaCombatPointScriptTests
             var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(holder), Ref(near), session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             CollectionAssert.AreEquivalent(new[] { AreaUseScriptHost.EntityId(near) }, damaged.Select(d => d.Victim).ToArray(), "only the critter around the weapon's tile, not the far ones nor the holder");
+            // A critter centre keeps its own place: the near critter sees itself and no far one; the weapon's row centre sees the same critter.
+            CollectionAssert.AreEquivalent(new[] { Ref(near) }, host.CrittersInVicinity(Ref(near)).Where(o => o != host.Pc).ToArray());
+            CollectionAssert.AreEquivalent(new[] { Ref(near) }, host.CrittersInVicinity(Ref(weapon)).Where(o => o != host.Pc).ToArray());
         });
     }
 
