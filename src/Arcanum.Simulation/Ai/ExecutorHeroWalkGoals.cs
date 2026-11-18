@@ -297,6 +297,11 @@ public static partial class AiExecutorRules
                         if (plan.Straight) state.Flags |= GoalRunFlags.Flight;
                         var steps = plan.Steps.Length > SegmentSteps ? plan.Steps[..SegmentSteps] : plan.Steps;
                         return new(Move.Next, goal.Goal == GoalType.RunToTile ? 7 : 6, Top: goal with { Path = steps, PathIndex = 0 });
+                    // ARC-COMBAT-2736 (0x427990, 0x42E9B0): the original's planner runs before the no-walk test and has no far outcome (it plans or fails), and the step start then refuses at once, so a run with run flag 0x100 (a Shift click)
+                    // never walks; Steamwoven's route follower is a walk too, so it is not handed the far goal: the run ends as a refused step does.
+                    case AiHeroPlanOutcome.Far when (state.Flags & GoalRunFlags.NoWalk) != 0:
+                        state.PathFlags &= ~GoalPathFlags.Replan;
+                        return End(AiExecutorReason.NoWalkStep);
                     case AiHeroPlanOutcome.Far when world.FollowRoute(tile):
                         state.PathFlags &= ~GoalPathFlags.Replan;
                         return new(Move.Restart, Delay: HeroRoutePollMs, Top: goal with { Flags = goal.Flags | GoalFrameFlags.RouteFollow });
@@ -307,7 +312,8 @@ public static partial class AiExecutorRules
                 }
             // 6: the turn toward the path's first rotation (a hero that faces it already, or is not standing, does not turn); goal 5 follows (node 4).
             default:
-                if (!goal.Path.IsDefaultOrEmpty && LineOfFireRules.Rotation(at, goal.Path[0]) is var rotation && world.NeedsTurn(rotation))
+                // ARC-COMBAT-2736 (0x42E9B0): the original's step start answers false for run flag 0x100 before it writes the facing, so a no-walk run (a Shift click out of reach) turns nowhere before its run ends.
+                if ((state.Flags & GoalRunFlags.NoWalk) == 0 && !goal.Path.IsDefaultOrEmpty && LineOfFireRules.Rotation(at, goal.Path[0]) is var rotation && world.NeedsTurn(rotation))
                     return new(Move.Push, Frame: new GoalFrame(GoalType.Rotate) { Rotation = rotation });
                 return Next(goal.Goal == GoalType.RunToTile ? 5 : 4);
         }

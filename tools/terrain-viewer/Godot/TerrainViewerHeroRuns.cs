@@ -280,6 +280,7 @@ public partial class TerrainViewerApp
         public void HeroAttackHit(string target) => app.HeroAttackHit(target);
         public bool HeroAttackRepeats(string target) => app.HeroAttackRepeats(target);
         public void AttackEnds(string target, AiExecutorReason reason) => app.HeroAttackEnds(target, reason);
+        public void HeroClickNoWalkEnds(GoalType goal, string target) => app.HeroClickNoWalkEnds(goal, target);
         public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) => app.HeroBeginThrow(item, tile);
         public bool HeroThrowItem(string item, CellCoord tile) => app.HeroThrowItem(item, tile);
         public void HeroThrowEnds(string item, AiExecutorReason reason) => app.HeroThrowEnds(item, reason);

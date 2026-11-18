@@ -26,8 +26,12 @@ public sealed class HeroTalkGoalsTests
         bool IAiHeroWalkWorld.Down => Down;
         bool IAiHeroWalkWorld.InRound => InRound;
 
+        public bool FarPlan, TurnNeeded;
+        public int FollowRoutes, Turns;
+
         public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight)
         {
+            if (FarPlan) return new(AiHeroPlanOutcome.Far, default);
             var cells = new List<CellCoord>();
             for (var at = At; at != destination;) cells.Add(at = new(at.X + Math.Sign(destination.X - at.X), at.Y + Math.Sign(destination.Y - at.Y)));
             return new(AiHeroPlanOutcome.Found, [.. cells]);
@@ -36,10 +40,10 @@ public sealed class HeroTalkGoalsTests
         public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => AiStepBlock.Clear;
         public int BeginStep(CellCoord from, CellCoord next, bool running) { Log.Add("step " + next.X + "," + next.Y); At = next; if (DiesAfterSteps > 0 && ++_steps == DiesAfterSteps) Dead = true; return 100; }
         public bool StepPending(CellCoord from, CellCoord to) => false;
-        public bool FollowRoute(CellCoord destination) => false;
+        public bool FollowRoute(CellCoord destination) { FollowRoutes++; return true; }
         public bool RouteFollowing(CellCoord destination) => false;
-        public bool NeedsTurn(int rotation) => false;
-        public int TurnStep(int rotation) => 0;
+        public bool NeedsTurn(int rotation) => TurnNeeded;
+        public int TurnStep(int rotation) { Turns++; return 0; }
 
         public AiHeroTarget? ObjectTarget(string target) => Gone ? null : new(Npc, Refused, Range, Portal: DoorFake is not null);
         public FakeDoors? DoorFake;
@@ -317,6 +321,99 @@ public sealed class HeroTalkGoalsTests
         w.Gone = true;
         var (_, _) = Drive(run, w);
         Assert.IsFalse(w.Log.Any(l => l.StartsWith("pickup", StringComparison.Ordinal)));
+    }
+
+    // ARC-COMBAT-2736 (tail of ARC-COMBAT-1948, GT148/GT213): a Shift click carries the no-walk flag 0x100; out of reach the walk step answers false and the whole run ends with no step, no act and no message;
+    // in reach the goal acts as always (goal 15's reach is the item's own tile, goals 38 and 81's the use range).
+
+    private static GoalRun NoWalk(GoalRun run) => run with { Flags = GoalRunFlags.NoWalk };
+
+    [TestMethod]
+    public void AShiftUseOrLootOutOfReachTakesNoStepAndEndsTheRunWithoutAnAct()
+    {
+        foreach (var goal in new[] { GoalType.UseObject, GoalType.UseContainer })
+        {
+            var w = new World { Npc = new(16, 10), Range = 1 };
+            var (last, _) = Drive(NoWalk(UseRun(goal)), w);
+            Assert.AreEqual(0, w.Log.Count, $"{goal}: no step and no use");
+            Assert.AreEqual(new CellCoord(10, 10), w.At, goal.ToString());
+            Assert.AreEqual(AiRunEnd.EndStep, last.End, goal.ToString());
+            Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason, goal.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void AShiftUseOrLootWithinReachActsAsAlways()
+    {
+        foreach (var goal in new[] { GoalType.UseObject, GoalType.UseContainer })
+        {
+            var w = new World { Npc = new(11, 10), Range = 1 };
+            var (last, _) = Drive(NoWalk(UseRun(goal)), w);
+            CollectionAssert.AreEqual(new[] { "use " + Npc }, w.Log, goal.ToString());
+            Assert.AreEqual(AiRunEnd.EndStep, last.End, goal.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void AShiftUseOneCellBeyondTheTargetsRangeStillWalksNowhere()
+    {
+        var w = new World { Npc = new(13, 10), Range = 2 };
+        var (last, _) = Drive(NoWalk(UseRun()), w);
+        Assert.AreEqual(0, w.Log.Count);
+        Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason);
+    }
+
+    [TestMethod]
+    public void AShiftPickupOutOfReachTakesNoStepAndEndsTheRunWithoutATake()
+    {
+        var w = new World { At = new(10, 10), Npc = new(13, 10), Approach = new(13, 10) };
+        var (last, _) = Drive(NoWalk(PickupRun()), w);
+        Assert.AreEqual(0, w.Log.Count, "no step and no pickup");
+        Assert.AreEqual(new CellCoord(10, 10), w.At);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
+        Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason);
+    }
+
+    [TestMethod]
+    public void AShiftPickupOnTheItemsOwnTileTakesItAsAlways()
+    {
+        var w = new World { At = new(12, 10), Npc = new(12, 10) };
+        var (last, _) = Drive(NoWalk(PickupRun()), w);
+        CollectionAssert.AreEqual(new[] { "pickup " + Npc }, w.Log);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
+    }
+
+    [TestMethod]
+    public void AShiftUseOrPickupOutOfReachTurnsTheHeroNowhere()
+    {
+        // 0x42E9B0 answers false for 0x100 before it writes the facing: no turn before the run ends.
+        foreach (var run in new[] { UseRun(), UseRun(GoalType.UseContainer), PickupRun() })
+        {
+            var w = new World { Npc = new(16, 10), Range = 1, TurnNeeded = true, Approach = new(16, 10) };
+            var (last, _) = Drive(NoWalk(run), w);
+            Assert.AreEqual(0, w.Turns, run.Bottom.Goal.ToString());
+            Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason, run.Bottom.Goal.ToString());
+        }
+        var plain = new World { Npc = new(16, 10), Range = 1, TurnNeeded = true };
+        Drive(UseRun(), plain);
+        Assert.IsTrue(plain.Turns > 0, "without Shift the same walk turns the hero first");
+    }
+
+    [TestMethod]
+    public void AShiftUseOrPickupOnAFarTargetHandsNothingToTheRouteFollower()
+    {
+        foreach (var run in new[] { UseRun(), UseRun(GoalType.UseContainer), PickupRun() })
+        {
+            var w = new World { Npc = new(16, 10), Range = 1, FarPlan = true, Approach = new(16, 10) };
+            var (last, _) = Drive(NoWalk(run), w);
+            Assert.AreEqual(0, w.FollowRoutes, run.Bottom.Goal.ToString());
+            Assert.AreEqual(0, w.Log.Count, run.Bottom.Goal.ToString());
+            Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason, run.Bottom.Goal.ToString());
+        }
+        var plain = new World { Npc = new(16, 10), Range = 1, FarPlan = true };
+        var again = UseRun();
+        for (var i = 0; i < 3 && AiExecutorRules.StepHeroWalk(again, plain) is { Ended: false } step; i++) again = step.Run!;
+        Assert.IsTrue(plain.FollowRoutes > 0, "without Shift the far goal goes to the route follower");
     }
 
     // ARC-DEV-176 (MIG13 S11d): the use of a door or window: goal 38 turns into the door goals.

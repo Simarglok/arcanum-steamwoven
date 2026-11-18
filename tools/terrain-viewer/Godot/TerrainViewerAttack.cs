@@ -673,6 +673,24 @@ public partial class TerrainViewerApp
         return repeats;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-2736: a Shift use, loot or pickup out of reach ended at its first step (no-walk flag 0x100, GT148/GT213; the original says nothing). The status line that said the goal started says the hero stays where it is
+    /// (the portal notice for a door or window, the inventory line for a loot or pickup, the use line for any other trigger object).
+    /// </summary>
+    internal void HeroClickNoWalkEnds(Arcanum.Simulation.Goals.GoalType goal, string target)
+    {
+        var line = goal switch
+        {
+            Arcanum.Simulation.Goals.GoalType.PickupItem => "Shift: the item is not within reach from here, no walk (goal 15 ended)",
+            Arcanum.Simulation.Goals.GoalType.UseContainer => "Shift: not within reach from here, no walk (goal 81 ended)",
+            _ => "Shift: not within reach from here, no walk (goal 38 ended)",
+        };
+        if (goal is Arcanum.Simulation.Goals.GoalType.PickupItem or Arcanum.Simulation.Goals.GoalType.UseContainer) _inventoryStatus = line;
+        else if (_areaDoors?.PortalOf(target) is not null) _portalNotice = line;
+        else _areaUseStatus = line;
+        RefreshAreaStatus();
+    }
+
     /// <summary>An attack goal ends the run (the node says why): the attack is cleared and the status line says it.</summary>
     internal void HeroAttackEnds(string target, Arcanum.Simulation.Ai.AiExecutorReason reason)
     {

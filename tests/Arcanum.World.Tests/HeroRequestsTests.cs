@@ -328,6 +328,21 @@ public sealed class HeroRequestsTests
         CollectionAssert.AreEqual(new[] { "attack obj:1 run=True" }, hero.Calls);
     }
 
+    // ARC-COMBAT-2736 (tail of ARC-COMBAT-1941): Shift+Alt on a container or scenery in combat mode stays the attempt attack 19 with no running, through the request host as well as the rule table.
+    [TestMethod]
+    public void AShiftAltClickOnAContainerOrSceneryInCombatModeStaysTheAttemptAttack()
+    {
+        foreach (var kind in new[] { HeroClickTarget.Container, HeroClickTarget.Scenery })
+        {
+            var hero = new Hero { Click = new(true, false, false, false, true, kind, Alt: true, Shift: true) };
+            var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Alt: true, Shift: true));
+            Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome, kind.ToString());
+            Assert.AreEqual(HeroClickGoal.AttemptAttack, result.Click, kind.ToString());
+            Assert.IsFalse(result.Run, kind.ToString());
+            CollectionAssert.AreEqual(new[] { "attempt obj:1" }, hero.Calls, kind.ToString());
+        }
+    }
+
     // ARC-COMBAT-1949 (VC62): the start branch of the click.
     [TestMethod]
     public void AnEqualClickIsIgnoredWithTheAutoAttackOptionOnAndChangesNoFlag()
