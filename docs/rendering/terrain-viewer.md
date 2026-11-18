@@ -2420,7 +2420,7 @@ actions (131) give the slide numbers (up to 100), which the table `rules\slide.m
   (the dying run the kill makes, 0x45DA57); both movies play from the installed table through the real decoder (800 × 400) with the session clocks standing still and no slide beginning under them; then the
   show starts and shows script 997's queue for the game's flags (46, 20, 33, 39 and 44 for a new game), each installed 800 × 600 picture fading in over about 2 s with the slides' music and its voice, a key
   release ending it and a 2 s fade-out; then the start map loads again with a fresh session without a hero and the main menu fades in. Without ffmpeg the movies are passed over (said in the log) and
-  the rest runs. `ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a frame of each movie, each slide and the reopened menu as PNG for a graphics report (never committed).
+  the rest runs. ARC-RENDER-2197: three more endings follow, each from a new game: the Vendigroth underground's use script 2862 used with the item named 6711 it tests its extra object for (movies 3 and 5, then 132) with global flag 2053 set, which script 997 answers with slide 3 alone, and the end game asked for with flag 2632 (slide 1) and with flag 2050 (slide 4), each with its picture, fades, voice, reset and menu fade-in. `ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a frame of each movie, each slide and the reopened menu as PNG for a graphics report (never committed).
 
 ### Options window (ARC-UI-013)
 

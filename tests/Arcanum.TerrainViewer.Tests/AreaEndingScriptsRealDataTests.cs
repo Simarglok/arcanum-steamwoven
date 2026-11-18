@@ -14,12 +14,15 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaEndingScriptsRealDataTests
 {
-    private static AreaObjectRecord Kerghan(int index, int script)
+    private static AreaObjectRecord Kerghan(int index, int script) => Scripted(index, ScrPoint.Dying, script);
+
+    // A row with the installed script at one attachment point (the dying point of Kerghan's prototypes, the use point of the Vendigroth underground's object).
+    private static AreaObjectRecord Scripted(int index, int point, int script)
     {
         var key = new AreaObjectKey(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
         var fields = new List<AreaFieldValue>
         {
-            new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dying, [0, 0, script])], null),
+            new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(point, [0, 0, script])], null),
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, 0u, [], null),
         };
         return new(key, 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
@@ -52,6 +55,55 @@ public sealed class AreaEndingScriptsRealDataTests
         }
     }
 
+    // The item the Vendigroth underground's use script 2862 tests its extra object for: an item row named 6711 (field 21), beside the object that carries the script.
+    internal static AreaObjectRecord VendigrothItem(int index)
+    {
+        var key = new AreaObjectKey(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
+        var fields = new List<AreaFieldValue> { new(21, AreaPresence.Value, AreaValueOrigin.Instance, 6711L, [], null) };
+        return new(key, 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
+    }
+
+    /// <summary>ARC-RENDER-2197: the Vendigroth underground's use script 2862 (use point 1 of a type-14 object) is admitted whole by the use set (float line, 23, included) and runs through the use host (<see cref="AreaUseScriptHost.RunUseScript"/>): used with the item
+    /// it tests its extra object for (name 6711) it plays its movies 3 and 5 and asks for the end of the game (script action 132); used with nothing it plays none (its float line 1 finds no dialog file in the installed game and floats nothing). Numbers only; no picture, movie or text is read or printed.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_Vendigroth_use_script_2862_plays_movies_3_and_5_and_asks_for_the_end_of_the_game_when_used_with_its_item()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in ending check; this is not a synthetic pass.");
+        using var content = ConversationSessionFixture.Scripts(root);
+        var read = content.Script(2862);
+        Assert.AreEqual(Arcanum.Data.Scripts.ScriptContentStatus.Read, read.Status, $"script 2862 {read.Detail}");
+        var admission = ScrAdmission.Admit(read.Program!, AreaUseScriptHost.Admission);
+        Assert.IsTrue(admission.IsAdmitted, $"script 2862 is admitted whole by the use set: {admission.Refusal}");
+
+        using var session = ConversationSessionFixture.CreateWithHero();
+        var row = Scripted(1, ScrPoint.Use, 2862);
+        var item = VendigrothItem(2);
+        var host = new AreaUseScriptHost(session, 1, [row, item], [], content, new AreaScriptWorld(() => new(11, 20), _ => false, _ => null, () => null));
+        var ran = host.RunUseScript(AreaUseScriptHost.EntityId(row), host.Pc, new ScrObjectRef(1, AreaUseScriptHost.EntityId(item)), session.Rules.Scripts);
+        var fades = host.TakeFades();
+        var endGame = host.TakeEndGame();
+        var floats = host.TakeFloats();
+        Console.WriteLine($"script 2862 with the item: outcome {ran.Outcome}, run {ran.Run?.Outcome}/{ran.Run?.Stop}, fades {string.Join(",", fades.Select(f => $"movie {f.Movie} track {f.Track} advance {f.AdvanceMs}"))}, end game {endGame}, floats {floats.Count}");
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+        CollectionAssert.AreEqual(new[] { 3, 5 }, fades.Select(f => f.Movie).ToArray(), "movies in order");
+        Assert.IsTrue(endGame, "script 2862 asks for the end of the game");
+        Assert.IsFalse(host.TakeEndGame(), "taken once");
+        // Its float line (23) asks for line 1 of the script's own dialog file; the installed game holds none readable for 2862, so (as in the original, whose load fails) nothing floats.
+        Assert.AreNotEqual(Arcanum.Data.Scripts.ScriptContentStatus.Read, content.Dialog(2862, session.Rules.Data).Status, "no readable dialog file for script 2862");
+        Assert.AreEqual(0, floats.Count, "nothing floats: no dialog file");
+
+        // Used with nothing, the extra object is missing and the script floats its hint line instead: no movie, no end of the game.
+        using var plain = ConversationSessionFixture.CreateWithHero();
+        var plainHost = new AreaUseScriptHost(plain, 1, [row], [], content, new AreaScriptWorld(() => new(11, 20), _ => false, _ => null, () => null));
+        var ranPlain = plainHost.Run(row, plain.Rules.Scripts);
+        Console.WriteLine($"script 2862 plain: outcome {ranPlain.Outcome}, run {ranPlain.Run?.Outcome}/{ranPlain.Run?.Stop}");
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ranPlain.Outcome, ranPlain.Detail);
+        Assert.AreEqual(0, plainHost.TakeFades().Count, "no movie without the item");
+        Assert.AreEqual(0, plainHost.TakeFloats().Count, "nothing floats: no dialog file");
+        Assert.IsFalse(plainHost.TakeEndGame(), "no end of the game without the item");
+    }
+
     /// <summary>ARC-SCRIPT-2198: Kerghan's dialog script 1105 (dialog point 9) runs under the dialog host with the shown map's use host answering: its ending lines (88, 91) play movie 2 or 3 through fade and ask for the end of the game,
     /// and the whole script is admitted (loops, change script, disband, create item, transform, call script, call-ex); the movies reach the viewer through <see cref="AreaScriptHost.TakeFades"/> and <see cref="AreaScriptHost.TakeEndGame"/>.</summary>
     [TestMethod, TestCategory("RealData")]
@@ -73,7 +125,7 @@ public sealed class AreaEndingScriptsRealDataTests
             var speaker = new AreaSpeaker(0, row, 1105, row.WorldX!.Value, row.WorldY!.Value);
             var map = new SessionMapId(1);
             var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
-            var use = new AreaUseScriptHost(session, 1, [row], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+            var use = new AreaUseScriptHost(session, 1, [row], [], content, new AreaScriptWorld(() => new(11, 20), _ => false, _ => null, () => null));
             var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
             Assert.AreSame(AreaScriptHost.SkillTalkAdmission, host.RunAdmission);
             var admission = ScrAdmission.Admit(content.Script(1105).Program!, host.RunAdmission);
