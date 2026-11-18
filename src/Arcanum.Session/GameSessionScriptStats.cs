@@ -13,8 +13,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The hero's stat <paramref name="stat"/> by the original's number as the stat getter (0x4B0490) gives it, or null without a hero or for a
     /// stat the session does not hold yet (GS3: the secondary stats 8..15, experience, fate and the rest). Strength to charisma (0..7) and the
-    /// aptitude (16) are the effective values with the life's poison and crippled legs (<c>HeroEffectiveStat</c>); the level (17) is the hero's
-    /// stored level and the alignment (19) the stored alignment (effects on them are not read).
+    /// aptitude (16) are the effective values with the life's poison and crippled legs (<c>HeroEffectiveStat</c>); the level (17) and the
+    /// alignment (19) are the stored values with the changes of that stat in the effect list laid over them (<see cref="HeroLevelAlignmentStat"/>).
     /// </summary>
     public int? QueryHeroScriptStat(int stat)
     {
@@ -24,10 +24,24 @@ public sealed partial class GameSessionOwner
         {
             >= 0 and <= 7 => HeroEffectiveStat((CharacterStat)stat),
             ScriptStatAptitude => HeroEffectiveStat(CharacterStat.MagickTechAptitude),
-            ScriptStatLevel => hero.State.Level,
-            ScriptStatAlignment => hero.State.Alignment,
+            ScriptStatLevel or ScriptStatAlignment => HeroLevelAlignmentStat(stat, _effects.Entries, _effects.Definitions),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// ARC-AI-2750 (exe read of the stat getter for stats 17 and 19, the PC included, ledger AP5): the hero's level (17) or alignment (19) as the getter gives
+    /// it: the stored value, then every change of that stat in the effect list as <see cref="EffectModifiers.Apply"/> aggregates them (the innate entries of
+    /// the race and gender stand first, then the entries of <paramref name="entries"/>), clamped to the stat's range. A number without a rule has no changes.
+    /// Null without a hero or for another stat.
+    /// </summary>
+    private int? HeroLevelAlignmentStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        if (_hero is not { } hero || stat is not (ScriptStatLevel or ScriptStatAlignment)) return null;
+        var level = stat == ScriptStatLevel;
+        var changes = EffectDomain.StatChanges(entries, definitions, stat, HeroInnateRules());
+        return Math.Clamp(EffectModifiers.Apply(level ? hero.State.Level : hero.State.Alignment, changes),
+            level ? SessionHeroLimits.MinLevel : SessionHeroLimits.MinAlignment, level ? SessionHeroLimits.MaxLevel : SessionHeroLimits.MaxAlignment);
     }
 
     /// <summary>Whether the hero's background makes the dumb test (0x45FC00, ledger BG5) pass without a low intelligence: background 55, 74 or 75;
