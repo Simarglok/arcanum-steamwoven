@@ -16,6 +16,8 @@ public enum AreaBodyMoveStatus
     EntryMismatch,
     /// <summary>No walk ART exists next to the body's ART.</summary>
     WalkMissing,
+    /// <summary>ARC-COMBAT-1932: no ART file exists for an armed animation after the missing-art repair and the viewer's fallbacks (none was unreadable): the attack's start fails.</summary>
+    ArtMissing,
     /// <summary>An ART could not be read or decoded.</summary>
     Unreadable,
 }
@@ -247,7 +249,7 @@ public static class AreaBodyMoveArt
                 // An unreadable candidate leaves the next one.
                 catch (Exception error) when (error is DatException or ArtException or ArgumentException) { refused.Add($"{wanted}: {error.GetType().Name}"); }
             }
-            return new(refused.Count == 0 ? AreaBodyMoveStatus.WalkMissing : AreaBodyMoveStatus.Unreadable, null, animation, weapon, shield,
+            return new(refused.Count == 0 ? AreaBodyMoveStatus.ArtMissing : AreaBodyMoveStatus.Unreadable, null, animation, weapon, shield,
                 string.Join("; ", [$"animation {animation} weapon {weapon} shield {shield}", .. refused]));
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)

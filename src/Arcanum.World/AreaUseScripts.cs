@@ -1715,7 +1715,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private bool DestroyScenery(ScrObjectRef obj)
     {
         if (AlreadyDestroyed(obj) || _destroyingScenery.Contains(obj.Code)) return true;
-        switch (RunDestroyPointGate(obj))
+        switch (RunDestroyPointGate(obj, false))
         {
             case DestroyPointFate.Failed: return false;
             case DestroyPointFate.Kept: return true;
@@ -1739,14 +1739,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-2501 / ARC-SCRIPT-2644 (TD2): runs the destroy point (2) of <paramref name="obj"/> as the first step of its object destroy (0x43CCA0) and says what follows: <see cref="DestroyPointFate.Proceed"/> (no point, or it answered to go on, or the point's run
     /// destroyed the object itself), <see cref="DestroyPointFate.Kept"/> (the point answered 0), <see cref="DestroyPointFate.Failed"/> (the run did not apply: nothing is destroyed on a guess). The object's own destroy that the point raises again is left to the running one.
     /// </summary>
-    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj)
+    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj, bool forBreak)
     {
         if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 }) return DestroyPointFate.Proceed;
         _destroyingScenery.Add(obj.Code);
         try
         {
             var ran = RunDestroyPoint(obj.Code, _lastRules ?? _session.Rules.Scripts);
-            LastDestroyPointRun = ran;
+            // ARC-SCRIPT-2686: only a break's gate keeps its run for the viewer's break step (a script's destroy has its own caller to show it).
+            if (forBreak) LastDestroyPointRun = ran;
             // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return DestroyPointFate.Failed;
             if (DyingStops(ran)) return DestroyPointFate.Kept;
@@ -1762,13 +1763,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public bool BreakMayDestroy(SessionObjectTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
+        // ARC-SCRIPT-2686: a run an earlier break left untaken is not this break's.
+        LastDestroyPointRun = null;
         if (target.Map.RuntimeMap != _shownMap) return true;
         var obj = new ScrObjectRef(_shownMap, target.Entity);
         // The row's own entity id is the code the scripts and the guard use (the viewer names a container by its inventory holder id).
         if (_content is null || Row(obj) is not { } row) return true;
         obj = new ScrObjectRef(_shownMap, EntityId(row));
         if (_destroyingScenery.Contains(obj.Code)) return true;
-        return RunDestroyPointGate(obj) == DestroyPointFate.Proceed;
+        return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed;
     }
 
     /// <summary>ARC-SCRIPT-2644: the run of the destroy point a break's gate made last (its award, message and float queues belong to the viewer's break step); taken once, null when none ran since.</summary>

@@ -2417,12 +2417,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (NpcCombatMode(id) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(id), true, context);
         // ARC-COMBAT-2597 (VC38): the NPC target's leader is followed up the chain to the PC (0x45DDA0), not only the direct leader.
         if (target == Pc || PcLeader(target) is not null && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
-        Face(id, target);
         // ARC-RENDER-038: the attack ART of the animation and the weapon the attacker's body shows (WA1, WA4), its frames, action frame
         // and the rate of its weapon slot; an ART the viewer cannot read plays with the fixed human attack ART's timing.
         var wanted = AttackRequest(id, target);
-        var art = _scene.AttackArt?.Invoke(npc, wanted) is { Frames: >= 1 and <= RealTimeCombatRules.MaxFrames, ActionFrame: >= 0 and <= RealTimeCombatRules.MaxFrames } read
-            ? read : null;
+        var answer = _scene.AttackArt?.Invoke(npc, wanted);
+        // ARC-COMBAT-1932 (VC38, 0x42B9C0): an ART that exists in no file after the missing-art repair fails the node, which has only entered
+        // combat mode so far (it does not turn the attacker): the goal ends with no swing, no bark, no begin effect and no hit.
+        if (answer is { Missing: true }) return AiAttackSwing.NoArt;
+        Face(id, target);
+        var art = answer is { Frames: >= 1 and <= RealTimeCombatRules.MaxFrames, ActionFrame: >= 0 and <= RealTimeCombatRules.MaxFrames } read ? read : null;
         var (frames, actionFrame, rate, weapon) = art is null
             ? (FixedAttackArt.Frames, FixedAttackArt.ActionFrame, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed,
                 Math.Clamp(values.Speed, 1, RealTimeCombatRules.MaxStat), FixedAttackArt.RawFramesPerSecond), AttackArtWeapon.Unarmed)
@@ -2596,7 +2599,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public SessionAttackResult? LandShot(string shooter, SessionShot shot, string struck)
     {
         // The aimed target's attack event was raised at the shot; a stray target's comes with its strike.
-        var aimed = _session.QueryNpcShot(shot) is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
+        var shotFacts = _session.QueryNpcShot(shot);
+        var aimed = shotFacts is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's (no weapon of its own): the wielded weapon's hit effect does not play on the victim.
+        var strikeWeapon = shotFacts is { Generic: true } ? null : WieldedPrototype(shooter);
         if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { EndStruckShot(shot); return null; }
         // The strike is a distance-1 hit with no line of its own (the carried check holds the cover); the shooter's worn items are what it wears now.
         var result = _session.LandNpcShot(_session.Version, shot, attack with { Distance = 1, LineOfFire = null });
@@ -2610,7 +2616,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (struck != aimed) AttackEvent(shooter, struck, AttackEventFlags.Accidental);
             // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
             // ARC-RENDER-1990: the weapon asked is the shooter's wielded one as it stands at the strike (the original reads the projectile's field 0x50 set at the shot; an NPC's thrown item is not told apart here, issue 2013).
-            HitEffect(struck, result, WieldedPrototype(shooter));
+            HitEffect(struck, result, strikeWeapon);
             if (VictimReached(result)) Struck(struck);
         }
         return result;

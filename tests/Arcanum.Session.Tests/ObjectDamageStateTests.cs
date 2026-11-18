@@ -148,7 +148,7 @@ public sealed class ObjectDamageStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, broke.Disposition);
         Assert.AreEqual(ObjectBreak.ContainerSpilled, broke.Hit!.Break);
         CollectionAssert.AreEqual(new[] { "chest" }, asked);
-        Assert.AreEqual(SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectBroken, broke.Host, "no destroy, but the spill eye candy still plays");
+        Assert.AreEqual(SessionObjectHostSteps.SpillEyeCandy | SessionObjectHostSteps.ObjectBroken | SessionObjectHostSteps.DestroyKept, broke.Host, "no destroy, but the spill eye candy still plays");
         Assert.IsFalse(broke.Host.HasFlag(SessionObjectHostSteps.ObjectDestroyed));
         Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(chest).Condition, "the object stays");
         Assert.AreEqual(100, owner.QueryObject(chest).Damage, "the damage is written");

@@ -49,8 +49,8 @@ public sealed class AreaLocalLighting
     private IReadOnlyList<ObjectLight> _critterLights = [];
     private IReadOnlyDictionary<int, StationaryLightFrame> _critterFrames = new Dictionary<int, StationaryLightFrame>();
 
-    private AreaLocalLighting(StationaryLightField field, AreaChart chart, Dictionary<(long, long), AreaAmbientChannel> tiles,
-        Dictionary<AreaVisualKey, AreaVisualRecord> visuals)
+    private AreaLocalLighting(StationaryLightField field, AreaChart chart, IReadOnlyDictionary<(long, long), AreaAmbientChannel> tiles,
+        IReadOnlyDictionary<AreaVisualKey, AreaVisualRecord> visuals)
     {
         Field = field; Chart = chart; _tiles = tiles; _visuals = visuals;
         _hourIndependent = !field.Source.Lights.Any(light => (light.Flags & (StationaryLightFlags.Indoor | StationaryLightFlags.Outdoor)) != 0);
@@ -138,6 +138,26 @@ public sealed class AreaLocalLighting
     public int LightCount => Field.Source.Lights.Count;
     /// <summary>ARC-RENDER-030: the object lights among <see cref="LightCount"/>.</summary>
     public int ObjectLightCount => Field.Source.Lights.Count(light => light.Owner is not null);
+
+    /// <summary>
+    /// ARC-SCRIPT-2585 (ledger OT10): this lighting with the lights of the objects in <paramref name="states"/> switched off (true) or on (false) by a script's toggle state
+    /// (<see cref="AreaStationaryLightSource.WithObjectsOff"/>), in the night form and the day form alike. Take it from the loaded lighting, before <see cref="AtHour"/>,
+    /// <see cref="AtAnimation"/> and <see cref="WithCarried(StationaryLightFrame, IEnumerable{CarriedLight})"/>: a posed or carried view is refused. This lighting itself when no light changes.
+    /// It builds a new lattice, so it is for a change of state, not for every frame.
+    /// </summary>
+    public AreaLocalLighting WithObjectsOff(IReadOnlyDictionary<AreaObjectKey, bool> states)
+    {
+        ArgumentNullException.ThrowIfNull(states);
+        if (_poses is not null || _carried is not null) throw new InvalidOperationException("Switch the lights of the loaded lighting, before a view is made of it.");
+        if (states.Count == 0) return this;
+        var source = Field.Source.WithObjectsOff(states);
+        var day = _day?.WithObjectsOff(states);
+        if (ReferenceEquals(source, Field.Source) && ReferenceEquals(day, _day)) return this;
+        return new(new StationaryLightField(source, Chart.OriginX, Chart.OriginY), Chart, _tiles, _visuals)
+        {
+            _day = day, _critterLights = _critterLights, _critterFrames = _critterFrames,
+        };
+    }
 
     /// <summary>The lighting of a game hour: the day form (hours 6..17) when object lights differ by day, else this.</summary>
     public AreaLocalLighting AtHour(int hour)

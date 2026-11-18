@@ -153,7 +153,7 @@ public sealed class NpcThrowLocationTests
             Assert.IsTrue(owner.QueryRandom().Draws > draws, "the lob rolls (TW11)");
             var attack = result.Attack!;
             var shot = result.Shots.Single();
-            Assert.IsNull(owner.QueryNpcShot(shot), "a generic item's flight carries no check");
+            Assert.AreEqual((true, Hit(attack), SessionNpcShotFacts.LocationTarget), (owner.QueryNpcShot(shot)!.Value.Generic, owner.QueryNpcShot(shot)!.Value.Hit, owner.QueryNpcShot(shot)!.Value.Target), "a generic item's flight carries its check (ARC-COMBAT-2693)");
             Assert.IsTrue(owner.QueryItemInFlight(Grenade));
             Assert.AreEqual(ThrowerCell, Lying(owner, Grenade));
             if (Hit(attack)) { hits++; Assert.AreEqual(Tile, result.Destination, "a hit flies to the location"); }
@@ -165,6 +165,25 @@ public sealed class NpcThrowLocationTests
             }
         }
         Assert.IsTrue(hits >= 2 && misses >= 2, $"both outcomes within the bounded run: {hits} hits, {misses} misses");
+    }
+
+    // ARC-COMBAT-2693 (0x4B2870): a critter a missed grenade passes takes a forced hit with the damage of the item's weight, the shot ends with the strike, the thrower's wielded weapon is not worn by it.
+    [TestMethod]
+    public void AMissedGrenadesStrayStrikeIsAForcedHitOfTheItemAndEndsTheShot()
+    {
+        for (ulong seed = 1; seed <= 400; seed++)
+        {
+            using var owner = Owner(seed);
+            var result = owner.ThrowByNpc(owner.Version, Lob(Tile));
+            if (result.Attack is not { Resolution: { } roll } || Hit(result.Attack) || roll.Outcome == AttackOutcome.CriticalMiss) continue;
+            var shot = result.Shots.Single();
+            var strike = owner.LandNpcShot(owner.Version, shot, new(Combat()) { AttackerWorn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>(), AttackerCell = ThrowerCell, Distance = 1 });
+            Assert.AreEqual(GameSessionFailure.None, strike.Failure);
+            Assert.AreEqual(AttackOutcome.Hit, strike.Resolution!.Outcome, "a stray strike of a missed grenade is a hit");
+            Assert.IsNull(owner.QueryNpcShot(shot), "the shot ends with the strike");
+            return;
+        }
+        Assert.Fail("no missed lob within the bounded run");
     }
 
     [TestMethod]
