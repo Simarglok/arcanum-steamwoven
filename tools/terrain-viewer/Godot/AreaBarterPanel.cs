@@ -146,6 +146,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
         _lookToggle.Pressed += () => Callable.From(() =>
         {
+            if (!_diagnosticSwitch) return;
             _diagnosticChosen = !_diagnosticChosen;
             if (View is { } view) Render(view, _message.Text, _art);
         }).CallDeferred();
