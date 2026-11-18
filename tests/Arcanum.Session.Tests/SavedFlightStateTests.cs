@@ -258,6 +258,31 @@ public sealed class SavedFlightStateTests
         Assert.AreEqual(0, restored.QueryShotsInFlight().Count);
     }
 
+    // ARC-COMBAT-2523: a thrown weapon aimed at a location (no struck critter) carries the location target; a save keeps it and the load accepts it.
+    [TestMethod]
+    public void An_npc_weapon_thrown_at_a_location_in_flight_round_trips_its_location_arrow()
+    {
+        var tile = new CellCoord(98, 203);
+        SessionNpcThrowResult? thrown = null;
+        GameSessionOwner? found = null;
+        for (ulong seed = 1; seed <= 300 && found is null; seed++)
+        {
+            var candidate = NpcThrowStateTests.Owner(seed);
+            thrown = candidate.ThrowByNpc(candidate.Version, new(NpcThrowStateTests.Combat(), NpcThrowStateTests.Dagger, 15, NpcThrowStateTests.ThrowerCell, tile) { ThrowerWorn = NpcThrowStateTests.Wielded(), Flight = true });
+            if (thrown.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) found = candidate; else candidate.Dispose();
+        }
+        using var owner = found ?? throw new AssertFailedException("no seed gave a hit");
+        var shot = thrown!.Shots.Single();
+        Fly(owner, shot, NpcThrowStateTests.Thrower, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
+        var capture = owner.Capture();
+        Assert.AreEqual(SessionNpcShotFacts.LocationTarget, capture.Flights.NpcArrows.Single().Target);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcThrowStateTests.Seed()).Failure);
+        Assert.AreEqual(owner.QueryNpcShot(shot), restored.QueryNpcShot(shot), "the restored shot carries the decided hit and the location target");
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.LandThrownItem(restored.Version, shot, tile).Disposition);
+        Assert.AreEqual(0, restored.QueryShotsInFlight().Count);
+    }
+
     [TestMethod]
     public void A_restore_refuses_a_launch_of_another_kind_than_its_shot()
     {

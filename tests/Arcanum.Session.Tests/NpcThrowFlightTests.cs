@@ -79,21 +79,7 @@ public sealed class NpcThrowFlightTests
         Assert.AreEqual(((CellCoord?)end, 0, false), (Lying(owner, Dagger), owner.QueryShotsInFlight().Count, owner.QueryItemInFlight(Dagger)));
     }
 
-    [TestMethod]
-    public void AThrowAtAnEmptyLocationFliesUncheckedAndLandsWhereTheFlightEnds()
-    {
-        using var owner = Owner();
-        var draws = owner.QueryRandom().Draws;
-        var tile = new CellCoord(98, 203);
-        var result = owner.ThrowByNpc(owner.Version, new(Combat(), Dagger, 15, ThrowerCell, tile) { ThrowerWorn = Wielded(), Flight = true });
-        Assert.AreEqual((GameSessionDisposition.Changed, (SessionAttackResult?)null, (CellCoord?)null, (CellCoord?)tile), (result.Disposition, result.Attack, result.Landed, result.Destination));
-        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing is rolled without a struck critter");
-        var shot = result.Shots.Single();
-        Assert.IsTrue(owner.QueryItemInFlight(Dagger));
-        Assert.IsNull(owner.QueryNpcShot(shot), "an unchecked flight carries no check");
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, tile).Disposition);
-        Assert.AreEqual((CellCoord?)tile, Lying(owner, Dagger));
-    }
+    // ARC-COMBAT-2523: a flying throw at a location with no struck critter carries its own location check (NpcThrowLocationTests).
 
     [TestMethod]
     public void AFlightTheHostGivesUpEndsBothStoresAndLeavesTheItemOnTheThrowersCell()

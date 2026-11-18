@@ -57,6 +57,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public bool StruckHero { get; init; }
     public CellCoord? StruckCell { get; init; }
     public SessionLineOfFire? LineOfFire { get; init; }
+    /// <summary>ARC-COMBAT-2523 (ledger TW11): the light level 0..255 (255: full light) at <see cref="Target"/>, a term of the roll of a throw that names no struck critter (0x4C8430); null reads as full light.</summary>
+    public int? TargetLight { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? ThrowerWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? StruckWorn { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
@@ -106,6 +108,9 @@ public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int 
 
     /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
     public const string HeroTarget = "\0hero";
+
+    /// <summary>ARC-COMBAT-2523 (TW11): the <see cref="Target"/> of a thrown weapon aimed at a location with no struck critter: a hit strikes nothing, a miss strikes the critters it passes with a forced hit.</summary>
+    public const string LocationTarget = "\0location";
 }
 
 public sealed partial class GameSessionOwner
@@ -149,7 +154,7 @@ public sealed partial class GameSessionOwner
         var struck = request.StruckHero || request.Struck is not null;
         if (!SessionValidation.Entity(request.Item) || !DropCellFits(request.ThrowerCell) || !DropCellFits(request.Target) ||
             request.StruckCell is { } at && !DropCellFits(at) || struck != request.StruckCell.HasValue || request.StruckHero && request.Struck is not null ||
-            request.Weight is < 0 or > ThrowRules.MaxWeight || request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude })
+            request.Weight is < 0 or > ThrowRules.MaxWeight || request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || request.TargetLight is < 0 or > AttackRules.MaxLightLevel)
             return Refused(GameSessionFailure.InvalidAttack);
         // An item a critical or an earlier throw dropped, or one destroyed, is no longer the NPC's.
         if (NpcItemSeed(request.Thrower.Entity, request.Item) is not { } listed || Gone(request.Item)) return Refused(GameSessionFailure.ItemNotAvailable);
@@ -192,30 +197,8 @@ public sealed partial class GameSessionOwner
     // The throw once its scripts ran (or it has none): ARC-DEV-258's generic flight, an unstruck weapon's landing or flight, the attack on the struck critter.
     private SessionNpcThrowResult ThrowNpcPlanned(GameSessionVersion expected, SessionNpcThrow request, bool generic, bool struck)
     {
-        SessionNpcThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, Version);
-        if (generic) return ThrowNpcGeneric(expected, request);
-        if (!struck)
-        {
-            // The thrower's own checks, as the attack's: its life record, its worn items, the wielded melee weapon (TW7); an inactive
-            // thrower throws nothing (the resolver's refusal on the attack's path).
-            var resolved = Resolve(request.Thrower.Target, out var record, out var facts, out _);
-            if (resolved != GameSessionFailure.None) return Refused(resolved);
-            if (!ValidWear(new SessionWearSide { Life = request.Thrower.Target, Worn = request.ThrowerWorn }, new SessionWearSide(), targetBroken: false, wear: null))
-                return Refused(GameSessionFailure.InvalidWear);
-            var status = LifeRules.Evaluate(record.State, facts!);
-            SessionNpcAttackValues values;
-            try { values = Levelled(request.Thrower).AttackValues(status, record.State, _rules.Combat, request.ThrowerWorn?.Keys); }
-            catch (ArgumentException) { return Refused(GameSessionFailure.InvalidAttack); }
-            if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee) return Refused(GameSessionFailure.AttackUnsupported);
-            if (!status.IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
-            if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
-            if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
-            // ARC-COMBAT-1717: the weapon thrown at a location flies unchecked to it, as a generic item does.
-            if (request.Flight && ShotsInFlight <= MaxShotsInFlight - 1) return ThrowNpcGeneric(expected, request);
-            var failure = LandNpcItem(request.Item, request.Target);
-            return failure == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, null, request.Target, Version)
-                : Refused(failure);
-        }
+        // ARC-COMBAT-2523 (TW11): a generic item (a grenade) always flies to the location; a weapon that names no struck critter is thrown at the location: both roll as the hero's location throw does.
+        if (generic || !struck) return ThrowNpcAtLocation(expected, request, generic, struck);
         var attack = new SessionNpcAttack(request.Thrower)
         {
             Target = request.Struck,
