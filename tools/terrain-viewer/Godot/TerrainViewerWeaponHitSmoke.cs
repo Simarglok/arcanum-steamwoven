@@ -145,6 +145,10 @@ public partial class TerrainViewerApp
                 for (var k = 0; k < 6; k++) { await Shot($"swing-{k}"); await Frames(1); }
                 GD.Print($"{WeaponHitCode} weapon-swing prototype={swingPrototype} entry={swingEntry} art=0x{swing.Eye.Art:X8} octant={octant} sound={swingShape.Sound}");
             }
+            // ARC-RENDER-2035 (PF4, RH10): the steps a tick of a flight come from the weapon list's kind-2 entry: Bronwyck's Gun 1, the weapons 6184 to 6191 2, any other weapon, no weapon and a non-weapon the default 4.
+            Require(WeaponFlightSteps(BronwycksGunPrototype) == 1 && Enumerable.Range(6184, 8).All(p => WeaponFlightSteps(p) == 2)
+                && WeaponFlightSteps(PlainWeaponPrototype) == ProjectileRules.DefaultStepsPerTick && WeaponFlightSteps(null) == ProjectileRules.DefaultStepsPerTick,
+                $"the weapon list's projectile speeds give the flight's steps ({WeaponFlightSteps(BronwycksGunPrototype)}, {WeaponFlightSteps(6184)}, {WeaponFlightSteps(PlainWeaponPrototype)})");
             GD.Print("ARC-RENDER-1990 native-smoke weapon-hit PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tesla = Entry(TeslaRodPrototype), Bronwyck = Entry(BronwycksGunPrototype), Swing = swingGroup }));
         }
         finally

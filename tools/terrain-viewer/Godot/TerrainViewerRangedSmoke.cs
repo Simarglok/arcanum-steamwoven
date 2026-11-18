@@ -668,6 +668,7 @@ public partial class TerrainViewerApp
                 await Lift();
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
                 _lastHeldThrowForSelfTest = null;
+                HeroThrowSwingsForSelfTest.Clear(); ProjectileStepsForSelfTest.Clear();
                 var started = ThrowGameCursorItem(World(pick.Target.Row), tilePress ? null : pick.Target.Row.Key);
                 // ARC-DEV-182: the throw is goal 37 of the table: its swing plays to the action frame, then the session throws.
                 for (var frames = 0; frames < 1500 && started && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++)
@@ -680,6 +681,13 @@ public partial class TerrainViewerApp
                 Require(started && result is { Disposition: GameSessionDisposition.Changed } && GameCursorItemForSelfTest is null
                     && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
                     $"the weapon is thrown from the cursor ({result?.Disposition} {result?.Failure}, {HeldThrowNoticeForSelfTest})");
+                // ARC-RENDER-2035 (RH10, PF4): the thrown weapon object asks the weapon list's swing entry once (the entry plays when it has art) and its flight takes the steps of its projectile-speed entry (4 for none).
+                var weaponProto = kit.Kind.Type == SessionItemType.Weapon ? (int?)kit.Kind.Prototype : null;
+                var swingEntry = weaponProto is { } wp && WeaponHitEffectRules.Index(wp, WeaponHitEffectRules.Swing) is { } swingAt && _spellData?.WeaponEyeCandy is { } weaponList ? weaponList.At(swingAt) : null;
+                Require(HeroThrowSwingsForSelfTest.Count == (weaponProto is null ? 0 : 1) && (weaponProto is null || HeroThrowSwingsForSelfTest[0].Prototype == weaponProto && ((!HeroThrowSwingsForSelfTest[0].Played || swingEntry?.Art is not null))),
+                    $"the thrown weapon's swing entry was asked once for prototype {weaponProto} (asked {string.Join(",", HeroThrowSwingsForSelfTest)}, entry art {swingEntry?.Art})");
+                Require(ProjectileStepsForSelfTest.Count == 1 && ProjectileStepsForSelfTest[0] == WeaponFlightSteps(weaponProto),
+                    $"the flight takes the weapon's projectile-speed steps ({string.Join(",", ProjectileStepsForSelfTest)} for {WeaponFlightSteps(weaponProto)}, prototype {weaponProto})");
                 for (var frames = 0; frames < 1500 && (_projectiles.Count > 0 || HeroRunsHost() is { ThrowRun: not null }); frames++)
                 {
                     _areaSmokeTime++;
