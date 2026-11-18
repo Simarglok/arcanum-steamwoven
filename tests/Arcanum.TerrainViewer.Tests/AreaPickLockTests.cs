@@ -44,6 +44,27 @@ public sealed class AreaPickLockTests
         Assert.IsNull(host.Lockpick(heroless, "kit:1", kit));
     }
 
+    // ARC-COMBAT-1878 (the finder 0x462760): the PC's first lockpicks in inventory order, armed or not.
+    [TestMethod]
+    public void The_first_lockpicks_of_the_hero_are_the_first_in_inventory_order_and_none_without_a_hero()
+    {
+        var first = AreaLockpicks.From("kit:2", Generic(0x02, bonus: 5))!;
+        var second = AreaLockpicks.From("kit:3", Generic(0x02, bonus: 9))!;
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
+            null, null, 385, [new SessionHeroKitItem(new(SessionItemType.Generic, 15100, 6000, 6001)), new(new(SessionItemType.Generic, 15104, 6000, 6001)), new(new(SessionItemType.Generic, 15104, 6000, 6001))]);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        var host = new AreaInventoryHost([]);
+        Assert.AreEqual("kit:2", host.FirstLockpicks(session, [null, first, second])!.Entity, "the first of two lockpicks, skipping the kit item that is none");
+        Assert.AreEqual("kit:3", host.FirstLockpicks(session, [null, null, second])!.Entity);
+        Assert.IsNull(host.FirstLockpicks(session, [null, null, null]), "none held");
+        Assert.IsNull(host.FirstLockpicks(session, null), "no kit facts");
+        using var heroless = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1).Owner!;
+        Assert.IsNull(host.FirstLockpicks(heroless, [null, first, second]));
+    }
+
     /// <summary>Opt-in (DAT_ROOT = the game folder): only the halfling-male kit holds lockpicks (first observation 2026-10-21),
     /// and a pre-made hero picks the first locked door with a lock difficulty of the installed interiors through the viewer's
     /// portal path, with the session's answer matching the door's state. Counts and outcomes only.</summary>
