@@ -142,6 +142,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-COMBAT-1776 (0x42A4E0): the lock a pick-locks goal's target names (a door, window or container of the shown map, by the goal's target string), as the session picks it: the object, its T0 lock facts, the lock's difficulty and the
     /// light at it; null (the provider, or its answer) for a target that is none or gone. Null delegate: no NPC picks a lock, and the attempt names it a gap.</summary>
     public Func<string, SessionPickLockTarget?>? PickLockTarget { get; init; }
+    /// <summary>ARC-AI-2625 (0x4C7160 case 7, the target test 0x4BBDD0): the trap class of the object a spot-trap attempt names (its script at point 1: magical for header flag 0x2, non-magical for 0x1; <see cref="TrapClass.None"/> for a target with no trap, the
+    /// hero, or one the shown map does not hold). Null delegate: every target holds no trap, so the attempt is the roll and the master's second roll alone.</summary>
+    public Func<string, TrapClass>? TargetTrapClass { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-AI-2084 (ledger GW5): a guard witness's catching-thief script (point 11, 0x4AEE50) after it saw or heard the actor at an act on a portal, container or scenery: the witness (the attachee), the actor (the triggerer; the hero is "pc") and the guarded object (the script's extra object); true when the witness goes on ("run default", or no script that runs), false when the script skipped the default and the witness is left out. Null: no script runs.</summary>
@@ -3158,9 +3161,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-AI-1854 (0x4C7160, the cases with no world write): the skills that have no case of their own in the attempt (bow, melee, throwing, backstab, prowling, haggle, persuasion, firearms), dodge (its incapacity gate), spot trap
-    /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is the
-    /// host's <see cref="CanAct"/> (object flag 0x10000, critter flags 0x60, the session's stun) or a dead NPC (the original's 0x45D800 is approximated by these). NOT READY: gambling (its stored roll 0x4C6560), repair and pick
-    /// locks through this goal (their own handlers: item damage, lock write), the spot trap's target test (0x4BBDD0: a target is non-magical here), and the other skills' UI callbacks (the local PC's messages); a skill
+    /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is
+    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. NOT READY: gambling (its stored roll 0x4C6560), repair and pick
+    /// locks through this goal (their own handlers: item damage, lock write), the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
     /// outside the 16 answers false.
     /// </summary>
     private bool PlainSkillAttempt(string id, string target, int skill)
@@ -3171,11 +3174,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         else if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
         else
         {
-            var incapable = !CanAct(id) || (Status(id)?.IsDead ?? false);
-            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable);
+            var incapable = skill == (int)Skill.Dodge && DodgeRefused(id);
+            var trap = skill == (int)Skill.SpotTrap ? _scene.TargetTrapClass?.Invoke(target) ?? TrapClass.None : TrapClass.None;
+            roll = _session.RollNpcSkill(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), (Skill)skill, incapable, trap);
         }
         Trace(id).Skill = roll is null ? $"skill {skill} on {target}: {refusal}"
-            : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Check?.Critical} second={roll.SecondRoll}";
+            : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Critical} second={roll.SecondRoll}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, PlainRoll = roll });
         return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
@@ -3259,6 +3263,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         }
         return _session.HealByNpc(_session.Version, new SessionNpcHeal(healer.Target, sheet.Loaded, sheet.Modifiers, life, healing));
     }
+
+    /// <summary>
+    /// ARC-AI-2625 (0x4C7160 case 1): the actor tests of the dodge attempt, in the exe's order: unconscious (0x45D800: fatigue at or below 0 and not undead), the spell flag 0x10000 (stoned), critter flags 0x60 (stunned 0x20 or paralysed
+    /// 0x40). Any of them forces the failure (no success, no critical). The attempt tests no death: a dead critter that none of these holds could dodge, and the object flag 0x10000 <see cref="CanAct"/> reads is not tested.
+    /// </summary>
+    private bool DodgeRefused(string id) => Unconscious(id) || Stoned(id) || Stunned(id) || Paralysed(id);
 
     // Object flag 0x10000 and a stunned or paralysed critter refuse an action's turn and start.
     private bool CanAct(string id)

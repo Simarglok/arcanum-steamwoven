@@ -46,10 +46,10 @@ public sealed class AreaAiSkillTests
 
     // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, heal 5 points, 20 hit points, at world
     // cell (10, 20).
-    private static AreaObjectRecord Npc(int index, uint critterFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
+    private static AreaObjectRecord Npc(int index, uint critterFlags = 0, uint spellFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
-            Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
+            Field(0, 0x60000000), Field(18, 0), Field(19, spellFlags), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
             Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
             Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
@@ -59,10 +59,10 @@ public sealed class AreaAiSkillTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null)
+    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null, uint spellFlags = 0)
     {
         var session = hero ? ConversationSessionFixture.CreateWithHero() : ConversationSessionFixture.Create();
-        var rows = new[] { Npc(0, critterFlags), Item(1) };
+        var rows = new[] { Npc(0, critterFlags, spellFlags), Item(1) };
         var map = new AreaInventoryMap(1,
             new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(Healing, 1, 0, 0, null, []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
@@ -76,7 +76,7 @@ public sealed class AreaAiSkillTests
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, critterFlags), new(10, 20))], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, critterFlags, spellFlags), new(10, 20))], Combat = combat,
             HeroCell = () => new CellCoord(14, 20),
             NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
@@ -349,6 +349,47 @@ public sealed class AreaAiSkillTests
             StringAssert.EndsWith(host.TraceOf(npc)!.Skill, "not ready");
         }
         Assert.IsFalse(host.AttemptSkill(npc, AiSchedulerRules.Pc, 99, null), "a number outside the 16 skills");
+    }
+
+    private static int Successes(AreaAiHost host, string npc, Skill skill, int attempts)
+    {
+        var wins = 0;
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            if (host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)skill, null)) wins++;
+            var roll = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll!;
+            Assert.AreEqual(GameSessionDisposition.Changed, roll.Disposition, host.TraceOf(npc)?.Skill);
+        }
+        return wins;
+    }
+
+    [TestMethod]
+    public void A_dodge_attempt_is_forced_to_fail_for_a_stunned_paralysed_or_stoned_actor_and_not_for_a_free_one()
+    {
+        // ARC-AI-2625 (0x4C7160 case 1): critter flags 0x60 and the spell flag 0x10000 of the actor force the failure; the roll is still drawn.
+        var (_, free, freeNpc, _) = Open(hero: true);
+        Assert.IsTrue(Successes(free, freeNpc, Skill.Dodge, 80) > 0, "a free actor dodges at least once");
+        foreach (var (critter, spell) in new[] { (0x20u, 0u), (0x40u, 0u), (0u, 0x10000u) })
+        {
+            var (session, host, npc, _) = Open(critterFlags: critter, hero: true, spellFlags: spell);
+            var before = session.Version.Revision;
+            Assert.AreEqual(0, Successes(host, npc, Skill.Dodge, 80), $"critter flags {critter:X}, spell flags {spell:X}");
+            Assert.AreEqual(before + 80, session.Version.Revision, "each attempt still rolls (one revision)");
+        }
+    }
+
+    [TestMethod]
+    public void A_spot_trap_attempt_below_expert_never_finds_a_magical_trap_and_asks_the_scene_for_the_targets_class()
+    {
+        // ARC-AI-2625 (0x4C7160 case 7, 0x4BBDD0): the trap class comes from the scene's answer for the named target.
+        var asked = new List<string>();
+        var (_, magical, magicalNpc, _) = Open(hero: true, tweak: scene => scene with { TargetTrapClass = target => { asked.Add(target); return Arcanum.Simulation.Traps.TrapClass.Magical; } });
+        Assert.AreEqual(0, Successes(magical, magicalNpc, Skill.SpotTrap, 80));
+        Assert.IsTrue(asked.Count == 80 && asked.All(target => target == AiSchedulerRules.Pc), "the scene is asked for each attempt's target");
+        var (_, plain, plainNpc, _) = Open(hero: true, tweak: scene => scene with { TargetTrapClass = _ => Arcanum.Simulation.Traps.TrapClass.Nonmagical });
+        Assert.IsTrue(Successes(plain, plainNpc, Skill.SpotTrap, 80) > 0, "a non-magical trap is found");
+        var (_, none, noneNpc, _) = Open(hero: true);
+        Assert.IsTrue(Successes(none, noneNpc, Skill.SpotTrap, 80) > 0, "no scene delegate: the target holds no trap and nothing is refused");
     }
 
     [TestMethod]

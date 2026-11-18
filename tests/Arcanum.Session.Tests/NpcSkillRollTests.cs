@@ -82,6 +82,38 @@ public sealed class NpcSkillRollTests
     }
 
     [TestMethod]
+    public void A_forced_failure_of_the_dodge_or_of_a_magical_spot_clears_the_critical_bit_the_check_kept()
+    {
+        // ARC-AI-2625 (exe 0x4C73FB): the forced failure clears the critical bit; the check's own roll is kept in Check.
+        var dodge = false;
+        var spot = false;
+        for (ulong seed = 0; seed < 600 && !(dodge && spot); seed++)
+        {
+            using var a = Owner(seed);
+            var gated = a.RollNpcSkill(a.Version, User(Skill.Dodge, 20, SkillTraining.Master), Skill.Dodge, incapable: true);
+            if (gated.Check!.Critical)
+            {
+                Assert.IsFalse(gated.Critical);
+                Assert.IsFalse(gated.Success);
+                using var free = Owner(seed);
+                Assert.IsTrue(free.RollNpcSkill(free.Version, User(Skill.Dodge, 20, SkillTraining.Master), Skill.Dodge).Critical, "a free actor keeps the critical");
+                dodge = true;
+            }
+            using var b = Owner(seed);
+            var magical = b.RollNpcSkill(b.Version, User(Skill.SpotTrap, 20, SkillTraining.Apprentice), Skill.SpotTrap, trap: TrapClass.Magical);
+            if (magical.Check!.Critical)
+            {
+                Assert.IsFalse(magical.Critical);
+                Assert.IsFalse(magical.Success);
+                using var plain = Owner(seed);
+                Assert.IsTrue(plain.RollNpcSkill(plain.Version, User(Skill.SpotTrap, 20, SkillTraining.Apprentice), Skill.SpotTrap, trap: TrapClass.None).Critical);
+                spot = true;
+            }
+        }
+        Assert.IsTrue(dodge && spot, $"dodge {dodge}, spot {spot}");
+    }
+
+    [TestMethod]
     public void The_incapacity_gate_is_the_dodges_alone()
     {
         using var owner = Owner(1);
