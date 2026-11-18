@@ -92,6 +92,9 @@ public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, G
     /// <summary>ARC-COMBAT-1761 (0x4B3C00): the item's throw script (point 6) answered skip default, so nothing was thrown: the item went back to the thrower's list unworn (the original puts it on the thrower's tile and inserts it again, 0x4415C0, 0x4617F0),
     /// the removal's and the throw script's own changes kept. The result is <see cref="GameSessionDisposition.Changed"/> with no attack, shot or landing.</summary>
     public bool ScriptDeclined { get; init; }
+    /// <summary>ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused the throw: the item left the thrower and lies on its tile switched off, with no shot and no landing (<see cref="GameSessionOwner.QueryItemOff"/>); the host's reaction is 0x4ADFF0 (<see cref="AttackRefusal.OutOfAmmunition"/>).
+    /// The result is Changed.</summary>
+    public bool AmmunitionShort { get; init; }
     /// <summary>ARC-COMBAT-1761: the lines the removal and throw scripts printed, in order, for the host to post as it posts any script's printed line (<see cref="InventoryMutationResult.Messages"/>).</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
     /// <summary>ARC-COMBAT-1761: the eye candy requests of those scripts, in order, for the host to play.</summary>
@@ -215,6 +218,8 @@ public sealed partial class GameSessionOwner
         };
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed, null);
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the dispatcher refused the thrown weapon before any roll (the thrower, led by a PC, has fewer units of its ammunition type than it consumes): the item stays on the thrower's tile switched off.
+        if (result.Resolution?.Refusal == AttackRefusal.OutOfAmmunition) return NpcThrowRefusedForAmmunition(request, result);
         // ARC-COMBAT-1717: a weapon that flies goes to the struck critter's cell (a hit) or the scatter tile (a miss).
         return new(result.Disposition, result.Failure, result.Disposition == GameSessionDisposition.Rejected ? null : result, landed, Version)
         {
@@ -222,6 +227,25 @@ public sealed partial class GameSessionOwner
             Destination = result.Shots.Count > 0 ? result.Scatter ?? request.StruckCell : null,
         };
     }
+
+    /// <summary>
+    /// ARC-COMBAT-2415 (ledger TW8): an NPC's throw of its weapon the ammunition check refused (a thrower led by a PC with fewer units of the weapon's ammunition type than its consumption). Nothing is rolled or spent; the item, which the
+    /// original took out of the thrower's hand, is not given back: it leaves the NPC (worn no more) and lies on the thrower's tile switched off (the field a script's toggle writes, <see cref="QueryItemOff"/>), in two revisions. The result is Changed with
+    /// <see cref="SessionNpcThrowResult.AmmunitionShort"/>; the host's reaction (<see cref="AttackRefusal.OutOfAmmunition"/>) reads it from <see cref="SessionNpcThrowResult.Attack"/>'s resolution when the attack was made, else from the flag.
+    /// </summary>
+    private SessionNpcThrowResult NpcThrowRefusedForAmmunition(SessionNpcThrow request, SessionAttackResult? attack)
+    {
+        if (_revision >= long.MaxValue - 1) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, null, null, Version);
+        var leaving = LandNpcItem(request.Item, request.ThrowerCell);
+        if (leaving != GameSessionFailure.None) return new(GameSessionDisposition.Rejected, leaving, null, null, Version);
+        var off = ApplyChanges(Version, null, [new(_actor.Map, SessionItemOff.Key(request.Item), 1)]);
+        return new(GameSessionDisposition.Changed, off.Disposition == GameSessionDisposition.Rejected ? off.Failure : GameSessionFailure.None, attack, null, Version) { AmmunitionShort = true };
+    }
+
+    // ARC-COMBAT-2415: the ammunition a thrown weapon takes from an NPC led by a PC (0x4B65D0), and whether the thrower has too few units; null for a weapon without an ammunition type or consumption, or a thrower with no PC up its leader chain (it passes at once).
+    private (SessionAmmoHolder Holder, int Type, int Count, bool Short)? NpcThrowAmmunition(string npc, CombatWeapon weapon) =>
+        weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } type && weapon.AmmoConsumption > 0 && PcLeads(npc)
+            ? (new SessionAmmoHolder(npc), type, weapon.AmmoConsumption, type is < 0 or >= SessionAmmoRecord.AmmoTypes || (NpcStackOfType(npc, type)?.Units ?? 0) < weapon.AmmoConsumption) : null;
 
     /// <summary>
     /// ARC-DEV-258 (MIG13 S14n, GT63): an NPC throws a generic item of its list (a grenade the AI chose, the throw goal 37) at a location: the item
@@ -394,8 +418,8 @@ public sealed partial class GameSessionOwner
         var throwFlies = arrow is null && throwing is not null && attack.Flight && ShotsInFlight <= MaxShotsInFlight - 1;
         if (throwFlies) { flies = true; projectiles = 1; }
         // ARC-DEV-283 (RA3, AM4, 0x4B65D0): a shot of an NPC led by a PC (a companion) spends its weapon's ammunition from the NPC's own stack, right after the location roll and before every
-        // other roll, all or nothing; too few units refuse the attack (the resolver's out-of-ammunition refusal). An NPC with no PC leader spends nothing. Spent at the shot, not at the strike.
-        var ammunition = arrow is null && throwing is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && PcLeads(attacker.Entity!)
+        // other roll, all or nothing; too few units refuse the attack (the resolver's out-of-ammunition refusal). An NPC with no PC leader spends nothing. Spent at the shot, not at the strike. ARC-COMBAT-2415 (TW8): a thrown weapon is checked the same (ThrowNpcPlanned leaves the refused one on the thrower's tile).
+        var ammunition = arrow is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && PcLeads(attacker.Entity!)
             ? (Holder: new SessionAmmoHolder(attacker.Entity), Type: ammoType, Count: weapon.AmmoConsumption) : ((SessionAmmoHolder Holder, int Type, int Count)?)null;
         var unsupplied = ammunition is { } need && (need.Type is < 0 or >= SessionAmmoRecord.AmmoTypes || (NpcStackOfType(attacker.Entity!, need.Type)?.Units ?? 0) < need.Count);
         var striker = values.Combatant;

@@ -70,6 +70,13 @@ public sealed partial class GameSessionOwner
             weapon = values.Weapon with { Range = range };
             if (request.ThrowerWorn?.GetValueOrDefault(EquipmentSlot.Weapon) is { } wielded) weapon = weapon with { ArtSubtype = wielded.ArtSubtype };
         }
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): a thrown weapon's ammunition check comes before any roll: a thrower led by a PC with too few units throws nothing and leaves the item on its tile switched off.
+        var ammo = values is null ? null : NpcThrowAmmunition(request.Thrower.Entity!, weapon);
+        if (ammo is { Short: true })
+        {
+            DrawHitLocationBeforeAmmunitionRefusal();
+            return NpcThrowRefusedForAmmunition(request, null);
+        }
         // A throw whose struck critter was named but not rolled for (a grenade flies to the location whatever the line names) carries the line of the critter, not of the location: it counts for nothing.
         var line = struck ? null : request.LineOfFire;
         var check = new AttackRequest
@@ -105,6 +112,14 @@ public sealed partial class GameSessionOwner
         // The item leaves the thrower's hand: it lies on its cell while it flies (0x4415C0, no decay), or lands at once on the hit location or the scatter tile.
         var leaving = LandNpcItem(request.Item, flies ? request.ThrowerCell : destination);
         if (leaving != GameSessionFailure.None) return new(GameSessionDisposition.Changed, leaving, null, null, Version);
+        // ARC-COMBAT-2415: the weapon's ammunition goes for a hit or a miss, before the item flies.
+        SessionAmmoUse? spentAmmo = null;
+        if (ammo is { } spend)
+        {
+            spentAmmo = SpendAmmo(Version, spend.Holder, spend.Type, spend.Count);
+            if (spentAmmo is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
+                return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend }, null, Version);
+        }
         if (values is not null) throwerSide = throwerSide with { Worn = request.ThrowerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         IReadOnlyList<SessionShot> shots = [];
         if (flies)
@@ -119,7 +134,7 @@ public sealed partial class GameSessionOwner
         }
 
         SessionAttackResult Attack(DamageRecipient? recipient = null, LifeOutcome? life = null, GameSessionFailure stepFailure = GameSessionFailure.None) =>
-            new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, life, null, null, stepFailure, Version) { Shots = shots, Scatter = scatter };
+            new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, life, null, null, stepFailure, Version) { Shots = shots, Scatter = scatter, Ammunition = spentAmmo };
         SessionNpcThrowResult Done(SessionAttackResult attack) =>
             new(GameSessionDisposition.Changed, GameSessionFailure.None, attack, flies ? null : destination, Version) { Shots = shots, Destination = flies ? destination : null };
 
