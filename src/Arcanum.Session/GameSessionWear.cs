@@ -100,6 +100,11 @@ public enum SessionWearSkip
     TargetBroken,
     /// <summary>The bare-handed attacker has no hit point it may lose (1 or fewer left).</summary>
     NoHitPoints,
+    /// <summary>
+    /// ARC-SCRIPT-2749 (ledger BS3g): the step's deleting break (or the critical "destroy weapon") asked the item's destroy point (2), which answered 0 (or a run that did not apply): the item stays where it is, at 0 hit points and broken as
+    /// the original's object destroy leaves it, so no deletion follows (the step's result still holds the written condition, <see cref="ItemDurabilityResult.DestroyKept"/>).
+    /// </summary>
+    DestroyKept,
 }
 
 /// <summary>
@@ -235,7 +240,7 @@ public sealed partial class GameSessionOwner
                 return true;
             }
             var result = write(item!.Entity, item.Baseline);
-            steps.Add(new(kind, whose, slot, item.Entity, amount, SessionWearSkip.None, result, null));
+            steps.Add(new(kind, whose, slot, item.Entity, amount, result.DestroyKept ? SessionWearSkip.DestroyKept : SessionWearSkip.None, result, null));
             if (result.Disposition == GameSessionDisposition.Rejected) { failure = result.Failure; return false; }
             changed |= result.Disposition == GameSessionDisposition.Changed;
             return true;
@@ -244,13 +249,13 @@ public sealed partial class GameSessionOwner
         var proceed = true;
         if (wear.ArmorDamage > 0)
             proceed = Item(SessionWearStepKind.Armor, wear.Wearer, wearer, wear.ArmorSlot, wear.ArmorDamage, testInvulnerable: false,
-                (entity, baseline) => DamageItem(Version, entity, baseline, wear.ArmorDamage));
+                (entity, baseline) => DamageItem(Version, entity, baseline, wear.ArmorDamage, destroyPoint: true));
         if (proceed && wear.WeaponDamage > 0)
             proceed = Item(SessionWearStepKind.WeaponDamage, wear.Wearer, wearer, EquipmentSlot.Weapon, wear.WeaponDamage, testInvulnerable: true,
-                (entity, baseline) => DamageItem(Version, entity, baseline, wear.WeaponDamage));
+                (entity, baseline) => DamageItem(Version, entity, baseline, wear.WeaponDamage, destroyPoint: true));
         if (proceed && wear.DestroyWeapon)
             proceed = Item(SessionWearStepKind.WeaponDestroy, wear.Wearer, wearer, EquipmentSlot.Weapon, 0, testInvulnerable: true,
-                (entity, baseline) => DestroyItem(Version, entity, baseline));
+                (entity, baseline) => DestroyItem(Version, entity, baseline, destroyPoint: true));
 
         if (proceed && wear.AttackerWear != AttackerWearKind.None)
         {
@@ -260,7 +265,7 @@ public sealed partial class GameSessionOwner
                     wear.AttackerWearAmount, SessionWearSkip.TargetBroken, null, null));
             else if (kind == SessionWearStepKind.AttackerWeapon)
                 Item(kind, DamageRecipient.Attacker, attacker, EquipmentSlot.Weapon, wear.AttackerWearAmount, testInvulnerable: false,
-                    (entity, baseline) => DamageItem(Version, entity, baseline, wear.AttackerWearAmount));
+                    (entity, baseline) => DamageItem(Version, entity, baseline, wear.AttackerWearAmount, destroyPoint: true));
             else
             {
                 var amount = wear.AttackerWearAmount;
