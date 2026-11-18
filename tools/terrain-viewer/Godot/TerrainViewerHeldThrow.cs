@@ -451,7 +451,7 @@ public partial class TerrainViewerApp
             // A refusal after the scripts took effect keeps its own notice: the throw goal's end must not replace it with "stopped".
             return result.Disposition == GameSessionDisposition.Rejected ? null : result;
         }
-        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused: the item left the pack and lies on the hero's tile switched off (message code 3 in the original).
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused: the item left the pack and lies on the hero's tile switched off (the original plays its out-of-ammunition sound).
         if (result.AmmunitionShort)
         {
             SetHeldThrowNotice($"{held.Name} not thrown: no ammunition for it (it lies switched off on the hero's tile)");

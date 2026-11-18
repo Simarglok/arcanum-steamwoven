@@ -401,8 +401,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-COMBAT-2415 (ledger TW8): the hero's throw of a weapon with an ammunition type whose units the hero lacks. The dispatcher refuses before any roll: nothing is rolled or spent, and the thrown item, which the
     /// original took out of the hero's list at the lift, is not given back: it stays on the hero's tile switched off (object flag 0x2, the field a script's toggle writes, so <see cref="QueryItemOff"/> reads it and no window lists it), in two revisions
-    /// (the item leaving its list, the off flag), after the hit-location roll the dispatcher draws first (<see cref="DrawHitLocationBeforeAmmunitionRefusal"/>). An inactive hero throws nothing (NoChange, as <see cref="ThrowAtLocation"/>). The host plays the out-of-ammunition sound on the hero (<see cref="SessionHeroThrowResult.AmmunitionShort"/>). NOT READY: the thrower's
-    /// reaction (an NPC) and the weapon auto-switch that follow the refusal; a hero throw reaches neither here.
+    /// (the item leaving its list, the off flag), after the hit-location roll the dispatcher draws first (<see cref="DrawHitLocationBeforeAmmunitionRefusal"/>). An inactive hero throws nothing (NoChange, as <see cref="ThrowAtLocation"/>). The host plays the out-of-ammunition sound on the hero (<see cref="SessionHeroThrowResult.AmmunitionShort"/>). The refusal's sound and the hero's auto switch
+    /// (ARC-COMBAT-2698) belong to the host; the session itself reaches neither.
     /// </summary>
     private (GameSessionFailure Failure, SessionHeroThrowResult? Result) ThrowRefusedForAmmunition(GameSessionVersion expected, SessionHeroThrow request)
     {
