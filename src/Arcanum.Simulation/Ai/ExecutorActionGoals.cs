@@ -57,6 +57,22 @@ public static partial class AiExecutorRules
     }
 
     /// <summary>
+    /// ARC-COMBAT-1878: the use-item-with-skill starter (0x4352C0) of <paramref name="npc"/> using <paramref name="skill"/> on <paramref name="target"/> with the tool <paramref name="item"/> (null: none): a target is needed (the item is not);
+    /// the start gate with <see cref="TurnBasedRules.UseItemCost"/> (0x4348E0 with 4: it charges nothing itself); goal 40 with the target, the item and the skill (the modifier word is the invocation modifier the scripts' action 79 passes, ARC-SCRIPT-2752; 0 for the follower), run flag 0x4000 and running for an NPC with
+    /// current fatigue above 8, as the item-use starter's. No animation and no duration are set (the timed pick-lock goal 33 of 0x436220 sets both). The follower the lockpick chooser picks starts it with its own lockpicks or, holding none, without any (0x571CB0).
+    /// </summary>
+    [OriginalFunction(0x4352C0, OriginalFunctionScope.Partial)]
+    public static AiPerformResult StartUseItemWithSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, GoalRun? current, int modifier = 0)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(npc);
+        if (target is null) return new(AiPerformKind.UseSkill, current, AiStartRefusal.NoObject);
+        if (!StartGate(world, npc, TurnBasedRules.UseItemCost)) return new(AiPerformKind.UseSkill, current, AiStartRefusal.Gate);
+        var frame = new GoalFrame(GoalType.UseItemWithSkill, target) { Item = item, Skill = skill, Modifier = modifier };
+        return new(AiPerformKind.UseSkill, new GoalRun(npc, default, frame, ActionFlags(world, npc, running: true))) { Started = true };
+    }
+
+    /// <summary>
     /// The skill starter (0x4350F0) of <paramref name="npc"/> using <paramref name="skill"/> on <paramref name="target"/> with the
     /// tool <paramref name="item"/> (null: none): pick locks goes to its own starter (<see cref="StartPickLocks"/>); otherwise the start
     /// gate with <see cref="TurnBasedRules.UseSkillCost"/>; goal 33 with the target, the item and the skill, run flag 0x4000 and running
@@ -443,6 +459,31 @@ public static partial class AiExecutorRules
                 if (goal.Item is not { } item || world.ItemHolder(item) != owner) return End(AiExecutorReason.ItemNotHeld);
                 UseItemNow(world, owner, item, target);
                 return End(AiExecutorReason.ItemUsed);
+        }
+    }
+
+    // ---- the use of an item with a skill (40) ----
+
+    // ARC-COMBAT-1878: goal 40 (descriptor 0x5AA5D0, three nodes, priority 3): range 1 (0x42BEA0); within it with a clear first step the attempt (0x425130, else the walk near, goal 8); the attempt (0x428E10) goes to the shared skill check (0x4C7160) with the
+    // goal's item and ends the goal either way: no animation node, no timer, no action points of its own (the item use's 4 were charged where it started). An item the user no longer holds directly refuses; none is allowed (a follower with no lockpicks
+    // picks without). Only the pick-locks skill's attempt is built; the heal skill's is not (the goal is never started for it).
+    private static Transition UseItemWithSkillNode(string owner, GoalFrame goal, IAiGoalWorld world)
+    {
+        var target = goal.Target;
+        switch (goal.Node)
+        {
+            case 1:
+                return new(Move.Next, 2, Top: goal with { Range = 1 });
+            case 2:
+                if (target is null || world.Tile(target) is null) return End(AiExecutorReason.ObjectGone);
+                return Within(world, owner, target, goal.Range) && world.FirstStepClear(owner, target, false)
+                    ? Next(3)
+                    : new(Move.Push, Frame: Child(GoalType.MoveNear, goal), Reason: AiExecutorReason.ActionApproach);
+            default:
+                if (target is null || world.Gone(target)) return End(AiExecutorReason.ObjectGone);
+                if (goal.Item is { } item && (world.ItemHolder(item) != owner || world.Gone(item))) return End(AiExecutorReason.ItemNotHeld);
+                world.AttemptSkillWithItem(owner, target, goal.Item, goal.Skill ?? -1, goal.Modifier);
+                return End(AiExecutorReason.SkillAttempted);
         }
     }
 

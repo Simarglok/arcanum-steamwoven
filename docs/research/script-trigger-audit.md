@@ -32,7 +32,7 @@ TG4), and for the PC calls his own dialog point (script 1324, line 4; the dialog
 action opens DLG 1324 at node 1, then removes itself and skips the tick's default (TG6). Steamwoven added set S17 (critter
 vicinity, `IScrWorldQueries.CrittersInVicinity`), call-ex of the dialog point, a wider heartbeat set and the viewer's
 `OpenHeartbeatConversation`; the smoke stage `opening` observes it. Both rule modes behave the same (the original's own
-behaviour). A talk asked for while another conversation or a window is open or the hero is under attack stays pending and opens
+behaviour). A talk asked for while another conversation is open is dropped, not kept (the start callback returns silently in dialog mode, ARC-SCRIPT-2760, U5); one asked for while a window outside the stack is open or the hero is held in combat mode stays pending and opens
 once it can (Steamwoven's choice, U5). A call-ex of the dialog point refuses a callee that reaches call script.
 
 ## 2. Attachment points: who fires them
@@ -182,6 +182,5 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
 - **U4** ~~The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
   dialog gates never trigger there.~~ Closed by ARC-SCRIPT-2464: the use host and the talk host answer dead, surrendered (the session's danger record) and
   mind-controlled (spell flag 0x8000000) for an NPC of the shown map.
-- **U5** What the original does with a heartbeat's talk while the PC is in another dialog, a window is open or the PC is under
-  attack is not read (the dialog start refuses a second dialog of the PC, G3, but whether the talk is lost or retried is not known);
-  Steamwoven keeps it pending until it can open.
+- **U5** What the original does with a heartbeat's talk while the PC is in another dialog is read (ARC-SCRIPT-2760: the dialog start callback 0x567460 returns silently when the dialog mode is on top, so the talk is lost, never retried; the heartbeat's other effects stay);
+  what it does while a window outside the stack is open or the PC is under attack is not read, and Steamwoven keeps that talk pending until it can open.

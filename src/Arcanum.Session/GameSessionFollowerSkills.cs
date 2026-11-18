@@ -25,8 +25,9 @@ public sealed partial class GameSessionOwner
     /// item's use or the AI's goal pays its own); witnesses and the hand-over line are the host's. Refused before anything is rolled: a user whose sheet or modifiers do not hold, that is not the sheet's NPC, is the hero or is dead
     /// (<see cref="GameSessionFailure.PickLockUnavailable"/>), an invalid object, difficulty or light (<see cref="GameSessionFailure.InvalidOpenable"/>), lockpicks that are none or hold values outside the bounds
     /// (<see cref="GameSessionFailure.InvalidLockpick"/>), with a use script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), destroyed or held by the hero (<see cref="GameSessionFailure.ItemNotAvailable"/>), the version.
+    /// ARC-SCRIPT-2752: <paramref name="modifier"/> is the invocation modifier of the use-item-with-skill goal 40 (0 for the others).
     /// </summary>
-    public SessionPickLockResult PickLockByNpc(GameSessionVersion expected, SessionNpcSkillUser user, SessionPickLockTarget target, SessionLockpick? lockpick)
+    public SessionPickLockResult PickLockByNpc(GameSessionVersion expected, SessionNpcSkillUser user, SessionPickLockTarget target, SessionLockpick? lockpick, int modifier = 0)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(user);
@@ -39,7 +40,9 @@ public sealed partial class GameSessionOwner
             if (_inventory.Hero.InPack(lockpick.Entity)) return RejectPickLock(GameSessionFailure.ItemNotAvailable);
         }
         if (!IsCurrent(expected)) return RejectPickLock(GameSessionFailure.StaleVersion);
-        return PickLockStep(target, lockpick, NpcSkillRequest(user, Skill.PickLocks, record, LockpickCondition(lockpick)));
+        var request = NpcSkillRequest(user, Skill.PickLocks, record, LockpickCondition(lockpick));
+        // ARC-SCRIPT-2752 (ledger SX4): the invocation modifier of the use-item-with-skill goal (a script's, the lockpicks' own: 5, the skeleton key's: 10) enters the check (SC12 counts it again in the rules).
+        return PickLockStep(target, lockpick, modifier == 0 ? request : request with { Difficulty = request.Difficulty with { Modifier = (int)Math.Clamp((long)request.Difficulty.Modifier + modifier, int.MinValue, int.MaxValue) } });
     }
 
     /// <summary>
