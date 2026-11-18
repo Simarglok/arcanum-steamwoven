@@ -671,6 +671,7 @@ src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
 src/Arcanum.World/AreaNpcSheet.cs,Mark,pending,
+src/Arcanum.World/AreaObjectBreakHost.cs,Interrupts,exempt,reference
 src/Arcanum.World/AreaOpeningShop.cs,Make,pending,
 src/Arcanum.World/AreaPickPocket.cs,Start,pending,
 src/Arcanum.World/AreaProjectileHost.cs,Finish,pending,
@@ -686,9 +687,11 @@ src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
 src/Arcanum.World/AreaRestock.cs,Wielder,pending,
 src/Arcanum.World/AreaScenePlan.cs,BodyRanks,pending,
 src/Arcanum.World/AreaSceneryHost.cs,AddCreated,pending,
+src/Arcanum.World/AreaSceneryHost.cs,ObjectBroken,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,ObjectDestroyed,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Reframe,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
+src/Arcanum.World/AreaSceneryHost.cs,RestartBroken,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
 src/Arcanum.World/AreaScriptHost.cs,ReactionOf,pending,
 src/Arcanum.World/AreaScriptSpells.cs,GiveMastery,pending,
@@ -1048,6 +1051,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,EndDestroyedObjectRuns,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,InterruptBrokenObjectRuns,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host
