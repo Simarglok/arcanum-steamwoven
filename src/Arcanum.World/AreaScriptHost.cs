@@ -435,6 +435,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     // ARC-SCRIPT-1842 (0x45DE00): a speaker of this map follows the PC as the conversation state holds it, else the NPC leader the session holds for it (named on the speaker's map).
     public ScrObjectRef? Leader(ScrObjectRef critter) => Speaker(critter) is not { } speaker ? null : _state.Follows(speaker.Index) ? Pc
         : _session.QueryLeader(critter.Code) is { } leader && leader != PcCode ? new ScrObjectRef(critter.Map, leader) : null;
+    /// <summary>ARC-SCRIPT-1899: one critter named by two maps is one object (the original keeps it wherever it stands, FM1): the PC and a mobile (its id is the object's own, <see cref="AreaConversationState.EntityId"/>) are told by their id, any other object by the reference.</summary>
+    public static bool SameCritter(ScrObjectRef a, ScrObjectRef b) => a == b || a.Code == b.Code && (a.Code == PcCode || a.Code.StartsWith("oid:", StringComparison.Ordinal));
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => false;
 
     // ARC-SCRIPT-1842: the first PC up a speaker's chain of leaders (0x45DDA0), which the schematic window takes as its viewer: the PC for a follower of the hero or of its companion, null for an NPC led by an NPC alone.

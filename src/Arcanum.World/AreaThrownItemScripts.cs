@@ -189,6 +189,7 @@ public sealed class AreaThrownItemScripts
             AreaScriptHost.PcCode => Player(),
             var leader => new ScrObjectRef(critter.Map, leader),
         };
+        public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
         public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && owner._session.QueryCompanion(critter.Code).Jilted;
 
         public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => [];

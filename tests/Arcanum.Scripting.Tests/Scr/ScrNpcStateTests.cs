@@ -45,6 +45,61 @@ public sealed class ScrNpcStateTests
         Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, "not following after the disband");
     }
 
+    // ARC-SCRIPT-1899: the narrow set with make follow (21), whose join the host applies after the run.
+    private static readonly ScrRunOptions JoinOptions = new()
+    {
+        Admission = new("test-npc-join", Narrow.Conditions, Narrow.Actions.Append(ScrCatalogue.Action.MakeFollow), Narrow.ValueKinds, Narrow.FocusKinds, counterIndexWraps: true),
+    };
+
+    private static ScrRunResult RunJoin(ScrProgram program, FakeHost host)
+    {
+        host.Attach(Npc, ScrPoint.Heartbeat, Script, program);
+        return ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Pc, null), host, JoinOptions);
+    }
+
+    [TestMethod]
+    public void A_make_follow_of_the_run_is_read_by_its_later_following_test()
+    {
+        // 0x45DE90: the original joins inline, so the run's own following test afterwards reads true (the host applies the join after the run).
+        var run = RunJoin(Program(
+            L(C(ScrCatalogue.Condition.FollowingPc, (AttacheeKind, 0), (TriggererKind, 0)), C(ScrCatalogue.Action.ReturnRunDefault), C(ScrCatalogue.Action.MakeFollow, (AttacheeKind, 0), (TriggererKind, 0))),
+            L(C(ScrCatalogue.Condition.FollowingPc, (AttacheeKind, 0), (TriggererKind, 0)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))), new FakeHost());
+        CollectionAssert.AreEqual(new[] { new ScrObjectStateRequest(ScrObjectStateChange.MakeFollow, Npc, Other: Pc) }, run.Effects.ObjectStates.ToArray());
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, "following after the make follow");
+    }
+
+    [TestMethod]
+    public void A_make_follow_after_a_disband_of_the_run_reads_the_new_leader_and_a_disband_after_it_reads_none()
+    {
+        var host = new FakeHost();
+        host.Leaders[Npc] = Pc;
+        var joined = RunJoin(Program(
+            Do(C(ScrCatalogue.Action.CritterDisband, (AttacheeKind, 0))),
+            Do(C(ScrCatalogue.Action.MakeFollow, (AttacheeKind, 0), (TriggererKind, 0))),
+            L(C(ScrCatalogue.Condition.FollowingPc, (AttacheeKind, 0), (TriggererKind, 0)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))), host);
+        Assert.AreEqual(ScrOutcome.SkipDefault, joined.Outcome, "disband then join: following again");
+        var left = RunJoin(Program(
+            Do(C(ScrCatalogue.Action.MakeFollow, (AttacheeKind, 0), (TriggererKind, 0))),
+            Do(C(ScrCatalogue.Action.CritterDisband, (AttacheeKind, 0))),
+            L(C(ScrCatalogue.Condition.FollowingPc, (AttacheeKind, 0), (TriggererKind, 0)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))), host);
+        Assert.AreEqual(ScrOutcome.RunDefault, left.Outcome, "join then disband: following no one");
+    }
+
+    [TestMethod]
+    public void The_following_test_asks_the_host_whether_the_leader_and_the_second_object_are_one_object()
+    {
+        // A carried follower's leader named by another map than the second object: the host's identity test says they are one object.
+        var named = new ScrObjectRef(2, "npc.1");
+        var host = new FakeHost();
+        host.Leaders[Npc] = named;
+        var program = Program(L(C(ScrCatalogue.Condition.FollowingPc, (AttacheeKind, 0), (TriggererKind, 0)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault)));
+        Assert.AreEqual(ScrOutcome.RunDefault, Run(program, host).Outcome, "the plain reference test tells two maps apart");
+        host.Same = (a, b) => a == b || a.Code == b.Code;
+        var triggerer = new ScrObjectRef(1, "npc.1");
+        host.Attach(Npc, ScrPoint.Heartbeat, Script, program);
+        Assert.AreEqual(ScrOutcome.SkipDefault, ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, triggerer, null), host, Options).Outcome);
+    }
+
     [TestMethod]
     public void Set_and_adjust_reaction_name_the_npc_the_pc_and_the_number()
     {

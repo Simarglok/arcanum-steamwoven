@@ -74,6 +74,9 @@ internal sealed class FakeHost : IScrHost
     public HashSet<ScrObjectRef> Pcs { get; } = new() { ScrTestPrograms.Pc };
     public ScrObjectRef? Player() => PlayerRef;
     public ScrObjectRef? Leader(ScrObjectRef critter) => Leaders.TryGetValue(critter, out var leader) ? leader : null;
+    /// <summary>ARC-SCRIPT-1899: the host's identity test between two references of one object (null: the plain reference test).</summary>
+    public Func<ScrObjectRef, ScrObjectRef, bool>? Same { get; set; }
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => Same?.Invoke(a, b) ?? a == b;
     public bool IsJilted(ScrObjectRef critter) => Jilted.Contains(critter);
     public bool IsPc(ScrObjectRef critter) => Pcs.Contains(critter);
 }
