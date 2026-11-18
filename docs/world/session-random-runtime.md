@@ -141,6 +141,8 @@ before this schema, so nothing is lost.
 - Combat is not wired to a session by every host. The life
   state's knockout and second-arm rolls (`combat.KnockoutFatigue`, `combat.CrippleBothArms`, ARC-COMBAT-002) draw from
   the same generator.
+- The original's start-up draw of the scroll-bar handle serial (0x580490, also at every game reset) is kept out on purpose (ARC-WORLD-2216,
+  [ledger](../research/ledger/items.md#gambling-bets-arc-ui-1740)): it is only a handle tag that nothing saves or shows.
 - The original's other draws (AI reactions, sounds, effect stat checks) are not modelled, so a session fight is not an
   original fight draw for draw.
 - The original's re-seeding for spawned inventories and dialog replies; a derived, independent sequence per purpose (if
