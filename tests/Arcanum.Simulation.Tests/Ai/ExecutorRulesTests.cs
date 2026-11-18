@@ -155,6 +155,7 @@ public sealed class ExecutorRulesTests
         public AiActionSwing BeginAction(string id, AiActionAnimation animation) => new(AiActionStart.Started, 300, 300);
         public bool AttemptSkill(string id, string target, int skill, string? item) => false;
         public void AttemptPickLocks(string id, string target, string? item) { }
+        public void AttemptSkillWithItem(string id, string target, string? item, int skill, int modifier) { }
         public bool ThrowItem(string id, string item, CellCoord tile) => true;
         public void PickUp(string id, string item) { }
         public string? ItemHolder(string item) => null;

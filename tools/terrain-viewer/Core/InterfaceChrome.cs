@@ -432,13 +432,13 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(18, 100, 330, 310, ChromeMaterial.Pit), // runs off the frame's bottom: the original's box has no bottom edge between its corners
             new ChromeGrid(23, 107, 10, 9, 32),
             new ChromeKeep(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), // the opaque box behind the live round view
-            new ChromeRoundView(AreaLensPlace.X + 44.5, AreaLensPlace.Y + 44.5, 44.5, false),
+            new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), // ARC-UI-2762: the lens art 198 carries the one ring (inside its square); a second ring outside the circle showed as arcs at the four sides
             new ChromeKeep(10, 303, 112, 97),
             new ChromeKeep(244, 303, 114, 97),
         ]);
         // ARC-UI-1194: the loot, barter and steal windows' frames (Legacy pixels of each art). The grids' last column and row carry a line too (their pit goes on
         // for the scroll bar's chain, which is kept). The curly flourishes of the original's boxes are not drawn (as in the inventory).
-        List<ChromePart> lootParts = [new ChromeRoundView(AreaLensPlace.X + 44.5, AreaLensPlace.Y + 44.5, 44.5), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
+        List<ChromePart> lootParts = [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
         foreach (var x in new[] { 171.0, 258.0 })
             foreach (var y in new[] { 45.5, 64.5, 82.5 }) lootParts.Add(new ChromeRivet(x, y, 2.5));
         lootParts.AddRange([new ChromeSunk(6, 134, 342, 260, ChromeMaterial.Pit), new ChromeGrid(8, 136, 10, 8, 32, true), new ChromeKeep(332, 136, 12, 256)]);
@@ -449,9 +449,9 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(6, 166, 343, 228, ChromeMaterial.Pit), new ChromeGrid(8, 168, 10, 7, 32, true), new ChromeKeep(332, 168, 12, 224),
             new ChromeRivet(147.5, 112, 2.5), new ChromeRivet(282.5, 112, 2.5),
         ];
-        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeKeep(AreaLensPlace.X - 4, AreaLensPlace.Y - 4, 98, 95, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
+        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
         var follower = new ChromeRecipe("barter_follower.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
-            [new ChromeRoundView(AreaLensPlace.X + 44.5, AreaLensPlace.Y + 44.5, 44.5), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
+            [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
         var lootDoll = new ChromeRecipe("loot_pd.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
         [
             new ChromeSunk(70, 46, 215, 194, ChromeMaterial.Pit),
@@ -1083,6 +1083,8 @@ public static class InterfaceChromeRenderer
                 ChromePlate p => (p.X, p.Y, p.Width, p.Height),
                 ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
                 ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                // ARC-UI-2762: the lens's square (and four units around it, where the Legacy frame has its own ring) is no wood: the frames draw no ring of their own, so the old ring pixels must not tone the wood.
+                ChromeBare { Width: 89 } p => (p.X - 4, p.Y - 4, p.Width + 8, p.Height + 8),
                 ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
                 // ARC-UI-2194: the brass pill's parts (the housing and the plates; the ring lies inside the housing's box).
                 ChromeCapsule p => ((int)Math.Floor(p.X), (int)Math.Floor(p.Y), (int)Math.Ceiling(p.Width) + 1, (int)Math.Ceiling(p.Height) + 1),
