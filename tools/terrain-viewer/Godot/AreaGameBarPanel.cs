@@ -356,6 +356,12 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     public override void _Process(double delta)
     {
+        // ARC-UI-2576: the open menu's backdrop leaves out the squares of the round views (the lens of the logbook, schematics, reading, inventory and barter windows).
+        if (_backdropLayer.Visible)
+        {
+            var holes = AreaRoundView.VisibleRects();
+            foreach (var backdrop in _backdrops) backdrop.SetHoles(holes);
+        }
         var changed = false;
         var now = Time.GetTicksMsec();
         foreach (var feedback in _downFeedback.Values)
@@ -443,6 +449,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2576: the family the backdrop is for (null: none asked) and the views of its pieces that show now, with the pixel size of each one's painted texture.</summary>
     internal (SteamwovenBackdropFamily? Family, IReadOnlyList<(Vector2 Position, Vector2I Pixels)> Shown) BackdropForSelfTest =>
         (_backdropFamily, [.. _backdrops.Where(backdrop => backdrop.Visible).Select(backdrop => (backdrop.Position, backdrop.PixelSizeForSelfTest))]);
+    /// <summary>ARC-UI-2576: how many round-view squares the first backdrop piece leaves out.</summary>
+    internal int BackdropHolesForSelfTest => _backdrops[0].HoleCount;
     internal IReadOnlyList<ColorRect> BarsForSelfTest => _barRects;
     internal bool BoardsShownForSelfTest => _boards.Visible;
 

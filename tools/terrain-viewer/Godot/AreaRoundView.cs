@@ -27,16 +27,27 @@ public partial class AreaRoundView : CanvasLayer
             COLOR = vec4(texture(screen_texture, SCREEN_UV + delta / hole_side * span).rgb, 1.0);
         }
         """;
+    private static readonly List<AreaRoundView> Live = [];
     private readonly ColorRect _hole;
     private readonly ShaderMaterial _material;
 
     public AreaRoundView()
     {
-        Name = "RoundViewLayer"; Layer = 3; Visible = false;
+        // ARC-UI-2576: layer 2, under the Steamwoven menu backdrop (layer 3, which leaves the lens's square out), so the copy reads the world and not the backdrop; the windows (layer 4) draw the lens ring over it.
+        Name = "RoundViewLayer"; Layer = 2; Visible = false;
+        lock (Live) Live.Add(this);
         _material = new ShaderMaterial { Shader = new Shader { Code = HoleShader } };
         _hole = new ColorRect { Name = "RoundView", MouseFilter = Control.MouseFilterEnum.Ignore, Material = _material };
         AddChild(_hole);
     }
+
+    /// <summary>ARC-UI-2576: the squares (canvas units) of the round views that show now: the menu backdrop leaves them out, so the copy of the game view is not covered.</summary>
+    public static IReadOnlyList<Rect2> VisibleRects()
+    {
+        lock (Live) return [.. Live.Where(view => view.Visible && view._hole.Size.X > 0).Select(view => new Rect2(view._hole.Position, view._hole.Size))];
+    }
+
+    public override void _ExitTree() { lock (Live) Live.Remove(this); }
 
     /// <summary>Shows the game view around <paramref name="holder"/> (its foot point in canvas units and the game view's zoom) in
     /// <paramref name="area"/>'s rectangle for its drawn mode, or hides it (null); the frame leaves the rectangle out while it shows.</summary>
