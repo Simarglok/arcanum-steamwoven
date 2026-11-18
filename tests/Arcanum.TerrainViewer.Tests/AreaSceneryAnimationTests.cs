@@ -449,4 +449,45 @@ public sealed class AreaSceneryAnimationTests
         Assert.AreEqual(0, f.Host.RestartBroken(_ => true), "a destroyed object has no loop to start");
         Assert.AreEqual(0, f.Host.Running);
     }
+    [TestMethod]
+    public void A_busted_art_of_several_frames_starts_the_interrupted_loop_again_at_once()
+    {
+        // ARC-SCRIPT-2670 (0x43EB30 -> 0x43F710 -> 0x433580): the break interrupts the loop, then the busted art is written and its restart starts the loop on the busted frames.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        f.Host.Start();
+        f.Run(200);
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(f.Host.ObjectBroken(entity));
+        Assert.AreEqual(0, f.Host.Running, "the break ended the loop's run");
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Reframe(row, NewArt(row, 3), framesPerSecond: 10));
+        Assert.AreEqual(1, f.Host.Running, "the busted art's restart runs the loop again");
+        Assert.AreEqual(GoalType.AnimateLoop, f.Host.GoalOf(entity));
+        Assert.AreEqual(3, f.Host.LoopOf(entity)!.Frames.Count);
+        Assert.AreEqual(100, f.Host.LoopOf(entity)!.Loop.PauseMs, "a run started now reads the busted art's rate");
+        Assert.AreEqual(0, f.Host.RestartBroken(_ => true), "the break's mark is gone: no second start");
+        f.Run(500);
+        Assert.AreEqual(f.Host.LoopOf(entity)!.Loop.Steps % 3, f.Host.LoopOf(entity)!.Loop.Frame, "the busted frames wrap at three");
+        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount);
+    }
+
+    [TestMethod]
+    public void A_busted_art_of_one_frame_kills_every_run_of_the_object_including_the_overlay()
+    {
+        // ARC-SCRIPT-2670: a one-frame busted art (no ambient sound) takes the restart's kill branch: 0x423FF0 ends every run of the object, the no-interrupt overlays too.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        var eye = new AreaEyeCandyHost(f.Session, _ => null, (art, parts) => new EyeCandyFacts(4, 2, 100, 0, true, true), (low, high) => low);
+        f.Host.Start();
+        f.Run(300);
+        var entity = f.Loop.Entity;
+        Assert.IsTrue(eye.StartHover(entity));
+        Assert.IsTrue(f.Host.ObjectBroken(entity));
+        Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done), "the break leaves the overlay");
+        Assert.AreEqual(SceneryRestart.Kill, f.Host.Reframe(row, NewArt(row, 1), framesPerSecond: 8));
+        Assert.AreEqual(0, f.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done), "the busted art's one frame ends the overlay too");
+        Assert.AreEqual(0, f.Host.Running);
+        Assert.AreEqual(0, f.Host.Start(), "the loop is given up");
+        Assert.AreEqual(0, f.Host.RestartBroken(_ => true));
+    }
 }

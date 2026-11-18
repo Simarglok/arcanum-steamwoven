@@ -67,6 +67,8 @@ public partial class TerrainViewerApp
         void Interrupt() { if (interrupted) return; interrupted = true; InterruptBrokenObjectRuns(row); }
         RunObjectBreakScripts(row, steps, byHero, ranged, breaker, Interrupt);
         if (AreaObjectBreakHost.Interrupts(steps)) Interrupt();
+        // ARC-SCRIPT-2670 (0x43EB30 → 0x43F710): a scenery the break busted has the busted art written and its restart decided at once (the next frame's art scan).
+        if (row.Type == SceneryType) ScanSceneryArtNow();
         // ARC-SCRIPT-2620 (OD7–OD11, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): a scenery, trap or container the break destroyed ends its goal runs and tells its spell runs, as a script's destroy does (the trap fired before the break, the interrupt first).
         if (AreaObjectBreakHost.EndsRuns(steps) && ShownObjectRef(row) is { } destroyed) EndDestroyedObjectRuns(destroyed);
         // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.

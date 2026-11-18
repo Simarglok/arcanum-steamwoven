@@ -48,7 +48,7 @@ public partial class TerrainViewerApp
         else if (SceneryArtStampIs(area, session, revision) || !_sceneryArtScanDue && System.Environment.TickCount64 - _sceneryArtScanAt < SceneryArtScanMs) return false;
         _sceneryArtScanAt = System.Environment.TickCount64; _sceneryArtScanDue = false;
         var map = new SessionMapId(area.Snapshot.RuntimeMap);
-        var wanted = session.QueryObjectArts(map);
+        var wanted = WantedSceneryArts(area, session, map);
         if (wanted.Count == 0 && _sceneryArt.Count == 0) { SceneryArtStampSet(area, session, revision); return false; }
         // Without the module's content the art cannot be read: tried again on the next frame.
         if (ExtraArt() is not { } art) return false;
@@ -69,12 +69,21 @@ public partial class TerrainViewerApp
             _sceneryArt[entity] = new(aid, row, loaded.Frames);
             host.Reframe(row, loaded.Frames, loaded.FramesPerSecond);
             changed = true;
+            // A busted body is drawn from the loop's frames now, not from the static ground body.
+            if (IsBustedSceneryArt(row, aid)) _groundStamp = null;
         }
         foreach (var entity in _sceneryArt.Keys.Where(entity => !seen.Contains(entity)).ToArray())
         {
             // The field went: the object has the art of the map data again (its frames from the plan, or its body alone).
             var row = _sceneryArt[entity].Row;
+            if (IsBustedSceneryArt(row, _sceneryArt[entity].Art)) _groundStamp = null;
             _sceneryArt.Remove(entity);
+            // ARC-SCRIPT-2670: a busted scenery the next hit destroyed has no art to give back: its runs ended at the destroy and nothing restarts for it.
+            if (AreaUseScriptHost.Destroyed(session, area.Snapshot.RuntimeMap, entity) || session.QueryObjectCondition(map, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
+            {
+                changed = true;
+                continue;
+            }
             if (overlay.Bodies.TryGetValue(row.Key, out var command) && overlay.Visuals.TryGetValue(command.Visual, out var visual))
             {
                 var own = AreaSceneryAnimation.BaseFrames(area.Plan, row);
@@ -84,6 +93,29 @@ public partial class TerrainViewerApp
         }
         return changed;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2670 (ledger OD7, BS3c, 0x43EB30 → 0x43F710): the arts the shown map's sceneries have apart from the map data. A script's art number comes from the session; a scenery the session holds busted has its destroyed ART (field 24 of the row) too: the break wrote it
+    /// into the object through the art writer, so the loop is the restart's decision on that art (several frames: the loop runs on them; one frame: the object's runs end). The busted art wins over a script's art, as the ground body of a busted scenery did.
+    /// </summary>
+    private IReadOnlyList<(string Entity, uint Art)> WantedSceneryArts(AreaLoadResult area, GameSessionOwner session, SessionMapId map)
+    {
+        var wanted = session.QueryObjectArts(map).ToList();
+        if (ObjectTargets() is not { } targets) return wanted;
+        foreach (var key in targets.Busted(session))
+        {
+            if (area.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is not { Type: SceneryType } row || BustedArt(row) is not { } art) continue;
+            var entity = AreaUseScriptHost.EntityId(row);
+            wanted.RemoveAll(w => w.Entity == entity);
+            wanted.Add((entity, art));
+        }
+        return wanted;
+    }
+
+    /// <summary>The destroyed ART of a scenery row (field 24), null when it has none.</summary>
+    private uint? BustedArt(AreaObjectRecord row) => Number(row, DestroyedArtSlot) is { } art && !AreaDataOwner.NamesNoArt(art) ? art : null;
+
+    private bool IsBustedSceneryArt(AreaObjectRecord row, uint art) => BustedArt(row) == art;
 
     /// <summary>Every frame of the art id (frame 0 first), each loaded into the frame overlay; null (said once) when a frame cannot be read: the object is then drawn from its map data as before.</summary>
     private (IReadOnlyList<AreaVisualRecord> Frames, int FramesPerSecond)? LoadSceneryArt(AreaExtraArt art, uint aid, string entity)

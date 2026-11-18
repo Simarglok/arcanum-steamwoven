@@ -140,7 +140,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>
     /// ARC-SCRIPT-2646 (ledger OD7, BS3c, 0x43F1C0 → 0x424070, rule 0x44E2C0): every break of a container, scenery or trap that is not already destroyed starts with the interrupt of the object's goal runs at level 5, before the type dispatch (a destroying break's
     /// kill, <see cref="ObjectDestroyed"/>, follows it). The rule ends the scenery's loop (goal 1 or 77, priority 1) with its end node, which stops the run's looping sound (listed for <see cref="TakeKilledByArt"/>); the loop is kept as the object's but has no run: a respawning
-    /// scenery gets it back when the object is switched on again (<see cref="RestartBroken"/>, 0x43D280 → 0x43F710), a busted one at the next sector or map show (<see cref="Start"/>; the busted ART's immediate restart is issue #2670). The no-interrupt overlays (eye candy, hover, floating) stay
+    /// scenery gets it back when the object is switched on again (<see cref="RestartBroken"/>, 0x43D280 → 0x43F710), a busted one at once, on its busted ART (ARC-SCRIPT-2670: the break writes the busted art through 0x43EB30, whose restart is <see cref="Reframe"/>: several frames start the loop again, one frame kills the object's runs). The no-interrupt overlays (eye candy, hover, floating) stay
     /// running, and the walk stops at a run that refuses (a priority-5 goal that is not no-interrupt). <paramref name="castId"/> is the object's id on the spell side when it differs from <paramref name="entity"/>. A call the session refuses for a pass in progress is tried again by <see cref="TakeChanged"/>.
     /// True when a loop run of the object ended.
     /// </summary>
@@ -322,6 +322,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
             var burning = (sceneryFlags & AreaSceneryAnimation.BurningFlag) != 0;
             var loop = new AreaSceneryLoop(row, frames, new SceneryLoop(x, y, frames.Select(f => (f.ArtOffsetX, f.ArtOffsetY)).ToArray(), 0, pause, offset.Item1, offset.Item2), burning);
             _byEntity[entity] = loop; _animation.Replace(loop); _resting.Remove(entity);
+            // ARC-SCRIPT-2670: the restart the art writer ran gives a loop a break interrupted its run back at once (the busted art's frames), so the break's mark goes.
+            _brokenLoops.Remove(entity);
             if (!running) StartOne(entity, burning);
             _changed = true;
         }
