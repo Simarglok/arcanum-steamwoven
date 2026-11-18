@@ -212,4 +212,64 @@ public sealed class HeroDropStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, window).Disposition);
         Assert.AreEqual(0, Complexity(restored), "no row: its facts are not read here");
     }
+
+    // ARC-SCRIPT-2594 (ledger IV8): a held item keeps the tile it last lay on (the original rewrites an item's location field only by a drop, an animation parameter or a cross-map teleport), so the session remembers it after the pickup.
+    [TestMethod]
+    public void A_taken_up_item_keeps_the_tile_it_last_lay_on_across_a_second_drop_a_save_and_a_destroy()
+    {
+        using var owner = Hero();
+        Assert.IsNull(owner.QueryItemLastDrop("apple"), "never dropped");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, "apple", Facts(owner, "apple")).Disposition);
+        Assert.IsNull(owner.QueryItemLastDrop("apple"), "on the ground it reads its placed cell");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
+        Assert.AreEqual(Start.Cell, owner.QueryItemLastDrop("apple"), "taken up again, the item keeps the tile");
+        Assert.IsNull(owner.QueryItemLastDrop("kit:3"), "an item never dropped has none");
+
+        // The tile follows the item through a save; a drop again lets the placed cell answer, the next pickup writes the new tile.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(Start.Cell, restored.QueryItemLastDrop("apple"));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.DropHeroItem(restored.Version, "apple", Facts(restored, "apple")).Disposition);
+        Assert.IsNull(restored.QueryItemLastDrop("apple"), "lying again: the placed cell");
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.PickUpItem(restored.Version, "apple", Accept).Disposition);
+        Assert.AreEqual(Start.Cell, restored.QueryItemLastDrop("apple"));
+
+        // A destroyed item has no tile any more; a destroy on the ground leaves none either.
+        owner.DestroyObject("apple");
+        Assert.IsNull(owner.QueryItemLastDrop("apple"));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, "kit:3", Facts(owner, "kit:3")).Disposition);
+        owner.DestroyObject("kit:3");
+        Assert.IsNull(owner.QueryItemLastDrop("kit:3"));
+        Assert.AreEqual(0, owner.Capture().Inventory.LastDrops.Count);
+    }
+
+    // A pile pickup (the loot of a junk pile of two items) is a pickup too.
+    [TestMethod]
+    public void A_looted_item_of_a_junk_pile_keeps_its_drop_tile()
+    {
+        using var owner = Hero();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, "apple", Facts(owner, "apple")).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, "kit:3", Facts(owner, "kit:3")).Disposition);
+        var pile = owner.QueryJunkPiles().Single().Entity;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, pile, "kit:3", Accept).Disposition);
+        Assert.AreEqual(Start.Cell, owner.QueryItemLastDrop("kit:3"));
+        Assert.IsNull(owner.QueryItemLastDrop("apple"), "the other item still lies there");
+    }
+
+    // The restore refuses a tile that names an item on the ground, a destroyed or unknown item, a cell beyond the drop's packing, or an unsorted list.
+    [TestMethod]
+    public void A_saved_last_drop_tile_is_checked_by_the_decode_and_the_restore()
+    {
+        using var owner = Hero();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, "apple", Facts(owner, "apple")).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var row = $"\"lastDrops\":[{{\"entity\":\"apple\",\"x\":{Start.Cell.X},\"y\":{Start.Cell.Y}}}]";
+        StringAssert.Contains(text, row);
+        Assert.AreEqual(SnapshotDecodeFailure.UnknownField, GameSessionSnapshotCodec.TryDecode(text.Replace(row, row.Replace("]", ",{\"entity\":\"b\",\"x\":1,\"y\":1,\"z\":0}]"))).Failure);
+        Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(text.Replace(row, row.Replace("]", ",{\"entity\":\"apple\",\"x\":1,\"y\":1}]"))).Failure, "the entities ascend strictly");
+        Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, GameSessionSnapshotCodec.TryDecode(text.Replace(row, row.Replace($"\"x\":{Start.Cell.X}", "\"x\":16777216"))).Failure);
+        var unknown = GameSessionSnapshotCodec.TryDecode(text.Replace(row, row.Replace("\"apple\"", "\"pear\"")));
+        Assert.IsNotNull(unknown.Snapshot, "a well-formed text decodes");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(unknown.Snapshot, RestoreOptions()).Failure, "an item nothing holds has no tile");
+    }
 }
