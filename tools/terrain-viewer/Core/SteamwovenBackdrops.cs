@@ -62,6 +62,23 @@ public static class SteamwovenBackdrops
         return null;
     }
 
+    /// <summary>ARC-UI-2643: the original art whose wood a piece of the family continues, so the backdrop takes the tone of its own window's wood (SWI-BDR-7): the paper doll (223) and the inventory (221) for the two halves of
+    /// BD-A, the character sheet (22), the logbook's side (264) and book (260), the reading window's side bar (494, for both halves: its backgrounds are sheets on the table), the map frame (138) and the schematic base (365).</summary>
+    public static int ToneArt(SteamwovenBackdropFamily family, int piece) => (family, piece) switch
+    {
+        (SteamwovenBackdropFamily.Inventory, 0) => 223,
+        (SteamwovenBackdropFamily.Inventory, _) => 221,
+        (SteamwovenBackdropFamily.CharacterSheet, _) => 22,
+        (SteamwovenBackdropFamily.Logbook, 0) => 264,
+        (SteamwovenBackdropFamily.Logbook, _) => 260,
+        (SteamwovenBackdropFamily.Reading, _) => 494,
+        (SteamwovenBackdropFamily.WorldMap, _) => 138,
+        _ => 365,
+    };
+
+    /// <summary>Every art number <see cref="ToneArt"/> names (the bars' content reads them with its own).</summary>
+    public static IReadOnlyList<int> ToneArts { get; } = [223, 221, 22, 264, 260, 494, 138, 365];
+
     /// <summary>The width in original units of the left part of a two-part family (the census: 358, 165, 132), or null for a family of one piece.</summary>
     public static int? LeftUnits(SteamwovenBackdropFamily family) => family switch
     {
