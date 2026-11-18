@@ -89,6 +89,9 @@ public sealed partial class GameSessionOwner
         if (!ValidWear(attackerSide, objectSide, targetBroken: false, wear: null)) return RejectObject(GameSessionFailure.InvalidWear);
         var attackerStatus = LifeRules.Evaluate(attackerRecord.State, attackerFacts!);
         SessionNpcAttackValues values;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's: the NPC's wielded weapon takes no wear from it.
+        if (arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)
+            attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes; a shot in flight carries its own.
         if (arrow is not null) values = arrow.Values;
         else

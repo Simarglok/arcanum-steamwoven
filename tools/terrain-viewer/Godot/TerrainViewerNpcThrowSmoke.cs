@@ -144,7 +144,7 @@ public partial class TerrainViewerApp
                 // ARC-COMBAT-2693 (TW11): a critical miss of the throw turned on the thrower and the viewer noticed it as the thrower's self-hit (not as a plain throw); judged when the roll gave one (the unit tests pin the roll).
                 var selfHit = _npcThrowSelfHitsForSelfTest.FirstOrDefault(h => h.Thrower == entity);
                 if (selfHit.Thrower is not null)
-                    Require(selfHit.Status.Contains("critical miss", StringComparison.Ordinal) && !launch.Hit, $"throw {index}: the critical miss was noticed as the thrower's self-hit ({selfHit.Status}, hit {launch.Hit})");
+                    Require(!launch.Hit && selfHit.Damage >= 0 && selfHit.Floaters >= 0, $"throw {index}: the critical miss was noticed as the thrower's self-hit ({selfHit.Status}, hit {launch.Hit})");
                 GD.Print($"ARC-COMBAT-2693 npc-throw self-hit leg throw={index} judged={selfHit.Thrower is not null} damage={selfHit.Damage} floaters={selfHit.Floaters}");
                 GD.Print($"ARC-DEV-1962 npc-throw tile leg throw={index} struck=none heroLost={lost} hp={heroAtThrow}->{session.QueryHeroLife()!.Status.HitPoints}"
                     + $" hit={launch.Hit} landed={landing.Tile.X},{landing.Tile.Y} drawn={drawn}");

@@ -2596,7 +2596,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public SessionAttackResult? LandShot(string shooter, SessionShot shot, string struck)
     {
         // The aimed target's attack event was raised at the shot; a stray target's comes with its strike.
-        var aimed = _session.QueryNpcShot(shot) is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
+        var shotFacts = _session.QueryNpcShot(shot);
+        var aimed = shotFacts is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's (no weapon of its own): the wielded weapon's hit effect does not play on the victim.
+        var strikeWeapon = shotFacts is { Generic: true } ? null : WieldedPrototype(shooter);
         if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { EndStruckShot(shot); return null; }
         // The strike is a distance-1 hit with no line of its own (the carried check holds the cover); the shooter's worn items are what it wears now.
         var result = _session.LandNpcShot(_session.Version, shot, attack with { Distance = 1, LineOfFire = null });
@@ -2610,7 +2613,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (struck != aimed) AttackEvent(shooter, struck, AttackEventFlags.Accidental);
             // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
             // ARC-RENDER-1990: the weapon asked is the shooter's wielded one as it stands at the strike (the original reads the projectile's field 0x50 set at the shot; an NPC's thrown item is not told apart here, issue 2013).
-            HitEffect(struck, result, WieldedPrototype(shooter));
+            HitEffect(struck, result, strikeWeapon);
             if (VictimReached(result)) Struck(struck);
         }
         return result;
