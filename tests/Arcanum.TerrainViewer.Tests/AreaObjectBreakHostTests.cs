@@ -93,6 +93,11 @@ public sealed class AreaObjectBreakHostTests
             Write("scr/00840nestedrefused.scr", Program(0, Do(new(ScrCatalogue.Action.Teleport, (Attachee, -1), N(5000), N(30), N(40))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-2513 (BS3d): a taking-damage script with the commands of the installed container script 2827: set a global flag, play a script eye candy on the attachee and destroy a scenery (here its own attachee).
             Write("scr/00841taking.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(2306))), Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Attachee, -1))), Do(new(ScrCatalogue.Action.Destroy, (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2686: 842 is a destroy point that prints a line (entry type 6) of its dlg and runs the default; 843 prints it and skips the default.
+            Write("scr/00842print.scr", Program(0, Do(new(ScrCatalogue.Action.PrintLine, N(1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("dlg/00842print.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{The statue crumbles.}{}{}{}{}{}"));
+            Write("scr/00843printstays.scr", Program(0, Do(new(ScrCatalogue.Action.PrintLine, N(1), N(6))), Do(new(skip))));
+            Write("dlg/00843printstays.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{It holds.}{}{}{}{}{}"));
             Write("scr/00831local.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -630,6 +635,7 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsTrue(host.GlobalFlag(2303), "the destroy point ran");
             Assert.AreEqual(SessionObjectCondition.Destroyed, ConditionOf(session, statue, kind));
             Assert.IsTrue(AreaObjectBreakHost.EndsRuns(broke.Host));
+            Assert.IsFalse(broke.Host.HasFlag(SessionObjectHostSteps.DestroyKept), "a destroy that went through names no kept step");
         });
         WithContent(content =>
         {
@@ -641,6 +647,7 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsTrue(host.GlobalFlag(2304), "the destroy point ran and skipped the default");
             Assert.AreEqual(SessionObjectCondition.Busted, ConditionOf(session, statue, kind), "the busted scenery stays");
             Assert.IsFalse(AreaObjectBreakHost.EndsRuns(broke.Host), "no destroy, no runs to end");
+            Assert.IsTrue(broke.Host.HasFlag(SessionObjectHostSteps.DestroyKept), "ARC-SCRIPT-2686: the host says the destroy was refused");
             Assert.IsTrue(broke.Host.HasFlag(SessionObjectHostSteps.DestroySound), "the sound plays after the destroy returns");
             Assert.AreEqual(10, session.QueryObject(BreakTarget(statue, kind)).Damage, "the hit's damage is written");
         });
@@ -715,6 +722,39 @@ public sealed class AreaObjectBreakHostTests
             session.DamageObject(session.Version, BreakTarget(chest, kind), 10);
             Assert.IsTrue(host.GlobalFlag(2303));
             Assert.AreEqual(SessionObjectCondition.Destroyed, ConditionOf(session, chest, kind));
+        });
+    }
+
+    // ARC-SCRIPT-2686 (TD2, IS2, PW1): the lines the break's destroy point printed are kept with its run for the viewer's break step (the message window), whether the point lets the object go or keeps it; the run is taken once.
+    [TestMethod]
+    public void The_destroy_points_printed_lines_stay_with_the_run_the_break_gate_made()
+    {
+        var kind = Arcanum.Simulation.Combat.DamageableObjectKind.Scenery;
+        foreach (var (script, text, condition) in new[] { (842, "The statue crumbles.", SessionObjectCondition.Destroyed), (843, "It holds.", SessionObjectCondition.Busted) })
+            WithContent(content =>
+            {
+                using var session = ConversationSessionFixture.Create();
+                var statue = Row(1, Scenery, 0, 0, destroy: script);
+                var (host, _) = Hosts(session, content, new Probe(), true, statue);
+                session.AttachObjectDestroyGate(host.BreakMayDestroy);
+                session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+                Assert.AreEqual(condition, ConditionOf(session, statue, kind));
+                var ran = host.TakeBreakDestroyRun();
+                Assert.IsNotNull(ran, "the gate's run is kept");
+                CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, text) }, ran.Printed.ToArray());
+                Assert.IsNull(host.TakeBreakDestroyRun(), "taken once");
+            });
+        // A run an earlier break left untaken is not a later break's: a break of an object with no point finds none.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 0, destroy: 842);
+            var plain = Row(2, Scenery, 0, 0);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue, plain);
+            session.AttachObjectDestroyGate(host.BreakMayDestroy);
+            session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
+            session.DamageObject(session.Version, BreakTarget(plain, kind), 10);
+            Assert.IsNull(host.TakeBreakDestroyRun(), "the second break had no point and the first run is gone");
         });
     }
 }

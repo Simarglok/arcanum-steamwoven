@@ -194,6 +194,11 @@ public sealed class AreaObjectTargetsTests
         // ARC-COMBAT-011: a trapped object's break names the trap the viewer does not run.
         Assert.AreEqual("hit: 4 damage, destroyed — its trap goes off", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))
             with { Host = SessionObjectHostSteps.TrapFires }));
+        // ARC-SCRIPT-2686: a destroy the object's destroy point refused is not called a destroy.
+        Assert.AreEqual("hit: 4 damage, the destroy is refused, the object stays", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))
+            with { Host = SessionObjectHostSteps.DestroyKept }));
+        Assert.AreEqual("hit: 4 damage, the container breaks, but it is not destroyed", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.ContainerSpilled, 12))
+            with { Host = SessionObjectHostSteps.DestroyKept }));
         Assert.AreEqual("attack refused: ObjectUnavailable", AreaObjectTargets.Describe(new(GameSessionDisposition.Rejected, GameSessionFailure.ObjectUnavailable,
             null, null, null, null, null, SessionObjectHostSteps.None, GameSessionFailure.None, default)));
     }
