@@ -171,10 +171,12 @@ public sealed class GeneratorItemCopyTests
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(back.Capture()));
         Assert.AreEqual(4, back.QueryItemCharges(sword));
         Assert.IsTrue(back.QueryItemIdentified(sword));
+        Assert.AreEqual(owner.QueryItemCondition(sword, baseline), back.QueryItemCondition(sword, baseline));
+        Assert.AreEqual(new SessionItemFieldWrites(77, false), back.QueryItemFieldWrites(sword));
     }
 
     [TestMethod]
-    public void A_copy_made_after_the_generators_records_are_full_keeps_the_items_and_drops_only_the_full_record()
+    public void Every_copy_gets_its_own_record_of_the_generators_item_and_the_records_are_independent()
     {
         using var owner = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "g-sword", 5).Disposition);
