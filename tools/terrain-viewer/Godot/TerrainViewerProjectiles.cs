@@ -604,7 +604,7 @@ public partial class TerrainViewerApp
         var owner = projectile.Owner;
         if (struck.Type == 0)
         {
-            var result = ai.LandShotOnObject(shooterId, projectile.Shot, null, wall: true);
+            var result = ai.LandShotOnObject(shooterId, projectile.Shot, null, wall: true, wallRow: struck);
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"an NPC's shot on a wall: disposition={result?.Disposition} failure={result?.Failure} prevented={result?.Resolution?.Damage?.Prevented}");
             _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, $"wall:{struck.Key.SourceIndex}", result?.Disposition ?? GameSessionDisposition.Rejected, null));
             if (result is { Disposition: not GameSessionDisposition.Rejected }) NpcObjectHit(shooterId, struck, null, result);
