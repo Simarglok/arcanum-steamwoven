@@ -77,7 +77,7 @@ public partial class TerrainViewerApp
         }
         if (_logbookPanel is null)
         {
-            _logbookPanel = new AreaLogbookPanel(); AddChild(_logbookPanel);
+            _logbookPanel = new AreaLogbookPanel(); AddChild(_logbookPanel); _logbookPanel.DiagnosticSwitch = DebugMode;
             _logbookPanel.CloseRequested += CloseLogbookByPlayer;
             _logbookPanel.TabRequested += SelectLogbookTab;
             _logbookPanel.SoundRequested += id => PlayInterfaceSound(id, "logbook page");

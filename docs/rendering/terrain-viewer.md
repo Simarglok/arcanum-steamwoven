@@ -1272,8 +1272,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   takes its art's cells), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
   18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
-  grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
-  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
+  grid, the boxes and a right click act as before, and (ARC-UI-2764) a debug-only *Diagnostic view* switch below the frame shows the diagnostic panel (its
+  buttons) and back; in play no panel draws the switch or the original look's message line (`DiagnosticSwitch`, off unless the debug mode or a self-test turns it on). The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
   (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
   toggle (plan). The native smoke checks it in the inventory stage (`ARC-UI-051 native-smoke inventory-art PASS`: every window
   art read, every grid and worn item's art read, three lines).
@@ -1287,8 +1287,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
   grid is taken through the same path as its Take button (a stack asks how many; PROJECT: into the first free cells); released on a
   box (which shows the refused art 348 / 347) or elsewhere it goes back; ARC-UI-065: a right release on a body's item takes it the same
-  way (IW36), on a hero's item it does nothing here. The "Diagnostic view"
-  switch keeps the Take buttons. **Body doll view (ARC-UI-072,** [ledger IW29–IW30](../research/ledger/ui-audio.md)**; bug B30):** the loot and steal windows of a
+  way (IW36), on a hero's item it does nothing here. The debug-only "Diagnostic view"
+  switch (ARC-UI-2764) keeps the Take buttons. **Body doll view (ARC-UI-072,** [ledger IW29–IW30](../research/ledger/ui-audio.md)**; bug B30):** the loot and steal windows of a
   critter (not a container) show the toggle buttons 338 (doll) and 339 (bag) at (23, 108) and (74, 108), which act on a release over the same button;
   the doll view draws art 349 at (0, 134) and the body's worn items (`AreaInventoryView.BodyDoll`, by the worn item's inventory location) in the nine slot
   rectangles of table 0x5CAE08, a cover (0x5CAF58) on each empty slot, and hides the grid; a worn item pressed on its slot and released on the hero's grid
@@ -1313,7 +1313,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
   released on the victim's grid one plant attempt (`AreaInventoryDropKind.Plant`), and a right release on either side's item makes the
   same attempt (PROJECT: the item goes to the receiving side's first free place); the boxes refuse the victim's items and drop or use the
-  hero's. The "Diagnostic view" switch keeps the Steal and Plant buttons. The `pickpocket` stage drives the theft and the plant by
+  hero's. The debug-only "Diagnostic view" switch (ARC-UI-2764) keeps the Steal and Plant buttons. The `pickpocket` stage drives the theft and the plant by
   drags and the first plain theft by a right release when the original look shows (`Look` and `Dragged` in its PASS line;
   `ARC_AREA_STEAL_CAPTURE=PATH.png` saves the window).
 - **Round view (ARC-UI-054,** [ledger IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054); `AreaInventoryHole`): the
@@ -3020,7 +3020,7 @@ quelled rumor, a completed and a failed quest. The window is docked at the scree
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
 break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; a tab not built (none now) would show an empty
-page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
+page and a note; a debug-only "Diagnostic view" button (ARC-UI-2764) at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. ARC-UI-098 adds the **PC lens** and the **tab hover hint** (ledger LB23): the open centres the game view on the hero, a round view of it (`AreaRoundView`, the component the inventory window shares) shows in the side panel's rectangle (25, 24, 89 × 89) under the window, the side art leaving that square out and art 198 drawn over it (art 198 is read with the others but is no reason for the list); a left release in the square closes the window with the close sound (a press does nothing); entering a tab button writes that tab's message of `logbk_ui.mes` to the message window as a hover entry (shown only 3 s after the last stored message, WM61) and leaving it takes it away (PROJECT: closing the window with the pointer on a tab clears it too). Self-test `ARC-UI-008 self-test PASS` checks the hints, the round view, the click and its edges; the native `bar` stage checks them with the player's art.
 
 ARC-UI-079 adds the **reputation** tab (the PC's reputations in the order the session stores them, which is the order they were gained: a date line over the
@@ -3118,7 +3118,7 @@ merchant's item pressed and released on the hero's grid is bought, a hero's item
 trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
 a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
 `… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
-original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The `Diagnostic view` switch below the frame
+original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The debug-only `Diagnostic view` switch below the frame (ARC-UI-2764)
 shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
 only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); since ARC-UI-069 the opening shop's docked window shows
 the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). Since ARC-UI-1740 the gamble box works ([barter](../world/barter-runtime.md#gambling-arc-ui-1740)): the art follows the pointer (345 rest, 344 when the gate 0x579840 passes for a held ware, 346 when it refuses), the merchant's line shows in the quote line, a release on it bets (the opening shop's docked window too, ARC-UI-1806). NOT READY: the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
@@ -3158,7 +3158,7 @@ self-test stage `AreaItemService` covers both windows over a synthetic hero and 
 of each step for a graphics comparison. ARC-UI-1765: with the game's art the window draws the **original look** (ledger IS8–IS11): the inventory window's frame of modes 5 and 6 (`AreaInventoryGridArea` in its service look, `AreaServiceArtLayout`): background 223, the hero's
 grid and wear slots, counts, arrange button and round view as in the own window, without the weight lines and the drop and use boxes, the NPC's image (`HolderImage`, the loot window's rules) at (141, 36) at half size,
 the NPC's generated quote line (`AreaConversationHost.PickLine` / `PickClassLine`; the price in the quote's `%d`) in the rectangle (180, 29, 155 × 65), and the remembered item's cells filled dark red. A press on an item
-is the click (the first quotes, the next on the same item pays: PROJECT substitute for IS3's undecided event); the switch below the frame ("Diagnostic view") shows the list and back; a release on the round view closes it.
+is the click (the first quotes, the next on the same item pays: PROJECT substitute for IS3's undecided event); the debug-only switch below the frame ("Diagnostic view", ARC-UI-2764) shows the list and back; a release on the round view closes it.
 Positions, sizes and hit areas stay the Legacy ones. Without the art (self-tests) or behind the switch the diagnostic list stays. A pad or the keyboard: the D-pad steps over the hero's items and quotes the one it lands on, confirm clicks the remembered item (the second click pays); the switch is the mouse's. `ARC_AREA_ITEM_SERVICE_PROBE=1` runs the self-test stage alone; the native `barter` stage also opens both windows on the real data and checks the original look (`ARC_AREA_SERVICE_CAPTURE=PREFIX` saves PREFIX-identify.png and PREFIX-repair.png).
 ### Reading window (ARC-UI-049)
 
