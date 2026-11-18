@@ -151,7 +151,9 @@ public sealed class AreaAiThrowTests
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure), host.TraceOf(npc)?.Throw);
         // ARC-COMBAT-2425 (TW10, TW11): the throw goal holds the hero's location and no object, and the line of fire never names the critter on the target tile: nothing is struck, the dagger lands there.
         Assert.AreEqual((dagger, (string?)null), (thrown.Item, thrown.Target), "the hero on the target tile is not named as the struck object");
-        Assert.IsNull(result.Attack, "no attack is rolled without a struck critter");
+        // ARC-COMBAT-2523 (TW11): the throw at a location still rolls a hit (distance, line-of-fire cost, tile light, thrower flags); a hit strikes nothing and lands on the tile.
+        Assert.AreEqual(AttackOutcome.Hit, result.Attack?.Resolution?.Outcome, "the location roll decided a hit");
+        Assert.IsNull(result.Attack!.Life, "a hit at a location strikes no critter");
         Assert.AreEqual(HeroCell, result.Landed ?? throw new AssertFailedException("the dagger did not land"), "the dagger lands on the target tile");
         Assert.IsNull(host.ThrowableWeapon(npc), "the dagger left the NPC");
         Assert.IsTrue(host.DrainNotices().Count == 0 && host.TraceOf(npc)!.Throw!.StartsWith("throw ", StringComparison.Ordinal));
@@ -190,15 +192,16 @@ public sealed class AreaAiThrowTests
     }
 
     [TestMethod]
-    public void A_throw_at_an_empty_tile_lands_the_dagger_there_unchecked()
+    public void A_throw_at_an_empty_tile_rolls_a_location_hit_and_lands_the_dagger_there()
     {
         var (session, host, npc, dagger) = Open();
         var draws = session.QueryRandom().Draws;
         var tile = new CellCoord(12, 22);
         Assert.IsTrue(host.ThrowItem(npc, dagger, tile));
         var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
-        Assert.AreEqual(((string?)null, (SessionAttackResult?)null, (CellCoord?)tile), (thrown.Target, thrown.Throw!.Attack, thrown.Throw.Landed));
-        Assert.AreEqual(draws, session.QueryRandom().Draws, "nothing is rolled without a struck critter");
+        Assert.AreEqual(((string?)null, (AttackOutcome?)AttackOutcome.Hit, (CellCoord?)tile), (thrown.Target, thrown.Throw!.Attack?.Resolution?.Outcome, thrown.Throw.Landed));
+        Assert.IsNull(thrown.Throw.Attack!.Life, "a hit at a location strikes no critter");
+        Assert.IsTrue(session.QueryRandom().Draws > draws, "the location roll draws from the stream (ARC-COMBAT-2523, TW11)");
         Assert.IsNull(host.ThrowableWeapon(npc));
     }
 
@@ -214,8 +217,8 @@ public sealed class AreaAiThrowTests
         var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
         var shot = thrown.Throw!.Shots.Single();
         Assert.AreEqual((npc, shot, NpcCell, tile), launched.Single(), "the viewer is asked to fly the shot from the thrower's tile to the location");
-        Assert.AreEqual((SessionAttackResult?)null, thrown.Throw.Attack, "no attack: the dispatcher's check is not ready for a thrown generic item");
-        Assert.AreEqual(draws, session.QueryRandom().Draws);
+        Assert.AreEqual((AttackOutcome?)AttackOutcome.Hit, thrown.Throw.Attack?.Resolution?.Outcome, "the location roll decided a hit; the grenade's flight carries no check (ARC-COMBAT-2523, TW11)");
+        Assert.IsTrue(session.QueryRandom().Draws > draws, "the location roll draws from the stream");
         Assert.IsTrue(session.QueryItemInFlight(grenade), "the grenade flies, hidden");
         // ARC-SCRIPT-2386 (IV15, 0x4B3C00 sets the off flag, 0x4B2690 clears it): the flight is the flag, with no record written.
         Assert.IsTrue(session.QueryItemOff(session.QueryActor().Map, grenade, dataOff: false), "a thrown item in flight is switched off");
@@ -294,14 +297,15 @@ public sealed class AreaAiThrowTests
 
     // ARC-COMBAT-2425 (TW10, TW11): the line of fire skips every non-wall object of the target's own tile, so a throw at the victim's tile names nobody (the original's throw goal holds a location only, 0x434F80).
     [TestMethod]
-    public void A_throw_at_the_tile_of_a_critter_names_no_struck_critter_and_lands_there_unchecked()
+    public void A_throw_at_the_tile_of_a_critter_names_no_struck_critter_and_lands_there_on_a_location_hit()
     {
         var (session, host, npc, dagger) = Open(victim: true);
         var draws = session.QueryRandom().Draws;
         Assert.IsTrue(host.ThrowItem(npc, dagger, VictimCell), host.TraceOf(npc)?.Throw);
         var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
-        Assert.AreEqual(((string?)null, (SessionAttackResult?)null, (CellCoord?)VictimCell), (thrown.Target, thrown.Throw!.Attack, thrown.Throw.Landed));
-        Assert.AreEqual(draws, session.QueryRandom().Draws, "nothing is rolled without a struck critter");
+        Assert.AreEqual(((string?)null, (AttackOutcome?)AttackOutcome.Hit, (CellCoord?)VictimCell), (thrown.Target, thrown.Throw!.Attack?.Resolution?.Outcome, thrown.Throw.Landed));
+        Assert.IsNull(thrown.Throw.Attack!.Life, "the critter on the tile is not struck");
+        Assert.IsTrue(session.QueryRandom().Draws > draws, "the location roll draws from the stream (ARC-COMBAT-2523, TW11)");
     }
 
     // ARC-COMBAT-1717: the seed whose throw at the hero decides a hit (or a miss), found by a bounded search; the scene it opened.
@@ -367,14 +371,14 @@ public sealed class AreaAiThrowTests
     }
 
     [TestMethod]
-    public void A_thrown_dagger_at_an_empty_tile_flies_unchecked_to_it()
+    public void A_thrown_dagger_at_an_empty_tile_flies_to_it_on_a_location_hit()
     {
         var launched = new List<CellCoord>();
         var (session, host, npc, dagger) = Open(launch: (_, _, _, to) => { launched.Add(to); return true; });
         var tile = new CellCoord(12, 22);
         Assert.IsTrue(host.ThrowItem(npc, dagger, tile));
         var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
-        Assert.AreEqual((tile, (SessionAttackResult?)null), (launched.Single(), thrown.Throw!.Attack));
+        Assert.AreEqual((tile, (AttackOutcome?)AttackOutcome.Hit), (launched.Single(), thrown.Throw!.Attack?.Resolution?.Outcome));
         Assert.IsTrue(session.QueryItemInFlight(dagger));
     }
 

@@ -195,6 +195,71 @@ public sealed class AreaDoorHostTests
         Assert.AreEqual(0, f.FrameOf(f.A));
     }
 
+    // ARC-SCRIPT-2669 (OD7, 0x43F1C0 -> 0x424070, level 5): a break of the door interrupts its runs (70, 71, 72: priority 3, not no-interrupt) before anything else of the break.
+    [TestMethod]
+    public void ABreakEndsAnOpeningLeavingTheDoorWhereItStandsAndAPendingCloseLeavingItOpen()
+    {
+        using var f = Open();
+        f.Host.Open(f.A, "hero");
+        f.Run(100);
+        var mid = f.FrameOf(f.A);
+        Assert.AreEqual(GoalType.AnimateDoorOpen, f.Host.GoalOf(f.A));
+        Assert.IsTrue(f.Host.ObjectBroken(DoorA), "the opening ended");
+        Assert.IsNull(f.Host.GoalOf(f.A));
+        Assert.AreEqual(mid, f.FrameOf(f.A), "the opening's end node moves nothing (0x42B640)");
+        f.Run(3000);
+        Assert.AreEqual(mid, f.FrameOf(f.A), "no close follows");
+        Assert.IsFalse(f.Host.ObjectBroken(DoorA), "a second break finds no run");
+
+        f.Host.Open(f.A, "hero");
+        for (var i = 0; i < 400 && f.Host.GoalOf(f.A) != GoalType.PendClosingDoor; i++) f.Step.AdvanceHost(20);
+        Assert.AreEqual(GoalType.PendClosingDoor, f.Host.GoalOf(f.A));
+        var open = f.FrameOf(f.A);
+        Assert.IsTrue(open > 0);
+        Assert.IsTrue(f.Host.ObjectBroken(DoorA), "the waiting close ended");
+        f.Run(3000);
+        Assert.AreEqual(open, f.FrameOf(f.A), "the door never closes by itself now");
+    }
+
+    [TestMethod]
+    public void ABreakDuringTheClosingEndsTheRunAndItsEndNodeSnapsTheDoorShut()
+    {
+        using var f = Open();
+        f.Host.Open(f.A, "hero");
+        for (var i = 0; i < 400 && !(f.Host.GoalOf(f.A) == GoalType.AnimateDoorClosed && f.FrameOf(f.A) == 2); i++) f.Step.AdvanceHost(20);
+        Assert.AreEqual(GoalType.AnimateDoorClosed, f.Host.GoalOf(f.A));
+        Assert.IsTrue(f.FrameOf(f.A) is > 0 and < 3);
+        Assert.IsTrue(f.Host.ObjectBroken(DoorA));
+        Assert.IsNull(f.Host.GoalOf(f.A));
+        Assert.AreEqual(0, f.FrameOf(f.A), "0x42B6F0: a closing cut short closes the door at once");
+    }
+
+    [TestMethod]
+    public void ABreakDuringTheClosingOfAMagicallyHeldDoorEndsTheRunButDoesNotSnapItShut()
+    {
+        using var f = Open(flagsA: LockRules.MagicallyHeldBit);
+        f.Host.Open(f.A, "hero");
+        for (var i = 0; i < 400 && !(f.Host.GoalOf(f.A) == GoalType.AnimateDoorClosed && f.FrameOf(f.A) == 2); i++) f.Step.AdvanceHost(20);
+        if (f.Host.GoalOf(f.A) != GoalType.AnimateDoorClosed) { Assert.Inconclusive("a held door has no closing run here"); return; }
+        var frame = f.FrameOf(f.A);
+        Assert.IsTrue(f.Host.ObjectBroken(DoorA));
+        Assert.AreEqual(frame, f.FrameOf(f.A), "0x42B6F0 closes only a door that is not held");
+    }
+
+    [TestMethod]
+    public void ABreakLeavesAnotherDoorsRunsAndAnEntityThatIsNotADoorAlone()
+    {
+        using var f = Open();
+        f.Host.Open(f.A, "hero");
+        f.Host.Open(f.B, "hero");
+        f.Run(100);
+        Assert.IsTrue(f.Host.ObjectBroken(DoorA));
+        Assert.IsNull(f.Host.GoalOf(f.A));
+        Assert.AreEqual(GoalType.AnimateDoorOpen, f.Host.GoalOf(f.B), "door B keeps its run");
+        Assert.IsFalse(f.Host.ObjectBroken("oid:not-a-door"));
+        Assert.AreEqual(0, f.Host.RetryPending(), "no refused interrupt is waiting");
+    }
+
     [TestMethod]
     public void TwoDoorsRunTheirOwnRunsAtOnce()
     {
