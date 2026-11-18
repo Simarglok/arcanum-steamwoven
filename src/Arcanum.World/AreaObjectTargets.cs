@@ -258,7 +258,7 @@ public sealed class AreaObjectTargets
         if (result.Item is { } item) return item.Break switch
         {
             Arcanum.Simulation.Items.ItemBreakStep.Broken => "hit: the item breaks",
-            Arcanum.Simulation.Items.ItemBreakStep.Deleted => "hit: the item is destroyed",
+            Arcanum.Simulation.Items.ItemBreakStep.Deleted => result.Host.HasFlag(SessionObjectHostSteps.DestroyKept) ? "hit: the destroy is refused, the item stays" : "hit: the item is destroyed",
             _ => $"hit: the item has {item.Condition?.HitPoints} hit points left",
         } + trap;
         return "attack: no damage";

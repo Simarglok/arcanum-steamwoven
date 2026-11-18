@@ -1774,6 +1774,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2722 (ledger TD2, OD12): the session's gate for the break's item deletion (<see cref="GameSessionOwner.AttachItemDestroyGate"/>): an item that is hit again after its first break is deleted through the object destroy
+    /// (0x43F1C0 → 0x43CCA0), which runs the item's destroy point (2) first (the item as the triggerer and the attachee). The answer 0, or a run that did not apply, keeps the item. False: the item stays. An item the shown map's rows do not
+    /// hold (the host reads the slots from a row; one carried from another map has none here), one with no destroy point, or one whose point is already running (it destroyed itself) answers true. The run is taken by the viewer's break step
+    /// (<see cref="TakeBreakDestroyRun"/>).
+    /// </summary>
+    public bool ItemMayDestroy(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        LastDestroyPointRun = null;
+        var obj = new ScrObjectRef(_shownMap, entity);
+        if (_content is null || Row(obj) is not { Type: >= FirstItemType and <= LastItemType } row) return true;
+        obj = new ScrObjectRef(_shownMap, EntityId(row));
+        if (_destroyingScenery.Contains(obj.Code)) return true;
+        return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed;
+    }
+
     /// <summary>ARC-SCRIPT-2644: the run of the destroy point a break's gate made last (its award, message and float queues belong to the viewer's break step); taken once, null when none ran since.</summary>
     public AreaScriptedUse? TakeBreakDestroyRun()
     {

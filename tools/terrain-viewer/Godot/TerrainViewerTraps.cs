@@ -60,19 +60,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
     {
-        // ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs below take their own).
-        // ARC-SCRIPT-2686: and its printed lines go to the message window (IS2, PW1) and its dialog action is queued as a heartbeat's is (opened once the pump that broke the object returned).
-        if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost && gateHost.TakeBreakDestroyRun() is { } destroyRun)
-        {
-            Awarded(gateHost, destroyRun);
-            foreach (var entry in ScriptLineEntries(destroyRun.Printed)) PostMessage(entry, "destroy point script line");
-            if (destroyRun.Dialog is { } talk)
-            {
-                var queued = _heartbeatDialog is null;
-                _heartbeatDialog ??= talk;
-                GD.Print($"ARC-SCRIPT-2686 destroy-point-talk object={AreaUseScriptHost.EntityId(row)} script={destroyRun.Run?.Script} dialog={talk.Script} line={talk.Line} node={talk.Node} queued={queued}");
-            }
-        }
+        ShowBreakDestroyRun(AreaUseScriptHost.EntityId(row));
         // ARC-SCRIPT-2646 (OD7, 0x43F1C0 → 0x424070): the break first interrupts the object's goal runs at level 5, after the trap and before the BUST script.
         var interrupted = false;
         void Interrupt() { if (interrupted) return; interrupted = true; InterruptBrokenObjectRuns(row); }
@@ -84,6 +72,22 @@ public partial class TerrainViewerApp
         if (AreaObjectBreakHost.EndsRuns(steps) && ShownObjectRef(row) is { } destroyed) EndDestroyedObjectRuns(destroyed);
         // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.
         PlayObjectBreakSounds(row, steps);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs take their own).
+    /// ARC-SCRIPT-2686: and its printed lines go to the message window (IS2, PW1) and its dialog action is queued as a heartbeat's is (opened once the pump that broke the object returned).
+    /// ARC-SCRIPT-2722: also the gate of an item's deleting break, whose hit has no map row to run the break's steps for (a carried or worn item): the run is shown all the same.
+    /// </summary>
+    private void ShowBreakDestroyRun(string entity)
+    {
+        if (_readyArea is not { } gated || UseScriptHost(gated.Snapshot) is not { } gateHost || gateHost.TakeBreakDestroyRun() is not { } destroyRun) return;
+        Awarded(gateHost, destroyRun);
+        foreach (var entry in ScriptLineEntries(destroyRun.Printed)) PostMessage(entry, "destroy point script line");
+        if (destroyRun.Dialog is not { } talk) return;
+        var queued = _heartbeatDialog is null;
+        _heartbeatDialog ??= talk;
+        GD.Print($"ARC-SCRIPT-2686 destroy-point-talk object={entity} script={destroyRun.Run?.Script} dialog={talk.Script} line={talk.Line} node={talk.Node} queued={queued}");
     }
 
     private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null, Action? interrupt = null)
