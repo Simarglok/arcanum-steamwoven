@@ -3216,9 +3216,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-AI-2622 (0x4C7160, repair case 12): the NPC repairs the item the goal names with the session's <see cref="GameSessionOwner.RepairByNpc"/>, on the item's own fields: an item it holds or one lying loose on the shown map
-    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>). The answer is the case's success, which sets the run's flag 0x40000. The original's repair has no target test, so a critter or a scenery target would be
-    /// "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). NOT READY: an item in a junk pile, an item of another holder (the hero's, another NPC's), the swap of a ground item's drawn art
-    /// after a master's broken-art clear, and the repair UI callbacks of the local player.
+    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>), in a junk pile, held by another NPC or by the PC (ARC-AI-2663, <see cref="RepairBaseline"/>). The answer is the case's success, which sets the run's flag 0x40000.
+    /// The original's repair has no target test, so a critter or a scenery target would be "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). The roll modifier 0x4C8430 of the case is
+    /// the shared check's (<see cref="Arcanum.Simulation.Skills.SkillCheckRules"/>: Repair's table 0x980, blinded +30, both arms +50 or one +20, nothing else; it only picks which critical test runs). NOT READY: the swap of a ground item's drawn
+    /// art after a master's broken-art clear (the viewer draws no broken art of an item), the hero's starting-kit items, and the repair UI callbacks of the local player.
     /// </summary>
     private bool RepairAttempt(string id, string target)
     {
@@ -3233,14 +3234,27 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
 
-    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds or one lying loose on the shown map; null for any other target.
+    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds, one lying loose on the shown map, one in a junk pile (the session's own or the map's data),
+    // one another NPC of any covered map holds, or one the PC took or made and holds (ARC-AI-2663; the original's repair case works on the target handle's own fields and asks nothing of its holder, 0x4C7160); null for any other target,
+    // a destroyed item, a critter and a hero starting-kit item (its condition is the hero load's, which the session does not keep).
     private ItemCondition? RepairBaseline(string id, string target)
     {
+        if (_session.IsItemDestroyed(target)) return null;
         var fields = _scene.Combat.HeldItemFields(_session, id, target);
-        if (fields is null && GroundView()?.Ground.FirstOrDefault(ground => ground.Item.Entity == target) is { } lying && !_session.IsItemDestroyed(target))
-            fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying.Item);
+        if (fields is null && GroundView() is { } view)
+        {
+            var lying = view.Ground.Select(ground => ground.Item).Concat(view.JunkPiles.SelectMany(pile => pile.Items)).FirstOrDefault(item => item.Entity == target);
+            if (lying is not null) fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, lying);
+        }
+        if (fields is null && MapPileOf(target) is not null && MapPileHolder(target) is { } listed) fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, listed);
+        fields ??= _scene.Combat.NpcItemFields(_session, target);
+        if (fields is null && _session.QueryPcInventory().FirstOrDefault(item => item.Entity == target) is { Entity: not null } pc) fields = _scene.Combat.PcItemFields(_session, _scene.RuntimeMap, pc);
         return fields is null ? null : SessionItemConditions.FromCombatFields(fields);
     }
+
+    // The item as the standing junk pile of the map's data that lists it now holds it (its list as the session shows it), or null.
+    private SessionInventoryItem? MapPileHolder(string item) =>
+        _scene.Combat.MapJunkPileHolding(_session, _scene.RuntimeMap, item) is { } pile ? _session.QueryHolderItems(pile.Entity)?.FirstOrDefault(listed => listed.Entity == item) : null;
 
     /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>
     private const int GoldArtCells = 1;

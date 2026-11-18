@@ -59,13 +59,25 @@ public sealed class AreaAiSkillTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null, long repair = 0, int itemPoints = 10, int itemDamage = 0, uint spellFlags = 0)
+    // ARC-AI-2663: where the item (Entity 1) lies: the NPC's own list (default), another NPC's list (Entity 2), a junk pile of the map's data (Entity 3, prototype 3043), loose on the ground, or in the hero's pack (taken from the ground).
+    public enum Place { Npc, OtherNpc, MapPile, Ground, HeroPack }
+
+    private static AreaObjectRecord PileRow(int index, CellCoord at) => new(Key(index), 0, 2, SessionObjectFacts.JunkPilePrototypeFile, "p", "p", "r", "s", AreaScope.Core, null, at.X, at.Y,
+        Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+        [
+            Field(0, 0x20000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 2),
+            Array(30), Empty(31), Field(36, 0), Field(38, 0),
+        ], true, true, true);
+
+    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null, long repair = 0, int itemPoints = 10, int itemDamage = 0, uint spellFlags = 0, Place place = Place.Npc)
     {
         var session = hero ? ConversationSessionFixture.CreateWithHero() : ConversationSessionFixture.Create();
-        var rows = new[] { Npc(0, critterFlags, repair, spellFlags), Item(1, itemPoints, itemDamage) };
-        var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(Healing, 1, 0, 0, null, []), null)]),
-            rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
+        var rows = new List<AreaObjectRecord> { Npc(0, critterFlags, repair, spellFlags), Item(1, itemPoints, itemDamage) };
+        var holders = new List<SessionSeedHolder> { new(Entity(0), SessionHolderKind.Npc, false, false, [], place == Place.Npc ? [Entity(1)] : []) };
+        if (place == Place.OtherNpc) { rows.Add(Npc(2)); holders.Add(new(Entity(2), SessionHolderKind.Npc, false, false, [], [Entity(1)])); }
+        if (place == Place.MapPile) { rows.Add(PileRow(3, new(12, 22))); holders.Add(new(Entity(3), SessionHolderKind.Container, false, false, [], [Entity(1)])); }
+        var seeded = new SessionSeedItem(Entity(1), new(Healing, 1, 0, place is Place.Ground or Place.HeroPack ? -1 : 0, null, []), place is Place.Ground or Place.HeroPack ? new CellCoord(12, 20) : null);
+        var map = new AreaInventoryMap(1, new(holders, [seeded]), rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         var combat = new AreaCombatHost(inventory);
@@ -436,6 +448,36 @@ public sealed class AreaAiSkillTests
         Assert.AreEqual(Math.Max(0, 60 - repair.Amount), repair.Condition!.Value.Damage, "the damage falls by the amount");
         Assert.AreEqual(100, repair.Condition!.Value.Points + repair.Condition.Value.Adjustment, "a master takes nothing from hp_adj");
         StringAssert.StartsWith(host.TraceOf(npc)!.Skill, $"repair {item} Changed");
+    }
+
+    [TestMethod]
+    [DataRow(Place.Ground)]
+    [DataRow(Place.MapPile)]
+    [DataRow(Place.OtherNpc)]
+    [DataRow(Place.HeroPack)]
+    public void An_npcs_repair_reaches_an_item_loose_in_a_junk_pile_in_another_npcs_list_or_in_the_heros_pack(Place place)
+    {
+        // ARC-AI-2663 (0x4C7160 repair case 12): the case works on the target handle's own fields and asks nothing of the item's holder, so the item's place changes nothing.
+        var (session, host, npc, item) = Open(hero: place == Place.HeroPack, repair: 20 | (long)SkillTraining.Master << 6, itemPoints: 100, itemDamage: 60, place: place);
+        if (place == Place.HeroPack) Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, item, _ => SessionInsertVerdict.Accepted).Disposition);
+        var before = session.Version.Revision;
+        var answer = host.AttemptSkill(npc, item, (int)Skill.Repair, null);
+        var repair = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).Repair ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no repair");
+        Assert.IsTrue(answer, host.TraceOf(npc)?.Skill);
+        Assert.AreEqual((GameSessionDisposition.Changed, true), (repair.Disposition, repair.Success));
+        Assert.AreEqual(before + 1, session.Version.Revision, "the repair is one revision");
+        Assert.AreEqual(Math.Max(0, 60 - repair.Amount), repair.Condition!.Value.Damage, "the damage falls by the amount");
+        Assert.AreEqual(Math.Max(0, 60 - repair.Amount), session.QueryItemCondition(item, new(100, 0, 60, false))!.Value.Damage, "the session keeps the item's record");
+    }
+
+    [TestMethod]
+    public void An_npcs_repair_names_no_critter_even_when_it_holds_the_item()
+    {
+        var (session, host, npc, _) = Open(repair: 20, itemPoints: 100, itemDamage: 60, place: Place.OtherNpc);
+        var before = session.Version;
+        Assert.IsFalse(host.AttemptSkill(npc, Entity(2), (int)Skill.Repair, null), "another NPC is no item");
+        StringAssert.EndsWith(host.TraceOf(npc)!.Skill, "no item to repair");
+        Assert.AreEqual(before, session.Version, "nothing is rolled");
     }
 
     [TestMethod]
