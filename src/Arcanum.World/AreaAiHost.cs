@@ -1756,17 +1756,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
-    /// ARC-COMBAT-1777 (0x571CB0, ledger PL3, PL5): the chosen follower's lock pick, as the lockpick item use hands it over: the skill starter (0x4350F0 → 0x436220, goal 33 with skill 14) on the lock <paramref name="target"/> (a door's entity or a container's
-    /// "inv:" string) with the follower's own <paramref name="item"/> (null: without lockpicks), so it walks within range 1 and picks at its attempt node (<see cref="AttemptPickLocks"/>). True when the run is in the table.
-    /// NOT READY: the original starts the use-item goal (0x28, no animation) for a follower that holds lockpicks and the timed pick-lock goal for one that holds none; both run as the timed goal 33 here.
+    /// ARC-COMBAT-1777 (0x571CB0, ledger PL3, PL5), ARC-COMBAT-1878: the chosen follower's lock pick, as the lockpick item use hands it over. A follower that holds lockpicks (<paramref name="item"/>) uses them through the item use (0x462CC0: the use script
+    /// gate, the lockable test, 4 action points of the follower in a round on its subturn, then the starter); one that holds none starts the use-item-with-skill starter (0x4352C0) with no item. Both start goal 40 with skill 14 on the lock <paramref name="target"/> (a door's
+    /// entity or a container's "inv:" string): it walks within range 1 and picks at its attempt node (<see cref="AttemptPickLocks"/>), with no animation (the timed pick-lock goal 33 of 0x436220 is the AI's own pick, not this path). True when the run is in the table.
+    /// NOT READY: 0x571CB0 sends lockpicks with charges, a magical flag or the no-ranged-use flag 0x100000 to the item-use goal 39 (0x435450) instead of the item use at once; the item use is called at once here (#2751).
     /// </summary>
     public bool StartPickLocks(string follower, string target, string? item)
     {
         ArgumentNullException.ThrowIfNull(follower);
         ArgumentNullException.ThrowIfNull(target);
-        if (!_followers.ContainsKey(follower)) return false;
-        PerformSkill(follower, target, AiExecutorRules.PickLocksSkill, item);
-        return RunOf(follower) is { Bottom: { Goal: GoalType.UseSkill or GoalType.AttemptPickLocks, Skill: AiExecutorRules.PickLocksSkill } bottom } && bottom.Target == target;
+        if (!RunsFollower(follower)) return false;
+        if (item is null) StartSkillWithItem(follower, null, target, AiExecutorRules.PickLocksSkill);
+        else AiExecutorRules.UseItemNow(this, follower, item, target);
+        return RunOf(follower) is { Bottom: { Goal: GoalType.UseItemWithSkill, Skill: AiExecutorRules.PickLocksSkill } bottom } && bottom.Target == target;
     }
 
     // An NPC that joined the hero since the host was built is the companions' (it counts as gone here); ARC-WORLD-115: a companion the
@@ -3570,11 +3572,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // The targeting cursor (0x4EE060) is the player's: an NPC's use always has a target (the starter's and the chooser's), so it never opens.
     public void OpenTargeting(string user, string item) => Trace(user).Item += $" targeting {item} not ready";
-    // NOT READY for an NPC: a trap device's use, reading a written item, picking a lock and the heal skill with an item (goal 40, 0x4352C0).
+    // NOT READY for an NPC: a trap device's use, reading a written item and the heal skill with an item (goal 40, 0x4352C0; its pick-locks use is built, ARC-COMBAT-1878).
     public void UseTrapDevice(string user, string item, string? target) => Trace(user).Item += $" trap-device {item} not ready";
     public void ReadWritten(string user, string item) => Trace(user).Item += $" read {item} not ready";
-    public bool Lockable(string target) => false;
-    public void StartSkillWithItem(string user, string item, string target, int skill) => Trace(user).Item += $" skill {skill} with {item} not ready";
+    // ARC-COMBAT-1878 (0x441CF0): a lock the scene names (a door's or a container's) is lockable; any other target is not.
+    public bool Lockable(string target) => _scene.PickLockTarget?.Invoke(target) is not null;
+
+    /// <summary>
+    /// ARC-COMBAT-1878 (the starter 0x4352C0, goal 40): the pick-locks skill with the lockpicks <paramref name="item"/> (null: none) on <paramref name="target"/>; the run replaces the user's current one as the other starters' do. NOT READY: the heal skill's attempt (0x428E10's heal branch)
+    /// is not built, so the heal skill with a healing kit starts nothing.
+    /// </summary>
+    public void StartSkillWithItem(string user, string? item, string target, int skill)
+    {
+        if (skill != AiExecutorRules.PickLocksSkill) { Trace(user).Item += $" skill {skill} with {item} not ready"; return; }
+        var current = RunOf(user);
+        Started(user, current, AiExecutorRules.StartUseItemWithSkill(this, user, target, skill, item, current));
+    }
 
     /// <summary>The magic branch (0x4F2810 … 0x4CBF70) through the cast host's item use (<see cref="SessionItemTriggers.UseItem"/>):
     /// for an NPC the slot-0 activation casts nothing (NU2), the item used executor's spells start at the target and play at once,
@@ -4092,9 +4105,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             {
                 Id = Pc, Kind = HostilityKind.Pc, Invulnerable = (ObjectFlagsOf(Pc, 0) & Invulnerable) != 0, Dead = hero.Status.IsDead, Unconscious = hero.Status.IsUnconscious,
                 Stunned = !hero.Status.IsActive && !hero.Status.IsDead && !hero.Status.IsUnconscious,
-                InCombatMode = _session.QueryCombatMode(SessionCombatant.Hero), Level = _session.QueryHero()?.Level ?? 0,
-                // ARC-AI-2155 (0x4B0490, the same getter for the PC): the hero's stored alignment; its effect list's changes of stats 17 and 19 are not read (the session holds no such stat effects, #2750).
-                Alignment = _session.QueryHero()?.Alignment ?? 0,
+                InCombatMode = _session.QueryCombatMode(SessionCombatant.Hero),
+                // ARC-AI-2155, ARC-AI-2750 (the stat getter for stats 17 and 19, the PC included): the stored level and alignment with the hero's effect list laid over them.
+                Level = _session.QueryHeroScriptStat(GameSessionOwner.ScriptStatLevel) ?? 0, Alignment = _session.QueryHeroScriptStat(GameSessionOwner.ScriptStatAlignment) ?? 0,
                 HealthPercent = Percent(hero.Status),
                 Perception = _session.QueryHeroAttack()?.Combatant.Perception ?? 0,
                 // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
@@ -4230,16 +4243,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-COMBAT-1777 (0x441260, 0x4C9050; ledger OH4, PL5): the users the best-follower chooser scores after the PC, in the PC's all-followers list's order (<see cref="FollowerSkillRules.AllFollowers"/>): each follower of the hero this host
-    /// runs and can build a life target and a sheet for (a follower it cannot read cannot be scored). NOT READY: the followers of a follower (the original's list recurses) are not a list this world keeps, so the list holds the hero's own.
+    /// runs and can build a life target and a sheet for (a follower it cannot read cannot be scored). ARC-COMBAT-1878: the list recurses as the original's does: the hero's direct followers, then each one's own follower array (<see cref="GameSessionOwner.QueryFollowers"/>), so
+    /// an NPC that follows a companion (a summon, a script group) is a candidate too, whether the host runs it as a carried companion or as a map NPC (<see cref="RunsFollower"/>).
     /// </summary>
     public IReadOnlyList<SessionNpcSkillUser> FollowerSkillUsers()
     {
         var users = new List<SessionNpcSkillUser>();
-        foreach (var id in FollowerSkillRules.AllFollowers(Pc, leader => leader == Pc ? Followers(Pc) : []))
-            if (Build(id) is { } follower && _scene.NpcSheet?.Invoke(id) is { } sheet && _followers.ContainsKey(id))
+        foreach (var id in FollowerSkillRules.AllFollowers(Pc, leader => leader == Pc ? Followers(Pc) : _session.QueryFollowers(leader)))
+            if (RunsFollower(id) && Build(id) is { } follower && _scene.NpcSheet?.Invoke(id) is { } sheet)
                 users.Add(new SessionNpcSkillUser(follower.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc));
         return users;
     }
+
+    // ARC-COMBAT-1878: a follower this host runs: a carried companion (the follower source's) or a map NPC that follows a companion (the host runs it as its own NPC). A map NPC the hero led since the host was built is the companions' and counts as gone here, as in AiLifeTarget.
+    private bool RunsFollower(string id) => id != Pc && (_followers.ContainsKey(id) || _npcs.ContainsKey(id) && !_session.QueryCompanion(id).LedByPc);
 
     /// <summary>
     /// ARC-COMBAT-1777 (the chooser 0x4C9050): who the skill use goes to: the hero (null) or the follower with the strictly best score (<see cref="FollowerSkillRules.Choose"/>: the hero first, ties keep the earlier). <paramref name="score"/>
