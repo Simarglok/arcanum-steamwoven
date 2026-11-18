@@ -347,6 +347,43 @@ public sealed class ActionGoalsTests
         CollectionAssert.DoesNotContain(world.Calls, "use script");
     }
 
+    // ARC-COMBAT-1878 (0x4352C0, goal 40: 0x42BEA0, 0x425130, 0x428E10): the use-item-with-skill goal, the follower lock pick's goal.
+    [TestMethod]
+    public void TheItemWithSkillStarterNeedsATargetNotAnItemAndPassesTheGateWithFour()
+    {
+        var world = Arena(3);
+        Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartUseItemWithSkill(world, Npc, null, AiExecutorRules.PickLocksSkill, Kit, null).Refusal);
+        var started = AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, null, null);
+        Assert.AreEqual((GoalType.UseItemWithSkill, Foe, (string?)null, AiExecutorRules.PickLocksSkill, GoalRunFlags.NearOccupied | GoalRunFlags.Running),
+            (started.Run!.Bottom.Goal, started.Run.Bottom.Target, started.Run.Bottom.Item, started.Run.Bottom.Skill, started.Run.Flags), "a follower with no lockpicks starts it with no item");
+        Assert.AreEqual(Kit, AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!.Bottom.Item);
+        world.Movers[Npc] = new(Fatigue: 8, MaxFatigue: 20);
+        Assert.AreEqual(GoalRunFlags.NearOccupied, AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!.Flags, "running only above 8");
+        world.Movers[Npc] = new(Fatigue: 7, MaxFatigue: 20);
+        InRound(world, 3);
+        Assert.AreEqual(AiStartRefusal.Gate, AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Refusal, "4 above 3 points, fatigue 7 of 20");
+    }
+
+    [TestMethod]
+    public void TheItemWithSkillGoalWalksNearThenPicksTheLockWithNoAnimationAndEnds()
+    {
+        var world = Arena(4);
+        var run = AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, null, null).Run!;
+        var steps = Drive(run, world, Steamwoven);
+        Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.SkillAttempted), (steps[^1].End, steps[^1].Reason));
+        Assert.IsFalse(world.Calls.Any(call => call.StartsWith("animate", StringComparison.Ordinal) || call.StartsWith("turn", StringComparison.Ordinal)), "no animation node and no turn");
+        Assert.AreEqual($"pick locks {Foe}", world.Calls[^1], "the attempt is the shared pick-locks check, with no item");
+
+        world = Arena(4);
+        Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!, world, Steamwoven);
+        Assert.AreEqual($"pick locks {Foe}", world.Calls[^1], "its own lockpicks, held directly");
+
+        world = Arena(1);
+        world.Holder = "oid:chest";
+        Assert.AreEqual(AiExecutorReason.ItemNotHeld, Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!, world, Steamwoven)[^1].Reason, "lockpicks held elsewhere refuse");
+        CollectionAssert.DoesNotContain(world.Calls, $"pick locks {Foe}");
+    }
+
     [TestMethod]
     public void TheItemUseChargesFourOnlyWhenTheScriptStopsItOrForAPlainItem()
     {

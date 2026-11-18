@@ -240,6 +240,27 @@ public sealed class AreaWorldObjectScriptTests
         });
     }
 
+    // ARC-COMBAT-1878 (ledger TT5): the device a follower's expert disarm makes is made in the follower's own pack.
+    [TestMethod]
+    public void A_prototype_item_for_an_npc_goes_into_its_own_pack_and_an_unknown_prototype_makes_nothing()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(2, NpcType, ScrPoint.Heartbeat, 847);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(new(1), new SessionMapInventorySeed([new(entity, SessionHolderKind.Npc, false, true, [], [])], [])).Failure);
+            var host = Host(session, content, null, npc);
+            var check = new SessionInsertCheck(_ => SessionInsertVerdict.Accepted);
+            Assert.IsNull(host.GiveNpcPrototypeItem(entity, 99999, check), "no item data: no device");
+            var given = host.GiveNpcPrototypeItem(entity, 10041, check)!.Value;
+            Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition, given.Failure.ToString());
+            Assert.AreEqual(Herb, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Single().Facts.Kind, "the follower's own pack, not the hero's");
+            Assert.AreEqual(0, session.QueryPcInventory().Count, "nothing reached the hero's pack");
+            Assert.AreEqual(GameSessionFailure.InsertRefused, host.GiveNpcPrototypeItem(entity, 10041, new SessionInsertCheck(_ => SessionInsertVerdict.NoRoom))!.Value.Failure, "a pack that refuses keeps the device out");
+        });
+    }
+
     [TestMethod]
     public void Create_item_of_gold_or_for_an_npc_with_no_list_is_left_unapplied_and_touch_art_is_a_no_op()
     {
