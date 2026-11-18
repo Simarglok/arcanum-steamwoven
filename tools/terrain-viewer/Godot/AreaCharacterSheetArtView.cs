@@ -28,7 +28,7 @@ public partial class AreaCharacterSheetArtView : Control
     private readonly record struct Hit(Kind Kind, int Index);
 
     /// <summary>The close rectangle in the modes 1 and 2 (struct 0x5C8930: art 198 PCWinCvr; a mouse-up inside it closes the sheet).</summary>
-    public static (int X, int Y, int Width, int Height) CloseRectangle { get; } = (12, 10, 89, 89);
+    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89, 89); // ARC-UI-2714: the common place with the generated interface
 
     private static readonly Hit[] Hits =
     [

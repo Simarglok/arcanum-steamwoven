@@ -41,7 +41,7 @@ public static class AreaInventoryHole
     public const int InventoryArt = 233, BarterArt = 231, LootArt = 232;
 
     /// <summary>The rectangle's corner in the frame.</summary>
-    public static (int X, int Y) Corner(AreaInventoryMode mode) => Checked(mode) == AreaInventoryMode.Own ? (11, 9) : (16, 17);
+    public static (int X, int Y) Corner(AreaInventoryMode mode) => AreaLensPlace.Corner(Checked(mode) == AreaInventoryMode.Own ? (11, 9) : (16, 17)); // ARC-UI-2714: the common place with the generated interface
 
     /// <summary>The art drawn over the copy.</summary>
     public static int Art(AreaInventoryMode mode) => Checked(mode) switch

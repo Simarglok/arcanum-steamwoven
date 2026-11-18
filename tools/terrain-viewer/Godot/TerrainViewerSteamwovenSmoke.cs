@@ -465,6 +465,12 @@ public partial class TerrainViewerApp
         var places = string.Join(" ", lenses.Select(rect => $"({(rect.Position.X - plan.Layout.WindowZone.X) / unit:F2},{(rect.Position.Y - plan.Layout.WindowZone.Y) / unit:F2},{rect.Size.X / unit:F2})"));
         // ARC-UI-2694: every lens is the same 89 units square (the cover art 198's) within a device pixel, at the same scale as the window.
         foreach (var rect in lenses) require(Math.Abs(rect.Size.X - 89 * unit) <= 1 && Math.Abs(rect.Size.Y - 89 * unit) <= 1, $"[{tag}] the {name} lens is 89 units square ({rect.Size.X / unit:F2} x {rect.Size.Y / unit:F2})");
+        // ARC-UI-2714: every lens of the generated interface stands at the one common place (within a unit: the reading window's origin is a fraction of a unit off the zone's).
+        foreach (var rect in lenses)
+        {
+            var (lensX, lensY) = ((rect.Position.X - plan.Layout.WindowZone.X) / unit, (rect.Position.Y - plan.Layout.WindowZone.Y) / unit);
+            require(Math.Abs(lensX - AreaLensPlace.X) <= 1 && Math.Abs(lensY - AreaLensPlace.Y) <= 1, $"[{tag}] the {name} lens stands at the common place ({AreaLensPlace.X}, {AreaLensPlace.Y}) (at {lensX:F2}, {lensY:F2})");
+        }
         GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count} places(units from the zone corner)={places}");
         using var captured = GetViewport().GetTexture().GetImage();
         if (captured is null) return;

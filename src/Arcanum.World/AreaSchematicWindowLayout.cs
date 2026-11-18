@@ -58,7 +58,14 @@ public static class AreaSchematicWindowLayout
 
     /// <summary>The round view's rectangle (the view-window mode 1 of 0x550DA0 with the rectangle 0x5CA840, art 231 over the copy): a left release inside
     /// it closes the window (0x56D530, the point test 0x551000, a square).</summary>
-    public static (int X, int Y, int Width, int Height) RoundView { get; } = (50, 26, 89, 89);
+    public static (int X, int Y, int Width, int Height) RoundView
+    {
+        get
+        {
+            var (x, y) = AreaLensPlace.Corner((50, 26)); // ARC-UI-2714: the common place with the generated interface
+            return (x, y, 89, 89);
+        }
+    }
 
     public static bool Inside((int X, int Y, int Width, int Height) rect, double x, double y) =>
         x >= rect.X && y >= rect.Y && x < rect.X + rect.Width && y < rect.Y + rect.Height;
