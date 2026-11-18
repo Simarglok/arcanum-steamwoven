@@ -424,11 +424,11 @@ public sealed class ActionGoalsTests
         var steps = Drive(run, world, Steamwoven);
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.SkillAttempted), (steps[^1].End, steps[^1].Reason));
         Assert.IsFalse(world.Calls.Any(call => call.StartsWith("animate", StringComparison.Ordinal) || call.StartsWith("turn", StringComparison.Ordinal)), "no animation node and no turn");
-        Assert.AreEqual($"pick locks {Foe}", world.Calls[^1], "the attempt is the shared pick-locks check, with no item");
+        Assert.AreEqual($"skill 14 modifier 0 on {Foe} with none", world.Calls[^1], "the attempt is the shared pick-locks check, with no item");
 
         world = Arena(4);
         Drive(AiExecutorRules.StartUseItemWithSkill(world, Npc, Foe, AiExecutorRules.PickLocksSkill, Kit, null).Run!, world, Steamwoven);
-        Assert.AreEqual($"pick locks {Foe}", world.Calls[^1], "its own lockpicks, held directly");
+        Assert.AreEqual($"skill 14 modifier 0 on {Foe} with {Kit}", world.Calls[^1], "its own lockpicks, held directly");
 
         world = Arena(1);
         world.Holder = "oid:chest";
