@@ -8,8 +8,8 @@ public sealed record SessionEventLogTally(int Frames, int Fired, int Dropped, in
 /// its own events (AI ticks, regeneration steps) in most frames, so a line per frame filled the bug report's 120 s window with
 /// thousands of lines that carry no news. A frame where something notable happened (an event dropped, a wait, a decay or a restock
 /// came due, a call was refused, the step bound or the pass budget cut the frame) is logged at once with the quiet frames
-/// before it summed in; quiet frames are summed and logged at most once per <see cref="QuietIntervalMilliseconds"/>. Nothing is lost:
-/// the sums carry every fired and dropped event. Not thread-safe (the viewer's frame loop is its one caller).
+/// before it summed in; quiet frames are summed and logged at most once per <see cref="QuietIntervalMilliseconds"/>. Dropped events are always notable, so
+/// never held; held quiet counts are logged with the next line (the last quiet second can be left unlogged at the end of a window). Not thread-safe (the viewer's frame loop is its one caller).
 /// </summary>
 public sealed class SessionEventLogThrottle
 {

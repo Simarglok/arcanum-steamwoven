@@ -351,7 +351,7 @@ owns; with an event world it also runs the passes. See [the frame step](game-clo
   prints a line (`ARC-WORLD-039 events ...`, and the bug report's `session events ...`) for a frame that took events only when
   something notable happened (a dropped event, a wait, decay or restock, a refused call, the step bound or the pass budget) and
   otherwise one line a second that sums the quiet frames (`frames=N`, ARC-DEV-1397: the AI ticks fire nearly every frame and a
-  line each filled the report's 120 s window); the sums carry every fired and dropped event (`SessionEventLogThrottle`).
+  line each filled the report's 120 s window); the sums carry every fired event except the last quiet second still held (a dropped event is always notable, so never held; `SessionEventLogThrottle`).
 
 Map mode (`--area-map`) uses the same pump with its own hosts. Not done: NPC timers on a map whose combat host is missing
 are dropped as missing entities (the session asks the world for their facts); the AI tick and body decay kinds (E4) and an

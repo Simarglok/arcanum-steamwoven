@@ -52,4 +52,14 @@ public sealed class SessionEventLogThrottleTests
         Assert.AreEqual(2, tally?.Frames);
         Assert.AreEqual(2, tally?.Fired);
     }
+
+    [TestMethod]
+    public void The_interval_edge_is_exact_and_every_count_field_is_summed()
+    {
+        var throttle = new SessionEventLogThrottle();
+        Assert.IsNotNull(Quiet(throttle, 0));
+        Assert.IsNull(throttle.Offer(999, 1, 0, 2, 1, 0, 1, 0, notable: false));
+        var tally = throttle.Offer(1000, 2, 0, 3, 3, 0, 0, 4, notable: false);
+        Assert.AreEqual(new SessionEventLogTally(2, 3, 0, 5, 4, 0, 1, 4), tally, "a gap of exactly 1000 ms logs, 999 did not");
+    }
 }
