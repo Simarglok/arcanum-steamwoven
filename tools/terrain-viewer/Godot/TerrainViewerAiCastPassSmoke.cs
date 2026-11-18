@@ -55,6 +55,8 @@ public partial class TerrainViewerApp
         var baseline = new HashSet<int>();
         var madeBefore = new HashSet<string>(StringComparer.Ordinal);
         (string Entity, SessionLifeTarget Life)? ally = null;
+        // ARC-AI-2678: the nearest other NPC of the map, whatever its distance: the foe an NPC's offensive cast is aimed at when the area excludes PCs.
+        (string Entity, SessionLifeTarget Life)? foe = null; var nearestFoe = int.MaxValue;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -92,6 +94,7 @@ public partial class TerrainViewerApp
                     var cell = map.Chart.ToChart(new(other.Row.WorldX!.Value, other.Row.WorldY!.Value));
                     var distance = Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y));
                     if (distance <= 8 && distance < best) { best = distance; ally = (other.Holder.Entity, other.Build.Combat!.Target); }
+                    if (distance < nearestFoe) { nearestFoe = distance; foe = (other.Holder.Entity, other.Build.Combat!.Target); }
                 }
             }
 
@@ -142,7 +145,11 @@ public partial class TerrainViewerApp
                 Field(SessionObjectFlagField.Blit, now.BlitSet, now.BlitCleared, was.BlitSet, was.BlitCleared);
                 Field(SessionObjectFlagField.Npc, now.NpcSet, now.NpcCleared, was.NpcSet, was.NpcCleared);
             }
-            foreach (var id in ally is { } first ? new[] { entity, SessionSpellCaster.Hero, first.Entity } : new[] { entity, SessionSpellCaster.Hero }) RestoreFlags(id);
+            // The critters a pass touches: the caster, the hero, the dead ally of Resurrect and the NPC foe of the offensive legs (the same NPC when it is near enough).
+            var touched = new List<string> { entity, SessionSpellCaster.Hero };
+            if (ally is { } first) touched.Add(first.Entity);
+            if (foe is { } far && !touched.Contains(far.Entity)) touched.Add(far.Entity);
+            foreach (var id in touched) RestoreFlags(id);
             // Leaving combat sets the NPC's DEMAINTAIN_SPELLS bit (0x4A8570 step 15 clears it at its next AI pass and ends the spells it maintains, the original's rule, ledger UE5), and the pass of a cast's busy NPC runs only after
             // the casting goal: a stale bit left by the reset would end the next cast's maintained run (ARC-MAGIC-2654). A flee exit sets no bit and clears FIGHTING, so the calm goes through it and the next exit is of an NPC that is not fighting.
             void CalmWithoutDemaintain(IEnumerable<string> ids)
@@ -172,13 +179,14 @@ public partial class TerrainViewerApp
             // Between two casts: every run the stage made (or an NPC's own AI cast in the meantime) ends, the NPC goes calm and idle, then the three critters are whole, alive and free of what the spells wrote on them.
             void Reset()
             {
-                var named = ally is { } held ? new[] { entity, held.Entity } : new[] { entity };
+                var named = touched.Where(id => id != SessionSpellCaster.Hero).ToArray();
                 EndRuns(); DestroyMade(); CalmWithoutDemaintain(named);
                 for (var idle = 0; idle < 900 && (host!.RunOf(entity) is not null || _spellGoal is not null || _spellMissiles.Count > 0); idle++) Frame();
                 EndRuns();
                 foreach (var id in named.Append(SessionSpellCaster.Hero)) RestoreFlags(id);
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 if (ally is { } friend) session.Heal(session.Version, friend.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                if (foe is { } hurtFoe) session.Heal(session.Version, hurtFoe.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 CalmWithoutDemaintain(named);
             }
@@ -221,7 +229,7 @@ public partial class TerrainViewerApp
                 : "no run (" + s.Why + ")";
 
             var maintainedSelf = new HashSet<int> { 10, 15, 20, 25, 30, 40, 45 };
-            int ran = 0, differs = 0, notRun = 0, refused = 0, notComparable = 0;
+            int ran = 0, differs = 0, notRun = 0, refused = 0, notComparable = 0, foeLegs = 0, ledLegs = 0;
             var differing = new List<int>();
             var unexplained = new List<int>();
             foreach (var (spell, kind, lists) in pairs)
@@ -230,11 +238,12 @@ public partial class TerrainViewerApp
                 if (kind == "ally" && ally is null) { notRun++; GD.Print($"ARC-MAGIC-1835 ai-cast-pass spell={spell} lists={lists} target={kind} NOT-RUN (no other NPC within eight cells to be the dead ally)"); continue; }
                 string HeroTarget() => kind == "ally" ? ally!.Value.Entity : SessionSpellCaster.Hero;
                 void Kill() { if (kind == "ally") session.ApplyDamage(session.Version, ally!.Value.Life, new LifeDamage { HitPoints = 1_000_000 }); }
-                AiCastPassSide NpcCast(string at)
+                // A follower of the hero is not set against it (a hero's attack on a follower is the follow check's business, not this cast's), so the led leg casts with no attack notice.
+                AiCastPassSide NpcCast(string at, bool attacked = true)
                 {
-                    host!.HeroAttacked(entity);
-                    return Observe(entity, spell, () => host.PerformChoice(entity, new AiPassChoice(AiPassAction.Cast, spell, 0, null, at)),
-                        () => host.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true, () => host.TraceOf(entity)?.Cast is { } trace && trace.StartsWith($"cast {spell} ", StringComparison.Ordinal) ? trace : "no cast of this spell in the trace (the perform did not reach the cast)");
+                    if (attacked) host!.HeroAttacked(entity);
+                    return Observe(entity, spell, () => host!.PerformChoice(entity, new AiPassChoice(AiPassAction.Cast, spell, 0, null, at)),
+                        () => host!.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true, () => host!.TraceOf(entity)?.Cast is { } trace && trace.StartsWith($"cast {spell} ", StringComparison.Ordinal) ? trace : "no cast of this spell in the trace (the perform did not reach the cast)");
                 }
 
                 // The NPC's own cast, at the target the chooser would give it (its run must settle and leave nothing); the comparison with the hero's cast is between the same target (the hero: a cast at self for a self spell), so
@@ -254,6 +263,45 @@ public partial class TerrainViewerApp
                     () => _spellGoal is not null, () => _spellNotice + " | hero " + session.QueryHeroLife()?.Status);
                 FlushSpellLog(null);
                 Reset();
+
+                // ARC-AI-2678 (ledger AP3, exe 0x4ABF10 / 0x4AAF50 / 0x4ABC70): the chooser's target for a spell whose area the stage's first target fails. Offensive is cast at the pass target, a foe that is never the NPC itself (a PC or another NPC);
+                // Flee at the NPC itself, which passes a party-only area only when the leader chain (0x45DDA0) ends in a PC. So a spell whose area excludes PCs is cast at an NPC foe, a self-only Offensive spell is refused at every foe (the original
+                // never casts it from the Offensive list), and a party-only Flee spell is cast by an NPC that follows the hero.
+                var extra = "";
+                var firstRefusal = (kind == "self" ? npc : npcAtHero) is { Started: false, Why: { } firstWhy } && firstWhy.Contains("check NoValidTarget", StringComparison.Ordinal) ? ExplainBeginRefusal(firstWhy) : null;
+                if (kind == "foe" && firstRefusal is not null)
+                {
+                    Require(foe is not null, $"spell {spell} is refused at the hero for its area, so an NPC foe must be cast at, but the map has no other NPC");
+                    var foeNpc = foe!.Value;
+                    Reset();
+                    var atFoe = NpcCast(foeNpc.Entity); foeLegs++;
+                    Reset();
+                    var atFoeRefusal = !atFoe.Started && atFoe.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true ? ExplainBeginRefusal(atFoe.Why) : null;
+                    extra = " | npc at an NPC foe: " + Show(atFoe) + (atFoeRefusal is not null ? " | NPC-REFUSED (" + atFoeRefusal + ")" : "");
+                    Require(!atFoe.Stuck, $"the NPC's cast of spell {spell} at an NPC foe never settled: {Show(atFoe)}");
+                    if (firstRefusal.Contains("self-only", StringComparison.Ordinal)) Require(!atFoe.Started && atFoeRefusal?.Contains("self-only", StringComparison.Ordinal) == true, $"spell {spell} has a self-only area, so the original refuses it at an NPC foe too (it never casts it from the Offensive list): {Show(atFoe)}");
+                    else
+                    {
+                        // The nearest other NPC of the map is the foe, whatever it is and wherever it stands, so it may still fail the range or an animal bit (the area test's other bits); what the pass pins is that the PC-excluding bit no longer refuses it.
+                        Require(atFoeRefusal?.Contains("excludes PCs", StringComparison.Ordinal) != true, $"spell {spell} excludes PCs, which an NPC foe is not: {Show(atFoe)}");
+                    }
+                }
+                else if (kind == "self" && firstRefusal?.Contains("party-only", StringComparison.Ordinal) == true)
+                {
+                    Reset();
+                    var join = session.ForceJoinParty(session.Version, entity);
+                    Require(join.Disposition != GameSessionDisposition.Rejected, "the NPC joined the party for the party-only spell: " + join.Failure);
+                    AiCastPassSide led; GameSessionMutationResult leftParty;
+                    // The cast runs while the NPC follows (the party-only area asks for a PC at the top of its leader chain); the calm goes after the NPC has left again.
+                    try { led = NpcCast(entity, false); ledLegs++; }
+                    finally { leftParty = session.LeaveParty(session.Version, entity, new PartyLeave(Force: true)); }
+                    Require(leftParty.Disposition != GameSessionDisposition.Rejected && session.QueryCompanion(entity).Standing == CompanionStanding.Free, $"the NPC left the party again after spell {spell}: {leftParty.Failure}");
+                    Reset();
+                    var ledRefusal = !led.Started && led.Why?.Contains("check NoValidTarget", StringComparison.Ordinal) == true ? ExplainBeginRefusal(led.Why) : null;
+                    extra = " | npc led by the hero: " + Show(led) + (ledRefusal is not null ? " | NPC-REFUSED (" + ledRefusal + ")" : "");
+                    Require(!led.Stuck, $"the NPC's cast of spell {spell} while following the hero never settled: {Show(led)}");
+                    Require(led.Started, $"spell {spell} has a party-only area, which an NPC led by a PC passes (0x45DDA0): {Show(led)}");
+                }
 
                 // The NPC's invocation check tests its BEGIN area for a parent that is no PC (0x4564E0) and the hero's does not, so an NPC refusal is no difference of the run: it is counted apart (an issue names why). A hero run that
                 // the release's re-check freed with nothing done (a tile spell cast at an object) has nothing to compare.
@@ -281,7 +329,7 @@ public partial class TerrainViewerApp
                 ran++;
                 if (differences.Count > 0) { differs++; differing.Add(spell); }
                 GD.Print($"ARC-MAGIC-1835 ai-cast-pass spell={spell} lists={lists} target={kind} npc: {Show(npc)}" + (ReferenceEquals(npc, npcAtHero) ? "" : " | npc at the hero: " + Show(npcAtHero))
-                    + " | hero: " + Show(heroCast) + (apart is not null ? " | " + apart : "") + (differences.Count > 0 ? " | DIFF " + string.Join("; ", differences) : ""));
+                    + " | hero: " + Show(heroCast) + (apart is not null ? " | " + apart : "") + extra + (differences.Count > 0 ? " | DIFF " + string.Join("; ", differences) : ""));
                 Require(!npcAtHero.Stuck, $"the NPC's cast of spell {spell} at the hero never settled: {Show(npcAtHero)}");
                 Require(!npc.Stuck, $"the NPC's cast of spell {spell} never settled: {Show(npc)}");
                 Require(!heroCast.Stuck, $"the hero's cast of spell {spell} never settled: {Show(heroCast)}");
@@ -293,7 +341,7 @@ public partial class TerrainViewerApp
             Require(ran > 0, "at least one pair ran");
             Require(unexplained.Count == 0, $"every NPC refusal by the BEGIN-area test is explained by an area bit the original tests too (ARC-MAGIC-2655); not explained: {string.Join(",", unexplained)}");
             GD.Print("ARC-MAGIC-1835 native-smoke ai-cast-pass PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Caster = target.Row.PrototypeNumber, Pairs = pairs.Count, Ran = ran, NotRun = notRun, NpcRefused = refused, NotComparable = notComparable, DifferingPairs = differs, DifferingSpells = differing.Distinct(),
+                map.RuntimeMap, Caster = target.Row.PrototypeNumber, Pairs = pairs.Count, Ran = ran, NotRun = notRun, NpcRefused = refused, FoeLegs = foeLegs, LedLegs = ledLegs, NotComparable = notComparable, DifferingPairs = differs, DifferingSpells = differing.Distinct(),
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -302,7 +350,8 @@ public partial class TerrainViewerApp
             foreach (var left in session.QuerySpellRuns().Runs.Select(r => r.Id).Where(id => !baseline.Contains(id)).ToArray()) SpellCasterNow()?.Act(new(SessionSpellRunActionKind.ForceEnd, left));
             session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (ally is { } friend) session.Heal(session.Version, friend.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            CalmNpcsForSmoke(session, [entity]);
+            if (foe is { } hurtFoe) session.Heal(session.Version, hurtFoe.Life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            CalmNpcsForSmoke(session, foe is { } calmFoe ? new[] { entity, calmFoe.Entity } : new[] { entity });
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             RestoreHeroForSmoke(session, heroBefore);
@@ -329,6 +378,7 @@ public partial class TerrainViewerApp
         if ((failing & 0x400000) != 0) reasons.Add("area needs a poisoned target");
         if ((failing & 0x200000) != 0) reasons.Add("area needs a damaged or poisoned target");
         if ((failing & 0x1000000) != 0) reasons.Add("area needs a flesh target");
+        if ((failing & 0x40000000) != 0) reasons.Add("area excludes animals, target is an animal");
         return reasons.Count == 0 ? null : string.Join("; ", reasons);
     }
 }

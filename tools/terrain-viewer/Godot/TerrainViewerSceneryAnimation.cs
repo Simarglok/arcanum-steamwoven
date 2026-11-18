@@ -160,7 +160,7 @@ public partial class TerrainViewerApp
             bodies[loop.Key] = AreaScenePlan.SceneryFrame(command, loop.Row, body, loop.Visual,
                 loop.Loop.OffsetX, loop.Loop.OffsetY);
         }
-        // ARC-RENDER-1781: a scenery with a changed art, on its loop's frame of that art or on frame 0 (a busted one's ground body wins in the draw order).
+        // ARC-RENDER-1781: a scenery with a changed art, on its loop's frame of that art or on frame 0 (a busted one with a destroyed art is a scenery art too, ARC-SCRIPT-2670; a busted body whose art did not read is the ground body).
         foreach (var (entity, art) in _sceneryArt)
             if (SceneryArtCommand(entity, art, _sceneryHost, overlay.Bodies, overlay.Visuals) is { } drawn) bodies[art.Row.Key] = drawn;
         AddOccupiedBeds(bodies, overlay.Bodies, overlay.Visuals);

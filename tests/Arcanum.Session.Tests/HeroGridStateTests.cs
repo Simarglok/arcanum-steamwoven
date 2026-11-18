@@ -135,7 +135,7 @@ public sealed class HeroGridStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveHeroItem(owner.Version, "crate", 57, Facts(owner, "crate"), Accept).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"grid\":[{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}," +
-            "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"crate\",\"slot\":57,\"width\":2,\"height\":3}],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
+            "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"crate\",\"slot\":57,\"width\":2,\"height\":3}],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[],\"lastDrops\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         using (var restored = Restore(Decode(text)))
         {
             Assert.AreEqual(Layout(owner), Layout(restored));

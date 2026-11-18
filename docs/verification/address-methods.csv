@@ -1058,6 +1058,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,EndDestroyedObjectRuns,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,InterruptBrokenObjectRuns,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSceneryArt.cs,WantedSceneryArts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host

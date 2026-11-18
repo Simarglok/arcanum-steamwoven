@@ -992,7 +992,10 @@ public sealed partial class GameSessionOwner
         if (throwing && pack?.Split is { } split) thrown = SplitForThrow(pack.Item, split.Count, split.Kind);
         if (throwing) heroSide = heroSide with { Worn = Throw(thrown!, attack.HeroWorn) };
         // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss (the original takes it before every roll).
-        var ammunition = pending is null && pack is null && resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
+        // ARC-COMBAT-2415 (TW8): a pack item that is a weapon with an ammunition type takes its units from the hero's stack here (the check passed at ThrowHeroItem).
+        var ammunition = pending is null && resolution.Refusal == AttackRefusal.None
+            ? pack is null ? SpendShot() : pack.Ammo is { } packAmmo ? SpendAmmo(Version, SessionAmmoHolder.Hero, packAmmo.Type, packAmmo.Count) : null
+            : null;
         if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend };
         var spent = ammunition is { Disposition: GameSessionDisposition.Changed };

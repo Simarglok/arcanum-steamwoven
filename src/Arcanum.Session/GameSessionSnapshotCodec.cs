@@ -86,12 +86,14 @@ public static partial class GameSessionSnapshotCodec
     // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items. The junk piles (schema 46), the pools of blood (schema 58) and the number marks (schema 60)
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields", "holderSlots"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields", "holderSlots", "lastDrops"];
     // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote.
     private static readonly string[] ItemFieldFields = ["entity", "writtenStart", "displayFlipped"];
     // ARC-RES-1441 (schema 95): the arranged slots of seed holders.
     private static readonly string[] HolderSlotsFields = ["holder", "slots"];
     private static readonly string[] HolderSlotFields = ["item", "slot"];
+    // ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it.
+    private static readonly string[] LastDropFields = ["entity", "x", "y"];
     private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
     private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
@@ -665,6 +667,17 @@ public static partial class GameSessionSnapshotCodec
                     w.WriteEndObject();
                 }
                 w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it, by entity in ordinal order.
+            w.WriteStartArray("lastDrops");
+            foreach (var row in snapshot.Inventory.LastDrops)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", row.Entity);
+                w.WriteNumber("x", row.Cell.X);
+                w.WriteNumber("y", row.Cell.Y);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -2300,8 +2313,19 @@ public static partial class GameSessionSnapshotCodec
             }
             holderSlots[i] = new(holder, System.Array.AsReadOnly(slots));
         }
+        // ARC-SCRIPT-2594: the last-drop tiles by entity in strictly ascending ordinal order, each cell within the drop's packing (which entities may carry one is the owner's restore).
+        var dropRows = Array(f["lastDrops"], p + ".lastDrops", HeroLists.MaxLastDrops);
+        var lastDrops = new SessionItemDrop[dropRows.Length];
+        for (var i = 0; i < dropRows.Length; i++)
+        {
+            var path = $"{p}.lastDrops[{i}]";
+            var row = Fields(dropRows[i], path, LastDropFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(lastDrops[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastDrops[i] = new(entity, new(Int(row["x"], path + ".x", 0, (1 << 24) - 1), Int(row["y"], path + ".y", 0, (1 << 24) - 1)));
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields, HolderSlots = holderSlots };
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields, HolderSlots = holderSlots, LastDrops = lastDrops };
     }
 
     // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records, in the order they were made; the owner's restore checks the rest.
