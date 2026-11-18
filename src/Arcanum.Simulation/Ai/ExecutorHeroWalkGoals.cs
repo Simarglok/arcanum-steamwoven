@@ -159,7 +159,7 @@ public static partial class AiExecutorRules
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(world);
         var frames = run.Frames.ToBuilder();
-        var state = new HeroWalkState(run.Flags, run.PathFlags);
+        var state = new HeroWalkState(run.Flags, run.PathFlags) { Approach = run.Bottom.Goal is not (GoalType.MoveToTile or GoalType.RunToTile) };
         var reason = AiExecutorReason.None;
         for (var nodes = 1; ; nodes++)
         {
@@ -216,6 +216,8 @@ public static partial class AiExecutorRules
     {
         public GoalRunFlags Flags = flags;
         public GoalPathFlags PathFlags = pathFlags;
+        /// <summary>ARC-COMBAT-2736: the walk is an approach pushed by another goal (use, loot, pickup, move near: the original's goals 8 and 61), not the hero's own walk goal 3 or 4.</summary>
+        public bool Approach;
     }
 
     private static Transition HeroWalkNode(GoalFrame goal, HeroWalkState state, IAiHeroWalkWorld world) => goal.Goal switch
@@ -298,8 +300,8 @@ public static partial class AiExecutorRules
                         var steps = plan.Steps.Length > SegmentSteps ? plan.Steps[..SegmentSteps] : plan.Steps;
                         return new(Move.Next, goal.Goal == GoalType.RunToTile ? 7 : 6, Top: goal with { Path = steps, PathIndex = 0 });
                     // ARC-COMBAT-2736 (0x427990, 0x42E9B0): the original's planner runs before the no-walk test and has no far outcome (it plans or fails), and the step start then refuses at once, so a run with run flag 0x100 (a Shift click)
-                    // never walks; Steamwoven's route follower is a walk too, so it is not handed the far goal: the run ends as a refused step does.
-                    case AiHeroPlanOutcome.Far when (state.Flags & GoalRunFlags.NoWalk) != 0:
+                    // never walks; Steamwoven's route follower is a walk too, so an approach (not the hero's own walk goals) is not handed the far goal: the run ends as a refused step does.
+                    case AiHeroPlanOutcome.Far when state.Approach && (state.Flags & GoalRunFlags.NoWalk) != 0:
                         state.PathFlags &= ~GoalPathFlags.Replan;
                         return End(AiExecutorReason.NoWalkStep);
                     case AiHeroPlanOutcome.Far when world.FollowRoute(tile):
@@ -312,8 +314,8 @@ public static partial class AiExecutorRules
                 }
             // 6: the turn toward the path's first rotation (a hero that faces it already, or is not standing, does not turn); goal 5 follows (node 4).
             default:
-                // ARC-COMBAT-2736 (0x42E9B0): the original's step start answers false for run flag 0x100 before it writes the facing, so a no-walk run (a Shift click out of reach) turns nowhere before its run ends.
-                if ((state.Flags & GoalRunFlags.NoWalk) == 0 && !goal.Path.IsDefaultOrEmpty && LineOfFireRules.Rotation(at, goal.Path[0]) is var rotation && world.NeedsTurn(rotation))
+                // ARC-COMBAT-2736 (0x42E9B0): the approach goal 61's step start answers false for run flag 0x100 before it writes the facing, so a no-walk approach (a Shift click out of reach) turns nowhere before its run ends (the hero's own goal 3 pushes the turn goal 53 first).
+                if (!(state.Approach && (state.Flags & GoalRunFlags.NoWalk) != 0) && !goal.Path.IsDefaultOrEmpty && LineOfFireRules.Rotation(at, goal.Path[0]) is var rotation && world.NeedsTurn(rotation))
                     return new(Move.Push, Frame: new GoalFrame(GoalType.Rotate) { Rotation = rotation });
                 return Next(goal.Goal == GoalType.RunToTile ? 5 : 4);
         }

@@ -416,6 +416,21 @@ public sealed class HeroTalkGoalsTests
         Assert.IsTrue(plain.FollowRoutes > 0, "without Shift the far goal goes to the route follower");
     }
 
+    [TestMethod]
+    public void TheHeroOwnWalkWithTheNoWalkFlagKeepsItsTurnAndItsRouteFollower()
+    {
+        // Only the approach goals (61 in the original) refuse before the turn; the hero's own walk goal 3 pushes the turn goal 53 first, and its far goal still goes to the route follower.
+        var walk = new GoalRun("pc", default, AiExecutorRules.HeroWalkFrame(new(16, 10), run: false)) { Flags = GoalRunFlags.NoWalk };
+        var turning = new World { TurnNeeded = true };
+        var (last, _) = Drive(walk, turning);
+        Assert.IsTrue(turning.Turns > 0, "the own walk turns before its first step is refused");
+        Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason);
+        var far = new World { FarPlan = true };
+        var run = walk;
+        for (var i = 0; i < 3 && AiExecutorRules.StepHeroWalk(run, far) is { Ended: false } step; i++) run = step.Run!;
+        Assert.IsTrue(far.FollowRoutes > 0);
+    }
+
     // ARC-DEV-176 (MIG13 S11d): the use of a door or window: goal 38 turns into the door goals.
 
     [TestMethod]

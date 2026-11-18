@@ -681,9 +681,9 @@ public partial class TerrainViewerApp
     {
         var line = goal switch
         {
-            Arcanum.Simulation.Goals.GoalType.PickupItem => "Shift: the item is not within reach from here, no walk (goal 15 ended)",
-            Arcanum.Simulation.Goals.GoalType.UseContainer => "Shift: not within reach from here, no walk (goal 81 ended)",
-            _ => "Shift: not within reach from here, no walk (goal 38 ended)",
+            Arcanum.Simulation.Goals.GoalType.PickupItem => "Shift: no walk, goal 15 ended before the item was reached",
+            Arcanum.Simulation.Goals.GoalType.UseContainer => "Shift: no walk, goal 81 ended before the target was reached",
+            _ => "Shift: no walk, the use ended before the target was reached",
         };
         if (goal is Arcanum.Simulation.Goals.GoalType.PickupItem or Arcanum.Simulation.Goals.GoalType.UseContainer) _inventoryStatus = line;
         else if (_areaDoors?.PortalOf(target) is not null) _portalNotice = line;
