@@ -177,7 +177,12 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         {
             if (!Owns(entity)) { _brokenLoops.Remove(entity); continue; }
             if (!comesBack(entity)) continue;
-            if (StartOne(entity, Burns(entity))) started++;
+            if (StartOne(entity, Burns(entity)))
+            {
+                started++;
+                // SUM4: a restarted run has no burn source any more.
+                if (_created.TryGetValue(entity, out var made)) _created[entity] = made with { Source = null, Begun = true };
+            }
             if (!StartPending) _brokenLoops.Remove(entity);
         }
         return started;
