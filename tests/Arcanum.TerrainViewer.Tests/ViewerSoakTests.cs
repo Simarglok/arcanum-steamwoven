@@ -55,8 +55,8 @@ public sealed class ViewerSoakTests
         StringAssert.Contains(problem, "ARC_SOAK_LOG");
     }
 
-    private static ViewerSoakSample Sample(int seconds, long texture, long gc = 100, long workingSet = 1000, string window = "CharacterEditor")
-        => new(seconds, window, 59.94, texture, 7, 8, 5000 + seconds, 700, 300, 0, 9, gc, 50, 3, 2, 1, workingSet, 33);
+    private static ViewerSoakSample Sample(int seconds, long texture, long gc = 100, long workingSet = 1000, string window = "CharacterEditor", int objects = -1, int files = 40, int threads = 33, long live = 50)
+        => new(seconds, window, 59.94, texture, 7, 8, objects >= 0 ? objects : 5000 + seconds, 700, 300, 0, 9, gc, live, 3, 2, 1, workingSet, threads, files);
 
     [TestMethod]
     public void RowMatchesTheHeaderColumns()
@@ -77,6 +77,85 @@ public sealed class ViewerSoakTests
         StringAssert.Contains(summary, "workingSet 100.0MiB -> 103.0MiB (+3.0MiB)");
         StringAssert.Contains(summary, "threads 33.0 -> 33.0 (0.0)");
         Assert.IsFalse(summary.Contains("warm-up", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void SummaryGivesTheMaximumAndTheOpenFiles()
+    {
+        // ARC-DEV-1398: first, last and maximum of each counter after the warm-up (the maximum is of the readings kept).
+        var mib = 1024L * 1024;
+        var samples = new[] { Sample(0, 99 * mib), Sample(120, 10 * mib, files: 40), Sample(300, 15 * mib, files: 44), Sample(600, 12 * mib, files: 41) };
+        var summary = ViewerSoakReport.Summary(samples);
+        StringAssert.Contains(summary, "texture 10.0MiB -> 12.0MiB (+2.0MiB) max 15.0MiB");
+        StringAssert.Contains(summary, "openFiles 40.0 -> 41.0 (+1.0) max 44.0");
+        // A system that cannot read the descriptors (-1) leaves the counter out.
+        Assert.IsFalse(ViewerSoakReport.Summary([Sample(0, 1, files: -1), Sample(130, 1, files: -1)]).Contains("openFiles", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ResourceLineHasEveryCounterAndTheDescriptorCount()
+    {
+        var mib = 1024L * 1024;
+        var line = Sample(90, 3 * mib, workingSet: 500 * mib, files: 52).Text();
+        Assert.IsTrue(line.StartsWith(ViewerResourceLine.Prefix + " t=90s fps=59.9 texture=3.0MiB video=0.0MiB", StringComparison.Ordinal), line);
+        foreach (var part in new[] { "objects=5090", "resources=700", "nodes=300", "orphans=0", "workingSet=500.0MiB", "threads=33", "openFiles=52", "gc=3/2/1" })
+            StringAssert.Contains(line, part);
+        StringAssert.Contains(Sample(0, 0, files: -1).Text(), "openFiles=?");
+    }
+
+    [TestMethod]
+    public void OpenFileDescriptorsAreCountedWhereTheSystemListsThem()
+    {
+        var count = ViewerResourceLine.OpenFileDescriptors();
+        if (OperatingSystem.IsWindows()) { Assert.AreEqual(-1, count); return; }
+        Assert.IsTrue(count >= 3, "a process holds at least stdin, stdout and stderr: " + count);
+        var before = count;
+        var files = Enumerable.Range(0, 5).Select(_ => File.OpenRead(typeof(ViewerSoakTests).Assembly.Location)).ToList();
+        try { Assert.IsTrue(ViewerResourceLine.OpenFileDescriptors() >= before + 5, "five opened files show"); }
+        finally { foreach (var file in files) file.Dispose(); }
+    }
+
+    [TestMethod]
+    public void ASteadyRunPassesTheLimits()
+    {
+        var mib = 1024L * 1024;
+        var samples = new[] { Sample(0, 5 * mib, live: 10 * mib), Sample(130, 30 * mib, live: 100 * mib, files: 60, threads: 40), Sample(400, 31 * mib, live: 101 * mib, files: 61, threads: 41), Sample(700, 30 * mib, live: 130 * mib, files: 60, threads: 40) };
+        Assert.AreEqual(0, ViewerSoakLimits.Exceeded(samples).Count, string.Join("; ", ViewerSoakLimits.Exceeded(samples)));
+    }
+
+    [TestMethod]
+    public void ACounterThatClimbsPastItsAllowanceFailsAfterTheWarmupOnly()
+    {
+        var mib = 1024L * 1024;
+        // The early rise (before 120 s) is the warm-up; the climb after it is the leak: live heap +60 MiB (allowed 48), descriptors +20 (allowed 16).
+        var samples = new[] { Sample(0, 1, live: 1 * mib, files: 10), Sample(130, 1, live: 100 * mib, files: 40), Sample(700, 1, live: 160 * mib, files: 60) };
+        var problems = ViewerSoakLimits.Exceeded(samples);
+        Assert.AreEqual(2, problems.Count, string.Join("; ", problems));
+        StringAssert.Contains(problems[0], "gcLive grew by 62914560");
+        StringAssert.Contains(problems[1], "openFiles grew by 20");
+        // Objects grown past 2000 fail too, and the unreadable descriptor count is not a failure.
+        Assert.AreEqual(1, ViewerSoakLimits.Exceeded([Sample(130, 1, objects: 5000, files: -1), Sample(300, 1, objects: 7001, files: -1)]).Count);
+    }
+
+    [TestMethod]
+    public void ATooShortRunProvesNothingAndSaysSo()
+    {
+        var problems = ViewerSoakLimits.Exceeded([Sample(0, 1), Sample(60, 1), Sample(150, 1)]);
+        Assert.AreEqual(1, problems.Count);
+        StringAssert.Contains(problems[0], "too few readings after the 120s warm-up (1)");
+    }
+
+    [TestMethod]
+    public void TheStageLengthDefaultsAndIsRangeChecked()
+    {
+        Assert.AreEqual(6, ViewerSoakSettings.StageMinutes(Env(), out var problem));
+        Assert.IsNull(problem);
+        Assert.AreEqual(30, ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", "30")), out problem));
+        foreach (var bad in new[] { "0", "121", "-1", "2.5", "abc" })
+        {
+            Assert.IsNull(ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", bad)), out problem), bad);
+            StringAssert.Contains(problem, "ARC_SOAK_STAGE_MINUTES");
+        }
     }
 
     [TestMethod]

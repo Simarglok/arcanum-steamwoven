@@ -30,6 +30,22 @@ public sealed record ViewerSoakSettings(string LogPath, int IntervalSeconds, int
     public const int DefaultIntervalSeconds = 30;
     public const int MaxIntervalSeconds = 3600;
     public const int MaxRunMinutes = 24 * 60;
+    /// <summary>ARC-DEV-1398: the length of the <c>soak</c> smoke stage in minutes (<c>ARC_SOAK_STAGE_MINUTES</c>).</summary>
+    public const string StageMinutesVariable = "ARC_SOAK_STAGE_MINUTES";
+    public const int DefaultStageMinutes = 6;
+    public const int MaxStageMinutes = 120;
+
+    /// <summary>ARC-DEV-1398: the soak stage's length: the variable (1 to <see cref="MaxStageMinutes"/>) or <see cref="DefaultStageMinutes"/>;
+    /// null with <paramref name="problem"/> set for a value that cannot be used. The default leaves four minutes after the 120 s warm-up.</summary>
+    public static int? StageMinutes(Func<string, string?> get, out string? problem)
+    {
+        ArgumentNullException.ThrowIfNull(get);
+        problem = null;
+        if (get(StageMinutesVariable) is not { Length: > 0 } text) return DefaultStageMinutes;
+        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) && minutes is >= 1 and <= MaxStageMinutes) return minutes;
+        problem = $"{StageMinutesVariable} must be 1 to {MaxStageMinutes} minutes, not '{text}'";
+        return null;
+    }
 
     /// <summary>Reads the settings; null when <c>ARC_SOAK_LOG</c> is unset (no soak), else the settings or, with <paramref name="problem"/>
     /// set, null for a value that cannot be used (the viewer then logs the problem and runs without a soak).</summary>
@@ -72,10 +88,10 @@ public sealed record ViewerSoakSample(
     int ElapsedSeconds, string Window, double Fps,
     long TextureBytes, long VideoBytes, long BufferBytes,
     long Objects, long Resources, long Nodes, long OrphanNodes,
-    long GodotStaticBytes, long GcHeapBytes, long GcLiveBytes, int Gen0, int Gen1, int Gen2, long WorkingSetBytes, int Threads)
+    long GodotStaticBytes, long GcHeapBytes, long GcLiveBytes, int Gen0, int Gen1, int Gen2, long WorkingSetBytes, int Threads, int OpenFiles = -1)
 {
     /// <summary>The CSV header of <see cref="Line"/>.</summary>
-    public const string Header = "elapsed_s,window,fps,texture_bytes,video_bytes,buffer_bytes,objects,resources,nodes,orphan_nodes,godot_static_bytes,gc_heap_bytes,gc_live_bytes,gc0,gc1,gc2,working_set_bytes,threads";
+    public const string Header = "elapsed_s,window,fps,texture_bytes,video_bytes,buffer_bytes,objects,resources,nodes,orphan_nodes,godot_static_bytes,gc_heap_bytes,gc_live_bytes,gc0,gc1,gc2,working_set_bytes,threads,open_files";
 
     /// <summary>The reading as one CSV row (invariant culture, no quoting needed: the window is an enum name).</summary>
     public string Line()
@@ -85,7 +101,42 @@ public sealed record ViewerSoakSample(
             TextureBytes.ToString(c), VideoBytes.ToString(c), BufferBytes.ToString(c),
             Objects.ToString(c), Resources.ToString(c), Nodes.ToString(c), OrphanNodes.ToString(c),
             GodotStaticBytes.ToString(c), GcHeapBytes.ToString(c), GcLiveBytes.ToString(c), Gen0.ToString(c), Gen1.ToString(c), Gen2.ToString(c),
-            WorkingSetBytes.ToString(c), Threads.ToString(c));
+            WorkingSetBytes.ToString(c), Threads.ToString(c), OpenFiles.ToString(c));
+    }
+
+    /// <summary>ARC-DEV-1398: the reading as the one resource line the viewer's log prints every half minute and the bug report carries
+    /// (the CSV row holds the same numbers; this is the form a person reads).</summary>
+    public string Text()
+    {
+        var c = CultureInfo.InvariantCulture;
+        const double Mib = 1024 * 1024;
+        string M(long bytes) => (bytes / Mib).ToString("0.0", c) + "MiB";
+        return $"{ViewerResourceLine.Prefix} t={ElapsedSeconds}s fps={Fps.ToString("0.0", c)} texture={M(TextureBytes)} video={M(VideoBytes)} buffer={M(BufferBytes)}"
+            + $" objects={Objects} resources={Resources} nodes={Nodes} orphans={OrphanNodes} godotStatic={M(GodotStaticBytes)}"
+            + $" gcLive={M(GcLiveBytes)} gcHeap={M(GcHeapBytes)} gc={Gen0}/{Gen1}/{Gen2} workingSet={M(WorkingSetBytes)} threads={Threads}"
+            + $" openFiles={(OpenFiles < 0 ? "?" : OpenFiles.ToString(c))}";
+    }
+}
+
+/// <summary>ARC-DEV-1398: the resource line and the reading of the one counter Godot has no monitor for.</summary>
+public static class ViewerResourceLine
+{
+    /// <summary>The start of every resource line in the viewer log (grep this).</summary>
+    public const string Prefix = "ARC-DEV-1398 resources";
+    /// <summary>The period of the resource line when no soak interval is set.</summary>
+    public const int DefaultIntervalSeconds = 30;
+
+    /// <summary>How many file descriptors the process has open (the listing of <c>/dev/fd</c>, which holds the descriptor of the listing
+    /// itself: a constant one more), or -1 where the system has no such folder (Windows) or it cannot be read.</summary>
+    public static int OpenFileDescriptors()
+    {
+        try
+        {
+            foreach (var folder in new[] { "/dev/fd", "/proc/self/fd" })
+                if (Directory.Exists(folder)) return Directory.EnumerateFileSystemEntries(folder).Count();
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException) { }
+        return -1;
     }
 }
 
@@ -108,23 +159,62 @@ public static class ViewerSoakReport
         var first = steady[0]; var last = steady[^1];
         var text = new StringBuilder("ARC-DEV-2279 soak summary: ");
         text.Append(CultureInfo.InvariantCulture, $"samples={samples.Count} span={last.ElapsedSeconds}s window={last.Window}{note}");
-        void Counter(string name, long from, long to, double scale = 1, string unit = "")
+        void Counter(string name, Func<ViewerSoakSample, long> read, double scale = 1, string unit = "")
         {
             var c = CultureInfo.InvariantCulture;
-            text.Append(c, $" | {name} {(from / scale).ToString("0.0", c)}{unit} -> {(to / scale).ToString("0.0", c)}{unit} ({((to - from) / scale).ToString("+0.0;-0.0;0.0", c)}{unit})");
+            long from = read(first), to = read(last), max = steady.Max(read);
+            text.Append(c, $" | {name} {(from / scale).ToString("0.0", c)}{unit} -> {(to / scale).ToString("0.0", c)}{unit} ({((to - from) / scale).ToString("+0.0;-0.0;0.0", c)}{unit}) max {(max / scale).ToString("0.0", c)}{unit}");
         }
         const double Mib = 1024 * 1024;
-        Counter("texture", first.TextureBytes, last.TextureBytes, Mib, "MiB");
-        Counter("video", first.VideoBytes, last.VideoBytes, Mib, "MiB");
-        Counter("godotStatic", first.GodotStaticBytes, last.GodotStaticBytes, Mib, "MiB");
-        Counter("gcHeap", first.GcHeapBytes, last.GcHeapBytes, Mib, "MiB");
-        Counter("gcLive", first.GcLiveBytes, last.GcLiveBytes, Mib, "MiB");
-        Counter("workingSet", first.WorkingSetBytes, last.WorkingSetBytes, Mib, "MiB");
-        Counter("objects", first.Objects, last.Objects);
-        Counter("resources", first.Resources, last.Resources);
-        Counter("nodes", first.Nodes, last.Nodes);
-        Counter("orphanNodes", first.OrphanNodes, last.OrphanNodes);
-        Counter("threads", first.Threads, last.Threads);
+        Counter("texture", x => x.TextureBytes, Mib, "MiB");
+        Counter("video", x => x.VideoBytes, Mib, "MiB");
+        Counter("godotStatic", x => x.GodotStaticBytes, Mib, "MiB");
+        Counter("gcHeap", x => x.GcHeapBytes, Mib, "MiB");
+        Counter("gcLive", x => x.GcLiveBytes, Mib, "MiB");
+        Counter("workingSet", x => x.WorkingSetBytes, Mib, "MiB");
+        Counter("objects", x => x.Objects);
+        Counter("resources", x => x.Resources);
+        Counter("nodes", x => x.Nodes);
+        Counter("orphanNodes", x => x.OrphanNodes);
+        Counter("threads", x => x.Threads);
+        if (first.OpenFiles >= 0 && last.OpenFiles >= 0) Counter("openFiles", x => x.OpenFiles);
         return text.ToString();
+    }
+}
+
+/// <summary>
+/// ARC-DEV-1398: the verdict of a scripted soak (the <c>soak</c> smoke stage). A counter that grows by more than its allowance between
+/// the first and the last reading after the warm-up fails the run; the allowances are loose (a cache that fills while the player's
+/// route is walked for the first time is no leak) and are the things to tune when a real run shows a counter that is flat by nature.
+/// </summary>
+public static class ViewerSoakLimits
+{
+    private const long Mib = 1024 * 1024;
+
+    /// <summary>The counters and their allowed growth (in the unit of the counter: bytes, or a count).</summary>
+    public static IReadOnlyList<(string Name, long Allowed, Func<ViewerSoakSample, long> Read)> Allowances { get; } =
+    [
+        ("gcLive", 48 * Mib, x => x.GcLiveBytes), ("godotStatic", 48 * Mib, x => x.GodotStaticBytes),
+        ("texture", 64 * Mib, x => x.TextureBytes), ("video", 64 * Mib, x => x.VideoBytes), ("workingSet", 256 * Mib, x => x.WorkingSetBytes),
+        ("objects", 2000, x => x.Objects), ("resources", 400, x => x.Resources), ("nodes", 400, x => x.Nodes), ("orphanNodes", 20, x => x.OrphanNodes),
+        ("threads", 6, x => x.Threads), ("openFiles", 16, x => x.OpenFiles),
+    ];
+
+    /// <summary>The counters that grew past their allowance between the first and last reading at or after the warm-up; the single entry
+    /// "too few readings after the warm-up" when fewer than two readings are left (a run that short proves nothing). Empty: the soak holds.
+    /// A counter the system cannot read (open files -1) is left out.</summary>
+    public static IReadOnlyList<string> Exceeded(IReadOnlyList<ViewerSoakSample> samples, int warmupSeconds = ViewerSoakReport.WarmupSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(samples);
+        var steady = samples.Where(sample => sample.ElapsedSeconds >= warmupSeconds).ToList();
+        if (steady.Count < 2) return ["too few readings after the " + warmupSeconds.ToString(CultureInfo.InvariantCulture) + "s warm-up (" + steady.Count.ToString(CultureInfo.InvariantCulture) + ")"];
+        var problems = new List<string>();
+        foreach (var (name, allowed, read) in Allowances)
+        {
+            long from = read(steady[0]), to = read(steady[^1]);
+            if (from < 0 || to < 0) continue;
+            if (to - from > allowed) problems.Add($"{name} grew by {(to - from).ToString(CultureInfo.InvariantCulture)} (allowed {allowed.ToString(CultureInfo.InvariantCulture)}): {from.ToString(CultureInfo.InvariantCulture)} -> {to.ToString(CultureInfo.InvariantCulture)}");
+        }
+        return problems;
     }
 }
