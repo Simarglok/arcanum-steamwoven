@@ -488,9 +488,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-WORLD-081 (PG3): the shown map's scenery within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
-    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place.
+    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
-    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => centre.Map != _shownMap || Place(centre) is not { } at ? [] : SceneryAround(at);
+    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : SceneryAround(at);
 
     private IReadOnlyList<ScrObjectRef> SceneryAround(CellCoord at)
     {
@@ -501,11 +501,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2041 (PV1–PV3): the shown map's portals within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, open, closed or locked alike, in snapshot order
-    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place.
+    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        if (VicinityCentre(centre) is not { } at) return [];
         return _portals.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
@@ -526,11 +526,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2322 (CV1–CV3): the shown map's containers within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, in snapshot order (the portals' rule with the
-    /// container type). Empty for a centre of another map or without a place.
+    /// container type). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        if (VicinityCentre(centre) is not { } at) return [];
         return ContainersAround(at);
     }
 
@@ -548,11 +548,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The item's own location field as the host reads it (IV2, IV8): the placed cell of a session-dropped item lying on the ground, else the tile it last lay on after the session dropped it and took it up again (a held item keeps that stale
     // location field in the original, also on another map: the scan is of the shown map around those coordinates), else the tile of its map data or of the carried item's row; null for an item of another map with no drop, or one without a tile.
-    private CellCoord? ItemCentre(ScrObjectRef item)
+    // ARC-SCRIPT-1704: with <paramref name="anyMap"/> (a vicinity scan, whose centre is the location field whichever map the reference names) an item named on another map reads its row by identity too, and a dropped item matches on its origin map.
+    private CellCoord? ItemCentre(ScrObjectRef item, bool anyMap = false)
     {
-        if (item.Map == _shownMap && _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && p.Map.RuntimeMap == item.Map) is { } placed) return placed.Cell;
+        if ((item.Map == _shownMap || anyMap) && _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && (p.Map.RuntimeMap == item.Map || anyMap && p.Origin?.RuntimeMap == item.Map)) is { } placed) return placed.Cell;
         if (_session.QueryItemLastDrop(item.Code) is { } dropped) return dropped;
-        if (item.Map != _shownMap) return null;
+        if (item.Map != _shownMap && !anyMap) return null;
         // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
         return (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
     }
@@ -565,13 +566,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1704 (CP14, IV2): the centre of a vicinity scan whose centre is <paramref name="centre"/>. The original's vicinity builder reads the object's own location field (the object field reader's field 2, ledger CP14) and scans the current map around it, so an item
+    /// (a combat-point script's weapon, which the hero carries from the map it took it on, or an NPC holds) is centred on its own stale location (<see cref="ItemCentre"/>: the tile a session-dropped item lies on, else the tile of its map data, read by
+    /// identity from the origin map when the item is carried here), whichever map the reference names; any other object is centred on its place when it is of the shown map. Null (an empty scan) for an object without a place, a made or kit item
+    /// (the location its creation wrote is not read) and an object of another map.
+    /// </summary>
+    private CellCoord? VicinityCentre(ScrObjectRef centre) => !IsPc(centre) && IsItemObject(centre) ? ItemCentre(centre, anyMap: true) : centre.Map == _shownMap ? Place(centre) : null;
+
+    /// <summary>
     /// ARC-SCRIPT-047 (TG4): the shown map's PCs and NPCs within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
     /// destroyed or switched off, the centre itself and the dead included: the NPC rows in snapshot order at their live cells
     /// (<see cref="AreaScriptWorld.CritterCell"/>, else the row's), then the PC at its live cell (the original's list order is not read).
-    /// Empty for a centre of another map or without a place.
+    /// Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     [OriginalFunction(0x440FF0, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => centre.Map != _shownMap || Place(centre) is not { } at ? [] : CrittersAround(at);
+    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : CrittersAround(at);
 
     private IReadOnlyList<ScrObjectRef> CrittersAround(CellCoord at)
     {
@@ -948,7 +957,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
     private bool IsItemObject(ScrObjectRef obj) =>
-        (Row(obj) ?? CarriedItemRow(obj)) is { Type: >= FirstItemType and <= LastItemType } || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && p.Map.RuntimeMap == obj.Map) || _session.QueryItemLastDrop(obj.Code) is not null;
+        Row(obj) is { } row ? row.Type is >= FirstItemType and <= LastItemType
+        : CarriedItemRow(obj) is not null || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && (p.Map.RuntimeMap == obj.Map || p.Origin?.RuntimeMap == obj.Map)) || _session.QueryItemLastDrop(obj.Code) is not null;
 
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>
