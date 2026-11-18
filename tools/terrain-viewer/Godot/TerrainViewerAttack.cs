@@ -362,7 +362,7 @@ public partial class TerrainViewerApp
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line.
-            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, target.Row, null, target, null);
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, target.Row, null, target, null, weaponBefore);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
@@ -947,7 +947,7 @@ public partial class TerrainViewerApp
         HeroOutOfAmmunition(result.Resolution?.Refusal, wall, false);
         if (result.Shot is { } shot)
         {
-            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, wall, null, null, null);
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, wall, null, null, null, weaponBefore);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
@@ -992,7 +992,7 @@ public partial class TerrainViewerApp
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line; a missed throw flies to its scattered tile.
-            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, struck.Row, struck, null, result.Scatter);
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, struck.Row, struck, null, result.Scatter, weaponBefore);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             // A critical miss turned on the hero at the shot; anything else waits for the strike.

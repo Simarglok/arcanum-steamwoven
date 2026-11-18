@@ -166,9 +166,9 @@ public partial class TerrainViewerApp
     /// start, and lands where it ends.
     /// </summary>
     private void LaunchProjectile(AttackGoal goal, SessionShot shot, (int Art, int Range) weapon, AttackResolution resolution, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter) =>
+        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter, int? weaponPrototype) =>
         FlyShot(shot, scatter ?? GoalTile(goal), unchecked((uint)weapon.Art), false, weapon.Range,
-            resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, target, critter, obj, scatter is not null);
+            resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, target, critter, obj, scatter is not null, weaponPrototype: weaponPrototype);
 
     /// <summary>
     /// The flight of one shot from the hero's cell to <paramref name="destination"/> (<see cref="LaunchProjectile"/>'s; ARC-UI-063: the
@@ -179,7 +179,7 @@ public partial class TerrainViewerApp
     /// a created object whose run, goal 36, builds the line itself; a shot whose destination is its own tile pops at once (no flight).
     /// </summary>
     private void FlyShot(SessionShot shot, CellCoord destination, uint? art, bool unfacedArt, int range, bool hit, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless, bool sizeArc = false)
+        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless, bool sizeArc = false, int? weaponPrototype = null)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
@@ -192,7 +192,7 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
             Flight = new(start, start, [(0, 0)], 1, start, 0, 0, 0), State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
-            Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc,
+            Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc, StepsPerTick = WeaponFlightSteps(weaponPrototype),
             Launched = new(ProjectileRowEntity(target), critter is not null, critter is null && obj is not null, null, null),
         };
         if (!ProjectileHost().Launch(projectile, start, critter?.Entity ?? obj?.Entity))
@@ -205,6 +205,7 @@ public partial class TerrainViewerApp
             + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}"
             + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : "") + (targetless ? " scattered" : "")
             + (owner.QueryShotReturns(shot) ? $" boomerang range={range}" : ""));
+        RecordForSelfTest(ProjectileStepsForSelfTest, projectile.StepsPerTick);
         SyncAreaProjectileBodies();
     }
 
@@ -232,6 +233,11 @@ public partial class TerrainViewerApp
         AiFlyShot(shooter, blocker.Type == 0 ? $"wall:{blocker.Key.SourceIndex}" : ObjectTargets()?.EntityOfKey(blocker.Key) ?? $"{blocker.Key.Kind}:{blocker.Key.SourceIndex}", blocker,
             blocker.Type == 0 || _areaSession is not { } owner ? null : ObjectTargets()?.Target(owner, blocker.Key, AreaTrapped), shot, from, destination);
 
+    /// <summary>ARC-RENDER-2035: the prototype number of the weapon an NPC wields now (its weapon-slot item), null for none; the fallback when the AI host names none (a launch outside its attack); its attack hands the weapon read before the strike (<see cref="AreaAiHost.LaunchingWeapon"/>).</summary>
+    private int? NpcWieldedWeaponPrototype(GameSessionOwner owner, string npc) =>
+        _combatHost?.Worn(owner, CurrentAreaMap, npc)?.FirstOrDefault(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && item.Entity is not null) is { Entity: not null } weapon
+            ? weapon.Fields.Object.Prototype : null;
+
     private bool AiFlyShot(string shooter, string target, AreaObjectRecord targetRow, AreaObjectAttackTarget? obj, SessionShot shot, CellCoord from, CellCoord destination)
     {
         if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(shooter, out var shooterRow)
@@ -244,6 +250,8 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Object = obj, Shooter = shooterRow, Destination = destination, Art = faced,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(facts.Hit, false, facts.Range),
+            // ARC-RENDER-2035 (PF4): the shot's pace is the launcher's projectile-speed entry of the weapon list.
+            StepsPerTick = WeaponFlightSteps(_aiHost?.LaunchingWeapon is { } launching && launching.Shooter == shooter ? launching.Weapon : NpcWieldedWeaponPrototype(owner, shooter)),
             Launched = new(atObject && obj is null ? null : target, false, obj is not null, shooter, null),
         };
         _npcShotLaunching = shot.Id;
@@ -258,6 +266,7 @@ public partial class TerrainViewerApp
         _npcShotLaunchesForSelfTest.Add((shot.Id, facts.Hit, shooter));
         GD.Print($"ARC-DEV-282 npc-shot-launch shot={shot.Id} entity={projectile.Entity} shooter={shooter} target={target} hit={facts.Hit} range={facts.Range} from={from.X},{from.Y}"
             + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}");
+        RecordForSelfTest(ProjectileStepsForSelfTest, projectile.StepsPerTick);
         SyncAreaProjectileBodies();
         return true;
     }
@@ -301,6 +310,9 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = aimed, Thrower = row, Shooter = weapon ? row : null, Destination = destination, Art = art,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, targetless, thrown.Range), Thrown = thrown, Targetless = targetless, SizeArc = !isWeapon,
+            // ARC-RENDER-2035 (PF4): a thrown weapon (type 5) flies at the pace of its own projectile-speed entry; any other thrown item at the default.
+            StepsPerTick = WeaponFlightSteps(!isWeapon ? null : map.TryGetRow(thrown.Item, out var paced) ? paced.Type == 5 ? paced.PrototypeNumber : null
+                : AreaMadeItems.Kind(owner, thrown.Item, thrower) is { Type: SessionItemType.Weapon } made ? made.Prototype : null),
             Launched = new(aimedId ?? thrower, false, false, weapon ? thrower : null, thrower),
         };
         // A weapon's refused launch leaves its shot to the AI host (the hit strikes at once, the item lands); a generic item's ends it (the item stays on the thrower's cell).
@@ -317,6 +329,7 @@ public partial class TerrainViewerApp
             + $" art={(art is { } a ? $"0x{a:X8}" : "none")}" + (weapon ? $" weapon check={(hit ? "hit " + aimedId : "miss")}" : ""));
         _npcThrowLaunchesForSelfTest.Add((shot.Id, thrown.Item, hit, thrower, from, destination, owner.QueryItemInFlight(thrown.Item),
             owner.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.FirstOrDefault(ground => ground.Item.Entity == thrown.Item)?.Cell));
+        RecordForSelfTest(ProjectileStepsForSelfTest, projectile.StepsPerTick);
         SyncAreaProjectileBodies();
         return true;
     }

@@ -24,4 +24,11 @@ public static class WeaponHitEffectRules
         // A number far above any prototype file (a corrupt record) names no entry rather than overflowing.
         return kind is < Begin or > Unused || basic < FirstPrototype || basic - FirstPrototype > (int.MaxValue - Unused) / PerWeapon ? null : (basic - FirstPrototype) * PerWeapon + kind;
     }
+
+    /// <summary>
+    /// ARC-RENDER-2035 (ledger RH10, PF4): the steps a flight takes in one tick, from the weapon list's projectile-speed entry (kind 2, <c>Proj Speed:</c>, <paramref name="projectileSpeed"/>, 0 for no entry or none written): the flight start
+    /// reads the entry only when the flight's weapon is a weapon object (type 5), stores its speed in the run, and the flight tick takes that many steps, 4 for 0. A negative speed takes no step in the original (none is installed);
+    /// the saved flight needs at least one step, so here it flies at the default pace.
+    /// </summary>
+    public static int StepsPerTick(int projectileSpeed) => projectileSpeed > 0 ? projectileSpeed : ProjectileRules.DefaultStepsPerTick;
 }

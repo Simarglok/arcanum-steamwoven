@@ -2548,13 +2548,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (VictimReached(result)) Struck(target);
         }
         // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
-        foreach (var shot in result.Shots)
-            if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LaunchShot?.Invoke(id, target, shot, from, to) != true)
-            {
-                LandShot(id, shot, target);
-                _session.EndShot(shot);
-            }
+        LaunchingWeapon = (id, weapon);
+        try
+        {
+            foreach (var shot in result.Shots)
+                if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LaunchShot?.Invoke(id, target, shot, from, to) != true)
+                {
+                    LandShot(id, shot, target);
+                    _session.EndShot(shot);
+                }
+        }
+        finally { LaunchingWeapon = null; }
     }
+
+    /// <summary>ARC-RENDER-2035 (PF4): while an NPC's arrows are being launched, the shooter and the prototype number of the weapon it wielded before the strike (a critical may have dropped or broken it since); the scene's launch reads it for the flight's
+    /// projectile-speed entry. Null outside a launch.</summary>
+    public (string Shooter, int? Weapon)? LaunchingWeapon { get; private set; }
 
     /// <summary>
     /// ARC-AI-1139 (0x4B3170 → 0x4ADFF0): an NPC's ranged attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, a companion with too few units of its
@@ -2666,12 +2675,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result.Resolution?.Refusal == AttackRefusal.None) WeaponAttackEffect(id, WeaponHitEffectRules.Swing, weapon, to);
         if ((result.Shots.Count == 0 || result.Life is not null) && result.Resolution?.Refusal == AttackRefusal.None) _scene.ObjectStruck?.Invoke(id, blocker, info, result);
         // The arrows leave the shooter's tile for the aimed target's; one the viewer cannot fly strikes the blocker at once.
-        foreach (var shot in result.Shots)
-            if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
-            {
-                if (LandShotOnObject(id, shot, struck, struck is null, blocker) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
-                _session.EndShot(shot);
-            }
+        LaunchingWeapon = (id, weapon);
+        try
+        {
+            foreach (var shot in result.Shots)
+                if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
+                {
+                    if (LandShotOnObject(id, shot, struck, struck is null, blocker) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                    _session.EndShot(shot);
+                }
+        }
+        finally { LaunchingWeapon = null; }
         return result;
     }
 
