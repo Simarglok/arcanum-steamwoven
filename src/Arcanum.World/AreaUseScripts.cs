@@ -1758,8 +1758,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var ran = RunDestroyPoint(obj.Code, _lastRules ?? _session.Rules.Scripts);
-            // ARC-SCRIPT-2686: only a break's gate keeps its run for the viewer's break step (a script's destroy has its own caller to show it).
-            if (forBreak) LastDestroyPointRun = ran;
+            // ARC-SCRIPT-2686: only a break's or an item's gate keeps its run for the viewer (a script's destroy has its own caller to show it); ARC-SCRIPT-2749: every run is kept in order, so two deleting steps in one pass show both.
+            if (forBreak) KeepDestroyPointRun(ran);
             // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return DestroyPointFate.Failed;
             if (DyingStops(ran)) return DestroyPointFate.Kept;
@@ -1775,8 +1775,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public bool BreakMayDestroy(SessionObjectTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        // ARC-SCRIPT-2686: a run an earlier break left untaken is not this break's.
-        LastDestroyPointRun = null;
         if (target.Map.RuntimeMap != _shownMap) return true;
         var obj = new ScrObjectRef(_shownMap, target.Entity);
         // The row's own entity id is the code the scripts and the guard use (the viewer names a container by its inventory holder id).
@@ -1795,23 +1793,44 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public bool ItemMayDestroy(string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        LastDestroyPointRun = null;
         var obj = new ScrObjectRef(_shownMap, entity);
-        if (_content is null || Row(obj) is not { Type: >= FirstItemType and <= LastItemType } row) return true;
+        if (_content is null) return true;
+        // ARC-SCRIPT-2749: an item carried here from another map has no row of the shown map: its row is read by identity from its origin map (as an item's use script reads it), and stands as the row of the run for the gate's length.
+        var carried = Row(obj) is null ? CarriedItemRow(obj) : null;
+        var row = carried ?? Row(obj);
+        if (row is not { Type: >= FirstItemType and <= LastItemType }) return true;
         obj = new ScrObjectRef(_shownMap, EntityId(row));
         if (_destroyingScenery.Contains(obj.Code)) return true;
-        return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed;
+        var previous = _clicked;
+        if (carried is not null) _clicked = (obj.Code, carried);
+        try { return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed; }
+        finally { _clicked = previous; }
     }
 
-    /// <summary>ARC-SCRIPT-2644: the run of the destroy point a break's gate made last (its award, message and float queues belong to the viewer's break step); taken once, null when none ran since.</summary>
-    public AreaScriptedUse? TakeBreakDestroyRun()
+    /// <summary>ARC-SCRIPT-2644: the oldest run of the destroy point a gate made and nobody took yet (its award, message and float queues belong to the viewer); null when none is waiting. <see cref="TakeDestroyPointRuns"/> takes them all.</summary>
+    public AreaScriptedUse? TakeBreakDestroyRun() => _destroyPointRuns.Count > 0 ? _destroyPointRuns.Dequeue() : null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2749 (ledger BS3g): every destroy-point run the gates made since the last take, oldest first (two deleting steps of one pass, such as an armour and a weapon wearing out under one attack, each keep their own run); the viewer shows their lines and awards.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> TakeDestroyPointRuns()
     {
-        var ran = LastDestroyPointRun;
-        LastDestroyPointRun = null;
-        return ran;
+        if (_destroyPointRuns.Count == 0) return [];
+        var runs = _destroyPointRuns.ToArray();
+        _destroyPointRuns.Clear();
+        return runs;
     }
 
-    private AreaScriptedUse? LastDestroyPointRun { get; set; }
+    private readonly Queue<AreaScriptedUse> _destroyPointRuns = new();
+
+    // A host nobody drains (a test, a map with no viewer) keeps a bounded tail: the oldest run goes first.
+    private const int MaxPendingDestroyRuns = 64;
+
+    private void KeepDestroyPointRun(AreaScriptedUse ran)
+    {
+        while (_destroyPointRuns.Count >= MaxPendingDestroyRuns) _destroyPointRuns.Dequeue();
+        _destroyPointRuns.Enqueue(ran);
+    }
 
 
     // ARC-SCRIPT-2501: a scenery of the shown map.

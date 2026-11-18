@@ -146,7 +146,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// <see cref="DamageItem(GameSessionVersion, string, ItemCondition, int)"/> as a hit on an item that the host follows with the break's steps (the hero's attack on an item, damage with no attacker):
     /// with <paramref name="destroyPoint"/> a deleting break first asks the attached item destroy gate (<see cref="AttachItemDestroyGate"/>), as the original's break does through the object destroy (ARC-SCRIPT-2722, ledger BS3g).
-    /// The wear paths leave it out: nothing there shows a destroy point's lines.
+    /// ARC-SCRIPT-2749: the wear paths (<see cref="ApplyAttackWear"/>, <see cref="ApplyArmorWear"/>) ask it too; the plain public overloads (scripts, tests, other callers) do not.
     /// </summary>
     internal ItemDurabilityResult DamageItem(GameSessionVersion expected, string entity, ItemCondition baseline, int amount, bool destroyPoint)
     {
@@ -165,10 +165,14 @@ public sealed partial class GameSessionOwner
 
     /// <summary>Deletes an item the session tracks at once, without a break (the "destroy weapon" critical, combat core C21).
     /// Refusals as <see cref="DamageItem"/>. One revision.</summary>
-    public ItemDurabilityResult DestroyItem(GameSessionVersion expected, string entity, ItemCondition baseline)
+    public ItemDurabilityResult DestroyItem(GameSessionVersion expected, string entity, ItemCondition baseline) =>
+        DestroyItem(expected, entity, baseline, destroyPoint: false);
+
+    /// <summary>ARC-SCRIPT-2749: <see cref="DestroyItem(GameSessionVersion, string, ItemCondition)"/> as the critical's object destroy, which runs the item's destroy point (2) first when <paramref name="destroyPoint"/> asks the attached gate.</summary>
+    internal ItemDurabilityResult DestroyItem(GameSessionVersion expected, string entity, ItemCondition baseline, bool destroyPoint)
     {
         ThrowIfDisposed();
-        return DurabilityWrite(expected, entity, baseline, current => new(current, ItemBreakStep.Deleted));
+        return DurabilityWrite(expected, entity, baseline, current => new(current, ItemBreakStep.Deleted), destroyPoint);
     }
 
     /// <summary>

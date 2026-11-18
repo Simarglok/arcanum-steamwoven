@@ -160,6 +160,52 @@ public sealed class AttackWearStateTests
         Assert.AreEqual(GameSessionFailure.InvalidWear, Apply(owner, Wear(destroy: true)).Failure, "a deleted weapon is no longer wielded");
     }
 
+    // ARC-SCRIPT-2749 (ledger BS3g): a wear that deletes an item calls the object destroy (0x43CCA0), which runs the item's destroy point (2) first; an answer 0 keeps the item and the step says so.
+    [TestMethod]
+    public void AnArmourWornOutAsksTheItemDestroyGateAndAnAnswerOfNoKeepsIt()
+    {
+        using var owner = Owner();
+        var asked = new List<string>();
+        var answer = false;
+        owner.AttachItemDestroyGate(entity => { asked.Add(entity); return answer; });
+        var wear = Wear(slot: EquipmentSlot.Armor, armor: CombatWearRules.ArmorWear);
+        Assert.AreEqual(ItemBreakStep.None, Single(Apply(owner, wear)).Item!.Value.Break);
+        Assert.AreEqual(ItemBreakStep.Broken, Single(Apply(owner, wear)).Item!.Value.Break);
+        Assert.AreEqual(ItemBreakStep.None, Single(Apply(owner, wear)).Item!.Value.Break);
+        Assert.AreEqual(0, asked.Count, "wear that deletes nothing asks nothing");
+        var kept = Single(Apply(owner, wear));
+        Assert.AreEqual((ItemBreakStep.Deleted, true, SessionWearSkip.DestroyKept), (kept.Item!.Value.Break, kept.Item.Value.DestroyKept, kept.Skip));
+        Assert.IsFalse(owner.IsItemDestroyed("golem-vest"));
+        CollectionAssert.AreEqual(new[] { "golem-vest" }, asked);
+        answer = true;
+        var gone = Single(Apply(owner, wear));
+        Assert.AreEqual((ItemBreakStep.Deleted, false, SessionWearSkip.None), (gone.Item!.Value.Break, gone.Item.Value.DestroyKept, gone.Skip));
+        Assert.IsTrue(owner.IsItemDestroyed("golem-vest"));
+        CollectionAssert.AreEqual(new[] { "golem-vest", "golem-vest" }, asked);
+    }
+
+    [TestMethod]
+    public void TheCriticalDestroyWeaponAndAnAttackerlessArmourWearAskTheGateToo()
+    {
+        using var owner = Owner();
+        var asked = new List<string>();
+        owner.AttachItemDestroyGate(entity => { asked.Add(entity); return false; });
+        var kept = Single(Apply(owner, Wear(destroy: true)));
+        Assert.AreEqual((SessionWearStepKind.WeaponDestroy, SessionWearSkip.DestroyKept, ItemBreakStep.Deleted), (kept.Kind, kept.Skip, kept.Item!.Value.Break));
+        Assert.IsFalse(owner.IsItemDestroyed("golem-sword"), "a destroy point that answers 0 leaves the weapon in the hand");
+        Assert.AreEqual(Fifteen, owner.QueryItemCondition("golem-sword", Fifteen), "a destroy with no break writes no damage");
+
+        // The armour of an attackerless wear (fire) breaks once, wears healthy again, then deletes: only the deleting one asks.
+        Assert.AreEqual(ItemBreakStep.None, owner.ApplyArmorWear(owner.Version, GolemSide()).Steps[0].Item!.Value.Break);
+        Assert.AreEqual(ItemBreakStep.Broken, owner.ApplyArmorWear(owner.Version, GolemSide()).Steps[0].Item!.Value.Break);
+        Assert.AreEqual(ItemBreakStep.None, owner.ApplyArmorWear(owner.Version, GolemSide()).Steps[0].Item!.Value.Break);
+        Assert.AreEqual(1, asked.Count, "the wears that delete nothing asked nothing");
+        owner.AttachItemDestroyGate(entity => { asked.Add(entity); return true; });
+        Assert.AreEqual(ItemBreakStep.Deleted, owner.ApplyArmorWear(owner.Version, GolemSide()).Steps[0].Item!.Value.Break);
+        Assert.IsTrue(owner.IsItemDestroyed("golem-vest"));
+        CollectionAssert.AreEqual(new[] { "golem-sword", "golem-vest" }, asked);
+    }
+
     [TestMethod]
     public void ACriticalSelfHitWearsTheAttackersOwnArmourAndWeapon()
     {
