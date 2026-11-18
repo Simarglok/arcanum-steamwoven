@@ -551,7 +551,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             var piece = pieces[i];
             // ARC-UI-2643: the wood takes the tone of the window art it continues (the bottom strip's where that art is not read).
             var tone = ToneOfArt(SteamwovenBackdrops.ToneArt(_backdropFamily!.Value, i));
-            if (tone.Legacy is null) tone = (bottomRecipe, bottomLegacy, bottomW, bottomH);
+            if (tone.Legacy is null || tone.Recipe is null) tone = (bottomRecipe, bottomLegacy, bottomW, bottomH);
             _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, tone.Recipe, tone.Legacy, tone.Width, tone.Height));
             _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
         }
