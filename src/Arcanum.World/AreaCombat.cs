@@ -457,25 +457,13 @@ public sealed class AreaCombatHost : IAreaEventObjects
     }
 
     // Whether the item has a source of fields (a row, which may not read, or a loaded prototype) and its fields.
-    private bool ItemSource(AreaInventoryMap map, SessionInventoryItem item, out CombatFields? fields) => ItemSource(map, item.Entity, item.Facts.Kind.Prototype, out fields);
-
-    private bool ItemSource(AreaInventoryMap map, string entity, int prototype, out CombatFields? fields)
+    private bool ItemSource(AreaInventoryMap map, SessionInventoryItem item, out CombatFields? fields)
     {
-        if (RowFields(map, entity, out fields)) return true;
+        if (RowFields(map, item.Entity, out fields)) return true;
         foreach (var other in _resolver.Maps)
-            if (!ReferenceEquals(other, map) && RowFields(other, entity, out fields)) return true;
-        fields = _prototypes?.Invoke(prototype);
+            if (!ReferenceEquals(other, map) && RowFields(other, item.Entity, out fields)) return true;
+        fields = _prototypes?.Invoke(item.Facts.Kind.Prototype);
         return fields is not null;
-    }
-
-    /// <summary>
-    /// ARC-AI-2663: the fields of an item the PC took from the world (or made) and holds now, read as <see cref="ItemFields"/> reads an item (its object row on this or another covered map, else its prototype's stored fields),
-    /// or null for a destroyed item, a map this host does not cover, or an item without fields. The hero's starting-kit items are not here: their condition is the hero load's, which the session does not keep.
-    /// </summary>
-    public CombatFields? PcItemFields(GameSessionOwner session, int runtimeMap, SessionPcItem item)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        return Held(runtimeMap, out var map) && !session.IsItemDestroyed(item.Entity) && ItemSource(map, item.Entity, item.Kind.Prototype, out var fields) ? fields : null;
     }
 
     /// <summary>ARC-DEV-1762 (smoke only): lends the item the given combat fields in place of its object row's (a null <paramref name="fields"/> gives the row's own back), so a smoke can make a seed

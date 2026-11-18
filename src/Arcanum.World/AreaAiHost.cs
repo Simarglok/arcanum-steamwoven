@@ -103,6 +103,9 @@ public sealed record AreaAiScene
     public Func<IAreaRestockScreen?>? Screen { get; init; }
     /// <summary>The hero's worn items with their durability values, or null.</summary>
     public Func<IReadOnlyDictionary<EquipmentSlot, SessionWearItem>?>? HeroWorn { get; init; }
+    /// <summary>ARC-AI-2673 (ledger DSV5): the condition baseline (hp_pts, hp_adj, hp_damage, destroyed bits) of an item the PC holds: a kit item's comes from the hero load (the viewer's kit durability), a taken or made item's from its own fields
+    /// (<see cref="AreaInventoryHost.RepairBaseline"/>); null for an item the PC does not hold. An NPC's repair of such an item reads it. Null provider: the PC's items are not repairable by an NPC.</summary>
+    public Func<string, ItemCondition?>? HeroItemCondition { get; init; }
     /// <summary>The NPC the hero talks with, or null.</summary>
     public Func<string?>? ConversationPartner { get; init; }
     /// <summary>ARC-DEV-177 (MIG13 S11e): the dialog-end callback the AI gate calls (0x5678D0 through 0x5F848C): the viewer ends the PC's conversation with this NPC at its next safe point (in the viewer a barter has already closed the dialog, so nothing is open to end).</summary>
@@ -3247,10 +3250,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-AI-2622 (0x4C7160, repair case 12): the NPC repairs the item the goal names with the session's <see cref="GameSessionOwner.RepairByNpc"/>, on the item's own fields: an item it holds or one lying loose on the shown map
-    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>), in a junk pile, held by another NPC or by the PC (ARC-AI-2663, <see cref="RepairBaseline"/>). The answer is the case's success, which sets the run's flag 0x40000.
+    /// (<see cref="AreaCombat.HeldItemFields"/>, <see cref="AreaCombat.GroundItemFields"/>), in a junk pile or held by another NPC (ARC-AI-2663, <see cref="RepairBaseline"/>). The answer is the case's success, which sets the run's flag 0x40000.
     /// The original's repair has no target test, so a critter or a scenery target would be "healed"; here a target that is no item the host can read is refused (the answer is false, nothing changes). The roll modifier 0x4C8430 of the case is
     /// the shared check's (<see cref="Arcanum.Simulation.Skills.SkillCheckRules"/>: Repair's table 0x980, blinded +30, both arms +50 or one +20, nothing else; it only picks which critical test runs). NOT READY: the swap of a ground item's drawn
-    /// art after a master's broken-art clear (the viewer draws no broken art of an item), the hero's starting-kit items, and the repair UI callbacks of the local player.
+    /// art after a master's broken-art clear (the viewer draws no broken art of an item) and the repair UI callbacks of the local player. The items the PC holds (kit, taken, made) are repaired through <see cref="AreaAiScene.HeroItemCondition"/> (ARC-AI-2673).
     /// </summary>
     private bool RepairAttempt(string id, string target)
     {
@@ -3265,9 +3268,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
 
-    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds, one lying loose on the shown map, one in a junk pile (the session's own or the map's data),
-    // one another NPC of any covered map holds, or one the PC took or made and holds (ARC-AI-2663; the original's repair case works on the target handle's own fields and asks nothing of its holder, 0x4C7160); null for any other target,
-    // a destroyed item, a critter and a hero starting-kit item (its condition is the hero load's, which the session does not keep).
+    // The condition baseline of the item a repair names: its fields' hp_pts, hp_adj, hp_damage and destroyed bits, for an item the NPC holds, one lying loose on the shown map, one in a junk pile (the session's own or the map's data) or one another
+    // NPC of any covered map holds (ARC-AI-2663; the original's repair case works on the target handle's own fields and asks nothing of its holder, 0x4C7160), or (ARC-AI-2673) one the PC holds, whose baseline the viewer supplies (a kit item's
+    // lives in the hero load, not in the session); null for any other target, a destroyed item and a critter.
     private ItemCondition? RepairBaseline(string id, string target)
     {
         if (_session.IsItemDestroyed(target)) return null;
@@ -3279,8 +3282,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         }
         if (fields is null && MapPileOf(target) is not null && MapPileHolder(target) is { } listed) fields = _scene.Combat.GroundItemFields(_scene.RuntimeMap, listed);
         fields ??= _scene.Combat.NpcItemFields(_session, target);
-        if (fields is null && _session.QueryPcInventory().FirstOrDefault(item => item.Entity == target) is { Entity: not null } pc) fields = _scene.Combat.PcItemFields(_session, _scene.RuntimeMap, pc);
-        return fields is null ? null : SessionItemConditions.FromCombatFields(fields);
+        return fields is null ? _scene.HeroItemCondition?.Invoke(target) : SessionItemConditions.FromCombatFields(fields);
     }
 
     // The item as the standing junk pile of the map's data that lists it now holds it (its list as the session shows it), or null.
