@@ -235,7 +235,7 @@ public sealed partial class GameSessionOwner
         DamageRecipient side = DamageRecipient.Target)
     {
         var gone = criticals.Where(step => step.Whose == side && step.Outcome == SessionCriticalStepOutcome.Dropped).Select(step => step.Entity)
-            .Concat(wear?.Steps.Where(step => step.Wearer == side && (step.Item is { Break: not ItemBreakStep.None }
+            .Concat(wear?.Steps.Where(step => step.Wearer == side && step.Skip != SessionWearSkip.DestroyKept && (step.Item is { Break: not ItemBreakStep.None }
                 || step is { Kind: SessionWearStepKind.WeaponDestroy, Skip: SessionWearSkip.None })).Select(step => step.Entity) ?? [])
             .ToHashSet();
         return [.. worn.Where(item => !gone.Contains(item))];

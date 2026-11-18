@@ -318,7 +318,9 @@ public partial class AreaConversationPanel : CanvasLayer
         // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2); ARC-UI-050:
         // b: for the barter window (BT7); ARC-UI-088: c-e for the NPC's sheet (WN2).
         // ARC-UI-2028: a reply that leads to the NPC's last line closes the window in the same call; the host floats the line (ledger DF1).
-        if (IsWindowEnd(conversation.End?.Kind) || AreaConversationText.EndsWithNpcLine(conversation)) CloseRequested?.Invoke();
+        // ARC-SCRIPT-2761 (reply handler 0x567E30): a reply whose response ends the conversation (0, or -N back to the script) closes the dialog (0x5678D0) in the same call and the script resumes at once; the original
+        // has no window with a single Close left for the player to click, so the next speaker's line (a resumed script's own conversation) follows the player's line. The diagnostic chrome keeps the finished dialog's ledger and its Close.
+        if (IsWindowEnd(conversation.End?.Kind) || AreaConversationText.EndsWithNpcLine(conversation) || (_chromeHidden && result.Status == DialogConversationSelectStatus.Ended)) CloseRequested?.Invoke();
     }
 
     /// <summary>Diagnostic leave: closes an awaiting dialog without a reply effect, or dismisses a finished one.</summary>

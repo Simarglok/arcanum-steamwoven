@@ -748,7 +748,7 @@ public sealed class AreaObjectBreakHostTests
                 CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, text) }, ran.Printed.ToArray());
                 Assert.IsNull(host.TakeBreakDestroyRun(), "taken once");
             });
-        // A run an earlier break left untaken is not a later break's: a break of an object with no point finds none.
+        // A run an earlier break left untaken stays for the viewer (ARC-SCRIPT-2749); a break of an object with no point adds none.
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();
@@ -758,7 +758,9 @@ public sealed class AreaObjectBreakHostTests
             session.AttachObjectDestroyGate(host.BreakMayDestroy);
             session.DamageObject(session.Version, BreakTarget(statue, kind), 10);
             session.DamageObject(session.Version, BreakTarget(plain, kind), 10);
-            Assert.IsNull(host.TakeBreakDestroyRun(), "the second break had no point and the first run is gone");
+            // ARC-SCRIPT-2749: an untaken run stays for the viewer (a later break does not drop it), and the second break, with no point, adds none.
+            Assert.IsNotNull(host.TakeBreakDestroyRun(), "the first run is still waiting");
+            Assert.IsNull(host.TakeBreakDestroyRun(), "the second break had no point");
         });
     }
 
@@ -802,6 +804,49 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsTrue(host.ItemMayDestroy(AreaUseScriptHost.EntityId(plain)), "no point, no run");
             Assert.IsNull(host.TakeBreakDestroyRun());
             Assert.IsTrue(host.ItemMayDestroy("not-a-row"), "an item the host holds no row for goes");
+        });
+    }
+
+    // ARC-SCRIPT-2749 (ledger BS3g): two deleting steps of one pass keep their own runs, oldest first, for the viewer.
+    [TestMethod]
+    public void Two_destroy_point_runs_of_one_pass_are_kept_in_order()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var first = Row(1, 7, 0, 0, destroy: 834);
+            var second = Row(2, 5, 0, 0, destroy: 843);
+            var (host, _) = Hosts(session, content, new Probe(), true, first, second);
+            Assert.IsTrue(host.ItemMayDestroy(AreaUseScriptHost.EntityId(first)));
+            Assert.IsFalse(host.ItemMayDestroy(AreaUseScriptHost.EntityId(second)));
+            var runs = host.TakeDestroyPointRuns();
+            Assert.AreEqual(2, runs.Count);
+            Assert.AreEqual(0, runs[0].Printed.Count);
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "It holds.") }, runs[1].Printed.ToArray());
+            Assert.AreEqual(0, host.TakeDestroyPointRuns().Count, "taken once");
+        });
+    }
+
+    // ARC-SCRIPT-2749 (ledger BS3g): an item the hero carried here from another map has no row of the shown map; its destroy point runs through the row of its origin map.
+    [TestMethod]
+    public void An_item_carried_here_from_another_map_runs_its_destroy_point_through_the_row_of_its_origin_map()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(runtimeMap: 2);
+            var row = Row(1, 14, 0, 0, destroy: 835);
+            var entity = AreaUseScriptHost.EntityId(row);
+            var kind = new SessionItemKind(SessionItemType.Generic, 2120, 1, 2);
+            var seed = new SessionMapInventorySeed([], [new SessionSeedItem(entity, new(kind, 1, 0, 0, null, []), new(10, 10))]);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.AttachMapInventory(new(2), seed).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition);
+            var (host, _) = Hosts(session, content, new Probe(), true);
+            Assert.IsTrue(host.ItemMayDestroy(entity), "without the origin row the host knows no point");
+            Assert.IsFalse(host.GlobalFlag(2304));
+            host.OtherMapRow = obj => obj.Map == 2 && obj.Code == entity ? row : null;
+            Assert.IsFalse(host.ItemMayDestroy(entity), "the origin row's skip default keeps the carried item");
+            Assert.IsTrue(host.GlobalFlag(2304));
+            Assert.IsNotNull(host.TakeBreakDestroyRun());
         });
     }
 
