@@ -452,8 +452,9 @@ public sealed class AreaAiFollowerTests
             new SessionEffectDefinition(152, [Change(AreaCompanionData.AlignmentStat, EffectChangeOperator.Add, 100), Change(AreaCompanionData.LevelStat, EffectChangeOperator.Add, 3)]), EffectCause.Spell).Failure);
         var after = host.Find(companion) ?? throw new AssertFailedException("no facts");
         Assert.AreEqual((140, before.Level + 3), (after.Alignment, after.Level), "base plus the effect");
-        Assert.AreEqual(session.QueryHero()?.Alignment ?? 0, host.Find(Pc)?.Alignment, "the hero's stored alignment, not 0");
-        Assert.AreEqual(host.AlignmentOf(enemy), host.Find(enemy)?.Alignment);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ChangeHeroAlignment(session.Version, 250).Disposition);
+        Assert.AreEqual((250, 250), (session.QueryHero()?.Alignment, host.Find(Pc)?.Alignment), "the hero's stored alignment, not 0");
+        Assert.AreEqual((0, 0), (host.AlignmentOf(enemy), host.Find(enemy)?.Alignment), "an NPC with no effect keeps its stored alignment");
     }
 
     // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any

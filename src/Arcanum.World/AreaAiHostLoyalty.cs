@@ -72,38 +72,44 @@ public sealed partial class AreaAiHost
     /// <see cref="AreaCombatHost.Fields(string)"/>), then every change of stat 19 in the effect list the session holds for it (or the loaded one), as the getter aggregates them (0x4EA6C0), clamped to the
     /// stat's range. Null when the NPC's fields do not read here.
     /// </summary>
-    internal int? AlignmentOf(string npc)
+    internal int? AlignmentOf(string npc) => AlignmentOf(npc, EffectsOf(npc));
+
+    // The same with the NPC's effect list already read (a caller that reads level and alignment together reads the list once).
+    internal int? AlignmentOf(string npc, SessionNpcEffectsView? effects)
     {
         if (Fields(npc)?.Critter is not { } critter) return null;
         var stored = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0;
-        return Math.Clamp(EffectModifiers.Apply(stored, EffectChangesOf(npc, AreaCompanionData.AlignmentStat)), AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
+        return Math.Clamp(EffectModifiers.Apply(stored, EffectChangesOf(effects, AreaCompanionData.AlignmentStat)), AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
     }
 
     /// <summary>
     /// ARC-AI-2155 (0x4B0490 for stat 0x11, read in the executable): the NPC's level as every hostility, flee and follow reader gets it, through the stat getter: the level the session's advancement record
-    /// holds when it levelled the NPC, else the stored one (<see cref="SessionCritterCombat.Level"/>, the value a TraitIdx spell wrote lies over it), then every change of stat 17 in the effect list the
-    /// session holds for it (or the loaded one), clamped to the level range. Null when the NPC's build does not read here.
+    /// holds when it levelled the NPC, else the stored one (<see cref="SessionCritterCombat.Level"/>; the value a TraitIdx spell wrote lies over the stored one of an NPC the session has not levelled), then every change of
+    /// stat 17 in the effect list the session holds for it (or the loaded one), clamped to the level range. Null when the NPC's build does not read here.
     /// </summary>
-    internal int? LevelOf(string npc)
+    internal int? LevelOf(string npc) => LevelOf(npc, EffectsOf(npc));
+
+    internal int? LevelOf(string npc, SessionNpcEffectsView? effects)
     {
         if (RawBuild(npc) is not { } build) return null;
-        return Math.Clamp(EffectModifiers.Apply(AreaAdvancement.Level(_session, npc, build.Level), EffectChangesOf(npc, AreaCompanionData.LevelStat)), AreaCompanionData.MinLevel, AreaCompanionData.MaxLevel);
+        return Math.Clamp(EffectModifiers.Apply(AreaAdvancement.Level(_session, npc, build.Level), EffectChangesOf(effects, AreaCompanionData.LevelStat)), AreaCompanionData.MinLevel, AreaCompanionData.MaxLevel);
     }
 
-    // The changes of one stat over the NPC's effect list in list order (the session's list when it holds one, else the loaded one); an entry without a rule changes nothing.
-    private List<EffectModifier> EffectChangesOf(string npc, int stat)
+    // The NPC's effect list as the session holds it (else the loaded one); null for an NPC whose build does not read here.
+    internal SessionNpcEffectsView? EffectsOf(string npc) => RawBuild(npc) is { } build ? _session.QueryNpcEffects(build.Target) : null;
+
+    // The changes of one stat over an effect list in list order; an entry without a rule changes nothing.
+    private static List<EffectModifier> EffectChangesOf(SessionNpcEffectsView? view, int stat)
     {
         var changes = new List<EffectModifier>();
-        if (RawBuild(npc) is { } build && _session.QueryNpcEffects(build.Target) is { } view)
+        if (view is null || view.Entries.Count == 0) return changes;
+        var rules = view.Definitions.ToDictionary(definition => definition.Number);
+        foreach (var entry in view.Entries)
         {
-            var rules = view.Definitions.ToDictionary(definition => definition.Number);
-            foreach (var entry in view.Entries)
-            {
-                if (!rules.TryGetValue(entry.Number, out var rule)) continue;
-                foreach (var change in rule.Changes)
-                    if (change.Kind == EffectAttributeKind.Stat && change.Attribute == stat)
-                        changes.Add(new(AreaCompanionData.Operator(change.Operator), change.Value));
-            }
+            if (!rules.TryGetValue(entry.Number, out var rule)) continue;
+            foreach (var change in rule.Changes)
+                if (change.Kind == EffectAttributeKind.Stat && change.Attribute == stat)
+                    changes.Add(new(AreaCompanionData.Operator(change.Operator), change.Value));
         }
         return changes;
     }

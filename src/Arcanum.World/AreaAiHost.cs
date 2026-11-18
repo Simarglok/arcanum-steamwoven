@@ -4113,6 +4113,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var leader = Leader(id);
         var pcLeader = PcLeader(id);
         var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
+        var effects = EffectsOf(id);
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
@@ -4132,7 +4133,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             // ARC-AI-2155: every hostility, flee and party reader takes the level (stat 17) and alignment (stat 19) through the stat getter 0x4B0490, the effect list's changes included.
-            Level = LevelOf(id) ?? build.Level, Alignment = AlignmentOf(id) ?? 0,
+            Level = LevelOf(id, effects) ?? build.Level, Alignment = AlignmentOf(id, effects) ?? 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = pcLeader,
             // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
             Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
