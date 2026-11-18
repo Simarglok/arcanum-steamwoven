@@ -161,7 +161,9 @@ def start(extra: Sequence[str] = ()) -> int:
     if target is None:
         print(f"menubar: {why}", file=sys.stderr)
         return 1
-    os.execv(target, [str(target), *extra])
+    from . import run_queue  # not at the top: run_queue imports this module
+    roots = [item for root in run_queue.game_roots() for item in ("--game-root", root)]  # ARC-DEV-2291: the automatic playing mode
+    os.execv(target, [str(target), *roots, *extra])
     return 1  # unreachable
 
 

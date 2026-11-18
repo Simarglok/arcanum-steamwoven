@@ -143,6 +143,38 @@ struct QueueFolder {
         return ((json["since"] as? NSNumber)?.doubleValue ?? 0, until)
     }
 
+    /// ARC-DEV-2291: the automatic mode: the start time of the oldest process whose program is under one of `gameRoots` (the
+    /// packaged game; the roots come from run_queue.game_roots() as `--game-root`, none when the automatic mode is off), read
+    /// through libproc like the queue does, no process spawned. nil when no such process runs.
+    func gameStart() -> Double? {
+        if gameRoots.isEmpty { return nil }
+        let wanted = gameRoots.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+        let bytes = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
+        if bytes <= 0 { return nil }
+        var pids = [Int32](repeating: 0, count: Int(bytes) / MemoryLayout<Int32>.size + 64)
+        let got = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, Int32(pids.count * MemoryLayout<Int32>.size))
+        if got <= 0 { return nil }
+        var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        var oldest: Double? = nil
+        for pid in pids.prefix(Int(got) / MemoryLayout<Int32>.size) where pid > 0 {
+            if proc_pidpath(pid, &path, UInt32(path.count)) <= 0 { continue }
+            let program = String(cString: path)
+            if !wanted.contains(where: { program.hasPrefix($0) }) { continue }
+            var info = proc_bsdinfo()
+            let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+            let started = size == Int32(MemoryLayout<proc_bsdinfo>.size) ? Double(info.pbi_start_tvsec) : Date().timeIntervalSince1970
+            oldest = min(oldest ?? started, started)
+        }
+        return oldest
+    }
+
+    /// The mode as the queue sees it: the manual switch, else the running packaged game (`auto`).
+    func playingOrGame() -> (since: Double, until: Double?, auto: Bool)? {
+        if let manual = playing() { return (manual.since, manual.until, false) }
+        if let started = gameStart() { return (started, nil, true) }
+        return nil
+    }
+
     /// Turn the mode on (`minutes` 0: no limit) or off, the way `./arcanum queue --playing / --not-playing` does.
     @discardableResult
     func setPlaying(_ on: Bool, minutes: Double = 240) -> Bool {
@@ -435,6 +467,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func togglePlaying() {  // ARC-DEV-2272: no window run starts while the owner plays; ends by itself after 4 h
+        if queue.playing() == nil && queue.gameStart() != nil { return }  // ARC-DEV-2291: the game holds the mode; quit it (a click would only add a 4 h switch)
         queue.setPlaying(queue.playing() == nil)
         refresh(force: true)
     }
@@ -540,7 +573,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func refresh(force: Bool = false) {
         let jobs = queue.jobs()
         let paused = queue.isPaused
-        let playing = queue.playing()
+        let playing = queue.playingOrGame()
         let lanes = queue.shortLanes
         let guardLimit = queue.maxLoad
         let now = Date().timeIntervalSince1970
@@ -554,7 +587,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let button = item.button {
             button.image = symbol(paused ? "pause.circle.fill" : (playing != nil ? "gamecontroller.fill" : (jobs.isEmpty ? "tray" : "tray.full.fill")))
             button.title = jobs.isEmpty ? "" : " \(running.count)·\(waiting.count)"
-            button.toolTip = "Arcanum launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? ", PAUSED" : "") + (playing != nil ? ", owner playing (no window run starts)" : "")
+            button.toolTip = "Arcanum launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? ", PAUSED" : "") + (playing != nil ? ", owner playing" + (playing?.auto == true ? " (game running)" : "") + " (no window run starts)" : "")
         }
 
         if !menuIsOpen && !force {  // a closed menu is built when it is opened (menuNeedsUpdate), not every second
@@ -581,7 +614,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pause.target = self
         pause.state = paused ? .on : .off
         menu.addItem(pause)
-        let play = NSMenuItem(title: "Owner is playing (no window run starts)", action: #selector(togglePlaying), keyEquivalent: "g")
+        let play = NSMenuItem(title: playing?.auto == true ? "Owner is playing: game running (no window run starts)" : "Owner is playing (no window run starts)", action: #selector(togglePlaying), keyEquivalent: "g")
         play.target = self
         play.state = playing != nil ? .on : .off
         menu.addItem(play)
@@ -591,7 +624,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         quit.target = self
         menu.addItem(quit)
         menu.addItem(.separator())
-        menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "") + (playing != nil ? "  —  OWNER PLAYING" : "")))
+        menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "") + (playing != nil ? (playing?.auto == true ? "  —  OWNER PLAYING (game running)" : "  —  OWNER PLAYING") : "")))
         let machine = header(machineLine())
         machineItem = machine
         menu.addItem(machine)
@@ -630,6 +663,7 @@ func defaultQueueURL() -> URL {
 
 var queueURL = defaultQueueURL()
 var lockURL: URL? = nil
+var gameRoots: [String] = []  // ARC-DEV-2291: folders whose programs are the packaged game (the automatic playing mode)
 var idleMinutes = 15.0
 var openMenu = false
 var arguments = Array(CommandLine.arguments.dropFirst())
@@ -640,6 +674,7 @@ while let flag = arguments.first {
     case "--lock": if let value = arguments.first { lockURL = URL(fileURLWithPath: value); arguments.removeFirst() }
     case "--idle-minutes": if let value = arguments.first, let minutes = Double(value) { idleMinutes = minutes; arguments.removeFirst() }
     case "--open-menu": openMenu = true
+    case "--game-root": if let value = arguments.first { gameRoots.append(value); arguments.removeFirst() }
     case "--set-lanes", "--set-max-load":  // the same writes as the menu's submenus, for the self-check: N|default, X|off
         let value = arguments.isEmpty ? "" : arguments.removeFirst()
         if flag == "--set-lanes" {
@@ -658,10 +693,13 @@ while let flag = arguments.first {
         exit(0)
     case "--set-pause", "--clear-pause":  // what the menu's Pause item does, for scripts and the self-check: act and exit
         exit(QueueFolder(url: queueURL).setPaused(flag == "--set-pause") ? 0 : 1)
+    case "--game-status":  // the automatic playing mode's check for the self-check: "game since <epoch seconds>" or "no game" (needs --game-root first)
+        if let since = QueueFolder(url: queueURL).gameStart() { print("game since \(Int(since))") } else { print("no game") }
+        exit(0)
     case "--set-playing", "--clear-playing":  // what the menu's playing item does (4 h limit), for scripts and the self-check
         exit(QueueFolder(url: queueURL).setPlaying(flag == "--set-playing") ? 0 : 1)
     default:
-        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause] [--set-playing|--clear-playing] [--set-lanes N|default] [--set-max-load X|off]\n".data(using: .utf8)!)
+        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--game-root DIR]... [--game-status] [--set-pause|--clear-pause] [--set-playing|--clear-playing] [--set-lanes N|default] [--set-max-load X|off]\n".data(using: .utf8)!)
         exit(2)
     }
 }
