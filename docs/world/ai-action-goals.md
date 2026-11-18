@@ -42,6 +42,7 @@ approach may end beside an occupied tile") is passed to the planners; running is
 | `StartUseItem` | 0x435450 | 4 | 39 (target, item) | No target or item; 0x4000; running. |
 | `StartUseSkill` | 0x4350F0 | 4 | 33 (target, item, skill) | Skill 14 → `StartPickLocks`; no target (inference: the original asserts); 0x4000; running. |
 | `StartPickLocks` | 0x436220 | 4 | 33 (skill 14) | No art for the skill animation 12 (`HasSkillArt`); 0x4000; no running. The animation's loop count is the world's. |
+| `StartUseItemWithSkill` | 0x4352C0 | 4 | 40 (target, item or none, skill) | No target (the item may be none); 0x4000; running. ARC-COMBAT-1878: only the pick-locks skill's attempt node is built (the follower lock pick's goal; no animation, no timer). |
 | `StartThrow` | 0x434F80 | 0 | 37 (item, tile) | No item or tile (after the gate); an equal throw (same item and tile) already in the run; a failed interrupt (priority 3); no flags. |
 | `StartPickup` | 0x4356C0 | 4 | 15 (the item) | No item; an NPC while the item system's pickup switch (`NpcPickupsOn`, global 0x5E8800) is off; 0x4000. |
 

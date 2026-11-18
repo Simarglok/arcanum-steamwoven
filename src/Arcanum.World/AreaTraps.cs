@@ -379,8 +379,8 @@ public sealed class AreaTraps
     /// <summary>
     /// ARC-COMBAT-1777 (ledger SP3, TT5, OH4): the disarm traps press of the hero handed to the follower <paramref name="user"/> by the best-follower chooser (0x57A620 → 0x4C9050): the session's <see cref="GameSessionOwner.RollNpcDisarmTrap"/> with the trap
     /// object's difficulty and the light at the row (the follower's own level, no local-PC term, no fate; the PC's press paid its action points, so the roll charges none); a sprung native trap's effect with the follower as the triggerer, an ordinary trap script run with
-    /// it as the triggerer. Null for a row that carries no trap the player knows, without a cast host or a follower disarm that cannot take effect (<see cref="NpcDisarmReady"/>). NOT READY: an expert's critical success makes the device in the follower's pack in the
-    /// original (TT5); the session has no item creation for an NPC, so it is made in the hero's pack (<paramref name="insert"/>: the hero's insert check).
+    /// it as the triggerer. Null for a row that carries no trap the player knows, without a cast host or a follower disarm that cannot take effect (<see cref="NpcDisarmReady"/>). ARC-COMBAT-1878 (TT5): an expert's critical success makes the device in the follower's own pack, as the original does
+    /// (<see cref="AreaUseScriptHost.GiveNpcPrototypeItem"/>; <paramref name="insert"/> is the insert check of that pack: the viewer passes the inventory host's check, which accepts any item).
     /// </summary>
     public AreaTrapDisarm? DisarmByNpc(AreaObjectRecord row, SessionNpcSkillUser user, SessionInsertCheck insert)
     {
@@ -397,7 +397,7 @@ public sealed class AreaTraps
             effect = by(follower, row, run, baseline.Counters, sprung.State.ObjectFlags);
         InventoryMutationResult? device = null;
         if (roll.Disarm is { Outcome: TrapDisarm.RemovedWithDevice, DevicePrototype: > 0 and var prototype })
-            device = _host.GiveHeroPrototypeItem(prototype, insert);
+            device = _host.GiveNpcPrototypeItem(follower, prototype, insert);
         AreaScriptedUse? script = null;
         if (roll.Disarm is { Outcome: TrapDisarm.Sprung, Run: null })
             script = _host.RunTrapScript(row, new ScrObjectRef(row.Key.RuntimeMap, follower), _session.Rules.Scripts);
