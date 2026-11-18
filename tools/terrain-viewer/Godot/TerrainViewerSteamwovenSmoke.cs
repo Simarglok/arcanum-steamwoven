@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Written;
+using Arcanum.Presentation.Hud;
 using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
@@ -189,10 +190,19 @@ public partial class TerrainViewerApp
             && Math.Abs(screen.BottomEdge - plan.Layout.Bottom.Band.Bottom) < 1e-2f, $"[{tag}] the screen hangs from the top frame at the HUD's unit scale and ends at the bottom band's lower edge ({AreaGameBarPanel.TopScreen})");
         var origin = AreaGameBarPanel.TopScreen!.Value.Origin;
         var floaters = new AreaFloaterLayer(); var portraits = new AreaFollowerPortraits(); var sleep = new AreaSleepView(); var fate = new AreaFateView();
+        var spellPane = new AreaSpellPane(); var combatHud = new AreaCombatHud();
         try
         {
-            foreach (var node in new Node[] { floaters, portraits, sleep, fate }) AddChild(node);
+            foreach (var node in new Node[] { floaters, portraits, sleep, fate, spellPane, combatHud }) AddChild(node);
             await frames(2);
+            // ARC-UI-2604: the spell pane starts at the frame's left edge and the combat list ends at its right edge, neither under a pillarbox bar.
+            spellPane.Show(Array.Empty<AreaSpellChoice>());
+            combatHud.Show(new AreaCombatHudView(ActionPointRules.Lamps(5, 0), true, 1, new[] { ("Smoke", true), ("Foe", false) }, 0), _gameBarPanel);
+            await frames(2);
+            var freeRect = AreaGameBarPanel.FreeRect(winSize);
+            var paneRect = spellPane.PanelRectForSelfTest; var listRect = combatHud.PlacementForSelfTest.List;
+            require(Math.Abs(paneRect.Position.X - (freeRect.Position.X + 12)) <= 1e-2f && paneRect.Position.X >= frame.X, $"[{tag}] the spell pane starts at the frame's left edge {frame.X} + 12 (got {paneRect.Position.X})");
+            require(Math.Abs(listRect.End.X - (freeRect.End.X - 8)) <= 1e-2f && listRect.End.X <= frame.X + frame.Width, $"[{tag}] the combat list ends at the frame's right edge {frame.X + frame.Width} - 8 (got {listRect.End.X})");
             require(Math.Abs(floaters.DrawScale - scale) < 1e-4f, $"[{tag}] the floaters are laid out at the strips' scale {scale} (got {floaters.DrawScale})");
             portraits.Show(Enumerable.Range(0, 2).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
             await frames(2);
@@ -228,7 +238,7 @@ public partial class TerrainViewerApp
                 finally { SteamwovenHud.Options = saved; _gameBarPanel!.Relayout(); await frames(2); }
             }
         }
-        finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate }) { RemoveChild(node); node.QueueFree(); } }
+        finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate, spellPane, combatHud }) { RemoveChild(node); node.QueueFree(); } }
     }
 
     // ARC-UI-2575 / ARC-UI-2614: every menu window the smoke can open (inventory, character sheet, logbook, world map, schematics, the save list, and since ARC-UI-2614 the loot window of a container, the
