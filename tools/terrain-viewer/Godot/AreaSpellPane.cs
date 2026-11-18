@@ -60,6 +60,9 @@ public partial class AreaSpellPane : CanvasLayer
 
     internal IReadOnlyList<AreaSpellChoice> ShownForSelfTest => _shown;
 
+    /// <summary>ARC-UI-2604 smoke: the pane's rectangle in window pixels.</summary>
+    internal Rect2 PanelRectForSelfTest => _panel.GetGlobalRect();
+
     internal AreaWeaponSpellPane? WeaponShownForSelfTest => _weaponShown;
 
     public override void _Ready()
@@ -175,6 +178,7 @@ public partial class AreaSpellPane : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         _panel.ResetSize();
         var panel = _panel.GetCombinedMinimumSize();
-        _panel.Position = new(12, Math.Max(12, size.Y - panel.Y - 12 - AreaGameBarPanel.BottomInset));
+        // ARC-UI-2604: from the frame's left edge (a pillarbox bar is not lain under); without the layout FreeRect is the whole window, as before.
+        _panel.Position = new(AreaGameBarPanel.FreeRect(size).Position.X + 12, Math.Max(12, size.Y - panel.Y - 12 - AreaGameBarPanel.BottomInset));
     }
 }
