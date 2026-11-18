@@ -75,6 +75,12 @@ public partial class TerrainViewerApp
             Require(_saveListPanel.TypingDescription && !HandleSaveListKey(new InputEventKey { Keycode = Key.A, PhysicalKeycode = Key.A, Pressed = true }),
                 "a typed letter reaches the description field on the new-save row");
             _saveList!.Description = "Synthetic start";
+            // ARC-INPUT-2648 (menu handler 0x546EE0, key events act on the release): a release with no press seen, a press and its echo do nothing; the release of the press saves.
+            InputWorld(new InputEventKey { Keycode = Key.Enter, PhysicalKeycode = Key.Enter, Pressed = false });
+            Require(SaveListOpen && library.List().Entries.Count == 0, "the release of a press the window never saw saved nothing");
+            InputWorld(new InputEventKey { Keycode = Key.Enter, PhysicalKeycode = Key.Enter, Pressed = true });
+            InputWorld(new InputEventKey { Keycode = Key.Enter, PhysicalKeycode = Key.Enter, Pressed = true, Echo = true });
+            Require(SaveListOpen && library.List().Entries.Count == 0, "the Return press and its echo saved nothing");
             InventoryKey(Key.Enter);
             var listed = library.List().Entries;
             Require(listed is [{ Name: "slot0000", Details: GameSaveDetails.Present }] && listed[0].DisplayDescription == "Synthetic start",
@@ -117,7 +123,19 @@ public partial class TerrainViewerApp
             Require(_saveList.Prompt == AreaSavePrompt.None && _saveListPanel.NoticeForSelfTest == "the auto-save cannot be deleted" && library.AutoSlot.Exists,
                 "the auto-save is not deleted");
             var running = _areaSession;
-            InventoryKey(Key.Down); InventoryKey(Key.Enter);
+            // ARC-INPUT-2648: Down moves on the release; the press and its echo do not (no repeat), a lone release does not.
+            InputWorld(new InputEventKey { Keycode = Key.Down, PhysicalKeycode = Key.Down, Pressed = false });
+            InputWorld(new InputEventKey { Keycode = Key.Down, PhysicalKeycode = Key.Down, Pressed = true });
+            InputWorld(new InputEventKey { Keycode = Key.Down, PhysicalKeycode = Key.Down, Pressed = true, Echo = true });
+            Require(_saveList!.Selected == 0, "Down on its press, echo or a lone release moved the selection");
+            InputWorld(new InputEventKey { Keycode = Key.Down, PhysicalKeycode = Key.Down, Pressed = false });
+            Require(_saveList.Selected == 1, "the Down release moved the selection once");
+            InputWorld(new InputEventKey { Keycode = Key.Up, PhysicalKeycode = Key.Up, Pressed = true });
+            Require(_saveList.Selected == 1, "the Up press alone moved nothing");
+            InputWorld(new InputEventKey { Keycode = Key.Up, PhysicalKeycode = Key.Up, Pressed = false });
+            InventoryKey(Key.Down);
+            Require(_saveList.Selected == 1, "Up then Down came back to the second row");
+            InventoryKey(Key.Enter);
             Require(!SaveListOpen && !ReferenceEquals(running, _areaSession) && _areaSession!.QueryActor() == start
                 && _quickSaveStatus?.StartsWith("Load quick loaded", StringComparison.Ordinal) == true && _quickSaveStatus.EndsWith(" from slot0000", StringComparison.Ordinal),
                 "Return loaded slot0000 and closed the window: " + _quickSaveStatus);
