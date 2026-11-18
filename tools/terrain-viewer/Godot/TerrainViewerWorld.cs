@@ -426,7 +426,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; _optionsKeyArmed = false; CancelArmedLockpicks("the window lost focus"); }
+            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; _optionsKeyArmed = false; _movieSkipKey = Key.None; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });

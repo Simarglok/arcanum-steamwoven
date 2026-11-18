@@ -71,6 +71,9 @@ public partial class TerrainViewerApp
             Require(Pump(() => _moviesSkipped == 1 && _moviePlayback is { } next && next.FramesShown >= 1 && next.Info.Width == 64, 15), $"the key ended the first movie and the second one started (skipped {_moviesSkipped})");
             Require(!_moviePanel.AudioPlaying || _moviePanel.FrameSize == new Vector2I(64, 48), "the first movie's audio stopped with it");
             Require(Pump(() => !MovieCovering, 20), "the second movie ran to its end");
+            // ARC-INPUT-2647: the release of the skipping key is taken too (a menu under the movie acts on releases), once.
+            Require(HandleMovieInput(new InputEventKey { Pressed = false, Keycode = Key.Space }) && !HandleMovieInput(new InputEventKey { Pressed = false, Keycode = Key.Space }),
+                "the release of the key that skipped the movie was taken once after the movie ended");
             Require(continued == 1 && _moviesPlayed >= 1 && !_moviePanel.IsOpen && !WorldModal && !WorldFrozenFrame && !_moviePanel.AudioPlaying,
                 $"the screen closed, the world is free and the continuation ran once (continued {continued}, played {_moviesPlayed})");
             // ARC-RENDER-1242: the start-up sequence (the Sierra and the Troika logo by path, then movie 8) plays once, before the first menu is used.
