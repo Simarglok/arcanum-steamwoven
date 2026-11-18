@@ -235,6 +235,25 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11; 0x434B00, 0x434F80): a combat click on a critter with the hero's wielded weapon "default throwing" starts the throw goal 37 at the critter's <b>tile</b>, never at the critter itself (the
+    /// builder writes the item and a location only), so the throw rolls as a throw at a location: the line of fire names only a living, non-shoot-through blocker before the tile, and a hit lands on the tile striking nothing. The item
+    /// is the session's choice (<see cref="GameSessionOwner.QueryDefaultThrowItem"/>: a spare of the weapon's prototype, else the wielded one); the throw goal needs no walk and takes the throw's points (<see cref="BeginThrowSwing"/>). True
+    /// when the click was taken (a throw started, or refused with its notice); false when the weapon stays in the hand and the attack goal starts as without the flag.
+    /// </summary>
+    private bool TryDefaultThrowClick(AreaCombatTarget target)
+    {
+        if (_gameCursorItem is not null || _areaSession is not { } owner || _inventoryHost is null || HeroRunsHost() is null || _worldActor.Session is not AreaGridSession) return false;
+        if (HeroDefaultThrowWeight() is not { } weight || owner.QueryDefaultThrowItem(new(weight)) is not { } item) return false;
+        var tile = NpcCell(target.Row);
+        _gameCursorItem = new GameCursorItem(item, _inventoryHost.ItemName(owner, item, _hoverNames?.Catalog), owner, CurrentAreaMap);
+        var started = ThrowGameCursorItem(tile);
+        // A throw that did not start leaves the weapon where it is: the cursor holds it only for the throw goal's first node.
+        if (!started) _gameCursorItem = null;
+        GD.Print($"ARC-COMBAT-2524 default-throw-click item={item} target={target.Entity} tile={tile.X},{tile.Y} started={started}");
+        return true;
+    }
+
     // The throw run in progress: the item, its tile and name while the hero's swing plays (the cursor is empty from the swing's start, TT2).
     private sealed record HeroThrowSwing(GameCursorItem Held, CellCoord Tile, AreaAttackPlayer Player, ActorDiagnosticAction Action, int Octant)
     {

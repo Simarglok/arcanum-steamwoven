@@ -260,6 +260,22 @@ public sealed partial class GameSessionOwner
         return first.Entity is { } spare && (HeroDomain.KitNumber(spare) is not null || requested.SpareScripts is not null) ? spare : null;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11, 0x434B00): the item a click on a critter throws when the hero's wielded weapon "default throws" (<paramref name="requested"/>, the host's facts of it): the attack start builds the throw
+    /// goal 37 with the item and the target's location, never the critter, so the host starts the location throw (<see cref="ThrowHeroItem"/> with no struck critter) with this item instead of the attack goal. The item is the first other
+    /// item of the wielded weapon's prototype the hero holds (<see cref="SameKindSpare"/>, 0x462930), else the wielded one. Null (the attack goal starts, the weapon stays in the hand, as <see cref="ThrowingHero"/> leaves it): no hero or
+    /// no wielded weapon, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>, a wielded item that is no melee weapon (the session's own limit, TW7), a weapon the remove check refuses (0x466DA0), or an item switched off.
+    /// </summary>
+    public string? QueryDefaultThrowItem(SessionThrow requested)
+    {
+        ArgumentNullException.ThrowIfNull(requested);
+        if (QueryHeroAttack() is not { } hero || requested.Weight is < 0 or > ThrowRules.MaxWeight || hero.Weapon.Kind != WeaponKind.Weapon || hero.Skill != CombatSkill.Melee
+            || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)
+            || Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove(wielded.Item) != Arcanum.Simulation.Equipment.EquipmentRefusal.None) return null;
+        var item = SameKindSpare(wielded.Entity, requested) ?? wielded.Entity;
+        return QueryItemOff(_actor.Map, item, dataOff: false) ? null : item;
+    }
+
     private static IReadOnlyList<int> SpareScriptPoints(string spare, SessionThrow requested) =>
         HeroDomain.KitNumber(spare) is not null ? [] : requested.SpareScripts?.Invoke(spare) ?? [];
 
