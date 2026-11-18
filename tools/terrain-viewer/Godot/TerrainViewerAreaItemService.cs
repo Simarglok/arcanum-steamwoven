@@ -99,7 +99,7 @@ public partial class TerrainViewerApp
 
     private AreaItemServicePanel CreateServicePanel()
     {
-        var panel = new AreaItemServicePanel(); AddChild(panel);
+        var panel = new AreaItemServicePanel(); AddChild(panel); panel.DiagnosticSwitch = DebugMode;
         panel.CloseRequested += EndItemService;
         panel.ItemClicked += ClickServiceItem;
         panel.ArrangeRequested += ServiceArrange;

@@ -97,6 +97,11 @@ public interface IScrHost
     ScrObjectRef? Player();
     /// <summary>The critter's leader, or null when it follows no one.</summary>
     ScrObjectRef? Leader(ScrObjectRef critter);
+    /// <summary>
+    /// ARC-SCRIPT-1899: whether two references name one object. The original keeps one critter wherever it stands, so a carried follower named by its home map and the same one named by the map that shows it are one object; a host that
+    /// can tell them apart answers by identity. The default is the plain reference test (the following test uses it to compare a leader with the second object of the condition).
+    /// </summary>
+    bool SameObject(ScrObjectRef a, ScrObjectRef b) => a == b;
     /// <summary>An NPC with the jilted flag; false for anything that is not an NPC.</summary>
     bool IsJilted(ScrObjectRef critter);
     /// <summary>A player character (the dialog action starts a conversation only for one).</summary>

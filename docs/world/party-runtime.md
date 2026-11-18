@@ -135,7 +135,10 @@ while an NPC leads it.
   follower does nothing, the original's NPC test) and in the thrown item's script (the leader the PC or another object of the shown
   map); disband (22, 0x45DFC0 force 1) leaves an NPC leader through `LeaveParty`. The scripts' leader query (condition 18, 0x45DE00)
   answers the session's leader in every script host: the PC, or an NPC leader named on the critter's map. A join refused as a cycle
-  leaves the run going on. A free Create Undead whose caster is a looped NPC (the dying scripts 30118 and 30127) reaches the cast host
+  leaves the run going on. ARC-SCRIPT-1899: condition 18 compares the leader with the second object by the host's identity test
+  (`IScrHost.SameObject`: the PC and a mobile by their id, so a carried follower named by its home map and by the shown map is one
+  object), and reads the run's own earlier make follow and disband in order (the original joins and leaves inline, the host applies
+  after the run). A free Create Undead whose caster is a looped NPC (the dying scripts 30118 and 30127) reaches the cast host
   with that caster, whose join makes the risen critter its follower (ARC-MAGIC-1841).
   Condition 11 (bad associates, 0x45F460) walks the NPC leader's follower array as it walks the hero's party; the schematic
   window of a talk takes the first PC up the speaker's chain (0x45DDA0) as its viewer, so an NPC led by an NPC alone opens none.
