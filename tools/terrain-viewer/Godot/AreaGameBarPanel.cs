@@ -79,6 +79,15 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// 16:9 frame has a pillarbox bar on each side, which a window must not lie under); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(_freeWidth > 0 ? _freeWidth : size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
 
+    /// <summary>ARC-UI-2603: the rectangle in window pixels the strips and the pillarbox bars leave free, for what must stay clear of them (a text bubble's placement). In the Steamwoven layout it is
+    /// the frame's width from <see cref="FreeLeft"/> between the strips; without the layout (the generated interface off) the strips are the original's and the whole window stands, as before.</summary>
+    public static Rect2 FreeRect(Vector2 size)
+    {
+        if (_freeWidth <= 0) return new Rect2(Vector2.Zero, size);
+        var (top, free) = FreeArea(size);
+        return new Rect2(FreeLeft, top, free.X, free.Y);
+    }
+
     /// <summary>ARC-UI-2510: where the original's 800 × 600 screen lies for what hangs from its top strip (the follower portraits and their buttons): the screen's top left, the strips' scale, and
     /// the window y of the bottom strip's bottom edge (the screen's bottom edge). Null while the layout is not the Steamwoven one or the bars are hidden: the whole-factor screen centred at the
     /// window's top stands. <see cref="ScreenFrame"/> is the same screen with its origin counted from the bottom strip (for what sits on that strip).</summary>

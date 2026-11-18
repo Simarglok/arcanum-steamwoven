@@ -3143,13 +3143,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
     /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
     /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
-    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). ARC-AI-1854: the plain-roll skills are <see cref="PlainSkillAttempt"/>. NOT READY: gambling, repair and pick locks through this goal, which do nothing and
-    /// answer false.
+    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). ARC-AI-1854: the plain-roll skills are <see cref="PlainSkillAttempt"/>. ARC-AI-2623: gambling is <see cref="GamblingAttempt"/>. Pick locks has its own attempt goal (67, <see cref="AttemptPickLocks"/>), so goal 34 never carries it. NOT READY: repair, which does nothing and
+    /// answers false.
     /// </summary>
     [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
+        if (skill == (int)Skill.Gambling) return GamblingAttempt(id, target);
         if (skill != AiPassChoice.HealSkill)
             return PlainSkillAttempt(id, target, skill);
         var heal = HealByNpc(id, target, item, out var refusal);
@@ -3162,8 +3163,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-AI-1854 (0x4C7160, the cases with no world write): the skills that have no case of their own in the attempt (bow, melee, throwing, backstab, prowling, haggle, persuasion, firearms), dodge (its incapacity gate), spot trap
     /// (the master's second roll) and disarm traps (no trap flag on this path) are the session's plain roll (<see cref="GameSessionOwner.RollNpcSkill"/>); its success is the run's flag 0x40000. The incapacity of a dodge is
-    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. NOT READY: gambling (its stored roll 0x4C6560), repair and pick
-    /// locks through this goal (their own handlers: item damage, lock write), the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
+    /// <see cref="DodgeRefused"/> (ARC-AI-2625: unconscious 0x45D800, stoned, stunned or paralysed); the spot trap's target test 0x4BBDD0 is <see cref="AreaAiScene.TargetTrapClass"/>. NOT READY: repair (its own handler: item damage), the spot trap's null-target read (undefined in the exe), and the other skills' UI callbacks (the local PC's messages); a skill
     /// outside the 16 answers false.
     /// </summary>
     private bool PlainSkillAttempt(string id, string target, int skill)
@@ -3181,6 +3181,32 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(id).Skill = roll is null ? $"skill {skill} on {target}: {refusal}"
             : $"skill {skill} on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} critical={roll.Critical} second={roll.SecondRoll}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, PlainRoll = roll });
+        return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
+    }
+
+    /// <summary>
+    /// ARC-AI-2623 (0x4C7160 with skill 8, the roll 0x4C6560): an NPC's gambling attempt, the session's <see cref="GameSessionOwner.RollNpcGambling"/> with the stored roll of the skill module. The skill is opposed by the target's
+    /// gambling level (0x4C6410 over 0x4C5EB0): the hero's, a map NPC's from its sheet, 0 for a target that is no critter. A target the host holds no fields of, or a critter with no sheet, is not read and the attempt does nothing. The answer is
+    /// the check's success (run flag 0x40000); the handler has no case of its own for the skill. NOT READY: the opponent of the other opposed skills (persuasion).
+    /// </summary>
+    private bool GamblingAttempt(string id, string target)
+    {
+        string? refusal = null;
+        SessionNpcSkillRoll? roll = null;
+        int? opponent = null;
+        if (target == Pc) { if (_session.QueryHeroSkills() is { } heroSkills) opponent = heroSkills[Skill.Gambling].Level; else refusal = "no hero"; }
+        else if (Fields(target) is not { } fields) refusal = "no target";
+        else if (fields.Critter is null) opponent = 0;
+        else if (_scene.NpcSheet?.Invoke(target) is { } targetSheet) opponent = _session.QueryNpcSkills(targetSheet.Loaded, targetSheet.Modifiers)[Skill.Gambling].Level;
+        else refusal = "no target sheet";
+        if (refusal is null)
+        {
+            if (Build(id) is not { } user || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+            else roll = _session.RollNpcGambling(_session.Version, new SessionNpcSkillUser(user.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), opponent);
+        }
+        Trace(id).Skill = roll is null ? $"gambling on {target}: {refusal}"
+            : $"gambling on {target} {roll.Disposition} {roll.Failure} success={roll.Success} check={roll.Check?.Success} roll={roll.Check?.Check.Roll} next={roll.Check?.NextGamblingRoll}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = (int)Skill.Gambling, PlainRoll = roll });
         return roll is { Disposition: GameSessionDisposition.Changed, Success: true };
     }
 

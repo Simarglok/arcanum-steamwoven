@@ -331,7 +331,7 @@ public sealed class AreaAiSkillTests
     [TestMethod]
     public void A_skill_with_no_case_of_its_own_answers_the_sessions_plain_roll_and_one_with_a_handler_not_built_answers_false()
     {
-        // ARC-AI-1854 (0x4C7160): bow, melee, ... are the shared check alone; gambling, repair and pick locks through goal 33 are not built here.
+        // ARC-AI-1854 (0x4C7160): bow, melee, ... are the shared check alone; repair is not built here (gambling is the next test, pick locks has its own goal 67).
         var (session, host, npc, _) = Open(hero: true);
         var before = session.Version.Revision;
         var answer = host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)Skill.Melee, null);
@@ -340,7 +340,7 @@ public sealed class AreaAiSkillTests
         Assert.AreEqual((GameSessionDisposition.Changed, roll.Success), (roll.Disposition, answer), "the answer is the roll's success (run flag 0x40000)");
         Assert.AreEqual(before + 1, session.Version.Revision, "the roll is one revision");
         StringAssert.StartsWith(host.TraceOf(npc)!.Skill, $"skill {(int)Skill.Melee} on {AiSchedulerRules.Pc} Changed");
-        foreach (var skill in new[] { Skill.Gambling, Skill.Repair, Skill.PickLocks })
+        foreach (var skill in new[] { Skill.Repair, Skill.PickLocks })
         {
             var revision = session.Version.Revision;
             Assert.IsFalse(host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)skill, null), skill.ToString());
@@ -390,6 +390,35 @@ public sealed class AreaAiSkillTests
         Assert.IsTrue(Successes(plain, plainNpc, Skill.SpotTrap, 80) > 0, "a non-magical trap is found");
         var (_, none, noneNpc, _) = Open(hero: true);
         Assert.IsTrue(Successes(none, noneNpc, Skill.SpotTrap, 80) > 0, "no scene delegate: the target holds no trap and nothing is refused");
+    }
+
+    [TestMethod]
+    public void An_npc_gambling_attempt_uses_the_stored_roll_against_the_targets_level_and_a_target_the_host_does_not_hold_changes_nothing()
+    {
+        // ARC-AI-2623 (0x4C7160 with skill 8 and the roll 0x4C6560): the shared check on the module's stored roll, opposed by the target's gambling level; the answer is the check's success.
+        var (session, host, npc, item) = Open(hero: true);
+        session.EnsureGamblingRoll(session.Version);
+        var stored = session.QueryGamblingRoll()!.Value;
+        var heroLevel = session.QueryHeroSkills()![Skill.Gambling].Level;
+        var revision = session.Version.Revision;
+        var answer = host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)Skill.Gambling, null);
+        var roll = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no roll");
+        Assert.AreEqual((GameSessionDisposition.Changed, roll.Success), (roll.Disposition, answer), "the answer is the roll's success (run flag 0x40000)");
+        Assert.AreEqual(stored, roll.Check!.Check.Roll, "the check reads the stored roll");
+        Assert.AreEqual(roll.Check.NextGamblingRoll, session.QueryGamblingRoll(), "its own draw is stored for the next check");
+        Assert.AreEqual(revision + 1, session.Version.Revision);
+        var opposed = SkillCheckRules.Opposed(0, heroLevel);
+        CollectionAssert.Contains(new[] { Math.Min(opposed, SkillCheckRules.EffectivenessCap), Math.Min(opposed + 10, SkillCheckRules.EffectivenessCap) }, roll.Check.Check.Effectiveness,
+            "opposed by the hero's gambling level (the NPC has none), plus the intelligence term at most");
+        StringAssert.StartsWith(host.TraceOf(npc)!.Skill, $"gambling on {AiSchedulerRules.Pc} Changed");
+        // A map item is no critter: its level reads 0. A target the host holds nothing of is refused and nothing is rolled.
+        host.AttemptSkill(npc, item, (int)Skill.Gambling, null);
+        Assert.AreEqual(GameSessionDisposition.Changed, host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll!.Disposition);
+        var before = (session.Version.Revision, session.QueryGamblingRoll());
+        Assert.IsFalse(host.AttemptSkill(npc, Entity(9), (int)Skill.Gambling, null));
+        Assert.IsNull(host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll);
+        Assert.AreEqual($"gambling on {Entity(9)}: no target", host.TraceOf(npc)!.Skill);
+        Assert.AreEqual(before, (session.Version.Revision, session.QueryGamblingRoll()), "nothing is rolled");
     }
 
     [TestMethod]
