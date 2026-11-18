@@ -129,7 +129,7 @@ public sealed class AreaStationaryLightSource
 
     /// <summary>
     /// ARC-SCRIPT-2585 (ledger OT2, OT10): this source with the lights of the objects in <paramref name="states"/> switched off (true: the light's OFF bit set) or on (false: cleared), as the original's toggle
-    /// setters do for every light field of the object (0x43D0E0 ends the lit flag light and marks the lights off through 0x4DCEA0; 0x43D280 marks them on through 0x4DCF60). A light of any other owner and every
+    /// setters do for every light field of the object (the functions are named in ledger row OT10). A light of any other owner and every
     /// stationary light stay as they are; this source itself when nothing changes.
     /// </summary>
     public AreaStationaryLightSource WithObjectsOff(IReadOnlyDictionary<AreaObjectKey, bool> states)
