@@ -520,9 +520,10 @@ public sealed class AreaConversationHost
         var talker = speaker;
         if (result.Effects.Dialog is { Npc: { } named })
         {
-            if (Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == named.Code) is not { } found)
+            if (named.Code == AreaConversationState.EntityId(speaker.Row)) talker = speaker;
+            else if (Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == named.Code) is not { } found)
                 return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {result.Script}: a conversation of script {result.Effects.Dialog.Script} with {named.Code}, which is no dialog NPC of this host, is not modelled");
-            talker = found;
+            else talker = found;
         }
         if (!Scripts.Apply(result.Effects))
             return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");

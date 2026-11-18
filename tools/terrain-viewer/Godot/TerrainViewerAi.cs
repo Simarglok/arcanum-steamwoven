@@ -410,13 +410,13 @@ public partial class TerrainViewerApp
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
-    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open).
+    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open, except while a conversation is open: dropped, ARC-SCRIPT-2760).
     private Arcanum.Scripting.Scr.ScrDialogStart? _heartbeatDialog;
 
     /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100) after the event
-    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk that cannot open yet (a conversation
-    /// or a panel outside the stack is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's
-    /// behaviour in those states is not read (audit U5). An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
+    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk asked for while a conversation is open
+    /// is dropped (the original's start callback returns silently in dialog mode, ARC-SCRIPT-2760, audit U5); one that cannot open yet for another reason (a panel outside the stack is open, the hero is under attack)
+    /// stays pending and opens once it can: a project choice, the original's behaviour there is not read. An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
     private void OpenHeartbeatConversation()
     {
         if (_heartbeatDialog is not { } talk) return;

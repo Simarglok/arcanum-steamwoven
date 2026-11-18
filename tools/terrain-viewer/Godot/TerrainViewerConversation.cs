@@ -609,6 +609,8 @@ public partial class TerrainViewerApp
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
+            // ARC-SCRIPT-2760: the resumed script may name a carried companion as the next speaker; admission is on demand (as BeginScriptedConversation's).
+            AdmitCompanionSpeakers();
             try { resumed = talkHost.Resume(speaker, line, startRefused: DialogStartRefused); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
             {
@@ -620,6 +622,7 @@ public partial class TerrainViewerApp
             if (resumed.Status == AreaConversationStartStatus.Started)
             {
                 var next = resumed.Speaker ?? speaker;
+                if (!ReferenceEquals(next, speaker)) _areaCompanions?.InterruptGoals(next.Row.Key);
                 if (!EndsAtStart(next, resumed, scripted: false)) OpenConversation(next, resumed);
                 RefreshReadyStatus();
                 return;
