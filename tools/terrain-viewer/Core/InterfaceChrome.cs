@@ -1083,6 +1083,8 @@ public static class InterfaceChromeRenderer
                 ChromePlate p => (p.X, p.Y, p.Width, p.Height),
                 ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
                 ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                // ARC-UI-2762: the lens's square (and four units around it, where the Legacy frame has its own ring) is no wood: the frames draw no ring of their own, so the old ring pixels must not tone the wood.
+                ChromeBare { Width: 89 } p => (p.X - 4, p.Y - 4, p.Width + 8, p.Height + 8),
                 ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
                 // ARC-UI-2194: the brass pill's parts (the housing and the plates; the ring lies inside the housing's box).
                 ChromeCapsule p => ((int)Math.Floor(p.X), (int)Math.Floor(p.Y), (int)Math.Ceiling(p.Width) + 1, (int)Math.Ceiling(p.Height) + 1),
