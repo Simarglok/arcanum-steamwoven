@@ -616,7 +616,14 @@ public partial class TerrainViewerApp
             }
             GD.Print($"ARC-SCRIPT-009 script resumed line={line.Value} status={resumed.Status} detail={resumed.Detail}");
             // ARC-UI-2028: a resumed script that lands on the NPC's last line ends at its start as well (no window).
-            if (resumed.Status == AreaConversationStartStatus.Started) { if (!EndsAtStart(speaker, resumed, scripted: false)) OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
+            // ARC-SCRIPT-2760: the resumed script may have called another NPC's dialog point (the dialog action's attachee), and the conversation opens with that NPC; its own "return to script" end resumes its slot.
+            if (resumed.Status == AreaConversationStartStatus.Started)
+            {
+                var next = resumed.Speaker ?? speaker;
+                if (!EndsAtStart(next, resumed, scripted: false)) OpenConversation(next, resumed);
+                RefreshReadyStatus();
+                return;
+            }
             _conversationNotice = $"script continued: {resumed.Status}: {resumed.Detail}";
         }
         QuarantineWorld(); RefreshReadyStatus();
