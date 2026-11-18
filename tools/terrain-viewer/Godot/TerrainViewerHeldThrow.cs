@@ -436,7 +436,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-063 throw item={held.Item} tile={tile.X},{tile.Y} struck={aimed?.Entity ?? "none"} disposition={result.Disposition}"
             + $" failure={result.Failure} outcome={result.Attack?.Resolution?.Outcome.ToString() ?? "-"} shots={result.Shots.Count}"
             + $" destination={(result.Destination is { } d ? $"{d.X},{d.Y}" : "-")} cost={owner.QueryHeroThrowCost()}"
-            + (result.ScriptDeclined ? " script-declined" : "") + (result.Scripts.Count > 0 ? $" scripts={result.Scripts.Count}" : "") + (result.Messages.Count > 0 ? $" lines={result.Messages.Count}" : ""));
+            + (result.ScriptDeclined ? " script-declined" : "") + (result.AmmunitionShort ? " out-of-ammunition" : "") + (result.Scripts.Count > 0 ? $" scripts={result.Scripts.Count}" : "") + (result.Messages.Count > 0 ? $" lines={result.Messages.Count}" : ""));
         // ARC-COMBAT-1955: a line the item's removal or throw script printed goes to the message window, and the eye candy they made plays (a refused throw whose scripts changed nothing shows none).
         PostScriptLines(result.Messages);
         QueueScriptEyeCandies(result.EyeCandies);
@@ -448,6 +448,13 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             // A refusal after the scripts took effect keeps its own notice: the throw goal's end must not replace it with "stopped".
             return result.Disposition == GameSessionDisposition.Rejected ? null : result;
+        }
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the thrown weapon's ammunition check refused: the item left the pack and lies on the hero's tile switched off (message code 3 in the original).
+        if (result.AmmunitionShort)
+        {
+            SetHeldThrowNotice($"{held.Name} not thrown: no ammunition for it (it lies switched off on the hero's tile)");
+            SyncAreaInventory(); RefreshAreaStatus();
+            return result;
         }
         if (result.ScriptDeclined)
         {
