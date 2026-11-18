@@ -216,9 +216,12 @@ public sealed class NpcSkillRollTests
         Assert.AreEqual(GameSessionFailure.InvalidSkill, owner.RollNpcGambling(owner.Version, user, SkillRules.MaxLevel + 1).Failure);
         Assert.AreEqual(GameSessionFailure.SkillsUnavailable, owner.RollNpcGambling(owner.Version, user with { User = SessionLifeTarget.Hero }, 0).Failure);
         Assert.AreEqual(GameSessionFailure.SkillsUnavailable, owner.RollNpcGambling(owner.Version, user with { Loaded = User(Skill.Gambling, 10, SkillTraining.Expert, entity: "other").Loaded }, 0).Failure);
+        Assert.AreEqual((revision, draws, roll), (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll()), "a refusal writes nothing");
         var stale = owner.Version;
-        owner.RollNpcGambling(owner.Version, user, 0);
+        Assert.AreEqual(GameSessionFailure.None, owner.RollNpcGambling(owner.Version, user, 0).Failure);
+        var (afterRevision, afterDraws, afterRoll) = (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll());
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RollNpcGambling(stale, user, 0).Failure);
-        Assert.AreNotEqual((revision, draws, roll), (revision, draws, owner.QueryGamblingRoll()), "only the one accepted attempt moved the roll");
+        Assert.AreEqual((afterRevision, afterDraws, afterRoll), (owner.Version.Revision, owner.QueryRandom().Draws, owner.QueryGamblingRoll()), "a stale attempt writes nothing");
+        Assert.AreEqual((revision + 1, draws + 2), (afterRevision, afterDraws), "only the one accepted attempt rolled");
     }
 }
