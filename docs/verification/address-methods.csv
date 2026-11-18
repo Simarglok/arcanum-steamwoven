@@ -549,6 +549,7 @@ src/Arcanum.World/AreaAiHost.cs,ScriptReaction,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SearchItems,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SeeToward,pending,
 src/Arcanum.World/AreaAiHost.cs,SetNoFlee,exempt,host
+src/Arcanum.World/AreaAiHost.cs,ShooterTrace,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ShownWeapon,pending,
 src/Arcanum.World/AreaAiHost.cs,SneakExcess,pending,
 src/Arcanum.World/AreaAiHost.cs,SpellAttacked,pending,
