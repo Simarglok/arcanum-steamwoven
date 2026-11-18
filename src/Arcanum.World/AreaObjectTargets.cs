@@ -254,7 +254,7 @@ public sealed class AreaObjectTargets
         if (result.Life is { } life) return $"critical miss: the hero takes {life.HitPointDamage} damage";
         var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap goes off" : "";
         if (result.Object is { } hit)
-            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {Broke(hit.Break)}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
+            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {(result.Host.HasFlag(SessionObjectHostSteps.DestroyKept) ? KeptBroke(hit.Break) : Broke(hit.Break))}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
         if (result.Item is { } item) return item.Break switch
         {
             Arcanum.Simulation.Items.ItemBreakStep.Broken => "hit: the item breaks",
@@ -263,6 +263,13 @@ public sealed class AreaObjectTargets
         } + trap;
         return "attack: no damage";
     }
+
+    // ARC-SCRIPT-2686: a destroy the object's destroy point refused (the object stays, the break's other effects stand).
+    private static string KeptBroke(ObjectBreak kind) => kind switch
+    {
+        ObjectBreak.ContainerSpilled => "the container breaks, but it is not destroyed",
+        _ => "the destroy is refused, the object stays",
+    };
 
     private static string Broke(ObjectBreak kind) => kind switch
     {
