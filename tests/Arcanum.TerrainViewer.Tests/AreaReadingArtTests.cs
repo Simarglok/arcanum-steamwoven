@@ -248,6 +248,28 @@ public sealed class AreaReadingArtTests
     }
 
     [TestMethod]
+    public void A_note_takes_the_first_readable_face_that_fits_with_the_generated_interface()
+    {
+        // ARC-UI-2765: the generated interface tries the readable faces, then the original's; the Original look draws the original's alone; every other text keeps its own font.
+        CollectionAssert.AreEqual(new[] { 840, 229, 497 }, AreaReadingArtLayout.NoteFontsFor(true).ToArray());
+        CollectionAssert.AreEqual(new[] { 497 }, AreaReadingArtLayout.NoteFontsFor(false).ToArray());
+        var document = new AreaReadingArtDocument(WrittenSubtype.Note, 489, false, [], [Message("a\n")], [], "a\n");
+        Assert.AreEqual(840, AreaReadingFlow.Single(document, Fonts, AreaReadingArtLayout.NoteFontsFor(true))[0].Font, "a short note fits the first face");
+        Assert.AreEqual(497, AreaReadingFlow.Single(document, Fonts)[0].Font, "no list: the original's face");
+        var plaque = AreaReadingFlow.Single(new(WrittenSubtype.Plaque, 633, false, [], [Message("plaque text", 500, true)], [], ""), Fonts, AreaReadingArtLayout.NoteFontsFor(true));
+        Assert.AreEqual(500, plaque[0].Font, "a plaque keeps its markup font");
+        // A note the first face's line height does not hold (4 lines of 100 over the 300 rectangle) takes the second; one neither holds keeps the original's.
+        var long4 = new AreaReadingArtDocument(WrittenSubtype.Note, 489, false, [], [Message("a\nb\nc\nd\n")], [], "a\nb\nc\nd\n");
+        Assert.AreEqual(229, AreaReadingFlow.Single(long4, number => number == 840 ? Font(100) : Font(), AreaReadingArtLayout.NoteFontsFor(true))[0].Font);
+        Assert.AreEqual(497, AreaReadingFlow.Single(long4, number => number == 497 ? Font() : Font(100), AreaReadingArtLayout.NoteFontsFor(true))[0].Font);
+        foreach (var font in AreaReadingArtLayout.ReadableNoteFonts)
+        {
+            CollectionAssert.Contains(AreaReadingArtLayout.FontArts([]).ToArray(), font, "the window loads the readable face");
+            Assert.IsFalse(AreaReadingArtLayout.RequiredArtNumbers.Contains(font), "an installed game without it still opens the original look");
+        }
+    }
+
+    [TestMethod]
     public void A_header_line_aligns_to_its_point_and_an_empty_one_is_nothing()
     {
         var font = Font();
@@ -295,6 +317,6 @@ public sealed class AreaReadingArtTests
     {
         var texts = WrittenTexts.Create(Mes("{100}{12 A}{101}{1c B}{102}{12 C}{103}{Plain}"), Mes("{200}{9 note}"), Mes("{0}{482 x}{1}{5 y}"), null, Mes("{500}{40c p}"));
         CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 482 }, texts.MarkupFonts().ToArray(), "the note's file has no markup; a message with no prefix is font 0 and left out");
-        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 479, 480, 481, 482, 484, 485, 497, 815 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 229, 479, 480, 481, 482, 484, 485, 497, 815, 840 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
     }
 }
