@@ -1,0 +1,4 @@
+KIND: HARDWARE (fixed metal or frame piece)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original art, scaled to the master size), SHEET, CONTEXT crop.
+
+Redraw one metal piece that lies over a strip or a window background (a ring, socket, vial housing, rail, pane frame, lens ring): brass, iron or gold from the SHEET. Keep the shape, opening and proportions of the ORIGINAL exactly; the inside of a frame, ring or socket is fully transparent (alpha), never a colour. Transparent background outside, clean edge, no halo, a soft contact shadow only if the ORIGINAL has one.

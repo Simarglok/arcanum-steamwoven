@@ -1,0 +1,4 @@
+KIND: SHEET (document laid over a backdrop)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original sheet art), SHEET (material sheet: paper, parchment, iron), CONTEXT crop.
+
+Redraw one document or panel that lies over a window background: newspaper, letter, book page, telegram, plaque, or an iron panel of the character sheet. Surface, wear and edges only; leave every text area blank (no letters, no lines of text, no pictures). Keep the outline and the unprinted margins of the ORIGINAL. Transparent background outside the outline, clean edge, no halo, a soft shadow only where the ORIGINAL has one.

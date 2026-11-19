@@ -1,0 +1,4 @@
+KIND: CAP (end cap of a strip)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: SHEET, CONTEXT crop of the strip end.
+
+New part with no original art. Draw the outer end of a strip: a brass edge piece that closes the wooden board at its end, with two or three rivets, a small bevel and a soft dark shadow that falls outward onto the ground beside the strip (semi-transparent, fading to full transparency). The cap's inner edge must continue the strip's wood and trim without a visible join. Transparent background, clean edge, no halo. Draw the left-hand cap; the right-hand cap is its mirror.

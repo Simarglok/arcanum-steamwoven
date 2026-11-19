@@ -1,0 +1,8 @@
+CONTEXT IMAGE - SCHEMATIC WINDOW
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled as a layout guide).
+
+Redraw the whole composition with the schematic window open: top strip, the schematic window in the middle zone, bottom strip.
+- One single background in the middle zone: a dark streaked wood left side holding a round portrait lens (empty glass, brass ring), two round brass sockets with a gear-and-arrowhead mechanism and a rolled scroll mechanism, and a lower brass control with a round centre button and two small side arrows.
+- A large sheet of aged parchment fills the middle and right, with a printed light grid (faint squared lines), a soft burnt edge and a stack of small parchment index tabs at its right edge with pictograms.
+- The parchment is blank: no drawing, no title, no text. Leave the two pink record frames empty.
+Goal: style anchor for BD-F (schematic parchment), parchment and its grid layer, small brass mechanism pieces.
