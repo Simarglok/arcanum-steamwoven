@@ -587,7 +587,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2022 (ledger DH4, DH11, DB3): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
-    /// 400 px view else the view height minus 181; the view is the part the bars leave free (the original's iso window, (0, 41, 800, 400) with the
+    /// 400 px view else the view height minus 181 (with the bars shown it ends 1 px above the bottom bar's top edge, ARC-UI-2770); the view is the part the bars leave free (the original's iso window, (0, 41, 800, 400) with the
     /// interface on, ledger DB3), so the band lies above the bottom bar. The stack inside it is 6 px in on both sides. A diagnostic panel that is still drawn sits above the band.
     /// </summary>
     private void PlaceBand(Vector2 window, float panelHeight)
@@ -596,7 +596,7 @@ public partial class AreaConversationPanel : CanvasLayer
         // ARC-UI-2268: the band is drawn at the screen's whole factor, as the bars are; its geometry (and the view it sits in) is counted in the original's pixels.
         var factor = AreaGameBarPanel.ScreenFactor(window);
         var left = AreaGameBarPanel.FreeLeft + DialogReplyBand.BoxLeft((int)(free.X / factor), _bandWidth) * factor;
-        var top = freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
+        var top = BandTop(window);
         _band.Scale = new(factor, factor);
         _band.Position = new(left, top);
         _band.Size = new(_bandWidth, DialogReplyBand.Height);
@@ -605,6 +605,19 @@ public partial class AreaConversationPanel : CanvasLayer
         _options.Position = new(DialogReplyBand.TextX, 0);
         _options.Size = new(_bandWidth - DialogReplyBand.Margins, DialogReplyBand.Height);
         _panel.Position = new(_panel.Position.X, Mathf.Round(Math.Max(freeTop, top - panelHeight - 8)));
+    }
+
+    /// <summary>
+    /// ARC-UI-2770: the band's top in a window of <paramref name="window"/> px. With the bars shown the band rests on the bottom bar's top edge, ending 1 original px above it (the original's 299 of its
+    /// 400 px view, whatever the view's height here); without them the full-screen rule of 0x4C9720 stands (view height minus 181).
+    /// </summary>
+    internal static float BandTop(Vector2 window)
+    {
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(window);
+        var factor = AreaGameBarPanel.ScreenFactor(window);
+        return AreaGameBarPanel.BottomInset > 0
+            ? freeTop + free.Y - (DialogReplyBand.Height + DialogReplyBand.BarGap) * factor
+            : freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
     }
 
     /// <summary>ARC-UI-2024: the panel's top left corner: centred, its bottom 24 px above the bottom bar (the view's bottom without the bars), and not above
