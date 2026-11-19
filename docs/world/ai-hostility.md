@@ -14,7 +14,7 @@ combat path or host calls them yet: the scheduler (I6, [AI scheduler](ai-schedul
 The world (`IHostilityWorld`) answers by object id: the object (`HostilityCritter`: type, the object, critter, spell and NPC
 flag bits the rules test, perception, intelligence, level, alignment, hit-point percent, origin, direct and PC leader), the tile
 distance, faction-same (0x45D110, the reputation owner's `FactionSame`), the AI reaction variant toward a PC (0x4C0CE0), the
-will-kos script's verdict (point 22), the AI parameters 4, 10, 11 and 12, sight and hearing (`AwarenessRules`, slice I2), an
+will-kos script's verdict (point 22; the viewer runs it through `AreaUseScriptHost.RunWillKos`, ARC-AI-2821), the AI parameters 4, 10, 11 and 12, sight and hearing (`AwarenessRules`, slice I2), an
 NPC's danger record, its mind controller (0x459040) and the scan's rectangle query in the map's order. A stored handle the
 world no longer knows (a focus, source or enemy that left the map) counts as none.
 

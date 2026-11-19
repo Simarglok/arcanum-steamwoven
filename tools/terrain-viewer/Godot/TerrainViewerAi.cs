@@ -228,6 +228,8 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
             ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
+            // ARC-AI-2821 (TQ14, 0x4AE120): the will-KOS script (point 22) of an NPC that decides on a candidate; its skip default vetoes the kill-on-sight.
+            WillKos = AiWillKos,
             GuardCatchingThief = AiGuardCatchingThief,
             // ARC-DEV-258 (MIG13 S14n): an NPC's thrown grenade flies as a projectile.
             LaunchThrown = AiLaunchThrown,
@@ -309,6 +311,29 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-246 catching-thief victim={victim} thief={thief} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
         // As the hero's thief (AreaPickPocket.Caught): a script that ran and skipped the default stops the consequences, and so does one the viewer cannot finish (Not ready, nothing applied).
         return ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
+    }
+
+    /// <summary>
+    /// ARC-AI-2821 (ledger TQ14, exe 0x4AE120 → 0x441980(candidate, npc, none, 22)): the will-KOS script of the NPC <paramref name="npc"/> with <paramref name="candidate"/> ("pc" is the hero) as the triggerer, through the shown map's use-script host. True lets the kill-on-sight
+    /// evaluation go on (the script ran default, or none runs: no script at the point, a refused or unapplied run, logged once); false when the script skipped the default.
+    /// </summary>
+    private bool AiWillKos(string npc, string candidate)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return true;
+        if (host.Slot(new(CurrentAreaMap, npc), Arcanum.Scripting.Scr.ScrPoint.WillKos) is not { Script: > 0 }) return true;
+        if ((map.TryGetRow(npc, out var held) ? held : CreatedCrittersRow(npc)) is not { } row) return true;
+        var ran = Awarded(host, host.RunWillKos(row, new(CurrentAreaMap, candidate), session.Rules.Scripts));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
+        {
+            if (_heartbeatRefusalsLogged.Add($"kos|{npc}|{ran.Outcome}|{ran.Run?.Script}"))
+                GD.Print($"ARC-AI-2821 will-kos-refused npc={npc} candidate={candidate} outcome={ran.Outcome} detail={ran.Detail}");
+            return true;
+        }
+        var veto = AreaUseScriptHost.WillKosVetoes(ran);
+        if (_heartbeatRefusalsLogged.Add($"kos|{npc}|{candidate}|{veto}|{ran.Run!.Script}"))
+            GD.Print($"ARC-AI-2821 will-kos npc={npc} candidate={candidate} script={ran.Run.Script} outcome={ran.Run.Outcome} veto={veto}");
+        return !veto;
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).

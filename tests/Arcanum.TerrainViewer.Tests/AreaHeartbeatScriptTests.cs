@@ -129,6 +129,10 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00803falloff.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(1)))));
             // ARC-DEV-254: 804 deals 3 normal damage to its attachee from a taking-damage slot (a nested damage, GT200).
             Write("scr/00804nested.scr", Program(Do(new(ScrCatalogue.Action.Damage, (Attachee, -1), N(3), N(0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-AI-2821 (TQ14): 816 is a will-KOS script that vetoes the kill-on-sight (skips the default) only for a candidate that is the player (object type 15), and lets the evaluation go on for any other candidate.
+            Write("scr/00816kosplayer.scr", Program(
+                Do(new(ScrCatalogue.Action.GetObjectType, (0, -1), (Local, 0))),
+                If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(15)), new(ScrCatalogue.Action.ReturnSkipDefault), new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00799heal.scr", Program(Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
             Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
@@ -859,6 +863,39 @@ public sealed class AreaHeartbeatScriptTests
             Assert.IsFalse(Vetoed(none), "script 0");
             Assert.IsFalse(Vetoed(other), "no slot at the point");
             Assert.IsFalse(AreaUseScriptHost.TakingDamageVetoes(host.RunTakingDamage("oid:nobody", null, rules)), "not a row of the shown map");
+        });
+    }
+
+    [TestMethod]
+    public void A_will_kos_script_vetoes_the_kill_on_sight_only_when_it_skips_the_default_for_that_candidate()
+    {
+        // ARC-AI-2821 (TQ14, 0x4AE120): point 22 of the deciding NPC runs with the candidate as the triggerer; skip default vetoes, run default, no script, another point and an NPC of no map do not.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var vetoes = Row(1, 16, 801, point: ScrPoint.WillKos);
+            var allows = Row(2, 16, 802, point: ScrPoint.WillKos);
+            var byCandidate = Row(3, 16, 816, point: ScrPoint.WillKos);
+            var none = Row(4, 16, 0, point: ScrPoint.WillKos);
+            var other = Row(5, 16, 801); // a script at the heartbeat point only
+            var door = Row(6, 3, 801, point: ScrPoint.WillKos); // not an NPC: the deciding NPC is one
+            var absent = Row(7, 16, 999, point: ScrPoint.WillKos); // a script number with no file: the interpreter answers "run default"
+            var host = Host(session, content, null, vetoes, allows, byCandidate, none, other, door, absent);
+            var rules = session.Rules.Scripts;
+            var hero = host.Pc;
+            var npcCandidate = new ScrObjectRef(1, AreaUseScriptHost.EntityId(allows));
+            bool Vetoed(AreaObjectRecord row, ScrObjectRef candidate) => AreaUseScriptHost.WillKosVetoes(host.RunWillKos(row, candidate, rules));
+            Assert.IsTrue(Vetoed(vetoes, hero));
+            Assert.IsTrue(Vetoed(vetoes, npcCandidate), "the candidate may be an NPC");
+            Assert.IsFalse(Vetoed(allows, hero));
+            Assert.IsTrue(Vetoed(byCandidate, hero), "the script reads the candidate as its triggerer (the player)");
+            Assert.IsFalse(Vetoed(byCandidate, npcCandidate), "an NPC candidate is let through");
+            Assert.IsFalse(Vetoed(none, hero), "script 0");
+            Assert.IsFalse(Vetoed(absent, hero), "a script file that is missing vetoes nothing");
+            Assert.IsFalse(Vetoed(other, hero), "no slot at the point");
+            var refused = host.RunWillKos(door, hero, rules);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, refused.Outcome);
+            Assert.IsFalse(AreaUseScriptHost.WillKosVetoes(refused), "a run that was not applied vetoes nothing");
         });
     }
 
