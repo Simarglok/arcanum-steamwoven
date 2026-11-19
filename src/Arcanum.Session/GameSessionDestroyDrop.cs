@@ -33,12 +33,18 @@ public sealed partial class GameSessionOwner
     // applies (a run the session cannot apply refuses the destroy whole); without a script host an item with the point refuses it, never dropped with the script skipped. The script points are the seed row's and the slots the session kept or the made item inherits.
     private RemovalScripted RunDestroyRemovals(IReadOnlyList<BodyItem> walk, SessionMapId map, string holder, ISessionItemScriptHost? scripts)
     {
-        var added = walk.Any(item => !item.Seed) ? _inventory.AddedTo(holder).ToDictionary(made => made.Entity, StringComparer.Ordinal) : [];
-        var items = walk.Select(item => (item.Entity, Points: item.Seed
-            ? KnownScriptPoints(item.Entity, _inventory.Seeds.TryGetValue(map, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null)
-            : KnownScriptPoints(item.Entity, added.TryGetValue(item.Entity, out var made) ? AddedItemFacts(made) : null))).ToArray();
+        var items = RemovalItems(walk, map, holder);
         if (scripts is not null) return RunRemovalScripts(items.Select(item => (item.Entity, item.Points)).ToArray(), holder, scripts);
         return items.Any(item => item.Points.Contains(SessionScriptPoint.RemoveItem)) ? new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null) : new(null, null);
+    }
+
+    // The walk's items with the script points they carry: the seed row's, or the slots the session kept or the made item inherits.
+    private (string Entity, IReadOnlyList<int> Points)[] RemovalItems(IReadOnlyList<BodyItem> walk, SessionMapId map, string holder)
+    {
+        var added = walk.Any(item => !item.Seed) ? _inventory.AddedTo(holder).ToDictionary(made => made.Entity, StringComparer.Ordinal) : [];
+        return walk.Select(item => (item.Entity, Points: item.Seed
+            ? KnownScriptPoints(item.Entity, _inventory.Seeds.TryGetValue(map, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null)
+            : KnownScriptPoints(item.Entity, added.TryGetValue(item.Entity, out var made) ? AddedItemFacts(made) : null))).ToArray();
     }
 
     // The destroy's own changes and the runs' planned ones as the commit writes them together: false when they would not fit the budget (checked before the runs commit, so a refusal leaves everything as it was).
@@ -109,26 +115,47 @@ public sealed partial class GameSessionOwner
     /// <see cref="PlanHolderDestroyDrop"/> over its list on its map at <paramref name="cell"/> (the live cell the caller knows, used when there is one critter; else the cell it was created on), and the first refusal of the drops
     /// (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>), the budgets counted over all the critters' drops together.
     /// </summary>
-    private (List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk)> Drops, GameSessionFailure Refusal) PlanCreatedCritterDrops(IReadOnlyList<SessionCreatedObject> critters, CellCoord? cell)
+    private (List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk, string Holder)> Drops, GameSessionFailure Refusal) PlanCreatedCritterDrops(IReadOnlyList<SessionCreatedObject> critters, CellCoord? cell)
     {
-        var drops = new List<(SessionMapId, CellCoord, List<BodyItem>)>();
+        var drops = new List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk, string Holder)>();
         foreach (var critter in critters)
         {
             if (critter.Kind != SessionCreatedKind.Critter) continue;
             var at = critters.Count == 1 && cell is { } live ? live : critter.Cell;
             var (walk, refusal) = PlanHolderDestroyDrop(critter.Map, critter.Entity, at, SessionHolderKind.Npc);
             if (refusal != GameSessionFailure.None) return (drops, refusal);
-            if (walk.Count > 0) drops.Add((critter.Map, at, walk));
+            if (walk.Count > 0) drops.Add((critter.Map, at, walk, critter.Entity));
         }
-        var created = drops.Sum(drop => drop.Item3.Count(item => item.Placed is { Source: SessionPlacedSource.Created }));
-        var held = drops.Sum(drop => drop.Item3.Count(item => item.Placed is { } placed && placed.Source != SessionPlacedSource.Created));
+        var created = drops.Sum(drop => drop.Walk.Count(item => item.Placed is { Source: SessionPlacedSource.Created }));
+        var held = drops.Sum(drop => drop.Walk.Count(item => item.Placed is { } placed && placed.Source != SessionPlacedSource.Created));
         return (drops, (long)_inventory.Created + created > _limits.MaxCreatedItems || (long)_inventory.Held + held > _limits.MaxPcItems ? GameSessionFailure.BudgetExceeded : GameSessionFailure.None);
     }
 
     // The planned drops laid down, each critter's walk in its order (the critter's destroy follows and discards what is left of its list).
-    private void DropCreatedCritterItems((List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk)> Drops, GameSessionFailure Refusal) plan)
+    private void DropCreatedCritterItems((List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk, string Holder)> Drops, GameSessionFailure Refusal) plan)
     {
-        foreach (var (map, cell, walk) in plan.Drops) DropWalk(walk, map, cell, worn: true);
+        foreach (var (map, cell, walk, _) in plan.Drops) DropWalk(walk, map, cell, worn: true);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2903 (IE3, DD4, DD11): the remove-item scripts (point 28) of the items the planned drops take out of the dying created critters, each run with its critter as the triggerer and the item as the attachee, in the drops' order (each critter's
+    /// walk last item first), the result ignored: made and prepared before anything changes, as <see cref="DestroyMapNpc"/> does. The policy is that map NPC's: a run the session cannot apply, an item whose row or critter belongs to a map other than the shown one (the host answers for the shown map alone) or an item with the point and
+    /// no script host refuses the destroy whole (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or the run's failure), never drops it with the script skipped; the destroy then changes nothing, so the critter stands until the refusal clears.
+    /// </summary>
+    private RemovalScripted RunCreatedDestroyRemovals((List<(SessionMapId Map, CellCoord Cell, List<BodyItem> Walk, string Holder)> Drops, GameSessionFailure Refusal) plan, ISessionItemScriptHost? scripts)
+    {
+        var items = new List<(string Item, string? Holder, IReadOnlyList<int> Points)>();
+        foreach (var (map, _, walk, holder) in plan.Drops)
+        {
+            foreach (var (entity, points) in RemovalItems(walk, map, holder))
+            {
+                if (!points.Contains(SessionScriptPoint.RemoveItem)) continue;
+                // The runs act on the shown map; a critter of another map is out of the host's reach.
+                if (scripts is null || map != _actor.Map) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+                items.Add((entity, holder, points));
+            }
+        }
+        return items.Count == 0 ? new(null, null) : RunRemovalScripts(items, scripts!);
     }
 
     // Each item leaves its holder in the walk's order; each placement sees the items still to come as not yet dropped (as a container's spill does), and a drop schedules the item's decay (0x468090). A worn item (an NPC's) is unequipped first.
