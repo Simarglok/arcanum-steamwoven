@@ -39,7 +39,9 @@ public static class ScrPoint
         // ARC-COMBAT-1719: the weapon's critical-miss point (35), run after the miss point (8) at the range end of a critical shot (0x4B2870).
         CriticalMiss = 35,
         // ARC-SCRIPT-2853: the item's drop point (5), run by the drop 0x461AB0 with the holder as the triggerer.
-        Drop = 5;
+        Drop = 5,
+        // ARC-SCRIPT-2860 (TQ11): the portal's or container's unlock point (3), run by the open attempts 0x4AEB70 and 0x4AED80 with the opener as the triggerer, before the lock test.
+        Unlock = 3;
 }
 
 /// <summary>

@@ -172,6 +172,23 @@ bars' captures are pixel-identical to `origin/main`; only the changing text of t
 - **SWI-BDR-7** Each backdrop is made from its own original background: the centre after the original, the sides
   continued outwards from the centre's edges in the same material, with no visible join (measured by SWI-VER-5).
 
+## Column mode (ARC-UI-2889)
+
+Owner decision 2026-11-19 (epic [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446), after the 1920 × 1080 / 2560 × 1440 comparison of [#2672](https://github.com/Simarglok/arcanum-steamwoven/issues/2672)): the full-width panels with wood sides read as a letterboxed film, so
+the **column** hypothesis is tested. The full-width rules above stay as they are (default); the column is an option of the layout model (`SteamwovenLayoutOptions.Column`, presets `ColumnOriginal` k = 1 and `ColumnThin` k = 0.8,
+`WithWorldToEdges()`), computed into `SteamwovenLayout.Column` (`SteamwovenColumnPlan`) by the same builder. The frame, bars, step and run-time scale are SWI-LAY-1..7 unchanged. If the owner accepts the column, it replaces the full-width rules of SWI-LAY-11, SWI-BDR-1 and SWI-BDR-5.
+
+- **Strip scale** `s = 3.6 · k · f` device px per original unit; k = 1 is the original strips' own heights (150 and 570 master px), k = 0.8 the thin pair (120 and 456). The options' panel heights must be the strips' (`IsValid`).
+- **Column** `2880 · k · f` wide, centred in the frame (each edge `round` of its own exact position, halves up, so the width is `round(2880 · k · f)` within a pixel), over the frame's whole height. The top strip stands at the
+  frame's top and the bottom strip at its bottom, both column-wide with the full-width layout's heights (`round(150 · k · f)` and `round(570 · k · f)` from the frame's edges).
+- **Window zone** (800 × 400 units at `s`) is column-wide and centred in the middle band between the strips, kept inside it; `GapAbove` and `GapBelow` are the column's rectangles above and below it, which take the window's wood
+  (empty at 16:9 with k = 1: 150 + 1440 + 570 = 2160 master px; 216 master px each at 16:9 with k = 0.8; 120 master px each at 16:10 with k = 1, 80 px at 2560 × 1600).
+- **Full-screen zone** (800 × 600 units at `s`) is column-wide and centred in the whole frame, strips included, with its own gaps in the column.
+- **World** `WorldLeft` and `WorldRight`: the frame left and right of the column over the frame's height. With `WorldToEdges` they run to the window's edges above 16:9 instead of ending at the frame's edges (the 21:9
+  question); a letterboxed frame (narrower than 16:10) keeps its vertical extent. No wood sides and no full-width backdrops; the old members of the layout (bands, centre block, split, backdrops, controls) are still the full-width ones and a column viewer does not draw them.
+
+Unit tests: `SteamwovenColumnTests` (exact numbers at eight sizes and 1024 × 768 for both presets, tiling at more sizes).
+
 ## Asset kit
 
 Part kinds:

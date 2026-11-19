@@ -1138,7 +1138,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.NewSector or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.LeaderKilling or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.LeaderKilling or ScrPoint.Unlock or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1829,6 +1829,46 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private int _leaderKillingDepth;
 
     /// <summary>
+    /// ARC-SCRIPT-2860 (TQ11, exe read 2026-11-19, UL1-UL3): the unlock script (attachment point 3) of <paramref name="target"/>, a portal or container of the shown map, which both open attempts (0x4AEB70, 0x4AED80) run through the script
+    /// dispatcher (0x441980) before the lock test: the opener (<paramref name="opener"/>: the PC or an NPC) as the triggerer, the object as the attachee, no extra object, line 0, under <see cref="UnlockAdmission"/>; its slot is kept as map
+    /// changes (<see cref="SlotProperty"/>). The attempt reads the answer (<see cref="UnlockRefused"/>: 0 refuses the opening). A target that is not a row of the shown map, or has no script at the point, runs nothing. The original has no guard; a script
+    /// whose effects open or toggle its own object reaches the attempt again nested, so a run of the same object inside its own run is not made (another object's attempt runs) (<see cref="AreaScriptedUseOutcome.Refused"/>).
+    /// </summary>
+    public AreaScriptedUse RunUnlock(string target, ScrObjectRef opener, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, target);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Unlock) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_unlocking.Contains(target)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "this object's unlock script is already running: a nested open attempt on it does not run it again");
+        var previous = _clicked;
+        _clicked = (target, row);
+        _unlocking.Add(target);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Unlock, attachee, opener, null), this, new() { Rules = Remember(rules), Admission = UnlockAdmission });
+            return Finish(run, _ => "a teleport from an unlock script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _unlocking.Remove(target); _clicked = previous; }
+    }
+
+    private readonly HashSet<string> _unlocking = new(StringComparer.Ordinal);
+
+    /// <summary>ARC-SCRIPT-2860: the set an unlock script (point 3) runs under (<see cref="RunUnlock"/>): the set of the object use scripts (<see cref="Admission"/>), which admits the installed script 1151 of a door whole (opt-in check).</summary>
+    public static ScrAdmissionSet UnlockAdmission => Admission;
+
+    /// <summary>
+    /// ARC-SCRIPT-2860 (UL2): what the open attempt reads from an unlock run (<see cref="RunUnlock"/>): true when the dispatcher answered 0 ("skip default", which includes a script that runs past its last line), so the attempt answers 4 and refuses the
+    /// opening; false when the object has no script at the point or the script answered "run default" (the attempt goes on to the lock test); null when the run did not finish (refused by the admission, effects the host cannot apply, an unreadable or
+    /// changed file, a nested run): the original has no such case, so the caller keeps the refusal it had before this point was run.
+    /// </summary>
+    public static bool? UnlockRefused(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport ? UseStops(ran) : null;
+    }
+
+    /// <summary>
     /// ARC-MAGIC-1167 (magic audit MA-10, exe read 2026-11-13, ledger RZ1-RZ3): the raise script (attachment point 18, 0x12) of <paramref name="target"/>, a creature of the shown map that a heal with the raise bit is about to bring back:
     /// the heal applier (0x4B58C0, the call at 0x4B5A46) runs it through the script dispatcher (0x441980) after it has computed the refusal by the creature's flags and before it tests that refusal, so it runs whether the flags refuse or not. The healer
     /// (<paramref name="healer"/>, the heal record's parent; null for a heal with none) is the triggerer, the target the attachee, line 0, under <see cref="DyingAdmission"/> (the set of the other NPC point scripts); its slot is kept as map
@@ -2508,7 +2548,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
                     // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
-                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code).Disposition : _session.DestroyUsedItem(_session.Version, used.Code).Disposition;
+                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts).Disposition : _session.DestroyUsedItem(_session.Version, used.Code, ItemScripts).Disposition;
                     if (removed == GameSessionDisposition.Rejected) return false;
                     continue;
                 }
@@ -2755,7 +2795,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             case ScrObjectStateChange.DestroyItemNamed:
             {
-                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value);
+                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value, ItemScripts);
                 LastNamedItem = destroyed;
                 return destroyed.Disposition != GameSessionDisposition.Rejected;
             }
@@ -3110,7 +3150,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_itemUse is { } used && used.Equals(request.Object))
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
-                    if ((_itemUser is { } eater ? _session.NpcItemRemovalRefusal(eater.Code, used.Code) : _session.UsedItemDestructionRefusal(used.Code)) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
+                    if ((_itemUser is { } eater ? _session.NpcItemRemovalRefusal(eater.Code, used.Code, ItemScripts) : _session.UsedItemDestructionRefusal(used.Code, ItemScripts)) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
                     continue;
                 }
                 // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first; ARC-WORLD-2502: so is a container, whose invulnerable items the session's budgets may refuse to lay down.
@@ -3288,7 +3328,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value, ItemScripts);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }

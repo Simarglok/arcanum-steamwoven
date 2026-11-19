@@ -97,6 +97,7 @@ src/Arcanum.Session/GameSessionExperience.cs,AwardHeroExperience,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordDamageExperience,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordNpcDamage,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordNpcKill,pending,
+src/Arcanum.Session/GameSessionExperience.cs,RunKillAlignment,exempt,host
 src/Arcanum.Session/GameSessionExperience.cs,RunLeaderKilling,exempt,host
 src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
@@ -455,6 +456,8 @@ src/Arcanum.Simulation/Party/CompanionFollow.cs,Interrupt,pending,
 src/Arcanum.Simulation/Reaction/CanSpeakRules.cs,Test,exempt,host
 src/Arcanum.Simulation/Reaction/ReactionRules.cs,PcHit,pending,
 src/Arcanum.Simulation/Skills/FollowerSkillRules.cs,AllFollowers,exempt,host
+src/Arcanum.Simulation/Skills/PickPocketRules.cs,AlignmentAfterKill,exempt,host
+src/Arcanum.Simulation/Skills/PickPocketRules.cs,AlignmentAfterTheft,exempt,host
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,Caught,pending,
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,NotAllowed,pending,
 src/Arcanum.Simulation/Skills/SkillCheckRules.cs,DifficultyReasons,pending,
@@ -687,6 +690,7 @@ src/Arcanum.World/AreaNpcSheet.cs,Mark,pending,
 src/Arcanum.World/AreaObjectBreakHost.cs,Interrupts,exempt,reference
 src/Arcanum.World/AreaOpeningShop.cs,Make,pending,
 src/Arcanum.World/AreaPickPocket.cs,Start,pending,
+src/Arcanum.World/AreaPortals.cs,Passages,exempt,host
 src/Arcanum.World/AreaProjectileHost.cs,Finish,pending,
 src/Arcanum.World/AreaRest.cs,BedScriptRefusal,exempt,reference
 src/Arcanum.World/AreaRestock.cs,GeneratedOnceFacts,pending,
@@ -768,6 +772,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunLeaderKilling,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunUnlock,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunWillKos,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,SocialClassOf,exempt,host
@@ -935,6 +940,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,FollowerMenuFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,Gamble,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,ContainerUnlockScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerPick.cs,AiPickLockTarget,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
@@ -967,6 +973,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,DoorUseScriptStops,exempt
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,PortalUnlockScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindow,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ItemUseScript,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ReadItem,pending,

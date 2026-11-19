@@ -371,23 +371,42 @@ public sealed partial class GameSessionOwner
     /// and a full durability budget (the deletion's record). The item's destroy script (point 2) is the host's; the session does not
     /// run it. One revision.
     /// </summary>
-    public GameSessionMutationResult DestroyUsedItem(GameSessionVersion expected, string entity)
+    public GameSessionMutationResult DestroyUsedItem(GameSessionVersion expected, string entity, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (UsedItemDestructionRefusal(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
+        if (UsedItemDestructionRefusalCore(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
+        if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the hero as the triggerer, made and prepared before anything applies and committed with the deletion (the lines it prints are not shown: this result carries none).
+        var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(entity, null, HeroItemPoints(entity), scripts);
+        if (removal.Done is { } refused) return new(GameSessionDisposition.Rejected, refused.Failure, Version);
+        removal.Runs?.Commit();
         DestroyObject(entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
+    // The script points the session knows of an item the hero holds (its seed row's, the slots kept or inherited).
+    private IReadOnlyList<int> HeroItemPoints(string entity) => HeldKind(entity) is { } kind ? HeroNamedItem(entity, kind).ScriptPoints : [];
+
     /// <summary>ARC-SCRIPT-1481: why <see cref="DestroyUsedItem"/> would refuse the item (not held or worn: <see cref="GameSessionFailure.ItemNotAvailable"/>; not food or a scroll: <see cref="GameSessionFailure.InventoryMismatch"/>;
     /// full durability budget: <see cref="GameSessionFailure.BudgetExceeded"/>), or null when it would destroy it; changes nothing. A use script run checks it before it applies any effect.</summary>
-    public GameSessionFailure? UsedItemDestructionRefusal(string entity)
+    public GameSessionFailure? UsedItemDestructionRefusal(string entity, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
+        if (UsedItemDestructionRefusalCore(entity) is { } refusal) return refusal;
+        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
+        // Without one an item with a remove-item script is refused, never deleted with the script skipped (the spell path's spent scroll or food: #2881).
+        if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return GameSessionFailure.ItemScriptUnsupported;
+        if (scripts is not null && RunRemovalScript(entity, null, HeroItemPoints(entity), scripts).Done is { } dry) return dry.Failure;
+        return null;
+    }
+
+    // The refusals of the destruction that no script decides.
+    private GameSessionFailure? UsedItemDestructionRefusalCore(string entity)
+    {
         if (!SessionValidation.Entity(entity)) return GameSessionFailure.InvalidItem;
         if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null) return GameSessionFailure.ItemNotAvailable;
         if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return GameSessionFailure.InventoryMismatch;
