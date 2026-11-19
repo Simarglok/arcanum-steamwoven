@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
             InventoryItemIcons();
             var art = InventoryLookLoads(_inventoryArtContent).ToDictionary(load => load.Number, load => (Texture2D)HotkeyTexture(load.Frames[0]));
             _inventoryArtLook = new(art, InventoryItemArt, _inventoryArtContent.Texts)
-                { LootReady = _inventoryArtContent.LootArtReady, BarterReady = _inventoryArtContent.BarterArtReady };
+                { LootReady = _inventoryArtContent.LootArtReady, BarterReady = _inventoryArtContent.BarterArtReady, Fonts = TextFonts() };
             GD.Print($"ARC-UI-051 inventory art ready {_inventoryArtContent.Detail}; item art {_inventoryItemIconsDetail}; ARC-UI-052 loot art ready={_inventoryArtContent.LootArtReady}; ARC-UI-064 barter art ready={_inventoryArtContent.BarterArtReady}");
         }
         else GD.Print($"ARC-UI-051 inventory art not ready: {_inventoryArtContent.Detail}");

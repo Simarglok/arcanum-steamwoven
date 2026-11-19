@@ -126,7 +126,7 @@ public partial class TerrainViewerApp
             if (zoomed.LoadBmpFromBuffer(zoomedBytes) == Error.Ok) { zoomed.Convert(Image.Format.Rgba8); zoomedTexture = ImageTexture.CreateFromImage(zoomed); }
             else GD.Print("ARC-UI-083 world-map continent picture did not decode");
         }
-        _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
+        _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content) { MessageFont = TextFonts()?.Text };
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
         GD.Print("ARC-UI-105 world-map marker art sizes " + string.Join(" ", new[] { 204, 205, 206, 143, 814 }.Where(art.ContainsKey).Select(n => $"{n}={art[n][0].GetWidth()}x{art[n][0].GetHeight()}x{art[n].Length}")));
         return _worldMapArtLook;

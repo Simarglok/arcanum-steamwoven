@@ -26,7 +26,7 @@ public partial class AreaHotkeyBarView : Control
     private readonly TextureRect[] _slots = new TextureRect[HotkeyBarRules.Entries];
     private readonly TextureRect[] _icons = new TextureRect[HotkeyBarRules.Entries];
     private readonly Label[] _standIns = new Label[HotkeyBarRules.Entries];
-    private readonly Label[] _counts = new Label[HotkeyBarRules.Entries];
+    private readonly AreaArtLabel[] _counts = new AreaArtLabel[HotkeyBarRules.Entries];
     private readonly TextureRect[] _recent = new TextureRect[2];
     private TextureRect _light = null!;
     private TextureRect _ghost = null!;
@@ -63,6 +63,15 @@ public partial class AreaHotkeyBarView : Control
     internal Texture2D? SlotArtForSelfTest(int entry) => _slots[entry].Texture;
     internal Texture2D? RecentArtForSelfTest(int index) => _recent[index].Texture;
     internal bool GhostShownForSelfTest => _ghost.Visible;
+
+    private AreaArtFontFace? _countFont;
+
+    /// <summary>ARC-UI-2795: the font of the item entries' counts (art 27, <c>morph15font</c>, white: the font 0x739F88 of HK12); null draws no count.</summary>
+    public AreaArtFontFace? CountFont
+    {
+        get => _countFont;
+        set { _countFont = value; foreach (var count in _counts) if (count is not null) count.Face = value; }
+    }
 
     public override void _Ready()
     {
@@ -108,9 +117,8 @@ public partial class AreaHotkeyBarView : Control
             };
             _standIns[i].AddThemeFontSizeOverride("font_size", AreaUiScale.MinimumTextPx); // ARC-GPAD-1377: no text under 9 px on the handheld
             AddChild(_standIns[i]);
-            // The count is printed at the slot's left + 2 and the strip's top (HK12).
-            _counts[i] = new Label { Name = "Count" + i, Position = new Vector2(HotkeyBarRules.SlotX[i] + 2, 0), MouseFilter = MouseFilterEnum.Ignore };
-            _counts[i].AddThemeFontSizeOverride("font_size", 10);
+            // The count is printed at the slot's left + 2 and the strip's top (HK12) in the title font (art 27, white; ARC-UI-2795, exe 0x57E140).
+            _counts[i] = new AreaArtLabel { Name = "Count" + i, Position = new Vector2(HotkeyBarRules.SlotX[i] + 2, 0), Size = new Vector2(HotkeyBarRules.HitWidth, 20), Face = _countFont };
             AddChild(_counts[i]);
         }
         for (var i = 0; i < _recent.Length; i++)
