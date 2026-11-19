@@ -312,6 +312,9 @@ public sealed partial class GameSessionOwner
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
+
+        /// <summary>ARC-SCRIPT-2880: the map changes the runs plan (the change art number actions), which the commit writes; the caller that writes changes of its own checks that both fit together.</summary>
+        internal IReadOnlyList<MapChangeEdit> PlannedArtEdits => _artEdits.AsReadOnly();
         /// <summary>ARC-MAGIC-1830: the eye candy requests (<see cref="ScrEffects.EyeCandies"/>) of the runs so far, in run and action order, for the host to show as it shows the lines (<see cref="Messages"/>) once the runs are applied; a run the session refused has none.</summary>
         internal IReadOnlyList<ScrEyeCandy> EyeCandies => _runs.Where(run => run.Run.Outcome != ScrOutcome.Refused).SelectMany(run => run.Run.Effects.EyeCandies).ToArray();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),

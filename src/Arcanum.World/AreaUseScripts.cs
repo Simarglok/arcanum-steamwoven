@@ -1989,7 +1989,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (AlreadyDestroyed(obj)) return true;
         // ARC-WORLD-2502 (0x43CCA0 → 0x4639E0): a container's invulnerable items are dropped on its cell with the destroy (a junk pile only destroyed, a never generated 0x200 container regenerated first).
         var applied = ShownContainer(obj) && Place(obj) is { } cell
-            ? _session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj)).Disposition != GameSessionDisposition.Rejected
+            ? NotedRemoval(_session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj), ItemScripts)).Disposition != GameSessionDisposition.Rejected
             : _session.ApplyChanges(_session.Version, null,
                 [new(new SessionMapId(obj.Map), MapChangeKey.ForEntity(obj.Code, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition != GameSessionDisposition.Rejected;
         // ARC-SCRIPT-2514 (BS3c): the destroy (0x43CCA0) kills every goal run of the object (0x423FF0) and tells the spell runs (0x459740): the viewer's hosts end them.
@@ -2436,7 +2436,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
             || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
-        if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
+        var removalMark = _removalLines.Count;
+        if (!Apply(effects, write))
+        {
+            _removalLines.RemoveRange(removalMark, _removalLines.Count - removalMark);
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
+        }
+        // ARC-SCRIPT-2880 (IE3): the lines the remove-item scripts of the run's destroys printed (the item in use, destroy item named, the items a destroyed NPC or container gives up) join the run's printed lines, after its own.
+        foreach (var removed in _removalLines.Skip(removalMark))
+        {
+            lines.Add(removed.Text);
+            printedLines.Add(new(removed.Kind, removed.Text));
+        }
+        _removalLines.RemoveRange(removalMark, _removalLines.Count - removalMark);
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
@@ -2454,6 +2466,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 { Printed = printedLines, NpcTeleports = npcTeleports }
             : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})") { Printed = printedLines };
     }
+
+    // ARC-SCRIPT-2880: the lines the remove-item scripts printed in the destroys the run being applied makes, in order; the run's result takes them. Bounded: a host that never ends a run (a call outside one) keeps the first lines only.
+    private readonly List<SessionScriptMessage> _removalLines = [];
+    private const int MaxPendingRemovalLines = 256;
+
+    private void NoteRemovalLines(IReadOnlyList<SessionScriptMessage> lines)
+    {
+        foreach (var line in lines)
+            if (_removalLines.Count < MaxPendingRemovalLines) _removalLines.Add(line);
+    }
+
+    private GameSessionMutationResult NotedRemoval(GameSessionMutationResult result) { NoteRemovalLines(result.Messages); return result; }
+
+    private InventoryMutationResult NotedRemoval(InventoryMutationResult result) { NoteRemovalLines(result.Messages); return result; }
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
@@ -2548,7 +2574,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
                     // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
-                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts).Disposition : _session.DestroyUsedItem(_session.Version, used.Code, ItemScripts).Disposition;
+                    // ARC-SCRIPT-2880: the lines the removal's script printed are shown with the run's.
+                    var removed = _itemUser is { } eater ? NotedRemoval(_session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts)).Disposition : NotedRemoval(_session.DestroyUsedItem(_session.Version, used.Code, ItemScripts)).Disposition;
                     if (removed == GameSessionDisposition.Rejected) return false;
                     continue;
                 }
@@ -2562,7 +2589,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (AlreadyDestroyed(request.Object)) continue;
                 // ARC-WORLD-2493 (0x43CCA0 → 0x4639E0): the NPC's invulnerable items are dropped on its cell with the destroy; an NPC with no cell of its own is destroyed with its list.
                 var destroyed = Place(request.Object) is { } cell
-                    ? _session.DestroyMapNpc(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, cell)
+                    ? NotedRemoval(_session.DestroyMapNpc(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, cell, scripts: ItemScripts))
                     : _session.ApplyChanges(_session.Version, null,
                         [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
                 if (destroyed.Disposition == GameSessionDisposition.Rejected) return false;
@@ -2795,7 +2822,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             case ScrObjectStateChange.DestroyItemNamed:
             {
-                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value, ItemScripts);
+                var destroyed = NotedRemoval(_session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value, ItemScripts));
                 LastNamedItem = destroyed;
                 return destroyed.Disposition != GameSessionDisposition.Rejected;
             }
@@ -3159,7 +3186,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     if (AlreadyDestroyed(request.Object)) continue;
                     if (DestroyPointRefusal(request.Object) is { } pointWhy) return pointWhy;
                     if (ShownContainer(request.Object) && Place(request.Object) is { } containerCell
-                        && _session.DestroyMapContainerRefusal(new SessionMapId(request.Object.Map), request.Object.Code, containerCell, IsJunkPile(request.Object)) is { } containerWhy)
+                        && _session.DestroyMapContainerRefusal(new SessionMapId(request.Object.Map), request.Object.Code, containerCell, IsJunkPile(request.Object), ItemScripts) is { } containerWhy)
                         return $"destroy of {request.Object.Code} is refused by the session ({containerWhy})";
                     continue;
                 }
@@ -3168,7 +3195,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
                 // ARC-WORLD-2493: the destroy drops the NPC's invulnerable items (0x4639E0), which the session's budgets may refuse; checked before any effect applies.
-                if (Place(request.Object) is { } dropCell && _session.DestroyMapNpcRefusal(new SessionMapId(request.Object.Map), request.Object.Code, dropCell) is { } dropWhy)
+                if (Place(request.Object) is { } dropCell && _session.DestroyMapNpcRefusal(new SessionMapId(request.Object.Map), request.Object.Code, dropCell, ItemScripts) is { } dropWhy)
                     return $"destroy of {request.Object.Code} is refused by the session ({dropWhy})";
                 if (FollowsPc(request.Object)) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
                 // ARC-SCRIPT-1842: the map change does not reach the session's destroy (which unlinks, 0x45E180), so a leader or follower of an NPC is left as it is.
@@ -3414,7 +3441,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_world.Vitals?.Invoke(obj.Code) is not { } vitals) return Not("its hit points and fatigue are unknown: the shares cannot be carried");
         if (vitals.MaxHitPoints <= 0 || vitals.MaxFatigue <= 0) return Not("a maximum of 0: the original divides by it without a guard (0x4AB400)");
         if (TransformPercents(vitals) is not (100, 100) && _world.CarryVitals is null) return Not("its hit points or fatigue are below full and the viewer's life cannot carry the shares");
-        if (_session.DestroyMapNpcRefusal(new SessionMapId(_shownMap), obj.Code, cell) is { } dropWhy) return Not($"the session would refuse the destroy's drops ({dropWhy})");
+        if (_session.DestroyMapNpcRefusal(new SessionMapId(_shownMap), obj.Code, cell, ItemScripts) is { } dropWhy) return Not($"the session would refuse the destroy's drops ({dropWhy})");
         if (_session.QueryCreateObjectRefusal(SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell) is { } why) return Not($"the session would refuse it ({why})");
         return null;
     }
@@ -3463,7 +3490,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return null;
         }
         // The earlier requests and the creation may have used the session's budgets since the plan: asked again before anything else applies.
-        if (_session.DestroyMapNpcRefusal(new SessionMapId(old.Map), old.Code, cell) is not null) return Undo();
+        if (_session.DestroyMapNpcRefusal(new SessionMapId(old.Map), old.Code, cell, ItemScripts) is not null) return Undo();
         if (percents is not (100, 100) && _world.CarryVitals?.Invoke(critter.Entity, percents.HitPoints, percents.Fatigue) != true) return Undo();
         // F6: the old object's destroy script runs first; a return of 0 keeps it (the creation stands either way), a run that could not apply leaves everything as it was.
         if (Slot(old, ScrPoint.Destroy) is { Script: > 0 })
@@ -3478,7 +3505,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             var left = _session.LeaveParty(_session.Version, old.Code, new PartyLeave(Force: true));
             if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
         }
-        var destroyed = _session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true);
+        var destroyed = NotedRemoval(_session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true, scripts: ItemScripts));
         if (destroyed.Disposition == GameSessionDisposition.Rejected) return Undo();
         CarryFacing();
         return new ScrObjectRef(_shownMap, critter.Entity);

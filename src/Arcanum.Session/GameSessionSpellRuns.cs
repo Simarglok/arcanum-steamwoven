@@ -379,13 +379,13 @@ public sealed partial class GameSessionOwner
         if (UsedItemDestructionRefusalCore(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
         if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
-        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the hero as the triggerer, made and prepared before anything applies and committed with the deletion (the lines it prints are not shown: this result carries none).
+        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the hero as the triggerer, made and prepared before anything applies and committed with the deletion (ARC-SCRIPT-2880: the lines it prints are the result's <see cref="GameSessionMutationResult.Messages"/>, for the host to show).
         var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(entity, null, HeroItemPoints(entity), scripts);
         if (removal.Done is { } refused) return new(GameSessionDisposition.Rejected, refused.Failure, Version);
         removal.Runs?.Commit();
         DestroyObject(entity);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version) { Messages = removal.Runs?.Messages ?? [] };
     }
 
     // The script points the session knows of an item the hero holds (its seed row's, the slots kept or inherited).
