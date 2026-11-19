@@ -575,7 +575,8 @@ public sealed class AreaInventoryHost
         var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
             .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
             .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
-                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray()).Where(item => !IsOff(session, runtimeMap, item.Entity)).ToArray();
+                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)
+                { Quantity = row.Entry.Facts.Kind.Type == SessionItemType.Gold ? row.Entry.Facts.Quantity : null }).ToArray()).Where(item => !IsOff(session, runtimeMap, item.Entity)).ToArray();
         // ARC-UI-072: the body's worn items by slot (its record over its map data, ARC-WORLD-103: the session's lists show it).
         var bodyDoll = pile is not null || current?.Holders.FirstOrDefault(h => h.Entity == holder) is not { } wearer || wearer.Kind != SessionHolderKind.Npc
             ? Array.Empty<AreaDollSlot>()
