@@ -475,7 +475,7 @@ public sealed partial class GameSessionOwner
                 ShotProjectiles(hero)) : [];
         // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step, at the landing for a shot that flew.
         // ARC-COMBAT-1973 (RH5): a wall's hit offers them too (the weapon's scripts with the wall as the extra object), as any struck object's.
-        // ARC-SCRIPT-2841 (TQ22): a critical miss's self-hit asks them too, before its damage step, but only where the attack is resolved at once: a shot or a throw that flies runs no hit step on the self-hit (the projectile ends on the attacker's own tile).
+        // ARC-SCRIPT-2841 (TQ31): a critical miss's self-hit asks them too, before its damage step, but only where the attack is resolved at once: a shot or a throw that flies runs no hit step on the self-hit (the projectile ends on the attacker's own tile).
         if (attack.HitScripts is { } hitScripts && HitScriptEventOf(resolution, !(pending is null && attack.Flight), !(attack.Flight || throwing),
                 new(pending is null ? WieldedEntity() : pending.WeaponItem, false, pending is not null, pending?.Thrown is not null)) is { } hitEvent)
             hitScripts(hitEvent);

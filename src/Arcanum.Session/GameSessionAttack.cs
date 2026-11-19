@@ -668,7 +668,7 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (attachment point 0x17) of whoever takes the damage, asked by the damage apply (0x4B4390) right before it, after the attack is resolved: the recipient in, whether the damage goes on out
     /// (false: the script skipped the default, which cancels the whole damage step, <see cref="SessionAttackResult.Vetoed"/>). Null: the damage goes on. The hero has no script data here, so a host answers true for it.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
-    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
+    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit (ARC-SCRIPT-2841: and of a critical miss's self-hit that is resolved at once, <see cref="SessionHitScriptEvent.SelfHit"/>), asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-SCRIPT-2828 (0x4B4390, 0x4B47F8): the host's critical-hit scripts (point 34) of the armour a critical damage step on a living critter reaches, asked after its taking-damage script let the damage go on and before the damage is written (<see cref="SessionArmourCriticalEvent"/>). Null: none run.</summary>
     public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
@@ -1009,7 +1009,7 @@ public sealed partial class GameSessionOwner
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step (0x4B3770), at the landing for a shot that flew.
-        // ARC-SCRIPT-2841 (TQ22): a critical miss's self-hit asks them too, before its damage step, but only where the attack is resolved at once: a shot or a throw that flies runs no hit step on the self-hit (the projectile ends on the attacker's own tile).
+        // ARC-SCRIPT-2841 (TQ31): a critical miss's self-hit asks them too, before its damage step, but only where the attack is resolved at once: a shot or a throw that flies runs no hit step on the self-hit (the projectile ends on the attacker's own tile).
         if (attack.HitScripts is { } hitScripts && HitScriptEventOf(resolution, !(pending is null && attack.Flight), !(attack.Flight || throwing),
                 new(pending is null ? WieldedEntity() : pending.WeaponItem, false, pending is not null, pending?.Thrown is not null)) is { } hitEvent)
             hitScripts(hitEvent);

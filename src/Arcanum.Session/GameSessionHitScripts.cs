@@ -9,7 +9,7 @@ namespace Arcanum.Session;
 /// the thrown item, the projectile's weapon; null for bare hands or a critter that holds none): its hit (7) and critical-hit (34) scripts run when it is not null, the attacker's own critter-hits script (26)
 /// runs whether or not it is. <see cref="Critical"/> is the context's critical flag (the critical-hit point, 34). <see cref="Projectile"/> marks the projectile path (0x4B2F60, a shot that flew), whose critical-hit point asks
 /// that the weapon is a weapon item. <see cref="Thrown"/>: the weapon is an item thrown (the hero's throw lands through the thrown-item host, which runs the hit point of its own, ARC-MAGIC-042). The attacker and the victim are the host's own (it built the attack). The answers of the scripts are not read (the call sites ignore them).
-/// ARC-SCRIPT-2841 (TQ22, 0x4B6410, 0x4B3170): <see cref="SelfHit"/> marks the hit a critical miss turned on the attacker (the context's hit flag 0x2 set, the target := the attacker, the critical flag 0x4 half of the time, which is <see cref="Critical"/> here):
+/// ARC-SCRIPT-2841 (TQ31, 0x4B6410, 0x4B3170): <see cref="SelfHit"/> marks the hit a critical miss turned on the attacker (the context's hit flag 0x2 set, the target := the attacker, the critical flag 0x4 half of the time, which is <see cref="Critical"/> here):
 /// the victim is the attacker itself, so the host passes the attacker as the extra object of the weapon's points and as the triggerer of its own critter-hits point (26).
 /// </summary>
 public readonly record struct SessionHitScriptEvent(string? Weapon, bool Critical, bool Projectile, bool Thrown = false, bool SelfHit = false);

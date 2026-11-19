@@ -367,7 +367,7 @@ public sealed class ScriptTriggerCensusTests
     }
 
     /// <summary>
-    /// ARC-SCRIPT-2841 (ledger TQ22; AC2): the installed weapons (object type 5) whose attachments the self-hit of a critical miss reaches: the hit (7) and critical-hit (34) points, over the placed rows of every map the data opens whole and over every item
+    /// ARC-SCRIPT-2841 (ledger TQ31; AC2): the installed weapons (object type 5) whose attachments the self-hit of a critical miss reaches: the hit (7) and critical-hit (34) points, over the placed rows of every map the data opens whole and over every item
     /// prototype, with the script numbers; the attacker's critter-hits point (26) is counted over the critters. Numbers and script numbers only; <c>ARC_SELF_HIT_CENSUS</c>, when set, receives the report. Opt-in: <c>DAT_ROOT</c>.
     /// </summary>
     [TestMethod, TestCategory("RealData")]

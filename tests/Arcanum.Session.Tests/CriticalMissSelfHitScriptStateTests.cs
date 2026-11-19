@@ -8,7 +8,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-SCRIPT-2841 (ledger TQ22; 0x4B3170 → 0x4B6410 → 0x4B3770): a critical miss turns the attack into a hit on the attacker, and the hit step runs the weapon's hit (7) and critical-hit (34, when the self-hit is critical) scripts and the
+// ARC-SCRIPT-2841 (ledger TQ31; 0x4B3170 → 0x4B6410 → 0x4B3770): a critical miss turns the attack into a hit on the attacker, and the hit step runs the weapon's hit (7) and critical-hit (34, when the self-hit is critical) scripts and the
 // attacker's critter-hits script (26) before the damage apply. The session tells the host (SessionHitScriptEvent.SelfHit) before the self-hit's damage step. The NPC fields are AttackStateTests' invented small animal, made tough.
 [TestClass]
 public sealed class CriticalMissSelfHitScriptStateTests
