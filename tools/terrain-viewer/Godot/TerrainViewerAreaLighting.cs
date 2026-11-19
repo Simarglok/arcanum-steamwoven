@@ -519,6 +519,8 @@ public partial class TerrainViewerApp
         foreach (var restock in last.Restocks)
             foreach (var regeneration in restock.Regenerations)
             {
+                // ARC-SCRIPT-2887: and the lines the get and insert-item scripts of the items it created printed.
+                PostScriptLines(regeneration.Messages);
                 PostScriptLines(regeneration.Wield?.Messages ?? []);
                 // ARC-MAGIC-1830: and the eye candy those scripts made.
                 QueueScriptEyeCandies(regeneration.Wield?.EyeCandies ?? []);

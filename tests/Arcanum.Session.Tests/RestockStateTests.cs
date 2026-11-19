@@ -57,6 +57,8 @@ public sealed class RestockStateTests
         public SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder) { Checks.Add((map, holder)); return Insert; }
         public bool Ready { get; set; } = true;
         public bool RestockReady => Ready;
+        public ISessionItemScriptHost? Scripts { get; set; }
+        public ISessionItemScriptHost? ItemScripts(SessionMapId map) => Scripts;
     }
 
     private static SessionMapInventorySeed Seed() => new(
@@ -501,5 +503,38 @@ public sealed class RestockStateTests
         world.Ready = false;
         Assert.AreEqual(GameSessionFailure.InventoryUnavailable, owner.RegenerateInventory(owner.Version, "chest", world).Failure);
         Assert.AreEqual(before, owner.Version);
+    }
+
+    // ARC-SCRIPT-2887 (ledger TQ19, NT2): a restock item and the restock pile are created objects moved in through 0x4617F0 → 0x461810 (no parent): the prototype's get script (4) runs before the insert check with the holder as the triggerer (skip default refuses
+    // the item, which 0x463E20 destroys), and the insert-item script (21) after it. The synthetic prototypes: the pile has both scripts, the sword a get script that skips the default.
+    private static IReadOnlyList<SessionPrototypeScript>? ScriptedPrototype(int prototype) => prototype switch
+    {
+        9056 => new SessionPrototypeScript[] { new(SessionScriptPoint.Get, CreatedItemScriptTests.GetScript, 0, 0), new(SessionScriptPoint.InsertItem, CreatedItemScriptTests.InsertScript, 0, 0) },
+        4021 => new SessionPrototypeScript[] { new(SessionScriptPoint.Get, 705, 0, 0) },
+        _ => null,
+    };
+
+    [TestMethod]
+    public void A_restock_pile_runs_its_get_and_insert_scripts_and_a_restock_item_whose_get_script_skips_the_default_is_refused()
+    {
+        using var owner = Owner();
+        owner.AttachItemScripts(ScriptedPrototype);
+        var host = new CreatedItemScriptTests.Host(owner);
+        host.Programs[705] = Arcanum.Session.Tests.InsertItemScriptTests.Program(Arcanum.Session.Tests.InsertItemScriptTests.C(Arcanum.Data.Scripts.ScrCatalogue.Action.ReturnSkipDefault));
+        var world = new World { Scripts = host };
+        var chest = owner.RegenerateInventory(owner.Version, "chest", world).Regeneration!;
+        Assert.AreEqual((40, 1, 2), (chest.Coins, chest.Refused, chest.Skipped), "the pile is made, the sword is refused by its get script (destroyed), the key and the unknown line are skipped");
+        Assert.AreEqual(1, List(owner, "chest").Length, "only the pile is in the chest");
+        CollectionAssert.AreEqual(new[] { "hero reads 5", "hero reads 6" }, chest.Messages.Select(message => message.Text).ToArray(), "a container is no critter: the hero's reading of the pile's lines");
+    }
+
+    [TestMethod]
+    public void A_restock_item_whose_prototype_has_scripts_is_not_created_without_a_script_host()
+    {
+        using var owner = Owner();
+        owner.AttachItemScripts(ScriptedPrototype);
+        var chest = owner.RegenerateInventory(owner.Version, "chest", new World()).Regeneration!;
+        Assert.AreEqual((0, 0, 4), (chest.Coins, chest.Refused, chest.Skipped), "the pile and the sword carry scripts nothing can run: both skipped, as the key and the unknown line");
+        Assert.AreEqual(0, List(owner, "chest").Length);
     }
 }

@@ -31,7 +31,7 @@ public sealed partial class GameSessionOwner
         var item = request.Item;
         var scripts = request.Scripts!;
         // ARC-COMBAT-2182 (TW3, QW5): a split stack's throw script runs for the stack the split makes. The original splits at the lift, so the script has its object; here the split comes after the scripts (a refusal leaves nothing made), so the script
-        // runs for the entity the split will take, which answers as that made item meanwhile (_pendingThrowMade).
+        // runs for the entity the split will take, which answers as that made item meanwhile (_pendingMade).
         var splitEntity = split ? NextObjectEntity(SessionObjectOrigin.Made) : null;
         if (split && (splitEntity is null || request.SplitKind is null)) return Stop(Refused(GameSessionFailure.BudgetExceeded));
         var attachee = splitEntity ?? item;
@@ -53,7 +53,7 @@ public sealed partial class GameSessionOwner
         // A made stack has no complexity of its own (its weight row is made with none).
         var complexity = worn?.Item.MagickTechComplexity ?? (!split && _inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0);
         var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [attachee] = complexity });
-        if (split) _pendingThrowMade = (splitEntity!, request.SplitKind!.Value);
+        if (split) _pendingMade = (splitEntity!, request.SplitKind!.Value);
         try
         {
             // The removal 0x467860 for a worn item, then the throw script; a run the session cannot apply ends the sequence.
@@ -104,7 +104,7 @@ public sealed partial class GameSessionOwner
         }
         finally
         {
-            _pendingThrowMade = null;
+            _pendingMade = null;
         }
     }
 
