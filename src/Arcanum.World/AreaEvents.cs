@@ -163,6 +163,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => _round?.Invoke()?.ScanCombatants(map) ?? [];
     public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => _round?.Invoke()?.CombatantFacts(map, entity);
     public long DistanceToPc(string npc) => Ai?.DistanceToPc(npc) ?? -1;
+    public bool Knows(string npc) => Ai?.Knows(npc) ?? true;
     public bool RunScript(Arcanum.Simulation.Ai.AiScriptPoint point, string npc, string? triggerer) => Ai?.RunScript(point, npc, triggerer) ?? true;
     public bool RunWaypoints(string npc) => Ai?.RunWaypoints(npc) ?? false;
     public void RunStandpoints(string npc) => Ai?.RunStandpoints(npc);
