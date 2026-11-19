@@ -1,0 +1,75 @@
+{
+  "note": "Geometry of the 800 x 600 layout references of the context screens (TRD SWI-GEN-1). Sources are the Original-look census screenshots under local/steamwoven-ui/census/shots/ (local only, never committed); a crop is WIDTHxHEIGHT+X+Y in the source's pixels; a zone is the 800 x 400 window zone, built from one crop or from stacked crops (resize to the target with an exclamation mark, flip for a mirrored filler; a patch copies a WxH+X+Y region of the cropped piece over the +X+Y place to hide a capture overlay). The strips are the clean 800 x 41 and 800 x 159 crops of the census.",
+  "strips": {
+    "top": "H01-top-strip-clock-before.png",
+    "bottom": "H02-bottom-strip-xp-before.png"
+  },
+  "screens": {
+    "ctx-hud": {
+      "zone": [
+        {
+          "src": "G16-reading-book.png",
+          "crop": "800x200+240+441"
+        },
+        {
+          "src": "G16-reading-book.png",
+          "crop": "800x200+240+441",
+          "flip": true
+        }
+      ]
+    },
+    "ctx-inventory": {
+      "zone": [
+        {
+          "src": "G01-inventory-after.png",
+          "crop": "1280x640+0+0",
+          "resize": "800x400!"
+        }
+      ]
+    },
+    "ctx-character": {
+      "zone": [
+        {
+          "src": "G06-sheet-skills-window-art.png",
+          "crop": "800x400+240+0"
+        }
+      ]
+    },
+    "ctx-logbook": {
+      "zone": [
+        {
+          "src": "G11-logbook-quests.png",
+          "crop": "800x400+240+41",
+          "patch": [
+            {
+              "from": "90x30+0+330",
+              "to": "+0+374"
+            }
+          ]
+        }
+      ]
+    },
+    "ctx-schematic": {
+      "zone": [
+        {
+          "src": "G15-schematic-window-art.png",
+          "crop": "800x400+240+0"
+        }
+      ]
+    },
+    "ctx-reading": {
+      "zone": [
+        {
+          "src": "G16-reading-book.png",
+          "crop": "800x400+240+41"
+        }
+      ]
+    },
+    "ctx-main-menu": {
+      "full": {
+        "src": "M01-main-menu.png",
+        "crop": "800x600+240+100"
+      }
+    }
+  }
+}

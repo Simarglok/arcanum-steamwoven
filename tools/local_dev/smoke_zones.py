@@ -96,6 +96,7 @@ TRIGGERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (".gitignore", _NONE, "repository settings"), ("LICENSE", _NONE, "licence"), 
     ("tools/research/", _NONE, "research probes"), ("tools/hd_pack/", _NONE, "HD pack tool"),
     ("tools/hd-interface-import/", _NONE, "HD import tool"), ("tools/hd_font/", _NONE, "font tool"),
+    ("tools/steamwoven_ui/", _NONE, "Steamwoven kit tools"),
     ("tools/original-oracle/", _NONE, "oracle"), ("tools/terrain-inspect/", _NONE, "inspect tool"),
     ("tools/local_dev/*", _NONE, "launcher tooling"), ("tools/menubar/", _NONE, "queue menu-bar app (ARC-DEV-1344)"), ("*.uid", _NONE, "Godot ids"),
     (_V + "tools/", _NONE, "viewer export and validation scripts"),

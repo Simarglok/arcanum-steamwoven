@@ -1,0 +1,4 @@
+KIND: PLATE (button body)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original button art, idle frame), SHEET, CONTEXT crop.
+
+Draw one button plate: the metal or stone body and its ring, without any symbol on it (the symbol is a separate glyph) and without state effects (hover, pressed are separate overlays). Keep the shape and size relations of the ORIGINAL: round, square, oval or ring-in-square. Idle look: matte, with a clean light edge on the upper left. Transparent background, clean edge, no halo. When the part note lists several sizes, draw them on one sheet in a row with equal spacing so they match, each on its own transparent cell.

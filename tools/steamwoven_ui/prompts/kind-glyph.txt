@@ -1,0 +1,4 @@
+KIND: GLYPH (symbol on transparent background)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original symbol), SHEET.
+
+Draw the symbol of the ORIGINAL (map marker, silhouette, key, gear, arrow) as an engraved or inlaid motif: a single flat shape with a thin lighter edge on the upper left, no plate, no ring, no background. Keep the silhouette of the ORIGINAL exactly. Transparent background, clean edge, no halo, centred in the picture with equal margin on all sides.
