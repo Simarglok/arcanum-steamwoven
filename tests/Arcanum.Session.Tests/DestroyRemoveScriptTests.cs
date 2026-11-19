@@ -18,7 +18,7 @@ public sealed class DestroyRemoveScriptTests
     private static readonly CellCoord Spot = new(101, 202);
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
-    private sealed class Host(GameSessionOwner session, params string[] scripted) : ISessionItemScriptHost
+    internal sealed class Host(GameSessionOwner session, params string[] scripted) : ISessionItemScriptHost
     {
         public Dictionary<int, ScrProgram> Programs { get; } = [];
         public List<string> Asked { get; } = [];
