@@ -129,7 +129,7 @@ public static partial class GameSessionSnapshotCodec
         "ammoType", "ammoConsumption", "critHitChart", "critMissChart", "magicCritHitChance", "magicCritHitEffect", "magicCritMissChance",
         "magicCritMissEffect"];
     private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
-        "magicResistances", "unarmedBonus"];
+        "magicResistances", "unarmedBonus", "silentMove", "magicSilentMove"];
     private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses", "critters"];
     private static readonly string[] CritterEffectFields = ["entity", "entries", "definitions"];
     private static readonly string[] BlessingFields = ["number", "effect", "timeMs"];
@@ -2535,6 +2535,8 @@ public static partial class GameSessionSnapshotCodec
             WriteResistances(w, "resistances", armor.Resistances);
             WriteResistances(w, "magicResistances", armor.MagicResistances);
             w.WriteNumber("unarmedBonus", armor.UnarmedBonusDamage);
+            w.WriteNumber("silentMove", armor.SilentMoveAdjustment);
+            w.WriteNumber("magicSilentMove", armor.MagicSilentMoveAdjustment);
             w.WriteEndObject();
         }
         else w.WriteNull("armor");
@@ -2827,6 +2829,7 @@ public static partial class GameSessionSnapshotCodec
                     Resistances = ResistanceValues(a["resistances"], ap + ".resistances"),
                     MagicResistances = ResistanceValues(a["magicResistances"], ap + ".magicResistances"),
                     UnarmedBonusDamage = Num(a, "unarmedBonus", ap),
+                    SilentMoveAdjustment = Num(a, "silentMove", ap), MagicSilentMoveAdjustment = Num(a, "magicSilentMove", ap),
                 },
             };
         }

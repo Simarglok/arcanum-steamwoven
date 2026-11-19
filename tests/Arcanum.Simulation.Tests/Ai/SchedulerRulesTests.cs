@@ -36,7 +36,7 @@ public sealed class SchedulerRulesTests
         public Action<AiScriptPoint>? OnScript;
         public long Distance = 3;
         public string? LeaderId, Actor;
-        public bool Round, Generator, Encounter, Loaded = true, Waypoints = true, Clearing, Asleep, Hide, PcOff, Stoned, Unconscious;
+        public bool Round, Generator, Encounter, Forgotten, Loaded = true, Waypoints = true, Clearing, Asleep, Hide, PcOff, Stoned, Unconscious;
         public bool Callback, StunAnimation, Animating, Healing, Searching, IsLoading;
         public long? Spawned;
         public AiCatchUpFacts Facts = new(true, 40, false, false, true);
@@ -82,6 +82,7 @@ public sealed class SchedulerRulesTests
         public AiCatchUpFacts CatchUp(string npc) => Log("catch-up facts", Facts);
         public void MoveToLeader(string npc) => Log("move to leader");
         public bool MapClearing => Clearing;
+        public bool Knows(string npc) => !Forgotten;
         public bool Sleeping(string npc) => Asleep;
         public bool Hidden(string npc) => Hide;
         public bool PcHidden => PcOff;
@@ -99,6 +100,23 @@ public sealed class SchedulerRulesTests
         public void UpdateDanger(string npc) => Log("danger update");
         public void Perform(string npc) => Log("perform");
         public bool Loading => IsLoading;
+    }
+
+    // ARC-AI-2793: the tick of a wolf the host forgot (its window moved while the tick was pending) runs its heartbeat but no pass stage.
+    [TestMethod]
+    public void ATickOfAnNpcTheHostNoLongerHoldsRunsTheHeartbeatButNoPassStage()
+    {
+        var world = new World { Forgotten = true };
+        var pass = AiSchedulerRules.Pass(world, Npc, new Rolls(), Steamwoven);
+        Assert.AreEqual((false, true, null, false), (pass.MapClearing, pass.NotHeld, pass.Gate, pass.Performed));
+        Assert.AreEqual(0, world.Calls.Count, "no stage of the pipeline ran");
+
+        world = new World { Forgotten = true, Distance = 3 };
+        var tick = AiSchedulerRules.Tick(world, Npc, false, new Rolls(), Steamwoven);
+        Assert.IsTrue(tick.Steps.HasFlag(AiTickSteps.Heartbeat));
+        Assert.IsTrue(tick.Pass!.NotHeld);
+        CollectionAssert.DoesNotContain(world.Calls, "heal");
+        Assert.AreEqual(AiTickNext.Delay, tick.Next, "the chain goes on");
     }
 
     private static readonly string[] PassCalls = ["heal", "item search", "danger update", "perform"];

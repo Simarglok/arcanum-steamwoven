@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":105,\"world\"";
+    private const string Current = "\"schemaVersion\":106,\"world\"";
+    private const string Current105 = "\"schemaVersion\":105,\"world\"";
     private const string Current104 = "\"schemaVersion\":104,\"world\"";
     private const string Current103 = "\"schemaVersion\":103,\"world\"";
     private const string Current102 = "\"schemaVersion\":102,\"world\"";
@@ -340,9 +341,18 @@ public sealed class SnapshotUpgradeTests
     // ARC-SCRIPT-2594: the schema 104 text of a schema 105 one in which the session dropped no item and took it up again: the inventory section loses its closing empty list of last-drop tiles. A text with a tile has no older literal: no build before saved one.
     internal static string Schema104(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema105(text);
+        StringAssert.Contains(text, Current105);
         Assert.AreEqual(1, text.Split(NoLastDrops).Length - 1, "the inventory section ends with an empty list of last-drop tiles");
-        return text.Replace(NoLastDrops, "").Replace(Current, Current104);
+        return text.Replace(NoLastDrops, "").Replace(Current105, Current104);
+    }
+
+    // ARC-AI-1578: the schema 105 text of a schema 106 one with no worn armour: only the version differs (an armour block's two silent-move fields have no older literal: the step that adds them is tested on its own).
+    internal static string Schema105(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.IsFalse(text.Contains("\"silentMove\""), "a text with a worn armour has no schema 105 form this helper writes");
+        return text.Replace(Current, Current105);
     }
 
     internal const string NoLastDrops = ",\"lastDrops\":[]";
@@ -776,6 +786,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":106,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":107,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

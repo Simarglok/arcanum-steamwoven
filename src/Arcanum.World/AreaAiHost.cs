@@ -1432,6 +1432,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public long DistanceToPc(string npc) => Tile(npc) is { } at && Tile(Pc) is { } pc ? AiExecutorRules.Distance(at, pc) : -1;
 
+    /// <summary>ARC-AI-2793: whether the host holds the NPC's row (<see cref="Find"/>); <see cref="Rebind"/> forgets a standing NPC the new window does not hold, while its tick chain goes on.</summary>
+    public bool Knows(string npc) => Find(npc) is not null;
+
     /// <summary>ARC-WORLD-114: the first-heartbeat and heartbeat points run the NPC's script through the scene's
     /// <see cref="AreaAiScene.Heartbeat"/> (true: continue); the other points run no script yet and continue.</summary>
     public bool RunScript(AiScriptPoint point, string npc, string? triggerer) =>
