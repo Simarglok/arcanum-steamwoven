@@ -164,6 +164,8 @@ public static class AiSchedulerRules
         ArgumentNullException.ThrowIfNull(rolls);
         ArgumentNullException.ThrowIfNull(profile);
         if (world.MapClearing) return new(true, null, null);
+        // ARC-AI-2793: the heartbeat of an NPC the host forgot (a window move) reaches here; the stages below read the host's row, which is gone.
+        if (!world.Knows(npc)) return new(false, null, null) { NotHeld = true };
         var gate = Gate(world, npc, world.Danger(npc), rolls, profile);
         if (!gate.Passed) return new(false, gate, null);
         var choice = world.Heal(npc) ? AiPipelineChoice.Heal
