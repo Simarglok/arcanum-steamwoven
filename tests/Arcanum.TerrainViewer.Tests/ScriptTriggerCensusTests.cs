@@ -147,6 +147,8 @@ public sealed class ScriptTriggerCensusTests
         ScrPoint.Dying => AreaUseScriptHost.DyingAdmission,
         // ARC-SCRIPT-2820 (TQ12): the start-combat and end-combat points run under the dying set (RunCombatPassPoint).
         ScrPoint.StartCombat or ScrPoint.EndCombat => AreaUseScriptHost.DyingAdmission,
+        // ARC-SCRIPT-2858 (TQ16): the caught-thief point runs under its own set (RunCaughtThief).
+        ScrPoint.CaughtThief => AreaUseScriptHost.CaughtThiefAdmission,
         ScrPoint.Destroy => AreaUseScriptHost.DestroyPointAdmission,
         ScrPoint.Bust => AreaUseScriptHost.BustAdmission,
         ScrPoint.TakingDamage => AreaUseScriptHost.TakingDamageAdmission,

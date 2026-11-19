@@ -156,6 +156,8 @@ public sealed record AreaAiScene
     public Func<string, TrapClass>? TargetTrapClass { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
+    /// <summary>ARC-SCRIPT-2858 (TQ16, 0x4C7160): the NPC thief's own caught-thief script (point 33) of a noticed failed pick pocket: the thief (the attachee) and the victim (the triggerer; the hero is "pc"); run just before <see cref="CatchingThief"/> and its answer is ignored; null: no script runs.</summary>
+    public Action<string, string>? CaughtThief { get; init; }
     /// <summary>ARC-AI-2084 (ledger GW5): a guard witness's catching-thief script (point 11, 0x4AEE50) after it saw or heard the actor at an act on a portal, container or scenery: the witness (the attachee), the actor (the triggerer; the hero is "pc") and the guarded object (the script's extra object); true when the witness goes on ("run default", or no script that runs), false when the script skipped the default and the witness is left out. Null: no script runs.</summary>
     public Func<string, string, string, bool>? GuardCatchingThief { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
@@ -3342,7 +3344,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-DEV-246 (MIG13 S14l, GT204–GT209): an NPC's pick pocket of gold at the attempt's action frame (goal 86 node 4 → the shared check and the pick-pocket case of 0x4C7160; only a script's steal, action 115, starts it: the AI
     /// starts no pick pocket). The session's <see cref="GameSessionOwner.PickPocketByNpc"/> with the thief's sheet and the victim's measured facts (its effective perception, its state, whether it is unaware of the thief); the victim is the PC
     /// or an NPC of the map. A noticed failure runs the victim's catching-thief script with the thief as the triggerer (<see cref="AreaAiScene.CatchingThief"/>; any answer but run default stops there) and then the attack event of the thief on the
-    /// victim (loudness 1). Answers the check's success (run flag 0x40000). NOT READY: the thief's own caught-thief script (point 33), the thief's alignment change and the victim's "item stolen" mark (the session keeps no NPC alignment or
+    /// victim (loudness 1). Answers the check's success (run flag 0x40000). The thief's own caught-thief script (point 33, ARC-SCRIPT-2858) runs first (<see cref="AreaAiScene.CaughtThief"/>). NOT READY: the thief's alignment change and the victim's "item stolen" mark (the session keeps no NPC alignment or
     /// critter flags 2), the follower-of-the-thief stop (only the PC leads here), the gold pile's art size (1 × 1) and an insert check for a thief with no pile (accepted).
     /// </summary>
     private bool PickPocketAttempt(string id, string target)
@@ -3372,8 +3374,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.PickPocketByNpc(_session.Version, steal);
         Trace(id).Skill = $"pick pocket {target} {result.Disposition} {result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} moved={result.Moved} noticed={result.Noticed}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickpocketSkill, PickPocket = result });
-        // PP7: a noticed failure's victim script, then (unless it stopped them) the attack event of the thief on the victim.
-        if (result.Noticed && (_scene.CatchingThief?.Invoke(target, id) ?? true)) AttackEvent(id, target);
+        // PP7: a noticed failure's thief script (point 33, answer ignored), then the victim's script (point 11) and (unless it stopped them) the attack event of the thief on the victim (0x4C7160).
+        if (result.Noticed)
+        {
+            _scene.CaughtThief?.Invoke(id, target);
+            if (_scene.CatchingThief?.Invoke(target, id) ?? true) AttackEvent(id, target);
+        }
         return result.Check?.Success == true && result.Disposition == GameSessionDisposition.Changed;
     }
 

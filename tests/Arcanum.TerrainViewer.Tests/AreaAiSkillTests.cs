@@ -382,6 +382,30 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
+    public void A_noticed_failed_pick_pocket_runs_the_thiefs_point_33_before_the_victims_point_11_whatever_33_answers()
+    {
+        // ARC-SCRIPT-2858 (TQ16, 0x4C7160): the thief's caught-thief script (the thief attachee, the victim the triggerer) runs first and its answer is ignored; then the victim's catching-thief script (the thief the triggerer), and the attack event follows
+        // when that one lets it. Invented scripts; the scene's callbacks record the calls.
+        var calls = new List<string>();
+        var (_, host, npc, _) = Open(hero: true, tweak: scene => scene with
+        {
+            CaughtThief = (thief, victim) => calls.Add($"33 thief={thief} victim={victim}"),
+            CatchingThief = (victim, thief) => { calls.Add($"11 victim={victim} thief={thief}"); return true; },
+        });
+        var noticed = 0;
+        for (var attempt = 0; attempt < 600 && noticed < 3; attempt++)
+        {
+            calls.Clear();
+            host.AttemptSkill(npc, AiSchedulerRules.Pc, AiExecutorRules.PickpocketSkill, null);
+            var result = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PickPocket!;
+            if (!result.Noticed) { Assert.AreEqual(0, calls.Count, "no script runs for an unnoticed attempt"); continue; }
+            noticed++;
+            CollectionAssert.AreEqual(new[] { $"33 thief={npc} victim={AiSchedulerRules.Pc}", $"11 victim={AiSchedulerRules.Pc} thief={npc}" }, calls, "33 before 11");
+        }
+        Assert.IsTrue(noticed > 0, "a noticed attempt came up within 600");
+    }
+
+    [TestMethod]
     public void A_skill_with_no_case_of_its_own_answers_the_sessions_plain_roll_and_one_with_a_handler_not_built_answers_false()
     {
         // ARC-AI-1854 (0x4C7160): bow, melee, ... are the shared check alone; repair has its own tests (ARC-AI-2622) (gambling is the next test, pick locks has its own goal 67).
