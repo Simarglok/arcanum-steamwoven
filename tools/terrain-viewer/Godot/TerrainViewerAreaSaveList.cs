@@ -312,6 +312,8 @@ public partial class TerrainViewerApp
             var path = System.IO.Path.ChangeExtension(capture, null) + "-" + list.Mode.ToString().ToLowerInvariant() + System.IO.Path.GetExtension(capture);
             require(image.SavePng(path) == Error.Ok, "the capture saved to " + path);
         }
+        // ARC-UI-2891: the same window in the column mode of the Steamwoven layout (opt-in, ARC_AREA_MENU_COLUMN).
+        if (ColumnMenuSmokeOn()) await SaveListColumnForSmoke(require, Frames);
         var (_, cx, cy) = AreaSaveListArtLayout.Button(AreaSaveListArtButton.Confirm);
         var over = art.ScreenPointForSelfTest(cx + 30, cy + 30);
         GetViewport().PushInput(new InputEventMouseMotion { Position = over, GlobalPosition = over });
