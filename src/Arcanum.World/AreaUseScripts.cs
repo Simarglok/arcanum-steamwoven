@@ -1138,7 +1138,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.NewSector or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.LeaderKilling or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1800,6 +1800,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         }
         finally { _combatPassDepth--; _clicked = previous; }
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2859 (TQ25, exe read 2026-11-19, LK1-LK3): the leader-killing script (attachment point 20, 0x14) of <paramref name="follower"/>, a direct follower of the killer's PC leader, which the kill step (0x45DA20, the loop after the
+    /// experience award, the alignment step and the kill log) runs through the script dispatcher (0x441980) when an NPC dies: the dead NPC (<paramref name="victim"/>) as the triggerer, the follower as the attachee, the PC leader
+    /// (<paramref name="leader"/>) as the extra object, line 0, under <see cref="DyingAdmission"/> (the set of the other NPC point scripts); its slot is kept as map changes (<see cref="SlotProperty"/>). The kill step ignores the
+    /// answer. A follower that is not a row of the shown map, or has no script at the point, runs nothing. The original has no guard; a script whose effects kill another NPC reaches the loop again nested, so the depth is bounded
+    /// (<see cref="MaxDangerRunDepth"/>).
+    /// </summary>
+    public AreaScriptedUse RunLeaderKilling(string follower, string victim, ScrObjectRef leader, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(follower); ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, follower);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.LeaderKilling) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_leaderKillingDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested leader-killing scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (follower, row);
+        _leaderKillingDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderKilling, attachee, new ScrObjectRef(_shownMap, victim), leader), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a leader-killing script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _leaderKillingDepth--; _clicked = previous; }
+    }
+
+    private int _leaderKillingDepth;
 
     /// <summary>
     /// ARC-MAGIC-1167 (magic audit MA-10, exe read 2026-11-13, ledger RZ1-RZ3): the raise script (attachment point 18, 0x12) of <paramref name="target"/>, a creature of the shown map that a heal with the raise bit is about to bring back:

@@ -252,6 +252,10 @@ public sealed class AttackStateTests
     {
         using var owner = Owner();
         var rat = Combat();
+        // ARC-SCRIPT-2859: the hero's kill step ends in the leader-killing loop, once per follower, after the award.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:mid").Disposition);
+        var leaderKilling = new List<(SessionLeaderKillingRequest Request, int Experience)>();
+        owner.LeaderKillingScript = request => leaderKilling.Add((request, owner.QueryHeroExperience()!.Experience));
         var hero = owner.QueryHeroAttack()!;
         Assert.AreEqual((WeaponKind.Unarmed, CombatSkill.Melee, 0, SkillTraining.None, 10, 1, true),
             (hero.Weapon.Kind, hero.Skill, hero.SkillLevel, hero.Training, hero.WeaponSpeed, hero.Range, hero.Supported));
@@ -275,6 +279,8 @@ public sealed class AttackStateTests
         Assert.IsTrue(last!.Life!.Events.HasFlag(LifeEvents.Died));
         Assert.IsNotNull(last.KillAward);
         Assert.AreEqual(160 / 5, last.KillAward!.Award, "a fifth of the worth (normal difficulty)");
+        Assert.AreEqual(new SessionLeaderKillingRequest(Rat, owner.QueryActor().Map.RuntimeMap, "oid:mid"), leaderKilling.Single().Request, "one ask for the one follower, on the killing step only");
+        Assert.AreEqual(owner.QueryHeroExperience()!.Experience, leaderKilling.Single().Experience, "after the experience award");
         var record = owner.QueryLifeRecord(Rat)!.Value;
         Assert.AreEqual(LifeLimits.DeathHitPointDamage, record.State.HitPointDamage);
         Assert.IsNotNull(record.DeathTimeMs);

@@ -230,6 +230,9 @@ public sealed class NpcAttackStateTests
             var rat = Combat();
             var victim = Combat(entity: Other);
             var experience = owner.QueryHeroExperience()!.Experience;
+            // ARC-SCRIPT-2859: the loop follows the same PC-leader test as the award; the hero's followers are asked once each.
+            var leaderKilling = new List<string>();
+            owner.LeaderKillingScript = request => leaderKilling.Add(request.Follower);
             SessionAttackResult? last = null;
             for (var attempt = 0; attempt < 600 && !owner.QueryNpcKilled(Other); attempt++)
             {
@@ -240,6 +243,7 @@ public sealed class NpcAttackStateTests
             Assert.IsTrue(owner.QueryNpcKilled(Other), "the bites kill the victim within the bounded run");
             var after = owner.QueryNpcExperience(Other)!.Value;
             Assert.IsTrue(after.Pool < 160, "the hits drained the pool");
+            CollectionAssert.AreEqual(mode switch { 0 => Array.Empty<string>(), 1 => new[] { Rat }, _ => new[] { "oid:mid" } }, leaderKilling, $"mode {mode}");
             if (led)
             {
                 Assert.AreEqual(160 / 5, last!.KillAward!.Award);

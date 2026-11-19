@@ -740,6 +740,8 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } session) return;
         session.DyingScript = DyingGoesOn;
+        // ARC-SCRIPT-2859: the kill step's leader-killing scripts (point 20) of the hero's followers.
+        session.LeaderKillingScript = RunLeaderKillingScript;
         // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
         session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
         // ARC-SCRIPT-2853: the drop script (point 5) of an item a critical, an arm hit or a spell's weapon block drops.
@@ -748,6 +750,18 @@ public partial class TerrainViewerApp
         session.DangerHookScript = RunDangerHook;
         // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).
         session.GenerateOnceWorld = () => AreaEvents;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2859 (LK1–LK3): the leader-killing script (point 20) of one follower of the hero, asked by the session once per follower after a kill the hero's side dealt: the dead NPC as the triggerer, the follower as the
+    /// attachee, the hero as the extra object, through the shown map's use-script host; the answer is ignored. A follower that is not a row of the shown map (or has no script at the point) runs nothing.
+    /// </summary>
+    private void RunLeaderKillingScript(SessionLeaderKillingRequest request)
+    {
+        if (_areaSession is not { } owner || request.Map != CurrentAreaMap || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var ran = Awarded(host, host.RunLeaderKilling(request.Follower, request.Victim, host.Pc, owner.Rules.Scripts));
+        if (ran.Run is not null)
+            GD.Print($"ARC-SCRIPT-2859 leader-killing victim={request.Victim} follower={request.Follower} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
     }
 
     /// <summary>
