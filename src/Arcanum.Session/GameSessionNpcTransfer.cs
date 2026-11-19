@@ -252,8 +252,8 @@ public sealed partial class GameSessionOwner
     /// recorded as given (<see cref="QueryGivenItems"/>), so taking it back returns it to the list it came from. Refused before any effect:
     /// an invalid input (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know
     /// (<see cref="GameSessionFailure.UnknownHolder"/>), an item the hero does not hold (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// an NPC with a transfer script (point 32, which can veto in the original; not run here:
-    /// <see cref="GameSessionFailure.HolderScriptUnsupported"/>), a taken item whose attached origin seed shows a remove-item, insert-item
+    /// an NPC with a transfer script (point 32) when there is no <paramref name="scripts"/> host or the shown map's seed does not list it (with a host the script runs first, ARC-SCRIPT-2827: skip default is
+    /// <see cref="InventoryMutationResult.DeclinedBy"/> 32 and the item stays; otherwise <see cref="GameSessionFailure.HolderScriptUnsupported"/>), a taken item whose attached origin seed shows a remove-item, insert-item
     /// or (worn) wield-off script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a full list, store or durability budget or a sum
     /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
@@ -312,10 +312,34 @@ public sealed partial class GameSessionOwner
         ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null, NpcWearer? slotWearer = null, IReadOnlyList<int>? slotPoints = null)
     {
         if (HeroListed(item) is not { } held) return RejectItem(GameSessionFailure.ItemNotAvailable);
-        if (HolderHasScript(npc, kind, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        // ARC-SCRIPT-2827 (IE2, TQ19; 0x461CA0 → 0x441980 point 32): the recipient's transfer script is the first gate of the move, run with the giver (the hero) as the triggerer, the recipient as the attachee and the item as the
+        // extra, before the no-drop check, the capacity checks and the insert check; skip default refuses the move. The script host answers for the shown map's rows, so a recipient that map's seed does not list with the point,
+        // or a move without a host, stays refused (HolderScriptUnsupported) as before.
+        var holderTransfer = HolderHasScript(npc, kind, SessionScriptPoint.Transfer);
+        if (holderTransfer && (scripts is null || !ShownHolderHasScript(npc, kind, SessionScriptPoint.Transfer))) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
+        var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
+            ? seedRow.Facts.Complexity : held.Complexity;
+        ItemScriptRuns? runs = null, wearRuns = null;
+        if (holderTransfer)
+        {
+            var (gateRevision, gateMap, gateFlags) = (_revision, _actor.Map, _flags.Version);
+            runs = new ItemScriptRuns(this, scripts!, gateMap.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
+            var gate = runs.Run(SessionScriptPoint.Transfer, npc, SessionEventKinds.PlayerEntity, item);
+            ThrowIfDisposed();
+            if (_revision != gateRevision || _actor.Map != gateMap || _flags.Version != gateFlags) return RejectItem(GameSessionFailure.StaleVersion) with { Scripts = runs.Runs };
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure) with { Scripts = runs.Runs };
+            if (gate?.Outcome == ScrOutcome.SkipDefault)
+            {
+                // A dry run (QueryNamedItemTransfer) applies nothing, not even a declined gate's flags (ARC-MAGIC-2252).
+                if (!_transferDryRun) return Declined(SessionScriptPoint.Transfer, runs);
+                runs.Prepare();
+                return runs.Failure != GameSessionFailure.None ? RejectItem(runs.Failure) with { Scripts = runs.Runs } : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+            }
+        }
         // ARC-WORLD-1283 (NT2, VP5, VPG2): the recipient's transfer script is the first gate of 0x461CA0, the item's remove check (0x466DA0) the second: the no-drop flag refuses
         // the hero's item (worn or not) with message 111 before any other check, so a barter sale, a plant or a hand-over of such an item changes nothing.
-        if (HeroItemNoDrop(item, held.Kind, held.Origin)) return NoDropRefusal();
+        if (HeroItemNoDrop(item, held.Kind, held.Origin)) return NoDropRefusal(runs?.Runs);
         var worn = _equipment.SlotOf(item) is not null;
         // ARC-MAGIC-1743 (IE3, IE4, IE6): the item event scripts of the move, from the worn record's points (a kit or made item too) and the origin seed row's. The removal runs wield off (25, only a worn
         // item) and remove item (28) with the hero as the triggerer, the insertion insert item (21) with the recipient as the triggerer; without a script host an item with any of them is refused.
@@ -332,9 +356,6 @@ public sealed partial class GameSessionOwner
         if (_equipment.SlotOf(item) is { } markedIn && _equipment.Worn[markedIn].ItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         // ARC-MAGIC-022: the removal ends the item's runs and runs its drop (IU9) only through an item trigger host.
         if (triggers is null && HasItemRuns(item)) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
-        // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
-        var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
-            ? seedRow.Facts.Complexity : held.Complexity;
         // ARC-WORLD-085: the host's insert check for the NPC sees the item's weight facts.
         var weights = _inventory.Weights.TryGetValue(item, out var row) ? row : default;
         var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity) with { Weight = weights.Weight, MagicWeight = weights.MagicWeight });
@@ -360,14 +381,13 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
-        ItemScriptRuns? runs = null, wearRuns = null;
         ScrRunResult? insertRun = null;
-        if (scripts is not null && (wieldOff || removeOwn || insertOwn || wieldOn))
+        if (scripts is not null && (runs is not null || wieldOff || removeOwn || insertOwn || wieldOn))
         {
             // The original moves the item first and then runs these scripts, whose results it ignores (IE3, IE4, IF10); the admitted commands read nothing the move changes, so the runs are made
             // before the commit and applied with it, or the whole move is refused.
             var (shown, flagVersion) = (_actor.Map, _flags.Version);
-            runs = new ItemScriptRuns(this, scripts, shown.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
+            runs ??= new ItemScriptRuns(this, scripts, shown.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
             if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item, SessionEventKinds.PlayerEntity, null);
             if (runs.Failure == GameSessionFailure.None && removeOwn) runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null);
             // The insertion's triggerer is the recipient: an NPC reads its own printed line variant; a container is no critter, so its run keeps the hero's reading.
@@ -638,6 +658,10 @@ public sealed partial class GameSessionOwner
 
     // Whether any attached seed's holder row of the NPC has a script at the point.
     private bool NpcHasScript(string npc, int point) => HolderHasScript(npc, SessionHolderKind.Npc, point);
+
+    // ARC-SCRIPT-2827: whether the seed of the shown map lists the holder with the point: the script host answers for that map's rows alone.
+    private bool ShownHolderHasScript(string holder, SessionHolderKind kind, int point) =>
+        _inventory.Seeds.TryGetValue(_actor.Map, out var seed) && seed.Holders.TryGetValue(holder, out var row) && row.Kind == kind && row.ScriptPoints.Contains(point);
 
     // ARC-WORLD-090: the same for a holder of either kind.
     private bool HolderHasScript(string holder, SessionHolderKind kind, int point) => _inventory.Seeds.Values.Any(seed =>
