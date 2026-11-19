@@ -65,7 +65,7 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// <summary>ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need (<see cref="SessionNpcWieldScripts"/>); null when the host cannot give it, and a choice or a worn item with a move script is then not wielded (as
     /// before the scripts were run).</summary>
     SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) => null;
-    /// <summary>ARC-SCRIPT-2887 (ledger TQ19, NT2): the host that runs the get (4) and insert-item (21) scripts of an item the regeneration creates (0x463E20, 0x4617F0 → 0x461810 → 0x466640, with the holder as the triggerer); null when the host has none, and a created
+    /// <summary>ARC-SCRIPT-2887 (ledger TQ19, NT2): the host that runs the get (4) and insert-item (21) scripts of an item the regeneration creates (the item move's fresh path, with the holder as the triggerer); null when the host has none, and a created
     /// item whose prototype carries either point is then not created (counted as skipped).</summary>
     ISessionItemScriptHost? ItemScripts(SessionMapId map) => null;
 }

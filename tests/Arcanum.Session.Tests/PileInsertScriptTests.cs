@@ -253,6 +253,8 @@ public sealed class PileInsertScriptTests
         // The made stack inherits the prototype's insert-item script, so giving it away runs 21 for it and, with no host, is refused.
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.GiveAmmoToNpc(owner.Version, "virgil", "made:1", 5, Bullets, Accept).Failure);
         var given = owner.GiveAmmoToNpc(owner.Version, "virgil", "made:1", 5, Bullets, Accept, host);
-        Assert.AreEqual((GameSessionDisposition.Changed, SessionScriptPoint.InsertItem, "made:1"), (given.Disposition, given.Scripts.Single().Point, given.Scripts.Single().Attachee));
+        Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition);
+        // ARC-SCRIPT-2887: virgil has no stack of the type, so the move creates one that carries the prototype's script too: its insert-item script runs after the source's.
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.InsertItem, "made:1"), (SessionScriptPoint.InsertItem, "made:2") }, given.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
     }
 }
