@@ -977,7 +977,7 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   printed `%02d` in white at the fill's top, the poison level 40 rows lower; nothing filled at 100 % damage. The original
   divides by a zero maximum there (a crash): the column reads fully damaged in both rule modes; and it shifts a poisoned
   PC's health number off centre by reusing the poison text's rectangle, which the viewer centres in both modes (both
-  technical). The original's font (art 229) is not drawn; Godot's default font stands in.
+  technical). The numbers are drawn in the original's font (art 229, white; ARC-UI-2795).
 - **Follower frames** (CH9, PA6). The [follower portraits](../world/companion-orders-runtime.md#area-viewer) are the
   original's frames: up to six 40 × 49 frames (art 503) at 11, 50 + 62 × slot of the 800 × 600 screen, scaled by the
   bars' whole factor with the screen centred and its top at the window's top (with or without the bars), each with the
@@ -1275,7 +1275,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   (scaled down only when larger than its place; a grid item's cells fit its art since ARC-UI-055; a worn item on the cursor
   takes its art's cells), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
-  18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
+  18 + level) and the gold and ammunition counts in the original's fonts (ARC-UI-2795). Every action of the diagnostic window stays: the doll, the
   grid, the boxes and a right click act as before, and (ARC-UI-2764) a debug-only *Diagnostic view* switch below the frame shows the diagnostic panel (its
   buttons) and back; in play no panel draws the switch or the original look's message line (`DiagnosticSwitch`, off unless the debug mode or a self-test turns it on). The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
   (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
@@ -1421,7 +1421,7 @@ and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PA
 readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
 button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; the fonts are not the original's), a human on a physical mouse and display.
+(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; ARC-UI-2795 draws the texts in the original's fonts), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 

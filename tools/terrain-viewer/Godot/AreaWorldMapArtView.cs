@@ -8,7 +8,11 @@ namespace Arcanum.TerrainViewer;
 /// <summary>The world-map window's textures and texts: the interface art by number, the 64 map tiles (column + 8 × row), the continent picture, the
 /// markers' font and the texts of <c>mes/worldmap.mes</c> (ARC-UI-083).</summary>
 public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> Art, IReadOnlyList<Texture2D> Tiles, Texture2D? Zoomed, AreaArtFontFace Font,
-    AreaWorldMapArtContent Content);
+    AreaWorldMapArtContent Content)
+{
+    /// <summary>ARC-UI-2795: the font of the window's status note (art 229 <c>Flare12Font</c>, white: the original's message font, exe 0x64C498), null when it did not read.</summary>
+    public AreaArtFontFace? MessageFont { get; init; }
+}
 
 /// <summary>ARC-UI-084: the town map the window shows (kind 2): its files, its plan, the party's location and which tiles are revealed. A whole map
 /// (<c>[w:1]</c> of the list, WM77) shows every tile plainly; otherwise <see cref="CellRevealed"/> says which tile bits are set (the session's
@@ -168,8 +172,9 @@ public partial class AreaWorldMapArtView : Control
         // and colour under clear pixels, so every texture drawn on these two canvases is the premultiplied variant (ARC-UI-126; only the background, drawn by this node, is not).
         AreaArtTextDraw.Prepare(_canvas);
         AreaArtTextDraw.Prepare(_chrome);
-        // The diagnostic message is drawn with the engine's font, which the premultiplied material would spoil: it has a canvas of its own.
-        _note = new NoteCanvas { Host = this, Position = new Vector2(x, y), Size = new Vector2(width, height), MouseFilter = MouseFilterEnum.Ignore };
+        // The status note has a canvas of its own (ARC-UI-2795: drawn in the original's message font, art 229, with the art text draw's material; its dim strip is black).
+        _note = new NoteCanvas { Host = this, Position = new Vector2(x, y), Size = new Vector2(width, height), MouseFilter = MouseFilterEnum.Ignore, ClipContents = true };
+        AreaArtTextDraw.Prepare(_note);
         AddChild(_canvas);
         AddChild(_note);
         AddChild(_chrome);
@@ -881,7 +886,9 @@ public partial class AreaWorldMapArtView : Control
         if (_message.Length == 0) return;
         var view = AreaWorldMapArtLayout.View;
         canvas.DrawRect(new Rect2(0, view.Height - 18, view.Width, 18), new Color(0, 0, 0, .7f));
-        canvas.DrawString(ThemeDB.FallbackFont, new Vector2(4, view.Height - 5), _message, HorizontalAlignment.Left, view.Width - 8, 12, new Color(1f, .85f, .5f));
+        // ARC-UI-2795: the original has no note strip inside the map (its messages go to the message window in art 229, white, WM60); the viewer's strip keeps that font.
+        if (_look?.MessageFont is { } face)
+            AreaArtTextDraw.Text(canvas, face, _message, 4, view.Height - 18 + (18 - AreaTextFontLayout.LineHeight(face.Frames)) / 2, (255, 255, 255));
     }
 
     // WM76–WM82: the black fill (done by the caller), the tiles, the party marker; the notes, the route and the followers follow in later slices.
