@@ -339,7 +339,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         foreach (var dim in _dim) { dim.Color = Colors.White; dim.MouseFilter = Control.MouseFilterEnum.Ignore; dim.Material = _dimMaterial; dim.Visible = false; _backdropLayer.AddChild(dim); }
         for (var i = 0; i < _backdrops.Length; i++)
         {
-            _backdrops[i] = new SteamwovenBoardView { Name = i == 0 ? "Backdrop" : "BackdropRight", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+            _backdrops[i] = new SteamwovenBoardView { Name = i == 0 ? "Backdrop" : "Backdrop" + i, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
             _backdropLayer.AddChild(_backdrops[i]);
             _backdrops[i].Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
         }
@@ -599,9 +599,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         // ARC-UI-2890: in the column mode the windows are centred in the column (the free width is the column's), the screen of the followers hangs from the frame's left edge, the edge frame is the whole frame.
         var column = plan.Column;
         var topScreen = (new Vector2(plan.StripLeft, plan.TopStripY), scale, bottomEdge);
-        SetTopScreen(topScreen, column is null ? null : (new Vector2(frame.X, plan.TopStripY), scale, bottomEdge), column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
         var (freeLeft, freeWidth) = column is { } c ? (c.Column.X, c.Column.Width) : (frame.X, frame.Width);
+        // The insets first, then the screens and the edge frame: a subscriber of InsetsChanged that the edge frame's change wakes reads the new insets.
         SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? freeLeft : 0, Visible ? freeWidth : 0);
+        SetTopScreen(topScreen, column is null ? null : (new Vector2(frame.X, plan.TopStripY), scale, bottomEdge), column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
         UpdateSteamwovenParts(plan);
     }
 
@@ -660,7 +661,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             if (i >= pieces.Count) { _backdrops[i].Visible = false; continue; }
             var piece = pieces[i];
             // ARC-UI-2643: the wood takes the tone of the window art it continues (the bottom strip's where that art is not read).
-            var tone = ToneOfArt(SteamwovenBackdrops.ToneArt(_backdropFamily!.Value, i));
+            var tone = ToneOfArt(SteamwovenBackdrops.ToneArt(_backdropFamily!.Value, piece.Part));
             if (tone.Legacy is null || tone.Recipe is null) tone = (bottomRecipe, bottomLegacy, bottomW, bottomH);
             _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, tone.Recipe, tone.Legacy, tone.Width, tone.Height));
             _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
@@ -689,6 +690,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             var visible = menuOpen && i < worlds.Length && worlds[i].Width > 0 && worlds[i].Height > 0;
             _dim[i].Visible = visible;
             if (!visible) continue;
+            // The dim reads the frame drawn so far on layer 3: the edge elements under it (floaters, spell pane) are dimmed with the world, as the modal window says (presentation only).
             _dim[i].Position = new Vector2(worlds[i].X, worlds[i].Y); _dim[i].Size = new Vector2(worlds[i].Width, worlds[i].Height);
         }
     }

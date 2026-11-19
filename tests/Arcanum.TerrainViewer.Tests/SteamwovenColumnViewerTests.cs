@@ -117,6 +117,8 @@ public sealed class SteamwovenColumnViewerTests
             Assert.AreEqual(split, pieces[1].Rect.X);
             Assert.AreEqual(plan.Column.Column.X, pieces[0].Rect.X);
             Assert.AreEqual(plan.Column.Column.Right, pieces[1].Rect.Right);
+            // The tone art follows the part, not the list index: above-left, above-right, below-left, below-right are parts 0, 1, 0, 1.
+            CollectionAssert.AreEqual(new[] { 0, 1, 0, 1 }, pieces.Select(piece => piece.Part).ToArray(), family.ToString());
         }
         // A one-piece family is not split.
         Assert.IsNull(SteamwovenBackdrops.SplitX(SteamwovenBackdropFamily.WorldMap, plan));

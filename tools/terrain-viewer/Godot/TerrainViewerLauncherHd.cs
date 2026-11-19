@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
         _launcherHdPackNote = HdPackSourceText();
         if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")) && !AutomatedVisualRun)
             _launcherHdPackNote += " (this run's ARC_VISUAL_PROFILE overrides HD)";
+        if (SteamwovenLayoutChoices.TryParse(System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LAYOUT")) is { } forced)
+            _launcherHdPackNote += $" (this run's ARC_STEAMWOVEN_LAYOUT={SteamwovenLayoutChoices.Name(forced)} overrides the interface layout)";
         _launcherHdProblem = "";
         LauncherHdShow();
     }

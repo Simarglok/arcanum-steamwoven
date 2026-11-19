@@ -25,8 +25,8 @@ public enum SteamwovenBackdropFamily
 }
 
 /// <summary>One piece of a family's backdrop: the rectangle it fills in the window (device pixels), the generated material, and where the material's grain starts: the origin, in original units, of the window art
-/// whose wood the piece continues outwards (negative to the left of and above that art), so the grain at the edge of the window zone is the window's own.</summary>
-public readonly record struct SteamwovenBackdropPiece(PixelRect Rect, ChromeMaterial Material, double OriginX, double OriginY);
+/// whose wood the piece continues outwards (negative to the left of and above that art), so the grain at the edge of the window zone is the window's own; <c>Part</c> is 0 for the left part of a two-part family (or the only one) and 1 for the right (the tone art of <see cref="SteamwovenBackdrops.ToneArt"/>: in the column mode the pieces above and below the window share a part).</summary>
+public readonly record struct SteamwovenBackdropPiece(PixelRect Rect, ChromeMaterial Material, double OriginX, double OriginY, int Part = 0);
 
 /// <summary>
 /// ARC-UI-2576 (SWI-BDR-1, -4, -5, -7): the generated backdrop of each census family over the middle band, from the layout model; Godot-free. Every piece is made after its window's own background
@@ -107,7 +107,7 @@ public static class SteamwovenBackdrops
         var unit = SteamwovenWindowZone.UnitScale(plan);
         // The grain of an art that starts at (artX, artY) device pixels: where the piece's top left lies from it, in units.
         SteamwovenBackdropPiece Piece(int left, int right, double artX) =>
-            new(PixelRect.FromEdges(left, band.Y, right, band.Bottom), ChromeMaterial.Wood, (left - artX) / unit, (band.Y - (double)zone.Y) / unit);
+            new(PixelRect.FromEdges(left, band.Y, right, band.Bottom), ChromeMaterial.Wood, (left - artX) / unit, (band.Y - (double)zone.Y) / unit, left == band.X ? 0 : 1);
         if (SplitX(family, plan) is not { } split)
             return [Piece(band.X, band.Right, zone.X)];
         // ARC-UI-2763: the inventory family is one wood and its pack art continues the doll's grain from the split, so the right piece's grain is the left one's continued; the logbook and the reading window keep a grain of their own per half.
@@ -125,7 +125,7 @@ public static class SteamwovenBackdrops
         var split = SplitX(family, plan);
         var pieces = new List<SteamwovenBackdropPiece>();
         SteamwovenBackdropPiece Piece(PixelRect rect, int left, int right, double artX) =>
-            new(PixelRect.FromEdges(left, rect.Y, right, rect.Bottom), ChromeMaterial.Wood, (left - artX) / unit, (rect.Y - (double)zone.Y) / unit);
+            new(PixelRect.FromEdges(left, rect.Y, right, rect.Bottom), ChromeMaterial.Wood, (left - artX) / unit, (rect.Y - (double)zone.Y) / unit, split is { } at && left >= at ? 1 : 0);
         foreach (var gap in new[] { column.Window.GapAbove, column.Window.GapBelow })
         {
             if (gap.Height <= 0 || gap.Width <= 0) continue;

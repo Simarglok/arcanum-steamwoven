@@ -184,7 +184,8 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            SteamwovenHud.Options = SteamwovenLayoutOptions.Default;
+            // The layout the game option chooses is back for what runs after this smoke in the process.
+            SteamwovenHud.Options = SteamwovenLayoutChoices.Options(EffectiveInterfaceLayout);
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
             window.Size = savedWindowSize;
             await frames(3);
