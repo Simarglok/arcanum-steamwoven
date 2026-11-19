@@ -47,6 +47,12 @@ public partial class TerrainViewerApp
         var view = GetViewport().GetVisibleRect();
         var inverse = _canvas.GetGlobalTransformWithCanvas().AffineInverse();
         var rect = new Rect2(inverse * view.Position, inverse * view.End - inverse * view.Position).Abs();
+        // ARC-UI-2936: in the Original look the rule keeps the original's fixed 800 x 400 window centred on the view's centre (decision 2026-11-07, option b), not what the zoom shows.
+        if (OriginalCompositionFactor > 0)
+        {
+            var (x, y, width, height) = OriginalComposition.OutOfSightWindow(rect.GetCenter().X, rect.GetCenter().Y);
+            return new(x, y, width, height);
+        }
         return new(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y);
     }
 
@@ -55,7 +61,7 @@ public partial class TerrainViewerApp
         public int? ShownMap => app._readyArea is null ? null : app.CurrentAreaMap;
         public AreaPixelRect? GameWindow => app.AreaGameWindow();
         // The viewport's size: the window in area pixels at zoom 1.
-        public (double Width, double Height) WindowSize => (app.GetViewport().GetVisibleRect().Size.X, app.GetViewport().GetVisibleRect().Size.Y);
+        public (double Width, double Height) WindowSize => app.OriginalCompositionFactor > 0 ? (OriginalComposition.ViewWidth, OriginalComposition.ViewHeight) : (app.GetViewport().GetVisibleRect().Size.X, app.GetViewport().GetVisibleRect().Size.Y);
         public AreaPixelRect? BodyRect(AreaObjectKey key) =>
             app._canvas?.AreaBodyRect(key) is { } rect ? new(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y) : null;
     }
