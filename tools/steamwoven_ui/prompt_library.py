@@ -249,6 +249,8 @@ def write_provenance(library: dict, batch: str, local_root: Path, generator: str
         width, height = png_size(image)
         want = item.get("size") or [None, None]
         # The generator may return a smaller size of the same aspect (common rule 7); the fit tool brings it to the master size.
+        if width <= 0 or height <= 0:
+            raise ValueError(f"{item['id']}: result has no size ({width} x {height})")
         if want[0] and want[1] and abs(width * want[1] - height * want[0]) > max(want):
             raise ValueError(f"{item['id']}: result is {width} x {height}, the prompt asks for the aspect of {want[0]} x {want[1]}")
         record = {"image": item["outbox_file"], "image_sha256": sha256_file(image), "image_size": [width, height],
