@@ -1,0 +1,4 @@
+KIND: BACKDROP - HALF OF A TWO-PART WINDOW
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original art of this half), SHEET, CONTEXT crop.
+
+Redraw one half of a two-part window (inventory left or right half, logbook side or book, reading side bar or desk). It keeps its own material. Its inner edge (the seam to the other half) is a clean straight vertical edge with a thin brass trim line; the outer edges meet the composition's edge and the strips cleanly. No continuation beyond the picture, no buttons, items, text or numbers.

@@ -30,16 +30,22 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-2880 (IE3): the same for several items one destroy takes out of the dying holder in order (the inventory-on-destroy walk, IE3): one run set, so a later run reads what the earlier ones did. Items without a point 28 run nothing.
     /// </summary>
-    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts)
+    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts) =>
+        RunRemovalScripts([.. items.Select(item => (item.Item, holder, item.Points))], scripts);
+
+    /// <summary>
+    /// ARC-SCRIPT-2903 (IE3): the same for items that leave several holders in one step (the created critters one destroy takes out, each item run with its own dying holder as the triggerer, in the order given): one run set, so a later run reads what the earlier ones did.
+    /// </summary>
+    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, string? Holder, IReadOnlyList<int> Points)> items, ISessionItemScriptHost scripts)
     {
-        var scripted = items.Where(item => item.Points.Contains(SessionScriptPoint.RemoveItem)).Select(item => item.Item).ToArray();
+        var scripted = items.Where(item => item.Points.Contains(SessionScriptPoint.RemoveItem)).Select(item => (item.Item, item.Holder)).ToArray();
         if (scripted.Length == 0) return new(null, null);
-        if (scripted.Any(ItemRowOfOtherMap)) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+        if (scripted.Any(item => ItemRowOfOtherMap(item.Item))) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
         // As LootItem's runs, made before the commit: the admitted commands read nothing the unlink changes, so running before it is the same as after (the original runs the script after the unlink).
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
-        var complexities = scripted.ToDictionary(item => item, item => _inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0, StringComparer.Ordinal);
-        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, complexities) { NpcTriggerer = holder is not null && KnownNpc(holder) };
-        foreach (var item in scripted)
+        var complexities = scripted.ToDictionary(item => item.Item, item => _inventory.Weights.TryGetValue(item.Item, out var weight) ? weight.Complexity : 0, StringComparer.Ordinal);
+        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, complexities) { NpcTriggerer = scripted.All(item => item.Holder is not null && KnownNpc(item.Holder)) };
+        foreach (var (item, holder) in scripted)
         {
             runs.Run(SessionScriptPoint.RemoveItem, item, holder ?? SessionEventKinds.PlayerEntity, null);
             if (runs.Failure != GameSessionFailure.None) break;

@@ -60,7 +60,7 @@ public sealed record SteamwovenLayout(
 /// laid out whole; a narrower one is letterboxed to 2400 · f and a wider one pillarboxed to 3840 · f, centred, and a bar under 4 px per side is
 /// dropped (the frame is the window; the middle band or the sides take the difference). The panel heights are rounded as sizes from the frame's top
 /// and bottom edges (`round(120 · f)`, `round(456 · f)` with the default heights, as the TRD reference table shows); every other edge (centre block, split, zone, backdrop) is rounded from its own exact position, halves
-/// up, so neighbouring parts share edges. With the column mode of the options (ARC-UI-2889) <see cref="SteamwovenLayout.Column"/> holds the column plan; every other member is the full-width layout
+/// up, so neighbouring parts share edges. With the column mode of the options (ARC-UI-2889) <see cref="SteamwovenLayout.Column"/> holds the column plan; every other member is the full-width layout (except in the fitted column of ARC-UI-2890, whose frame, bands, `f` and step are the fitted composition's)
 /// computed as before (the bands span the frame, <see cref="SteamwovenLayout.Controls"/> sit on the full-width centre block), which a column viewer does not draw. The window zone is centred in the middle band and kept inside it. Godot-free; the viewer reads the rectangles.
 /// </summary>
 public static class SteamwovenLayoutBuilder
@@ -75,16 +75,30 @@ public static class SteamwovenLayoutBuilder
         long w = width, h = height;
         var wider = 9 * w > 16 * h;
         var scale = wider ? new Ratio(h, SteamwovenGrid.ReferenceHeight) : new Ratio(w, SteamwovenGrid.ReferenceWidth);
+        // ARC-UI-2890: the fitted column supports any aspect ratio: the 4:3 composition fills the window's height (or its width where the window is narrower than 4:3: black bars above and below), the world shows at the sides.
+        // Its kit scale is `f = frame height / 2160` (the composition's 600 units are 2160 master px at f = 1), so an 800 x 600 window has f = 0.278 and is supported, whatever its width.
+        PixelRect frame;
+        if (options.Column is { FitHeight: true })
+        {
+            frame = FitFrame(width, height);
+            scale = new Ratio(frame.Height, SteamwovenGrid.ReferenceHeight);
+        }
+        else
+        {
+            if (scale < SteamwovenGrid.MinSupportedScale) return Fail(SteamwovenLayoutFailure.ScaleBelowSupport);
+            frame = FrameFor(width, height, scale, wider);
+        }
         if (scale < SteamwovenGrid.MinSupportedScale) return Fail(SteamwovenLayoutFailure.ScaleBelowSupport);
-
-        var frame = FrameFor(width, height, scale, wider);
         var bars = new PixelInsets(frame.X, frame.Y, width - frame.Right, height - frame.Bottom);
 
         var step = SteamwovenGrid.StepFor(scale);
         var runtime = scale / SteamwovenGrid.StepScale(step);
 
-        var topH = (scale * options.TopPanelMaster).RoundHalfUp();
-        var bottomH = (scale * options.BottomPanelMaster).RoundHalfUp();
+        // ARC-UI-2890: in the fitted column the bands are the composition's: the top strip's 41 units and the bottom strip's 159 at `u = frame height / 600`, the middle band the window's 400 between them (each edge rounded from its own exact position).
+        var fit = options.Column is { FitHeight: true };
+        var fitUnit = new Ratio(frame.Height, 600);
+        var topH = fit ? (fitUnit * 41).RoundHalfUp() : (scale * options.TopPanelMaster).RoundHalfUp();
+        var bottomH = fit ? frame.Height - (fitUnit * 441).RoundHalfUp() : (scale * options.BottomPanelMaster).RoundHalfUp();
         var topRect = new PixelRect(frame.X, frame.Y, frame.Width, topH);
         var middleRect = new PixelRect(frame.X, frame.Y + topH, frame.Width, frame.Height - topH - bottomH);
         var bottomRect = new PixelRect(frame.X, frame.Bottom - bottomH, frame.Width, bottomH);
@@ -140,14 +154,16 @@ public static class SteamwovenLayoutBuilder
     /// </summary>
     private static SteamwovenColumnPlan ColumnPlan(SteamwovenColumnMode mode, Ratio scale, int windowWidth, PixelRect frame, PixelRect top, PixelRect bottom, PixelRect middle)
     {
-        var stripScale = scale * mode.K;
+        // The fitted column's strip scale in the model's terms (`f · k`, unit = 3.6 times it) is frame height / 2160, so `u = frame height / 600`.
+        var stripScale = mode.FitHeight ? new Ratio(frame.Height, SteamwovenGrid.ReferenceHeight) : scale * mode.K;
         var columnWidth = stripScale * SteamwovenGrid.CentreWidth;
         var left = frame.X + ((Ratio)frame.Width - columnWidth).Halve().RoundHalfUp();
         var right = frame.X + ((Ratio)frame.Width + columnWidth).Halve().RoundHalfUp();
 
         SteamwovenColumnZone ZoneIn(PixelRect area, int zoneUnitsHeightMaster)
         {
-            var zone = CentredZone(area, left, right, stripScale * zoneUnitsHeightMaster);
+            // The fitted column's window zone is the middle band itself (no gap); the full-screen zone is the whole frame in both modes at 16:9 and in the fitted one.
+            var zone = mode.FitHeight && zoneUnitsHeightMaster == SteamwovenGrid.WindowZoneHeight ? PixelRect.FromEdges(left, area.Y, right, area.Bottom) : CentredZone(area, left, right, stripScale * zoneUnitsHeightMaster);
             return new SteamwovenColumnZone(
                 zone,
                 PixelRect.FromEdges(left, area.Y, right, zone.Y),
@@ -170,6 +186,14 @@ public static class SteamwovenLayoutBuilder
     private static SteamwovenLayoutResult Fail(SteamwovenLayoutFailure failure) => new(null, failure);
 
     private static Ratio Halve(this Ratio value) => value / 2;
+
+    /// <summary>The frame of the fitted column: the whole window, or, where the window is taller than 4:3, a 4:3 band of the window's width centred vertically (the bars above and below are black, however thin).</summary>
+    private static PixelRect FitFrame(int width, int height)
+    {
+        var composition = new Ratio(3L * width, 4).RoundHalfUp();
+        if (height <= composition) return new PixelRect(0, 0, width, height);
+        return new PixelRect(0, new Ratio(height - composition, 2).RoundHalfUp(), width, composition);
+    }
 
     private static PixelRect FrameFor(int width, int height, Ratio scale, bool wider)
     {

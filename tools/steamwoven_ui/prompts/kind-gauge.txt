@@ -1,0 +1,4 @@
+KIND: GAUGE (layered gauge parts)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original gauge art), SHEET (glass, brass), CONTEXT crop.
+
+Draw one layer of a gauge as the part note says: the empty glass tube or vial, its brass housing, or the liquid or bar fill. Layers are drawn separately on transparent backgrounds so that the game draws the fill level from the value: the glass and the housing must have fully transparent interiors; the fill layer is a straight, full-height column of liquid or bar with a soft highlight and no meniscus cut-off. Keep the proportions of the ORIGINAL. No numbers, no scale marks unless the ORIGINAL has them as part of the glass.

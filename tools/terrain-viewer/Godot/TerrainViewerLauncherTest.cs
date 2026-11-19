@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Data.Content;
 using Arcanum.Session;
 using Arcanum.Session.Launcher;
@@ -256,7 +257,7 @@ public partial class TerrainViewerApp
             await Start(true);
             Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto", "Generated interface: Off"]) && _launcherPanel.HdEnabledForSelfTest && !_launcherPanel.HdGeneratedEnabledForSelfTest,
                 "the HD lines default to Off, Auto, Off (an old visual profile line alone does not turn HD on; generated is off while HD is Off): " + string.Join(" | ", HdLines()));
-            Require(Lines().Length == 12 && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+            Require(Lines().Length == 13 && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
                 "the launcher has one HD row, no HD graphics, HD interface or HD lighting line: " + Lines().Length);
             _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
@@ -267,6 +268,13 @@ public partial class TerrainViewerApp
                 "the hd line is written and the old lines stay in place");
             _launcherPanel.HdGeneratedForSelfTest(true);
             Require(Lines()[10] == "Generated interface: On" && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: true }, "the generated interface is a separate experimental row");
+            // ARC-UI-2890: the layout row (column by default) is on while the generated interface is on, and each choice is saved at once.
+            Require(Lines()[12] == "Interface layout: Column" && _launcherPanel.HdLayoutEnabledForSelfTest, "the layout row shows Column by default: " + Lines()[12]);
+            _launcherPanel.HdLayoutForSelfTest(SteamwovenLayoutChoice.ColumnThin);
+            Require(Lines()[12] == "Interface layout: Column thin" && new GameSettingsStore(false).Load() is { InterfaceLayout: SteamwovenLayoutChoice.ColumnThin }
+                    && System.IO.File.ReadAllText(gameSettingsPath).Contains("interface layout=column-thin", StringComparison.Ordinal), "Column thin is saved at once: " + Lines()[12]);
+            _launcherPanel.HdLayoutForSelfTest(SteamwovenLayoutChoice.FullWidth);
+            Require(Lines()[12] == "Interface layout: Full width" && new GameSettingsStore(false).Load() is { InterfaceLayout: SteamwovenLayoutChoice.FullWidth }, "Full width is saved at once: " + Lines()[12]);
             // The next launcher shows what was saved, and the start's own reading finds the same values.
             _gameSettings = AreaGameSettings.Defaults;
             await Start(true);
