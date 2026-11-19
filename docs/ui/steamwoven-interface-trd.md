@@ -182,7 +182,7 @@ the **column** hypothesis is tested. The full-width rules above stay as they are
 - **Column** `2880 · k · f` wide, centred in the frame (each edge `round` of its own exact position, halves up, so the width is `round(2880 · k · f)` within a pixel), over the frame's whole height. The top strip stands at the
   frame's top and the bottom strip at its bottom, both column-wide with the full-width layout's heights (`round(150 · k · f)` and `round(570 · k · f)` from the frame's edges).
 - **Window zone** (800 × 400 units at `s`) is column-wide and centred in the middle band between the strips, kept inside it; `GapAbove` and `GapBelow` are the column's rectangles above and below it, which take the window's wood
-  (empty at 16:9 with k = 1: 150 + 1440 + 570 = 2160 master px; 216 master px each at 16:9 with k = 0.8; 80 each at 16:10 with k = 1).
+  (empty at 16:9 with k = 1: 150 + 1440 + 570 = 2160 master px; 216 master px each at 16:9 with k = 0.8; 120 master px each at 16:10 with k = 1, 80 px at 2560 × 1600).
 - **Full-screen zone** (800 × 600 units at `s`) is column-wide and centred in the whole frame, strips included, with its own gaps in the column.
 - **World** `WorldLeft` and `WorldRight`: the frame left and right of the column over the frame's height. With `WorldToEdges` they run to the window's edges above 16:9 instead of ending at the frame's edges (the 21:9
   question); a letterboxed frame (narrower than 16:10) keeps its vertical extent. No wood sides and no full-width backdrops; the old members of the layout (bands, centre block, split, backdrops, controls) are still the full-width ones and a column viewer does not draw them.
