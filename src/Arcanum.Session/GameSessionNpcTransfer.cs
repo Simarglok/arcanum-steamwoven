@@ -270,7 +270,8 @@ public sealed partial class GameSessionOwner
         ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null)
     {
         var result = GiveToNpc(expected, npc, item, insertCheck, triggers, scripts);
-        if (triggers is null || result.Disposition != GameSessionDisposition.Changed) return result;
+        // A recipient's transfer script that declined the give (DeclinedBy) left the item with the hero: its removal spell steps do not run.
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.DeclinedBy is not null) return result;
         return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
     }
 
@@ -289,7 +290,7 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!ShownContainer(container)) return RejectItem(GameSessionFailure.UnknownHolder);
         var result = GiveItemTo(container, SessionHolderKind.Container, item, insertCheck, identify: false, triggers, scripts);
-        if (triggers is null || result.Disposition != GameSessionDisposition.Changed) return result;
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.DeclinedBy is not null) return result;
         return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
     }
 
@@ -321,9 +322,9 @@ public sealed partial class GameSessionOwner
         var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
             ? seedRow.Facts.Complexity : held.Complexity;
         ItemScriptRuns? runs = null, wearRuns = null;
+        var (gateRevision, gateMap, gateFlags) = (_revision, _actor.Map, _flags.Version);
         if (holderTransfer)
         {
-            var (gateRevision, gateMap, gateFlags) = (_revision, _actor.Map, _flags.Version);
             runs = new ItemScriptRuns(this, scripts!, gateMap.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
             var gate = runs.Run(SessionScriptPoint.Transfer, npc, SessionEventKinds.PlayerEntity, item);
             ThrowIfDisposed();
@@ -386,7 +387,8 @@ public sealed partial class GameSessionOwner
         {
             // The original moves the item first and then runs these scripts, whose results it ignores (IE3, IE4, IF10); the admitted commands read nothing the move changes, so the runs are made
             // before the commit and applied with it, or the whole move is refused.
-            var (shown, flagVersion) = (_actor.Map, _flags.Version);
+            // The gate's reads (its flags, the shown map) stay current until the move applies, the insert check included.
+            var (shown, flagVersion) = holderTransfer ? (gateMap, gateFlags) : (_actor.Map, _flags.Version);
             runs ??= new ItemScriptRuns(this, scripts, shown.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
             if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item, SessionEventKinds.PlayerEntity, null);
             if (runs.Failure == GameSessionFailure.None && removeOwn) runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null);

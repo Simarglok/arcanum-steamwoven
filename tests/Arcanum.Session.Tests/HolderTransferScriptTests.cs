@@ -47,7 +47,7 @@ public sealed class HolderTransferScriptTests
     private static GameSessionOwner Hero()
     {
         var seed = InventoryStateTests.Seed();
-        var custom = seed with { Holders = [.. seed.Holders.Select(h => h.Entity is "virgil" or "chest" ? h with { ScriptPoints = [.. h.ScriptPoints, SessionScriptPoint.Transfer] } : h)] };
+        var custom = seed with { Holders = [.. seed.Holders.Select(h => h.Entity is "virgil" or "chest" or "merchant" ? h with { ScriptPoints = [.. h.ScriptPoints, SessionScriptPoint.Transfer] } : h)] };
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, custom).Failure);
         return owner;
@@ -146,5 +146,40 @@ public sealed class HolderTransferScriptTests
         var moved = owner.TransferNamedItem(owner.Version, null, "virgil", name, Accept, host);
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (moved.Disposition, moved.Failure));
         Assert.AreEqual(true, ReadFlag(owner, 3));
+    }
+
+    [TestMethod]
+    public void A_declined_barter_sale_pays_nothing_and_a_declined_dialog_handover_takes_the_settle_fallback()
+    {
+        using var owner = Hero();
+        var gold = owner.QueryGold();
+        var bullets = new SessionItemKind(SessionItemType.Ammo, 7059, 3301, 33301);
+        // The merchant's script writes a flag and skips the default: the sale is declined (a Changed result with DeclinedBy), so the merchant pays nothing and the hero keeps the item.
+        var host = Hosted(owner, "merchant", C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var sold = owner.BarterSell(owner.Version, "merchant", "kit:1", 1, 5, bullets, Accept, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Changed, (int?)SessionScriptPoint.Transfer, (string?)null), (sold.Disposition, sold.DeclinedBy, sold.Item));
+        Assert.AreEqual((gold, true), (owner.QueryGold(), ReadFlag(owner, 3)), "the declined sale paid nothing, its flag write stands");
+        Assert.IsTrue(owner.QueryHeroKit().Any(item => item.Entity == "kit:1"));
+
+        // The dialog's IN: the declined hand-over is the original's failed transfer (0x461CA0 returned 0), which the port settles as it settles a refused insert.
+        DialogParticipantId pc = new(1), npc = new(2);
+        var name = owner.QueryItemName("kit:2", owner.QueryHeroKit().Single(item => item.Entity == "kit:2").Kind.Name);
+        var virgil = Hosted(owner, "virgil", C(ScrCatalogue.Action.ReturnSkipDefault));
+        var port = new SessionDialogItemTakePort(owner, pc, who => who == npc ? "virgil" : null, Accept, scripts: virgil);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(new TakeItemCommand(npc, pc, name)));
+        CollectionAssert.DoesNotContain(List(owner, "virgil"), "kit:2");
+    }
+
+    [TestMethod]
+    public void The_script_transfer_item_plan_and_move_of_a_declining_holder_script_change_nothing_but_its_effects()
+    {
+        using var owner = Hero();
+        var name = owner.QueryHeroKit().Single(item => item.Entity == "kit:1").Kind.Name;
+        var host = Hosted(owner, "virgil", C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        Assert.IsNull(owner.QueryNamedItemTransfer(null, "virgil", name, host, Accept).Refusal);
+        Assert.AreEqual((0L, (bool?)false), (owner.Version.Revision, ReadFlag(owner, 3)), "the plan applies nothing, a declined gate's flags included");
+        var moved = owner.TransferNamedItem(owner.Version, null, "virgil", name, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, (int?)SessionScriptPoint.Transfer), (moved.Disposition, moved.DeclinedBy));
+        CollectionAssert.DoesNotContain(List(owner, "virgil"), "kit:1");
     }
 }
