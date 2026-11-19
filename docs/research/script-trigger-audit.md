@@ -84,7 +84,7 @@ from line 0, static.
 | 30 | bust | 0x43F30D, 0x43F42A, 0x43F4C0, 0x43F574, 0x4F076E | **none** | 64 (25) | — |
 | 31 | dialog override | none | — (DLG number) | 0 | — |
 | 32 | transfer | 0x461D18 | hero's item moves | 6 (4) | 3 |
-| 33 | caught thief | 0x4C76CE, 0x4C78E9 | **none** | 0 | — |
+| 33 | caught thief | 0x4C76CE, 0x4C78E9 | NPC thief's pick pocket: `AreaAiHost.PickPocketAttempt` → `AreaUseScriptHost.RunCaughtThief` (ARC-SCRIPT-2858); the hero thief has no script | 10 | — |
 | 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483); the worn armour pieces' (0x4B47F8, `AreaUseScriptHost.RunArmourCritical`, ARC-SCRIPT-2828: 2 of the 4 rows are armour, scripts 30219 and 30237, admitted whole; 35 never runs on armour) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
 | 35 | critical miss | 0x4B2F35, 0x4B3163, 0x4B399C (and 0x4B47F8) | **none** | 2 (2) | — |
 

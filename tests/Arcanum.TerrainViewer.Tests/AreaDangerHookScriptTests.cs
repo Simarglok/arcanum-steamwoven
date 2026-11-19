@@ -167,6 +167,35 @@ public sealed class AreaDangerHookScriptTests
     }
 
     [TestMethod]
+    public void The_caught_thief_script_runs_at_point_33_with_the_thief_attached_and_the_victim_as_triggerer()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // ARC-SCRIPT-2858 (TQ16): 911 sets flag 2401 and, for a PC triggerer, 2403; 912 sets flag 2402. The thief's point 33 and its point 11 are separate slots.
+            var thief = Row(1, (ScrPoint.CaughtThief, 911), (AreaUseScriptHost.CatchingThiefPoint, 912));
+            var victim = Row(2, (AreaUseScriptHost.CatchingThiefPoint, 912));
+            var plain = Row(3);
+            var host = Host(session, content, thief, victim, plain);
+            var rules = session.Rules.Scripts;
+            var id = AreaUseScriptHost.EntityId(thief);
+
+            var first = host.RunCaughtThief(id, new ScrObjectRef(1, AreaUseScriptHost.EntityId(victim)), rules);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, first.Outcome, first.Detail);
+            Assert.AreEqual((ScrOutcome.RunDefault, 911), (first.Run!.Outcome, first.Run.Script));
+            Assert.IsTrue(Flag(session, EnterFlag), "point 33 runs its own slot");
+            Assert.IsFalse(Flag(session, ExitFlag), "the catching-thief slot (11) is another one");
+            Assert.IsFalse(Flag(session, PcTargetFlag), "an NPC victim is no PC");
+
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCaughtThief(id, host.Pc, rules).Outcome);
+            Assert.IsTrue(Flag(session, PcTargetFlag), "the hero victim is the triggerer");
+
+            foreach (var other in new[] { AreaUseScriptHost.EntityId(victim), AreaUseScriptHost.EntityId(plain), "oid:nobody" })
+                Assert.IsNull(host.RunCaughtThief(other, host.Pc, rules).Run, other);
+        });
+    }
+
+    [TestMethod]
     public void The_sessions_danger_setter_runs_the_enter_script_on_entering_a_fight_and_the_exit_script_on_leaving_it()
     {
         WithContent(content =>

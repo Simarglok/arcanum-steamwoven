@@ -66,6 +66,8 @@ public sealed class SessionDialogItemTakePort(
             LastResult = result;
             // ARC-WORLD-1283: the item's remove check (the no-drop flag) fails the transfer too, before the insert check; the original's fallback is the same (0x416091).
             if (result.Disposition == GameSessionDisposition.Rejected && result.Failure is GameSessionFailure.InsertRefused or GameSessionFailure.ItemNotDroppable) return Settle(npc, held.Entity);
+            // ARC-SCRIPT-2827: the recipient's transfer script declined the item (0x461CA0 returns 0, as for a refused insert): the same fallback.
+            if (result.DeclinedBy is not null) return Settle(npc, held.Entity);
             return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
         }
         foreach (var follower in _session.QueryParty().Followers)

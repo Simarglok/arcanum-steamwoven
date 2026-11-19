@@ -228,6 +228,7 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
             ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
+            CaughtThief = AiCaughtThief,
             // ARC-AI-2821 (TQ14, 0x4AE120): the will-KOS script (point 22) of an NPC that decides on a candidate; its skip default vetoes the kill-on-sight.
             WillKos = AiWillKos,
             GuardCatchingThief = AiGuardCatchingThief,
@@ -311,6 +312,17 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-246 catching-thief victim={victim} thief={thief} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
         // As the hero's thief (AreaPickPocket.Caught): a script that ran and skipped the default stops the consequences, and so does one the viewer cannot finish (Not ready, nothing applied).
         return ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
+    }
+
+    /// <summary>ARC-SCRIPT-2858 (TQ16, 0x4C7160): the NPC thief's caught-thief script (point 33) of a noticed failed pick pocket through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCaughtThief"/>), the victim (the hero is "pc") as the triggerer; the original ignores its
+    /// answer, so nothing is returned. A refused run is logged with its refusal and goes on as without a script.</summary>
+    private void AiCaughtThief(string thief, string victim)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || host.Slot(new(CurrentAreaMap, thief), AreaUseScriptHost.CaughtThiefPoint) is not { Script: > 0 }) return;
+        var who = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, victim);
+        var ran = Awarded(host, host.RunCaughtThief(thief, who, session.Rules.Scripts));
+        GD.Print($"ARC-SCRIPT-2858 caught-thief thief={thief} victim={victim} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
     }
 
     /// <summary>

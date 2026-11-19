@@ -752,6 +752,7 @@ src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,RunArmourCritical,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunCaughtThief,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPassPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
@@ -914,6 +915,7 @@ tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,CancelNoteEdit,exempt,host
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,SetNoteText,exempt,host
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiCaughtThief,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiCombatScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiItemUseScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
