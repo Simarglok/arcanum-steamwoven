@@ -359,7 +359,7 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-261 (GT198): the struck object's taking-damage script, with the hero as the attacker.
             TakingDamage = () => TakingDamageGoesOn(struckEntity, SessionSpellCaster.Hero),
-            HitScripts = HeroHitScripts(struckEntity),
+            HitScripts = HeroHitScripts(struckEntity), ArmourScripts = HeroArmourScripts(struckEntity),
             DropMap = AreaDropMapNow(), Flight = flight is not null,
             // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
             Throw = flight is null ? null : HeroThrow(goal),
@@ -945,7 +945,7 @@ public partial class TerrainViewerApp
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
             // ARC-COMBAT-1973 (RH5): the weapon's hit scripts (7, 34) with the wall as the extra object and the wall's taking-damage script (23), as for any struck object.
             TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(wall), SessionSpellCaster.Hero),
-            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)),
+            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)), ArmourScripts = HeroArmourScripts(AreaUseScriptHost.EntityId(wall)),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
@@ -1037,6 +1037,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-261 (GT198): the struck NPC's taking-damage script, with the hero as the attacker; the hero's own (a critical self-hit) has none.
             TakingDamage = recipient => recipient != Arcanum.Simulation.Combat.DamageRecipient.Target || TakingDamageGoesOn(struck.Entity, SessionSpellCaster.Hero),
             HitScripts = HeroHitScripts(struck.Entity),
+            // ARC-SCRIPT-2828: the worn armour's critical-hit scripts of a critical damage step on the struck NPC (or on the hero on a critical self-hit).
+            ArmourScripts = HeroArmourScripts(struck.Entity),
             Aim = struck.Aim, Distance = distance,
             // ARC-COMBAT-015: the bow and firearms skills read the line of fire's cost and blocker (SC8).
             LineOfFire = line,

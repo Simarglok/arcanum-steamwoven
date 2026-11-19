@@ -224,6 +224,7 @@ public partial class TerrainViewerApp
             Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            CombatScript = AiCombatScript,
             // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
             ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
@@ -250,6 +251,8 @@ public partial class TerrainViewerApp
             TakingDamage = TakingDamageGoesOn,
             // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
             HitScripts = RunHitScripts,
+            // ARC-SCRIPT-2828: the critical-hit scripts of the worn armour of a critical damage step.
+            ArmourScripts = RunArmourScripts,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -424,6 +427,21 @@ public partial class TerrainViewerApp
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
+    /// <summary>ARC-SCRIPT-2820 (TQ12, 0x4A8570, 0x4B7630): an NPC's start-combat (15) or end-combat (16) script through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCombatPassPoint"/>), with the NPC's danger source ("pc" for the hero, none without one) as the
+    /// triggerer; the callers ignore the answer. It runs on every AI pass of an NPC in combat mode, so a miss on the slot returns before anything else; a refused run is logged once per NPC, point and outcome, like the heartbeat's.</summary>
+    private void AiCombatScript(AiScriptPoint point, string npc, string? triggerer)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return;
+        var scrPoint = point == AiScriptPoint.StartCombat ? Arcanum.Scripting.Scr.ScrPoint.StartCombat : Arcanum.Scripting.Scr.ScrPoint.EndCombat;
+        if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return;
+        Arcanum.Scripting.Scr.ScrObjectRef? who = triggerer is null ? null : triggerer == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? host.Pc : new(CurrentAreaMap, triggerer);
+        var ran = Awarded(host, host.RunCombatPassPoint(scrPoint, npc, who, session.Rules.Scripts));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|{ran.Outcome}|{ran.Run?.Script}"))
+            GD.Print($"ARC-SCRIPT-2820 combat-script-refused npc={npc} point={scrPoint} outcome={ran.Outcome} detail={ran.Detail}");
+        else if (ran.Run is not null && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|ran|{ran.Run.Script}"))
+            GD.Print($"ARC-SCRIPT-2820 combat-script npc={npc} point={scrPoint} script={ran.Run.Script} outcome={ran.Run.Outcome} stop={ran.Run.Stop}");
+    }
+
     /// <summary>ARC-SCRIPT-1590 (item use 0x462CC0 → 0x441980, ledger IU2, VT8): the use script of an item an NPC of the shown map holds, through the shown map's use-script host with the NPC as the user and triggerer and the target as the extra object ("pc" is the hero).
     /// True lets the use go on (the script ran default, or none that runs: a refused or unapplied run goes on as without a script, logged once); false when the script skipped the default.</summary>
     private bool AiItemUseScript(string npc, string item, string? target)
@@ -582,6 +600,32 @@ public partial class TerrainViewerApp
         if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
             GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");
         return !vetoed;
+    }
+
+    /// <summary>ARC-SCRIPT-2828: the armour scripts of a hero's critical damage step on <paramref name="victim"/> (the hero itself on a critical self-hit), the event the session raised before its damage was written.</summary>
+    private Action<SessionArmourCriticalEvent> HeroArmourScripts(string victim) => armour => RunArmourScripts(SessionSpellCaster.Hero, victim, armour);
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (ledger TQ23; 0x4B4390, 0x4B47F8): the critical-hit script (point 34) of each armour piece the critter that takes a critical damage step wears, asked by the session after the victim's taking-damage script and before the
+    /// hit points are written, through the shown map's use-script host (<see cref="AreaUseScriptHost.RunArmourCritical"/>): the attacker is the triggerer, the critter that takes the damage (the victim, or the attacker on a critical self-hit) the extra
+    /// object. The hero's pieces are items it carries (read by identity from the map it took them on), an NPC's rows of the shown map. The answers cancel nothing; a run that is refused or whose effects the host cannot apply is said and the damage
+    /// goes on. An attacker or victim that is not on the shown map runs nothing here.
+    /// </summary>
+    private void RunArmourScripts(string attacker, string victim, SessionArmourCriticalEvent armour)
+    {
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var map = CurrentAreaMap;
+        static bool IsHero(string id) => id == SessionSpellCaster.Hero || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
+        var struck = armour.Recipient == Arcanum.Simulation.Combat.DamageRecipient.Target ? victim : attacker;
+        var carried = IsHero(struck) ? owner.QueryPcInventory() : null;
+        var pieces = armour.Worn.Select(entity => new Arcanum.Scripting.Scr.ScrObjectRef(carried?.FirstOrDefault(held => held.Entity == entity) is { Entity: not null } held ? held.Origin.RuntimeMap : map, entity)).ToArray();
+        foreach (var one in host.RunArmourCritical(pieces, Ref(attacker), Ref(struck), owner.Rules.Scripts))
+        {
+            var ran = Awarded(host, one);
+            if (ran.Run is not null)
+                GD.Print($"ARC-SCRIPT-2828 armour-critical attacker={attacker} victim={struck} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        }
     }
 
     /// <summary>

@@ -52,6 +52,7 @@ public partial class TerrainViewerApp
             _hotkeyBarView.SlotLeft += _ => HotkeyDescriptionLeft();
             _hotkeyBarView.RecentLeft += _ => HotkeyDescriptionLeft();
         }
+        _hotkeyBarView.CountFont = TextFonts()?.Title;
         var module = _arguments?.ModulePath;
         if (_hotkeyBarContent is null || module != _hotkeyBarModule)
         {

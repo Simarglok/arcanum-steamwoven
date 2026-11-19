@@ -125,6 +125,7 @@ src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowAtLocation,exempt,host
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
 src/Arcanum.Session/GameSessionHeroThrowScripts.cs,RunHeroThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
+src/Arcanum.Session/GameSessionHitScripts.cs,NotifyArmourCritical,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,StoreInsertPlace,exempt,host
@@ -747,8 +748,10 @@ src/Arcanum.World/AreaUseScripts.cs,MakeFollowRefusal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,OriginOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
+src/Arcanum.World/AreaUseScripts.cs,RunArmourCritical,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunCombatPassPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDestroyPoint,exempt,host
@@ -909,10 +912,12 @@ tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,CancelNoteEdit,exempt,host
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,SetNoteText,exempt,host
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiCombatScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiItemUseScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiWillKos,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,CarryTransformVitals,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunArmourScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,

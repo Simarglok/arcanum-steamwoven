@@ -1251,7 +1251,7 @@ name the functions and the verdict. Corrections to TG2 and the audit are in that
 | TQ9 | use goal node 0x428A10 (0x428C21) | Any actor on a portal after 2 AP in turn-based; 0 fails the node. | F1; agrees |
 | TQ10 | 0x428A10 (0x428CAB) | The hero's click on other objects but containers, critters, beds; no NPC or companion reaches the branch (goals 38 and 81 have one creator, the hero's click; goal 12 ends unless the target is a portal, TT19). | F1; agrees (#2826 closed: the audit's "any actor" was wrong for this branch) |
 | TQ11 | open attempts 0x4AEB70, 0x4AED80 | Unlock before the lock test, also from path planning; 0 refuses. | F1; not modelled (#2825) |
-| TQ12 | AI gate 0x4A8570, subturn end 0x4B7630 | 16 then 15 on every AI pass in combat mode (16 real time only), 16 at each subturn end. | F1; not run (#2820) |
+| TQ12 | AI gate 0x4A8570, subturn end 0x4B7630 | 16 then 15 on every AI pass in combat mode (16 real time only), 16 at each subturn end. | F1; run by ARC-SCRIPT-2820 (`RunCombatPassPoint`, dying set, answer ignored) |
 | TQ13 | AI tick 0x4AD200/0x4AD420, fold 0x4F1CD0 → 0x4AD790, subturn hook 0x4B7010 | First heartbeat on each fold-flagged tick; heartbeat within 30 tiles, period 250 ms to 5 s; turn-based for the NPC turn actor. | F1; agrees (TG3 corrected) |
 | TQ14 | kill-on-sight 0x4AE120 | Will KOS after target validity from target finding, dialog start, reply step; 0 vetoes. | F1; not modelled (#2821) |
 | TQ15 | danger setter 0x4AABE0 | Enter on becoming combat, exit on leaving it for none, flee or surrender. | F1; agrees (ARC-AI-1530) |
@@ -1262,7 +1262,7 @@ name the functions and the verdict. Corrections to TG2 and the audit are in that
 | TQ20 | wield hooks 0x4677B0/0x467CB0, rewield 0x465530, removal 0x467860 | 24/25 on worn slots and on magick/tech point changes; 28 on every removal. | F1; partial (#2827) |
 | TQ21 | sale check 0x462170, hover quote 0x578330 | Exactly 1 to buy, skipped at haggle training 2+. | F1; not modelled (#2825) |
 | TQ22 | melee 0x4B3770, ranged 0x4B2F60, projectile 0x4B2870 | 7/34, 26 (target → attacker), 8/35; projectile landing and range rules. | F1; agrees |
-| TQ23 | damage apply 0x4B4390 (0x4B47F8) | 34/35 on worn armour after 23. | F1; not modelled (#2828) |
+| TQ23 | damage apply 0x4B4390 (0x4B47F8), 0x4B6410, 0x4B3170, 0x4B3770, 0x4B2F60 | 34 on each worn type-7 piece (slots 1000–1008, slot order) for a critical damage on a living critter, after 23 and before the hit points are written; 35 unreachable (every damage apply with the critical flag has the hit flag: 0x4B6410 turns a critical miss into a hit on the attacker). | F1; agrees since ARC-SCRIPT-2828; the self-hit's weapon 7/34 and critter-hits 26 not run (#2841) |
 | TQ24 | damage apply 0x4B4390 (0x4B446B), throw 0x4B3C00 | 23 with re-entry guard, 0 cancels damage; 6, 0 throws nothing. | F1; agrees where hosted |
 | TQ25 | kill 0x45DA20, destroy 0x43CCA0, heal applier 0x4B58C0 | 12 (0 skips death), 20 per follower of the killer's PC leader, 2 (0 keeps), 18 also when blocked. | F1; 20 not modelled (#2825) |
 | TQ26 | object break 0x43F1C0, portal bust 0x4F06E0, rest 0x57BAC0 | Bust on objects with broken art; leader sleeping per follower. | F1; agrees |

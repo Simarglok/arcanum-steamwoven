@@ -670,6 +670,8 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828 (0x4B4390, 0x4B47F8): the host's critical-hit scripts (point 34) of the armour a critical damage step on a living critter reaches, asked after its taking-damage script let the damage go on and before the damage is written (<see cref="SessionArmourCriticalEvent"/>). Null: none run.</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-COMBAT-1929 (0x45F9D0): the target's facing and awareness of the hero, for a backstab of a melee attack with a wielded weapon (the wielded weapon's art subtype comes with <see cref="HeroWorn"/>). Null: the host knows none, and the attack is no backstab.</summary>
     public SessionBackstabFacts? Backstab { get; init; }
     /// <summary>ARC-COMBAT-1942 (0x4B3170, SC16): the target is the occupant the blow pulled out of a bed it struck (the record's target replaced), so the check carries -30 (<see cref="AttackRequest.TargetWasInBed"/>).</summary>
@@ -1025,6 +1027,9 @@ public sealed partial class GameSessionOwner
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version)
             { Ammunition = ammunition, Shots = flying, Scatter = scatter, Vetoed = true };
+        // ARC-SCRIPT-2828 (0x4B47F8): the victim's worn armour runs its critical-hit script after the victim's own and before the hit points are written.
+        NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.HeroWorn,
+            QueryLife(recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero).View?.Status);
         // ARC-DEV-312: the hero is the killer of a target it kills (its critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage, killer: recipient == DamageRecipient.Target ? SessionSpellCaster.Hero : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)

@@ -1129,7 +1129,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1584,6 +1584,32 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         finally { _itemUse = previousItem; }
     }
 
+    /// <summary>The object type of an armour piece (armour, shields, helmets, gauntlets, boots, rings and medallions), which the damage apply's armour loop asks (0x4B47F8: type 7).</summary>
+    private const int ArmourType = 7;
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (0x4B4390, the loop at 0x4B47F8, GT201; ledger TQ23): the critical-hit script (point 34) of each armour piece <paramref name="worn"/> (an entity of the victim's wear slots 1000–1008, in slot order; an item of another
+    /// type, a weapon or a generic item, runs none) for a critical damage step on a living critter: the attacker is the triggerer, <paramref name="victim"/> (the one who takes the damage: the attacker itself on a critical self-hit) the extra
+    /// object, line 0, through <see cref="RunCombatPoint"/> (its set, its slot kept as map changes); the answers are ignored. A piece the host cannot read (no row) or with no script at the point runs nothing. Returns the runs, one per piece
+    /// that was asked, in order.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> RunArmourCritical(IReadOnlyList<ScrObjectRef> worn, ScrObjectRef attacker, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(worn); ArgumentNullException.ThrowIfNull(rules);
+        var runs = new List<AreaScriptedUse>(worn.Count);
+        foreach (var piece in worn)
+        {
+            // An item the host was not given a map of is read by identity, as its use is (the type is the row's).
+            var previous = _itemUse;
+            _itemUse = piece;
+            bool armour;
+            try { armour = Row(piece)?.Type == ArmourType; }
+            finally { _itemUse = previous; }
+            if (armour) runs.Add(RunCombatPoint(ScrPoint.CriticalHit, piece, attacker, victim, rules));
+        }
+        return runs;
+    }
+
     /// <summary>
     /// ARC-WORLD-1160 (E3-a; 0x57BAC0, 0x4411C0, ledger SWB8): the leader-sleeping script (attachment point 29) of <paramref name="follower"/>, an NPC of the shown map that leads the hero's rest: the rest's option click runs it for
     /// every direct follower of the sleeper with the hero as the triggerer and the follower as the attachee, no extra object, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>).
@@ -1671,6 +1697,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _dangerRunDepth--; _clicked = previous; }
+    }
+
+    private int _combatPassDepth;
+
+    /// <summary>
+    /// ARC-SCRIPT-2820 (TQ12, exe read 2026-11-19): the start-combat (15) or end-combat (16) script of <paramref name="npc"/>, an NPC of the shown map, through the script dispatcher (0x441980) at the two places the original calls it: the AI gate 0x4A8570 (16 in real
+    /// time only, then 15, on every AI pass of an NPC in combat mode; the NPC's danger source as the triggerer, none without one) and the turn-based subturn end 0x4B7630 (16 for the outgoing non-PC actor, the actor as the triggerer too). The NPC is the attachee, no extra object,
+    /// line 0, under <see cref="DyingAdmission"/> (the set of the other NPC combat scripts); its slot is kept as map changes (<see cref="SlotProperty"/>). Both callers ignore the answer. An NPC that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// The original has no guard; a script whose effects reach the same pass again runs nested, so the depth is bounded (<see cref="MaxDangerRunDepth"/>).
+    /// </summary>
+    public AreaScriptedUse RunCombatPassPoint(int point, string npc, ScrObjectRef? triggerer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(npc); ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.StartCombat or ScrPoint.EndCombat)) throw new ArgumentOutOfRangeException(nameof(point), "Not a start-combat or end-combat point.");
+        var attachee = new ScrObjectRef(_shownMap, npc);
+        if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_combatPassDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested combat pass scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (npc, row);
+        _combatPassDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a combat pass script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _combatPassDepth--; _clicked = previous; }
     }
 
     /// <summary>
