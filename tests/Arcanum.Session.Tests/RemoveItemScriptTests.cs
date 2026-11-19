@@ -14,7 +14,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class RemoveItemScriptTests
 {
-    private const int RemoveScript = 702;
+    internal const int RemoveScript = 702;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     internal sealed class Host(GameSessionOwner session) : ISessionItemScriptHost
@@ -44,14 +44,14 @@ public sealed class RemoveItemScriptTests
         public SessionPrintedLine PrintedLineForNpc(int script, int line) => new(SessionPrintedLineStatus.Shown, $"npc line {line} of {script}", "test");
     }
 
-    private static GameSessionOwner Hero()
+    internal static GameSessionOwner Hero()
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
         return owner;
     }
 
-    private static Host Hosted(GameSessionOwner owner, params (int Type, (byte Kind, int Value)[] Operands)[] actions)
+    internal static Host Hosted(GameSessionOwner owner, params (int Type, (byte Kind, int Value)[] Operands)[] actions)
     {
         var host = new Host(owner);
         host.Slots[("torn", SessionScriptPoint.RemoveItem)] = RemoveScript;

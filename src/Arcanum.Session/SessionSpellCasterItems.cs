@@ -284,7 +284,9 @@ public sealed partial class SessionSpellCaster
     /// (<see cref="GameSessionOwner.DestroyUsedItem"/> for the hero's; ARC-WORLD-108: <see cref="GameSessionOwner.RemoveItemFromNpc"/>
     /// for an NPC's, refused for food or a scroll it wears), then the source of every run whose parent or source is the item is cleared
     /// (the original clears first; nothing reads the runs in between). Nothing is cleared when the deletion is refused. False when
-    /// nothing was deleted, also for an item the host does not know or that is not food or a scroll.
+    /// nothing was deleted, also for an item the host does not know or that is not food or a scroll. ARC-SCRIPT-2881: the deletion runs the item's
+    /// remove-item script (28) through <see cref="ItemScripts"/>; an item with one and no host is refused, and the lines the script printed are logged
+    /// (<see cref="SpellCastEventKind.ItemScriptLine"/>).
     /// </summary>
     public bool SpendUsedItem(string item)
     {
@@ -295,9 +297,18 @@ public sealed partial class SessionSpellCaster
     }
 
     // The destruction of a used food or scroll (0x43CCA0) out of its holder's lists: the hero's, or an NPC's (ARC-WORLD-108).
-    private bool DestroyHeldItem(SessionItemSpells item) => (item.Holder == Hero
-        ? _owner.DestroyUsedItem(_owner.Version, item.Entity).Disposition
-        : _owner.RemoveItemFromNpc(_owner.Version, item.Holder, item.Entity).Disposition) == GameSessionDisposition.Changed;
+    // ARC-SCRIPT-2881 (IE3, exe 0x467860): the removal runs the item's remove-item script (28) through the viewer's item script host (ItemScripts), with the holder as the triggerer; without a host an item with a 28 is refused,
+    // never deleted with the script skipped. The lines it printed are logged as ItemScriptLine entries for the message window (no run: the spend is the use's own step, so the run id is -1).
+    private bool DestroyHeldItem(SessionItemSpells item)
+    {
+        var scripts = ItemScripts?.Invoke();
+        var destroyed = item.Holder == Hero
+            ? _owner.DestroyUsedItemWithLines(_owner.Version, item.Entity, scripts)
+            : _owner.RemoveItemFromNpc(_owner.Version, item.Holder, item.Entity, scripts);
+        if (destroyed.Disposition != GameSessionDisposition.Changed) return false;
+        foreach (var message in destroyed.Messages) _log.Add(new(SpellCastEventKind.ItemScriptLine, -1, message.Kind, item.Holder, message.Script) { Text = message.Text });
+        return true;
+    }
 
     // The map with the items a critter of it holds (ARC-MAGIC-020): an item is an object in its holder's inventory, at its holder's
     // location (the inventory flag 0x1000, owner the holder). Everything else is the map's.
