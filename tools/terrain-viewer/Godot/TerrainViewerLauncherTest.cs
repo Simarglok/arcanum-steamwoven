@@ -257,7 +257,7 @@ public partial class TerrainViewerApp
             await Start(true);
             Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto", "Generated interface: Off"]) && _launcherPanel.HdEnabledForSelfTest && !_launcherPanel.HdGeneratedEnabledForSelfTest,
                 "the HD lines default to Off, Auto, Off (an old visual profile line alone does not turn HD on; generated is off while HD is Off): " + string.Join(" | ", HdLines()));
-            Require(Lines().Length == 12 && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+            Require(Lines().Length == 13 && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
                 "the launcher has one HD row, no HD graphics, HD interface or HD lighting line: " + Lines().Length);
             _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
