@@ -159,7 +159,7 @@ public static partial class AiExecutorRules
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(world);
         var frames = run.Frames.ToBuilder();
-        var state = new HeroWalkState(run.Flags, run.PathFlags) { Approach = run.Bottom.Goal is not (GoalType.MoveToTile or GoalType.RunToTile) };
+        var state = new HeroWalkState(run.Flags, run.PathFlags) { Approach = run.Bottom.Goal is GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem };
         var reason = AiExecutorReason.None;
         for (var nodes = 1; ; nodes++)
         {
@@ -216,7 +216,7 @@ public static partial class AiExecutorRules
     {
         public GoalRunFlags Flags = flags;
         public GoalPathFlags PathFlags = pathFlags;
-        /// <summary>ARC-COMBAT-2736: the walk is an approach pushed by another goal (use, loot, pickup, move near: the original's goals 8 and 61), not the hero's own walk goal 3 or 4.</summary>
+        /// <summary>ARC-COMBAT-2736: the walk is the approach of a use (38), loot (81) or pickup (15) run (the original's goals 8 and 61); the hero's own walk goals 3 and 4 and the walks of other goals (attack, cast, skills) are not covered (not read).</summary>
         public bool Approach;
     }
 
@@ -338,6 +338,8 @@ public static partial class AiExecutorRules
         if (index > 0 && goal.Target is { } stop && world.AttackWalkInReach(stop)) return new(Move.Pop);
         var from = index == 0 ? at : goal.Path[index - 1];
         var next = goal.Path[index];
+        // ARC-COMBAT-2736 (GT148): an approach's step start refuses run flag 0x100 before anything else, so a held or blocked first step ends the same way (the status line hears of it).
+        if (state.Approach && (state.Flags & GoalRunFlags.NoWalk) != 0) return End(AiExecutorReason.NoWalkStep);
         var block = world.StepBlocked(from, next, lastOfSegment: index == goal.Path.Length - 1);
         // ARC-DEV-302 (GT148, D8): a held hero takes no step; the walk asks again in a frame and goes on to its destination when the hold ends.
         if (block == AiStepBlock.Held) return new(Move.Restart, Delay: HeroRoutePollMs, Reason: AiExecutorReason.StepHeld);

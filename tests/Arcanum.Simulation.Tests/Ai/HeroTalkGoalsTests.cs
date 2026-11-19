@@ -37,7 +37,8 @@ public sealed class HeroTalkGoalsTests
             return new(AiHeroPlanOutcome.Found, [.. cells]);
         }
 
-        public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => AiStepBlock.Clear;
+        public AiStepBlock Block = AiStepBlock.Clear;
+        public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => Block;
         public int BeginStep(CellCoord from, CellCoord next, bool running) { Log.Add("step " + next.X + "," + next.Y); At = next; if (DiesAfterSteps > 0 && ++_steps == DiesAfterSteps) Dead = true; return 100; }
         public bool StepPending(CellCoord from, CellCoord to) => false;
         public bool FollowRoute(CellCoord destination) { FollowRoutes++; return true; }
@@ -361,6 +362,27 @@ public sealed class HeroTalkGoalsTests
         var (last, _) = Drive(NoWalk(UseRun()), w);
         Assert.AreEqual(0, w.Log.Count);
         Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason);
+    }
+
+    [TestMethod]
+    public void AShiftUseExactlyAtTheTargetsRangeActsAsAlways()
+    {
+        var w = new World { Npc = new(12, 10), Range = 2 };
+        var (last, _) = Drive(NoWalk(UseRun()), w);
+        CollectionAssert.AreEqual(new[] { "use " + Npc }, w.Log);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
+    }
+
+    [TestMethod]
+    public void AShiftUseOutOfReachWithAHeldOrBlockedFirstStepStillEndsWithTheNoWalkReason()
+    {
+        foreach (var block in new[] { AiStepBlock.Held, AiStepBlock.Occupied })
+        {
+            var w = new World { Npc = new(16, 10), Range = 1, Block = block };
+            var (last, _) = Drive(NoWalk(UseRun()), w);
+            Assert.AreEqual(0, w.Log.Count, block.ToString());
+            Assert.AreEqual(AiExecutorReason.NoWalkStep, last.Reason, block.ToString());
+        }
     }
 
     [TestMethod]

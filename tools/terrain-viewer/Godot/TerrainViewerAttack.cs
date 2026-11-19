@@ -681,8 +681,8 @@ public partial class TerrainViewerApp
     {
         var line = goal switch
         {
-            Arcanum.Simulation.Goals.GoalType.PickupItem => "Shift: no walk, goal 15 ended before the item was reached",
-            Arcanum.Simulation.Goals.GoalType.UseContainer => "Shift: no walk, goal 81 ended before the target was reached",
+            Arcanum.Simulation.Goals.GoalType.PickupItem => "Shift: no walk, the pickup ended before the item was reached",
+            Arcanum.Simulation.Goals.GoalType.UseContainer => "Shift: no walk, the looting ended before the target was reached",
             _ => "Shift: no walk, the use ended before the target was reached",
         };
         if (goal is Arcanum.Simulation.Goals.GoalType.PickupItem or Arcanum.Simulation.Goals.GoalType.UseContainer) _inventoryStatus = line;
