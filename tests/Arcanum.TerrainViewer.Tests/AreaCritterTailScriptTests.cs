@@ -101,12 +101,12 @@ public sealed class AreaCritterTailScriptTests
     }
 
     [TestMethod]
-    public void The_use_placed_heartbeat_combat_point_and_dying_sets_admit_the_follower_focus_kinds_and_stay_inside_S62()
+    public void The_use_placed_heartbeat_combat_point_and_dying_sets_admit_the_follower_focus_kinds_and_stay_inside_the_latest_set()
     {
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryFollower) && set.FocusKinds.Contains(ScrFocusKind.AnyFollower), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
     }
 

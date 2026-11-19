@@ -247,6 +247,10 @@ The Godot-free parts are `SteamwovenHudPlan.Column` / `WindowZone`, `SteamwovenW
 
 ## Asset kit
 
+**Master scale (ARC-RES-2949).** The kit stays at 3.6 px per unit (composition 2880 × 2160): the HD pack audit compared it with the pack's 4 px per unit
+(3200 × 2400) and recommends 3.6, because its steps draw the 16:9 and 21:9 sizes (720p, 1080p, 1440p, 2160p) without resampling and the kit, its tools
+and the layout already use it; a pack frame reused in the kit is area-resampled by 0.9 ([audit](../rendering/hd-pack-4x3-audit.md#kit-master-scale-36-or-4-px-per-unit)).
+
 Part kinds:
 
 | Kind | What | Examples |
@@ -311,11 +315,32 @@ Part kinds:
   ([#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458)) from the comparison
   ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)).
 - **SWI-GEN-6** Every generated image has a provenance record: generator and version, date, prompt id and the hash of
-  its text, reference ids, who ran it.
-- **SWI-GEN-7** The owner runs Codex image generation (owner decision 2026-11-16, [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449)); agents never
-  send anything to Codex. Handoff: the agent puts a batch's prompts, references and a short list of what to generate into
-  `local/steamwoven-ui/inbox/<batch>/`, asks the owner in the thread, and the owner puts the results into
-  `local/steamwoven-ui/outbox/<batch>/`; the agent then writes the provenance records (SWI-GEN-6) and runs the fit tool.
+  its text, reference ids and hashes, who ran it. The batch runner (SWI-GEN-7) also records the Codex thread id, the pixel size, the
+  outcome and the refusal text.
+- **SWI-GEN-7** Codex image generation runs through the owner's subscription Codex CLI on the Mac (owner decision 2026-11-16,
+  [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449), changed 2026-11-19, [#3001](https://github.com/Simarglok/arcanum-steamwoven/issues/3001):
+  agents may run it). No API and no key: the built-in `image_gen` tool of the logged-in CLI only. Handoff: the agent builds a batch inbox
+  (`local/steamwoven-ui/inbox/<batch>/`: prompts, references, `batch.json`, `README.txt`), runs `tools/steamwoven_ui/codex_batch.py`, which writes
+  `local/steamwoven-ui/outbox/<batch>/<id>.png` with a provenance record per image, reports the files, sizes and refusals to the owner, and then runs the fit tool.
+  The owner can still fill the outbox by hand and run `prompt_library.py provenance`.
+- **SWI-GEN-8** The result of an item is accepted only as a PNG at the asked aspect (within 1 %); the generator keeps a budget of about 1.57 MP per
+  image, so a master size above it is reached by the fit tool, never by an upscale inside the generation session. A refusal or a failure is
+  logged with Codex's own text; the prompt is never reworded automatically.
+
+### Codex batch runner (ARC-DEV-3001)
+
+[#3001](https://github.com/Simarglok/arcanum-steamwoven/issues/3001). `tools/steamwoven_ui/codex_batch.py` (standard library only; tests `python3 -B -m unittest tools.steamwoven_ui.test_codex_batch`, also in the batched `run_tests.py`)
+runs one inbox batch and writes the outbox. It never writes into the inbox and never touches git. Its work folder is `local/steamwoven-ui/codex-work/<batch>/<run>/` (prompts sent, JSONL events, results and stderr per item).
+
+- **`batch.json`** (written by `prompt_library.py inbox`, or by hand): `{"batch": NAME, "items": [...]}`; an item has `id` (plain name), `prompt_file` and `prompt_sha256` (required; the text is checked against it; files stay inside the inbox),
+  `size` `[w, h]` or null and optional `aspect` `[w, h]` (the asked aspect is `aspect`, else `size`), `references` `[{"slot", "file", "sha256"}]` (files relative to the inbox, inside it, hash required and checked); `after` and other keys are ignored and `outbox_file` = `outbox/<batch>/<id>.png`.
+- **Pre-check**: `codex --version`, `codex features list` shows `image_generation` on, `codex login status` is a subscription login (an API-key login stops the run). Any failure stops with the reason (exit 2) before anything is sent.
+- **One session per batch**: the first item is `codex exec --skip-git-repo-check --sandbox workspace-write --enable image_generation --json -C <workdir> -o <result> [--image=REF ...] -` (prompt on stdin, with the session rules); the `thread_id` comes from the `thread.started` event and every later item is `codex exec resume <thread_id> ...` run from the same directory, strictly in order. Never `--last`, never `--ephemeral`, an argument list with no shell, `OPENAI_*` variables removed from the environment.
+- **Per item**: exit code, the final JSON `{"ok", "path", "error"}`, the file `<id>.png` in the work folder, a PNG, the aspect within 1 %. Outcomes: `ok`, `refused` (ok false, with Codex's text), `failed`, `timeout` (`--timeout`, default 900 s, the process group is killed), `bad-result`, `missing-file`, `not-png`, `wrong-aspect`. The batch goes on after a failed item. Only an `ok` image is copied to the outbox, and an existing outbox file is kept unless `--overwrite`.
+- **Provenance** `outbox/<batch>/<id>.provenance.json`: generator `codex-cli <version> image_gen`, date, batch, id, `prompt_sha256`, each reference with its sha256, `thread_id`, pixel size, asked size and aspect, outcome, refusal text, image sha256.
+- **Commands**: `codex_batch.py check`; `codex_batch.py run BATCH --dry-run [--only ID,ID]` prints the commands and sends nothing; `codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite] [--model M]`. Exit 0 all ok, 1 an item not ok, 2 pre-check or batch file failed.
+- First real run (2026-11-19): a two-item synthetic text batch, both items `ok` in one resumed session; the tool returned 1448 × 1086 px (1.57 MP) for a 4:3 ask. Reference attachment (repeated `--image=PATH` before the `-` prompt, on `exec` and on `exec resume`) was checked once with two tiny synthetic images against the real CLI.
+- The agent skill that drives it, `.claude/skills/steamwoven-codex-images/SKILL.md`, is narrow: only running ready interface image batches.
 
 ### Prompt library and handoff (ARC-RES-2455)
 
@@ -383,7 +408,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | --- | --- | --- | --- |
 | 0. Decisions | [#2447](https://github.com/Simarglok/arcanum-steamwoven/issues/2447) | the first ADR and TRD (2026-11-16, done) | — |
 | 0. Decisions | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) | owner: provenance and distribution — decided: originals are Codex inputs, kit local only | — |
-| 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | Codex runner — decided: the owner runs Codex (closed, not planned) | — |
+| 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | Codex runner — decided 2026-11-16: the owner runs Codex (closed, not planned); changed 2026-11-19: agents run the subscription CLI ([#3001](https://github.com/Simarglok/arcanum-steamwoven/issues/3001)) | — |
 | 0. Decisions | [#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893) | this rewrite: the ADR amendment, the TRD, the replacement production issues | #2892 |
 | 1. Geometry | [#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450) | layout model of the full-width frame (done; its model is superseded) | — |
 | 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | full-width prototype with generated chrome (done, [historical](#prototype-of-the-play-screen-arc-ui-2452)) | #2450 |

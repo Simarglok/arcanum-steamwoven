@@ -54,12 +54,14 @@ class SourceScanTests(unittest.TestCase):
 
     def test_only_known_sites_send_a_signal_and_each_is_a_started_group_or_a_liveness_check(self) -> None:
         # The allowed sites (Python only): the queue's _signal_group, the world validator's own child group, the HD pack's liveness
-        # check and the Steamwoven bake lock's (os.kill with signal 0 signals nothing), and the queue's lock holder, a single process it started itself.
+        # check and the Steamwoven bake lock's (os.kill with signal 0 signals nothing), the queue's lock holder, a single process it started itself, and the Codex batch runner's
+        # time-out (ARC-DEV-3001), which kills the group of the `codex exec` child it started with start_new_session.
         allowed = {
             "tools/local_dev/run_queue.py": {"os.killpg(pid, number)", "os.kill(pid, 0)", "holder.kill()"},
             "tools/terrain-viewer/Godot/tools/world_validate.py": {"os.killpg(child.pid, signal.SIGTERM)", "os.killpg(child.pid, signal.SIGKILL)"},
             "tools/hd_pack/hd_pack.py": {"os.kill(pid, 0)"},
             "tools/steamwoven_ui/bake.py": {"os.kill(pid, 0)"},
+            "tools/steamwoven_ui/codex_batch.py": {"os.killpg(process.pid, signal.SIGKILL)"},
         }
         seen: dict[str, set[str]] = {}
         for path in sources():
