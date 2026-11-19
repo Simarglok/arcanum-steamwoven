@@ -404,8 +404,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The loop-break set (ARC-SCRIPT-1166, plan slice E5-e, ledger PG15): <see cref="S38"/> plus loop break (20), which ends the run's running loop at once and goes on after the first loop end following the loop for (the same
-    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task. Call script at (55) is not part of the slice:
-    /// it stands on one line no run reaches.
+    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task.
     /// </summary>
     public static ScrAdmissionSet S40 { get; } = new("S40", S38.Conditions, S38.Actions.Append(ScrCatalogue.Action.LoopBreak), S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
 

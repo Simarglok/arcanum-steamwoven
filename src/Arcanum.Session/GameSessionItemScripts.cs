@@ -965,7 +965,6 @@ public sealed partial class GameSessionOwner
             return [];
         }
 
-        // ARC-SCRIPT-2377 (IV44): random (37) draws from the session's generator in the move (a trial copy of the stream the commit takes over), so the runs of a move continue one sequence and a refused move spends none.
         // ARC-SCRIPT-2824 (TQ17): call script at reads the session's clock (a move leaves it where it is), its time of day counted from the profile's start hour.
         public ScrGameTime? Time()
         {
@@ -973,6 +972,7 @@ public sealed partial class GameSessionOwner
             return new ScrGameTime(clock.DayIndex, clock.Hour, clock.Minute, clock.MillisecondOfDay, clock.ProfileBinding.StartHour);
         }
 
+        // ARC-SCRIPT-2377 (IV44): random (37) draws from the session's generator in the move (a trial copy of the stream the commit takes over), so the runs of a move continue one sequence and a refused move spends none.
         public int Random(int low, int high) => runs.Draw(low, high);
 
         // ARC-SCRIPT-2377 (IV45, CQ1, CQ2): get social class and get origin go to the host's world part; an object it reads no row for stops the run as an absent one does (UnknownObject: the session refuses the move). The faction and armor getters are not admitted.
