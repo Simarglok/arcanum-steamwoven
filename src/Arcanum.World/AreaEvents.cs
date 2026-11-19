@@ -94,6 +94,8 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
 
     private readonly Func<ISessionItemScriptHost?>? _itemScripts;
 
+    /// <summary>ARC-SCRIPT-2879: the shown map's item script host, for the remove-item scripts of a restock's clear and a body's inventory walk.</summary>
+    public ISessionItemScriptHost? ItemScriptHost => _itemScripts?.Invoke();
     /// <summary>ARC-SCRIPT-2887: the item script host the regeneration's created items run their get and insert-item scripts through (null without one: such an item is then not created).</summary>
     public ISessionItemScriptHost? ItemScripts(SessionMapId map) => _itemScripts?.Invoke();
 
