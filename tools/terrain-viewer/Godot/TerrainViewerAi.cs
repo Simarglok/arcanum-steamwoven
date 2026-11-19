@@ -248,6 +248,8 @@ public partial class TerrainViewerApp
             TakingDamage = TakingDamageGoesOn,
             // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
             HitScripts = RunHitScripts,
+            // ARC-SCRIPT-2828: the critical-hit scripts of the worn armour of a critical damage step.
+            ArmourScripts = RunArmourScripts,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -557,6 +559,32 @@ public partial class TerrainViewerApp
         if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
             GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");
         return !vetoed;
+    }
+
+    /// <summary>ARC-SCRIPT-2828: the armour scripts of a hero's critical damage step on <paramref name="victim"/> (the hero itself on a critical self-hit), the event the session raised before its damage was written.</summary>
+    private Action<SessionArmourCriticalEvent> HeroArmourScripts(string victim) => armour => RunArmourScripts(SessionSpellCaster.Hero, victim, armour);
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (ledger TQ23; 0x4B4390, 0x4B47F8): the critical-hit script (point 34) of each armour piece the critter that takes a critical damage step wears, asked by the session after the victim's taking-damage script and before the
+    /// hit points are written, through the shown map's use-script host (<see cref="AreaUseScriptHost.RunArmourCritical"/>): the attacker is the triggerer, the critter that takes the damage (the victim, or the attacker on a critical self-hit) the extra
+    /// object. The hero's pieces are items it carries (read by identity from the map it took them on), an NPC's rows of the shown map. The answers cancel nothing; a run that is refused or whose effects the host cannot apply is said and the damage
+    /// goes on. An attacker or victim that is not on the shown map runs nothing here.
+    /// </summary>
+    private void RunArmourScripts(string attacker, string victim, SessionArmourCriticalEvent armour)
+    {
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var map = CurrentAreaMap;
+        static bool IsHero(string id) => id == SessionSpellCaster.Hero || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
+        var struck = armour.Recipient == Arcanum.Simulation.Combat.DamageRecipient.Target ? victim : attacker;
+        var carried = IsHero(struck) ? owner.QueryPcInventory() : null;
+        var pieces = armour.Worn.Select(entity => new Arcanum.Scripting.Scr.ScrObjectRef(carried?.FirstOrDefault(held => held.Entity == entity) is { Entity: not null } held ? held.Origin.RuntimeMap : map, entity)).ToArray();
+        foreach (var one in host.RunArmourCritical(pieces, Ref(attacker), Ref(struck), owner.Rules.Scripts))
+        {
+            var ran = Awarded(host, one);
+            if (ran.Run is not null)
+                GD.Print($"ARC-SCRIPT-2828 armour-critical attacker={attacker} victim={struck} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        }
     }
 
     /// <summary>

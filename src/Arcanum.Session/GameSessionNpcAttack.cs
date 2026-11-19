@@ -31,6 +31,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, as <see cref="SessionAttack.HitScripts"/>; an NPC's shot that flies asks at its strike.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionAttack.ArmourScripts"/>: the worn armour of whoever takes a critical damage step (the target, or the attacker on a critical self-hit).</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-DEV-282 (PF1, PF2): the host can fly a shot. A bow or firearms attack whose wielded weapon has a projectile art (<see cref="SessionWearItem.MissileArt"/>) is then decided now and its hit's damage waits for the strike (<see cref="GameSessionOwner.LandNpcShot"/>); the result names the shots in flight. Without it (or without the art) the attack lands at once, as ARC-DEV-273's.</summary>
     public bool Flight { get; init; }
     /// <summary>ARC-AI-1756 (0x4B3170, SC16): the target is the occupant the attack pulled out of a bed it struck (the record's target replaced), so the check carries -30 (<see cref="AttackRequest.TargetWasInBed"/>).</summary>
@@ -66,6 +68,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483: as <see cref="SessionNpcAttack.HitScripts"/>.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionNpcAttack.ArmourScripts"/>.</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-MAGIC-1188: as <see cref="SessionNpcAttack.ItemTriggers"/>, for the attack on the struck critter (the thrown item is the event's weapon; the thrower's worn items exclude it).</summary>
     public ISessionItemTriggers? ItemTriggers { get; init; }
     /// <summary>ARC-COMBAT-1717 (PF1, PF6, PF7, PF10; 0x4B3C00 → 0x4B3170): the host can fly the thrown weapon. The throw is then decided now (the check and a miss's scatter, rolled as ever) and the weapon leaves
@@ -216,6 +220,7 @@ public sealed partial class GameSessionOwner
             DropMap = request.DropMap,
             TakingDamage = request.TakingDamage,
             HitScripts = request.HitScripts,
+            ArmourScripts = request.ArmourScripts,
             ItemTriggers = request.ItemTriggers,
             Flight = request.Flight,
         };
@@ -538,6 +543,8 @@ public sealed partial class GameSessionOwner
         // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
         if (attack.TakingDamage is { } asks && !asks(recipient))
             return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
+        // ARC-SCRIPT-2828 (0x4B47F8): the victim's worn armour runs its critical-hit script after the victim's own and before the hit points are written.
+        NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.AttackerWorn, recipient == DamageRecipient.Target ? targetStatus : attackerStatus);
         // ARC-DEV-312: the attacker is the killer of a target it kills (a critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage, killer: recipient == DamageRecipient.Target ? attacker.Entity : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
