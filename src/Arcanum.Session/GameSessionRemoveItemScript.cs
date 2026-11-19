@@ -28,7 +28,7 @@ public sealed partial class GameSessionOwner
     private RemovalScripted RunRemovalScript(string item, string? holder, IReadOnlyList<int> points, ISessionItemScriptHost scripts) => RunRemovalScripts([(item, points)], holder, scripts);
 
     /// <summary>
-    /// ARC-SCRIPT-2880 (IE3): the same for several items one destroy takes out of the dying holder in order (the inventory-on-destroy walk, 0x4639E0 → 0x467860): one run set, so a later run reads what the earlier ones did. Items without a point 28 run nothing.
+    /// ARC-SCRIPT-2880 (IE3): the same for several items one destroy takes out of the dying holder in order (the inventory-on-destroy walk, IE3): one run set, so a later run reads what the earlier ones did. Items without a point 28 run nothing.
     /// </summary>
     private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts)
     {
