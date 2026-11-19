@@ -23,14 +23,15 @@ public sealed class AreaNewSectorScriptTests
     private static AreaObjectKey Key(int index, int map = 1) => new(new string('a', 64), map, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
     // An NPC row with a script slot at the given point.
-    private static AreaObjectRecord Row(int index, int script, int point = ScrPoint.NewSector, int map = 1)
+    private static AreaObjectRecord Row(int index, int script, int point = ScrPoint.NewSector, int map = 1, uint? npcFlags = null, int type = 16)
     {
         var fields = new List<AreaFieldValue>
         {
             new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(point, [0, 0, script])], null),
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, 0u, [], null),
         };
-        return new(Key(index, map), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
+        if (npcFlags is { } flags) fields.Add(new(69, AreaPresence.Value, AreaValueOrigin.Instance, (long)flags, [], null));
+        return new(Key(index, map), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
@@ -209,5 +210,41 @@ public sealed class AreaNewSectorScriptTests
         Console.WriteLine($"script 1568: outcome {ran.Outcome}, run {ran.Run?.Outcome}/{ran.Run?.Stop}, lines {ran.Run?.Trace.Count}, detail {ran.Detail}");
         Assert.IsNotNull(ran.Run, ran.Detail);
         Assert.AreNotEqual(AreaScriptedUseOutcome.Refused, ran.Outcome, ran.Detail);
+    }
+
+    [TestMethod]
+    public void A_monster_generator_follower_runs_no_script_and_answers_run_default()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // NPC flag 0x80000 (the generator's mark, 0x4BA5B0) stops the interpreter's entry (0x4449B0) before the script; other NPC flag bits do not.
+            var generator = Row(1, 911, npcFlags: 0x80000 | 0x4);
+            var plain = Row(2, 911, npcFlags: 0x4);
+            var notNpc = Row(3, 911, npcFlags: 0x80000, type: 2);
+            var host = Host(session, content, null, generator, plain, notNpc);
+            Assert.IsTrue(host.IsMonsterGenerator(new ScrObjectRef(1, AreaUseScriptHost.EntityId(generator))));
+            Assert.IsFalse(host.IsMonsterGenerator(new ScrObjectRef(1, AreaUseScriptHost.EntityId(plain))));
+            Assert.IsFalse(host.IsMonsterGenerator(new ScrObjectRef(1, AreaUseScriptHost.EntityId(notNpc))), "the NPC flag field is read for an NPC only");
+            var ran = host.RunNewSector(new ScrObjectRef(1, AreaUseScriptHost.EntityId(generator)), session.Rules.Scripts);
+            Assert.AreEqual(ScrOutcome.RunDefault, ran.Run!.Outcome, ran.Detail);
+            Assert.AreEqual(ScrStop.MonsterGenerator, ran.Run.Stop);
+            Assert.IsFalse(Flag(session, RanFlag), "a generator's script does not run");
+            var other = host.RunNewSector(new ScrObjectRef(1, AreaUseScriptHost.EntityId(plain)), session.Rules.Scripts);
+            Assert.AreEqual(911, other.Run!.Script);
+            Assert.IsTrue(Flag(session, RanFlag), "an NPC without the mark runs it");
+        });
+    }
+
+    [TestMethod]
+    public void The_follower_point_runs_for_a_sector_border_and_an_arrival_only()
+    {
+        var a = new Arcanum.Data.Traversal.AreaStepCell(10, 10);
+        // A crossing of a sector border (64 tiles wide) and an arrival (from equal to to) enter a sector; a step inside one sector and a path-walk tile do not.
+        Assert.IsTrue(AreaMapTransfers.RunsFollowerNewSector(new(63, 10), new(64, 10), false));
+        Assert.IsTrue(AreaMapTransfers.RunsFollowerNewSector(a, a, false), "the arrival, teleport landing and placement of mode 2");
+        Assert.IsFalse(AreaMapTransfers.RunsFollowerNewSector(new(10, 10), new(11, 10), false), "a step inside one sector is mode 1");
+        Assert.IsFalse(AreaMapTransfers.RunsFollowerNewSector(new(63, 10), new(64, 10), true), "the spell path walk runs the tile scripts only");
+        Assert.IsFalse(AreaMapTransfers.RunsFollowerNewSector(a, a, true));
     }
 }
