@@ -340,15 +340,17 @@ public sealed class RestockStateTests
         Assert.IsTrue(Fire(owner, new World(), SessionEventKinds.RestockRetryDelayMs).Restocks.Single() is { Postponed: false, Decision.Step: RestockStep.Regenerate });
     }
 
+    // ARC-SCRIPT-2857 (NT2, IE2): the items a restock creates have no parent, so 0x4617F0 → 0x461810 never reaches the parented transfer that runs the holder's transfer script (point 32): a holder with the point regenerates as one without.
     [TestMethod]
-    public void Holders_the_session_cannot_regenerate_keep_their_lists()
+    public void A_holder_with_a_transfer_script_regenerates_as_any_other()
     {
-        // A container generated once (flag 0x200) without the host's seed facts: GeneratedOnceStateTests (ARC-WORLD-100). A holder with a transfer script would refuse every created item after the clear (the script is not run).
         var scripted = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "smith" ? h with { ScriptPoints = [SessionScriptPoint.Transfer] } : h)] };
         using var owner = Owner(seed: scripted);
         Schedule(owner, "smith");
-        Assert.AreEqual(SessionRestockOutcome.Unsupported, Fire(owner, new World()).Restocks.Single().Regenerations.Single().Outcome);
-        CollectionAssert.AreEqual(new[] { "purse", "hammer", "ring" }, List(owner, "smith"));
+        var done = Fire(owner, new World()).Restocks.Single().Regenerations.Single();
+        Assert.AreEqual(("smith", SessionRestockOutcome.Regenerated, 25, 0, 0), (done.Holder, done.Outcome, done.Coins, done.Refused, done.Skipped));
+        CollectionAssert.AreEqual(new[] { "ring", "made:1", "made:2", "made:3" }, List(owner, "smith"));
+        Assert.AreEqual(25, owner.QueryNpcGold("smith"));
     }
 
     [TestMethod]

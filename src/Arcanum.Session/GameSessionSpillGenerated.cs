@@ -15,7 +15,7 @@ public sealed partial class GameSessionOwner
     /// first loot open passes to <see cref="GenerateContainerOnce"/>), asked when a container breaks outside an event pass (inside one, the pass's
     /// world is used when it is ready). It may answer null. None set, a null answer or a host that is not ready (<see cref="ISessionRestockWorld.RestockReady"/>): the
     /// break spills only the stored items, as before (a recorded limit); so does a break whose seed facts the host cannot give
-    /// (<see cref="ISessionRestockWorld.GeneratedOnceFacts"/>), a set the session does not admit, a transfer script on the container and a full
+    /// (<see cref="ISessionRestockWorld.GeneratedOnceFacts"/>), a set the session does not admit and a full
     /// session budget. The host must not call back into the session from its callbacks.
     /// </summary>
     public Func<ISessionRestockWorld?>? GenerateOnceWorld { get; set; }

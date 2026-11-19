@@ -25,7 +25,7 @@ public sealed partial class GameSessionOwner
     /// <see cref="ISessionRestockWorld.GeneratedOnceFacts"/>); the session's own generator draws nothing. With a source it is then recorded
     /// as generated (its source and flag 0x200 cleared, RK10), so the schedule after it finds no source; a container with flag 0x200 and
     /// source 0 is only cleared and keeps its flag (none installed). Without flag 0x200 nothing changes; a container the session cannot
-    /// regenerate (a set it does not admit, a transfer script, no seed facts from the host) keeps its list
+    /// regenerate (a set it does not admit, no seed facts from the host) keeps its list
     /// (<see cref="SessionRestockOutcome.Unsupported"/>, no change). Refused before any effect: an invalid entity
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, a host not ready yet (<see cref="ISessionRestockWorld.RestockReady"/>) or
     /// no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a container the seed or the host does not list as one, or a spilled one
