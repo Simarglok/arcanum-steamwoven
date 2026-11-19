@@ -49,8 +49,8 @@ public sealed partial class GameSessionOwner
 
     private Func<int, IReadOnlyList<SessionPrototypeScript>?>? _prototypeScripts;
 
-    // ARC-COMBAT-2182: the made item (entity and kind) a hero's throw splits off a stack for, only while the throw's scripts run before the split creates it; null otherwise. Not state.
-    private (string Entity, SessionItemKind Kind)? _pendingThrowMade;
+    // ARC-COMBAT-2182, ARC-SCRIPT-2887: the made item (entity and kind) a hero's throw splits off a stack for, or a created object an NPC's or container's list takes in (NewNpcEntry), only while its scripts run before it is created; null otherwise. Not state.
+    private (string Entity, SessionItemKind Kind)? _pendingMade;
 
     /// <summary>
     /// ARC-DEV-097 (MIG8, TM9, GR7, SA4): attaches the host's prototype data for the script arrays of the objects the session creates from a
@@ -139,7 +139,7 @@ public sealed partial class GameSessionOwner
     private SessionItemKind? MadeKind(string entity)
     {
         // ARC-COMBAT-2182: the stack a hero's throw is about to split off answers as the made item it will be while the throw's scripts run (it is created after them).
-        if (_pendingThrowMade is { } pending && pending.Entity == entity) return pending.Kind;
+        if (_pendingMade is { } pending && pending.Entity == entity) return pending.Kind;
         var origin = ObjectOriginOf(entity);
         if (origin is not (SessionObjectOrigin.Made or SessionObjectOrigin.Kit)) return null;
         foreach (var made in _inventory.Made)

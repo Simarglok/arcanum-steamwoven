@@ -94,10 +94,11 @@ public sealed partial class GameSessionOwner
         if (piles.Length == 0 && marked.Count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, 0, null, 0, Version);
         if (_revision == long.MaxValue) return Refuse(GameSessionFailure.RevisionExhausted);
         string? pile = target?.Entity;
+        var report = new CreatedScripts();
         if (piles.Length > 0 && target is null)
         {
             // 0x464830 creates the first pile with its coins and moves it in (0x4617F0); the later piles join it.
-            var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal);
+            var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal, scripts: scripts, report: report);
             if (created is null) return Refuse(refusal!.Value.Failure);
             pile = created.Value.Entity;
             if (identify) marked.Add(pile);
@@ -107,7 +108,7 @@ public sealed partial class GameSessionOwner
         foreach (var entry in piles) DestroyObject(entry.Entity);
         _inventory.Identified.UnionWith(marked);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, (int)coins, piles.Length, pile, marked.Count, Version) { Messages = insert.Runs?.Messages ?? [] };
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, (int)coins, piles.Length, pile, marked.Count, Version) { Messages = [.. insert.Runs?.Messages ?? [], .. report.Messages] };
     }
 
     /// <summary>ARC-WORLD-090: whether the session marked the item identified (item flag 0x1 a barter window set); the item's own
@@ -356,6 +357,7 @@ public sealed partial class GameSessionOwner
         var insert = RunPileInsert(scripts, source.Entity, holder, npcTriggerer: false);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = ContainerStackOfType(holder, source.AmmoType);
-        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind) : null, insert);
+        var report = new CreatedScripts();
+        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind, scripts, report) : null, insert, report);
     }
 }
