@@ -11,13 +11,13 @@ namespace Arcanum.Session;
 /// that the weapon is a weapon item. <see cref="Thrown"/>: the weapon is an item thrown (the hero's throw lands through the thrown-item host, which runs the hit point of its own, ARC-MAGIC-042). The attacker and the victim are the host's own (it built the attack). The answers of the scripts are not read (the call sites ignore them).
 /// ARC-SCRIPT-2841 (TQ31, 0x4B6410, 0x4B3170): <see cref="SelfHit"/> marks the hit a critical miss turned on the attacker (the context's hit flag 0x2 set, the target := the attacker, the critical flag 0x4 half of the time, which is <see cref="Critical"/> here):
 /// the victim is the attacker itself, so the host passes the attacker as the extra object of the weapon's points and as the triggerer of its own critter-hits point (26).
-/// ARC-SCRIPT-2724 (0x4B2F60): <see cref="Generic"/> marks a projectile whose parent item is a generic item (an NPC's thrown grenade: no weapon block, <see cref="Arcanum.Simulation.Equipment.WeaponKind.ThrownItem"/>), not a weapon item (object type 5):
+/// ARC-SCRIPT-2724 (0x4B2F60): <see cref="Generic"/> marks a projectile whose parent item is a generic item (an NPC's thrown grenade: no weapon block, <see cref="WeaponKind.ThrownItem"/>), not a weapon item (object type 5):
 /// the projectile path's critical-hit point (34) asks for a weapon item, so the host runs it for no generic item.
 /// </summary>
 public readonly record struct SessionHitScriptEvent(string? Weapon, bool Critical, bool Projectile, bool Thrown = false, bool SelfHit = false, bool Generic = false)
 {
     /// <summary>
-    /// ARC-SCRIPT-2724 (0x4B2F60, ledger CP2): whether the weapon's critical-hit script (point 34) runs for the hit: a critical hit runs it; on the projectile path only when the parent item is a weapon item
+    /// ARC-SCRIPT-2724 (ledger CP2, the projectile path's weapon-item test): whether the weapon's critical-hit script (point 34) runs for the hit: a critical hit runs it; on the projectile path only when the parent item is a weapon item
     /// (<paramref name="parentIsWeapon"/>: the host's reading of the item's type, true for an NPC's wielded weapon) and not a generic item (<see cref="Generic"/>, a thrown grenade).
     /// </summary>
     public bool RunsCriticalHitPoint(bool parentIsWeapon) => Critical && (!Projectile || parentIsWeapon && !Generic);

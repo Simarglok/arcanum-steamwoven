@@ -200,7 +200,6 @@ public sealed class NpcThrowLocationTests
             Assert.AreEqual(GameSessionFailure.None, strike.Failure);
             var hit = heard.Single();
             Assert.AreEqual((Grenade, true, true), (hit.Weapon, hit.Projectile, hit.Generic), "the event names the grenade as a projectile's generic parent item");
-            Assert.IsFalse(hit.RunsCriticalHitPoint(parentIsWeapon: true), "even a critical flag would run no critical-hit point for it");
             Assert.IsFalse((hit with { Critical = true }).RunsCriticalHitPoint(parentIsWeapon: true), "a critical stray hit of a grenade runs no point 34");
             return;
         }
