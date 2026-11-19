@@ -55,8 +55,8 @@ texture of the wood backgrounds).
 7. **All art is redrawn by Codex image generation.** The style is held by: a census of the original interface
    (screenshots, element extraction, reuse); whole-screen context images first (as in the current HD pack) so Codex sees
    each part's purpose; a material sheet the owner approves; prompts per part kind; a fit tool that locks every part to
-   the approved materials. Original art is given to Codex as input, and the owner runs Codex; agents prepare the
-   inputs and process the outputs (owner decision 2026-11-16). So the kit is derived content: it stays local like the HD
+   the approved materials. Original art is given to Codex as input; agents prepare the
+   inputs, run the owner's subscription Codex CLI and process the outputs (owner decisions 2026-11-16 and 2026-11-19). So the kit is derived content: it stays local like the HD
    pack and is not shipped.
 8. **Large surfaces are a research item.** How to get 2880-wide strips and 2880 × 1440 window backgrounds from a generator with a smaller
    output (upscale, tiled regeneration, material texture plus macro image) is decided by comparison

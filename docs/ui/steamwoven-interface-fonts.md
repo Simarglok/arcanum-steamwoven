@@ -122,8 +122,10 @@ No font file, glyph frame or outline is in git, and none is added.
 
 ## Non-original text in the viewer today
 
-Found by reading the viewer on 2026-11-19; each draws player-facing text with Godot's default font, against the owner rule. Not fixed here (layout and viewer code are
-other slices' ground). Sites: the "Round N" turn-order list of the combat HUD (`AreaCombatHud`, 13 px `Label`s); the hotkey bar's slot names where a slot has no icon (`AreaHotkeyBarView`, 9 px
-`Label`s); the follower portraits' initials and fallback words (`AreaFollowerPortraits`, 9 px `Label`s); and the fallback paths of the bar numbers, floaters and text bubbles and the
-message window and log that run when the original font did not load (`AreaBarNumber.DrawStandIn`, `AreaFloaterLayer`, `AreaMessageLogView`). Other `Label` sites in the panels
-(about 150 in the Godot folder, many developer or launcher panels) were not audited. Issue: [#2940](https://github.com/Simarglok/arcanum-steamwoven/issues/2940).
+Found by reading the viewer on 2026-11-19; each drew player-facing text with Godot's default font, against the owner rule. [#2940](https://github.com/Simarglok/arcanum-steamwoven/issues/2940)
+(ARC-UI-2940) fixed the sites below on the normal path and in their no-font paths: the "Round N" turn-order list of the combat HUD (`AreaCombatHud`, art 229, the current row in gold), the hotkey bar's
+names of item entries whose icon art did not read (`AreaHotkeyBarView`, art 229), the follower portraits' initials and chrome words (`AreaFollowerPortraits`, art 229; the Godot tooltip of a portrait is gone, the hover
+window names the follower), the hovered critter's bar texts in the floating tooltip (`AreaHoverLifeBars`, art 229, white), and the no-font paths of the bar numbers (`AreaBarNumber`) and the floaters and bubbles (`AreaFloaterLayer`). Without
+the font (no game folder) these draw nothing: the lines of the floater layer are laid out at a nominal 15 px line and 6 px advance, and a self-test that needs the text gives a synthetic face (`AreaArtFontFace.SyntheticForSelfTest`).
+The sites that remain (menu notes, the save list's detail, notice and question buttons, the gamepad prompt strip, Godot tooltips, and the fallback `Label` panels of the windows that run without their art) are listed with an audit of
+the other `Label` sites (developer, launcher and QA panels excluded) in [#2968](https://github.com/Simarglok/arcanum-steamwoven/issues/2968).

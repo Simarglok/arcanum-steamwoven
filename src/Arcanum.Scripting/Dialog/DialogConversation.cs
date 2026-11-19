@@ -1485,7 +1485,8 @@ public sealed partial class DialogConversation
                 return null;
             }
             // The NPC line addresses the PC: the alternate field is its female-PC variant.
-            var bytes = _request.Pc.Gender == DialogPcGender.Male ? npc.Text : npc.AlternateText;
+            // A Player record used as a final line has no female-PC text: its slot holds a gender number, which the original takes as the text (ARC-SCRIPT-2804, FLM2), so its own text is shown.
+            var bytes = _request.Pc.Gender == DialogPcGender.Male || npc.Role == DlgRecordRole.Player ? npc.Text : npc.AlternateText;
             var textFailure = DialogText.Decode(bytes.Bytes, _request.Encoding, _options.MaxTextBytes, out var text);
             if (textFailure != DialogTextFailureKind.None)
             {
@@ -1881,8 +1882,9 @@ public sealed partial class DialogConversation
                 target = null;
                 line = null;
             }
-            else if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
+            else if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc && transfer is not ConversationFinalLine)
             {
+                // A final line takes any record of the DLG, a Player record too (ARC-SCRIPT-2804, ledger FLM2); a join, an unwait and an expert teacher still need an NPC node.
                 block = new DialogOptionBlock(DialogOptionBlockKind.TargetInvalid, transfer.Source);
             }
             else
