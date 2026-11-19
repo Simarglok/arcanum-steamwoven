@@ -228,6 +228,8 @@ public sealed class SteamwovenColumnTests
         (1024, 768, 0, 1024, 768, 0, 1024, 52, 564),
         (1280, 1024, 0, 1280, 960, 0, 1280, 66, 706),
         (5120, 1440, 0, 5120, 1440, 1600, 3520, 98, 1058),
+        (800, 600, 0, 800, 600, 0, 800, 41, 441),
+        (1000, 2000, 0, 1000, 750, 0, 1000, 51, 551),
         (1366, 768, 0, 1366, 768, 171, 1195, 52, 564),
     ];
 
@@ -243,6 +245,9 @@ public sealed class SteamwovenColumnTests
             Assert.AreEqual(row.FrameW, layout.Frame.Width, label);
             Assert.AreEqual(row.FrameH, layout.Frame.Height, label);
             Assert.AreEqual(row.FrameX, layout.Frame.X, label);
+            Assert.AreEqual(row.W - layout.Frame.Right + layout.Frame.X, row.W - row.FrameW, label + ": the bars together");
+            Assert.AreEqual(layout.Bars.Top + layout.Bars.Bottom, row.H - row.FrameH, label + ": the bars above and below");
+            Assert.AreEqual(layout.Scale, new Ratio(row.FrameH, 2160), label + ": the kit scale is frame height / 2160");
             Assert.AreEqual(row.ColL, plan.Column.X, label);
             Assert.AreEqual(row.ColR, plan.Column.Right, label);
             var topBottom = layout.Frame.Y + row.TopH;

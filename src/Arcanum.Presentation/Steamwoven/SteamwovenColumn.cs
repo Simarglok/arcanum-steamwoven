@@ -14,7 +14,7 @@ public sealed record SteamwovenColumnMode(Ratio K, bool WorldToEdges = false)
 
     /// <summary>
     /// ARC-UI-2890 (owner decision 2026-11-19: no wood fill in the gaps): the strips and the open window are one 4:3 composition (41 + 400 + 159 = 600 units of the original's 800 × 600 screen) scaled to the frame's whole height, `u = frame height / 600`
-    /// device pixels per unit, the column `800 · u` wide; the window zone fills the middle band exactly, so there are no gaps, and the world (or the black bars) shows at the sides. At 16:9 it is the same as k = 1 (`u = 3.6 · f`); at 16:10 the
+    /// device pixels per unit, the column `800 · u` wide; the window zone fills the middle band exactly, so there are no gaps, and the world (or the black bars) shows at the sides. At 16:9 it is the k = 1 column within a pixel or two (`u = 3.6 · f`; the strips are exactly 41 and 159 units, without the sliver and overhang of the 150 and 570 px bands); at 16:10 the
     /// composition is scaled up (4 · f). Only with k = 1; the scale does not depend on the panel heights of the options.
     /// </summary>
     public bool FitHeight { get; init; }

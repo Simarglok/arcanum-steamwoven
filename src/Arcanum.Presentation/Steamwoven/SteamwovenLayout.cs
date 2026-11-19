@@ -60,7 +60,7 @@ public sealed record SteamwovenLayout(
 /// laid out whole; a narrower one is letterboxed to 2400 · f and a wider one pillarboxed to 3840 · f, centred, and a bar under 4 px per side is
 /// dropped (the frame is the window; the middle band or the sides take the difference). The panel heights are rounded as sizes from the frame's top
 /// and bottom edges (`round(120 · f)`, `round(456 · f)` with the default heights, as the TRD reference table shows); every other edge (centre block, split, zone, backdrop) is rounded from its own exact position, halves
-/// up, so neighbouring parts share edges. With the column mode of the options (ARC-UI-2889) <see cref="SteamwovenLayout.Column"/> holds the column plan; every other member is the full-width layout
+/// up, so neighbouring parts share edges. With the column mode of the options (ARC-UI-2889) <see cref="SteamwovenLayout.Column"/> holds the column plan; every other member is the full-width layout (except in the fitted column of ARC-UI-2890, whose frame, bands, `f` and step are the fitted composition's)
 /// computed as before (the bands span the frame, <see cref="SteamwovenLayout.Controls"/> sit on the full-width centre block), which a column viewer does not draw. The window zone is centred in the middle band and kept inside it. Godot-free; the viewer reads the rectangles.
 /// </summary>
 public static class SteamwovenLayoutBuilder
@@ -75,10 +75,20 @@ public static class SteamwovenLayoutBuilder
         long w = width, h = height;
         var wider = 9 * w > 16 * h;
         var scale = wider ? new Ratio(h, SteamwovenGrid.ReferenceHeight) : new Ratio(w, SteamwovenGrid.ReferenceWidth);
-        if (scale < SteamwovenGrid.MinSupportedScale) return Fail(SteamwovenLayoutFailure.ScaleBelowSupport);
-
         // ARC-UI-2890: the fitted column supports any aspect ratio: the 4:3 composition fills the window's height (or its width where the window is narrower than 4:3: black bars above and below), the world shows at the sides.
-        var frame = options.Column is { FitHeight: true } ? FitFrame(width, height) : FrameFor(width, height, scale, wider);
+        // Its kit scale is `f = frame height / 2160` (the composition's 600 units are 2160 master px at f = 1), so an 800 x 600 window has f = 0.278 and is supported, whatever its width.
+        PixelRect frame;
+        if (options.Column is { FitHeight: true })
+        {
+            frame = FitFrame(width, height);
+            scale = new Ratio(frame.Height, SteamwovenGrid.ReferenceHeight);
+        }
+        else
+        {
+            if (scale < SteamwovenGrid.MinSupportedScale) return Fail(SteamwovenLayoutFailure.ScaleBelowSupport);
+            frame = FrameFor(width, height, scale, wider);
+        }
+        if (scale < SteamwovenGrid.MinSupportedScale) return Fail(SteamwovenLayoutFailure.ScaleBelowSupport);
         var bars = new PixelInsets(frame.X, frame.Y, width - frame.Right, height - frame.Bottom);
 
         var step = SteamwovenGrid.StepFor(scale);
