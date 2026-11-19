@@ -5,6 +5,10 @@ using System.Text.Json.Nodes;
 
 namespace Arcanum.Data.Hd;
 
+/// <summary>ARC-UI-2865: one portrait redraw ready to write: <paramref name="Path"/> is the original's bitmap (<c>portrait/hum1_b.bmp</c>), <paramref name="LegacyRgba"/> its
+/// decoded pixels (<paramref name="Width"/> × <paramref name="Height"/>), <paramref name="Rgba"/> the opaque redraw at exactly the pack's scale times that size.</summary>
+public sealed record HdBuiltPortrait(string Path, int Width, int Height, byte[] LegacyRgba, byte[] Rgba);
+
 public enum HdInterfaceWriteStatus { Written, InvalidPack, RecipeConflict, WriteFailed, VerifyFailed }
 
 /// <param name="Detail">The refusal's reason, or the pack's identity on success.</param>
@@ -26,9 +30,14 @@ public static class HdInterfacePackWriter
     private const string SliceAlphaMode = "legacySmooth";
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    public static HdInterfaceWriteResult Write(string directory, string packId, int scale, IReadOnlyList<HdBuiltInterfaceFrame> frames, DateTimeOffset now)
+    public static HdInterfaceWriteResult Write(string directory, string packId, int scale, IReadOnlyList<HdBuiltInterfaceFrame> frames, DateTimeOffset now,
+        IReadOnlyList<HdBuiltPortrait>? portraits = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory); ArgumentNullException.ThrowIfNull(frames);
+        portraits ??= [];
+        // ARC-UI-2865: a write of interface frames replaces the pack's interface sprites and leaves its portraits; a write of portraits replaces only the portraits it names (by path)
+        // and leaves the sprites and every other portrait.
+        var portraitPaths = portraits.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
         if (!new HdPackOptions().Scales.Contains(scale)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"scale {scale} is not an accepted pack scale");
         var manifestPath = Path.Combine(directory, HdPack.ManifestFile);
         var written = new List<string>();
@@ -70,7 +79,11 @@ public static class HdInterfacePackWriter
             var entries = manifest["entries"]!.AsArray();
             var oldFiles = new List<string>(); var replaced = 0;
             for (var i = entries.Count - 1; i >= 0; i--)
-                if ((string?)entries[i]!["slice"] == SliceName) { oldFiles.Add((string)entries[i]!["file"]!); entries.RemoveAt(i); replaced++; }
+            {
+                var isPortrait = (string?)entries[i]!["kind"] == "portrait";
+                if ((string?)entries[i]!["slice"] == SliceName && (isPortrait ? portraitPaths.Contains((string?)entries[i]!["portrait"]?["path"] ?? "") : frames.Count > 0 || portraits.Count == 0))
+                { oldFiles.Add((string)entries[i]!["file"]!); entries.RemoveAt(i); replaced++; }
+            }
             var keys = new HashSet<(string, int)>(); var files = new List<(string File, byte[] Png, JsonObject Entry)>();
             foreach (var frame in frames.OrderBy(f => f.Art.FileName, StringComparer.OrdinalIgnoreCase).ThenBy(f => f.Frame))
             {
@@ -87,6 +100,26 @@ public static class HdInterfacePackWriter
                     ["legacy"] = new JsonObject { ["width"] = frame.Width, ["height"] = frame.Height, ["rgbaSha256"] = HdPackPath.Sha256(legacyRgba) },
                     ["review"] = "unreviewed",
                 }.WithMasked(frame.Masked)));
+            }
+            var portraitKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var portrait in portraits.OrderBy(p => p.Path, StringComparer.Ordinal))
+            {
+                if (!HdPortraitKey.TryPath(portrait.Path, out var path) || path != portrait.Path) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{portrait.Path} is not an acceptable portrait path");
+                if (!portraitKeys.Add(path)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} is given twice");
+                if (portrait.Rgba.Length != (long)portrait.Width * scale * portrait.Height * scale * 4 || portrait.LegacyRgba.Length != portrait.Width * portrait.Height * 4)
+                    return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} has the wrong pixel count for scale {scale}");
+                for (var i = 3; i < portrait.Rgba.Length; i += 4)
+                    if (portrait.Rgba[i] != byte.MaxValue) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} is not opaque");
+                var png = HdPng.EncodeRgba(portrait.Width * scale, portrait.Height * scale, portrait.Rgba);
+                var sha = HdPackPath.Sha256(png);
+                var file = $"interface/portrait-{Sanitise(path[HdPortraitKey.Folder.Length..^4])}-f0-{sha[..8]}.png";
+                files.Add((file, png, new JsonObject
+                {
+                    ["kind"] = "portrait", ["file"] = file, ["sha256"] = sha, ["bytes"] = png.Length, ["slice"] = SliceName,
+                    ["portrait"] = new JsonObject { ["path"] = path },
+                    ["legacy"] = new JsonObject { ["width"] = portrait.Width, ["height"] = portrait.Height, ["rgbaSha256"] = HdPackPath.Sha256(portrait.LegacyRgba) },
+                    ["review"] = "unreviewed",
+                }));
             }
             var taken = new HashSet<string>(entries.Select(e => (string)e!["file"]!), StringComparer.Ordinal);
             var fresh = new HashSet<string>(StringComparer.Ordinal);
@@ -121,11 +154,11 @@ public static class HdInterfacePackWriter
                 try { File.Delete(HdPackPath.Full(directory, old)); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
             var check = HdPack.Open(directory);
-            if (check.Status != HdPackOpenStatus.Opened) return new(HdInterfaceWriteStatus.VerifyFailed, frames.Count, replaced, $"{check.Status} {check.Detail}");
+            if (check.Status != HdPackOpenStatus.Opened) return new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count, replaced, $"{check.Status} {check.Detail}");
             var integrity = check.Pack!.VerifyIntegrity();
             return integrity.Intact
-                ? new(HdInterfaceWriteStatus.Written, frames.Count, replaced, $"{check.Pack.Id} {check.Pack.Scale}x manifest {check.Pack.Identity.ManifestSha256}")
-                : new(HdInterfaceWriteStatus.VerifyFailed, frames.Count, replaced, $"{integrity.Valid}/{integrity.Entries} entries intact");
+                ? new(HdInterfaceWriteStatus.Written, frames.Count + portraits.Count, replaced, $"{check.Pack.Id} {check.Pack.Scale}x manifest {check.Pack.Identity.ManifestSha256}")
+                : new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count, replaced, $"{integrity.Valid}/{integrity.Entries} entries intact");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {

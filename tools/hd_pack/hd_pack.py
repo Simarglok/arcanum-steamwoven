@@ -76,6 +76,8 @@ def load_manifest(pack: Path) -> tuple[dict, str]:
 
 
 def entry_key(e: dict) -> tuple:
+    if e.get("kind") == "portrait":  # ARC-UI-2865: a portrait redraw is keyed by the original bitmap's path (docs/formats/hd-pack.md#portrait-entries)
+        return ("portrait", e["portrait"]["path"])
     return (e["art"]["sha256"], e["group"], e["frame"], e["palette"])
 
 
@@ -291,6 +293,19 @@ def pack_map(pack: Path) -> "layout.LayoutMap | None":
     return load_map_file(pack / layout.MAP_FILE) if (pack / layout.MAP_FILE).is_file() else None
 
 
+def portrait_rows(keyed_entries: dict) -> dict:
+    """The default layout rows (screen `portraits`, kind `heroes` or `npcs`) of the portrait entries among `keyed_entries`, by the ART name `art_of` finds in their staged file."""
+    rows = {}
+    for e in keyed_entries.values():
+        if e.get("kind") == "portrait":
+            stem = e["portrait"]["path"].rsplit("/", 1)[-1].removesuffix(".bmp")
+            try:
+                rows[layout.art_of(e["file"])] = ("portraits", "npcs" if stem.startswith("npc") else "heroes", False)
+            except layout.LayoutError as err:
+                raise PackError(str(err)) from err
+    return rows
+
+
 def place_entry(e: dict, lm: "layout.LayoutMap") -> str:
     try:
         return layout.place(layout.art_of(e["file"]), e, lm)
@@ -365,6 +380,8 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
     if lm is None and extra_map is not None:
         raise PackError("--map only applies to a pack with a layout-map.tsv (run relayout first)")
     pack_rows = dict(lm.rows) if lm is not None else {}
+    if lm is not None:  # ARC-UI-2865: a staged portrait needs no row in the map: it goes to interface/portraits/<heroes|npcs>/ and apply appends the row
+        lm = layout.LayoutMap({**portrait_rows(ks), **lm.rows})
     if lm is not None and extra_map is not None:  # the pack's own rows win; the file only adds ARTs the pack's map lacks
         lm = layout.LayoutMap({**{a: r for a, r in extra_map.rows.items() if a not in lm.rows}, **lm.rows})
 
@@ -1075,6 +1092,93 @@ def cmd_fonts_plan(a) -> int:
     return 0
 
 
+PORTRAIT_PLAN_KIND = "arcanum-steamwoven-hd-portrait-plan"
+
+
+def read_sums(folder: Path) -> dict:
+    """`SHA256SUMS.txt` of a delivery folder (`<sha256>  ./<relative path>` per line)."""
+    path = folder / "SHA256SUMS.txt"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as e:
+        raise PackError(f"{folder} has no readable SHA256SUMS.txt ({e})") from e
+    sums = {}
+    for line in lines:
+        digest, _, name = line.partition("  ")
+        if len(digest) == 64 and name:
+            sums[name.removeprefix("./")] = digest
+    return sums
+
+
+def portrait_plan(hero: Path | None, npc: Path | None, out: Path, pack_id: str) -> tuple[dict, dict]:
+    """ARC-UI-2865: the importer plan for the portrait deliveries. A hero delivery (ARC-UI-2864) holds `large/<id>_b.png` (512, for the 128 bitmap
+    `portrait/<id>_b.bmp`) and `small/<id>.png` (256, for `portrait/<id>.bmp`); an NPC delivery (ARC-UI-2884) holds `<id>.png` (256, the small bitmap
+    only: an NPC has no large one). Every file used is checked against the delivery's SHA256SUMS.txt, its PNG header (8-bit, not interlaced, the size
+    above) and, for a hero, that its large and small image exist for the same ids. Image paths are relative to OUT. The importer checks each size
+    against the original bitmap it redraws."""
+    items, counts = [], {}
+
+    def add(folder: Path, rel: str, bmp: str, side: int, sums: dict, group: str) -> None:
+        png = folder / rel
+        if not png.is_file() or png.is_symlink():
+            raise PackError(f"{png} is missing or not a plain file")
+        if sums.get(rel) != sha256(png):
+            raise PackError(f"{png} is not listed in {folder}/SHA256SUMS.txt or differs from it; the delivery changed after it was packed")
+        w, h, depth, ctype, interlace = png_header(png)
+        if (w, h) != (side, side) or depth != 8 or ctype not in (2, 6) or interlace:
+            raise PackError(f"{png}: {w}x{h}, depth {depth}, colour type {ctype}; expected {side}x{side}, 8-bit RGB or RGBA, not interlaced")
+        items.append({"bmp": bmp, "image": os.path.relpath(png, out.parent).replace(os.sep, "/")})
+        counts[group] = counts.get(group, 0) + 1
+
+    if hero is not None:
+        sums = read_sums(hero)
+        ids = sorted(p.name.removesuffix("_b.png") for p in (hero / "large").glob("*_b.png"))
+        small = sorted(p.name.removesuffix(".png") for p in (hero / "small").glob("*.png"))
+        if ids != small:
+            raise PackError(f"{hero}: the large and the small folder name different portraits ({sorted(set(ids) ^ set(small))[:6]})")
+        for i in ids:
+            add(hero, f"large/{i}_b.png", f"portrait/{i}_b.bmp", 512, sums, "hero large")
+            add(hero, f"small/{i}.png", f"portrait/{i}.bmp", 256, sums, "hero small")
+    if npc is not None:
+        sums = read_sums(npc)
+        for p in sorted(npc.glob("*.png")):
+            add(npc, p.name, f"portrait/{p.stem}.bmp", 256, sums, "npc small")
+    if not items:
+        raise PackError("no portrait delivery given (--hero DIR, --npc DIR)")
+    for it in items:
+        if not all(c.islower() or c.isdigit() or c in "_-/." for c in it["bmp"]):
+            raise PackError(f"{it['bmp']} is not a lowercase portrait name")
+    return {"schema": 1, "kind": PORTRAIT_PLAN_KIND, "packId": pack_id, "scale": 4, "items": items}, counts
+
+
+def cmd_portraits_plan(a) -> int:
+    out = a.out
+    real = out.resolve()
+    anchored = any(p.name == "local" and (p.parent / ".git").exists() for p in real.parents)
+    if out.is_symlink() or not anchored or GAME_SUPPORT.resolve() in (real, *real.parents) \
+            or {"hd-packs", "hd_pack", "pack-out"} & set(real.parts):
+        raise PackError(f"{out} must be a plain file under a checkout's local/ directory, never inside an installed pack, a staging pack or a pack collection")
+    if out.suffix != ".json":
+        raise PackError(f"{out} must be a .json file")
+    if out.exists():
+        try:
+            if json.loads(out.read_text()).get("kind") != PORTRAIT_PLAN_KIND:
+                raise ValueError("not a portrait plan")
+        except (OSError, ValueError, AttributeError) as e:
+            raise PackError(f"{out} exists and is not a portrait plan of this tool; refusing to overwrite it ({e})") from e
+    plan, counts = portrait_plan(a.hero.resolve() if a.hero else None, a.npc.resolve() if a.npc else None, real, a.pack_id)
+    for group, n in sorted(counts.items()):
+        print(f"  {group}: {n} images")
+    print(f"plan {out}: {len(plan['items'])} portraits, scale 4x, pack id {plan['packId']}")
+    if a.dry_run:
+        print("DRY-RUN: nothing written")
+        return 0
+    real.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(real, (json.dumps(plan, indent=1) + "\n").encode())
+    print(f"PASS portraits-plan; next: stage --plan {out} --staging local/res095/pack-out/{a.pack_id} --dry-run")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="hd_pack.py", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1129,6 +1233,12 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--pack-id", default="interface-fonts", help="id of the staging pack the plan builds (default interface-fonts)")
     s.add_argument("--art", help="only these font ART numbers, e.g. 27,229 (default: every font folder)")
     s.add_argument("--dry-run", action="store_true", help="read and check the frames, print the counts, write nothing")
+    s = add("portraits-plan", cmd_portraits_plan, "write the importer plan for portrait deliveries (ARC-UI-2865)")
+    s.add_argument("--hero", type=Path, help="the hero portrait delivery folder (large/<id>_b.png 512, small/<id>.png 256, SHA256SUMS.txt)")
+    s.add_argument("--npc", type=Path, help="the NPC portrait delivery folder (<id>.png 256, SHA256SUMS.txt)")
+    s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
+    s.add_argument("--pack-id", default="interface-portraits", help="id of the staging pack the plan builds (default interface-portraits)")
+    s.add_argument("--dry-run", action="store_true", help="read and check the images, print the counts, write nothing")
     return p
 
 

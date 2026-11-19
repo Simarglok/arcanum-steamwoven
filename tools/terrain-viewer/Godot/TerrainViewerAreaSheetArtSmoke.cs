@@ -49,6 +49,12 @@ public partial class TerrainViewerApp
             var art = _sheetPanel!.ArtViewForSelfTest!;
             if (verifyHd)
             {
+                // ARC-UI-2865: the hero's portrait is drawn at its bitmap's size, and from the pack's redraw when the pack holds that bitmap (the pack of this run
+                // may be an interface-only one: then the portrait stays Legacy and the line says so).
+                var packPortraits = _canvas!.HdSource!.Pack!.Entries.Count(e => e.Kind == Arcanum.Data.Hd.HdEntryKind.Portrait);
+                var (portraitOk, portraitDetail) = PortraitHd.Check(art.PortraitTextureForSelfTest, _canvas.HdSource.Pack, 64);
+                Require(portraitOk, "the sheet's portrait at 64 x 64: " + portraitDetail);
+                GD.Print($"ARC-UI-2865 native sheet portrait HD PASS packPortraits={packPortraits} {portraitDetail}");
                 var count = 0;
                 foreach (var load in _sheetArtContent!.Art.Values)
                 {

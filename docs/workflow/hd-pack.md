@@ -220,6 +220,29 @@ the pack but is not in its manifest (move such a file away first). A staged-only
 game or viewer, and look at the changed frames in the game (the owner or an L2 native check, not the tool, decides
 that the art is right).
 
+### Portraits (ARC-UI-2865)
+
+The portrait redraws (the Codex deliveries of #2864 for the 48 hero portraits at 512 and 256, and of #2884 for 30 NPC portraits at 256) enter the installed pack as entries of kind
+`portrait` ([format](../formats/hd-pack.md#portrait-entries-arc-ui-2865)), built into their own staging pack and added with `apply --add-new`, like the traced fonts. The deliveries stay under `local/hd-portraits/`
+(never in git). Every command is run with `--dry-run` first and the game closed for the install:
+
+```sh
+python3 -B tools/hd_pack/hd_pack.py portraits-plan --hero local/hd-portraits/ARC-UI-2864-deliveries/delivery-portraits --npc local/hd-portraits/ARC-UI-2884-deliveries/delivery-npc-portraits --out local/hd-portraits/ARC-UI-2865/portraits-plan.json --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-portraits/ARC-UI-2865/portraits-plan.json --staging local/res095/pack-out/interface-portraits --fresh
+python3 -B tools/hd_pack/hd_pack.py verify --installed local/res095/pack-out/interface-portraits --deep
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-portraits --add-new
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-portraits --add-new --no-base-check --task ARC-UI-2865 --dry-run
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-portraits --add-new --no-base-check --task ARC-UI-2865
+python3 -B tools/hd_pack/hd_pack.py verify --deep && python3 -B tools/hd_pack/hd_pack.py mirror --dry-run
+```
+
+- `portraits-plan` checks every file it uses against the delivery's `SHA256SUMS.txt` and its PNG header (8-bit, 512 for `large/<id>_b.png`, 256 for `small/<id>.png` and an NPC `<id>.png`) and pairs each large image with its small one. Hero images map to `portrait/<id>_b.bmp` and `portrait/<id>.bmp`, NPC images to `portrait/<id>.bmp` (an NPC has no large bitmap). It writes only a plan file under a checkout's `local/`.
+- `stage` runs the importer: for each item it reads the original bitmap from the game (the content stack's winner) and refuses a redraw that is not exactly 4× its size. Portraits are taken as they are (no fit, no lock) and written opaque.
+- `--no-base-check` is right here because the update only adds entries (`plan` shows `0 ... differ and would be replaced`); a later re-delivery of one portrait is a replacement and goes in with `--base` as usual (the
+  `staged-manifest.json` of this apply is the base). A staged portrait needs no row in `layout-map.tsv`: it is placed at `interface/portraits/heroes/` (stems starting `npc`: `interface/portraits/npcs/`) as `portrait-<stem>-f000.png` and `apply` appends its row.
+- The device cache (`hd-cache`) converts the portraits too (about 80 MB more), which it does by itself a few seconds after the pack attaches.
+- A portrait whose bitmap changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; nothing else of the pack depends on portraits.
+
 ### Replace the main-menu art
 
 `main-menu-16x9.png` sits at the pack root outside the manifest, so `apply` never touches it and the importer never

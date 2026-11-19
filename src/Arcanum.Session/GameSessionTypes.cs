@@ -330,7 +330,13 @@ public sealed record GameSessionCreationResult(GameSessionOwner? Owner, GameSess
     ClockFailure ClockFailure, GlobalFlagReason FlagReason);
 
 public readonly record struct GameSessionMutationResult(GameSessionDisposition Disposition,
-    GameSessionFailure Failure, GameSessionVersion Version);
+    GameSessionFailure Failure, GameSessionVersion Version)
+{
+    private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+
+    /// <summary>ARC-SCRIPT-2880: the lines the item scripts the move ran printed (the remove-item scripts of a destroy, ledger IE3), in order, for the host to show; empty when none ran or the move carries none.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
+}
 
 /// <summary>Saved clock state without the process-local owner identity. Schema 70 (MIG12 S3, ARC-DEV-122) adds the real and animation
 /// stamps of the session's three clocks (TL34: the original's save stores all three): real from 1 ms, animation from 0; the world

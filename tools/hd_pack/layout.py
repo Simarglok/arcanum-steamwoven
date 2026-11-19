@@ -92,7 +92,7 @@ def art_of(rel: str) -> str:
 
 
 def suffix(entry: dict) -> str:
-    out = f"f{entry['frame']:03d}"
+    out = f"f{entry.get('frame', 0):03d}"  # a portrait entry (ARC-UI-2865) has no frame: 0
     if entry.get("group"):
         out += f"-g{entry['group']}"
     if entry.get("palette"):
@@ -130,7 +130,7 @@ def render_index(manifest: dict) -> tuple[bytes, bytes]:
             art = e["file"]
         legacy = e.get("legacy") or {}
         lw, lh = legacy.get("width", 0), legacy.get("height", 0)
-        rows.append((screen, kind, art, e["frame"], e["file"], lw, lh, lw * scale, lh * scale, e.get("slice", ""), e.get("alpha") or "", e.get("review", ""), e["sha256"][:12]))
+        rows.append((screen, kind, art, e.get("frame", 0), e["file"], lw, lh, lw * scale, lh * scale, e.get("slice", ""), e.get("alpha") or "", e.get("review", ""), e["sha256"][:12]))
     rows.sort(key=lambda r: (r[0], r[1], r[2], r[3], r[4]))
     head = ("screen", "kind", "art", "frame", "path", "legacy_w", "legacy_h", "hd_w", "hd_h", "slice", "alpha", "review", "sha12")
     tsv = "\n".join("\t".join(str(c) for c in r) for r in [head] + rows) + "\n"
