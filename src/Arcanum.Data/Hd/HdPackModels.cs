@@ -1,7 +1,7 @@
 namespace Arcanum.Data.Hd;
 
 public enum HdReviewStatus { Unreviewed, Approved, Rejected }
-public enum HdEntryKind { Sprite, TerrainChunk }
+public enum HdEntryKind { Sprite, TerrainChunk, Portrait }
 
 /// <summary>A pack's identity: a rebuild, a review mark or any other manifest change is a
 /// new identity. HD texture caches are keyed by it (ARC-RENDER-013, Budgets).</summary>
@@ -30,13 +30,15 @@ public sealed record HdLegacyFrame(int Width, int Height, string RgbaSha256);
 /// (<see cref="HdFrameStatus.SourceMismatch"/>) from an absent one.</param>
 /// <param name="AlphaMasked">ARC-UI-113, interface sprites only (<c>"alpha":"masked"</c> in the manifest): the owner's mask replaced the
 /// frame's Legacy alpha, so the alpha check is <see cref="HdAlphaMode.Masked"/> and not the slice's policy.</param>
+/// <param name="PortraitPath">ARC-UI-2865, portraits only (<c>"kind":"portrait"</c>): the lowercase path of the original's bitmap this entry redraws,
+/// <c>portrait/&lt;name&gt;.bmp</c> (<see cref="HdPortraitKey"/>); <see cref="Key"/> and <see cref="NameSha256"/> are derived from it.</param>
 /// <param name="ChunkX">Terrain chunks only (reserved entry kind, never bound in this
 /// slice): chunk coordinates as <c>AreaTerrainChunks</c> uses them.</param>
 /// <param name="TileRgbaSha256">Terrain chunks only: Legacy RGBA SHA-256 of every tile and
 /// facade frame composed into the chunk, in plan order.</param>
 public sealed record HdPackEntry(int Index, HdEntryKind Kind, string File, string Sha256, long Bytes, string Slice,
     HdSpriteKey? Key, string? NameSha256, HdLegacyFrame Legacy, HdReviewStatus Review,
-    int? ChunkX = null, int? ChunkY = null, int? ChunkPadding = null, IReadOnlyList<string>? TileRgbaSha256 = null, bool AlphaMasked = false);
+    int? ChunkX = null, int? ChunkY = null, int? ChunkPadding = null, IReadOnlyList<string>? TileRgbaSha256 = null, bool AlphaMasked = false, string? PortraitPath = null);
 
 public enum HdPackOpenStatus
 {

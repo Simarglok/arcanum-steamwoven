@@ -71,9 +71,7 @@ public partial class TerrainViewerApp
     {
         if (_premadePortraits.TryGetValue(id, out var portrait)) return portrait;
         var file = content.Portrait(_arguments!.ModulePath, id);
-        var image = new Image();
-        portrait = file is { Status: AreaPortraitStatus.Ready, Bytes: { } bytes } && image.LoadBmpFromBuffer(bytes) == Error.Ok && !image.IsEmpty()
-            ? ImageTexture.CreateFromImage(image) : null;
+        portrait = PortraitHd.Texture(file); // ARC-UI-2865: draws the pack's HD portrait when the HD setting is on
         GD.Print($"ARC-UI-066 character portrait {id}: {file.Status} {file.Detail} decoded={portrait is not null}");
         return _premadePortraits[id] = portrait;
     }
@@ -229,6 +227,13 @@ public partial class TerrainViewerApp
                     SyncInterfaceHd();
                     require(InterfaceHd.Enabled, "HD interface switch enabled for the capture");
                     await Frames(3);
+                    // ARC-UI-2865: the window's large portrait keeps its 128 x 128 size and, when the pack holds portraits, draws the pack's redraw (the premade browser
+                    // reads the same large file through the same texture call).
+                    var packPortraits = _canvas!.HdSource!.Pack!.Entries.Count(e => e.Kind == Arcanum.Data.Hd.HdEntryKind.Portrait);
+                    var portrait = art.PortraitTextureForSelfTest as HdInterfaceTexture;
+                    require(portrait is not null && portrait.GetWidth() == 128 && portrait.GetHeight() == 128, "the creation window's portrait keeps its 128 x 128 size");
+                    require(packPortraits == 0 || portrait!.IsHd && portrait.HdScale == 4, $"the pack holds {packPortraits} portraits and the creation window's portrait draws HD");
+                    GD.Print($"ARC-UI-2865 native creation portrait HD PASS packPortraits={packPortraits} hd={portrait!.IsHd}");
                 }
                 using var image = GetViewport().GetTexture().GetImage();
                 require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);

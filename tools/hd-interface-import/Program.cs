@@ -1,3 +1,4 @@
+using System.Text;
 using Arcanum.Data.Content;
 using Arcanum.Data.Hd;
 using Arcanum.TerrainViewer.Core;
@@ -13,6 +14,7 @@ namespace Arcanum.Tools.HdInterfaceCli;
 internal static class Program
 {
     private const string Usage = "usage: hd-interface-import --module PATH/modules/Arcanum.dat --plan PLAN.json --pack PACK_DIR [--dry-run]\n"
+        + "  --plan     an interface plan (kind arcanum-steamwoven-hd-interface-plan) or, ARC-UI-2865, a portrait plan (kind arcanum-steamwoven-hd-portrait-plan: the redraws of portrait\\*.bmp, written as 'portrait' entries)\n"
         + "  --module   the module archive of the installed game (as the viewer takes it)\n"
         + "  --plan     the local import plan (kind arcanum-steamwoven-hd-interface-plan); image paths are relative to it\n"
         + "  --pack     the pack directory: an existing pack gets the 'interface' slice added or replaced, a missing one is created\n"
@@ -37,8 +39,11 @@ internal static class Program
         }
         if (module is null || plan is null || pack is null) { stderr.WriteLine("hd-interface-import: --module, --plan and --pack are required\n" + Usage); return 2; }
 
-        HdInterfacePlan parsed;
-        try { parsed = HdInterfacePlan.Parse(File.ReadAllBytes(plan)); }
+        var planBytes = File.ReadAllBytes(plan);
+        var portraitPlan = Encoding.UTF8.GetString(planBytes).Contains(HdPortraitPlan.Kind, StringComparison.Ordinal);
+        HdInterfacePlan? parsed = null;
+        HdPortraitPlan? portraits = null;
+        try { if (portraitPlan) portraits = HdPortraitPlan.Parse(planBytes); else parsed = HdInterfacePlan.Parse(planBytes); }
         catch (Exception error) when (error is FormatException or IOException or UnauthorizedAccessException)
         { stderr.WriteLine("hd-interface-import: plan: " + error.Message); return 2; }
 
@@ -49,6 +54,18 @@ internal static class Program
         using var stack = opened.Stack!;
 
         var planDirectory = Path.GetDirectoryName(Path.GetFullPath(plan))!;
+        HdRgbImage? Image(string path)
+        {
+            try
+            {
+                var (status, image, detail) = HdImagePng.Decode(File.ReadAllBytes(Path.GetFullPath(Path.Combine(planDirectory, path))), 1L << 26);
+                if (status != HdPngStatus.Decoded) stderr.WriteLine($"hd-interface-import: image {Path.GetFileName(path)}: {status} {detail}");
+                return image;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+        }
+        if (portraits is not null) return RunPortraits(portraits, stack, Image, pack, dry, stdout, stderr);
+        var interfacePlan = parsed!;
         var arts = new Dictionary<string, HdInterfaceArt?>(StringComparer.OrdinalIgnoreCase);
         HdInterfaceArt? Art(string name)
         {
@@ -60,27 +77,36 @@ internal static class Program
                 ? new HdInterfaceArt(load.Name ?? name, identity, [.. load.Frames.Select(f => new HdLegacyRaster(f.Width, f.Height, f.Rgba))])
                 : null;
         }
-        HdRgbImage? Image(string path)
-        {
-            try
-            {
-                var (status, image, detail) = HdImagePng.Decode(File.ReadAllBytes(Path.GetFullPath(Path.Combine(planDirectory, path))), 1L << 26);
-                if (status != HdPngStatus.Decoded) stderr.WriteLine($"hd-interface-import: image {Path.GetFileName(path)}: {status} {detail}");
-                return image;
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
-        }
-
-        var built = HdInterfaceImport.Build(parsed, Art, Image);
+        var built = HdInterfaceImport.Build(interfacePlan, Art, Image);
         foreach (var frame in built.Frames)
-            stdout.WriteLine($"built {frame.Art.FileName} frame {frame.Frame} {frame.Width * parsed.Scale}x{frame.Height * parsed.Scale} fit {frame.Ncc:F3} (scale {frame.Fit.Sx:F2}x{frame.Fit.Sy:F2}, offset {frame.Fit.Tx:F1},{frame.Fit.Ty:F1})");
+            stdout.WriteLine($"built {frame.Art.FileName} frame {frame.Frame} {frame.Width * interfacePlan.Scale}x{frame.Height * interfacePlan.Scale} fit {frame.Ncc:F3} (scale {frame.Fit.Sx:F2}x{frame.Fit.Sy:F2}, offset {frame.Fit.Tx:F1},{frame.Fit.Ty:F1})");
         foreach (var problem in built.Problems) stderr.WriteLine("hd-interface-import: " + problem);
         if (!built.Ok) { stderr.WriteLine("hd-interface-import: FAIL (nothing written)"); return 3; }
         if (dry) { stdout.WriteLine($"PASS dry run, {built.Frames.Count} frames"); return 0; }
 
-        var written = HdInterfacePackWriter.Write(pack, parsed.PackId, parsed.Scale, built.Frames, DateTimeOffset.UtcNow);
+        var written = HdInterfacePackWriter.Write(pack, interfacePlan.PackId, interfacePlan.Scale, built.Frames, DateTimeOffset.UtcNow);
         if (written.Status != HdInterfaceWriteStatus.Written) { stderr.WriteLine($"hd-interface-import: FAIL {written.Status} {written.Detail}"); return 3; }
         stdout.WriteLine($"PASS {written.Entries} interface frames written ({written.Replaced} replaced); {written.Detail}");
+        return 0;
+    }
+
+    // ARC-UI-2865: a portrait plan: each redraw is checked against the original's bitmap read from the content stack (the winner of portrait/<name>.bmp, as the viewer reads it).
+    private static int RunPortraits(HdPortraitPlan plan, ContentStack stack, Func<string, HdRgbImage?> image, string pack, bool dry, TextWriter stdout, TextWriter stderr)
+    {
+        byte[]? Bitmap(string path)
+        {
+            if (stack.Resolve(path).Winner is not { } winner || winner.Length > AreaPortraits.MaxFileBytes) return null;
+            var read = stack.Read(winner);
+            return read.Status == ContentReadStatus.Read ? read.Bytes : null;
+        }
+        var built = HdPortraitImport.Build(plan, Bitmap, image);
+        foreach (var portrait in built.Portraits) stdout.WriteLine($"built {portrait.Path} {portrait.Width * plan.Scale}x{portrait.Height * plan.Scale}");
+        foreach (var problem in built.Problems) stderr.WriteLine("hd-interface-import: " + problem);
+        if (!built.Ok) { stderr.WriteLine("hd-interface-import: FAIL (nothing written)"); return 3; }
+        if (dry) { stdout.WriteLine($"PASS dry run, {built.Portraits.Count} portraits"); return 0; }
+        var written = HdInterfacePackWriter.Write(pack, plan.PackId, plan.Scale, [], DateTimeOffset.UtcNow, built.Portraits);
+        if (written.Status != HdInterfaceWriteStatus.Written) { stderr.WriteLine($"hd-interface-import: FAIL {written.Status} {written.Detail}"); return 3; }
+        stdout.WriteLine($"PASS {written.Entries} portraits written ({written.Replaced} replaced); {written.Detail}");
         return 0;
     }
 }

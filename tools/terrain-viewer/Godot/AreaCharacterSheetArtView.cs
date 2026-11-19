@@ -76,6 +76,8 @@ public partial class AreaCharacterSheetArtView : Control
     internal AreaCharacterSheetView? ViewForSelfTest => Visible ? _view : null;
     internal int? RegionForSelfTest => _region;
     internal bool PortraitForSelfTest => Visible && _portrait is not null;
+    /// <summary>ARC-UI-2865: the portrait texture the sheet draws (the HD smoke reads whether it is the pack's redraw).</summary>
+    internal Texture2D? PortraitTextureForSelfTest => _portrait;
     /// <summary>ARC-UI-1791: whether the icon art of the view is held (the slot then shows it).</summary>
     internal bool IconForSelfTest => Visible && _portrait is null && _view?.IconArt is { } icon && Art(icon) is not null;
     internal IReadOnlyList<AreaSheetText> TextsForSelfTest => _view is { } view && _fonts is { } fonts
