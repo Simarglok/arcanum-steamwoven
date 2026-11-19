@@ -105,12 +105,6 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
   drawn view).
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
   ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)).
-  **Note body (ARC-UI-2765, [#2765](https://github.com/Simarglok/arcanum-steamwoven/issues/2765)).** The owner could not read a letter in the original's
-  handwriting face (Pepper20, art 497) at the window's scale, so the generated interface draws a note's body in the first of the player's fonts 840 (NewTimes16,
-  a plain serif) and 229 (Flare12) that holds the whole text in the note's rectangle, and keeps 497 for a note neither holds (`AreaReadingArtLayout.NoteFontsFor`,
-  `AreaReadingFlow.Single`); the Original look and every other written kind keep their fonts. Local capture: `--env ARC_AREA_READING_NOTE_FONTS=301,...` with the
-  Steamwoven `bar` smoke (`ARC_AREA_BAR_STEAMWOVEN=1`, `ARC_AREA_BAR_CAPTURE=PREFIX`) saves the note as drawn, in 497 and in each listed face, as `PREFIX-hud-steamwoven-*-note-*.png`
-  (never committed). The telegram, newspaper and plaque faces are not reworked; they stay the original's until the owner asks.
 
 ## Prototype of the play screen (ARC-UI-2452)
 
