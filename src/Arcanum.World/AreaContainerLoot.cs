@@ -14,8 +14,10 @@ public enum AreaContainerOpenOutcome
     Locked,
     Jammed,
     MagicallyHeld,
-    /// <summary>The container has an unlock script (SAP 3), which the original's attempt runs and the viewer does not (Not ready).</summary>
+    /// <summary>The container has an unlock script (SAP 3), which the original's attempt runs, and the viewer could not run it to its end (no script host, or the dispatcher refused the run, which then applied nothing): the open is refused (Not ready).</summary>
     UnlockScriptUnsupported,
+    /// <summary>ARC-SCRIPT-2860 (TQ11): the container's unlock script (SAP 3) ran before the lock test and answered 0: the attempt answers 4 and the open is refused with the locked sound.</summary>
+    UnlockScriptRefused,
     /// <summary>The container's use script (SAP 1), run after the attempt, ended with skip default: the original refuses the open with the
     /// locked sound.</summary>
     UseScriptStopped,
@@ -46,10 +48,12 @@ public enum AreaContainerOpenOutcome
 public sealed record AreaContainerOpen(AreaContainerOpenOutcome Outcome, SessionGenerateOnceResult? Generation, bool Opening, string Detail)
 {
     public AreaScriptedUse? UseScript { get; init; }
+    /// <summary>ARC-SCRIPT-2860: the unlock script's run (null when none ran).</summary>
+    public AreaScriptedUse? UnlockScript { get; init; }
     /// <summary>The refusals the original answers with the container's locked sound (0x572370): the attempt's, with the inventory window's
     /// message (<c>mes\inven_ui.mes</c>, the attempt's code), and the use script's skip default.</summary>
     public bool LockedSound => Outcome is AreaContainerOpenOutcome.Locked or AreaContainerOpenOutcome.Jammed or AreaContainerOpenOutcome.MagicallyHeld
-        or AreaContainerOpenOutcome.UseScriptStopped;
+        or AreaContainerOpenOutcome.UseScriptStopped or AreaContainerOpenOutcome.UnlockScriptRefused;
 }
 
 /// <summary>
@@ -77,7 +81,7 @@ public static class AreaContainerLoot
     /// frame 0) and <see cref="AreaContainerOpen.Opening"/> asks for the open sound.
     /// </summary>
     public static AreaContainerOpen Open(GameSessionOwner session, AreaInventoryMap map, string container, int frameCount, ISessionRestockWorld world,
-        Func<Arcanum.Data.Area.AreaObjectRecord, AreaScriptedUse>? useScript = null)
+        Func<Arcanum.Data.Area.AreaObjectRecord, AreaScriptedUse>? useScript = null, Func<Arcanum.Data.Area.AreaObjectRecord, AreaScriptedUse>? unlockScript = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(map);
@@ -85,20 +89,31 @@ public static class AreaContainerLoot
         ArgumentNullException.ThrowIfNull(world);
         if (Facts(session, map, container) is not { } facts) return new(AreaContainerOpenOutcome.Unavailable, null, false, "not a standing container of the map's seed");
         var (openable, baseline, row, holder) = facts;
-        if (AreaStepInspector.HasUnlockScript(row)) return new(AreaContainerOpenOutcome.UnlockScriptUnsupported, null, false, "unlock script not run");
+        // ARC-SCRIPT-2860 (TQ11, UL1): the open attempt (0x4AED80) runs the unlock script before the lock test, so also for an unlocked container; a junk pile and a busted container (they open before it) never ask it.
+        AreaScriptedUse? unlocked = null;
+        if (AreaStepInspector.HasUnlockScript(row) && !baseline.JunkPile && (session.QueryOpenable(openable, baseline).Flags & LockRules.BustedBit) == 0)
+        {
+            if (unlockScript is null) return new(AreaContainerOpenOutcome.UnlockScriptUnsupported, null, false, "unlock script: no script host");
+            unlocked = unlockScript(row);
+            switch (AreaUseScriptHost.UnlockRefused(unlocked))
+            {
+                case true: return new(AreaContainerOpenOutcome.UnlockScriptRefused, null, false, "unlock script: skip default") { UnlockScript = unlocked };
+                case null: return new(AreaContainerOpenOutcome.UnlockScriptUnsupported, null, false, $"unlock script {unlocked.Outcome}: {unlocked.Detail}") { UnlockScript = unlocked };
+            }
+        }
         var attempt = session.AttemptOpen(openable, baseline, scriptRefused: false);
         switch (attempt)
         {
-            case OpenAttempt.Locked: return new(AreaContainerOpenOutcome.Locked, null, false, "attempt=Locked");
-            case OpenAttempt.Jammed: return new(AreaContainerOpenOutcome.Jammed, null, false, "attempt=Jammed");
-            case OpenAttempt.MagicallyHeld: return new(AreaContainerOpenOutcome.MagicallyHeld, null, false, "attempt=MagicallyHeld");
-            case not OpenAttempt.Opens: return new(AreaContainerOpenOutcome.Unavailable, null, false, $"attempt={attempt}");
+            case OpenAttempt.Locked: return new(AreaContainerOpenOutcome.Locked, null, false, "attempt=Locked") { UnlockScript = unlocked };
+            case OpenAttempt.Jammed: return new(AreaContainerOpenOutcome.Jammed, null, false, "attempt=Jammed") { UnlockScript = unlocked };
+            case OpenAttempt.MagicallyHeld: return new(AreaContainerOpenOutcome.MagicallyHeld, null, false, "attempt=MagicallyHeld") { UnlockScript = unlocked };
+            case not OpenAttempt.Opens: return new(AreaContainerOpenOutcome.Unavailable, null, false, $"attempt={attempt}") { UnlockScript = unlocked };
         }
         // A container to generate needs the restock host; while it loads, the open is refused before the use script runs, so a retry does
         // not run the script twice.
         var generate = (map.RestockSeed(container).ContainerFlags & Arcanum.Simulation.Items.RestockRules.GeneratedOnceFlag) != 0 &&
             !session.QueryContainerGenerated(openable.Map, container);
-        if (generate && !world.RestockReady) return new(AreaContainerOpenOutcome.GenerationRefused, null, false, "generation: the restock host is not ready");
+        if (generate && !world.RestockReady) return new(AreaContainerOpenOutcome.GenerationRefused, null, false, "generation: the restock host is not ready") { UnlockScript = unlocked };
         AreaScriptedUse? ran = null;
         if (holder.ScriptPoints.Contains(SessionScriptPoint.Use))
         {
@@ -107,13 +122,13 @@ public static class AreaContainerLoot
             // ARC-WORLD-110: the trap meeting before the use script (the object entry point's E2 and trap run).
             if (ran.Trap is { Cancels: true } trap)
                 return new(trap.Rejected ? AreaContainerOpenOutcome.TrapRefused : trap.Outcome == SessionTrapOutcome.Spotted
-                    ? AreaContainerOpenOutcome.TrapSpotted : AreaContainerOpenOutcome.TrapFired, null, false, "trap: " + trap.Describe()) { UseScript = ran };
+                    ? AreaContainerOpenOutcome.TrapSpotted : AreaContainerOpenOutcome.TrapFired, null, false, "trap: " + trap.Describe()) { UseScript = ran, UnlockScript = unlocked };
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
-                return new(AreaContainerOpenOutcome.UseScriptUnsupported, null, false, $"use script {ran.Outcome}: {ran.Detail}") { UseScript = ran };
+                return new(AreaContainerOpenOutcome.UseScriptUnsupported, null, false, $"use script {ran.Outcome}: {ran.Detail}") { UseScript = ran, UnlockScript = unlocked };
             if (ran.Run?.Stop == Arcanum.Scripting.Scr.ScrStop.TrapScript)
-                return new(AreaContainerOpenOutcome.TrapScriptUnsupported, null, false, "use script: a native trap script") { UseScript = ran };
+                return new(AreaContainerOpenOutcome.TrapScriptUnsupported, null, false, "use script: a native trap script") { UseScript = ran, UnlockScript = unlocked };
             if (ran.Run?.Outcome == Arcanum.Scripting.Scr.ScrOutcome.SkipDefault)
-                return new(AreaContainerOpenOutcome.UseScriptStopped, null, false, "use script: skip default") { UseScript = ran };
+                return new(AreaContainerOpenOutcome.UseScriptStopped, null, false, "use script: skip default") { UseScript = ran, UnlockScript = unlocked };
         }
         // Only a container with flag 0x200 (its T0 field 0x38) the session has not generated asks the session: any other opens while the
         // restock host still loads.
@@ -122,7 +137,7 @@ public static class AreaContainerLoot
         {
             generation = session.GenerateContainerOnce(session.Version, container, world);
             if (generation.Disposition == GameSessionDisposition.Rejected)
-                return new(AreaContainerOpenOutcome.GenerationRefused, generation, false, $"generation={generation.Failure}") { UseScript = ran };
+                return new(AreaContainerOpenOutcome.GenerationRefused, generation, false, $"generation={generation.Failure}") { UseScript = ran, UnlockScript = unlocked };
         }
         var frame = session.QueryOpenable(openable, baseline).Frame;
         var opening = frame == 0;
@@ -133,7 +148,7 @@ public static class AreaContainerLoot
             var written = session.SetOpenableFrame(session.Version, openable, baseline, next);
             detail += $"->{next} write={written.Disposition}/{written.Failure}";
         }
-        return new(AreaContainerOpenOutcome.Opened, generation, opening, detail + (ran is null ? "" : " use-script=run-default")) { UseScript = ran };
+        return new(AreaContainerOpenOutcome.Opened, generation, opening, detail + (ran is null ? "" : " use-script=run-default")) { UseScript = ran, UnlockScript = unlocked };
     }
 
     /// <summary>

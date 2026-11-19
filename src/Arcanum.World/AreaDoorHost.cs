@@ -162,7 +162,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     {
         if (Portal(door) is not { } portal) return true;
         // A portal with no open frame (a one-frame ART) cannot open: the attempt refuses it, as the viewer's open decision did (AreaPortals.Decide), so nothing is charged and nothing starts.
-        var refusal = _portals.OpenRefusal(_session, portal) ?? (portal.OpenFrame == 0 ? AreaPortalUse.CannotOpen : null);
+        var refusal = _portals.OpenRefusal(_session, portal, opener) ?? (portal.OpenFrame == 0 ? AreaPortalUse.CannotOpen : null);
         if (refusal is { } why && opener == AreaHeroRunsHost.Hero) HeroNotice?.Invoke(portal, why);
         return refusal is not null;
     }
