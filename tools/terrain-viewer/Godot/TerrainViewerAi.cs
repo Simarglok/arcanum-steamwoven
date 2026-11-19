@@ -703,9 +703,9 @@ public partial class TerrainViewerApp
             var weaponMap = IsHero(attacker) && owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is { Entity: not null } carried ? carried.Origin.RuntimeMap : map;
             var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, weapon);
             if (!(hit.Thrown && IsHero(attacker))) Run(Arcanum.Scripting.Scr.ScrPoint.Hit, weaponRef, attackerRef, victimRef);
-            // 0x4B2F60 (CP2): on the projectile path the critical-hit script runs only for a weapon item (object type 5): a thrown potion, ammunition or junk item runs none. An NPC's thrown item is its wielded weapon; the hero's item is read from its list (an item not found counts as the wielded weapon).
+            // 0x4B2F60 (CP2): on the projectile path the critical-hit script runs only for a weapon item (object type 5): a thrown potion, ammunition or junk item runs none. An NPC's thrown item is its wielded weapon, but for a generic item (a grenade, ARC-SCRIPT-2724: the event's <see cref="SessionHitScriptEvent.Generic"/>); the hero's item is read from its list (an item not found counts as the wielded weapon).
             var isWeapon = !IsHero(attacker) || owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is not { Entity: not null } kindHolder || kindHolder.Kind.Type == SessionItemType.Weapon;
-            if (hit.Critical && (!hit.Projectile || isWeapon)) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
+            if (hit.RunsCriticalHitPoint(isWeapon)) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
         }
         if (!IsHero(attacker)) Run(Arcanum.Scripting.Scr.ScrPoint.CritterHits, attackerRef, victimRef, null);
     }
