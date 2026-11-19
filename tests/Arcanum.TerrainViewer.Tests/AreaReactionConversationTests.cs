@@ -25,6 +25,18 @@ public sealed class AreaReactionConversationTests
         + "{4}{i:}{}{1}{}{0}{}";
 
     [TestMethod]
+    public void A_speakers_lines_are_named_by_the_hero_and_the_name_source_and_a_rebind_keeps_the_source()
+    {
+        // ARC-SCRIPT-2787 (0x416B00): the host's names for a speaker are the hero's player name and the speaker's shown name; without a source the placeholder stays (tests).
+        using var f = Fixture.Create(hero: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.SetHeroPlayerName(f.Session.Version, Encoding.Latin1.GetBytes("Zed")).Disposition);
+        Assert.AreEqual(new DialogSpeakerNames("Zed", "[NPC]"), f.Host.NamesFor(f.Speaker));
+        f.Host.NpcName = row => row == f.Speaker.Row ? "Wren" : null;
+        Assert.AreEqual(new DialogSpeakerNames("Zed", "Wren"), f.Host.NamesFor(f.Speaker));
+        Assert.AreSame(f.Host.NpcName, f.Host.Rebind(f.Session).NpcName);
+    }
+
+    [TestMethod]
     public void Me_is_false_in_the_first_talk_and_true_in_the_second()
     {
         using var f = Fixture.Create();

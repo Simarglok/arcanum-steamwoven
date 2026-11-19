@@ -336,6 +336,46 @@ class StateTests(unittest.TestCase):
             app.save({"step": "ARC-DEV-100#2", "status": "differs"})
             self.assertEqual("differs", app.state()["sections"][0]["steps"][1]["status"])
 
+    def test_a_step_with_a_report_is_answered_and_a_reopen_brings_it_back(self) -> None:
+        """ARC-DEV-2768: a mark or a Ctrl+B report tagged with the step answers it; the owner can reopen it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp) / "reports"
+            make_report(reports, "2026-11-18_22-02-38", check="ARC-DEV-100#1")
+            app = make_app(Path(tmp), reports=reports)
+
+            def step(step_id: str) -> dict:
+                return next(item for section in app.state()["sections"] for item in section["steps"] if item["id"] == step_id)
+
+            tagged = step("ARC-DEV-100#1")
+            self.assertEqual(("open", True, "report", "2026-11-18"), (tagged["status"], tagged["answered"], tagged["answeredBy"], tagged["answeredAt"]))
+            self.assertTrue(step("ARC-DEV-100#2")["answered"])                       # `same` in the list
+            self.assertFalse(step("ARC-UI-200#1")["answered"])
+            app.save({"step": "ARC-UI-200#1", "status": "same"})
+            marked = step("ARC-UI-200#1")
+            self.assertEqual(("mark", 10), (marked["answeredBy"], len(marked["answeredAt"])))
+            reopened = app.reopen("ARC-DEV-100#1")
+            self.assertEqual(("open", None), (reopened["status"], reopened["report"]))
+            self.assertFalse(step("ARC-DEV-100#1")["answered"], "a report older than the reopen no longer counts")
+            self.assertEqual("open", app.reopen("ARC-UI-200#1")["status"])
+            self.assertFalse(step("ARC-UI-200#1")["answered"])
+            app.reopen("ARC-DEV-100#2")
+            self.assertFalse(step("ARC-DEV-100#2")["answered"], "reopening clears an answer taken from the list")
+            self.assertEqual(1, sum(1 for line in app.store.results_path.read_text().splitlines() if '"reopen":true' in line and "100#1" in line))
+            with self.assertRaises(ValueError):
+                app.reopen("nope")
+            # a report sent after the reopen answers the step again
+            make_report(reports, "2099-01-01_00-00-00", check="ARC-DEV-100#1")
+            self.assertTrue(step("ARC-DEV-100#1")["answered"])
+
+    def test_a_report_recorded_by_the_game_answers_the_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            with app.store.locked():
+                app.store.append({"kind": "result", "ts": qa.now_iso(), "step": "ARC-UI-200#1", "status": "open", "note": "ok",
+                                  "report": "2026-11-18_22-02-38", "build": "abc", "src": "game"})
+            entry = next(item for section in app.state()["sections"] for item in section["steps"] if item["id"] == "ARC-UI-200#1")
+            self.assertEqual((True, "report"), (entry["answered"], entry["answeredBy"]))
+
     def test_new_since_the_last_visit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             first = make_app(Path(tmp))
@@ -417,6 +457,9 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(400, self.call("/api/result", {"step": "nope", "status": "same"})[0])
         self.assertEqual(200, self.call("/api/reports")[0])
         self.assertEqual(404, self.call("/api/none")[0])
+        status, reopened = self.call("/api/reopen", {"step": "ARC-UI-200#1"})
+        self.assertEqual((200, "open", None), (status, reopened["status"], reopened["report"]))
+        self.assertEqual(400, self.call("/api/reopen", {"step": "nope"})[0])
 
     def test_api_active_writes_and_clears_the_file(self) -> None:
         self.assertEqual((200, {"active": "ARC-UI-200#1"}), self.call("/api/active", {"step": "ARC-UI-200#1"}))

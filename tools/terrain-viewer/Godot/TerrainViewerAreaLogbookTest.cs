@@ -174,10 +174,13 @@ public partial class TerrainViewerApp
             Require(!_logbookPanel.RoundViewShown && !book.LensCut, "without a holder there is no round view");
             // The diagnostic list has no lens at all.
             _logbookPanel.HolderView = () => (new Vector2(400, 300), 1f);
+            Require(!_logbookPanel.LookToggleForSelfTest.IsVisibleInTree(), "ARC-UI-2764: no Diagnostic view switch in play");
+            _logbookPanel.DiagnosticSwitch = true;
             _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(!_logbookPanel.ArtMode && !_logbookPanel.RoundViewShown, "the diagnostic list shows no round view");
             _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(_logbookPanel.ArtMode && _logbookPanel.RoundViewShown, "the original look shows the round view again");
+            _logbookPanel.DiagnosticSwitch = false;
             _logbookPanel.HolderView = null;
         }
         finally
@@ -302,10 +305,12 @@ public partial class TerrainViewerApp
                 // Tab (the keyboard) goes on to the next tab; the diagnostic list is one click away and back.
                 InventoryKey(Key.Tab);
                 Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Background, "Tab goes on to the next tab");
+                _logbookPanel.DiagnosticSwitch = true;
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!_logbookPanel.ArtMode && _logbookPanel.ListShownForSelfTest && !book.Visible && _logbookPanel.TextForSelfTest.Length > 0, "Diagnostic view shows the list");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(_logbookPanel.ArtMode && book.Visible && !_logbookPanel.ListShownForSelfTest, "Original look shows the book again");
+                _logbookPanel.DiagnosticSwitch = false;
                 AssertLogbookLensAndHint(book, Click);
                 InventoryKey(Key.L);
                 Require(!LogbookOpen, "L closed the book");

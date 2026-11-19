@@ -16,7 +16,7 @@ public sealed class AreaArtFontFace
 {
     private readonly IReadOnlyList<AreaInterfaceFrame> _frames;
     private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _textures = [];
-    private readonly Dictionary<int, Texture2D?> _hdTextures = [];
+    private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _hdTextures = [];
     private HdPack? _hdFor;
 
     public AreaArtFontFace(IReadOnlyList<AreaInterfaceFrame> frames)
@@ -31,7 +31,8 @@ public sealed class AreaArtFontFace
     /// <summary>A glyph frame's texture for <paramref name="blend"/>; null for an empty frame.</summary>
     public Texture2D? Texture(int frame, AreaArtTextBlend blend)
     {
-        if (blend == AreaArtTextBlend.Coverage && HdTexture(frame) is { } hd) return hd;
+        // ARC-UI-2795: the additive blend (the inventory windows' counts, font flag 0x10) draws the same HD coverage frame, as the glyph pixel added instead of covering.
+        if (blend is AreaArtTextBlend.Coverage or AreaArtTextBlend.Additive && HdTexture(frame, blend) is { } hd) return hd;
         if (_textures.TryGetValue((frame, blend), out var known)) return known;
         var art = _frames[frame];
         var texture = art.Width > 0 && art.Height > 0
@@ -42,11 +43,11 @@ public sealed class AreaArtFontFace
     }
 
     /// <summary>True when <paramref name="frame"/> draws its HD coverage frame now (the switch is on and the pack holds a valid entry).</summary>
-    public bool IsHd(int frame) => HdTexture(frame) is not null;
+    public bool IsHd(int frame) => HdTexture(frame, AreaArtTextBlend.Coverage) is not null;
 
     // The glyph's HD frame as a premultiplied coverage layer (the HD pixels are grey with alpha 255 on ink: LayerPixels gives (w, w, w, w)),
     // decoded once per pack and frame; null while Legacy draws. Dropped when the pack or the switch changes.
-    private Texture2D? HdTexture(int frame)
+    private Texture2D? HdTexture(int frame, AreaArtTextBlend blend)
     {
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack)
         {
@@ -54,18 +55,18 @@ public sealed class AreaArtFontFace
             return null;
         }
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hdTextures.Clear(); }
-        if (_hdTextures.TryGetValue(frame, out var known)) return known;
+        if (_hdTextures.TryGetValue((frame, blend), out var known)) return known;
         Texture2D? texture = null;
         var art = _frames[frame];
         if (art.Hd is { } query && art.Width > 0 && art.Height > 0
             && pack.ResolveSprite(query, art.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result)
         {
-            using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(rgba, AreaArtTextBlend.Coverage));
+            using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(rgba, blend));
             // ARC-UI-145: bilinear, no mipmaps. The mip chain of a 4× glyph blurred the edge at the sheet's and the windows' scales (2.5-3.5 here),
             // where one level down is a quarter of the detail; the owner chose this over trilinear, nearest and a sharper trace by comparing them on screen.
             texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.Linear };
         }
-        _hdTextures[frame] = texture;
+        _hdTextures[(frame, blend)] = texture;
         return texture;
     }
 }
@@ -90,9 +91,10 @@ public static class AreaArtTextDraw
     public static bool Prepared(CanvasItem canvas) => _material is not null && ReferenceEquals(canvas.Material, _material);
 
     /// <summary>Placed glyphs (their x from the text's left edge) from (x, y) in <paramref name="colour"/>; <paramref name="alpha"/> (ARC-DEV-156,
-    /// the floaters' fade) scales the draw's effect on the canvas under it, as the original's art blit with an opacity does.</summary>
+    /// the floaters' fade) scales the draw's effect on the canvas under it, as the original's art blit with an opacity does.
+    /// ARC-UI-2795: <paramref name="scale"/> (a window drawn larger than the original's 1:1) enlarges the glyphs and their advances alike.</summary>
     public static void Glyphs(CanvasItem canvas, AreaArtFontFace face, IEnumerable<(int X, AreaArtGlyph Glyph)> placed, int x, int y,
-        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue)
+        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f)
     {
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(placed);
@@ -102,10 +104,10 @@ public static class AreaArtTextDraw
         var tint = new Color(colour.R / 255f * opacity, colour.G / 255f * opacity, colour.B / 255f * opacity, opacity);
         foreach (var (gx, glyph) in placed)
             if (face.Texture(glyph.Frame, blend) is { } texture)
-                canvas.DrawTextureRect(texture, new Rect2(x + gx, y, glyph.Width, glyph.Height), false, tint);
+                canvas.DrawTextureRect(texture, new Rect2(x + gx * scale, y, glyph.Width * scale, glyph.Height * scale), false, tint);
     }
 
     /// <summary>One line of text from (x, y) in <paramref name="colour"/>.</summary>
     public static void Text(CanvasItem canvas, AreaArtFontFace face, string text, int x, int y, (byte R, byte G, byte B) colour,
-        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha);
+        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha, scale);
 }

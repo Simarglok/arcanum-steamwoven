@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
         // ARC-UI-2284: content read before the panel existed (a save window's portraits, a warm-up) has the panel bound the first time the panel meets it.
         BindPanelArt();
         // ARC-UI-1786: the order menu's words come from the same load (mes\follower_ui.mes).
-        if (_followerPortraits is { } panel) panel.MenuTexts = _portraitContent?.Menu;
+        if (_followerPortraits is { } panel) { panel.MenuTexts = _portraitContent?.Menu; panel.MenuFont = TextFonts()?.Text; }
     }
 
     /// <summary>Reads the frame art (on the first use) and the portraits of <paramref name="ids"/> not read yet.</summary>

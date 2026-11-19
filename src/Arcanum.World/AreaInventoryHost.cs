@@ -575,7 +575,8 @@ public sealed class AreaInventoryHost
         var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
             .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
             .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
-                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray()).Where(item => !IsOff(session, runtimeMap, item.Entity)).ToArray();
+                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)
+                { Quantity = row.Entry.Facts.Kind.Type == SessionItemType.Gold ? row.Entry.Facts.Quantity : null }).ToArray()).Where(item => !IsOff(session, runtimeMap, item.Entity)).ToArray();
         // ARC-UI-072: the body's worn items by slot (its record over its map data, ARC-WORLD-103: the session's lists show it).
         var bodyDoll = pile is not null || current?.Holders.FirstOrDefault(h => h.Entity == holder) is not { } wearer || wearer.Kind != SessionHolderKind.Npc
             ? Array.Empty<AreaDollSlot>()
@@ -883,6 +884,19 @@ public sealed class AreaInventoryHost
         if (MadeFacts(session, entity) is { } made) return AreaLockpicks.From(entity, made.Fields);
         if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
         return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? AreaLockpicks.From(entity, fields) : null;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1878 (the finder 0x462760, ledger PL4, PL5): the PC's first lockpicks in inventory order, armed or not: the starting kit's items first, then the items taken from the world, then the made ones (the order of the inventory lines,
+    /// <see cref="View"/>); the first that reads as lockpicks (<see cref="Lockpick"/>: an item the session destroyed is not one). Null when the hero holds none or there is no hero. The best-follower chooser scores every candidate with this one item.
+    /// </summary>
+    public SessionLockpick? FirstLockpicks(GameSessionOwner session, IReadOnlyList<SessionLockpick?>? kitLockpicks)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null) return null;
+        foreach (var entity in session.QueryHeroKit().Select(item => item.Entity).Concat(session.QueryPcInventory().Select(item => item.Entity)).Concat(session.QueryMadeItems().Select(item => item.Entity)))
+            if (Lockpick(session, entity, kitLockpicks) is { } pick) return pick;
+        return null;
     }
 
     /// <summary>ARC-UI-016: the spell facts of an item the hero holds (the cast host's item lookup): a kit item's from

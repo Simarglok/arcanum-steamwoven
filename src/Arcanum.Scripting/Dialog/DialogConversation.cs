@@ -198,7 +198,18 @@ public sealed partial class DialogConversation
                 return Result();
             case DialogOptionTransition.FinalLine:
                 Turn++;
-                CurrentNode = new DialogNodeId(plan!.Target!.Npc.Id);
+                if (plan!.Target is null)
+                {
+                    // ARC-SCRIPT-2790 (FLM1): the node is not in the DLG; the blank final line has no text and no action (the original shows a single space and ends the talk). The talk ends here, so the turn limit (which Admit tests only for a next step) is not checked.
+                    CurrentNode = new DialogNodeId(plan.Reply.Action!.OfType<ConversationFinalLine>().Last().Node);
+                    NpcLine = new DialogNpcLine(CurrentNode, string.Empty);
+                    if (replyCombat is not { } missingCombat || StartCombat(missingCombat))
+                    {
+                        Finish(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null));
+                    }
+                    return Result();
+                }
+                CurrentNode = new DialogNodeId(plan.Target.Npc.Id);
                 NpcLine = new DialogNpcLine(CurrentNode, plan.Target.NpcText);
                 if (Execute(plan.Target.Action) && (replyCombat is not { } finalCombat || StartCombat(finalCombat)))
                 {
@@ -1861,7 +1872,16 @@ public sealed partial class DialogConversation
                 ConversationExpertTeacher teacher => teacher.Node,
                 _ => ((ConversationFinalLine)transfer).Node,
             };
-            if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
+            if (transfer is ConversationFinalLine && (!_document.TryGetRecord(continuation, out var absent) || absent is null))
+            {
+                // ARC-SCRIPT-2790 (0x415BA0 case 3, 0x413A30, 0x416840, 0x416AB0; ledger FLM1): an FL whose node is not in the DLG is no error in the original:
+                // the line lookup fails, the line stays a single space with no voice, and the string goes on (a co still runs); the dialog ends with that blank
+                // final line. The reply stays offered, with no target (the select step reads the node from the action).
+                transition = DialogOptionTransition.FinalLine;
+                target = null;
+                line = null;
+            }
+            else if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
             {
                 block = new DialogOptionBlock(DialogOptionBlockKind.TargetInvalid, transfer.Source);
             }

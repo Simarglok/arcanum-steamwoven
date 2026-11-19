@@ -46,6 +46,8 @@ textarea { width:100%; min-height:44px; resize:vertical; margin-top:6px; }
 kbd { font:12px ui-monospace, Menlo, monospace; border:1px solid var(--line); border-radius:4px; padding:0 4px; }
 .help { color:var(--muted); font-size:13px; margin:8px 0; }
 a { color:var(--accent); }
+details.answered { margin-top:20px; }
+details.answered > summary { cursor:pointer; font-weight:600; color:var(--muted); padding:6px 0; }
 .empty { color:var(--muted); padding:24px 0; text-align:center; }
 </style>
 </head>
@@ -99,10 +101,15 @@ function allSteps() { return data.sections.flatMap(s => s.steps); }
 function find(id) { return allSteps().find(s => s.id === id); }
 function visible(step, sec) {
   if (section && sec.code !== section) return false;
+  if (step.answered) return false;          // ARC-DEV-2768: an answered step (a mark or a sent report) is in the group at the end
   if (filter === "open") return step.status === "open";
   if (filter === "new") return step.isNew;
   return true;
 }
+function answeredVisible(step, sec) {      // the group follows the section and the "new" filters; the "open" filter hides it (it is all answered)
+  return step.answered && filter !== "open" && (!section || sec.code === section) && (filter !== "new" || step.isNew);
+}
+let answeredOpen = false;                  // the group is collapsed until the owner opens it
 function draftOf(step) {
   if (!drafts.has(step.id)) drafts.set(step.id, { note: step.note, report: step.report });
   return drafts.get(step.id);
@@ -123,7 +130,7 @@ function render() {
     select.value = section;
   }
   document.getElementById("meta").textContent = "list from " + data.ref + " @ " + data.commit + " · " + allSteps().length + " steps · "
-    + allSteps().filter(s => s.status === "open").length + " open";
+    + allSteps().filter(s => !s.answered).length + " open, " + allSteps().filter(s => s.answered).length + " answered";
   const banners = document.getElementById("banners");
   banners.replaceChildren(...[
     data.warning ? h("div", { class: "banner" }, data.warning) : null,
@@ -134,13 +141,16 @@ function render() {
   for (const sec of data.sections) {
     const steps = sec.steps.filter(s => visible(s, sec));
     if (!steps.length) continue;
-    const done = sec.steps.filter(s => s.status !== "open").length;
+    const done = sec.steps.filter(s => s.answered).length;
     out.push(h("section", {},
       h("h2", {}, h("span", {}, sec.title), h("span", { class: "progress" }, done + " / " + sec.steps.length + " checked")),
       h("div", { class: "bar" }, h("span", { style: "width:" + Math.round(100 * done / sec.steps.length) + "%" })),
       steps.map(stepNode)));
   }
-  list.replaceChildren(...(out.length ? out : [h("div", { class: "empty" }, "No steps match this filter.")]));
+  const answered = data.sections.flatMap(sec => sec.steps.filter(s => answeredVisible(s, sec)));
+  const group = answered.length ? h("details", { class: "answered", open: answeredOpen, on: { toggle: e => { answeredOpen = e.target.open; } } },
+    h("summary", {}, "Answered (" + answered.length + ")"), answered.map(stepNode)) : null;
+  list.replaceChildren(...(out.length || group ? [...out, group].filter(Boolean) : [h("div", { class: "empty" }, "No steps match this filter.")]));
 }
 function reportOptions(draft, step) {
   const names = new Set(data.reports.map(r => r.name));
@@ -162,11 +172,13 @@ function stepNode(step) {
     input: e => { draft.note = e.target.value; },
     blur: () => { if (draft.note !== step.note && (step.recorded || step.status !== "open")) save(step, step.status); } } });
   note.value = draft.note || "";
-  const buttons = Object.keys(STATUS_LABEL).map(s => h("button", { dataset: { s }, class: step.status === s ? "on" : "", on: { click: () => save(step, s) } }, STATUS_LABEL[s]));
+  const buttons = Object.keys(STATUS_LABEL).map(s => h("button", { dataset: { s }, class: step.status === s && !(s === "open" && step.answered) ? "on" : "",
+    title: s === "open" ? "Reopen: clear the answer and the report mark (o)" : null, on: { click: () => s === "open" ? reopen(step) : save(step, s) } }, s === "open" && step.answered ? "reopen" : STATUS_LABEL[s]));
   const issue = step.issue ? h("span", { class: "issue" }, "issue ", h("a", { href: step.issueUrl || "#", target: "_blank", rel: "noopener" }, "#" + step.issue))
     : (step.status === "differs" && step.issueError ? h("span", { class: "issue err" }, "issue not created: " + step.issueError + " ", h("button", { on: { click: () => save(step, "differs") } }, "Retry")) : null);
   return h("div", { class: "step" + (selected === step.id ? " sel" : ""), dataset: { id: step.id }, tabindex: "0", on: { focus: () => choose(step.id, false), click: () => choose(step.id, false) } },
     h("div", { class: "head" }, h("span", { class: "id" }, step.id), step.isNew ? h("span", { class: "tag new" }, "new") : null,
+      step.answered ? h("span", { class: "tag" }, "answered" + (step.answeredBy === "report" ? " by report" : "") + (step.answeredAt ? " " + step.answeredAt : "")) : null,
       step.recorded ? null : (step.listStatus !== "open" ? h("span", { class: "tag" }, "from the list: " + step.listStatus + (step.listNote ? " " + step.listNote : "")) : null)),
     h("div", { class: "text" }, step.step),
     h("div", { class: "exp" }, h("b", {}, "Expected: "), step.expected),
@@ -204,18 +216,39 @@ async function save(step, status) {
     const result = await api("/api/result", { step: step.id, status, note: draft.note || "", report: draft.report || null });
     Object.assign(step, { status: result.status, note: result.note, report: result.report, issue: result.issue, issueUrl: result.issueUrl, issueError: result.issueError, recorded: true });
     drafts.set(step.id, { note: result.note, report: result.report });
+    data = await api("/api/state");          // ARC-DEV-2768: whether the step is answered (and when) is the server's reading of results and reports
     flash.set(step.id, status === "differs" ? (result.issue ? "saved, issue #" + result.issue : "saved, issue NOT created") : "saved");
   } catch (e) { flash.set(step.id, "not saved: " + e.message); }
   busy.delete(step.id);
+  const before = visibleNodes(), at = before.findIndex(n => n.dataset.id === step.id);
   render();
+  const now = find(step.id);
+  if (now && now.answered && selected === step.id && at >= 0) {      // the marked step went to the answered group: the next step of the list is selected
+    const nodes = visibleNodes();
+    if (nodes.length) { selected = null; choose(nodes[Math.min(at, nodes.length - 1)].dataset.id, true); }
+  }
   if (selected) { const n = document.querySelector('.step[data-id="' + CSS.escape(selected) + '"]'); if (n && document.activeElement === document.body) n.focus({ preventScroll: true }); }
+}
+async function reopen(step) {
+  if (busy.has(step.id)) { flash.set(step.id, "wait: the last save is still running"); return; }
+  busy.add(step.id);
+  flash.set(step.id, "reopening...");
+  try {
+    await api("/api/reopen", { step: step.id });
+    drafts.delete(step.id); chosen.add(step.id);
+    data = await api("/api/state");
+    flash.set(step.id, "reopened");
+  } catch (e) { flash.set(step.id, "not reopened: " + e.message); }
+  busy.delete(step.id);
+  render();
 }
 async function load() {
   data = await api("/api/state");
   render();
 }
+function visibleNodes() { return [...document.querySelectorAll(".step")].filter(n => n.offsetParent !== null); }
 function move(delta) {
-  const nodes = [...document.querySelectorAll(".step")];
+  const nodes = visibleNodes();          // not the steps inside the collapsed answered group
   if (!nodes.length) return;
   let at = nodes.findIndex(n => n.dataset.id === selected);
   at = at < 0 ? (delta > 0 ? 0 : nodes.length - 1) : Math.min(nodes.length - 1, Math.max(0, at + delta));
@@ -226,7 +259,7 @@ document.addEventListener("keydown", e => {
   if (tag === "textarea" || tag === "select" || tag === "input" || e.ctrlKey || e.metaKey || e.altKey) { if (tag === "textarea" && e.key === "Escape") e.target.blur(); return; }
   const step = selected && find(selected);
   const keys = { j: () => move(1), k: () => move(-1), r: () => document.getElementById("reload").click(),
-    s: () => step && save(step, "same"), d: () => step && save(step, "differs"), c: () => step && save(step, "cannot-test"), o: () => step && save(step, "open"),
+    s: () => step && save(step, "same"), d: () => step && save(step, "differs"), c: () => step && save(step, "cannot-test"), o: () => step && reopen(step),
     n: () => { const t = document.querySelector('.step[data-id="' + CSS.escape(selected || "") + '"] textarea'); if (t) { t.focus(); e.preventDefault(); } } };
   if (keys[e.key]) keys[e.key]();
 });

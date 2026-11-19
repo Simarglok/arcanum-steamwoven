@@ -575,7 +575,7 @@ public partial class TerrainViewerApp
         {
             if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero), HitScripts = HeroHitScripts(target.Entity) });
+                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero), HitScripts = HeroHitScripts(target.Entity), ArmourScripts = HeroArmourScripts(target.Entity) });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
             end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, target.Entity);
@@ -588,7 +588,7 @@ public partial class TerrainViewerApp
                 {
                     Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
                     // ARC-COMBAT-1973 (RH5): the strike offers the weapon's hit scripts and the wall's taking-damage script as any object's.
-                    TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(struck), SessionSpellCaster.Hero), HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(struck)),
+                    TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(struck), SessionSpellCaster.Hero), HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(struck)), ArmourScripts = HeroArmourScripts(AreaUseScriptHost.EntityId(struck)),
                 });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
             // ARC-COMBAT-1973 (RH5): a wall is hit without a roll, so a thrown item's hit script (not its miss script) ends the flight, with the wall as the target.

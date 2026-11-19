@@ -258,6 +258,7 @@ public sealed partial class GameSessionOwner
 
         // The host's part.
         public long DistanceToPc(string npc) => host.DistanceToPc(npc);
+        public bool Knows(string npc) => host.Knows(npc);
         public bool RunScript(AiScriptPoint point, string npc, string? triggerer) => host.RunScript(point, npc, triggerer);
         public bool RunWaypoints(string npc) => host.RunWaypoints(npc);
         public void RunStandpoints(string npc) => host.RunStandpoints(npc);

@@ -447,6 +447,8 @@ public interface IAiGoalWorld : IItemUseWorld
     bool AttemptSkill(string id, string target, int skill, string? item);
     /// <summary>The pick-locks attempt (0x42A4E0: the skill invocation for skill 14, without action points).</summary>
     void AttemptPickLocks(string id, string target, string? item);
+    /// <summary>ARC-SCRIPT-2752 (0x428E10 after its refusals): the skill invocation of goal 40, with the invocation <paramref name="modifier"/> and no action points; <paramref name="item"/> is the tool the user holds (null: none).</summary>
+    void AttemptSkillWithItem(string id, string target, string? item, int skill, int modifier);
     /// <summary>The throw at the action frame (0x42AB90 → 0x4B3C00): false when the item is destroyed or off.</summary>
     bool ThrowItem(string id, string item, CellCoord tile);
     /// <summary>The pickup (0x42A9B0 → 0x42AA70: the item moves into the inventory; 1 action point for an item from a junk pile).</summary>

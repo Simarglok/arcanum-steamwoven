@@ -16,6 +16,11 @@ supplied the names; every call site below was found by scanning all direct calls
 the point argument each one pushes. Behaviour is described in prose; no listing, byte or oracle output is in git. Original parity
 beyond the rows named here is **NOT_VERIFIED**.
 
+The firing conditions of every trigger kind (when, for whom, which gates, what the return changes) and the corrections to
+this note (TG2 callers, points 15 and 16, the first heartbeat, unlock, catching thief) are in
+[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ28); its section 2 is newer than the
+host column of section 2 here.
+
 ## Answer
 
 **Systemic, three causes.** A script of the original does not run in Steamwoven when (a) no Steamwoven host fires its trigger
@@ -32,7 +37,7 @@ TG4), and for the PC calls his own dialog point (script 1324, line 4; the dialog
 action opens DLG 1324 at node 1, then removes itself and skips the tick's default (TG6). Steamwoven added set S17 (critter
 vicinity, `IScrWorldQueries.CrittersInVicinity`), call-ex of the dialog point, a wider heartbeat set and the viewer's
 `OpenHeartbeatConversation`; the smoke stage `opening` observes it. Both rule modes behave the same (the original's own
-behaviour). A talk asked for while another conversation or a window is open or the hero is under attack stays pending and opens
+behaviour). A talk asked for while another conversation is open is dropped, not kept (the start callback returns silently in dialog mode, ARC-SCRIPT-2760, U5); one asked for while a window outside the stack is open or the hero is held in combat mode stays pending and opens
 once it can (Steamwoven's choice, U5). A call-ex of the dialog point refuses a callee that reaches call script.
 
 ## 2. Attachment points: who fires them
@@ -78,7 +83,7 @@ from line 0, static.
 | 31 | dialog override | none | — (DLG number) | 0 | — |
 | 32 | transfer | 0x461D18 | hero's item moves | 6 (4) | 3 |
 | 33 | caught thief | 0x4C76CE, 0x4C78E9 | **none** | 0 | — |
-| 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
+| 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483); the worn armour pieces' (0x4B47F8, `AreaUseScriptHost.RunArmourCritical`, ARC-SCRIPT-2828: 2 of the 4 rows are armour, scripts 30219 and 30237, admitted whole; 35 never runs on armour) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
 | 35 | critical miss | 0x4B2F35, 0x4B3163, 0x4B399C (and 0x4B47F8) | **none** | 2 (2) | — |
 
 
@@ -182,6 +187,5 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
 - **U4** ~~The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
   dialog gates never trigger there.~~ Closed by ARC-SCRIPT-2464: the use host and the talk host answer dead, surrendered (the session's danger record) and
   mind-controlled (spell flag 0x8000000) for an NPC of the shown map.
-- **U5** What the original does with a heartbeat's talk while the PC is in another dialog, a window is open or the PC is under
-  attack is not read (the dialog start refuses a second dialog of the PC, G3, but whether the talk is lost or retried is not known);
-  Steamwoven keeps it pending until it can open.
+- **U5** What the original does with a heartbeat's talk while the PC is in another dialog is read (ARC-SCRIPT-2760: the dialog start callback 0x567460 returns silently when the dialog mode is on top, so the talk is lost, never retried; the heartbeat's other effects stay);
+  what it does while a window outside the stack is open or the PC is under attack is not read, and Steamwoven keeps that talk pending until it can open.

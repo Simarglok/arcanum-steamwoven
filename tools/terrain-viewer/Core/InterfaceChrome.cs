@@ -139,7 +139,7 @@ public enum ChromeKind
 /// the Parchment material shades, in the same coordinates as the materials (the art's own plus <paramref name="OriginX"/>): the logbook's book has it at its 286, the reading window's book at the
 /// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -432,13 +432,13 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(18, 100, 330, 310, ChromeMaterial.Pit), // runs off the frame's bottom: the original's box has no bottom edge between its corners
             new ChromeGrid(23, 107, 10, 9, 32),
             new ChromeKeep(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), // the opaque box behind the live round view
-            new ChromeRoundView(AreaLensPlace.X + 44.5, AreaLensPlace.Y + 44.5, 44.5, false),
+            new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), // ARC-UI-2762: the lens art 198 carries the one ring (inside its square); a second ring outside the circle showed as arcs at the four sides
             new ChromeKeep(10, 303, 112, 97),
             new ChromeKeep(244, 303, 114, 97),
         ]);
         // ARC-UI-1194: the loot, barter and steal windows' frames (Legacy pixels of each art). The grids' last column and row carry a line too (their pit goes on
         // for the scroll bar's chain, which is kept). The curly flourishes of the original's boxes are not drawn (as in the inventory).
-        List<ChromePart> lootParts = [new ChromeRoundView(AreaLensPlace.X + 44.5, AreaLensPlace.Y + 44.5, 44.5), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
+        List<ChromePart> lootParts = [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
         foreach (var x in new[] { 171.0, 258.0 })
             foreach (var y in new[] { 45.5, 64.5, 82.5 }) lootParts.Add(new ChromeRivet(x, y, 2.5));
         lootParts.AddRange([new ChromeSunk(6, 134, 342, 260, ChromeMaterial.Pit), new ChromeGrid(8, 136, 10, 8, 32, true), new ChromeKeep(332, 136, 12, 256)]);
@@ -449,9 +449,9 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(6, 166, 343, 228, ChromeMaterial.Pit), new ChromeGrid(8, 168, 10, 7, 32, true), new ChromeKeep(332, 168, 12, 224),
             new ChromeRivet(147.5, 112, 2.5), new ChromeRivet(282.5, 112, 2.5),
         ];
-        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeKeep(AreaLensPlace.X - 4, AreaLensPlace.Y - 4, 98, 95, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
+        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
         var follower = new ChromeRecipe("barter_follower.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
-            [new ChromeRoundView(AreaLensPlace.X + 44.5, AreaLensPlace.Y + 44.5, 44.5), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
+            [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
         var lootDoll = new ChromeRecipe("loot_pd.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
         [
             new ChromeSunk(70, 46, 215, 194, ChromeMaterial.Pit),
@@ -488,7 +488,12 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, barterDoll, dollCover, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        // ARC-UI-2763: the windows of the inventory family (the inventory, loot, barter, steal, identify and repair windows, backdrop BD-A) are all one wood: the original's arts have wood of slightly different tones
+        // (the doll 223 darker than the pack 221, the loot doll lighter), so the window's two halves and the backdrop behind them read as two surfaces. Every art of the family takes the tone `FamilyWoodLow` / `FamilyWoodHigh`;
+        // the pack art (inventor.art) continues the doll's grain from the split (358 units), as the backdrop's right piece does.
+        ChromeRecipe Family(ChromeRecipe recipe) => recipe with { FamilyWood = true };
+        return [top, bottom, Family(inventory with { OriginX = InterfaceChromeRenderer.SteamwovenFamilySplitUnits }), Family(doll), Family(loot), Family(barter), Family(follower), Family(lootDoll), Family(barterDoll), Family(dollCover),
+            .. lenses.Select(recipe => recipe.File is "lns_bart.art" or "lns_loot.art" or "lns_papr.art" ? Family(recipe) : recipe), .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
@@ -618,6 +623,13 @@ public static class InterfaceChromeRenderer
     }
 
     private static readonly Rgb Ink = new(20, 14, 8), BrassLight = new(214, 178, 96), Brass = new(160, 120, 52), BrassDark = new(96, 70, 30);
+    /// <summary>ARC-UI-2763: the width in original units of the left part of the inventory family's window (the doll's, the loot and barter windows' left art, the pack's `PackX`): where the pack art 221 starts, so its grain continues the left part's.</summary>
+    public const int SteamwovenFamilySplitUnits = Arcanum.World.AreaInventoryArtLayout.PackX;
+
+    /// <summary>ARC-UI-2763: the darkest and lightest wood colour of the inventory family: the wood of the pack art 221 (`inventor.art`) as <see cref="TuneWood"/> reads it (mean 64, 51, 42 in the Legacy pixels), the art every window of the family has
+    /// on its right and the middle one of the family's arts (the doll 223 reads 61, 46, 38, the loot window 66, 53, 45, its doll 70, 53, 43).</summary>
+    public static readonly (float R, float G, float B) FamilyWoodLow = (12.34f, 1.14f, 5.40f), FamilyWoodHigh = (102.34f, 87.10f, 69.89f);
+
     private static readonly Rgb WoodLowDefault = new(58, 37, 20), WoodHighDefault = new(112, 76, 43), IronLow = new(44, 46, 50), IronHigh = new(96, 98, 104);
     private static readonly Rgb SlateLow = new(20, 22, 26), SlateHigh = new(66, 68, 74);
     private static readonly Rgb PitFill = new(3, 3, 5), GridLine = new(48, 54, 64);
@@ -1047,6 +1059,12 @@ public static class InterfaceChromeRenderer
     // wood is the middle of our grain; its spread (about six standard deviations of the pixels) is the grain's range, never wider than ours.
     private static void TuneWood(Canvas c, ChromeRecipe recipe)
     {
+        if (recipe.FamilyWood)
+        {
+            c.WoodLow = new Rgb(FamilyWoodLow.R, FamilyWoodLow.G, FamilyWoodLow.B);
+            c.WoodHigh = new Rgb(FamilyWoodHigh.R, FamilyWoodHigh.G, FamilyWoodHigh.B);
+            return;
+        }
         double sr = 0, sg = 0, sb = 0, qr = 0, qg = 0, qb = 0; long n = 0;
         for (var y = 0; y < c.LegacyH; y++)
         for (var x = 0; x < c.LegacyW; x++)
@@ -1083,6 +1101,8 @@ public static class InterfaceChromeRenderer
                 ChromePlate p => (p.X, p.Y, p.Width, p.Height),
                 ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
                 ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                // ARC-UI-2762: the lens's square (and four units around it, where the Legacy frame has its own ring) is no wood: the frames draw no ring of their own, so the old ring pixels must not tone the wood.
+                ChromeBare { Width: 89 } p => (p.X - 4, p.Y - 4, p.Width + 8, p.Height + 8),
                 ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
                 // ARC-UI-2194: the brass pill's parts (the housing and the plates; the ring lies inside the housing's box).
                 ChromeCapsule p => ((int)Math.Floor(p.X), (int)Math.Floor(p.Y), (int)Math.Ceiling(p.Width) + 1, (int)Math.Ceiling(p.Height) + 1),

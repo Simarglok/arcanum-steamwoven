@@ -1034,7 +1034,7 @@ public partial class TerrainViewerApp
         if (HandleHeroDeathInput(input)) { GetViewport().SetInputAsHandled(); return; }
         // ARC-DEV-201: a right press on a bar closes the window the bar handler pops; the release that follows is part of that press.
         if (input is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } rightPress) _rightPressPoppedWindow = HandleRightPressOverWindow(rightPress.Position, rightPress.CtrlPressed);
-        if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); }
+        if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); TrackFollowerSkillModifiers(modifierKey); }
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
         if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)
         {
@@ -1215,7 +1215,7 @@ public partial class TerrainViewerApp
         // click-to-move goal, see _UnhandledInput), and wheel/+/- do not zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.
         // F11 is a host window control (not an M/Q game key), not a diagnostic.
         if (input is InputEventKey key && key.Pressed && !key.Echo && GetViewport().GuiGetFocusOwner() is null && key.Keycode == Key.F11)
-            GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
+            SwitchWindowMode(null);
         RefreshReadyStatus();
     }
     private void CaptureWorldCallbackActor(RawInputFrame raw, IntentFrame reduced)

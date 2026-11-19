@@ -62,8 +62,8 @@ public partial class TerrainViewerApp
     {
         // ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs below take their own).
         // ARC-SCRIPT-2686: and its printed lines go to the message window (IS2, PW1) and its dialog action is queued as a heartbeat's is (opened once the pump that broke the object returned).
-        if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost && gateHost.TakeBreakDestroyRun() is { } destroyRun)
-            TakeBreakRunOutput(gateHost, AreaUseScriptHost.EntityId(row), destroyRun, "destroy point");
+        // ARC-SCRIPT-2749: every run the gates left, oldest first (an earlier wear's run included).
+        if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost) ShowDestroyPointRuns(gateHost, AreaUseScriptHost.EntityId(row));
         // ARC-SCRIPT-2646 (OD7, 0x43F1C0 → 0x424070): the break first interrupts the object's goal runs at level 5, after the trap and before the BUST script.
         var interrupted = false;
         void Interrupt() { if (interrupted) return; interrupted = true; InterruptBrokenObjectRuns(row); }
@@ -97,6 +97,15 @@ public partial class TerrainViewerApp
     }
 
     private bool _objectBreakRunning;
+
+    /// <summary>
+    /// ARC-SCRIPT-2749 (ledger BS3g): shows the destroy-point runs the item and object gates kept (awards, printed lines, dialog action), oldest first: the break steps take them at once, and the frame pump takes those of the wear paths
+    /// (an armour or weapon worn out under an attack, the critical "destroy weapon"), whose callers show nothing of the run.
+    /// </summary>
+    private void ShowDestroyPointRuns(AreaUseScriptHost host, string entity)
+    {
+        foreach (var run in host.TakeDestroyPointRuns()) TakeBreakRunOutput(host, entity, run, "destroy point");
+    }
 
     /// <summary>
     /// ARC-SCRIPT-2686, ARC-SCRIPT-2723: what the host takes of one script run of an object's break (the destroy point, the ordinary trap script, the BUST script): the awards, floats and creations,

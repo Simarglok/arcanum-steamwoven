@@ -72,6 +72,31 @@ public sealed class DialogCombatTests
     }
 
     [TestMethod]
+    public void A_final_line_to_a_missing_node_still_runs_the_attack_event_and_ends_the_talk()
+    {
+        // ARC-SCRIPT-2790: the installed reply "I will kill you" of Fahrkus (dialog 2792, record 42) is "fl 179 ,co" and its DLG has no record 179: the original shows a blank final
+        // line, the co flag still runs the attack at the string's end, and the talk is over.
+        foreach (var action in new[] { "fl 99 ,co", "co, fl 99", "fl 99, co" })
+        {
+            var combat = new Combat();
+            var document = Read(Record("10", "?") + Record("11", "Attack.", iq: "1", response: "20", action: action) + Record("20", "Bye."));
+            var conversation = Start(document, new Ports(), Owner(), world: new World(), combat: combat);
+            Assert.IsNull(conversation.Options[0].Block, action);
+            Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options[0].Token).Status, action);
+            Assert.AreEqual(1, combat.Started.Count, action);
+            Assert.AreEqual(DialogEndKind.NpcFinalLine, conversation.End!.Kind, action);
+            Assert.AreEqual(string.Empty, conversation.NpcLine!.Text, action);
+            Assert.IsInstanceOfType<StartCombatCommand>(conversation.Effects[^1].Command, action);
+        }
+
+        // A refused attack fails the conversation as for every action port.
+        var refused = new Combat { Result = DialogCommandResult.Rejected };
+        var rejecting = Start(Read(Record("10", "?") + Record("11", "Attack.", iq: "1", response: "20", action: "fl 99, co") + Record("20", "Bye.")), new Ports(), Owner(), world: new World(), combat: refused);
+        rejecting.Select(rejecting.Options[0].Token);
+        Assert.IsNotNull(rejecting.Failure);
+    }
+
+    [TestMethod]
     public void A_final_line_in_the_string_speaks_before_the_attack_event()
     {
         // fl enters the final line at once (0x413A30, its node's action runs) and the event follows at the string's end, whatever the order.

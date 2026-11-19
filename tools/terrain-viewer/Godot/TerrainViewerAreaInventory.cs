@@ -310,7 +310,7 @@ public partial class TerrainViewerApp
         if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
         if (_inventoryPanel is null)
         {
-            _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel);
+            _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel); _inventoryPanel.DiagnosticSwitch = DebugMode;
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
             _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };

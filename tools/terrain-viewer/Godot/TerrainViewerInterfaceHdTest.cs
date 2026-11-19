@@ -473,7 +473,8 @@ public static partial class TerrainViewerSelfTest
         InterfaceHd.Configure(pack, true);
         require(face.IsHd(Glyph) && face.Texture(Glyph, AreaArtTextBlend.Coverage) is CanvasTexture, "pack and switch on: the glyph with an entry is HD");
         require(!face.IsHd(NoEntry) && !face.IsHd(0), "a glyph without an entry and a frame without a key stay Legacy");
-        require(face.Texture(Glyph, AreaArtTextBlend.Additive) is not CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage blend takes the HD frame");
+        // ARC-UI-2795: the additive blend (the inventory counts' font flag 0x10) takes the HD frame too, as an added layer; the multiply blend stays Legacy.
+        require(face.Texture(Glyph, AreaArtTextBlend.Additive) is CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage and Additive blends take the HD frame");
         require(face.Texture(Glyph, AreaArtTextBlend.Coverage)!.GetWidth() == W * Scale, "the HD glyph texture is 4× the Legacy frame");
 
         var viewport = new SubViewport { Size = new(W, H), TransparentBg = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };

@@ -149,6 +149,8 @@ public sealed partial class GameSessionOwner
         var recipientOfDamage = resolution.Damage.Recipient;
         // The thrower's taking-damage script comes first in the damage apply (GT198, GT199); a veto ends the step.
         if (request.TakingDamage is { } asks && !asks(recipientOfDamage)) return Done(Attack(recipientOfDamage) with { Vetoed = true });
+        // ARC-SCRIPT-2828 (0x4B47F8): the thrower's worn armour runs its critical-hit script on a critical self-hit, after its own taking-damage script and before the hit points are written.
+        NotifyArmourCritical(request.ArmourScripts, resolution, request.ThrowerWorn, QueryLife(request.Thrower.Target).View?.Status);
         var applied = ApplyDamage(Version, request.Thrower.Target, damage, killer: null);
         if (applied.Disposition == GameSessionDisposition.Rejected) return Done(Attack(recipientOfDamage) with { StepFailure = applied.Failure });
         var outcome = applied.Outcome!;

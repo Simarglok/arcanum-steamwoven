@@ -468,6 +468,8 @@ public partial class TerrainViewerApp
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(), ItemTriggers = ItemTriggersNow(),
             // ARC-COMBAT-1955: the removal's and the throw script (point 6) of the item run through the shown map's item script host.
             Scripts = _inventoryHost.ItemScripts(owner),
+            // ARC-SCRIPT-2828: the worn armour's critical-hit scripts on a critical self-hit of the throw at a location (a struck critter's hit lands through LandShot).
+            ArmourScripts = HeroArmourScripts(SessionSpellCaster.Hero),
         };
         var aimed = struck?.Goal;
         if (aimed is not null)

@@ -85,8 +85,8 @@ is never replaced and each such start says so again. A folder is ready when the 
 `GameFolderStatus` with the missing name. The start is map mode on `Arcanum1-024-fixed` with the main menu and the
 folder's own inputs, the same as `./arcanum area` (`test_launcher_sync.py` keeps the two in step). The log prints
 `ARC-DEV-046` lines: the settings read, each folder checked, the save and the folder used (GOG marker, verified
-1.0.7.4 executable, changed identity, whether the launcher screen shows). Not built: applying the stored display at
-start (window or fullscreen, monitor, UI scale; stored, not edited or applied); the candidate paths are F0 until a
+1.0.7.4 executable, changed identity, whether the launcher screen shows). Not built: applying the stored display's
+monitor and UI scale (stored, not edited or applied); the window mode applies at start (below); the candidate paths are F0 until a
 packaging task checks them on Windows and in Wine wrappers.
 
 ### Launcher screen (ARC-UI-014)
@@ -180,7 +180,7 @@ ARC_AREA_MAP_SMOKE_ONLY=menu` and `godot_canonical --path tools/terrain-viewer/G
 with `FILE` absent, or with `--launcher`) prints `ARC-UI-014 native-smoke launcher PASS` (the detected or stored folder
 ready, an empty folder refused, Original chosen, Play storing it and starting under Original), then
 `ARC-UI-011 native-smoke main menu PASS`; with `FILE` holding a stored folder and no `--launcher` the log says
-`launcher reason=None` and the menu smoke runs at once. Not done: applying the display at start, keyboard and
+`launcher reason=None` and the menu smoke runs at once. Not done: applying the display's monitor and UI scale at start, keyboard and
 controller use of the screen (mouse only), the candidate paths and the folder dialog on Windows and with wrappers (F0).
 
 ARC-DEV-047: the launcher and the main menu show the build in their bottom right corner (`ViewerBuildInfo`):
@@ -244,8 +244,10 @@ with 32-pixel margins. Zoom is bounded to 0.125–8.0 with nearest 1/1024 fit
 rounding. Arrow/WASD pans, wheel and `+`/`-` zoom, and left drag pans. `R`
 resets initial Fit, `F` recomputes Fit, and `L` reloads through the same
 generation-aware load route. Resize changes HUD layout only; the camera's
-current Fit or manual pan/zoom transform survives resize. F11 toggles normal fullscreen and
-Escape restores windowed mode. The resizable default is 1280x800. These are the standalone-mode controls; WORLD has the distinct controls below.
+current Fit or manual pan/zoom transform survives resize. F11 toggles fullscreen and
+Escape restores windowed mode (fullscreen is the platform's kind: on macOS the exclusive mode, so the Dock and the menu bar stay hidden, also at the
+screen edge; elsewhere the plain one, ARC-UI-2771; the choice is stored as `display.window` of the launcher settings, and a first start without a
+settings file opens fullscreen; an automated run neither applies nor stores it). The resizable default is 1280x800. These are the standalone-mode controls; WORLD has the distinct controls below.
 A responsive synthetic HUD matrix checks containment,
 sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
@@ -276,6 +278,8 @@ settings a reply is chosen on the mouse press, not on the release, as in the ori
 reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down) and resolves a left press by the band's rules:
 the row is y / 20 (so a press in a gap picks a row and the fifth row's first pixel picks the fourth), an empty slot, the release and a blocked reply choose
 nothing; the hover lights a row as the original's move records do (DH5) and, ARC-UI-2052, again after every rebuild of the rows against the live pointer (DH9). The release that follows a closing press reaches the viewer with no panel under it and sets no route and opens nothing (DH8, DH10; the routing self-test pushes it; the windows a reply opens take it in both settings, ARC-UI-2071 (no switch: the original's design, not an exe bug): the viewer keeps the release of a press that began while the dialog was open and hands it to the identify or repair window (an item under it is quoted as a click), the round view of the identify and repair windows, the NPC sheet and the schematic window (they close), DH10, SW12; only their original look takes it, the diagnostic lists do not). Under the Steamwoven setting each button is its own hit area. The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
+
+ARC-UI-2791: a reply row is the reply's own text only. The project diagnostic `not supported here: KIND, record N field op M` (`AreaConversationText.BlockReason`) is never appended to the row: it goes to the log, and, under the Steamwoven setting only, to the blocked row's tooltip with the row greyed; under the Original setting a blocked row is drawn in the plain row colour, with no tooltip (it still chooses nothing and never lights on hover).
 
 ARC-UI-2022 (ledger DH11–DH14): under the Original setting the reply stack sits in `AreaConversationPanel`'s band over the game view, not in the framed panel: a 100 px tall strip, 400 px wide
 (a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181, the view being the part the bars leave free (the original's iso window), so the band lies above the bottom bar. The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
@@ -820,7 +824,7 @@ on the pick of ARC-UI-005.
   session's lock flags and hour, `AreaHoverWindow.LockMessage`) and the hit points `current/maximum` at the right edge
   (`AreaHoverWindow.HitPointText`: the maximum less the damage over `hp_pts + hp_adj`, no clamp; a portal's always, a container's
   and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original's draw functions read the values when they run; a hit taken while the pointer stays shows at the next hover, redraw on a change of the same hovered object not traced); a critter by its name, the bars of
-  ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
+  ARC-UI-020 on the third and fourth lines (235 px, the bar art's width, ARC-UI-2795; the viewer's colours: the bar art 463–466 is not drawn; they follow the
   critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
   loot window's; for a hero who detects alignment, spell flag 0x80, the alignment image of six bands instead) and, since ARC-UI-109 ([OH11](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), a second line (290, 528, 291 × 18): "Level: N" right-aligned and, for an NPC, at the left "Sneak: state" while the hero is concealed (the AI host's sight and hearing checks), else "Alignment: N" for a hero who detects alignment, else "Reaction: R (category)"; a dead critter gets its dead line in red and no bars (`AreaHoverWindow.CritterWindow`, read when the pointer enters the object); and, since ARC-UI-124 ([OH19](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), with the hero in combat mode and the critter alive, the **combat panel** (0x554830) in place of the image, read when the pointer enters (`AreaCombatPanelLayout`, `AttackChanceRules.Preview`): the bullseye art 582 at (207, 498) and the hit chance of the wielded weapon against the critter, printed `N%` (not clamped above; font art 230, white, centred in a 64-wide rectangle), the effectiveness of its skill less the difficulty of the shared check from where the hero stands (the tile distance and, on the ranged path, the line of fire the attack reads), less the weapon's magick or technology cancel share, 0 for an impossible shot; with a term that made the check harder the number is at the top (215, 507) and one icon of 20 px each stands over the bullseye in six places (weapon too heavy `Pen_MSR` 586, out of range `Pen_Range` 588, distance `Pen_Perception` 587, cover `Pen_Cover` 583, darkness `Pen_Light` 585, injury `Pen_Injury` 584, blocked line `BlockedShot` 845, cancel chance above 20 `Magic-Tech-Penalty` 846, in that order, at most six); without one the label "To Hit:" (`intgame.mes` 20) is centred at (215, 526) and the number under it at (215, 544); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
   an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
@@ -973,7 +977,7 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   printed `%02d` in white at the fill's top, the poison level 40 rows lower; nothing filled at 100 % damage. The original
   divides by a zero maximum there (a crash): the column reads fully damaged in both rule modes; and it shifts a poisoned
   PC's health number off centre by reusing the poison text's rectangle, which the viewer centres in both modes (both
-  technical). The original's font (art 229) is not drawn; Godot's default font stands in.
+  technical). The numbers are drawn in the original's font (art 229, white; ARC-UI-2795).
 - **Follower frames** (CH9, PA6). The [follower portraits](../world/companion-orders-runtime.md#area-viewer) are the
   original's frames: up to six 40 × 49 frames (art 503) at 11, 50 + 62 × slot of the 800 × 600 screen, scaled by the
   bars' whole factor with the screen centred and its top at the window's top (with or without the bars), each with the
@@ -1271,10 +1275,10 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   (scaled down only when larger than its place; a grid item's cells fit its art since ARC-UI-055; a worn item on the cursor
   takes its art's cells), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
-  18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
-  grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
-  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
-  (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
+  18 + level) and the gold and ammunition counts in the original's fonts (ARC-UI-2795). Every action of the diagnostic window stays: the doll, the
+  grid, the boxes and a right click act as before, and (ARC-UI-2764) a debug-only *Diagnostic view* switch below the frame shows the diagnostic panel (its
+  buttons) and back; in play no panel draws the switch or the original look's message line (`DiagnosticSwitch`, off unless the debug mode or a self-test turns it on). The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
+  (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the other modes' art and the doll
   toggle (plan). The native smoke checks it in the inventory stage (`ARC-UI-051 native-smoke inventory-art PASS`: every window
   art read, every grid and worn item's art read, three lines).
 - **Loot window art (ARC-UI-052,** [plan](../ui/original-windows.md#loot-window-done-arc-ui-052),
@@ -1287,8 +1291,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
   grid is taken through the same path as its Take button (a stack asks how many; PROJECT: into the first free cells); released on a
   box (which shows the refused art 348 / 347) or elsewhere it goes back; ARC-UI-065: a right release on a body's item takes it the same
-  way (IW36), on a hero's item it does nothing here. The "Diagnostic view"
-  switch keeps the Take buttons. **Body doll view (ARC-UI-072,** [ledger IW29–IW30](../research/ledger/ui-audio.md)**; bug B30):** the loot and steal windows of a
+  way (IW36), on a hero's item it does nothing here. The debug-only "Diagnostic view"
+  switch (ARC-UI-2764) keeps the Take buttons. **Body doll view (ARC-UI-072,** [ledger IW29–IW30](../research/ledger/ui-audio.md)**; bug B30):** the loot and steal windows of a
   critter (not a container) show the toggle buttons 338 (doll) and 339 (bag) at (23, 108) and (74, 108), which act on a release over the same button;
   the doll view draws art 349 at (0, 134) and the body's worn items (`AreaInventoryView.BodyDoll`, by the worn item's inventory location) in the nine slot
   rectangles of table 0x5CAE08, a cover (0x5CAF58) on each empty slot, and hides the grid; a worn item pressed on its slot and released on the hero's grid
@@ -1313,7 +1317,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
   released on the victim's grid one plant attempt (`AreaInventoryDropKind.Plant`), and a right release on either side's item makes the
   same attempt (PROJECT: the item goes to the receiving side's first free place); the boxes refuse the victim's items and drop or use the
-  hero's. The "Diagnostic view" switch keeps the Steal and Plant buttons. The `pickpocket` stage drives the theft and the plant by
+  hero's. The debug-only "Diagnostic view" switch (ARC-UI-2764) keeps the Steal and Plant buttons. The `pickpocket` stage drives the theft and the plant by
   drags and the first plain theft by a right release when the original look shows (`Look` and `Dragged` in its PASS line;
   `ARC_AREA_STEAL_CAPTURE=PATH.png` saves the window).
 - **Round view (ARC-UI-054,** [ledger IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054); `AreaInventoryHole`): the
@@ -1417,7 +1421,7 @@ and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PA
 readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
 button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; the fonts are not the original's), a human on a physical mouse and display.
+(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; ARC-UI-2795 draws the texts in the original's fonts), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 
@@ -2148,6 +2152,11 @@ A PROJECT window (the original has no such window; no original art; all text Eng
   record are taken at Send, not at opening (ARC-DEV-2236: an overlay opened and closed leaves the session alone). Send writes the same
   report folder (the same writer and places) tagged with the step (`Check:` line, ARC-DEV-2189); the folder name is recorded in the
   step's result (status kept, `open` when none). One send per opening; the note is the player's text.
+- **Answered group (ARC-DEV-2768).** A step with a status other than open or with a report folder recorded is answered (a Ctrl+B report
+  tagged with the step is recorded in `results.jsonl` too, status kept). Answered steps leave the list and sit in a collapsed group at its
+  end (button `Answered (n)` expands it; rows show `[same 2026-11-18]`, `[answered ...]` for a report only). A new overlay starts on the
+  first unanswered step even when `active-check.txt` still names an answered one; Next open skips answered steps. **Reopen** appends an
+  `open` result with no report (the note stays). The smoke `report` stage checks the group and Reopen.
 - **Plate.** While a step is current a read-only plate at the top left (`Check ARC-TYPE-NNN#k: step`) stays on screen; it takes no click and
   no key and draws no original art.
 - **Smoke.** Stage `report` also runs the overlay (marker `ARC-DEV-2190 native-smoke owner-qa PASS`, required beside the report's own):
@@ -3020,7 +3029,7 @@ quelled rumor, a completed and a failed quest. The window is docked at the scree
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
 break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; a tab not built (none now) would show an empty
-page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
+page and a note; a debug-only "Diagnostic view" button (ARC-UI-2764) at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. ARC-UI-098 adds the **PC lens** and the **tab hover hint** (ledger LB23): the open centres the game view on the hero, a round view of it (`AreaRoundView`, the component the inventory window shares) shows in the side panel's rectangle (25, 24, 89 × 89) under the window, the side art leaving that square out and art 198 drawn over it (art 198 is read with the others but is no reason for the list); a left release in the square closes the window with the close sound (a press does nothing); entering a tab button writes that tab's message of `logbk_ui.mes` to the message window as a hover entry (shown only 3 s after the last stored message, WM61) and leaving it takes it away (PROJECT: closing the window with the pointer on a tab clears it too). Self-test `ARC-UI-008 self-test PASS` checks the hints, the round view, the click and its edges; the native `bar` stage checks them with the player's art.
 
 ARC-UI-079 adds the **reputation** tab (the PC's reputations in the order the session stores them, which is the order they were gained: a date line over the
@@ -3118,11 +3127,11 @@ merchant's item pressed and released on the hero's grid is bought, a hero's item
 trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
 a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
 `… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
-original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The `Diagnostic view` switch below the frame
+original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The debug-only `Diagnostic view` switch below the frame (ARC-UI-2764)
 shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
 only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); since ARC-UI-069 the opening shop's docked window shows
 the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). Since ARC-UI-1740 the gamble box works ([barter](../world/barter-runtime.md#gambling-arc-ui-1740)): the art follows the pointer (345 rest, 344 when the gate 0x579840 passes for a held ware, 346 when it refuses), the merchant's line shows in the quote line, a release on it bets (the opening shop's docked window too, ARC-UI-1806). NOT READY: the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
-generated quote phrases, the follower's weight lines, the hero's item released on a slot of the merchant's doll (issue #2138), staking a worn item (issue #2139), the scroll bar's art, a follower's portrait as the image, the original fonts.
+generated quote phrases, the follower's weight lines, the hero's item released on a slot of the merchant's doll (issue #2138), staking a worn item (issue #2139), the scroll bar's art, a follower's portrait as the image.
 **Merchant's doll view (ARC-UI-1917,** [ledger IW29, IW30](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052)**):** the doll and bag buttons 338 and 339 at (8, 123) and (46, 123) are drawn whenever the window shows a merchant or a follower (the shown grid may be a substitute container's); the doll button shows art 337 `Barter_PD` at (0, 157) with the merchant's worn items by inventory art in the nine rectangles of table 0x5CAD78 (the loot windows' rectangles), the covers of the empty slots, the doll's two values and the weapon slot's fill (only where the combat host covers the map: no values in the opening shop, and a body the session's lists do not show as an NPC, such as a follower held elsewhere, draws covers only), and hides the grid; the bag button shows the grid again. The toggle starts clear at every open. ARC-UI-1926 (ledger IW29, IW36): a slot's rectangle hits the location 1000 + slot, a press lifts the merchant's worn item, the resting pointer quotes it (`Buy NAME (worn): no price (Worn)`), and a release on the hero's grid or a right release buys it through `AreaBarter.Buy` (the model's `WornWares`, taken from the merchant itself): below Master haggle the price is 0 and the buy is refused, a follower's window gives it away. NOT READY: a hero's item released on a slot of the merchant's doll goes back (issue #2138). The native smoke stage `barter` checks the buttons, the doll view, the worn vest's lift, quote and refused buy, and its frame in the Legacy, HD and (ARC-UI-1750, recipe `barter_pd.art`) Generated runs (`ARC_AREA_WINDOW_ART`).
 
 **Not implemented in the diagnostic window:** grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
@@ -3158,7 +3167,7 @@ self-test stage `AreaItemService` covers both windows over a synthetic hero and 
 of each step for a graphics comparison. ARC-UI-1765: with the game's art the window draws the **original look** (ledger IS8–IS11): the inventory window's frame of modes 5 and 6 (`AreaInventoryGridArea` in its service look, `AreaServiceArtLayout`): background 223, the hero's
 grid and wear slots, counts, arrange button and round view as in the own window, without the weight lines and the drop and use boxes, the NPC's image (`HolderImage`, the loot window's rules) at (141, 36) at half size,
 the NPC's generated quote line (`AreaConversationHost.PickLine` / `PickClassLine`; the price in the quote's `%d`) in the rectangle (180, 29, 155 × 65), and the remembered item's cells filled dark red. A press on an item
-is the click (the first quotes, the next on the same item pays: PROJECT substitute for IS3's undecided event); the switch below the frame ("Diagnostic view") shows the list and back; a release on the round view closes it.
+is the click (the first quotes, the next on the same item pays: PROJECT substitute for IS3's undecided event); the debug-only switch below the frame ("Diagnostic view", ARC-UI-2764) shows the list and back; a release on the round view closes it.
 Positions, sizes and hit areas stay the Legacy ones. Without the art (self-tests) or behind the switch the diagnostic list stays. A pad or the keyboard: the D-pad steps over the hero's items and quotes the one it lands on, confirm clicks the remembered item (the second click pays); the switch is the mouse's. `ARC_AREA_ITEM_SERVICE_PROBE=1` runs the self-test stage alone; the native `barter` stage also opens both windows on the real data and checks the original look (`ARC_AREA_SERVICE_CAPTURE=PREFIX` saves PREFIX-identify.png and PREFIX-repair.png).
 ### Reading window (ARC-UI-049)
 
@@ -3552,14 +3561,13 @@ the first play-test "crash" was a Cmd+Q closing the game). The `report` smoke st
 ## Follower Skills (ARC-COMBAT-1777)
 
 Follower Skills slice 2 (ledger PL5, SP3, OH4; the chooser 0x4C9050, its setting getter 0x4C8FA0). The Game page's seventh row (`AreaOption.FollowerSkills`, settings-file line `follower skills`, default on, `AreaGameSettings.FollowerSkills`) switches it. With it on and no Ctrl key held
-(`FollowerSkillsAllowed`: the viewer cannot tell the left Ctrl key, which the lockpick use tests, from the right one, which the Disarm Traps press also tests), two presses go to the follower with the strictly best effectiveness minus difficulty (`SkillCheckRules.Score` of the request
-the use would run, `GameSessionOwner.QueryPickLockScore` and `QueryDisarmScore`; the hero scored first with its local-PC term, `AreaAiHost.ChooseSkillUser` over the hero's followers the host runs, `FollowerSkillRules.Choose`: a tie keeps the hero or the earlier follower):
+(`FollowerSkillsAllowed`: ARC-COMBAT-1878, the key events' location tells the Ctrl keys apart: the lockpick use tests the left one only, the Disarm Traps press either), two presses go to the follower with the strictly best effectiveness minus difficulty (`SkillCheckRules.Score` of the request
+the use would run, `GameSessionOwner.QueryPickLockScore` and `QueryDisarmScore`; the hero scored first with its local-PC term, `AreaAiHost.ChooseSkillUser` over the hero's all-followers list the host runs, followers of followers included (`FollowerSkillRules.AllFollowers`, 0x441260; `FollowerSkillRules.Choose`: a tie keeps the hero or the earlier follower); the lockpick score of every candidate uses the PC's first lockpicks in inventory order, armed or not, none: without (`AreaInventoryHost.FirstLockpicks`, 0x462760)):
 
-- **The lockpick use** on a door, window or container (`HandOverLockpick`, called by the two armed-lockpick presses before the hero's own skill goal): the follower's skill goal 33 with skill 14 starts (`AreaAiHost.StartPickLocks`, its own lockpicks if it holds any, `FirstLockpicks`, else none), so it walks within range 1 and picks at its attempt node with
-  `PickLockByNpc`; the hero does not move, the pick's cost is the follower's goal's.
+- **The lockpick use** on a door, window or container (`HandOverLockpick`, called by the two armed-lockpick presses before the hero's own skill goal): the follower's use-item-with-skill goal 40 with skill 14 starts (ARC-COMBAT-1878; 0x571CB0, descriptor 0x5AA5D0, starter 0x4352C0), so it walks within range 1 and picks at its attempt node at once with
+  `PickLockByNpc`, no animation and no timer; the hero does not move. A follower holding lockpicks (`AreaAiHost.FirstLockpicks`) uses them through the item use (0x462CC0: the use-script gate, the lockable test, 4 action points of the follower on its subturn in a round); one holding none starts the starter with no item and pays nothing. The timed pick-lock goal 33 (0x436220) is the AI's own pick, not this path.
 - **The skill bar's Disarm Traps** (`DisarmByFollower`, in `PerformDisarm`): the hero's press pays its 4 action points in a round (`ChargeHeroAction`, the original's 0x57A320), then `AreaTraps.DisarmByNpc` rolls the follower's own check at once from where it stands (`RollNpcDisarmTrap`), a sprung native trap takes effect with the follower as
   the triggerer and an ordinary trap script runs with it.
 
-The hand-over line (random line 4700..4799 of the follower's dialog override or of the gender pair's gd_npc file, 0x4139A0) floats over the follower through the follower-comment float (`SayFollowerLine`, with its can-speak head test). NOT READY: the lockpicks the candidates are scored with are the ones the hero armed (the original takes the PC's first lockpicks in inventory order); the original's list recurses into followers of followers (the world holds the hero's own);
-the original starts the use-item goal (0x28, no animation) for a follower holding lockpicks and the timed goal for one that does not (both run as goal 33 here); an expert follower's critical-success trap device lands in the hero's pack, not its own; the open parts are [#1878](https://github.com/Simarglok/arcanum-steamwoven/issues/1878); a pick by a follower has no witnesses ([#1860](https://github.com/Simarglok/arcanum-steamwoven/issues/1860)).
-Smoke: the `options` stage checks the row and its saved line, the `disarm` stage's last step joins a following NPC, forces it to score best (`FollowerSkillsScoreForSelfTest`) and checks the hand-over, Ctrl and the option off; unit tests `FollowerSkillRulesTests`, `FollowerSkillsStateTests`, `AreaAiFollowerTests`.
+The hand-over line (random line 4700..4799 of the follower's dialog override or of the gender pair's gd_npc file, 0x4139A0) floats over the follower through the follower-comment float (`SayFollowerLine`, with its can-speak head test). An expert follower's critical-success trap device is made in the follower's own pack (`AreaUseScriptHost.GiveNpcPrototypeItem`, TT5; a pack that refuses keeps it out, where the original leaves it at the follower's feet: not modelled). NOT READY: a pick by a follower has no witnesses ([#1860](https://github.com/Simarglok/arcanum-steamwoven/issues/1860)).
+Smoke: the `options` stage checks the row and its saved line, the `disarm` stage's last step joins a following NPC, forces it to score best (`FollowerSkillsScoreForSelfTest`) and checks the hand-over, left Ctrl, right Ctrl (Disarm Traps only) and the option off; unit tests `FollowerSkillRulesTests`, `FollowerSkillsStateTests`, `AreaAiFollowerTests`.

@@ -109,8 +109,8 @@ public sealed class SteamwovenBackdropsTests
         foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
             for (var piece = 0; piece < (SteamwovenBackdrops.LeftUnits(family) is null ? 1 : 2); piece++)
                 CollectionAssert.Contains(SteamwovenBackdrops.ToneArts.ToArray(), SteamwovenBackdrops.ToneArt(family, piece), $"{family} piece {piece}");
-        // The census arts: the paper doll and inventory, the sheet, the logbook's side and book, the reading side bar, the map frame, the schematic base.
-        Assert.AreEqual(223, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Inventory, 0));
+        // The census arts: the inventory (both halves of its family, ARC-UI-2763), the sheet, the logbook's side and book, the reading side bar, the map frame, the schematic base.
+        Assert.AreEqual(221, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Inventory, 0));
         Assert.AreEqual(221, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Inventory, 1));
         Assert.AreEqual(264, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Logbook, 0));
         Assert.AreEqual(260, SteamwovenBackdrops.ToneArt(SteamwovenBackdropFamily.Logbook, 1));
@@ -131,9 +131,45 @@ public sealed class SteamwovenBackdropsTests
         // Each half of a two-part window is an art of its own: the right half's grain starts at the split.
         var parts = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.Inventory, plan);
         Assert.AreEqual((parts[0].Rect.X - zone.X) / unit, parts[0].OriginX, 1e-9);
-        Assert.AreEqual(0.0, parts[1].OriginX, 1e-9);
+        // ARC-UI-2763: the inventory family is one wood, so its right piece continues the left one's grain from the zone's left edge (the pack art starts at the split's 358 units).
+        Assert.AreEqual((parts[1].Rect.X - zone.X) / unit, parts[1].OriginX, 1e-9);
         Assert.AreEqual(parts[0].OriginY, parts[1].OriginY, 1e-9);
         Assert.IsTrue(parts.All(part => part.Material == ChromeMaterial.Wood), "the census's wood under every family of the middle band");
+        // The logbook's and the reading window's halves are arts of their own: the right half's grain starts at the split.
+        foreach (var family in new[] { SteamwovenBackdropFamily.Logbook, SteamwovenBackdropFamily.Reading })
+            Assert.AreEqual(0.0, SteamwovenBackdrops.Pieces(family, plan)[1].OriginX, 1e-9, family.ToString());
+    }
+
+    private static byte[] Flat(int w, int h, (byte R, byte G, byte B) colour)
+    {
+        var pixels = new byte[w * h * 4];
+        for (var i = 0; i < w * h; i++) (pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2], pixels[i * 4 + 3]) = (colour.R, colour.G, colour.B, 255);
+        return pixels;
+    }
+
+    [TestMethod]
+    public void The_inventory_family_is_one_wood_in_every_window_art_and_in_both_halves_of_the_backdrop()
+    {
+        // ARC-UI-2763: whatever the Legacy frame's own wood is (a flat dark and a flat light one here), the family's recipes paint the same wood, and the backdrop tuned to either gives the same board.
+        string[] family = ["inventor.art", "pdoll.art", "loot.art", "barter.art", "barter_follower.art", "loot_pd.art", "barter_pd.art", "pd_cover4inven.art"];
+        foreach (var file in family)
+        {
+            var recipe = InterfaceChromeRecipes.All.Single(r => r.File == file);
+            Assert.IsTrue(recipe.FamilyWood, file);
+            var dark = InterfaceChromeRenderer.Render(recipe with { Parts = [] }, 24, 24, Flat(24, 24, (50, 40, 30)), [], 0, 2);
+            var light = InterfaceChromeRenderer.Render(recipe with { Parts = [] }, 24, 24, Flat(24, 24, (90, 70, 60)), [], 0, 2);
+            CollectionAssert.AreEqual(dark, light, $"{file} paints the family's wood, not its Legacy frame's");
+        }
+        var pack = InterfaceChromeRecipes.All.Single(r => r.File == "inventor.art");
+        Assert.AreEqual(InterfaceChromeRenderer.SteamwovenFamilySplitUnits, pack.OriginX, "the pack art continues the doll's grain");
+        var left = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 60, 20, 1.8, 0, 0, pack, Flat(24, 24, (50, 40, 30)), 24, 24);
+        var right = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 60, 20, 1.8, 0, 0, pack, Flat(24, 24, (90, 70, 60)), 24, 24);
+        CollectionAssert.AreEqual(left, right, "the backdrop's tone is the family's, whatever the tone art's pixels are");
+        Assert.AreEqual(Arcanum.World.AreaInventoryArtLayout.PackX, SteamwovenBackdrops.LeftUnits(SteamwovenBackdropFamily.Inventory));
+        foreach (var lens in new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art" }) Assert.IsTrue(InterfaceChromeRecipes.All.Single(r => r.File == lens).FamilyWood, lens);
+        // A recipe outside the family still reads its own frame's wood.
+        var sheet = InterfaceChromeRecipes.All.First(r => r.File == "char_maint.art");
+        Assert.IsFalse(sheet.FamilyWood);
     }
 
     [TestMethod]
