@@ -865,5 +865,134 @@ class FontsPlanTests(unittest.TestCase):
         self.assertEqual(run("fonts-plan", "--fonts", no_receipt, "--out", self.out)[0], 2)
 
 
+def portrait_entry(path: str, rel: str, body: bytes) -> dict:
+    return {"kind": "portrait", "file": rel, "sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body), "slice": "interface",
+            "portrait": {"path": path}, "legacy": {"width": 2, "height": 2, "rgbaSha256": hashlib.sha256(path.encode()).hexdigest()}, "review": "unreviewed"}
+
+
+class PortraitTests(unittest.TestCase):
+    """ARC-UI-2865: portrait entries (kind portrait, keyed by the original bitmap's path) through plan, apply, verify, mirror and rollback, and the portrait plan."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        real_users = hp.pack_users
+        hp.pack_users = lambda pack: []
+        self.addCleanup(setattr, hp, "pack_users", real_users)
+        self.inst = self.tmp / "game" / "hd-packs" / "interface-redraw-4x"
+        self.backups = self.tmp / "game" / "hd-pack-backups"
+        self.inst.mkdir(parents=True)
+        body = png(8, 8) + fake("btn")
+        rel = "interface/window-a/buttons/btn-f000.png"
+        (self.inst / "interface" / "window-a" / "buttons").mkdir(parents=True)
+        (self.inst / rel).write_bytes(body)
+        e = entry("btn", rel, body)
+        e["legacy"] = {"width": 2, "height": 2, "rgbaSha256": "0" * 64}
+        self.write_pack(self.inst, [e])
+        (self.inst / "layout-map.tsv").write_text("art\tscreen\tkind\tfolder\nbtn\twindow-a\tbuttons\t0\n")
+        self.assertEqual(run("index", "--installed", self.inst)[0], 0)  # a laid-out pack has its INDEX.md and index.tsv, which apply rewrites and rollback restores
+        self.stage = self.tmp / "local" / "res095" / "pack-out" / "interface-portraits"
+        self.stage.mkdir(parents=True)
+        (self.stage / "interface").mkdir()
+        entries = []
+        for path, stem in (("portrait/hum1_b.bmp", "hum1_b"), ("portrait/npcdog.bmp", "npcdog")):
+            body = png(8, 8) + fake(stem)
+            rel = f"interface/portrait-{stem}-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
+            (self.stage / rel).write_bytes(body)
+            entries.append(portrait_entry(path, rel, body))
+        self.write_pack(self.stage, entries)
+
+    @staticmethod
+    def write_pack(root: Path, entries: list) -> None:
+        recipe = b'{"kind":"arcanum-steamwoven-hd-recipe"}'
+        (root / "recipe.json").write_bytes(recipe)
+        manifest = {"schema": 1, "kind": "arcanum-steamwoven-hd-pack", "id": root.name, "scale": 4,
+                    "recipe": {"file": "recipe.json", "sha256": hashlib.sha256(recipe).hexdigest()}, "entries": entries}
+        (root / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+
+    def manifest(self):
+        return json.loads((self.inst / "manifest.json").read_text())
+
+    def apply(self, *extra):
+        return run("apply", "--installed", self.inst, "--staged", self.stage, "--backup-root", self.backups, "--task", "ARC-TEST-2865", "--no-base-check", "--add-new", *extra)
+
+    def test_the_key_of_a_portrait_is_its_bitmap_path(self):
+        a = portrait_entry("portrait/hum1_b.bmp", "interface/x.png", b"a")
+        b = portrait_entry("portrait/hum1.bmp", "interface/y.png", b"b")
+        self.assertEqual(hp.entry_key(a), ("portrait", "portrait/hum1_b.bmp"))
+        self.assertNotEqual(hp.entry_key(a), hp.entry_key(b))
+        self.assertEqual(len(hp.keyed({"entries": [a, b]}, "t")), 2)
+
+    def test_apply_adds_portraits_by_default_rows_and_appends_them_to_the_map(self):
+        before = tree(self.inst)
+        rc, out, err = self.apply("--dry-run")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertIn("2 new entries are placed by it", out)
+        rc, out, err = self.apply()
+        self.assertEqual(rc, 0, out + err)
+        files = {e["file"] for e in self.manifest()["entries"]}
+        self.assertEqual(files, {"interface/window-a/buttons/btn-f000.png", "interface/portraits/heroes/portrait-hum1_b-f000.png", "interface/portraits/npcs/portrait-npcdog-f000.png"})
+        rows = (self.inst / "layout-map.tsv").read_text()
+        self.assertIn("portrait-hum1_b\tportraits\theroes\t0", rows)
+        self.assertIn("portrait-npcdog\tportraits\tnpcs\t0", rows)
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        self.assertIn("portrait-npcdog", (self.inst / "INDEX.md").read_text())
+        # the same staging again changes nothing; the backup rolls the pack back byte for byte
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--add-new")
+        self.assertIn("staged-only entries: 0", out)
+        backup = next(self.backups.iterdir())
+        rc, out, err = run("rollback", backup, "--installed", self.inst)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+
+    def test_a_changed_portrait_replaces_only_that_entry(self):
+        self.assertEqual(self.apply()[0], 0)
+        stage = {e["portrait"]["path"]: e for e in json.loads((self.stage / "manifest.json").read_text())["entries"]}
+        new = png(8, 8) + fake("hum1_b v2")
+        rel = f"interface/portrait-hum1_b-f0-{hashlib.sha256(new).hexdigest()[:8]}.png"
+        (self.stage / rel).write_bytes(new)
+        entries = [portrait_entry("portrait/hum1_b.bmp", rel, new), stage["portrait/npcdog.bmp"]]
+        self.write_pack(self.stage, entries)
+        rc, out, err = run("plan", "--installed", self.inst, "--staged", self.stage, "--add-new")
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("1 interface entries differ", out)
+        self.assertIn("replace interface/portraits/heroes/portrait-hum1_b-f000.png", out)
+
+    def test_portraits_plan_checks_sums_sizes_and_pairs_large_with_small(self):
+        local = self.tmp / "local"
+        hero, npc = local / "hero", local / "npc"
+        for folder in (hero / "large", hero / "small", npc):
+            folder.mkdir(parents=True)
+        sums = {}
+        for folder, rel, side in ((hero, "large/hum1_b.png", 512), (hero, "small/hum1.png", 256), (npc, "npcdog.png", 256)):
+            data = png(side, side, ctype=2) + fake(rel)
+            (folder / rel).write_bytes(data)
+            sums.setdefault(folder, []).append(f"{hashlib.sha256(data).hexdigest()}  ./{rel}")
+        for folder, lines in sums.items():
+            (folder / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
+        (self.tmp / ".git").mkdir()  # local/ must sit beside a .git
+        out = local / "plans" / "p.json"
+        rc, text, err = run("portraits-plan", "--hero", hero, "--npc", npc, "--out", out)
+        self.assertEqual(rc, 0, text + err)
+        plan = json.loads(out.read_text())
+        self.assertEqual(plan["kind"], hp.PORTRAIT_PLAN_KIND)
+        self.assertEqual(plan["scale"], 4)
+        self.assertEqual({i["bmp"] for i in plan["items"]}, {"portrait/hum1_b.bmp", "portrait/hum1.bmp", "portrait/npcdog.bmp"})
+        self.assertTrue(all((out.parent / i["image"]).is_file() for i in plan["items"]))
+        # a delivery that changed after it was packed, a wrong size and a large image without its small one are refused
+        (npc / "npcdog.png").write_bytes(png(256, 256, ctype=2) + b"changed")
+        self.assertEqual(run("portraits-plan", "--npc", npc, "--out", out)[0], 2)
+        (npc / "npcdog.png").write_bytes(png(128, 128, ctype=2))
+        (npc / "SHA256SUMS.txt").write_text(f"{hashlib.sha256((npc / 'npcdog.png').read_bytes()).hexdigest()}  ./npcdog.png\n")
+        rc, _, err = run("portraits-plan", "--npc", npc, "--out", out)
+        self.assertEqual(rc, 2)
+        self.assertIn("expected 256x256", err)
+        (hero / "small" / "hum1.png").unlink()
+        self.assertEqual(run("portraits-plan", "--hero", hero, "--out", out)[0], 2)
+        self.assertEqual(run("portraits-plan", "--out", out)[0], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
