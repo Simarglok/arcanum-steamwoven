@@ -50,6 +50,13 @@ the printed `Lines` (S6), the `Sounds` (S7) and the `Teleports` (S4). A run read
 own writes back from an overlay. Effects made before a stop are kept, as the
 original applies them as it goes; a refused script has none.
 
+### The admission chain (ARC-SCRIPT-1881)
+
+The numbered sets `ScrAdmissionSet.S1` .. `S65` are one linear chain: each set is built on the one before it (`S4` follows `S7`, `S40` follows `S38`, `S58` follows `S56`; numbers that never landed are gaps) and holds every type and kind of it.
+`ScrAdmissionSet.Latest` names the top of the chain (now `S65`): it is the one maximum the interpreter runs (`ScrRunOptions` refuses any set outside it) and the one the host-set tests check against.
+A later slice builds its set on `Latest` and moves that one property, and the sentences "the interpreter runs at most Sn" below are the maximum as each slice left it, not the current one.
+`ScrAdmissionChainTests` finds the sets by reflection and fails when the chain forks or `Latest` is not the top.
+
 ## Decision order of an object event
 
 Each step returns at once when it applies (the original's object script
