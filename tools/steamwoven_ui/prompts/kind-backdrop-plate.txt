@@ -1,0 +1,4 @@
+KIND: BACKDROP - FULL-SCREEN PLATE
+Part: {part_id} - {part_note}. Size: {width} x {height} px (the composition, 2880 x 2160). References: ORIGINAL (the original full-screen art), CONTEXT image (the approved redraw of this screen, if any), SHEET.
+
+Redraw one full-screen menu plate (the whole 4:3 composition with the strips hidden). Keep every object and the light of the ORIGINAL. Menu entries, buttons and text are not part of the plate: leave their places empty (a bare panel, a bare plaque). No frame, no vignette beyond the art, nothing outside the picture.
