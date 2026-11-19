@@ -134,6 +134,15 @@ public partial class TerrainViewerApp
                     // The top band's art ends on the board's edge and the bottom band's starts on it: each strip lies inside its own band (the bottom one may hang over the frame's bottom edge by under 3 px · f).
                     Require(plan.TopStripY >= layout.Top.Band.Y && plan.TopStripY + (int)Math.Round(41 * plan.StripScale) == layout.Top.Band.Bottom, $"[{tag}] the top strip stands on its band's lower edge");
                     Require(plan.BottomStripY == layout.Bottom.Band.Y, $"[{tag}] the bottom strip hangs from its band's upper edge");
+                    // ARC-UI-2767: the Fate Points and Sleep balls stand in the middle of the ring the strip draws round their hole (the ring's centre is read from the strip's Legacy hole, the ball's from its node).
+                    foreach (var ball in new[] { AreaBarButton.FatePoints, AreaBarButton.Sleep })
+                    {
+                        var ring = panel.RingCentreForSelfTest(ball);
+                        Require(ring is not null, $"[{tag}] the {ball} button has a ring round its hole");
+                        var off = panel.ButtonCentreForSelfTest(ball) - ring!.Value;
+                        GD.Print($"ARC-UI-2767 steamwoven [{tag}] {ball} ball centre minus ring centre: ({off.X:F3}, {off.Y:F3}) px");
+                        Require(Math.Abs(off.X) <= 0.01f && Math.Abs(off.Y) <= 0.01f, $"[{tag}] the {ball} ball is centred in its ring (off by {off} px)");
+                    }
                     // The boards fill each band over the whole frame width in the strips' own device pixels, one texel per pixel.
                     var (topBoard, bottomBoard, backdropShown) = panel.BoardsForSelfTest;
                     Require(panel.BoardsShownForSelfTest && !backdropShown, $"[{tag}] the boards show and no backdrop shows with no menu");

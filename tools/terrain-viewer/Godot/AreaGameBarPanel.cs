@@ -175,6 +175,45 @@ public partial class AreaGameBarPanel : CanvasLayer
     private const string ArtMeta = "bar_art";
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
+    /// <summary>ARC-UI-2767: the centre, in window pixels, of the ring the generated top strip draws round the hole the button stands in (the centre of that hole's box scaled and placed with the strip); null when the button has no round hole (or no ring is drawn: the Original look).</summary>
+    internal Vector2? RingCentreForSelfTest(AreaBarButton button)
+    {
+        var spec = AreaGameBarLayout.Spec(button);
+        if (_plan is null || spec.Strip != AreaBarStrip.Top || RingHoles() is not { Count: > 0 } holes || _buttons[button].Texture is null) return null;
+        var size = _buttons[button].Size;
+        var (dx, dy) = AreaBarRingFit.Shift(spec.X, spec.Y, size.X, size.Y, holes);
+        // A button with no round hole gives (0, 0), which is its own centre: tell that apart by the holes themselves.
+        var (cx, cy) = (spec.X + size.X * 0.5 + dx, spec.Y + size.Y * 0.5 + dy);
+        if (!holes.Any(hole => hole.Round && Math.Abs((hole.X0 + hole.X1) * 0.5 - cx) < 1e-9 && Math.Abs((hole.Y0 + hole.Y1) * 0.5 - cy) < 1e-9)) return null;
+        var strip = _strips[AreaBarStrip.Top];
+        return strip.GetGlobalTransform() * new Vector2((float)cx, (float)cy);
+    }
+    private IReadOnlyList<InterfaceChromeRenderer.Hole>? _ringHoles;
+    private AreaInterfaceFrame? _ringHolesFrame;
+
+    /// <summary>The round holes of the top strip's Legacy art, found once per frame; null while the art is not read.</summary>
+    private IReadOnlyList<InterfaceChromeRenderer.Hole>? RingHoles()
+    {
+        if ((ArtFrame(AreaGameBarLayout.StripArt(AreaBarStrip.Top)) as HdInterfaceTexture)?.FrameForBoard is not { } frame) return null;
+        if (!ReferenceEquals(frame, _ringHolesFrame)) { _ringHoles = InterfaceChromeRenderer.Holes(frame.Width, frame.Height, frame.Rgba); _ringHolesFrame = frame; }
+        return _ringHoles;
+    }
+
+    /// <summary>
+    /// ARC-UI-2767: puts each button where it stands: the original's place (the Original look), or, in the Steamwoven layout, centred in the ring the generated strip draws round its hole
+    /// (<see cref="AreaBarRingFit"/>; the Fate Points and Sleep balls stood a Legacy pixel off the hole's centre, which the strips' larger scale shows).
+    /// </summary>
+    private void PlaceButtons(bool steamwoven)
+    {
+        var holes = steamwoven ? RingHoles() : null;
+        foreach (var spec in AreaGameBarLayout.Buttons)
+        {
+            var (left, top, _, _) = AreaGameBarLayout.StripRect(spec.Strip);
+            var rect = _buttons[spec.Button];
+            var (dx, dy) = holes is not null && spec.Strip == AreaBarStrip.Top && rect.Texture is not null ? AreaBarRingFit.Shift(spec.X - left, spec.Y - top, rect.Size.X, rect.Size.Y, holes) : (0, 0);
+            rect.Position = new Vector2((float)(spec.X - left + dx), (float)(spec.Y - top + dy));
+        }
+    }
     internal Rect2 StripRectForSelfTest(AreaBarStrip strip) => _strips[strip].GetGlobalRect();
     private const string FrameMeta = "bar_frame";
     private const ulong DownMinimumMs = 80;
@@ -413,6 +452,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             rect.SetMeta(FrameMeta, frame);
             rect.SetMeta(ArtMeta, shown);
         }
+        PlaceButtons(_plan is not null);
         RenderClock();
         _experience.Set(_experienceProgress, _art);
         _messageLog.Render();
@@ -468,7 +508,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         // Only while the bars show: windows that hide them (the full-screen views) keep the whole-factor scale for their own textures.
         var plan = SteamwovenOn && Visible ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
         _plan = plan;
-        if (plan is not null) { PlaceSteamwoven(size, plan); return; }
+        if (plan is not null) { PlaceSteamwoven(size, plan); PlaceButtons(true); return; }
+        PlaceButtons(false);
         // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
         InterfaceHd.SetFractionalScale(null);
         SetTopScreen(null);
