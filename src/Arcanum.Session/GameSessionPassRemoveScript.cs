@@ -14,7 +14,11 @@ public sealed partial class GameSessionOwner
     /// destroy or drop), so the caller calls <see cref="Run"/> item by item, right before it applies the item. A run is made, prepared and committed on its own (one revision comes from the pass). An event pass cannot refuse a removal, so a run the session
     /// cannot apply (a host callback, a row of another map, an effect the session does not model) or no script host in the world is counted in <see cref="SessionPassRemovals.Skipped"/> and the removal goes on without it, as before the scripts were run.
     /// </summary>
-    private sealed class PassRemovals(GameSessionOwner owner, ISessionItemScriptHost? host, SessionMapId map)
+    /// <summary>
+    /// ARC-SCRIPT-2885 (0x467860 → 0x467CB0): a removal of an item the NPC holder wears runs its wield-off script (25) first, then 28, the NPC as the wearer (<paramref name="wearerOf"/>: the pass world's context for it, else <see cref="NpcWearerScripts"/>);
+    /// no context for it counts the removal as skipped, as no script host does.
+    /// </summary>
+    private sealed class PassRemovals(GameSessionOwner owner, ISessionItemScriptHost? host, SessionMapId map, Func<string, SessionNpcWieldScripts?>? wearerOf = null)
     {
         private readonly List<SessionItemScriptRun> _scripts = [];
         private readonly List<SessionScriptMessage> _messages = [];
@@ -22,9 +26,9 @@ public sealed partial class GameSessionOwner
 
         internal void Run(string holder, string item, IReadOnlyList<int> points)
         {
-            if (!points.Contains(SessionScriptPoint.RemoveItem)) return;
+            if (!points.Contains(SessionScriptPoint.RemoveItem) && !(points.Contains(SessionScriptPoint.WieldOff) && owner.WornByNpc(holder, item))) return;
             if (host is null || map != owner._actor.Map) { _skipped++; return; }
-            var removal = owner.RunRemovalScript(item, holder, points, host);
+            var removal = owner.RunRemovalScript(item, holder, points, host, npc => wearerOf?.Invoke(npc) ?? owner.NpcWearerScripts?.Invoke(npc));
             if (removal.Runs is not { } runs) { _skipped++; return; }
             runs.Commit();
             _scripts.AddRange(runs.Runs);
@@ -33,6 +37,9 @@ public sealed partial class GameSessionOwner
 
         internal SessionPassRemovals Result => _scripts.Count == 0 && _messages.Count == 0 && _skipped == 0 ? SessionPassRemovals.None : new(_scripts.AsReadOnly(), _messages.AsReadOnly(), _skipped);
     }
+
+    // ARC-SCRIPT-2885: whether the holder is an NPC wearing the item (the pass's pre-check of a worn wield-off point).
+    private bool WornByNpc(string holder, string item) => KnownNpc(holder) && NpcItemWorn(holder, item);
 
     // The attachment points of an item as the session knows them: the points of its row in the map's seed (when the map's seed lists it), and the slots the session kept or a made item inherits.
     private IReadOnlyList<int> PassItemPoints(SessionMapId map, string item) =>

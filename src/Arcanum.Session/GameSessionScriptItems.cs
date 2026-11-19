@@ -74,7 +74,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-SCRIPT-1279 (WO7): what destroy item named would do to the first item of <paramref name="holder"/>'s list named <paramref name="name"/> (the destroy 0x43CCA0, the one destroy path of
-    /// <see cref="DestroyObject"/>): refused when the item has a destroy (2), remove-item (28) or, worn, wield-off (25) script, which the session does not run here (the destroy script can refuse the destroy and the
+    /// <see cref="DestroyObject"/>): refused when the item has a destroy (2), remove-item (28) or, worn by the hero, wield-off (25) script, which the session does not run here (an NPC's worn item runs 25 under a script host, ARC-SCRIPT-2885; the destroy script can refuse the destroy and the
     /// removal fires its event; ARC-SCRIPT-2854: with <paramref name="scripts"/> the remove-item script is run by the destroy, so only a run the session cannot apply refuses), or a spell run that names it as its source (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), or when the budget of deleted-item records is spent.
     /// </summary>
     public SessionNamedItemPlan QueryNamedItemDestroy(string? holder, int name, ISessionItemScriptHost? scripts = null)
@@ -82,7 +82,9 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (QueryNamedItem(holder, name) is not { } item) return new(null, null);
         // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) is run (the dry run below finds a run the session cannot apply); without one an item with it is refused.
-        if (scripts is null && item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff))
+        // ARC-SCRIPT-2885 (0x467860 → 0x467CB0): the wield-off script (25) of an item an NPC wears runs with the removal under a script host (RunRemovalScripts: no context for the NPC refuses it, as a run the session cannot apply); the hero's worn item stays refused.
+        var wornWieldOff = item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff) && (scripts is null || holder is null || !KnownNpc(holder));
+        if (scripts is null && item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || wornWieldOff)
             return new(item, $"destroy item named {name} would run a destroy, remove-item or wield-off script of {item.Entity}, which is not modelled", GameSessionFailure.ItemScriptUnsupported);
         if (scripts is not null && RunRemovalScript(item.Entity, holder, item.ScriptPoints, scripts).Done is { } dry)
             return new(item, $"destroy item named {name}: the remove-item script of {item.Entity} cannot be applied ({dry.Failure})", dry.Failure);

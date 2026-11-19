@@ -25,23 +25,41 @@ public sealed partial class GameSessionOwner
     /// <see cref="SessionItemScripts.Admission"/> and prepared, not committed: a run the session cannot apply, a host callback that changed what the move rests on or an item whose row belongs to another map refuses the destroy before any effect.
     /// Without a point 28 nothing runs.
     /// </summary>
-    private RemovalScripted RunRemovalScript(string item, string? holder, IReadOnlyList<int> points, ISessionItemScriptHost scripts) => RunRemovalScripts([(item, points)], holder, scripts);
+    private RemovalScripted RunRemovalScript(string item, string? holder, IReadOnlyList<int> points, ISessionItemScriptHost scripts, Func<string, SessionNpcWieldScripts?>? wearerOf = null) =>
+        RunRemovalScripts([(item, points)], holder, scripts, wearerOf);
 
     /// <summary>
     /// ARC-SCRIPT-2880 (IE3): the same for several items one destroy takes out of the dying holder in order (the inventory-on-destroy walk, IE3): one run set, so a later run reads what the earlier ones did. Items without a point 28 run nothing.
+    /// ARC-SCRIPT-2885 (PI2, VP1; exe read 0x467860 → 0x467CB0): an item the NPC holder WORE when it is taken out (the removal sees its inventory location 1000..1008) runs its wield-off script (25) first, then 28, per item, 25 with no other gate (the
+    /// holder's life or destroy state is not asked). The NPC is then the wearer of the runs (its stats and effect list, <paramref name="wearerOf"/>, default <see cref="NpcWearerScripts"/>); with no context for it, an item with a worn point 25 refuses the
+    /// removal (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, as a drop's script no host ran), the original's runs being not skippable here.
     /// </summary>
-    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts)
+    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts, Func<string, SessionNpcWieldScripts?>? wearerOf = null)
     {
-        var scripted = items.Where(item => item.Points.Contains(SessionScriptPoint.RemoveItem)).Select(item => item.Item).ToArray();
+        var npcHolder = holder is not null && KnownNpc(holder);
+        var scripted = items
+            .Select(item => (item.Item, WieldOff: npcHolder && item.Points.Contains(SessionScriptPoint.WieldOff) && NpcItemWorn(holder!, item.Item), Remove: item.Points.Contains(SessionScriptPoint.RemoveItem)))
+            .Where(item => item.WieldOff || item.Remove).ToArray();
         if (scripted.Length == 0) return new(null, null);
-        if (scripted.Any(ItemRowOfOtherMap)) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+        if (scripted.Any(item => ItemRowOfOtherMap(item.Item))) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+        NpcWearer? wearer = null;
+        if (scripted.Any(item => item.WieldOff))
+        {
+            SessionNpcWieldScripts? context;
+            try { context = (wearerOf ?? NpcWearerScripts)?.Invoke(holder!); }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { context = null; }
+            if (context is null) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+            wearer = new NpcWearer(holder!, context.Target, NpcStatsOverSheet(holder!, context.Stored));
+        }
         // As LootItem's runs, made before the commit: the admitted commands read nothing the unlink changes, so running before it is the same as after (the original runs the script after the unlink).
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
-        var complexities = scripted.ToDictionary(item => item, item => _inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0, StringComparer.Ordinal);
-        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, complexities) { NpcTriggerer = holder is not null && KnownNpc(holder) };
+        var complexities = scripted.ToDictionary(item => item.Item, item => _inventory.Weights.TryGetValue(item.Item, out var weight) ? weight.Complexity : 0, StringComparer.Ordinal);
+        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, complexities, wearer) { NpcTriggerer = npcHolder };
         foreach (var item in scripted)
         {
-            runs.Run(SessionScriptPoint.RemoveItem, item, holder ?? SessionEventKinds.PlayerEntity, null);
+            if (item.WieldOff) runs.Run(SessionScriptPoint.WieldOff, item.Item, holder!, null);
+            if (runs.Failure != GameSessionFailure.None) break;
+            if (item.Remove) runs.Run(SessionScriptPoint.RemoveItem, item.Item, holder ?? SessionEventKinds.PlayerEntity, null);
             if (runs.Failure != GameSessionFailure.None) break;
         }
         ThrowIfDisposed();
@@ -50,4 +68,8 @@ public sealed partial class GameSessionOwner
         if (runs.Failure != GameSessionFailure.None) return new(RejectItem(runs.Failure) with { Scripts = runs.Runs }, null);
         return new(null, runs);
     }
+
+    // ARC-SCRIPT-2885: whether the NPC wears the item as the removal sees it (inventory location 1000..1008): the record of an NPC the session dressed decides (ARC-WORLD-103), else the item's row in the shown map's seed.
+    private bool NpcItemWorn(string npc, string item) =>
+        _inventory.NpcWorn.TryGetValue(npc, out var worn) ? worn.ContainsValue(item) : NpcItemSeed(npc, item) is { } row && row.Facts.Worn;
 }
