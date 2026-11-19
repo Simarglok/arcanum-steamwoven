@@ -75,14 +75,17 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-1279 (WO7): what destroy item named would do to the first item of <paramref name="holder"/>'s list named <paramref name="name"/> (the destroy 0x43CCA0, the one destroy path of
     /// <see cref="DestroyObject"/>): refused when the item has a destroy (2), remove-item (28) or, worn, wield-off (25) script, which the session does not run here (the destroy script can refuse the destroy and the
-    /// removal fires its event), or a spell run that names it as its source (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), or when the budget of deleted-item records is spent.
+    /// removal fires its event; ARC-SCRIPT-2854: with <paramref name="scripts"/> the remove-item script is run by the destroy, so only a run the session cannot apply refuses), or a spell run that names it as its source (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), or when the budget of deleted-item records is spent.
     /// </summary>
-    public SessionNamedItemPlan QueryNamedItemDestroy(string? holder, int name)
+    public SessionNamedItemPlan QueryNamedItemDestroy(string? holder, int name, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (QueryNamedItem(holder, name) is not { } item) return new(null, null);
-        if (item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff))
+        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) is run (the dry run below finds a run the session cannot apply); without one an item with it is refused.
+        if (scripts is null && item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff))
             return new(item, $"destroy item named {name} would run a destroy, remove-item or wield-off script of {item.Entity}, which is not modelled", GameSessionFailure.ItemScriptUnsupported);
+        if (scripts is not null && RunRemovalScript(item.Entity, holder, item.ScriptPoints, scripts).Done is { } dry)
+            return new(item, $"destroy item named {name}: the remove-item script of {item.Entity} cannot be applied ({dry.Failure})", dry.Failure);
         if (HasItemRuns(item.Entity) || item.Worn && item.ItemSpells)
             return new(item, $"destroy item named {name}: {item.Entity} is the source of a running spell or carries worn item spells", GameSessionFailure.ItemEffectUnsupported);
         if (_durability.Count >= _limits.MaxDurabilityRecords && !_durability.Records.ContainsKey(item.Entity))
@@ -95,18 +98,22 @@ public sealed partial class GameSessionOwner
     /// (<see cref="DestroyObject"/>: out of its slot and list, hidden from its seed, its records dropped, recorded as deleted); no such item changes nothing. One revision. Refused before any effect: the version, the checks of
     /// <see cref="QueryNamedItemDestroy"/> (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, <see cref="GameSessionFailure.ItemEffectUnsupported"/>, <see cref="GameSessionFailure.BudgetExceeded"/>), the revision.
     /// </summary>
-    public InventoryMutationResult DestroyNamedItem(GameSessionVersion expected, string? holder, int name)
+    public InventoryMutationResult DestroyNamedItem(GameSessionVersion expected, string? holder, int name, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (holder is not null && !SessionValidation.Entity(holder)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        var plan = QueryNamedItemDestroy(holder, name);
+        var plan = QueryNamedItemDestroy(holder, name, scripts);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (plan.Refusal is not null) return RejectItem(plan.Failure);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        // ARC-SCRIPT-2854 (IE3): the removal's remove-item script (28) with the holder as the triggerer, made and prepared before anything applies, committed with the destroy (the original destroys after the removal ran it).
+        var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(item.Entity, holder, item.ScriptPoints, scripts);
+        if (removal.Done is { } refused) return refused;
+        removal.Runs?.Commit();
         DestroyObject(item.Entity);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version) { Scripts = removal.Runs?.Runs ?? [], Messages = removal.Runs?.Messages ?? [] };
     }
 
     /// <summary>
