@@ -4,7 +4,7 @@
     python3 -B tools/steamwoven_ui/bake.py verify [--masters DIR] [--out DIR] [--steps ...]
     python3 -B tools/steamwoven_ui/bake.py self-test
 
-A master is a PNG (RGBA, 8 bit, sRGB, straight alpha, sides multiples of 6 px; `png_io.py`) at `<masters>/<part id>.png`; the baked set of a
+A master is a PNG (RGBA, 8 bit, sRGB, straight alpha, sides multiples of 6 px; `pngio.py`) at `<masters>/<part id>.png`; the baked set of a
 step is `<out>/<step>/<part id>.png` plus `<out>/<step>/manifest.json`. Defaults: `local/steamwoven-ui/masters` and `local/steamwoven-ui/baked` of the
 main checkout (ignored by git; the kit is derived content, SWI-PRV-1; storage and backup: docs/workflow/toolchain.md "Steamwoven kit bake").
 
@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.steamwoven_ui import png_io  # noqa: E402
+from tools.steamwoven_ui import pngio  # noqa: E402
 from tools.steamwoven_ui import prompt_library  # noqa: E402
 
 KIT = Path(__file__).resolve().parent / "kit.json"
@@ -116,21 +116,31 @@ def _finish_row(sums: list[list[int]], total: int) -> bytes:
     return bytes(out)
 
 
-def resample(image: png_io.Image, step: str) -> png_io.Image:
+def image_rows(image: pngio.Image) -> list[bytes]:
+    stride = image.w * 4
+    return [bytes(image.data[y * stride:(y + 1) * stride]) for y in range(image.h)]
+
+
+def from_rows(width: int, height: int, rows: list[bytes]) -> pngio.Image:
+    return pngio.Image(width, height, bytearray(b"".join(rows)))
+
+
+def resample(image: pngio.Image, step: str) -> pngio.Image:
     """The image at the step (see the module doc). x1 returns the same pixels."""
     a, b = STEPS[step]
-    out_w, out_h = baked_size(image.width, image.height, step)
+    out_w, out_h = baked_size(image.w, image.h, step)
     if (a, b) == (1, 1):
-        return png_io.Image(image.width, image.height, list(image.rows))
+        return pngio.Image(image.w, image.h, bytearray(image.data), image.source_alpha)
     taps = step_taps(a, b)
     total = b * b
+    source = image_rows(image)
     rows: list[bytes] = []
-    for block in range(image.height // b):
-        horizontal = [_horizontal(image.rows[block * b + k], a, b, taps) for k in range(b)]
+    for block in range(image.h // b):
+        horizontal = [_horizontal(source[block * b + k], a, b, taps) for k in range(b)]
         for phase_taps in taps:
             sums = [_combine([horizontal[k][c] for k, _ in phase_taps], [w for _, w in phase_taps]) for c in range(4)]
             rows.append(_finish_row(sums, total))
-    return png_io.Image(out_w, out_h, rows)
+    return from_rows(out_w, out_h, rows)
 
 
 def sha256(data: bytes) -> str:
@@ -235,22 +245,24 @@ def bake_set(masters: dict[str, Path], everything: set[str], out: Path, step: st
                 parts.append(old)
                 report.lines.append(f"{step} {part_id}: unchanged")
                 continue
-            image = png_io.decode(master_bytes)
-            if image.width % GRID or image.height % GRID:
-                raise ValueError(f"master {image.width} x {image.height} is not a multiple of {GRID} px per side (SWI-KIT-2)")
-            if not check_against_kit(part_id, (image.width, image.height), kit, report):
+            image = pngio.decode(master_bytes)
+            if not image.source_alpha:
+                raise ValueError("master has no alpha channel (SWI-KIT-2: RGBA)")
+            if image.w % GRID or image.h % GRID:
+                raise ValueError(f"master {image.w} x {image.h} is not a multiple of {GRID} px per side (SWI-KIT-2)")
+            if not check_against_kit(part_id, (image.w, image.h), kit, report):
                 continue
-            size = baked_size(image.width, image.height, step)
+            size = baked_size(image.w, image.h, step)
             if dry_run:
-                report.lines.append(f"{step} {part_id}: would bake {image.width} x {image.height} -> {size[0]} x {size[1]}")
+                report.lines.append(f"{step} {part_id}: would bake {image.w} x {image.h} -> {size[0]} x {size[1]}")
                 continue
             baked = resample(image, step)
-            data = png_io.encode(baked)
+            data = pngio.encode(baked)
             _write_atomic(target, data)
-            parts.append({"id": part_id, "master": {"size": [image.width, image.height], "sha256": master_hash}, "size": [baked.width, baked.height],
-                          "bytes": len(data), "sha256": sha256(data), "pixels_sha256": sha256(baked.pixels())})
-            report.lines.append(f"{step} {part_id}: {image.width} x {image.height} -> {baked.width} x {baked.height}")
-        except (png_io.PngError, ValueError, OSError) as exc:
+            parts.append({"id": part_id, "master": {"size": [image.w, image.h], "sha256": master_hash}, "size": [baked.w, baked.h],
+                          "bytes": len(data), "sha256": sha256(data), "pixels_sha256": sha256(bytes(baked.data))})
+            report.lines.append(f"{step} {part_id}: {image.w} x {image.h} -> {baked.w} x {baked.h}")
+        except (pngio.PngError, ValueError, OSError) as exc:
             report.errors.append(f"{step} {part_id}: {exc}")
     if dry_run:
         return
@@ -352,8 +364,8 @@ def verify(masters_dir: Path, out: Path, steps: list[str]) -> Report:
                 report.errors.append(f"{name}: file differs from the manifest")
                 continue
             try:
-                image = png_io.decode(data)
-            except png_io.PngError as exc:
+                image = pngio.decode(data)
+            except pngio.PngError as exc:
                 report.errors.append(f"{name}: {exc}")
                 continue
             mw, mh = part["master"]["size"]
@@ -362,9 +374,9 @@ def verify(masters_dir: Path, out: Path, steps: list[str]) -> Report:
             except ValueError as exc:
                 report.errors.append(f"{name}: {exc}")
                 continue
-            if (image.width, image.height) != want or list(want) != part["size"]:
-                report.errors.append(f"{name}: size {image.width} x {image.height}, expected {want[0]} x {want[1]} ({mw} x {mh} times {a}/{b})")
-            if sha256(image.pixels()) != part["pixels_sha256"]:
+            if (image.w, image.h) != want or list(want) != part["size"]:
+                report.errors.append(f"{name}: size {image.w} x {image.h}, expected {want[0]} x {want[1]} ({mw} x {mh} times {a}/{b})")
+            if sha256(bytes(image.data)) != part["pixels_sha256"]:
                 report.errors.append(f"{name}: pixels differ from the manifest")
             master = masters_dir / f"{part['id']}.png"
             if master.is_file() and sha256(master.read_bytes()) != part["master"]["sha256"]:
@@ -376,7 +388,7 @@ def verify(masters_dir: Path, out: Path, steps: list[str]) -> Report:
 # --- self test and CLI ---------------------------------------------------------------------------------------------------------------
 
 
-def _synthetic_master(width: int, height: int) -> png_io.Image:
+def _synthetic_master(width: int, height: int) -> pngio.Image:
     rows = []
     for y in range(height):
         row = bytearray()
@@ -384,7 +396,7 @@ def _synthetic_master(width: int, height: int) -> png_io.Image:
             inside = (x * 3 // width + y * 2 // height) % 2
             row += bytes((200 if inside else 20, (x * 255) // max(1, width - 1), (y * 255) // max(1, height - 1), 255 if (x + y) % 5 else 0))
         rows.append(bytes(row))
-    return png_io.Image(width, height, rows)
+    return from_rows(width, height, rows)
 
 
 def self_test() -> list[str]:
@@ -394,11 +406,11 @@ def self_test() -> list[str]:
     for step, (a, b) in STEPS.items():
         out = resample(master, step)
         want = (36 * a // b, 24 * a // b)
-        if (out.width, out.height) != want:
-            failures.append(f"{step}: size {out.width} x {out.height}, expected {want}")
-        if png_io.encode(out) != png_io.encode(resample(master, step)):
+        if (out.w, out.h) != want:
+            failures.append(f"{step}: size {out.w} x {out.h}, expected {want}")
+        if pngio.encode(out) != pngio.encode(resample(master, step)):
             failures.append(f"{step}: two runs differ")
-    if png_io.decode(png_io.encode(master)).rows != master.rows:
+    if pngio.decode(pngio.encode(master)).data != master.data:
         failures.append("png round trip")
     if any(SRGB8[LIN16[i]] != i for i in range(256)):
         failures.append("sRGB table round trip")

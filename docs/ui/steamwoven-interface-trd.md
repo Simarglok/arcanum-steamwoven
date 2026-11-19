@@ -263,6 +263,7 @@ Part kinds:
 | 4. Material sheet | owner in Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
 | 5. Parts | owner in Codex, per batch | raw generations | `local/steamwoven-ui/outbox/` |
 | 6. Fit | agent tool ([#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459)) | masters | `local/steamwoven-ui/masters/` |
+| 6b. Assemble | agent tool ([#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972), [page](steamwoven-kit-assembly.md)) | clean base plus placed details baked into the HD frame of the original ART, one frame per original frame with its state | local |
 | 7. Look check | owner | per-batch composite | thread only |
 | 8. Bake | agent tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460), `tools/steamwoven_ui/bake.py`) | four step sets | `local/steamwoven-ui/baked/<step>/`, local only (SWI-PRV-4) |
 | 9. Runtime | agent ([#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)) | composed interface | code in git |
@@ -374,6 +375,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method | #2457 |
 | 4. Tools | [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459) | fit tool | #2454 |
 | 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
+| 4. Tools | [#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972) | kit assembly tool: base plus details at the original coordinates, baked per original frame (`tools/steamwoven_ui/assemble.py`, [page](steamwoven-kit-assembly.md); done) | #2893, #2971 |
 | 5. Runtime | [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) | runtime composition of the strips, caps, window backgrounds and plates, window integration issues | #2925, #2460 |
 | 5. Runtime | [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) | fonts at the four steps | #2451 |
 | 6. Production | [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) to [#2935](https://github.com/Simarglok/arcanum-steamwoven/issues/2935) (replace the full-width #2472 to #2480, [batch table](steamwoven-interface-census.md#production-batches)) | strips with caps (B-BOARD), window backgrounds (BD-A to BD-G), full-screen plates (BD-H) | fit, bake, material sheet, surface method |
