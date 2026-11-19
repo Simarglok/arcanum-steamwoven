@@ -19,6 +19,7 @@ class Image:
     w: int
     h: int
     data: bytearray
+    source_alpha: bool = True  # False: decoded from a PNG with no alpha channel and no colour key (every pixel opaque by default)
 
     @staticmethod
     def blank(w: int, h: int, rgba: tuple[int, int, int, int] = (0, 0, 0, 0)) -> "Image":
@@ -64,6 +65,8 @@ def decode(blob: bytes) -> Image:
     idat = bytearray()
     for kind, body in _chunks(blob):
         if kind == b"IHDR":
+            if len(body) != 13:
+                raise PngError("bad IHDR chunk")
             header = struct.unpack(">IIBBBBB", body)
         elif kind == b"PLTE":
             palette = body
@@ -105,6 +108,11 @@ def decode(blob: bytes) -> Image:
                 raise PngError(f"unknown filter {kind}")
         rows.append(line)
         previous = line
+    key = None  # a colour key of tRNS for grey (one value) and RGB (three values): that colour is transparent
+    if color == 0 and len(trns) >= 2:
+        key = (int.from_bytes(trns[:2], "big"),)
+    elif color == 2 and len(trns) >= 6:
+        key = tuple(int.from_bytes(trns[i:i + 2], "big") for i in (0, 2, 4))
     out = bytearray(w * h * 4)
     for y, line in enumerate(rows):
         for x in range(w):
@@ -113,10 +121,10 @@ def decode(blob: bytes) -> Image:
                 out[o:o + 4] = line[x * 4:x * 4 + 4]
             elif color == 2:
                 out[o:o + 3] = line[x * 3:x * 3 + 3]
-                out[o + 3] = 255
+                out[o + 3] = 0 if key is not None and tuple(out[o:o + 3]) == key else 255
             elif color == 0:
                 out[o] = out[o + 1] = out[o + 2] = line[x]
-                out[o + 3] = 255
+                out[o + 3] = 0 if key is not None and line[x] == key[0] else 255
             elif color == 4:
                 out[o] = out[o + 1] = out[o + 2] = line[x * 2]
                 out[o + 3] = line[x * 2 + 1]
@@ -126,7 +134,7 @@ def decode(blob: bytes) -> Image:
                     raise PngError("palette index out of range")
                 out[o:o + 3] = palette[index * 3:index * 3 + 3]
                 out[o + 3] = trns[index] if index < len(trns) else 255
-    return Image(w, h, out)
+    return Image(w, h, out, source_alpha=color in (3, 4, 6) or key is not None)
 
 
 def _chunk(kind: bytes, body: bytes) -> bytes:

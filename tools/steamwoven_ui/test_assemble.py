@@ -61,7 +61,69 @@ def layout_dict(**extra) -> dict:
     return data
 
 
+def hand_png(color: int, width: int, rows: list[bytes], filters: list[int], palette: bytes = b"", trns: bytes = b"") -> bytes:
+    """A CRC-valid PNG written with the given filter on each row, so the decoder's filter paths are read from bytes it did not write."""
+    import struct
+    import zlib
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
+    raw = bytearray()
+    previous = bytes(width * channels)
+    for row, kind in zip(rows, filters):
+        raw.append(kind)
+        for i, value in enumerate(row):
+            left = row[i - channels] if i >= channels else 0
+            up = previous[i]
+            corner = previous[i - channels] if i >= channels else 0
+            guess = (0, left, up, (left + up) >> 1, _paeth(left, up, corner))[kind]
+            raw.append((value - guess) & 255)
+        previous = row
+
+    def chunk(name: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + name + body + struct.pack(">I", zlib.crc32(name + body) & 0xFFFFFFFF)
+
+    return (pngio.SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", width, len(rows), 8, color, 0, 0, 0))
+            + (chunk(b"PLTE", palette) if palette else b"") + (chunk(b"tRNS", trns) if trns else b"")
+            + chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b""))
+
+
+def _paeth(a: int, b: int, c: int) -> int:
+    p = a + b - c
+    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+    return a if pa <= pb and pa <= pc else b if pb <= pc else c
+
+
 class PngTests(unittest.TestCase):
+    def test_every_filter_and_colour_type_decodes(self) -> None:
+        rows = [bytes((i * 29 + j * 53 + 7) % 256 for j in range(12)) for i in range(5)]
+        for kind in range(5):
+            image = pngio.decode(hand_png(6, 3, rows, [kind] * 5))
+            self.assertEqual(bytes(image.data), b"".join(rows), f"RGBA filter {kind}")
+        rgb = [bytes((i * 31 + j * 17) % 256 for j in range(9)) for i in range(4)]
+        out = pngio.decode(hand_png(2, 3, rgb, [0, 1, 2, 4]))
+        self.assertEqual(out.pixel(1, 2), (*rgb[2][3:6], 255))
+        self.assertFalse(out.source_alpha)
+        grey_alpha = [bytes((i * 11 + j * 5) % 256 for j in range(6)) for i in range(3)]
+        ga = pngio.decode(hand_png(4, 3, grey_alpha, [3, 4, 1]))
+        self.assertEqual(ga.pixel(2, 1), (*(grey_alpha[1][4],) * 3, grey_alpha[1][5]))
+        self.assertTrue(ga.source_alpha)
+
+    def test_palette_and_colour_keys(self) -> None:
+        pal = pngio.decode(hand_png(3, 3, [bytes((0, 1, 2))], [0], palette=bytes((9, 8, 7, 1, 2, 3, 4, 5, 6)), trns=bytes((0, 128))))
+        self.assertEqual([pal.pixel(x, 0) for x in range(3)], [(9, 8, 7, 0), (1, 2, 3, 128), (4, 5, 6, 255)])
+        grey = pngio.decode(hand_png(0, 3, [bytes((7, 8, 9))], [0], trns=bytes((0, 7))))
+        self.assertEqual([grey.pixel(x, 0)[3] for x in range(3)], [0, 255, 255])
+        self.assertTrue(grey.source_alpha)
+        rgb = pngio.decode(hand_png(2, 2, [bytes((1, 2, 3, 4, 5, 6))], [0], trns=bytes((0, 1, 0, 2, 0, 3))))
+        self.assertEqual([rgb.pixel(x, 0)[3] for x in range(2)], [0, 255])
+        self.assertFalse(pngio.decode(hand_png(0, 2, [bytes((1, 2))], [0])).source_alpha)
+
+    def test_malformed_files_raise_png_error(self) -> None:
+        good = hand_png(6, 1, [bytes(4)], [0])
+        broken_header = good[:16] + good[17:]  # a 12 byte IHDR body
+        for blob in (b"", b"x" * 40, good[:30], broken_header):
+            with self.assertRaises(pngio.PngError):
+                pngio.decode(blob)
+
     def test_round_trip_and_reproducible(self) -> None:
         image = noisy(7, 5, 1)
         image.data[3] = 17
@@ -157,7 +219,7 @@ class AssembleTests(unittest.TestCase):
                            placements=[{"detail": "dot", "at": [5, 5]}])
         report = assemble.assemble(assemble.load_layout(ws.layout(data)))
         self.assertEqual(report.canvas, (36, 29))
-        self.assertEqual((report.boxes[0].x, report.boxes[0].y), (18, 18))
+        self.assertEqual((report.boxes[0].x, report.boxes[0].y), (20, 20))  # 18 master px are 20 output px
         out = report.images[0]
         self.assertEqual((out.w, out.h), (40, 32))
 
@@ -250,10 +312,50 @@ class AssembleTests(unittest.TestCase):
         ws.png("base.png", solid(40, 32, (1, 1, 1, 255)))
         ws.png("big.png", solid(8, 8, (1, 1, 1, 255)))
         data = layout_dict(details={"big": {"image": "big.png"}}, placements=[{"id": "p", "detail": "big", "at": [9, 7]}])
-        with self.assertRaisesRegex(assemble.LayoutError, "leaves the 40x32 canvas"):
+        with self.assertRaisesRegex(assemble.LayoutError, "leaves the 40x32 frame"):
             assemble.assemble(assemble.load_layout(ws.layout(data)))
         ws.png("legacy.png", solid(9, 8, (0, 0, 0, 255)))
         with self.assertRaisesRegex(assemble.LayoutError, "original frame is 10x8"):
+            assemble.assemble(assemble.load_layout(ws.layout(layout_dict())))
+
+    def test_scales_that_differ_keep_every_place_identical(self) -> None:
+        """AC1 with a master scale of 3.6 and a pack scale of 4: the detail is brought to the pack scale once, so the five places match."""
+        ws = Workspace(self)
+        base = Image.blank(108, 36)  # 30 x 10 units at 3.6 px per unit
+        for i in range(108 * 36):
+            base.data[i * 4:i * 4 + 4] = bytes((i % 251, i * 7 % 253, i * 3 % 241, 255))
+        detail = noisy(12, 12, 9)
+        ws.png("base.png", base)
+        ws.png("socket.png", detail)
+        ws.png("legacy.png", solid(30, 10, (0, 0, 0, 255)))
+        spots = ["0", "10/3", "20/3", "10", "40/3"]  # 0, 12, 24, 36, 48 master px: side by side on the 6 px grid, at different phases of the x4/3.6 step
+        data = layout_dict(target={"art": "Row", "size": [30, 10], "frames": 1}, master={"scale": "18/5", "snap": 6},
+                           details={"socket": {"image": "socket.png"}},
+                           placements=[{"id": f"s{i}", "detail": "socket", "at": [at, "5/3"]} for i, at in enumerate(spots)])
+        report = assemble.assemble(assemble.load_layout(ws.layout(data)))
+        out = report.images[0]
+        expected = assemble.resample(detail, 13, 13)  # 12 master px are 13.3 output px
+        self.assertEqual([(b.x, b.w) for b in report.boxes], [(0, 13), (13, 13), (27, 13), (40, 13), (53, 13)])
+        for box in report.boxes:
+            self.assertEqual(out.crop(box.x, box.y, box.w, box.h), expected)
+
+    def test_centre_anchor_and_per_frame_boxes(self) -> None:
+        ws = Workspace(self)
+        ws.png("base.png", solid(40, 32, (1, 2, 3, 255)))
+        ws.png("d.png", solid(6, 6, (9, 9, 9, 255)))
+        ws.png("legacy.png", solid(10, 8, (0, 0, 0, 255)))
+        data = layout_dict(target={"art": "Two", "size": [10, 8], "frames": 2}, details={"d": {"image": "d.png"}},
+                           placements=[{"id": "c", "detail": "d", "at": [5, 4], "anchor": "center", "frames": [1]}])
+        report = assemble.assemble(assemble.load_layout(ws.layout(data)))
+        self.assertEqual(report.frames[0].boxes, [])
+        self.assertEqual((report.frames[1].boxes[0].x, report.frames[1].boxes[0].y), (17, 13))  # 20 - 3, 16 - 3
+        self.assertEqual(report.to_json()["frames"][1]["placements"][0]["x"], 17)
+
+    def test_legacy_picture_without_alpha_is_refused(self) -> None:
+        ws = Workspace(self)
+        ws.png("base.png", solid(40, 32, (1, 1, 1, 255)))
+        (ws.root / "legacy.png").write_bytes(hand_png(2, 10, [bytes(30)] * 8, [0] * 8))
+        with self.assertRaisesRegex(assemble.LayoutError, "no alpha channel"):
             assemble.assemble(assemble.load_layout(ws.layout(layout_dict())))
 
     def test_missing_state_image_is_named(self) -> None:
@@ -278,6 +380,10 @@ class LayoutTests(unittest.TestCase):
         self.check(lambda d: d.update(extra=1), "unknown field 'extra'")
         self.check(lambda d: d.update(scale=0), "scale")
         self.check(lambda d: d["target"].update(art="a/b"), "target.art")
+        self.check(lambda d: d["target"].update(art="a\x00b"), "target.art")
+        self.check(lambda d: d["target"].update(art=".."), "target.art")
+        self.check(lambda d: d["target"].update(size=[4096, 4096]), "more than")
+        self.check(lambda d: d.update(master={"scale": "1e9999999"}), "master.scale")
         self.check(lambda d: (d["target"].update(frames=3), d.update(frames=[{"state": "a"}])), r"frames: must list one entry for each of the 3")
         self.check(lambda d: d["alpha"].update(mode="soft"), "alpha.mode")
         self.check(lambda d: d["alpha"].update(legacy=["a", "b"]), "alpha.legacy")

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -36,6 +37,9 @@ ANCHORS = ("tl", "center")
 POSITIONS = ("snap", "exact")
 MAX_SCALE = 16
 DEFAULT_STATE = "default"
+_ART = re.compile(r"[A-Za-z0-9_.-]{1,80}")
+MAX_PIXELS = 64 * 1024 * 1024  # of one output frame or master canvas
+MAX_NUMBER_TEXT = 32
 _TOP = {"kind", "version", "target", "scale", "master", "alpha", "base", "details", "placements", "frames"}
 
 
@@ -55,6 +59,8 @@ def parse_number(value, what: str) -> Fraction:
         if isinstance(value, float):
             return Fraction(repr(value))
         if isinstance(value, str):
+            if len(value) > MAX_NUMBER_TEXT or "e" in value.lower():  # an exponent could build a huge integer
+                raise ValueError("too long or with an exponent")
             return Fraction(value.strip())
     except (ValueError, ZeroDivisionError) as error:
         raise LayoutError(f"{what}: {value!r} is not a number") from error
@@ -160,19 +166,23 @@ def parse_layout(data, root: Path) -> Layout:
     art = target.get("art")
     if isinstance(art, int) and not isinstance(art, bool):
         art = str(art)
-    if not isinstance(art, str) or not art or any(c in art for c in "/\\") or art in (".", ".."):
-        raise LayoutError("target.art: must be an art identifier (a name or a number, no path)")
+    if not isinstance(art, str) or not _ART.fullmatch(art) or art in (".", ".."):
+        raise LayoutError("target.art: must be an art identifier of letters, digits, _ . - (a name or a number, no path)")
     size = target.get("size")
     if not isinstance(size, list) or len(size) != 2:
         raise LayoutError("target.size: must be [width, height] of the original frame")
     width, height = _int(size[0], "target.size[0]", 1, 4096), _int(size[1], "target.size[1]", 1, 4096)
     count = _int(target.get("frames"), "target.frames", 1, 255)
     scale = _int(top.get("scale"), "scale", 1, MAX_SCALE)
+    if width * height * scale * scale > MAX_PIXELS:
+        raise LayoutError(f"target: {width}x{height} at x{scale} is more than {MAX_PIXELS} pixels in one frame")
 
     master = _object(top.get("master", {}), "master", {"scale", "snap", "position"})
     master_scale = parse_number(master["scale"], "master.scale") if "scale" in master else Fraction(scale)
-    if master_scale <= 0:
-        raise LayoutError("master.scale: must be above 0")
+    if master_scale <= 0 or master_scale > 64:
+        raise LayoutError("master.scale: must be above 0 and at most 64")
+    if width * height * master_scale * master_scale > MAX_PIXELS:
+        raise LayoutError(f"master: the {width}x{height} canvas at {master_scale} px per unit is more than {MAX_PIXELS} pixels")
     snap = _int(master.get("snap", 1), "master.snap", 1, 64)
     position = master.get("position", "snap")
     if position not in POSITIONS:
@@ -446,7 +456,8 @@ def bake_alpha(color: Image, legacy: Image, scale: int, mode: str) -> tuple[Imag
         elif out.data[(y * w + x) * 4 + 3] and color.data[(y * w + x) * 4 + 3] == 0:
             uncovered += 1
     if check_alpha(out, legacy, scale, mode):
-        for i in range(w * h):
+        for i in range(w * h):  # the exact alpha, with the composed colour as it is (the importer's fallback)
+            out.data[i * 4:i * 4 + 3] = color.data[i * 4:i * 4 + 3]
             out.data[i * 4 + 3] = legacy.data[((i // w // scale) * legacy.w + (i % w) // scale) * 4 + 3]
         return out, True, uncovered
     return out, False, uncovered
@@ -471,6 +482,7 @@ class FrameReport:
     file: str
     size: tuple[int, int]
     placed: list[str] = field(default_factory=list)
+    boxes: list[Box] = field(default_factory=list)
     alpha_fallback: bool = False
 
 
@@ -480,15 +492,19 @@ class Report:
     scale: int
     canvas: tuple[int, int]
     frames: list[FrameReport]
-    boxes: list[Box]
     images: dict[int, Image] = field(default_factory=dict)
     written: list[str] = field(default_factory=list)
 
+    @property
+    def boxes(self) -> list[Box]:
+        """The placements of the first frame that has any (output pixels); every frame's own are in `frames[i].boxes`."""
+        return next((f.boxes for f in self.frames if f.boxes), [])
+
     def to_json(self) -> dict:
-        return {"art": self.art, "scale": self.scale, "canvas": list(self.canvas),
-                "frames": [{"frame": f.frame, "state": f.state, "file": f.file, "size": list(f.size), "placed": f.placed,
-                            "alphaFallbackToExact": f.alpha_fallback} for f in self.frames],
-                "placements": [{"id": b.ident, "detail": b.detail, "x": b.x, "y": b.y, "w": b.w, "h": b.h} for b in self.boxes]}
+        return {"art": self.art, "scale": self.scale, "masterCanvas": list(self.canvas),
+                "frames": [{"frame": f.frame, "state": f.state, "file": f.file, "size": list(f.size), "alphaFallbackToExact": f.alpha_fallback,
+                            "placements": [{"id": b.ident, "detail": b.detail, "x": b.x, "y": b.y, "w": b.w, "h": b.h} for b in f.boxes]}
+                           for f in self.frames]}
 
 
 def frame_file(art: str, frame: int) -> str:
@@ -505,43 +521,56 @@ def _load(path: Path, what: str, cache: dict[Path, Image]) -> Image:
 
 
 def assemble(layout: Layout, out_dir: Path | None = None) -> Report:
-    """Composes every frame at the master scale, bakes it to the pack scale and the original's alpha, and checks the pack's gates.
-    With `out_dir` None nothing is written (the dry run). A failure raises LayoutError; nothing is written then either."""
+    """Composes every frame at the pack scale and checks the pack's gates. The base and every detail are first brought from the master
+    scale to the pack scale **once per picture** (the identity when the scales are equal), then placed at whole output pixels, so a
+    detail placed N times is the same pixels in every place whatever the two scales are. With `out_dir` None nothing is written (the dry
+    run). A failure raises LayoutError; nothing is written then either."""
     width, height = layout.size
     cw, ch = canvas_size(layout)
+    ow, oh = width * layout.scale, height * layout.scale
+    ratio = Fraction(layout.scale) / layout.master_scale  # output pixels per master pixel
     cache: dict[Path, Image] = {}  # one file is read once: a detail used in many places is one picture
-    boxes: list[Box] = []
+    scaled: dict[tuple[Path, int, int], Image] = {}
+
+    def at_output_scale(image: Image, w: int, h: int, key: Path) -> Image:
+        if (key, w, h) not in scaled:
+            scaled[(key, w, h)] = resample(image, w, h)
+        return scaled[(key, w, h)]
+
     frames: list[FrameReport] = []
     images: dict[int, Image] = {}
     for index, state in enumerate(layout.frame_states):
         what = f"frame {index} ({state})"
-        base = _load(layout.base.path_for(state, "base"), "base", cache)
+        base_path = layout.base.path_for(state, "base")
+        base = _load(base_path, "base", cache)
         if (base.w, base.h) != (cw, ch):
             raise LayoutError(f"base: {what} is {base.w}x{base.h}, the canvas is {cw}x{ch} ({width}x{height} units at {layout.master_scale} px per unit)")
-        canvas = Image(cw, ch, bytearray(base.data))
-        report = FrameReport(index, state, frame_file(layout.art, index), (width * layout.scale, height * layout.scale))
-        frame_boxes: list[Box] = []
+        canvas = Image(ow, oh, bytearray(at_output_scale(base, ow, oh, base_path).data))
+        report = FrameReport(index, state, frame_file(layout.art, index), (ow, oh))
         for placement in layout.placements:
             if placement.frames is not None and index not in placement.frames:
                 continue
             if placement.states is not None and state not in placement.states:
                 continue
-            detail = _load(layout.details[placement.detail].path_for(state, f"detail {placement.detail}"), f"detail {placement.detail}", cache)
-            x = units_to_px(placement.at[0], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} x")
-            y = units_to_px(placement.at[1], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} y")
+            detail_path = layout.details[placement.detail].path_for(state, f"detail {placement.detail}")
+            master_detail = _load(detail_path, f"detail {placement.detail}", cache)
+            detail = at_output_scale(master_detail, max(1, round_half_up(master_detail.w * ratio)), max(1, round_half_up(master_detail.h * ratio)), detail_path)
+            mx = units_to_px(placement.at[0], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} x")
+            my = units_to_px(placement.at[1], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} y")
+            x, y = round_half_up(mx * ratio), round_half_up(my * ratio)
             if placement.anchor == "center":
                 x, y = x - detail.w // 2, y - detail.h // 2
-            if x < 0 or y < 0 or x + detail.w > cw or y + detail.h > ch:
-                raise LayoutError(f"placement {placement.ident}: the {detail.w}x{detail.h} detail at {x},{y} leaves the {cw}x{ch} canvas")
+            if x < 0 or y < 0 or x + detail.w > ow or y + detail.h > oh:
+                raise LayoutError(f"placement {placement.ident}: the {detail.w}x{detail.h} detail at {x},{y} leaves the {ow}x{oh} frame")
             blit(canvas, detail, x, y)
-            frame_boxes.append(Box(placement.ident, placement.detail, x, y, detail.w, detail.h))
+            report.boxes.append(Box(placement.ident, placement.detail, x, y, detail.w, detail.h))
             report.placed.append(placement.ident)
-        if not boxes:
-            boxes = frame_boxes
         legacy = _load(layout.legacy[index], f"alpha.legacy[{index}]", cache)
         if (legacy.w, legacy.h) != (width, height):
             raise LayoutError(f"alpha.legacy[{index}]: is {legacy.w}x{legacy.h}, the original frame is {width}x{height}")
-        baked, fallback, uncovered = bake_alpha(resample(canvas, width * layout.scale, height * layout.scale), legacy, layout.scale, layout.alpha_mode)
+        if not legacy.source_alpha:
+            raise LayoutError(f"alpha.legacy[{index}]: the picture has no alpha channel (its alpha is what the original's alpha is read from)")
+        baked, fallback, uncovered = bake_alpha(canvas, legacy, layout.scale, layout.alpha_mode)
         if uncovered:
             raise LayoutError(f"{what}: {uncovered} visible pixels have nothing drawn under them (the base must cover the original's silhouette)")
         problems = check_alpha(baked, legacy, layout.scale, layout.alpha_mode)
@@ -550,15 +579,18 @@ def assemble(layout: Layout, out_dir: Path | None = None) -> Report:
         report.alpha_fallback = fallback
         frames.append(report)
         images[index] = baked
-    result = Report(layout.art, layout.scale, (cw, ch), frames, boxes, images)
+    result = Report(layout.art, layout.scale, (cw, ch), frames, images)
     if out_dir is not None:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        for item in frames:
-            pngio.write(out_dir / item.file, images[item.frame])
-            result.written.append(item.file)
-        name = f"{layout.art}.assembly.json"
-        (out_dir / name).write_text(json.dumps(result.to_json(), indent=2) + "\n", encoding="utf-8")
-        result.written.append(name)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for item in frames:
+                pngio.write(out_dir / item.file, images[item.frame])
+                result.written.append(item.file)
+            name = f"{layout.art}.assembly.json"
+            (out_dir / name).write_text(json.dumps(result.to_json(), indent=2) + "\n", encoding="utf-8")
+            result.written.append(name)
+        except OSError as error:
+            raise LayoutError(f"cannot write to {out_dir}: {error}") from error
     return result
 
 
@@ -574,14 +606,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         layout = load_layout(args.layout)
         report = assemble(layout, None if args.dry_run else args.out)
-    except LayoutError as error:
+    except (LayoutError, ValueError) as error:
         print(f"ASSEMBLE FAIL: {error}", file=sys.stderr)
         return 1
     if args.json:
         print(json.dumps(report.to_json(), indent=2))
     else:
         print(f"ASSEMBLE {'DRY-RUN ' if args.dry_run else ''}PASS: art {report.art}, {len(report.frames)} frame(s) at x{report.scale} "
-              f"from a {report.canvas[0]}x{report.canvas[1]} canvas, {len(report.boxes)} placement(s)")
+              f"from a {report.canvas[0]}x{report.canvas[1]} master canvas, {sum(len(f.boxes) for f in report.frames)} placement(s) in all")
         for item in report.frames:
             print(f"  frame {item.frame} [{item.state}] {item.file} {item.size[0]}x{item.size[1]} details: {', '.join(item.placed) or '-'}"
                   + (" (smooth alpha refused, exact original alpha)" if item.alpha_fallback else ""))

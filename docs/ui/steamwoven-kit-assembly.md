@@ -35,7 +35,7 @@ Exit 0 and `ASSEMBLE PASS` or `ASSEMBLE DRY-RUN PASS`; exit 1 and `ASSEMBLE FAIL
 then. A frame is written only after it passes the alpha gate below. The output names are the pack's frame names
 (`<art>-f<NNN>.png`), so the files go to the pack's staging the way the importer's `ready` items do (`tools/hd-interface-import`,
 [HD pack workflow](../workflow/hd-pack.md)); this tool does not touch a pack or its manifest. Time: a full 800 x 41 unit strip at x4 takes
-about 10 s in plain Python.
+a few seconds in plain Python (about 4 s).
 
 ## The layout file
 
@@ -60,22 +60,28 @@ PNG, 8 bit, not interlaced.
 
 ## Rules
 
-- **One detail, one picture.** A file is read once and every placement of that detail copies the same pixels (opaque pixels exactly,
-  translucent ones by an integer source-over). At equal master and output scale the footprint of a detail is therefore the same
-  in every place (the test checks five placements of one socket over a gradient). With a master scale that differs from the output scale the
-  canvas is resampled by an exact area average (premultiplied), so two places that fall on different phases of the resampling grid differ in
-  the last bit at the edge; place on the 6 px master grid (a whole number of output pixels at 2, 3, 4 pixels per master pixel) to avoid it.
-- **Whole pixels.** Positions are exact (`3.6` is read as 18/5, not a binary float) and become whole master pixels by `master.position`;
-  a detail that leaves the canvas is refused. The canvas is the original frame size at the master scale, in whole pixels (half up); the
-  output is exactly `scale x w` by `scale x h`.
+- **One detail, one picture.** A file is read once. The base and every detail are brought from the master scale to the pack scale **once
+  per picture** (the identity when the two scales are equal; otherwise an exact area average of premultiplied pixels, a detail's size is
+  `master size x scale / master.scale` rounded half up), and then every placement copies those same pixels at whole output pixels
+  (opaque pixels exactly, translucent ones by an integer source-over). A detail placed N times is therefore the same pixels in every
+  place at any pair of scales (the tests check five placements at equal scales and at 3.6 to 4). A detail that is a whole number of
+  output pixels at the pack scale (a multiple of 9 master px at 3.6 to 4) is not resampled by a fraction.
+- **Whole pixels.** Positions are exact (`3.6` is read as 18/5, not a binary float) and become whole master pixels by `master.position` and
+  `master.snap` (the TRD's 6 px grid), then output pixels `round(master px x scale / master.scale)` (half up); a placement box in the report
+  is in output pixels. With `anchor: center` the snapped point is the detail's centre and the top-left is `centre - w // 2` in output
+  pixels, so a centre-anchored detail is on the grid by its centre, not by its corner. A detail that leaves the frame is refused. The base is
+  the original frame size at the master scale in whole pixels (half up); the output is exactly `scale x w` by `scale x h`.
 - **Alpha.** The colour is the composed canvas; the alpha is the original's by the mode: `legacy` the parent texel's exact alpha;
   `legacySmooth` the original silhouette with a one-pixel anti-aliased edge (the importer's rule: texels whose 3 x 3 neighbourhood is
   uniform keep the parent's alpha, single-texel holes keep their centre, band pixels over a transparent parent take the nearest opaque
-  colour), falling back to the exact alpha for a frame that fails its own gate, as the importer does (reported); `masked` the composed alpha,
+  colour), falling back to the exact alpha and the composed colour for a frame that fails its own gate, as the importer does (reported); `masked` the composed alpha,
   cleared farther than one original texel from the silhouette (a plate that must not keep the original's corners). Every written frame
   passes the pack's gate (`check_alpha` is a port of `HdAlphaCheck`: size, the three `legacySmooth` rules and the 900 permille overlap, `legacy` exactness, `masked` reach).
 - **Coverage.** A visible pixel (`legacy`, `legacySmooth`) must have base or detail pixels under it; a hole in the base under the
-  silhouette is refused and counted, so a frame never ships transparent colour where the pack shows it.
+  silhouette is refused and counted, so a frame never ships transparent colour where the pack shows it. An `alpha.legacy` picture with no
+  alpha channel is refused (a grey or RGB PNG counts only with a `tRNS` colour key, which the reader applies).
+- **Limits.** `target.art` is letters, digits, `_ . -` (at most 80, not `.` or `..`); one frame or master canvas is at most 64 Mpx; numbers
+  are at most 32 characters and take no exponent; I/O errors and bad files end as `ASSEMBLE FAIL` and nothing is written.
 
 ## Example (synthetic names)
 
@@ -102,7 +108,7 @@ base and the glyph.
 ## Checks and limits
 
 - Tests: `python3 -B -m unittest tools.steamwoven_ui.test_assemble` (synthetic pictures only: PNG round trip, exact unit-to-pixel maps,
-  a detail placed five times is pixel-identical, a synthetic three-frame button with states, size and alpha gates for all three modes,
+  a detail placed five times is pixel-identical (equal scales and 3.6 to 4), PNG filters, palette and colour keys decoded from hand-built files, a synthetic three-frame button with states, size and alpha gates for all three modes,
   refusals, the dry run); they also run in the batched `tools/local_dev/run_tests.py` through `test_steamwoven_assemble.py`.
 - The tool does not read ART files and does not know the kit manifest: the original frame size, frame count and alpha come from the layout
   and from local pictures. The manifest `kit.json` and its validator ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454))
