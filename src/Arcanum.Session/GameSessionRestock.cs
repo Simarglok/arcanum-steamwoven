@@ -65,6 +65,9 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// <summary>ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need (<see cref="SessionNpcWieldScripts"/>); null when the host cannot give it, and a choice or a worn item with a move script is then not wielded (as
     /// before the scripts were run).</summary>
     SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) => null;
+    /// <summary>ARC-SCRIPT-2887 (ledger TQ19, NT2): the host that runs the get (4) and insert-item (21) scripts of an item the regeneration creates (the item move's fresh path, with the holder as the triggerer); null when the host has none, and a created
+    /// item whose prototype carries either point is then not created (counted as skipped).</summary>
+    ISessionItemScriptHost? ItemScripts(SessionMapId map) => null;
 }
 
 /// <summary>What one regeneration did (ARC-WORLD-094).</summary>
@@ -89,6 +92,9 @@ public sealed record SessionRestockRegeneration(string Holder, SessionRestockOut
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after the regeneration (RK15); null for a container and for a regeneration that
     /// changed nothing.</summary>
     public SessionNpcWield? Wield { get; init; }
+
+    /// <summary>ARC-SCRIPT-2887: the lines the get and insert-item scripts of the created items printed, in order, for the host to show; empty when none (<see cref="ISessionRestockWorld.ItemScripts"/>).</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
 }
 
 /// <summary>ARC-UI-038: what a regeneration asked for directly did (<see cref="GameSessionOwner.RegenerateInventory"/>).</summary>
@@ -349,9 +355,11 @@ public sealed partial class GameSessionOwner
         var insert = world.RestockInsertCheck(map, plan.Holder);
         var (refused, skipped) = (0, 0);
         var (coins, pile) = (0, (string?)null);
+        var scripts = world.ItemScripts(map);
+        var report = new CreatedScripts();
         if (loot.Coins > 0)
         {
-            var outcome = RestockCoins(world.RestockPileKind, plan, loot.Coins, insert, out pile);
+            var outcome = RestockCoins(world.RestockPileKind, plan, loot.Coins, insert, out pile, scripts, report);
             if (outcome == RestockCreation.Created) coins = loot.Coins;
             else if (outcome == RestockCreation.Refused) refused++;
             else skipped++;
@@ -359,19 +367,19 @@ public sealed partial class GameSessionOwner
         var created = new List<string>();
         foreach (var prototype in loot.BasicPrototypes)
         {
-            var outcome = RestockItem(world.RestockItem(prototype), plan, insert, out var entity);
+            var outcome = RestockItem(world.RestockItem(prototype), plan, insert, out var entity, scripts, report);
             if (outcome == RestockCreation.Created) { if (entity is not null) created.Add(entity); }
             else if (outcome == RestockCreation.Refused) refused++;
             else skipped++;
         }
         if (plan.Generates) _inventory.Generated.Add(new(map, plan.Holder));
-        return new(plan.Holder, plan.Outcome, plan.Deleted.Count, coins, pile, created.AsReadOnly(), refused, skipped);
+        return new(plan.Holder, plan.Outcome, plan.Deleted.Count, coins, pile, created.AsReadOnly(), refused, skipped) { Messages = report.Messages.AsReadOnly() };
     }
 
     private enum RestockCreation { Created, Refused, Skipped }
 
     // The coins (0x464830 with no pile given): a new pile moved in; a pile that stayed (persistent) takes them as the insertion's merge.
-    private RestockCreation RestockCoins(SessionItemKind pileKind, RestockPlan plan, int coins, SessionInsertCheck insert, out string? pile)
+    private RestockCreation RestockCoins(SessionItemKind pileKind, RestockPlan plan, int coins, SessionInsertCheck insert, out string? pile, ISessionItemScriptHost? scripts, CreatedScripts report)
     {
         pile = null;
         if (pileKind.Type != SessionItemType.Gold) return RestockCreation.Skipped;
@@ -391,7 +399,7 @@ public sealed partial class GameSessionOwner
             return RestockCreation.Created;
         }
         if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RestockCreation.Skipped;
-        var created = NewNpcEntry(plan.Holder, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = coins }, insert, out var refusal, plan.Kind);
+        var created = NewNpcEntry(plan.Holder, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = coins }, insert, out var refusal, plan.Kind, scripts, report);
         if (created is null) return refusal?.Failure == GameSessionFailure.InsertRefused ? RestockCreation.Refused : RestockCreation.Skipped;
         _inventory.Piles[created.Value.Entity] = coins;
         pile = created.Value.Entity;
@@ -401,7 +409,7 @@ public sealed partial class GameSessionOwner
     // One line's item (0x4ED8B0 and 0x4617F0): a new made item at the end of the holder's list, or the units of ammunition joining the
     // holder's stack as the insertion merges them (an NPC's stack of the prototype, as AddItemToNpc; a container's by the type lookup,
     // which follows AMA5). Gold, keys and key rings are no item the lists admit (Not ready).
-    private RestockCreation RestockItem(SessionRestockItem? made, RestockPlan plan, SessionInsertCheck insert, out string? entity)
+    private RestockCreation RestockItem(SessionRestockItem? made, RestockPlan plan, SessionInsertCheck insert, out string? entity, ISessionItemScriptHost? scripts, CreatedScripts report)
     {
         entity = null;
         if (made is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return RestockCreation.Skipped;
@@ -430,7 +438,7 @@ public sealed partial class GameSessionOwner
             if (_inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RestockCreation.Skipped;
         }
         var facts = ammo ? InventoryDomain.MadeFacts(item.Kind) with { AmmoType = item.AmmoType, Quantity = item.Units } : InventoryDomain.MadeFacts(item.Kind);
-        var created = NewNpcEntry(plan.Holder, item.Kind, facts, insert, out var refusal, plan.Kind);
+        var created = NewNpcEntry(plan.Holder, item.Kind, facts, insert, out var refusal, plan.Kind, scripts, report);
         if (created is null) return refusal?.Failure == GameSessionFailure.InsertRefused ? RestockCreation.Refused : RestockCreation.Skipped;
         if (ammo) _inventory.Ammo[created.Value.Entity] = new(created.Value.Entity, item.AmmoType!.Value, item.Units!.Value);
         entity = created.Value.Entity;
