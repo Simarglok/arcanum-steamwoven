@@ -45,7 +45,8 @@ public sealed record SteamwovenLayout(
     SteamwovenBand Top, SteamwovenBand Middle, SteamwovenBand Bottom,
     PixelRect WindowZone, SteamwovenSplit Split,
     SteamwovenBackdrop MiddleBackdrop, SteamwovenBackdrop FullScreenBackdrop,
-    SteamwovenControlList Controls)
+    SteamwovenControlList Controls,
+    SteamwovenColumnPlan? Column = null)
 {
     /// <summary>The control with this id (ARC-UI-2526, SWI-LAY-11).</summary>
     public SteamwovenControl Control(SteamwovenControlId id) => Controls.First(control => control.Id == id);
@@ -59,7 +60,8 @@ public sealed record SteamwovenLayout(
 /// laid out whole; a narrower one is letterboxed to 2400 · f and a wider one pillarboxed to 3840 · f, centred, and a bar under 4 px per side is
 /// dropped (the frame is the window; the middle band or the sides take the difference). The panel heights are rounded as sizes from the frame's top
 /// and bottom edges (`round(120 · f)`, `round(456 · f)` with the default heights, as the TRD reference table shows); every other edge (centre block, split, zone, backdrop) is rounded from its own exact position, halves
-/// up, so neighbouring parts share edges. The window zone is centred in the middle band and kept inside it. Godot-free; the viewer reads the rectangles.
+/// up, so neighbouring parts share edges. With the column mode of the options (ARC-UI-2889) <see cref="SteamwovenLayout.Column"/> holds the column plan; every other member is the full-width layout
+/// computed as before (the bands span the frame, <see cref="SteamwovenLayout.Controls"/> sit on the full-width centre block), which a column viewer does not draw. The window zone is centred in the middle band and kept inside it. Godot-free; the viewer reads the rectangles.
 /// </summary>
 public static class SteamwovenLayoutBuilder
 {
@@ -112,7 +114,8 @@ public static class SteamwovenLayoutBuilder
             width, height, scale, step, runtime, runtime == Ratio.One,
             frame, bars, BandOf(topRect), BandOf(middleRect), BandOf(bottomRect),
             zone, split, middleBackdrop, fullBackdrop,
-            PlaceControls(options, scale, centreLeft, topRect, bottomRect));
+            PlaceControls(options, scale, centreLeft, topRect, bottomRect),
+            options.Column is { } column ? ColumnPlan(column, scale, width, frame, topRect, bottomRect, middleRect) : null);
         return new SteamwovenLayoutResult(layout, null);
     }
 
@@ -128,6 +131,40 @@ public static class SteamwovenLayoutBuilder
                 Edge(centreLeft, spec.X), Edge(band.Y, spec.Y), Edge(centreLeft, spec.X + spec.Width), Edge(band.Y, spec.Y + spec.Height))));
         }
         return new SteamwovenControlList(placed);
+    }
+
+    /// <summary>
+    /// ARC-UI-2889: the column plan. The column is `2880 · k · f` wide, centred in the frame (edges rounded from their own exact position); the strips are the full-width layout's panel heights
+    /// (150 / 570 · k master px, rounded as sizes from the frame's edges); the window zone (800 × 400 units at `3.6 · k · f`) and the full-screen zone (800 × 600 units) are centred vertically in
+    /// the middle band and in the frame and kept inside them.
+    /// </summary>
+    private static SteamwovenColumnPlan ColumnPlan(SteamwovenColumnMode mode, Ratio scale, int windowWidth, PixelRect frame, PixelRect top, PixelRect bottom, PixelRect middle)
+    {
+        var stripScale = scale * mode.K;
+        var columnWidth = stripScale * SteamwovenGrid.CentreWidth;
+        var left = frame.X + ((Ratio)frame.Width - columnWidth).Halve().RoundHalfUp();
+        var right = frame.X + ((Ratio)frame.Width + columnWidth).Halve().RoundHalfUp();
+
+        SteamwovenColumnZone ZoneIn(PixelRect area, int zoneUnitsHeightMaster)
+        {
+            var zone = CentredZone(area, left, right, stripScale * zoneUnitsHeightMaster);
+            return new SteamwovenColumnZone(
+                zone,
+                PixelRect.FromEdges(left, area.Y, right, zone.Y),
+                PixelRect.FromEdges(left, zone.Bottom, right, area.Bottom));
+        }
+
+        var worldLeftEdge = mode.WorldToEdges ? 0 : frame.X;
+        var worldRightEdge = mode.WorldToEdges ? windowWidth : frame.Right;
+        return new SteamwovenColumnPlan(
+            mode, stripScale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator),
+            PixelRect.FromEdges(left, frame.Y, right, frame.Bottom),
+            PixelRect.FromEdges(left, top.Y, right, top.Bottom),
+            PixelRect.FromEdges(left, bottom.Y, right, bottom.Bottom),
+            ZoneIn(middle, SteamwovenGrid.WindowZoneHeight),
+            ZoneIn(frame, SteamwovenGrid.FullScreenZoneHeight),
+            PixelRect.FromEdges(worldLeftEdge, frame.Y, left, frame.Bottom),
+            PixelRect.FromEdges(right, frame.Y, worldRightEdge, frame.Bottom));
     }
 
     private static SteamwovenLayoutResult Fail(SteamwovenLayoutFailure failure) => new(null, failure);
