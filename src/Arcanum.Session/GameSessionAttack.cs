@@ -1009,8 +1009,10 @@ public sealed partial class GameSessionOwner
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step (0x4B3770), at the landing for a shot that flew.
-        if (resolution.Refusal == AttackRefusal.None && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
-            attack.HitScripts?.Invoke(new(pending is null ? WieldedEntity() : pending.WeaponItem, resolution.Outcome == AttackOutcome.CriticalHit, pending is not null, pending?.Thrown is not null));
+        // ARC-SCRIPT-2841 (TQ22): a critical miss's self-hit asks them too, before its damage step, but only where the attack is resolved at once: a shot or a throw that flies runs no hit step on the self-hit (the projectile ends on the attacker's own tile).
+        if (attack.HitScripts is { } hitScripts && HitScriptEventOf(resolution, !(pending is null && attack.Flight), !(attack.Flight || throwing),
+                new(pending is null ? WieldedEntity() : pending.WeaponItem, false, pending is not null, pending?.Thrown is not null)) is { } hitEvent)
+            hitScripts(hitEvent);
         // ARC-DEV-261 (GT198): the victim's script comes before the invulnerable gate, so a prevented damage asks it too; its answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)

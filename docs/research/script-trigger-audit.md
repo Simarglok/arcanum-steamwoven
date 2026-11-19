@@ -18,7 +18,7 @@ beyond the rows named here is **NOT_VERIFIED**.
 
 The firing conditions of every trigger kind (when, for whom, which gates, what the return changes) and the corrections to
 this note (TG2 callers, points 15 and 16, the first heartbeat, unlock, catching thief) are in
-[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ28); its section 2 is newer than the
+[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ29); its section 2 is newer than the
 host column of section 2 here.
 
 ## Answer
@@ -85,7 +85,7 @@ from line 0, static.
 | 31 | dialog override | none | — (DLG number) | 0 | — |
 | 32 | transfer | 0x461D18 | hero's item moves | 6 (4) | 3 |
 | 33 | caught thief | 0x4C76CE, 0x4C78E9 | NPC thief's pick pocket: `AreaAiHost.PickPocketAttempt` → `AreaUseScriptHost.RunCaughtThief` (ARC-SCRIPT-2858); the hero thief has no script | 10 | — |
-| 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483); the worn armour pieces' (0x4B47F8, `AreaUseScriptHost.RunArmourCritical`, ARC-SCRIPT-2828: 2 of the 4 rows are armour, scripts 30219 and 30237, admitted whole; 35 never runs on armour) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
+| 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483); the worn armour pieces' (0x4B47F8, `AreaUseScriptHost.RunArmourCritical`, ARC-SCRIPT-2828: 2 of the 4 rows are armour, scripts 30219 and 30237, admitted whole; 35 never runs on armour); the self-hit of a critical miss runs 7/34/26 for an attack resolved at once (ARC-SCRIPT-2841, TQ29) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
 | 35 | critical miss | 0x4B2F35, 0x4B3163, 0x4B399C (and 0x4B47F8) | **none** | 2 (2) | — |
 
 

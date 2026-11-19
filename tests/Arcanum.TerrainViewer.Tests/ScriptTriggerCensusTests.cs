@@ -366,6 +366,59 @@ public sealed class ScriptTriggerCensusTests
         Assert.IsTrue(armourScripts.All(number => content.Script(number).Status == ScriptContentStatus.Read && ScrAdmission.AdmitFrom(content.Script(number).Program!, AreaUseScriptHost.CombatPointAdmission, 0).IsAdmitted), "the armour scripts run whole");
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2841 (ledger TQ22; AC2): the installed weapons (object type 5) whose attachments the self-hit of a critical miss reaches: the hit (7) and critical-hit (34) points, over the placed rows of every map the data opens whole and over every item
+    /// prototype, with the script numbers; the attacker's critter-hits point (26) is counted over the critters. Numbers and script numbers only; <c>ARC_SELF_HIT_CENSUS</c>, when set, receives the report. Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_weapons_with_hit_and_critical_hit_scripts_that_a_critical_miss_self_hit_reaches_are_counted()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        var report = new List<string>();
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var points = new[] { ScrPoint.Hit, ScrPoint.CriticalHit, ScrPoint.CritterHits };
+        var placed = new SortedDictionary<(int Point, int Type), (int Rows, SortedSet<int> Scripts)>();
+        var maps = 0;
+        foreach (var map in WorldCatalog.Open(stack).Maps)
+        {
+            Arcanum.Data.Area.AreaSnapshot? snapshot;
+            try { snapshot = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default).Area?.Snapshot; }
+            catch (Exception error) when (error is InvalidOperationException or Arcanum.Data.Area.AreaException) { report.Add($"skipped {map.Name}: {error.Message}"); continue; }
+            if (snapshot is null) continue;
+            maps++;
+            foreach (var row in snapshot.Objects.GroupBy(AreaUseScriptHost.EntityId).Select(g => g.First()))
+                foreach (var point in points)
+                    if (AreaUseScriptHost.LoadedSlot(row, point) is { Script: > 0 } slot)
+                    {
+                        var (rows, scripts) = placed.GetValueOrDefault((point, row.Type), (0, new SortedSet<int>()));
+                        scripts.Add(slot.Script);
+                        placed[(point, row.Type)] = (rows + 1, scripts);
+                    }
+        }
+        report.Add($"maps read {maps}");
+        foreach (var ((point, type), (rows, scripts)) in placed) report.Add($"placed point {point} type {type}: rows {rows} scripts {string.Join(",", scripts)}");
+        var prototypes = ContentPrototypes.Open(stack);
+        var byPrototype = new SortedDictionary<(int Point, int Type), (int Prototypes, SortedSet<int> Scripts)>();
+        foreach (var number in prototypes.Numbers)
+            if (Arcanum.Data.Combat.CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { } fields)
+                foreach (var attachment in fields.Object.ScriptAttachments.Where(a => a.Script > 0 && points.Contains(a.Point)))
+                {
+                    var (count, scripts) = byPrototype.GetValueOrDefault((attachment.Point, fields.Object.Type), (0, new SortedSet<int>()));
+                    scripts.Add(attachment.Script);
+                    byPrototype[(attachment.Point, fields.Object.Type)] = (count + 1, scripts);
+                }
+        foreach (var ((point, type), (count, scripts)) in byPrototype) report.Add($"prototype point {point} type {type}: prototypes {count} scripts {string.Join(",", scripts)}");
+        if (Environment.GetEnvironmentVariable("ARC_SELF_HIT_CENSUS") is { Length: > 0 } output) File.WriteAllLines(output, report);
+        Assert.AreEqual(81, maps);
+        // The installed data (ARC-SCRIPT-2841, 81 maps read whole): the hit point (7) sits on 26 placed weapon rows (11 scripts) and 4 weapon prototypes (28003, 28006, 28007, 29006; 6 more on type 14 prototypes); the critical-hit point (34) on 2 placed weapon rows
+        // (30047, 30064) and no weapon prototype; the critter-hits point (26) on 18 placed critter rows (1345, 30122) and 9 critter prototypes. A self-hit of a critical miss reaches the points of the weapon the attacker holds and its own point 26.
+        CollectionAssert.AreEqual(new[] { (ScrPoint.Hit, 5), (ScrPoint.CritterHits, 16), (ScrPoint.CriticalHit, 5), (ScrPoint.CriticalHit, 7) }.OrderBy(k => k).ToArray(), placed.Keys.OrderBy(k => k).ToArray());
+        Assert.AreEqual((26, 18, 2), (placed[(ScrPoint.Hit, 5)].Rows, placed[(ScrPoint.CritterHits, 16)].Rows, placed[(ScrPoint.CriticalHit, 5)].Rows));
+        CollectionAssert.AreEqual(new[] { 30047, 30064 }, placed[(ScrPoint.CriticalHit, 5)].Scripts.ToArray());
+        Assert.AreEqual((4, 9), (byPrototype[(ScrPoint.Hit, 5)].Prototypes, byPrototype[(ScrPoint.CritterHits, 16)].Prototypes));
+        Assert.IsFalse(byPrototype.ContainsKey((ScrPoint.CriticalHit, 5)), "no weapon prototype carries the critical-hit point");
+    }
+
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",
         "--module", Path.Combine(root, "modules", "Arcanum.dat"), "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test",
         "--actor-resource", Path.Combine(root, "arcanum1.dat"), "--game-root", root, "--area-map", map]);
