@@ -111,7 +111,7 @@ public sealed class ScrNewspaperTests
     }
 
     [TestMethod]
-    public void S59_is_S58_plus_the_two_newspaper_actions_and_the_interpreter_runs_nothing_above_it()
+    public void S59_is_S58_plus_the_two_newspaper_actions_and_the_interpreter_accepts_it()
     {
         Assert.IsTrue(ScrAdmissionSet.S58.IsSubsetOf(ScrAdmissionSet.S59));
         Assert.IsFalse(ScrAdmissionSet.S59.IsSubsetOf(ScrAdmissionSet.S58));

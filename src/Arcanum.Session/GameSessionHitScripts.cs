@@ -9,8 +9,10 @@ namespace Arcanum.Session;
 /// the thrown item, the projectile's weapon; null for bare hands or a critter that holds none): its hit (7) and critical-hit (34) scripts run when it is not null, the attacker's own critter-hits script (26)
 /// runs whether or not it is. <see cref="Critical"/> is the context's critical flag (the critical-hit point, 34). <see cref="Projectile"/> marks the projectile path (0x4B2F60, a shot that flew), whose critical-hit point asks
 /// that the weapon is a weapon item. <see cref="Thrown"/>: the weapon is an item thrown (the hero's throw lands through the thrown-item host, which runs the hit point of its own, ARC-MAGIC-042). The attacker and the victim are the host's own (it built the attack). The answers of the scripts are not read (the call sites ignore them).
+/// ARC-SCRIPT-2841 (TQ31, 0x4B6410, 0x4B3170): <see cref="SelfHit"/> marks the hit a critical miss turned on the attacker (the context's hit flag 0x2 set, the target := the attacker, the critical flag 0x4 half of the time, which is <see cref="Critical"/> here):
+/// the victim is the attacker itself, so the host passes the attacker as the extra object of the weapon's points and as the triggerer of its own critter-hits point (26).
 /// </summary>
-public readonly record struct SessionHitScriptEvent(string? Weapon, bool Critical, bool Projectile, bool Thrown = false);
+public readonly record struct SessionHitScriptEvent(string? Weapon, bool Critical, bool Projectile, bool Thrown = false, bool SelfHit = false);
 
 /// <summary>
 /// ARC-COMBAT-1719 (ledger PF9, PS5; 0x4B2870): what the session tells the host's weapon scripts at an end of a projectile's flight, asked while the shot is still in flight: <see cref="Attacker"/> is the shooter (the hero's
@@ -32,6 +34,22 @@ public readonly record struct SessionArmourCriticalEvent(DamageRecipient Recipie
 
 public sealed partial class GameSessionOwner
 {
+    /// <summary>
+    /// ARC-SCRIPT-2841 (0x4B3170 → 0x4B6410 → 0x4B3770, ranged without projectile art 0x4B2F60): the combat-point event of a resolved attack, or null when none runs. A hit or critical hit runs when <paramref name="hitLands"/> (a shot that flies asks at its strike instead);
+    /// a critical miss turned on the attacker runs for its self-hit when <paramref name="selfHitRuns"/>: the original's self-hit has a hit step only where the attack is resolved at once (a swing, a shot with no projectile art); a projectile that flies, a throw included,
+    /// ends at once on the attacker's own tile and runs no hit step at all (ARC-SCRIPT-2841 exe read), so those callers pass false. The event's <see cref="SessionHitScriptEvent.Critical"/> is the self-hit's critical flag (point 34). A plain miss, a dodge and a refusal run nothing here.
+    /// </summary>
+    private static SessionHitScriptEvent? HitScriptEventOf(AttackResolution resolution, bool hitLands, bool selfHitRuns, SessionHitScriptEvent hit)
+    {
+        if (resolution.Refusal != AttackRefusal.None) return null;
+        return resolution.Outcome switch
+        {
+            AttackOutcome.Hit or AttackOutcome.CriticalHit when hitLands => hit with { Critical = resolution.Outcome == AttackOutcome.CriticalHit },
+            AttackOutcome.CriticalMiss when selfHitRuns && resolution.Damage is { Recipient: DamageRecipient.Attacker } => hit with { Critical = resolution.CriticalSelfHit, SelfHit = true },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// ARC-SCRIPT-2828 (0x4B4390, the loop at 0x4B47F8, GT201): tells <paramref name="scripts"/> of the armour a critical damage step reaches, right after the victim's taking-damage script let the damage go on. The step is critical when
     /// the damage is a critical hit's on the target or a critical self-hit's on the attacker (context flag 4); it runs for a living victim only (hit points above 0 before the damage: the original returns for a dead critter before the loop) and
