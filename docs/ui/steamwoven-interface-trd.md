@@ -201,6 +201,22 @@ The layout model is `SteamwovenLayout` in `Arcanum.Presentation`, with the colum
 - **Removal ([#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926)):** the full-width plan and its presets, the side boards and the per-family full-middle backdrops of the viewer, the layout option's `full-width` and `column-thin` choices, their smoke variants and checks; the `legacy` capture variant ([#2672](https://github.com/Simarglok/arcanum-steamwoven/issues/2672)) stays. The
   [prototype section](#prototype-of-the-play-screen-arc-ui-2452) above is trimmed to what remains in the same PR.
 
+### Menus in the column (ARC-UI-2891)
+
+Issue [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891). **Owner decision 2026-11-19 (after the first composite of the column plan's full-screen zone):** in column mode every **full-screen menu** (main, single player, new game, in-play, options: `AreaMenuArtView`, `AreaMainMenuPanel`)
+and every **two-strip screen** (pre-made, new character, shop and the save and load lists: their 800 × 600 screen, whose 800 × 400 body lies between its own two strips) is **scaled up to fill the window's height from edge to edge**, centred, and everything beside it is **black**.
+The column plan's full-screen zone (a plate at `3.6 · k · f` with wood gaps at 16:10 and k = 0.8) is not used by the menus; k makes no difference to them.
+
+- **Plate.** `SteamwovenColumnMenu.Fit(width, height)`: scale `min(width / 800, height / 600)` device px per unit (the whole height from 4:3 and wider; a window narrower than 4:3 is limited by its width and has black above and below), the rectangle centred (the top left rounded from its exact position, halves up; the far edges rounded up, so the black starts after the drawn plate): 1920 × 1080 s = 1.8, the plate 1440 × 1080 at x = 240; 2560 × 1600 s = 8/3, 2134 × 1600 at x = 213; 1920 × 1200 s = 2, 1600 × 1200 at x = 160. The plan is `SteamwovenFullScreen.Plan(w, h, options)` (the plate fitted, the rest of the layout unchanged); the two-strip views take their place from
+  `AreaGameBarPanel.TwoStripScreen`, which is `SteamwovenColumnMenu.Place` with the column option on and the window zone's place with it off, as before. The fractional scale is sampled Linear, as in the full-width layout.
+- **Black, nothing else.** No wood sides, no vignette, no full-width backdrop, no wood gap (the plate leaves none). `SteamwovenColumnMenu.BlackRects` are the rectangles around the plate (`SteamwovenColumnSidesView`, which also takes the pointer over the whole window: the menu is modal).
+- **Hit testing** is the control's own transform, so it follows the drawn plate; `SteamwovenFullScreenPlan.HitTest` is the same mapping as plain numbers (unit-tested; a pointer on the black hits nothing).
+- Unchanged: the full-width layout (the option off), HD off (the whole-factor plate and the pack's 16:9 plate), the Credits and View Intro black fills.
+
+Unit tests: `SteamwovenColumnMenuTests` (the plate and the black at the AC5 sizes, 4:3 and a narrower window, tiling of the window by the black and the plate, hit tests, the full-width plan unchanged). Smoke: `./arcanum smoke pr --stages menu --main-menu --env ARC_AREA_MENU_COLUMN=1 [--env ARC_STEAMWOVEN_SIZES=WxH,...] [--env ARC_AREA_MENU_CAPTURE=PATH.png]`
+(default sizes 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200, 3440 × 1440, 1280 × 800) checks, for the main and options windows and the pre-made and new-character screens, the plate's scale and place against `Fit`, its full height, the black rectangles, no full-width backdrop, the labels' hit tests and the pixels of the black, and saves
+`PATH-column-WINDOW-WxH.png`; with the column option off, and with it on but the HD option off, nothing of it shows. The same pass runs on the save list inside the save window's smoke (`SaveListColumnForSmoke`, saved with `ARC_AREA_SAVE_CAPTURE`).
+
 ## Asset kit
 
 Part kinds:
