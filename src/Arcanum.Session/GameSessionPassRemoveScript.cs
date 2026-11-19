@@ -13,10 +13,9 @@ public sealed partial class GameSessionOwner
     /// the triggerer) and a dead body's inventory walk (0x463860, the corpse). Each removal runs point 28 with the holder as the triggerer and the item as the attachee, result ignored, at the item's own place in the walk (after its unlink, before its
     /// destroy or drop), so the caller calls <see cref="Run"/> item by item, right before it applies the item. A run is made, prepared and committed on its own (one revision comes from the pass). An event pass cannot refuse a removal, so a run the session
     /// cannot apply (a host callback, a row of another map, an effect the session does not model) or no script host in the world is counted in <see cref="SessionPassRemovals.Skipped"/> and the removal goes on without it, as before the scripts were run.
-    /// </summary>
-    /// <summary>
+    ///
     /// ARC-SCRIPT-2885 (0x467860 → 0x467CB0): a removal of an item the NPC holder wears runs its wield-off script (25) first, then 28, the NPC as the wearer (<paramref name="wearerOf"/>: the pass world's context for it, else <see cref="NpcWearerScripts"/>);
-    /// no context for it counts the removal as skipped, as no script host does.
+    /// no context for it counts the removal as skipped (its 28 still runs alone), as no script host does.
     /// </summary>
     private sealed class PassRemovals(GameSessionOwner owner, ISessionItemScriptHost? host, SessionMapId map, Func<string, SessionNpcWieldScripts?>? wearerOf = null)
     {
@@ -28,11 +27,25 @@ public sealed partial class GameSessionOwner
         {
             if (!points.Contains(SessionScriptPoint.RemoveItem) && !(points.Contains(SessionScriptPoint.WieldOff) && owner.WornByNpc(holder, item))) return;
             if (host is null || map != owner._actor.Map) { _skipped++; return; }
-            var removal = owner.RunRemovalScript(item, holder, points, host, npc => wearerOf?.Invoke(npc) ?? owner.NpcWearerScripts?.Invoke(npc));
+            // No wearer context for a worn item's wield-off run: that run is counted skipped and the remove-item script still runs alone, as before point 25 was run.
+            Func<string, SessionNpcWieldScripts?> context = npc => wearerOf?.Invoke(npc) ?? owner.NpcWearerScripts?.Invoke(npc);
+            if (points.Contains(SessionScriptPoint.WieldOff) && owner.WornByNpc(holder, item) && !HasContext(context, holder))
+            {
+                _skipped++;
+                if (!points.Contains(SessionScriptPoint.RemoveItem)) return;
+                points = [.. points.Where(point => point != SessionScriptPoint.WieldOff)];
+            }
+            var removal = owner.RunRemovalScript(item, holder, points, host, context);
             if (removal.Runs is not { } runs) { _skipped++; return; }
             runs.Commit();
             _scripts.AddRange(runs.Runs);
             _messages.AddRange(runs.Messages);
+        }
+
+        private static bool HasContext(Func<string, SessionNpcWieldScripts?> context, string holder)
+        {
+            try { return context(holder) is not null; }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { return false; }
         }
 
         internal SessionPassRemovals Result => _scripts.Count == 0 && _messages.Count == 0 && _skipped == 0 ? SessionPassRemovals.None : new(_scripts.AsReadOnly(), _messages.AsReadOnly(), _skipped);

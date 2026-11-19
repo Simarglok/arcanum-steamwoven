@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using Arcanum.Scripting.Scr;
 
 namespace Arcanum.Session;
@@ -69,7 +70,9 @@ public sealed partial class GameSessionOwner
         return new(null, runs);
     }
 
-    // ARC-SCRIPT-2885: whether the NPC wears the item as the removal sees it (inventory location 1000..1008): the record of an NPC the session dressed decides (ARC-WORLD-103), else the item's row in the shown map's seed.
+    // ARC-SCRIPT-2885: whether the NPC wears the item as the removal sees it (inventory location 1000..1008): the record of an NPC the session dressed decides (ARC-WORLD-103), else the item's row in the shown map's seed; body armour (slot 1006) the
+    // session's durability record shows broken was taken off by the break (its original location -1 then, ledger AR8, QueryNpcBodyArmorTakenOff), so no 25 runs for it again.
     private bool NpcItemWorn(string npc, string item) =>
-        _inventory.NpcWorn.TryGetValue(npc, out var worn) ? worn.ContainsValue(item) : NpcItemSeed(npc, item) is { } row && row.Facts.Worn;
+        _inventory.NpcWorn.TryGetValue(npc, out var worn) ? worn.ContainsValue(item)
+            : NpcItemSeed(npc, item) is { } row && row.Facts.Worn && !(row.Facts.InventoryLocation == (int)EquipmentSlot.Armor && _durability.Records.TryGetValue(item, out var condition) && condition.Broken);
 }

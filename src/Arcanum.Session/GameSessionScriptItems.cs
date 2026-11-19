@@ -87,7 +87,7 @@ public sealed partial class GameSessionOwner
         if (scripts is null && item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || wornWieldOff)
             return new(item, $"destroy item named {name} would run a destroy, remove-item or wield-off script of {item.Entity}, which is not modelled", GameSessionFailure.ItemScriptUnsupported);
         if (scripts is not null && RunRemovalScript(item.Entity, holder, item.ScriptPoints, scripts).Done is { } dry)
-            return new(item, $"destroy item named {name}: the remove-item script of {item.Entity} cannot be applied ({dry.Failure})", dry.Failure);
+            return new(item, $"destroy item named {name}: the wield-off or remove-item script of {item.Entity} cannot be applied ({dry.Failure})", dry.Failure);
         if (HasItemRuns(item.Entity) || item.Worn && item.ItemSpells)
             return new(item, $"destroy item named {name}: {item.Entity} is the source of a running spell or carries worn item spells", GameSessionFailure.ItemEffectUnsupported);
         if (_durability.Count >= _limits.MaxDurabilityRecords && !_durability.Records.ContainsKey(item.Entity))

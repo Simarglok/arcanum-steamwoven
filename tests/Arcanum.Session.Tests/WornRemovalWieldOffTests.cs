@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Clock;
@@ -173,14 +174,14 @@ public sealed class WornRemovalWieldOffTests
     }
 
     [TestMethod]
-    public void The_restock_clear_without_a_context_for_a_worn_wield_off_counts_the_removal_skipped_and_still_deletes_the_item()
+    public void The_restock_clear_without_a_context_for_a_worn_wield_off_counts_it_skipped_runs_the_remove_item_script_alone_and_deletes_the_item()
     {
         using var owner = Owner();
         var host = Hosted(owner);
         var done = Restock(owner, new World(host, context: false));
         Assert.AreEqual(3, done.Removed);
-        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.RemoveItem, "sack") }, done.Removals.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
-        Assert.AreEqual(1, done.Removals.Skipped, "the helm's run set needs the wearer");
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.RemoveItem, "helm"), (SessionScriptPoint.RemoveItem, "sack") }, done.Removals.Scripts.Select(run => (run.Point, run.Attachee)).ToArray(), "the helm's 28 still runs alone");
+        Assert.AreEqual(1, done.Removals.Skipped, "the helm's 25 needs the wearer");
         Assert.IsTrue(owner.IsItemDestroyed("helm"));
     }
 
@@ -226,14 +227,14 @@ public sealed class WornRemovalWieldOffTests
     }
 
     [TestMethod]
-    public void A_bodys_walk_without_a_context_skips_the_worn_items_run_set_and_still_drops_the_item()
+    public void A_bodys_walk_without_a_context_skips_the_worn_items_25_runs_its_28_alone_and_still_drops_the_item()
     {
         using var owner = Owner();
         var host = Hosted(owner);
         Kill(owner, "npc-1");
         var fired = owner.ProcessEvents(new World(host, context: false)).BodyDecays.Single();
-        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 0, 1), (fired.Outcome, fired.Removals.Scripts.Count, fired.Removals.Skipped));
-        Assert.IsFalse(ReadFlag(owner, 3));
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 1), (fired.Outcome, fired.Removals.Scripts.Count, fired.Removals.Skipped), "the hat's 25 is skipped, its 28 runs alone");
+        Assert.AreEqual((false, true), (ReadFlag(owner, 3), ReadFlag(owner, 7)));
     }
 
     [TestMethod]
@@ -245,5 +246,66 @@ public sealed class WornRemovalWieldOffTests
         var caster = new SessionSpellCaster(owner, _ => null, new RestockStateTests.NoMap(), new World(host, context: true));
         var fired = caster.ProcessEvents().BodyDecays.Single();
         Assert.AreEqual((SessionBodyDecayOutcome.Removed, 2, 0), (fired.Outcome, fired.Removals.Scripts.Count, fired.Removals.Skipped), "the wrapper forwards the wearer context");
+    }
+
+    // The break's own write (ItemBreakStep.Broken) is the durability record this marks; a session test has no other door to it from outside.
+    private static void MarkBroken(GameSessionOwner owner, string item)
+    {
+        var durability = typeof(GameSessionOwner).GetField("_durability", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(owner)!;
+        var records = (SortedDictionary<string, ItemCondition>)durability.GetType().GetProperty("Records", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(durability)!;
+        records[item] = new ItemCondition(15, 0, 0, false) with { Broken = true };
+    }
+
+    [TestMethod]
+    public void A_broken_body_armour_the_break_took_off_runs_no_25_again()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new(
+            [new("smith", SessionHolderKind.Npc, false, true, [], ["plate"])], [new("plate", Both(SessionItemType.Armor, 2809, 1006) with { Invulnerable = true }, null)])).Failure);
+        MarkBroken(owner, "plate");
+        var host = Hosted(owner);
+        owner.NpcWearerScripts = _ => throw new AssertFailedException("the broken armour is no longer worn: no 25, no context");
+        var result = owner.DestroyMapNpc(owner.Version, Exterior, "smith", new CellCoord(101, 202), scripts: host);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        CollectionAssert.AreEqual(new[] { $"slot plate {SessionScriptPoint.RemoveItem}" }, Slots(host));
+    }
+
+    // The session's own record of what a dressed NPC wears (ARC-WORLD-103), set directly: a session test has no other door to it from outside.
+    private static SortedDictionary<EquipmentSlot, string> Dress(GameSessionOwner owner, string npc)
+    {
+        var inventory = typeof(GameSessionOwner).GetField("_inventory", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(owner)!;
+        var worn = (SortedDictionary<string, SortedDictionary<EquipmentSlot, string>>)inventory.GetType().GetProperty("NpcWorn", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(inventory)!;
+        return worn[npc] = [];
+    }
+
+    [TestMethod]
+    public void A_dressed_npcs_record_decides_what_it_wears_whatever_its_map_data_says()
+    {
+        using var owner = Owner();
+        var host = Hosted(owner);
+        // The record says the NPC wears nothing: the map data's helm is in the pack, so no 25 and no context asked; a made-up record that names the sack as worn makes the sack run 25.
+        var record = Dress(owner, "smith");
+        owner.NpcWearerScripts = _ => throw new AssertFailedException("nothing the NPC wears has a wield-off point");
+        var dry = owner.DestroyMapNpcRefusal(Exterior, "smith", new CellCoord(101, 202), host);
+        Assert.IsNull(dry);
+        record[EquipmentSlot.Armor] = "sack";
+        Wear(owner, host, "smith");
+        host.Asked.Clear();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyMapNpc(owner.Version, Exterior, "smith", new CellCoord(101, 202), scripts: host).Disposition);
+        CollectionAssert.AreEqual(new[] { $"slot sack {SessionScriptPoint.WieldOff}", $"slot sack {SessionScriptPoint.RemoveItem}", $"slot helm {SessionScriptPoint.RemoveItem}" }, Slots(host),
+            "the walk goes last item first: the sack (now worn: 25 then 28), then the helm (in the pack: 28 only)");
+    }
+
+    [TestMethod]
+    public void A_28_only_item_shares_the_run_set_with_a_worn_25_item()
+    {
+        using var owner = Owner();
+        var host = Hosted(owner);
+        Wear(owner, host, "smith");
+        host.Asked.Clear();
+        var result = owner.DestroyMapNpc(owner.Version, Exterior, "smith", new CellCoord(101, 202), scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        CollectionAssert.AreEqual(new[] { $"slot sack {SessionScriptPoint.RemoveItem}", $"slot helm {SessionScriptPoint.WieldOff}", $"slot helm {SessionScriptPoint.RemoveItem}" }, Slots(host));
+        Assert.AreEqual((true, true), (ReadFlag(owner, 3), ReadFlag(owner, 7)), "the sack's 28 and the helm's 25 and 28 all applied in one run set");
     }
 }
