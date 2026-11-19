@@ -85,8 +85,8 @@ is never replaced and each such start says so again. A folder is ready when the 
 `GameFolderStatus` with the missing name. The start is map mode on `Arcanum1-024-fixed` with the main menu and the
 folder's own inputs, the same as `./arcanum area` (`test_launcher_sync.py` keeps the two in step). The log prints
 `ARC-DEV-046` lines: the settings read, each folder checked, the save and the folder used (GOG marker, verified
-1.0.7.4 executable, changed identity, whether the launcher screen shows). Not built: applying the stored display at
-start (window or fullscreen, monitor, UI scale; stored, not edited or applied); the candidate paths are F0 until a
+1.0.7.4 executable, changed identity, whether the launcher screen shows). Not built: applying the stored display's
+monitor and UI scale (stored, not edited or applied); the window mode applies at start (below); the candidate paths are F0 until a
 packaging task checks them on Windows and in Wine wrappers.
 
 ### Launcher screen (ARC-UI-014)
@@ -180,7 +180,7 @@ ARC_AREA_MAP_SMOKE_ONLY=menu` and `godot_canonical --path tools/terrain-viewer/G
 with `FILE` absent, or with `--launcher`) prints `ARC-UI-014 native-smoke launcher PASS` (the detected or stored folder
 ready, an empty folder refused, Original chosen, Play storing it and starting under Original), then
 `ARC-UI-011 native-smoke main menu PASS`; with `FILE` holding a stored folder and no `--launcher` the log says
-`launcher reason=None` and the menu smoke runs at once. Not done: applying the display at start, keyboard and
+`launcher reason=None` and the menu smoke runs at once. Not done: applying the display's monitor and UI scale at start, keyboard and
 controller use of the screen (mouse only), the candidate paths and the folder dialog on Windows and with wrappers (F0).
 
 ARC-DEV-047: the launcher and the main menu show the build in their bottom right corner (`ViewerBuildInfo`):
@@ -244,8 +244,10 @@ with 32-pixel margins. Zoom is bounded to 0.125–8.0 with nearest 1/1024 fit
 rounding. Arrow/WASD pans, wheel and `+`/`-` zoom, and left drag pans. `R`
 resets initial Fit, `F` recomputes Fit, and `L` reloads through the same
 generation-aware load route. Resize changes HUD layout only; the camera's
-current Fit or manual pan/zoom transform survives resize. F11 toggles normal fullscreen and
-Escape restores windowed mode. The resizable default is 1280x800. These are the standalone-mode controls; WORLD has the distinct controls below.
+current Fit or manual pan/zoom transform survives resize. F11 toggles fullscreen and
+Escape restores windowed mode (fullscreen is the platform's kind: on macOS the exclusive mode, so the Dock and the menu bar stay hidden, also at the
+screen edge; elsewhere the plain one, ARC-UI-2771; the choice is stored as `display.window` of the launcher settings, and a first start without a
+settings file opens fullscreen; an automated run neither applies nor stores it). The resizable default is 1280x800. These are the standalone-mode controls; WORLD has the distinct controls below.
 A responsive synthetic HUD matrix checks containment,
 sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
@@ -2148,6 +2150,11 @@ A PROJECT window (the original has no such window; no original art; all text Eng
   record are taken at Send, not at opening (ARC-DEV-2236: an overlay opened and closed leaves the session alone). Send writes the same
   report folder (the same writer and places) tagged with the step (`Check:` line, ARC-DEV-2189); the folder name is recorded in the
   step's result (status kept, `open` when none). One send per opening; the note is the player's text.
+- **Answered group (ARC-DEV-2768).** A step with a status other than open or with a report folder recorded is answered (a Ctrl+B report
+  tagged with the step is recorded in `results.jsonl` too, status kept). Answered steps leave the list and sit in a collapsed group at its
+  end (button `Answered (n)` expands it; rows show `[same 2026-11-18]`, `[answered ...]` for a report only). A new overlay starts on the
+  first unanswered step even when `active-check.txt` still names an answered one; Next open skips answered steps. **Reopen** appends an
+  `open` result with no report (the note stays). The smoke `report` stage checks the group and Reopen.
 - **Plate.** While a step is current a read-only plate at the top left (`Check ARC-TYPE-NNN#k: step`) stays on screen; it takes no click and
   no key and draws no original art.
 - **Smoke.** Stage `report` also runs the overlay (marker `ARC-DEV-2190 native-smoke owner-qa PASS`, required beside the report's own):

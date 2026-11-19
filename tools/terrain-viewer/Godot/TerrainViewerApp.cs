@@ -1209,8 +1209,8 @@ public partial class TerrainViewerApp : Node
                 GD.Print("ARC-RENDER-004 input=L reload");
                 _lastLoad = StartLoadAsync(_arguments, false);
             }
-            else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
-            else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
+            else if (key.Keycode == Key.F11) SwitchWindowMode(null);
+            else if (key.Keycode == Key.Escape && ViewerWindowMode.IsFullscreen(GetWindow())) SwitchWindowMode(false);
             else if (_readyActorInput is not null && key.Keycode == Key.Key1) SelectActorAction(ActorDiagnosticAction.Idle);
             else if (_readyActorInput is not null && key.Keycode == Key.Key2) SelectActorAction(ActorDiagnosticAction.Walk);
             else if (_readyActorInput is not null && key.Keycode == Key.Bracketleft) SelectActorFacing(-1);

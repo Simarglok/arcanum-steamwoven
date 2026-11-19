@@ -1064,6 +1064,8 @@ public partial class TerrainViewerApp
             var frames = 0; var walked = false; var swing = false;
             hostMs = 30_000_000L;
             TickAreaClock(hostMs);
+            // ARC-COMBAT-2769: the follower's swing is drawn with its attack ART frames, as an NPC's is (the viewer drew its stand only).
+            _npcAttackFramesOf.Clear();
             for (; frames < 4000 && host.TraceOf(follower)?.Hit is null; frames++)
             {
                 _areaSmokeTime++;
@@ -1076,6 +1078,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-115 ai-follower smoke trace event={trace?.Event} danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
             Require(trace?.Hit is { } hit && !hit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal), $"the follower's blow was resolved after {frames} frames: {trace?.Hit}");
             Require(swing, "its attempt-attack goal ran");
+            var followerFrames = _npcAttackFramesOf.TryGetValue(follower, out var drawnFrames) ? drawnFrames.Count : 0;
+            Require(followerFrames >= 2, $"the follower's attack was drawn with its attack ART: {followerFrames} distinct frames (ARC-COMBAT-2769)");
             Require(walked || apart <= 1, "it walked up through its own walk");
             var at = host.Tile(follower)!.Value;
             var there = host.Tile(enemy)!.Value;

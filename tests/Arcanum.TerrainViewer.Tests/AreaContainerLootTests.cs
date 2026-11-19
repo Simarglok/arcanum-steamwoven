@@ -306,6 +306,11 @@ public sealed class AreaContainerLootTests
         var loot = RestockRules.GenerateOnce(set, CrateX);
         Assert.AreEqual((SessionRestockOutcome.Regenerated, 1, loot.Coins, loot.BasicPrototypes.Count), (done.Outcome, done.Removed, done.Coins, done.Created.Count));
         Assert.IsTrue(session.QueryContainerGenerated(new(1), Entity(5)));
+        // ARC-UI-2766 (FR-ITEM-003): the loot window's gold pile carries its real coins for the item window's Quantity line, and no other item carries a quantity.
+        var piles = inventory.View(session, null, 1, Entity(5)).LootGrid.Where(item => item.Kind.Type == SessionItemType.Gold).ToArray();
+        Assert.AreEqual(1, piles.Length, "the generated pile is in the loot grid");
+        Assert.AreEqual(loot.Coins, piles[0].Quantity);
+        Assert.IsTrue(inventory.View(session, null, 1, Entity(5)).LootGrid.Where(item => item.Kind.Type != SessionItemType.Gold).All(item => item.Quantity is null));
         Assert.AreEqual(GameSessionDisposition.NoChange, AreaRestockHost.Schedule(session, inventory, Entity(5))?.Disposition, "no source after it (RK12)");
         // The kept amulet and the new goods are looted; the destroyed axe is gone.
         Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(5), Entity(11)).Disposition);
