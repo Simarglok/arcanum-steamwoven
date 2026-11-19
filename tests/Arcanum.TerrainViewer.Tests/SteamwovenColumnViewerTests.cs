@@ -8,6 +8,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class SteamwovenColumnViewerTests
 {
+    private static readonly SteamwovenLayoutOptions ThinColumn = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KThin); // ARC-UI-2925: the model keeps k = 0.8, the viewer no longer offers it
     private static readonly (int W, int H)[] Sizes = [(3840, 2160), (2560, 1440), (1920, 1080), (2560, 1600), (1920, 1200), (3440, 1440), (1280, 800), (1366, 768)];
 
     private static SteamwovenHudPlan Plan(int w, int h, SteamwovenLayoutOptions options) => SteamwovenHud.Plan(w, h, options)!;
@@ -15,7 +16,7 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void The_hud_plan_of_a_column_has_the_strips_scale_and_the_column_s_zone()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutOptions.ColumnFitted })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, ThinColumn, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, options);
@@ -30,7 +31,7 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void A_window_stands_in_the_column_zone_at_the_column_s_unit_scale()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutOptions.ColumnFitted })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, ThinColumn, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, options);
@@ -63,7 +64,7 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void The_gaps_take_the_family_s_wood_and_tile_with_the_window_zone_to_the_column()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutOptions.ColumnFitted })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, ThinColumn, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
         {
@@ -129,7 +130,7 @@ public sealed class SteamwovenColumnViewerTests
     {
         foreach (var (w, h) in Sizes)
         {
-            var plan = Plan(w, h, SteamwovenLayoutOptions.ColumnThin);
+            var plan = Plan(w, h, ThinColumn);
             var column = plan.Column!;
             var play = SteamwovenColumnEdges.Parts(plan, false);
             Assert.AreEqual(2, play.Count, $"{w}x{h}");
@@ -182,7 +183,7 @@ public sealed class SteamwovenColumnViewerTests
         Assert.IsNull(SteamwovenLayoutChoices.TryParse("wide"));
         Assert.IsNull(SteamwovenLayoutChoices.TryParse(null));
         Assert.AreEqual(SteamwovenLayoutOptions.ColumnFitted, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.Column));
-        Assert.AreEqual(SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.ColumnThin));
+        Assert.IsNull(SteamwovenLayoutChoices.TryParse("column-thin"), "ARC-UI-2925: the thin preset is gone");
         Assert.IsNull(SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.FullWidth).Column);
         Assert.AreEqual(SteamwovenLayoutOptions.Default, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.FullWidth));
     }

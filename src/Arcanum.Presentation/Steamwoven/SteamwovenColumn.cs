@@ -63,11 +63,10 @@ public sealed record SteamwovenWorldDim(double Darken, double Desaturate)
     public bool IsValid => Darken is >= 0 and <= 1 && Desaturate is >= 0 and <= 1;
 }
 
-/// <summary>ARC-UI-2890 (AC1): the layout the game option chooses: the column (the strips and the window as one 4:3 composition scaled to the frame's height, the world at the sides; the default while it is tested), the column with the thinner strips (k = 0.8, wood in the gaps: kept for comparison), or the full-width panels.</summary>
+/// <summary>ARC-UI-2890 (AC1): the layout the game option chooses: the column (the strips and the window as one 4:3 composition scaled to the frame's height, the world at the sides; the default while it is tested) or the full-width panels. ARC-UI-2925: the thin-strip preset (`column-thin`) is gone; a settings line that still says it reads as the default.</summary>
 public enum SteamwovenLayoutChoice
 {
     Column,
-    ColumnThin,
     FullWidth,
 }
 
@@ -80,7 +79,6 @@ public static class SteamwovenLayoutChoices
     public static string Name(SteamwovenLayoutChoice choice) => choice switch
     {
         SteamwovenLayoutChoice.Column => "column",
-        SteamwovenLayoutChoice.ColumnThin => "column-thin",
         SteamwovenLayoutChoice.FullWidth => "full-width",
         _ => throw new ArgumentOutOfRangeException(nameof(choice)),
     };
@@ -89,16 +87,14 @@ public static class SteamwovenLayoutChoices
     public static SteamwovenLayoutChoice? TryParse(string? name) => name?.Trim().ToLowerInvariant() switch
     {
         "column" => SteamwovenLayoutChoice.Column,
-        "column-thin" => SteamwovenLayoutChoice.ColumnThin,
         "full-width" => SteamwovenLayoutChoice.FullWidth,
         _ => null,
     };
 
-    /// <summary>The layout options of a choice: <see cref="SteamwovenLayoutOptions.ColumnFitted"/>, <see cref="SteamwovenLayoutOptions.ColumnThin"/> or the full-width default.</summary>
+    /// <summary>The layout options of a choice: <see cref="SteamwovenLayoutOptions.ColumnFitted"/> or the full-width default.</summary>
     public static SteamwovenLayoutOptions Options(SteamwovenLayoutChoice choice) => choice switch
     {
         SteamwovenLayoutChoice.Column => SteamwovenLayoutOptions.ColumnFitted,
-        SteamwovenLayoutChoice.ColumnThin => SteamwovenLayoutOptions.ColumnThin,
         SteamwovenLayoutChoice.FullWidth => SteamwovenLayoutOptions.Default,
         _ => throw new ArgumentOutOfRangeException(nameof(choice)),
     };

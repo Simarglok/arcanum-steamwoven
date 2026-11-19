@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
 {
     // ARC-UI-2452: opt-in part of the native bar smoke (ARC_AREA_BAR_STEAMWOVEN=1, with ARC_HD_PACK: the generated interface runs the HD path). The play screen is laid out by the
     // Steamwoven layout model at each size of ARC_STEAMWOVEN_SIZES (default: the TRD's verification sizes, SWI-VER-6) for each panel-height variant of ARC_STEAMWOVEN_VARIANTS
-    // (default "thin,original,column,column-thin": SWI-LAY-10's 120 and 456 master px, the original strips' 150 and 570, and the column mode of ARC-UI-2890 with k = 1 and k = 0.8), with and without an open menu. The window takes the size's width, not its height (a Mac screen may be smaller than 3840 x 2160; ARC-UI-2696, FitWindowToRenderTargetAsync): the root
+    // (default "thin,original,column": SWI-LAY-10's 120 and 456 master px, the original strips' 150 and 570, and the fitted column mode of ARC-UI-2890; ARC-UI-2925: the k = 0.8 variant is gone), with and without an open menu. The window takes the size's width, not its height (a Mac screen may be smaller than 3840 x 2160; ARC-UI-2696, FitWindowToRenderTargetAsync): the root
     // viewport is given the size as its logical render target (content scale mode Viewport), so the captures have exactly the requested size.
     // ARC_AREA_BAR_CAPTURE=PREFIX saves PREFIX-hud-steamwoven-VARIANT-WxH[-menu].png (local, never in git).
     // ARC-DEV-2672: the variant "legacy" is the Original look (the HD option off: Legacy textures, no plan, the whole-factor layout) at the same sizes and windows, for side-by-side comparison with the Steamwoven
@@ -30,14 +30,14 @@ public partial class TerrainViewerApp
     private static IReadOnlyList<(string Name, SteamwovenLayoutOptions Options)> SteamwovenVariants()
     {
         var text = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_VARIANTS");
-        if (string.IsNullOrWhiteSpace(text)) text = "thin,original,column,column-thin";
+        if (string.IsNullOrWhiteSpace(text)) text = "thin,original,column";
         var list = new List<(string, SteamwovenLayoutOptions)>();
         foreach (var name in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             // "before" is the whole-factor layout of the generated interface as it was (captured for the owner's comparison; no layout checks).
-            // ARC-UI-2890: "column" and "column-thin" are the column mode (the original's strip width, the world at the sides; k = 1 and k = 0.8).
-            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, "column" => SteamwovenLayoutOptions.ColumnFitted, "column-wood" => SteamwovenLayoutOptions.ColumnOriginal, "column-thin" => SteamwovenLayoutOptions.ColumnThin, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
-            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, column, column-wood, column-thin, before, legacy or TOP-BOTTOM master px");
+            // ARC-UI-2890: "column" is the fitted column mode and "column-wood" the unfitted one (the original's strip width, k = 1, the world at the sides).
+            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, "column" => SteamwovenLayoutOptions.ColumnFitted, "column-wood" => SteamwovenLayoutOptions.ColumnOriginal, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
+            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, column, column-wood, before, legacy or TOP-BOTTOM master px");
             list.Add((name, options));
         }
         return list;
@@ -373,10 +373,26 @@ public partial class TerrainViewerApp
                 $"[{tag}] the spell pane stands at the frame's left edge {frame.X} + 12 and 12 above its bottom {frame.Bottom} (got {paneRect})");
             require(Math.Abs(listRect.End.X - (frame.Right - 8)) <= 1e-2f && Math.Abs(listRect.Position.Y - (frame.Y + 8)) <= 1e-2f, $"[{tag}] the combat list stands at the frame's right edge {frame.Right} - 8, 8 under its top (got {listRect})");
             require(Math.Abs(floaters.DrawScale - scale) < 1e-4f, $"[{tag}] the floaters are laid out at the strips' scale {scale} (got {floaters.DrawScale})");
-            portraits.Show(Enumerable.Range(0, 2).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
+            // ARC-UI-2925 (AC3): seven followers show the whole group (portraits, both scroll arrows, the show/hide button on its brass plate); it moves as one: every part stands at its original height (units from the top of the composition) at the
+            // composition's scale and the group's left edge is the window's left edge.
+            if (_portraitContent is { } content) portraits.Bind(InterfaceTextures(content.Art));
+            portraits.Show(Enumerable.Range(0, 7).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
             await frames(2);
             var origin = new Vector2(frame.X, plan.TopStripY);
             require(portraits.OriginForSelfTest == origin && Math.Abs(portraits.ScaleForSelfTest - scale) < 1e-4f, $"[{tag}] the follower portraits hang from the frame's left edge at {origin} (got {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
+            require(frame.X == 0, $"[{tag}] the frame's left edge is the window's left edge (got {frame.X})");
+            bool Near(Rect2 got, float x, float y, float w, float h) => Math.Abs(got.Position.X - (origin.X + x * scale)) <= 1.01f && Math.Abs(got.Position.Y - (origin.Y + y * scale)) <= 1.01f
+                && Math.Abs(got.Size.X - w * scale) <= 1.01f && Math.Abs(got.Size.Y - h * scale) <= 1.01f;
+            require(portraits.ButtonScreenRectForSelfTest("toggle") is { } toggleRect && Near(toggleRect, 0, 428, 67, 13), $"[{tag}] the show/hide button is 67 x 13 units at (0, 428) of the composition (got {portraits.ButtonScreenRectForSelfTest("toggle")})");
+            require(portraits.ButtonScreenRectForSelfTest("up") is { } upRect && Near(upRect, 0, 415, 33, 13) && portraits.ButtonScreenRectForSelfTest("down") is { } downRect && Near(downRect, 33, 415, 34, 13),
+                $"[{tag}] the scroll arrows stand at (0, 415) and (33, 415) of the composition (got {portraits.ButtonScreenRectForSelfTest("up")} and {portraits.ButtonScreenRectForSelfTest("down")})");
+            for (var slot = 0; slot < 6; slot++)
+                require(portraits.FrameForSelfTest("smoke:" + slot) is { } slotFrame && Near(slotFrame.Rect, 11, 50 + 62 * slot, 40, 49), $"[{tag}] follower slot {slot} stands at (11, {50 + 62 * slot}) of the composition (got {portraits.FrameForSelfTest("smoke:" + slot)?.Rect})");
+            var plate = SteamwovenFollowerBacking.Plate(AreaFollowerPanelRules.ToggleRect);
+            require(portraits.BackingScreenRectForSelfTest is { } backing && Near(backing, plate.X, plate.Y, plate.Width, plate.Height) && backing.Encloses(portraits.ButtonScreenRectForSelfTest("toggle")!.Value),
+                $"[{tag}] the show/hide button stands on its brass plate {plate} (got {portraits.BackingScreenRectForSelfTest})");
+            for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+            await CaptureHudAsync("steamwoven-" + tag + "-followers", frames);
             require(portraits.OriginForSelfTest.X + 2 * scale <= column.Column.X || column.Column.X - frame.X < 2 * scale, $"[{tag}] the portraits' left edge lies left of the column at {column.Column.X}");
             sleep.Place(); fate.Place();
             // The sleep and fate views are screens of the original: they stay on the strips' screen, centred in the column.

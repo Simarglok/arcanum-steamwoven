@@ -150,7 +150,7 @@ public partial class LauncherPanel : CanvasLayer
         _hd1 = MakeChoiceRow("Hd", "HD:", dark, ["Off", "On"], index => HdRequested?.Invoke(index == 1));
         _hdPack = MakeChoiceRow("HdPack", "HD pack:", dark, ["Auto", "Game", "Custom"], index => HdPackRequested?.Invoke((HdPackSourceMode)index));
         _hdGenerated = MakeChoiceRow("HdGenerated", "Generated interface (experimental):", dark, ["Off", "On"], index => HdGeneratedRequested?.Invoke(index == 1));
-        _hdLayout = MakeChoiceRow("HdLayout", "Interface layout (generated):", dark, ["Column", "Column thin", "Full width"], index => HdLayoutRequested?.Invoke((SteamwovenLayoutChoice)index));
+        _hdLayout = MakeChoiceRow("HdLayout", "Interface layout (generated):", dark, ["Column", "Full width"], index => HdLayoutRequested?.Invoke((SteamwovenLayoutChoice)index));
         _hdNote = Line(new Color(.3f, .3f, .3f));
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
