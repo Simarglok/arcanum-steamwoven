@@ -467,7 +467,10 @@ public partial class TerrainViewerApp
     private sealed record SteamwovenWindowProbe(string Name, Action Open, Func<bool> IsOpen, Action Close, Func<(Vector2 Origin, float Scale)?> View, Func<SteamwovenHudPlan, SteamwovenWindowPlace> Expected, SteamwovenBackdropFamily? Family = null, bool Optional = false);
 
     private static SteamwovenWindowPlace ZoneBody(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, 800, 400);
-    private static SteamwovenWindowPlace ZoneScreen(SteamwovenHudPlan plan) => SteamwovenWindowZone.Screen(plan, AreaShopArtLayout.Window.Y);
+    // ARC-UI-2891: with the column option the two-strip screens (save and load lists, pre-made, new character, shop) stand on the fitted plate of SteamwovenColumnMenu (AreaGameBarPanel.TwoStripScreen); otherwise in the zone.
+    private static SteamwovenWindowPlace ZoneScreen(SteamwovenHudPlan plan) =>
+        plan.Column is not null && SteamwovenColumnMenu.Plan(plan.Layout.WindowWidth, plan.Layout.WindowHeight, plan.Options) is { } menu
+            ? SteamwovenColumnMenu.Place(menu) : SteamwovenWindowZone.Screen(plan, AreaShopArtLayout.Window.Y);
     // ARC-UI-2714: the reading window stands in the zone like the others: its top left is the zone body's (its 800 x 399 under the body's top).
     private static SteamwovenWindowPlace ZoneReading(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, AreaReadingArtLayout.Window.Width, AreaReadingArtLayout.Window.Height + 1);
 
