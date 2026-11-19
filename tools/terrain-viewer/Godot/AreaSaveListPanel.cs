@@ -74,7 +74,7 @@ public partial class AreaSaveListPanel : CanvasLayer
             ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
         };
         _panel.AddThemeStyleboxOverride("panel", _panelStyle);
-        // ARC-UI-2891: with the column option the list's 800 × 600 screen stands in the column; the sides are black or a vignette.
+        // ARC-UI-2891: with the column option the list's 800 × 600 screen fills the window's height and the rest is black.
         _sides = new SteamwovenColumnSidesView();
         AddChild(_sides);
         _art = new AreaSaveListArtView();
@@ -251,7 +251,7 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (_art.Visible)
         {
             _art.Place();
-            if (AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column) _sides.Present(column, SteamwovenColumnMenu.Sides, AreaMenuArtView.DefaultEdgeTone);
+            if (AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column) _sides.Present(column);
             else _sides.Clear();
             _panel.Position = _art.Position + new Vector2(200, AreaSaveListArtLayout.BottomStripTop + 47) * _art.Scale;
             _panel.Size = new Vector2(400, AreaSaveListArtLayout.BottomStripHeight - 47) * _art.Scale;

@@ -161,35 +161,6 @@ public partial class AreaMenuArtView : Control
     private SteamwovenLayoutOptions? _planOptions;
     private bool _hadPlan;
 
-    private Texture2D? _toneOf;
-    private Color _tone = DefaultEdgeTone;
-
-    /// <summary>ARC-UI-2891: the tone of the plate's own dark edge for the column's vignette: the average of the background's outermost columns on both sides, or a dark brown where it cannot be read.</summary>
-    internal static readonly Color DefaultEdgeTone = new(.09f, .06f, .04f);
-
-    internal Color EdgeTone
-    {
-        get
-        {
-            if (_background is null) return DefaultEdgeTone;
-            if (ReferenceEquals(_toneOf, _background)) return _tone;
-            _toneOf = _background;
-            _tone = DefaultEdgeTone;
-            using var image = _background.GetImage();
-            if (image is null || image.GetWidth() < 12 || image.IsCompressed()) return _tone;
-            double r = 0, g = 0, b = 0; var count = 0;
-            for (var x = 0; x < 6; x++)
-                for (var y = 0; y < image.GetHeight(); y += 4)
-                    foreach (var column in new[] { x, image.GetWidth() - 1 - x })
-                    {
-                        var pixel = image.GetPixel(column, y);
-                        (r, g, b, count) = (r + pixel.R, g + pixel.G, b + pixel.B, count + 1);
-                    }
-            if (count > 0) _tone = new Color((float)(r / count), (float)(g / count), (float)(b / count));
-            return _tone;
-        }
-    }
-
     private Texture2D? WidescreenBackground()
     {
         // The generated backdrop continues the menu's background over the frame, so the pack's 16:9 plate is not used.

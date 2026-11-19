@@ -126,7 +126,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         // ARC-UI-2577: the generated backdrop of the Steamwoven full-screen menus (over the frame, under the art; the window outside the frame is the black of _backdrop).
         _frameBackdrop = new SteamwovenBoardView { Name = "MainMenuFrameBackdrop", Visible = false };
         AddChild(_frameBackdrop);
-        // ARC-UI-2891: with the column option the menus stand in the column: black or vignette sides and wood only in a vertical gap, instead of the full-width backdrop.
+        // ARC-UI-2891: with the column option the menus fill the window's height with black beside the plate, instead of the full-width backdrop.
         _sides = new SteamwovenColumnSidesView();
         AddChild(_sides);
         _art = new AreaMenuArtView();
@@ -505,14 +505,14 @@ public partial class AreaMainMenuPanel : CanvasLayer
     }
 
     /// <summary>ARC-UI-2577: the generated backdrop over the frame while a full-screen menu is drawn by the Steamwoven layout; shown once its first paint is in (until then the black of the window shows).
-    /// ARC-UI-2891: with the column option every art window of this panel (the full-screen menus and the pre-made, new-character and shop screens) instead gets the column's surroundings: no full-width backdrop.</summary>
+    /// ARC-UI-2891: with the column option every art window of this panel (the full-screen menus and the pre-made, new-character and shop screens) instead gets black around the plate: no full-width backdrop.</summary>
     private void UpdateFrameBackdrop()
     {
         var anyArt = _art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible;
         if (anyArt && AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column)
         {
             _frameBackdrop.Visible = false;
-            _sides.Present(column, SteamwovenColumnMenu.Sides, SteamwovenColumnMenu.Sides == SteamwovenColumnSides.Vignette && _art.Visible ? _art.EdgeTone : AreaMenuArtView.DefaultEdgeTone);
+            _sides.Present(column);
             return;
         }
         _sides.Clear();
@@ -525,7 +525,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _frameBackdrop.Visible = _frameBackdrop.Texture is not null;
     }
 
-    /// <summary>ARC-UI-2891: for the self-test: the column's surroundings (black rectangles, vignette, wood gaps) and whether they show.</summary>
+    /// <summary>ARC-UI-2891: for the self-test: the black around the plate in column mode and whether it shows.</summary>
     internal (SteamwovenColumnSidesView Sides, bool Shown) ColumnSidesForSelfTest => (_sides, _sides.Visible);
 
     /// <summary>ARC-UI-2577: for the self-test: the generated backdrop and whether it shows.</summary>

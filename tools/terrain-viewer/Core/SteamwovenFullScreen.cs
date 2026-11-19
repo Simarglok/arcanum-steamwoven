@@ -10,10 +10,10 @@ namespace Arcanum.TerrainViewer.Core;
 /// </summary>
 public sealed record SteamwovenFullScreenPlan(SteamwovenLayout Layout, double Factor, PixelRect Zone)
 {
-    /// <summary>ARC-UI-2891: the column plan of the layout when the plan was made in column mode (the zone and factor are then the column's full-screen zone), null for the full-width one.</summary>
+    /// <summary>ARC-UI-2891: the column plan of the layout when the plan was made in column mode, null for the full-width one. The menus do not use the column plan's full-screen zone (owner decision 2026-11-19: the plate fills the window's height edge to edge): the zone and factor are those of <see cref="SteamwovenColumnMenu.Fit"/>.</summary>
     public SteamwovenColumnPlan? Column => Layout.Column;
 
-    /// <summary>True when the menu stands in the column: no wood sides, no full-width backdrop; the sides are black or a vignette and a vertical gap takes the window's wood.</summary>
+    /// <summary>True when the menu is laid out in column mode: the plate fills the window's height, centred, and everything beside it is black; no wood sides, no full-width backdrop.</summary>
     public bool IsColumn => Column is not null;
 
     /// <summary>The frame (the generated backdrop's rectangle in device pixels of the window).</summary>
@@ -41,13 +41,13 @@ public static class SteamwovenFullScreen
 {
     /// <summary>
     /// The plan for a window of <paramref name="width"/> × <paramref name="height"/> device pixels, or null where the layout is not supported (below f = 0.25). With <paramref name="options"/> in column mode
-    /// (ARC-UI-2891: <see cref="SteamwovenLayoutOptions.Column"/>) the zone is the column plan's full-screen zone at the strip scale `3.6 · k · f`; any other options give the full-width plan, as before.
+    /// (ARC-UI-2891: <see cref="SteamwovenLayoutOptions.Column"/>) the plate is fitted to the window's height (<see cref="SteamwovenColumnMenu.Fit"/>); any other options give the full-width plan, as before.
     /// </summary>
     public static SteamwovenFullScreenPlan? Plan(int width, int height, SteamwovenLayoutOptions? options = null)
     {
         var column = options?.Column is not null;
         if (SteamwovenLayoutBuilder.Compute(width, height, column ? options : null).Layout is not { } layout) return null;
-        if (layout.Column is { } plan) return new SteamwovenFullScreenPlan(layout, plan.UnitScale, plan.FullScreen.Zone);
+        if (layout.Column is not null) { var (factor, zone) = SteamwovenColumnMenu.Fit(width, height); return new SteamwovenFullScreenPlan(layout, factor, zone); }
         var unit = layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator);
         return new SteamwovenFullScreenPlan(layout, unit.ToDouble(), layout.FullScreenBackdrop.Zone);
     }

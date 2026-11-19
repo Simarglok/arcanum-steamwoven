@@ -7,11 +7,11 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-UI-2891: opt-in part of the menu smoke (ARC_AREA_MENU_COLUMN=1, or a list of `column` and `column-thin`): the full-screen menus (main, options) and the two-strip screens (pre-made,
-    // new character; the save list has its own pass inside the save window's smoke, ARC_AREA_MENU_COLUMN with `--stages scene`) in the column mode of the Steamwoven layout (TRD "Column mode"), at each size of ARC_STEAMWOVEN_SIZES (default: the AC5 sizes of the play-screen slice, 2560x1440, 1920x1080,
-    // 2560x1600, 1920x1200, 3440x1440, 1280x800) for each sides option of ARC_AREA_MENU_COLUMN_SIDES (default `black,vignette`): the 800 x 600 plate stands in the column plan's full-screen zone at the strip scale,
-    // no full-width backdrop, black or vignette sides, generated wood only in a vertical gap, the pointer hitting the labels where they are drawn (the full-screen windows, through the plan's mapping).
-    // ARC_AREA_MENU_CAPTURE=PATH.png also saves PATH-column-VARIANT-SIDES-WINDOW-WxH.png (local, never in git). The window is not resized: the root viewport takes the size as its logical render target.
+    // ARC-UI-2891: opt-in part of the menu smoke (ARC_AREA_MENU_COLUMN=1, or `column`): the full-screen menus (main, options) and the two-strip screens (pre-made, new character; the save list has its own pass inside
+    // the save window's smoke, ARC_AREA_MENU_COLUMN with `--stages scene` or `menu`) in column mode of the Steamwoven layout (TRD "Column mode", owner decision 2026-11-19: the plate fills the window's height from edge
+    // to edge, black beside it), at each size of ARC_STEAMWOVEN_SIZES (default: the AC5 sizes, 2560x1440, 1920x1080, 2560x1600, 1920x1200, 3440x1440, 1280x800): the plate's scale and place, the black rectangles, no
+    // full-width backdrop, the pointer hitting the labels where they are drawn (the full-screen windows) and not on the black, the pixels of the black side. ARC_AREA_MENU_CAPTURE=PATH.png also saves
+    // PATH-column-WINDOW-WxH.png (local, never in git). The window is not resized: the root viewport takes the size as its logical render target.
     private static IReadOnlyList<Vector2I> ColumnMenuSizes()
     {
         var text = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_SIZES");
@@ -27,21 +27,14 @@ public partial class TerrainViewerApp
         var window = GetWindow();
         var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
         var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
-        var (savedOptions, savedSides) = (SteamwovenHud.Options, SteamwovenColumnMenu.Sides);
+        var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
-        var variants = ColumnSmokeVariants();
-        var sidesList = ColumnSmokeSides();
         async Task SaveAsync(string name)
         {
             if (capture is null) return;
             await frames(2);
             using var image = GetViewport().GetTexture().GetImage();
             require(image.SavePng($"{capture}-{name}.png") == Error.Ok, "the capture saved: " + name);
-        }
-        async Task WaitGapsAsync(Func<SteamwovenColumnSidesView> sides)
-        {
-            for (var wait = 0; wait < 1800 && sides().PaintPendingForSelfTest; wait++) await frames(1);
-            await frames(2);
         }
         var checkedCases = 0;
         try
@@ -68,31 +61,27 @@ public partial class TerrainViewerApp
                 ("newcharacter", () => SteamwovenOpenMenuWindow(421, require), () => panel.NewCharacterArtMode,
                     () => (panel.NewCharacterArtForSelfTest.Position, panel.NewCharacterArtForSelfTest.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, ReopenMainForColumnSmoke),
             };
-            foreach (var (variantName, options) in variants)
-            foreach (var sides in sidesList)
             {
+                var options = SteamwovenLayoutOptions.ColumnOriginal;
                 SteamwovenHud.Options = options;
-                SteamwovenColumnMenu.Sides = sides;
                 foreach (var screen in screens)
                 {
                     screen.Open();
                     await frames(3);
-                    require(screen.IsOpen(), $"[{variantName}-{sides}] the {screen.Name} window opened (window {_mainMenu?.Window})");
+                    require(screen.IsOpen(), $"[column] the {screen.Name} window opened (window {_mainMenu?.Window})");
                     foreach (var size in ColumnMenuSizes())
                     {
                         window.ContentScaleSize = size;
                         for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
                         require((Vector2I)window.GetVisibleRect().Size == size, $"the viewport is {size}, got {window.GetVisibleRect().Size}");
                         await frames(3);
-                        var tag = $"{variantName}-{sides}-{screen.Name}-{size.X}x{size.Y}";
+                        var tag = $"{screen.Name}-{size.X}x{size.Y}";
                         var plan = SteamwovenColumnMenu.Plan(size.X, size.Y, options);
                         require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the menu is laid out by the column plan");
                         var layout = plan!;
-                        var surround = screen.Sides();
-                        await WaitGapsAsync(screen.Sides);
-                        await CheckColumnCaseAsync(tag, layout, sides, surround, screen.Plate() ?? throw new InvalidOperationException($"[{tag}] the {screen.Name} view is not drawn"),
-                            panel.FrameBackdropForSelfTest.Shown, screen.Name is "main" or "options" ? art : null,
-                            screen.Name is "main" or "options" ? art.EdgeTone : AreaMenuArtView.DefaultEdgeTone, frames, require);
+                        await frames(2);
+                        await CheckColumnCaseAsync(tag, layout, screen.Sides(), screen.Plate() ?? throw new InvalidOperationException($"[{tag}] the {screen.Name} view is not drawn"),
+                            panel.FrameBackdropForSelfTest.Shown, screen.Name is "main" or "options" ? art : null, frames, require);
                         await SaveAsync($"column-{tag}");
                         checkedCases++;
                     }
@@ -117,34 +106,16 @@ public partial class TerrainViewerApp
         finally
         {
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
-            (SteamwovenHud.Options, SteamwovenColumnMenu.Sides) = (savedOptions, savedSides);
+            SteamwovenHud.Options = savedOptions;
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
         }
     }
 
-    private static IReadOnlyList<(string Name, SteamwovenLayoutOptions Options)> ColumnSmokeVariants()
-    {
-        var text = System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_COLUMN");
-        return [.. (string.IsNullOrWhiteSpace(text) || text == "1" ? "column,column-thin" : text)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(name => (Name: name, Options: name switch
-            {
-                "column" => SteamwovenLayoutOptions.ColumnOriginal,
-                "column-thin" => SteamwovenLayoutOptions.ColumnThin,
-                _ => throw new InvalidOperationException($"ARC-UI-2891 column menu smoke: ARC_AREA_MENU_COLUMN entry '{name}' is not column or column-thin"),
-            }))];
-    }
-
-    private static IReadOnlyList<SteamwovenColumnSides> ColumnSmokeSides() =>
-        [.. (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_COLUMN_SIDES") is { Length: > 0 } text ? text : "black,vignette")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(name => SteamwovenColumnMenu.ParseSides(name) ?? throw new InvalidOperationException($"ARC-UI-2891 column menu smoke: sides '{name}' is not black or vignette"))];
-
     /// <summary>
-    /// ARC-UI-2891: the save list (an open save or load window of the original's look) in the column mode, at each size and sides option of the menu pass: the 800 × 600 screen stands in the column's full-screen
-    /// zone, the sides are black or a vignette, no wood sides; saved as PATH-column-VARIANT-SIDES-saves-WxH.png with ARC_AREA_SAVE_CAPTURE.
+    /// ARC-UI-2891: the save list (an open save or load window of the original's look) in column mode at each size of the menu pass: the 800 × 600 screen fills the window's height from edge to edge and the rest is
+    /// black; saved as PATH-column-saves-WxH.png with ARC_AREA_SAVE_CAPTURE.
     /// </summary>
     private async Task SaveListColumnForSmoke(Action<bool, string> require, Func<int, Task> frames)
     {
@@ -152,7 +123,7 @@ public partial class TerrainViewerApp
         var window = GetWindow();
         var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
         var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
-        var (savedOptions, savedSides) = (SteamwovenHud.Options, SteamwovenColumnMenu.Sides);
+        var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         var cases = 0;
         try
@@ -163,69 +134,52 @@ public partial class TerrainViewerApp
             window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
             window.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
             window.ContentScaleFactor = 1;
-            foreach (var (variantName, options) in ColumnSmokeVariants())
-            foreach (var sides in ColumnSmokeSides())
+            SteamwovenHud.Options = SteamwovenLayoutOptions.ColumnOriginal;
+            foreach (var size in ColumnMenuSizes())
             {
-                (SteamwovenHud.Options, SteamwovenColumnMenu.Sides) = (options, sides);
-                foreach (var size in ColumnMenuSizes())
+                window.ContentScaleSize = size;
+                for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
+                require((Vector2I)window.GetVisibleRect().Size == size, $"the viewport is {size}, got {window.GetVisibleRect().Size}");
+                await frames(4);
+                var tag = $"saves-{size.X}x{size.Y}";
+                var plan = SteamwovenColumnMenu.Plan(size.X, size.Y, SteamwovenLayoutOptions.ColumnOriginal);
+                require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the save list is laid out by the column plan");
+                var art = panel.ArtForSelfTest;
+                await CheckColumnCaseAsync(tag, plan!, panel.ColumnSidesForSelfTest, (art.Position, art.Scale.X), false, null, frames, require);
+                if (capture is not null)
                 {
-                    window.ContentScaleSize = size;
-                    for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
-                    require((Vector2I)window.GetVisibleRect().Size == size, $"the viewport is {size}, got {window.GetVisibleRect().Size}");
-                    await frames(3);
-                    var tag = $"{variantName}-{sides}-saves-{size.X}x{size.Y}";
-                    var plan = SteamwovenColumnMenu.Plan(size.X, size.Y, options);
-                    require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the save list is laid out by the column plan");
-                    var sidesView = panel.ColumnSidesForSelfTest;
-                    for (var wait = 0; wait < 1800 && sidesView.PaintPendingForSelfTest; wait++) await frames(1);
-                    await frames(2);
-                    var art = panel.ArtForSelfTest;
-                    await CheckColumnCaseAsync(tag, plan!, sides, sidesView, (art.Position, art.Scale.X), false, null, AreaMenuArtView.DefaultEdgeTone, frames, require);
-                    if (capture is not null)
-                    {
-                        using var image = GetViewport().GetTexture().GetImage();
-                        require(image.SavePng($"{capture}-column-{tag}.png") == Error.Ok, "the capture saved: " + tag);
-                    }
-                    cases++;
+                    using var image = GetViewport().GetTexture().GetImage();
+                    require(image.SavePng($"{capture}-column-{tag}.png") == Error.Ok, "the capture saved: " + tag);
                 }
+                cases++;
             }
             GD.Print($"ARC-UI-2891 native-smoke save list column PASS cases={cases}");
         }
         finally
         {
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
-            (SteamwovenHud.Options, SteamwovenColumnMenu.Sides) = (savedOptions, savedSides);
+            SteamwovenHud.Options = savedOptions;
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
         }
     }
 
-    /// <summary>The checks of one column case (the plate, the surroundings, the hit tests of a full-screen window, the pixels); shared by the main menu's pass and the save list's.</summary>
-    private async Task CheckColumnCaseAsync(string tag, SteamwovenFullScreenPlan layout, SteamwovenColumnSides sides, SteamwovenColumnSidesView surround, (Vector2 Position, float Scale) plate,
-        bool frameBackdropShown, AreaMenuArtView? art, Color tone, Func<int, Task> frames, Action<bool, string> require)
+    /// <summary>The checks of one column case (the plate, the black around it, the hit tests of a full-screen window, the pixels); shared by the main menu's pass and the save list's.</summary>
+    private async Task CheckColumnCaseAsync(string tag, SteamwovenFullScreenPlan layout, SteamwovenColumnSidesView surround, (Vector2 Position, float Scale) plate,
+        bool frameBackdropShown, AreaMenuArtView? art, Func<int, Task> frames, Action<bool, string> require)
     {
         var (position, scale) = plate;
-        // The plate: the column's full-screen zone, drawn at the strip scale.
+        // The plate fills the window's height from edge to edge (the width limits a window narrower than 4:3), drawn at the fitted scale.
+        var (fitFactor, fitZone) = SteamwovenColumnMenu.Fit(layout.Layout.WindowWidth, layout.Layout.WindowHeight);
+        require(layout.Zone == fitZone && Math.Abs(layout.Factor - fitFactor) < 1e-9, $"[{tag}] the plan is the fitted plate {fitZone}");
+        require(layout.Layout.WindowWidth * 3 < layout.Layout.WindowHeight * 4 || (layout.Zone.Y == 0 && layout.Zone.Bottom == layout.Layout.WindowHeight), $"[{tag}] the plate spans the window's height: {layout.Zone}");
         require(Math.Abs(scale - (float)layout.Factor) < 1e-4f, $"[{tag}] the plate is drawn at {layout.Factor:F4}, got {scale}");
         require(Math.Abs(position.X - layout.Zone.X) <= 1.01f && Math.Abs(position.Y - layout.Zone.Y) <= 1.01f, $"[{tag}] the plate stands at {layout.Zone}, got {position}");
-        // The plate: the column's full-screen zone, drawn at the strip scale.
-        // No full-width backdrop and no wood sides; the black and vignette rectangles are the plan's.
+        // No full-width backdrop; the black is the plan's.
         require(!frameBackdropShown, $"[{tag}] no full-width backdrop shows");
-        require(surround.Visible && surround.BlackForSelfTest.SequenceEqual(SteamwovenColumnMenu.BlackRects(layout)), $"[{tag}] the sides are the plan's black rectangles");
-        var (wantLeft, wantRight) = SteamwovenColumnMenu.VignetteRects(layout);
-        var vignette = surround.VignetteForSelfTest;
-        if (sides == SteamwovenColumnSides.Vignette)
-            require(vignette.Count == (wantLeft.Width > 0 ? 1 : 0) + (wantRight.Width > 0 ? 1 : 0)
-                && vignette.All(rect => rect.Position.Y == layout.Zone.Y && rect.Size.Y == layout.Zone.Height), $"[{tag}] the vignette hangs beside the plate: {vignette.Count} rectangles");
-        else require(vignette.Count == 0, $"[{tag}] no vignette with black sides");
-        // A vertical gap takes the generated wood; none where the plate fills the column.
-        var gaps = surround.GapsForSelfTest;
-        var wantGaps = new[] { layout.Column!.FullScreen.GapAbove, layout.Column.FullScreen.GapBelow };
-        for (var g = 0; g < 2; g++)
-            require(gaps[g].Shown == (wantGaps[g].Height > 0) && (!gaps[g].Shown || gaps[g].Rect == new Rect2(wantGaps[g].X, wantGaps[g].Y, wantGaps[g].Width, wantGaps[g].Height)),
-                $"[{tag}] the gap {g} ({wantGaps[g]}) shows wood only where the plate leaves one: shown={gaps[g].Shown} at {gaps[g].Rect}");
-        // Hit testing (the full-screen windows): the pointer over each drawn label lights it, over the black side or a gap it lights none.
+        require(surround.Visible && surround.BlackForSelfTest.SequenceEqual(SteamwovenColumnMenu.BlackRects(layout)), $"[{tag}] the black is the plan's rectangles");
+        // Hit testing (the full-screen windows): the pointer over each drawn label lights it, over the black beside the plate it lights none.
         if (art is not null)
         {
             var buttons = art.ButtonsForSelfTest;
@@ -240,35 +194,23 @@ public partial class TerrainViewerApp
                 await frames(1);
                 require(art.HoveredForSelfTest == slot, $"[{tag}] the pointer over label {slot} lights it, got {art.HoveredForSelfTest}");
             }
-            var side = new Vector2(Math.Max(1, layout.Column!.Column.X / 2), layout.Zone.Y + layout.Zone.Height / 2);
+            var side = new Vector2(Math.Max(1, layout.Zone.X / 2), layout.Zone.Y + layout.Zone.Height / 2);
             GetViewport().PushInput(new InputEventMouseMotion { Position = side, GlobalPosition = side }, true);
             await frames(1);
-            require(art.HoveredForSelfTest == -1, $"[{tag}] the pointer on the black side lights no label");
+            require(art.HoveredForSelfTest == -1, $"[{tag}] the pointer on the black lights no label");
         }
-        // Pixels: the side is black (or the vignette's tone beside the plate and black at the far edge); a gap is wood, not black.
-        using (var image = GetViewport().GetTexture().GetImage())
+        // Pixels: the black beside the plate is black, and the plate's own pixels are not.
+        using var image = GetViewport().GetTexture().GetImage();
+        var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+        Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
+        static int Sum(Color c) => c.R8 + c.G8 + c.B8;
+        var rowY = layout.Zone.Y + layout.Zone.Height / 2;
+        if (layout.Zone.X > 4)
         {
-            var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
-            Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
-            static int Sum(Color c) => c.R8 + c.G8 + c.B8;
-            var rowY = layout.Zone.Y + layout.Zone.Height / 2;
             var far = Pixel(1, rowY);
             var near = Pixel(layout.Zone.X - 2, rowY);
-            if (sides == SteamwovenColumnSides.Black) require(Sum(far) == 0 && Sum(near) == 0, $"[{tag}] the sides are black (far {far}, near {near})");
-            else
-        {
-            require(Sum(far) <= 12 && Sum(near) >= Sum(far), $"[{tag}] the vignette fades from the plate's edge tone ({near}) to black ({far})");
-            // A drawn vignette is lit beside the plate (a tone that is itself near black proves nothing).
-            if (tone.R8 + tone.G8 + tone.B8 >= 24) require(Sum(near) > 0, $"[{tag}] the vignette is drawn beside the plate: {near} for the tone {tone}");
+            require(Sum(far) == 0 && Sum(near) == 0, $"[{tag}] the black is black (far {far}, near {near})");
         }
-            for (var g = 0; g < 2; g++)
-                if (wantGaps[g].Height >= 4)
-                {
-                    var inside = Pixel(wantGaps[g].X + wantGaps[g].Width / 2, wantGaps[g].Y + wantGaps[g].Height / 2);
-                    require(Sum(inside) > 20, $"[{tag}] the gap {g} shows wood ({inside})");
-                }
-        }
-
     }
 
     // Back to the main window after a screen the smoke opened through the main menu's buttons.

@@ -166,7 +166,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     private static (int Width, int Height, SteamwovenLayoutOptions Options, SteamwovenFullScreenPlan? Plan)? _columnMenuPlan;
 
     /// <summary>
-    /// ARC-UI-2891: the column plan of the full-screen and two-strip menus for a window of <paramref name="size"/> (the 800 × 600 plate in the column's full-screen zone at the strip scale), or null while the layout is
+    /// ARC-UI-2891: the column-mode plan of the full-screen and two-strip menus for a window of <paramref name="size"/> (the 800 × 600 plate fitted to the window's height, black beside it), or null while the layout is
     /// off (the HD option or the generated interface off), the column option is not set (<see cref="SteamwovenHud.Options"/>) or the window is below f = 0.25. Looked up once per size and options (the views ask several times a frame).
     /// </summary>
     public static SteamwovenFullScreenPlan? ColumnMenuPlan(Vector2 size)
@@ -182,7 +182,7 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2891: the place of a two-strip screen (the save and load lists, the pre-made, new-character, editor and shop windows: an 800 × 600 screen whose 800 × 400 body lies between its own two strips,
-    /// <paramref name="bodyTopUnits"/> from its top). With the column option it is the column's full-screen zone, the plate centred in the whole frame; otherwise the window zone's place (<see cref="ZoneScreen"/>);
+    /// <paramref name="bodyTopUnits"/> from its top). With the column option it is the fitted plate (the window's height from edge to edge, centred); otherwise the window zone's place (<see cref="ZoneScreen"/>);
     /// null while the layout is off.
     /// </summary>
     public static SteamwovenWindowPlace? TwoStripScreen(Vector2 size, int bodyTopUnits) =>
