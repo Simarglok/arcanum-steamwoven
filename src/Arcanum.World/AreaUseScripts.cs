@@ -1544,6 +1544,32 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         finally { _itemUse = previousItem; }
     }
 
+    /// <summary>The object type of an armour piece (armour, shields, helmets, gauntlets, boots, rings and medallions), which the damage apply's armour loop asks (0x4B47F8: type 7).</summary>
+    private const int ArmourType = 7;
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (0x4B4390, the loop at 0x4B47F8, GT201; ledger TQ23): the critical-hit script (point 34) of each armour piece <paramref name="worn"/> (an entity of the victim's wear slots 1000–1008, in slot order; an item of another
+    /// type, a weapon or a generic item, runs none) for a critical damage step on a living critter: the attacker is the triggerer, <paramref name="victim"/> (the one who takes the damage: the attacker itself on a critical self-hit) the extra
+    /// object, line 0, through <see cref="RunCombatPoint"/> (its set, its slot kept as map changes); the answers are ignored. A piece the host cannot read (no row) or with no script at the point runs nothing. Returns the runs, one per piece
+    /// that was asked, in order.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> RunArmourCritical(IReadOnlyList<ScrObjectRef> worn, ScrObjectRef attacker, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(worn); ArgumentNullException.ThrowIfNull(rules);
+        var runs = new List<AreaScriptedUse>(worn.Count);
+        foreach (var piece in worn)
+        {
+            // An item the host was not given a map of is read by identity, as its use is (the type is the row's).
+            var previous = _itemUse;
+            _itemUse = piece;
+            bool armour;
+            try { armour = Row(piece)?.Type == ArmourType; }
+            finally { _itemUse = previous; }
+            if (armour) runs.Add(RunCombatPoint(ScrPoint.CriticalHit, piece, attacker, victim, rules));
+        }
+        return runs;
+    }
+
     /// <summary>
     /// ARC-WORLD-1160 (E3-a; 0x57BAC0, 0x4411C0, ledger SWB8): the leader-sleeping script (attachment point 29) of <paramref name="follower"/>, an NPC of the shown map that leads the hero's rest: the rest's option click runs it for
     /// every direct follower of the sleeper with the hero as the triggerer and the follower as the attachee, no extra object, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>).

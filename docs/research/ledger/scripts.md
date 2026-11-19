@@ -1262,7 +1262,7 @@ name the functions and the verdict. Corrections to TG2 and the audit are in that
 | TQ20 | wield hooks 0x4677B0/0x467CB0, rewield 0x465530, removal 0x467860 | 24/25 on worn slots and on magick/tech point changes; 28 on every removal. | F1; partial (#2827) |
 | TQ21 | sale check 0x462170, hover quote 0x578330 | Exactly 1 to buy, skipped at haggle training 2+. | F1; not modelled (#2825) |
 | TQ22 | melee 0x4B3770, ranged 0x4B2F60, projectile 0x4B2870 | 7/34, 26 (target → attacker), 8/35; projectile landing and range rules. | F1; agrees |
-| TQ23 | damage apply 0x4B4390 (0x4B47F8) | 34/35 on worn armour after 23. | F1; not modelled (#2828) |
+| TQ23 | damage apply 0x4B4390 (0x4B47F8), 0x4B6410, 0x4B3170, 0x4B3770, 0x4B2F60 | 34 on each worn type-7 piece (slots 1000–1008, slot order) for a critical damage on a living critter, after 23 and before the hit points are written; 35 unreachable (every damage apply with the critical flag has the hit flag: 0x4B6410 turns a critical miss into a hit on the attacker). | F1; agrees since ARC-SCRIPT-2828; the self-hit's weapon 7/34 and critter-hits 26 not run (#2841) |
 | TQ24 | damage apply 0x4B4390 (0x4B446B), throw 0x4B3C00 | 23 with re-entry guard, 0 cancels damage; 6, 0 throws nothing. | F1; agrees where hosted |
 | TQ25 | kill 0x45DA20, destroy 0x43CCA0, heal applier 0x4B58C0 | 12 (0 skips death), 20 per follower of the killer's PC leader, 2 (0 keeps), 18 also when blocked. | F1; 20 not modelled (#2825) |
 | TQ26 | object break 0x43F1C0, portal bust 0x4F06E0, rest 0x57BAC0 | Bust on objects with broken art; leader sleeping per follower. | F1; agrees |

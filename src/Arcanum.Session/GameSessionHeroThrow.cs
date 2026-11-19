@@ -38,6 +38,8 @@ public sealed record SessionHeroThrow(string Item, SessionGridMoveItem Facts, Ce
     public int? TargetLight { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
     public ISessionItemTriggers? ItemTriggers { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionAttack.ArmourScripts"/>, for the hero's own critical self-hit (the only damage step a throw at a location has).</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-COMBAT-1955 (0x466E00 → 0x467860, 0x4B3C00 → 0x441980): the host that runs the item's removal scripts (wield off 25 for a worn item, remove-item 28) and its throw script (point 6) before the throw; without it an
     /// item with any of them is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).</summary>
     public ISessionItemScriptHost? Scripts { get; init; }
@@ -382,6 +384,8 @@ public sealed partial class GameSessionOwner
                 new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots, Scatter = scatter, Ammunition = ammunition }, Version) { Destination = destination, AtLocation = true });
 
         // A critical miss: the throw turns on the hero (the attacker is the victim, as in any attack's critical-miss procedure).
+        // ARC-SCRIPT-2828 (0x4B47F8): the hero's worn armour runs its critical-hit script on a critical self-hit, before the hit points are written.
+        NotifyArmourCritical(request.ArmourScripts, resolution, request.HeroWorn, QueryLife(SessionLifeTarget.Hero).View?.Status);
         var applied = ApplyDamage(Version, SessionLifeTarget.Hero, damage, killer: null);
         var recipient = resolution.Damage.Recipient;
         if (applied.Disposition == GameSessionDisposition.Rejected)

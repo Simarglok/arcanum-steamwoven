@@ -118,6 +118,7 @@ public partial class TerrainViewerApp
         if (kind == AreaHoverWindowKind.Critter && !_hoverWindowDead && HoverLife(hit) is { } life)
         {
             if (_hoverWindowBars is null || !IsInstanceValid(_hoverWindowBars)) { _hoverWindowBars = new AreaWindowLifeBars(); panel.AddPart(AreaBarStrip.Bottom, _hoverWindowBars); }
+            _hoverWindowBars.SetFont(TextFonts()?.Text);
             _hoverWindowBars.Show(life);
         }
         panel.MessageLog.Render();
