@@ -1199,6 +1199,22 @@ python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
 python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
 ```
 
+## Steamwoven Codex batch runner (ARC-DEV-3001)
+
+[`tools/steamwoven_ui/codex_batch.py`](../../tools/steamwoven_ui/codex_batch.py) runs one inbox batch of the Steamwoven kit through the owner's subscription
+Codex CLI on the Mac (`codex exec` for the first item, `codex exec resume <thread_id>` for the rest, one session per batch) and writes
+`local/steamwoven-ui/outbox/<batch>/` with a provenance record per image; design, `batch.json` format and rules:
+[TRD](../ui/steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001). Standard-library Python; it runs no Godot and no `dotnet`, so it does not use the launch
+queue; it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
+[`steamwoven-codex-images`](../../.claude/skills/steamwoven-codex-images/SKILL.md) says how). Its tests use a fake `codex` and run in the batched `tools/local_dev/run_tests.py`.
+
+```sh
+python3 -B -m unittest tools.steamwoven_ui.test_codex_batch                          # task check: fake codex, no quota
+python3 -B tools/steamwoven_ui/codex_batch.py check                                  # codex version, image_generation on, subscription login
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]     # the commands, nothing is sent
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite]
+```
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
