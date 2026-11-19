@@ -129,9 +129,8 @@ public sealed partial class GameSessionOwner
     /// with no insert check; an NPC without one gets a new <c>made:n</c> pile of <paramref name="pileKind"/> after <paramref name="insertCheck"/>
     /// (<see cref="GiveGoldToNpc"/>'s rules, but no coins leave the hero). Refused before any effect: an invalid input
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know (<see cref="GameSessionFailure.UnknownHolder"/>),
-    /// a sum past 32 bits or a full pile, list or store budget (<see cref="GameSessionFailure.BudgetExceeded"/>), a destination with a transfer
-    /// script when it needs a new pile (<see cref="GameSessionFailure.HolderScriptUnsupported"/>), the host's verdict
-    /// (<see cref="GameSessionFailure.InsertRefused"/>), the revision. A count of 0 changes nothing. One revision.
+    /// a sum past 32 bits or a full pile, list or store budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the host's verdict
+    /// (<see cref="GameSessionFailure.InsertRefused"/>), the revision. A count of 0 changes nothing. One revision. A destination's transfer script (point 32) is not run for a new pile (ARC-SCRIPT-2857: it has no parent, 0x461810).
     /// </summary>
     public InventoryMutationResult GiveGoldToNpcFromNothing(GameSessionVersion expected, string npc, int count, SessionItemKind pileKind, SessionInsertCheck insertCheck)
     {
@@ -169,8 +168,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know (<see cref="GameSessionFailure.UnknownHolder"/>),
     /// a source pile with an insert-item script when there is no <paramref name="scripts"/> host (with one it runs first with the destination NPC as the triggerer, as in <see cref="TakeGoldFromNpc"/>; ARC-SCRIPT-2855) or a run the session cannot apply
     /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a sum past 32 bits or a full pile,
-    /// durability, list or store budget (<see cref="GameSessionFailure.BudgetExceeded"/>), a destination with a transfer script when it needs
-    /// a new pile (<see cref="GameSessionFailure.HolderScriptUnsupported"/>), the host's verdict (<see cref="GameSessionFailure.InsertRefused"/>),
+    /// durability, list or store budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the host's verdict (<see cref="GameSessionFailure.InsertRefused"/>),
     /// the revision. A count of 0 changes nothing. One revision.
     /// </summary>
     public InventoryMutationResult MoveGoldBetweenNpcs(GameSessionVersion expected, string from, string to, int count, SessionItemKind pileKind, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
@@ -634,8 +632,8 @@ public sealed partial class GameSessionOwner
         SessionHolderKind holder = SessionHolderKind.Npc)
     {
         refusal = null;
-        // The new object moves in through 0x4617F0, whose first step is the NPC's transfer script (NT2): not run here.
-        if (HolderHasScript(npc, holder, SessionScriptPoint.Transfer)) { refusal = RejectItem(GameSessionFailure.HolderScriptUnsupported); return null; }
+        // ARC-SCRIPT-2857 (NT2, IE2): the new object moves in through 0x4617F0 → 0x461810. It has no parent, so 0x461810 does not forward to the parented transfer 0x461CA0: the holder's transfer script (point 32) is never
+        // run for it, whatever the holder's scripts (the fresh path runs the new item's own get script, point 4, with the holder as the triggerer, then the insert check, and at the end of the insert 0x466640 the item's insert-item script, 21; neither is run here: #2887).
         if (_inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
         {
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);
@@ -673,9 +671,6 @@ public sealed partial class GameSessionOwner
             foreach (var item in _inventory.AddedTo(holder))
                 if (item.Kind.Type == SessionItemType.Gold) yield return (item.Entity, _inventory.Piles[item.Entity], null);
     }
-
-    // Whether any attached seed's holder row of the NPC has a script at the point.
-    private bool NpcHasScript(string npc, int point) => HolderHasScript(npc, SessionHolderKind.Npc, point);
 
     // ARC-SCRIPT-2827: whether the seed of the shown map lists the holder with the point: the script host answers for that map's rows alone.
     private bool ShownHolderHasScript(string holder, SessionHolderKind kind, int point) =>

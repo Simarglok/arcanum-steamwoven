@@ -82,7 +82,7 @@ public enum SessionRestockOutcome
 /// <summary>One regeneration of a restock event: the holder, the outcome, how many items its clearing removed, the coins and entity of
 /// the gold pile it filled (0 and null when none), the items it created in order, how many created items the holder's insert check
 /// refused (destroyed, as in the original) and how many lines the session could not create (a type the lists do not admit, a prototype
-/// the host does not know, a transfer script, a full budget: Not ready).</summary>
+/// the host does not know, a full budget: Not ready).</summary>
 public sealed record SessionRestockRegeneration(string Holder, SessionRestockOutcome Outcome, int Removed, int Coins, string? Pile,
     IReadOnlyList<string> Created, int Refused, int Skipped)
 {
@@ -155,7 +155,7 @@ public sealed partial class GameSessionOwner
     /// (the host's <see cref="ISessionRestockWorld.RestockFacts"/>) is 0, which then ends it; otherwise it is generated from its set with
     /// the session's labelled rolls (a container with flag 0x200 with the seeded draws of <see cref="GenerateContainerOnce"/>, and then
     /// recorded as generated), and an NPC with a source then wields its best items (<see cref="SessionRestockRegeneration.Wield"/>). A
-    /// holder the session cannot regenerate (a set it does not admit, a transfer script, a spilled container, no seed facts from the host)
+    /// holder the session cannot regenerate (a set it does not admit, a spilled container, no seed facts from the host)
     /// keeps its list (<see cref="SessionRestockOutcome.Unsupported"/>, no change). Refused before any effect: an invalid entity
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, a host not ready (<see cref="ISessionRestockWorld.RestockReady"/>) or no
     /// seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), an object the seed or the host does not list as
@@ -272,11 +272,10 @@ public sealed partial class GameSessionOwner
     {
         var kind = facts.Kind == RestockHolderKind.Npc ? SessionHolderKind.Npc : SessionHolderKind.Container;
         RestockPlan Unsupported() => new(holder, kind, SessionRestockOutcome.Unsupported, null, [], []);
-        // A holder of the map's seed as that kind; a spilled container's items lie on the ground. A holder with a transfer script would
-        // refuse every created item here (the script is not run, NT2): both keep their lists.
+        // A holder of the map's seed as that kind; a spilled container's items lie on the ground. ARC-SCRIPT-2857 (NT2): a holder's transfer script (point 32) is no gate here: a created item has no parent, so 0x461810 never
+        // reaches the parented transfer 0x461CA0 for it.
         if (facts.Kind == RestockHolderKind.Other || !seed.Holders.TryGetValue(holder, out var row) || row.Kind != kind ||
-            kind == SessionHolderKind.Container && SpillCell(map, seed, holder) is not null ||
-            HolderHasScript(holder, kind, SessionScriptPoint.Transfer)) return Unsupported();
+            kind == SessionHolderKind.Container && SpillCell(map, seed, holder) is not null) return Unsupported();
         // ARC-WORLD-100: a container with flag 0x200 (0x463E20, RK10) seeds its draws from the hero and the host's tile x and name bytes;
         // without them it keeps its list.
         var source = RestockRules.InventorySource(facts);
