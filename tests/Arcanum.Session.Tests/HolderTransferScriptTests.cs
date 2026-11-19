@@ -189,7 +189,7 @@ public sealed class HolderTransferScriptTests
     private static readonly SessionItemKind Bullets = new(SessionItemType.Ammo, 7059, 3301, 33301);
 
     [TestMethod]
-    public void A_new_gold_pile_moves_into_a_holder_with_a_transfer_script_without_running_it()
+    public void A_new_gold_pile_is_not_refused_by_a_holders_transfer_script()
     {
         using var owner = Hero();
         // The insert check still refuses, as for any holder, with nothing changed.
@@ -203,7 +203,7 @@ public sealed class HolderTransferScriptTests
     }
 
     [TestMethod]
-    public void A_new_ammunition_stack_and_a_barter_payment_pile_meet_no_transfer_script()
+    public void A_new_ammunition_stack_and_a_barter_payment_pile_are_not_refused_by_a_transfer_script()
     {
         using var owner = Hero();
         // The hero gets a stack from virgil's list, then gives part of it to the scripted merchant, which holds none: a new stack.

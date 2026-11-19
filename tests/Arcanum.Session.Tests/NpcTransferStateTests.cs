@@ -202,8 +202,7 @@ public sealed class NpcTransferStateTests
         var arrows = new SessionSeedItem("arrows", Facts(SessionItemType.Ammo, 3300, quantity: 30) with { AmmoType = 0 }, null);
         var custom = seed with
         {
-            Holders = [.. seed.Holders.Select(h => h.Entity == "virgil" ? h with { ScriptPoints = [SessionScriptPoint.Transfer] } : h),
-                new("archer", SessionHolderKind.Npc, false, false, [], ["arrows"])],
+            Holders = [.. seed.Holders, new("archer", SessionHolderKind.Npc, false, false, [], ["arrows"])],
             Items = [.. seed.Items, arrows],
         };
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), new GameSessionLimits(maxAmmoRecords: 1));

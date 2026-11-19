@@ -633,7 +633,7 @@ public sealed partial class GameSessionOwner
     {
         refusal = null;
         // ARC-SCRIPT-2857 (NT2, IE2): the new object moves in through 0x4617F0 → 0x461810. It has no parent, so 0x461810 does not forward to the parented transfer 0x461CA0: the holder's transfer script (point 32) is never
-        // run for it, whatever the holder's scripts (the fresh path runs the new item's own get script, point 4, with the holder as the triggerer, then the insert check; the item's get script is not run here).
+        // run for it, whatever the holder's scripts (the fresh path runs the new item's own get script, point 4, with the holder as the triggerer, then the insert check, and at the end of the insert 0x466640 the item's insert-item script, 21; neither is run here: #2887).
         if (_inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
         {
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);
