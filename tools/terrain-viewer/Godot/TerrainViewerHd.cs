@@ -52,6 +52,9 @@ public partial class TerrainViewerApp
         _visualStore = new VisualProfileSettingsStore(AutomatedVisualRun);
         var packPath = System.Environment.GetEnvironmentVariable("ARC_HD_PACK");
         var requested = System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")?.Trim().ToLowerInvariant();
+        // ARC-DEV-2923: the sheet HD check (ARC_AREA_SHEET_HD_VERIFY=1 with ARC_HD_PACK) turns the interface HD for itself and the Crash Site smoke's
+        // later pixel observers compare Legacy source pixels, so a smoke run with that check takes the Legacy world profile unless the run names one.
+        if (string.IsNullOrEmpty(requested) && _nativeSmoke && System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_HD_VERIFY") == "1") requested = "legacy";
         VisualProfile profile;
         if (!string.IsNullOrEmpty(requested) || !string.IsNullOrWhiteSpace(packPath))
         {
