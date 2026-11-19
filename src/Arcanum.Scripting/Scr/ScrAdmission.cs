@@ -101,10 +101,11 @@ public sealed class ScrAdmissionSet
         [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player]);
 
     /// <summary>The deferred-call set (ARC-SCRIPT-010): <see cref="S3"/> plus call script in (54) and remove script call
-    /// (125). Call script at (55) stays outside: one installed line uses it, none a run reaches (ARC-RES-045), and its
-    /// time-of-day arithmetic (TE2) is not settled.</summary>
+    /// (125). ARC-SCRIPT-2824 (ledger TQ17) adds call script at (55): the same deferred call, its delay the time to the operand's
+    /// time of day counted from the start hour (<see cref="ScrGameTime.SecondsSinceStartHour"/>); the host answers the clock
+    /// through <see cref="IScrTimeQueries"/> (one without it ends the run with <see cref="ScrStop.NotModelled"/>).</summary>
     public static ScrAdmissionSet S5 { get; } = new("S5", S3.Conditions,
-        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
+        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.CallScriptAt).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
 
     /// <summary>The print-line set (ARC-SCRIPT-013): <see cref="S5"/> plus print line (24), which hands a line of the running
     /// script's DLG and a number to the host as a <see cref="ScrPrintLine"/> effect (ledger IS1–IS3,
@@ -403,8 +404,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The loop-break set (ARC-SCRIPT-1166, plan slice E5-e, ledger PG15): <see cref="S38"/> plus loop break (20), which ends the run's running loop at once and goes on after the first loop end following the loop for (the same
-    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task. Call script at (55) is not part of the slice:
-    /// it stands on one line no run reaches.
+    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task.
     /// </summary>
     public static ScrAdmissionSet S40 { get; } = new("S40", S38.Conditions, S38.Actions.Append(ScrCatalogue.Action.LoopBreak), S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
 

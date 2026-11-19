@@ -479,6 +479,16 @@ public sealed partial class GameSessionOwner
     public Func<SessionDropScriptRequest, SessionDropScriptAnswer>? DropScript { get; set; }
 
     /// <summary>
+    /// ARC-SCRIPT-2856 (exe read 0x467860, ledger PI2, VP1, TQ20): the host's item script context of an NPC as the wearer of the item event scripts its worn item's removal runs (<see cref="SessionNpcWieldScripts"/>: the item script host, the NPC's life target and
+    /// stored stats; null when the host does not know the NPC). A critter drop (a critical, an arm hit, a spell's weapon block) of an NPC's worn item that has a wield-off (25) or remove-item (28) script runs them with the NPC as the triggerer through it and applies their
+    /// changes with the drop; with none set, or for a script the session cannot apply, the item stays (<see cref="SessionCriticalStepOutcome.ScriptUnsupported"/>).
+    /// </summary>
+    public Func<string, SessionNpcWieldScripts?>? NpcWearerScripts { get; set; }
+
+    /// <summary>ARC-SCRIPT-2856: where the host takes the printed lines and the eye candy requests of the item scripts a drop's removal ran (<see cref="NpcWearerScripts"/>), after their changes are applied; the drop's results carry no such lines.</summary>
+    public Action<IReadOnlyList<SessionScriptMessage>, IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy>>? ItemRunOutput { get; set; }
+
+    /// <summary>
     /// ARC-AI-1530 (exe read 2026-11-13, ledger VB2-6): the host's enter-combat (slot 13, 0x4AAE29) and exit-combat (slot 14, 0x4AAF32) script of an NPC the danger setter 0x4AABE0 has just put into or taken out of FIGHT, the target (the
     /// new one, or the requested one on an exit, none when it has none) as the triggerer and the NPC as the attachee. It runs after the setter's writes are committed and its answer is ignored, as the original's: for an entering call the state bits are
     /// written before it and rules 8 (the reaction lowered toward the hero) and 9 (the focus := the target) after it, so the session holds those two back until the script has run. With a host set, every setter call of the session (the host's own, the attack
