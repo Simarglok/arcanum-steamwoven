@@ -3505,7 +3505,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             var left = _session.LeaveParty(_session.Version, old.Code, new PartyLeave(Force: true));
             if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
         }
+        // ARC-SCRIPT-2880: the lines the removal scripts of the dropped items print have no run to join here (the talk host shows none of a transform's), so they are not kept.
+        var removalMark = _removalLines.Count;
         var destroyed = NotedRemoval(_session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true, scripts: ItemScripts));
+        _removalLines.RemoveRange(removalMark, _removalLines.Count - removalMark);
         if (destroyed.Disposition == GameSessionDisposition.Rejected) return Undo();
         CarryFacing();
         return new ScrObjectRef(_shownMap, critter.Entity);
