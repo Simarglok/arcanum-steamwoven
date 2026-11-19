@@ -6,12 +6,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-SCRIPT-1620 (ledger TI6): the use, placed, heartbeat, dying and talk sets hold the script action attack (36) and stay inside S43; the opt-in check counts the installed scripts that carry it and how many each set admits whole.</summary>
+/// <summary>ARC-SCRIPT-1620 (ledger TI6): the use, placed, heartbeat, dying and talk sets hold the script action attack (36) and stay inside the latest set; the opt-in check counts the installed scripts that carry it and how many each set admits whole.</summary>
 [TestClass]
 public sealed class AreaScriptAttackAdmissionTests
 {
     [TestMethod]
-    public void The_use_placed_heartbeat_dying_and_talk_sets_hold_attack_and_stay_inside_S43()
+    public void The_use_placed_heartbeat_dying_and_talk_sets_hold_attack_and_stay_inside_the_latest_set()
     {
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission,
             AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })

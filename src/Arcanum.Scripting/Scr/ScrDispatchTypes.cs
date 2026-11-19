@@ -1189,7 +1189,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.Latest)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.Latest.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.Latest)) throw new ArgumentException($"The interpreter runs only the commands of ScrAdmissionSet.Latest ({ScrAdmissionSet.Latest.Id}).", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

@@ -18,7 +18,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         {
             foreach (var action in ScrAdmissionSet.NpcStateHostActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
         // The dialog host applies two of them while the shown map's use host answers (ARC-SCRIPT-2198: critter disband through the party, change script through the use host's slot writes): its bare sets stay without the nine, its talk sets hold those two.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
