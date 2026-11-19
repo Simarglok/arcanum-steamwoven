@@ -43,11 +43,11 @@ public sealed class SpellSpentItemScriptTests
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     // A cast host whose items are the scroll "torn" the corpse holds and the scroll "relic-scroll" the hero holds (the lookup names holder and kind; the session's lists decide what the deletion does).
-    private static SessionSpellCaster CasterOf(GameSessionOwner owner, ISessionItemScriptHost? host)
+    private static SessionSpellCaster CasterOf(GameSessionOwner owner, ISessionItemScriptHost? host, int type = SessionItemSpells.ScrollType)
     {
         var caster = new SessionSpellCaster(owner, _ => null, new Map(), new Events(), id => id switch
         {
-            "torn" => new SessionItemSpells(id, "corpse", SessionItemSpells.ScrollType, [10000, 10000, 10000, 10000, 10000], 1, 0),
+            "torn" => new SessionItemSpells(id, "corpse", type, [10000, 10000, 10000, 10000, 10000], 1, 0),
             "relic-scroll" => new SessionItemSpells(id, SessionSpellCaster.Hero, SessionItemSpells.ScrollType, [10000, 10000, 10000, 10000, 10000], 1, 0),
             _ => null,
         });
@@ -84,6 +84,15 @@ public sealed class SpellSpentItemScriptTests
         Assert.AreEqual(true, ReadFlag(owner, 3), "the run's flag write applied with the deletion");
         var line = caster.Log.Single(e => e.Kind == SpellCastEventKind.ItemScriptLine);
         Assert.AreEqual(($"npc line 4 of {RemoveScript}", RemoveScript, "corpse", 0), (line.Text, line.Detail, line.Object, line.Value), "an NPC triggerer reads its own line variant");
+    }
+
+    [TestMethod]
+    public void A_food_an_npc_spends_runs_its_remove_item_script_as_a_scroll_does()
+    {
+        using var owner = Hero();
+        var host = Hosted(owner, C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        Assert.IsTrue(CasterOf(owner, host, SessionItemSpells.FoodType).SpendUsedItem("torn"));
+        Assert.AreEqual((true, true), (owner.IsItemDestroyed("torn"), ReadFlag(owner, 3)));
     }
 
     [TestMethod]

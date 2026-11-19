@@ -2438,11 +2438,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
             || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
-        _removalMessages.Clear();
-        if (!Apply(effects, write)) { _removalMessages.Clear(); return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects"); }
-        // ARC-SCRIPT-2881: the lines the used-up item's remove-item script (28) printed with the deletion follow the run's own.
-        foreach (var message in _removalMessages) { lines.Add(message.Text); printedLines.Add(new(message.Kind, message.Text)); }
-        _removalMessages.Clear();
+        // ARC-SCRIPT-2881: the lines the used-up item's remove-item script (28) printed with the deletion follow the run's own, also when a later action of the run was refused (the deletion and its 28 are committed by then).
+        var removalFrom = _removalMessages.Count;
+        var applied = Apply(effects, write);
+        var removalLines = _removalMessages.GetRange(removalFrom, _removalMessages.Count - removalFrom);
+        _removalMessages.RemoveRange(removalFrom, removalLines.Count);
+        foreach (var message in removalLines) { lines.Add(message.Text); printedLines.Add(new(message.Kind, message.Text)); }
+        if (!applied) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects") { Printed = [.. removalLines.Select(m => new AreaPrintedLine(m.Kind, m.Text))] };
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
