@@ -155,6 +155,8 @@ public sealed class ScriptTriggerCensusTests
         ScrPoint.StartCombat or ScrPoint.EndCombat => AreaUseScriptHost.DyingAdmission,
         // ARC-SCRIPT-2858 (TQ16): the caught-thief point runs under its own set (RunCaughtThief).
         ScrPoint.CaughtThief => AreaUseScriptHost.CaughtThiefAdmission,
+        // ARC-SCRIPT-2860 (TQ11): the unlock point runs under its own set (RunUnlock).
+        ScrPoint.Unlock => AreaUseScriptHost.UnlockAdmission,
         ScrPoint.Destroy => AreaUseScriptHost.DestroyPointAdmission,
         ScrPoint.Bust => AreaUseScriptHost.BustAdmission,
         ScrPoint.TakingDamage => AreaUseScriptHost.TakingDamageAdmission,

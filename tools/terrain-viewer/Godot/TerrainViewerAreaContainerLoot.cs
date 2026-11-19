@@ -67,11 +67,16 @@ public partial class TerrainViewerApp
         // ARC-DEV-109: another window on the stack refuses the open before the session part below runs (the container would stay open there).
         if (!InventoryActive || InventoryOpen || !WindowCanOpen(InterfaceMode.Loot) || _inventoryHost!.Map(CurrentAreaMap) is not { } map) return;
         var frames = ContainerFrameCount(target.Row);
-        var open = AreaContainerLoot.Open(_areaSession!, map, target.Entity, frames, AreaEvents, ContainerUseScript);
+        var open = AreaContainerLoot.Open(_areaSession!, map, target.Entity, frames, AreaEvents, ContainerUseScript, ContainerUnlockScript);
         _lastContainerOpen = open;
         var done = open.Generation?.Regeneration;
         if (open.UseScript is { } ran)
             GD.Print($"ARC-WORLD-101 container use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} lines={ran.Lines.Count} detail={ran.Detail}");
+        if (open.UnlockScript is { Run: not null } unlocked)
+        {
+            GD.Print($"ARC-SCRIPT-2860 container unlock script outcome={unlocked.Outcome} run={unlocked.Run.Outcome} lines={unlocked.Lines.Count} detail={unlocked.Detail}");
+            foreach (var line in ScriptLineEntries(unlocked.Printed)) PostMessage(line, "unlock script line");
+        }
         if (open.UseScript?.Trap is { } met) NoteTrapMeeting(met);
         GD.Print($"ARC-WORLD-101 container open entity={target.Entity} outcome={open.Outcome} {open.Detail} " +
             $"removed={done?.Removed ?? 0} coins={done?.Coins ?? 0} created={done?.Created.Count ?? 0} refused={done?.Refused ?? 0} skipped={done?.Skipped ?? 0}");
@@ -96,6 +101,12 @@ public partial class TerrainViewerApp
     private AreaScriptedUse ContainerUseScript(AreaObjectRecord row) =>
         _readyArea is { } area && UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.Run(row, _areaSession!.Rules.Scripts, _ => "a container's use script does not teleport here"))
+            : new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no use-script host");
+
+    /// <summary>ARC-SCRIPT-2860 (TQ11, 0x4AED80 → 0x441980 point 3): the container's unlock script through the shown map's use-script host, the PC as the opener (the triggerer); effects applied as a use's are.</summary>
+    private AreaScriptedUse ContainerUnlockScript(AreaObjectRecord row) =>
+        _readyArea is { } area && UseScriptHost(area.Snapshot) is { } host
+            ? Awarded(host, host.RunUnlock(AreaUseScriptHost.EntityId(row), host.Pc, _areaSession!.Rules.Scripts))
             : new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no use-script host");
 
     /// <summary>The close of a container's window (0x573440): a container on frame 1 closes with its close sound.</summary>
@@ -137,7 +148,8 @@ public partial class TerrainViewerApp
         AreaContainerOpenOutcome.Locked => "locked",
         AreaContainerOpenOutcome.Jammed => "jammed",
         AreaContainerOpenOutcome.MagicallyHeld => "magically held",
-        AreaContainerOpenOutcome.UnlockScriptUnsupported => "not opened: its unlock script is not run here",
+        AreaContainerOpenOutcome.UnlockScriptUnsupported => "not opened: its unlock script cannot run here",
+        AreaContainerOpenOutcome.UnlockScriptRefused => "its unlock script kept it shut",
         AreaContainerOpenOutcome.UseScriptStopped => "its use script kept it shut",
         AreaContainerOpenOutcome.TrapScriptUnsupported => "not opened: it is trapped (no cast host to set its trap off)",
         AreaContainerOpenOutcome.TrapSpotted => "not opened: you spotted a trap on it",
