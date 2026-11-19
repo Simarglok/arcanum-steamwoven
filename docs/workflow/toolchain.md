@@ -1227,6 +1227,7 @@ python3 -B tools/steamwoven_ui/bake.py bake [--steps x1-2,x1-3] [--only ID,...] 
 python3 -B tools/steamwoven_ui/bake.py verify                   # files, hashes and sizes of the sets against the manifests and masters
 python3 -B tools/steamwoven_ui/bake.py self-test                # task check: synthetic master, no file
 python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (also in the batched run_tests.py set)
+```
 
 ## Steamwoven Codex batch runner (ARC-DEV-3001)
 
