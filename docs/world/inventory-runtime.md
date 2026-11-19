@@ -667,7 +667,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   exactly the count destroys the pile (the durability deletion), more leave the rest. `GiveGoldToNpc(expected, npc, count, pileKind,
   insertCheck)` moves the hero's coins to the NPC: its pile grows with no insert check; without one a new `made:n` pile of `pileKind` (the
   gold prototype 9056, the host's) enters the end of its list after the host's insert check. Gold needs a hero (`GoldUnavailable`); a pile
-  with an insert-item script refuses (the original fires that event on the source pile first; not run here). The map views show a tracked
+  with an insert-item script runs the original's event on the source pile first (ARC-SCRIPT-2855, 0x464830 → 0x441980 point 21: the destination is the triggerer, the pile the attachee, its answer ignored, its effects applied with the move) when `scripts` is given; without a host or with a run the session cannot apply the move is refused (`ItemScriptUnsupported`). The map views show a tracked
   pile's coins.
 - **Items (NT2, NT3).** `GiveItemToNpc(expected, npc, item, insertCheck)` moves one of the hero's items (its kit, a taken or a made item;
   not a placed one) to the end of the NPC's list after the host's insert check for the NPC: a worn item leaves its slot, ammunition merges
@@ -680,7 +680,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   wield-off script (`ItemScriptUnsupported`).
 - **Ammunition units (AM4).** `TakeAmmoFromNpc` and `GiveAmmoToNpc(expected, npc, stack, count, newStackKind, insertCheck)` move units of
   one named stack (since ARC-WORLD-101 `TakeAmmoFromNpc` also from a standing container's stack): fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
-  script does not run or refuse, as for an emptied pile), more leave the rest; the destination's
+  script does not run or refuse, as for an emptied pile), more leave the rest; ARC-SCRIPT-2855 (0x4658E0): with a `scripts` host a source stack with an insert-item script runs it first (the destination the triggerer; without a host such a stack is refused with `ItemScriptUnsupported`; `MoveGoldBetweenNpcs`, `OpenBarter`, the barter, the steal and the hero's give use the same rule); the destination's
   first stack of the same type grows with no insert check, or a new `made:n` stack of `newStackKind` (the type's base prototype, the
   host's) enters its list after its insert check (the hero's with the Technophobia refusal, no complexity).
 - **State.** The inventory section's `given` list (kit or taken items in NPCs' lists, by entity, origin 0 for a kit item) and `piles` list

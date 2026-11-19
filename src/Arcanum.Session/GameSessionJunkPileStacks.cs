@@ -16,7 +16,7 @@ public sealed partial class GameSessionOwner
     /// pile (<see cref="GameSessionFailure.ItemNotAvailable"/>), no hero (<see cref="GameSessionFailure.GoldUnavailable"/>), fewer coins
     /// (<see cref="GameSessionFailure.GoldShort"/>), a budget or the revision. A count of 0 changes nothing. One revision.
     /// </summary>
-    public InventoryMutationResult TakeGoldFromJunkPile(GameSessionVersion expected, string pile, string item, int count)
+    public InventoryMutationResult TakeGoldFromJunkPile(GameSessionVersion expected, string pile, string item, int count, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(pile) || !SessionValidation.Entity(item) || count < 0) return RejectItem(GameSessionFailure.InvalidItem);
@@ -29,7 +29,7 @@ public sealed partial class GameSessionOwner
         _lootedPile = found.Entity;
         try
         {
-            var result = TakeGold((item, coins, facts), count);
+            var result = TakeGold((item, coins, facts), count, scripts);
             // The pile the move emptied is destroyed (it left the junk pile), so its decay ends (the whole loot does the same).
             if (result.Disposition == GameSessionDisposition.Changed && coins == count) CancelDecay(item);
             return result;
@@ -46,7 +46,7 @@ public sealed partial class GameSessionOwner
     /// <see cref="TakeAmmoFromNpc"/>'s with the junk pile as the holder. A count of 0 changes nothing. One revision.
     /// </summary>
     public InventoryMutationResult TakeAmmoFromJunkPile(GameSessionVersion expected, string pile, string item, int count, SessionItemKind newStackKind,
-        SessionInsertCheck insertCheck)
+        SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -57,12 +57,15 @@ public sealed partial class GameSessionOwner
         if (AmmoOf(item, facts ?? InventoryDomain.MadeFacts(kind)) is not { } source) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        // ARC-SCRIPT-2855 (AM4): the stack's insert-item script (21) runs first with the hero as the triggerer.
+        var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false);
+        if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = HeroStackOfType(source.AmmoType);
         var outer = _lootedPile;
         _lootedPile = found.Entity;
         try
         {
-            var result = MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null);
+            var result = MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
             if (result.Disposition == GameSessionDisposition.Changed && source.Units == count) CancelDecay(item);
             return result;
         }

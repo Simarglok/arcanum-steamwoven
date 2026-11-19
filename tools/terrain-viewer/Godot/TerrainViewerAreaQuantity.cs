@@ -131,12 +131,12 @@ public partial class TerrainViewerApp
             // ARC-UI-1328: a junk pile is the same move out of its own list (the pile stays while the window shows it, the rest stays in it).
             var pile = SessionJunkPile.Number(npc) is not null;
             result = move.Kind.Type == SessionItemType.Gold
-                ? pile ? session.TakeGoldFromJunkPile(session.Version, npc, move.Item, count) : session.TakeGoldFromNpc(session.Version, npc, count, move.Item)
-                : pile ? session.TakeAmmoFromJunkPile(session.Version, npc, move.Item, count, move.Kind, _inventoryHost!.InsertCheck)
-                : session.TakeAmmoFromNpc(session.Version, npc, move.Item, count, move.Kind, _inventoryHost!.InsertCheck);
+                ? pile ? session.TakeGoldFromJunkPile(session.Version, npc, move.Item, count, _inventoryHost!.ItemScripts(session)) : session.TakeGoldFromNpc(session.Version, npc, count, move.Item, _inventoryHost!.ItemScripts(session))
+                : pile ? session.TakeAmmoFromJunkPile(session.Version, npc, move.Item, count, move.Kind, _inventoryHost!.InsertCheck, _inventoryHost.ItemScripts(session))
+                : session.TakeAmmoFromNpc(session.Version, npc, move.Item, count, move.Kind, _inventoryHost!.InsertCheck, _inventoryHost.ItemScripts(session));
             message = result.Value.Disposition switch
             {
-                GameSessionDisposition.Changed => $"took {count} of {move.Name}",
+                GameSessionDisposition.Changed => $"took {count} of {move.Name}{AreaInventoryHost.Printed(result.Value)}",
                 GameSessionDisposition.NoChange => $"took nothing: 0 of {move.Name}",
                 _ => $"not taken: {AreaInventoryHost.Refusal(result.Value.Failure, result.Value.Verdict)}",
             };
