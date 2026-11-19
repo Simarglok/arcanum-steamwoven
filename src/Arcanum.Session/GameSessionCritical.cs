@@ -259,8 +259,19 @@ public sealed partial class GameSessionOwner
         {
             // An item the session added to the NPC (ARC-WORLD-055) lies in no seed: not ready until a store holds it.
             if (NpcItemSeed(side.Life.Entity!, item.Entity) is not { } seedItem) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
+            // ARC-SCRIPT-2856 (PI2, VP1, VP6, TQ20; 0x461AB0 → 0x466E00 → 0x467860): the removal runs the wield-off script (25) of the worn item and its remove-item script (28) with the NPC as the triggerer and the wearer, planned here and applied with the drop.
+            var (runs, runsFailure, runsUnsupported) = PlanNpcDropRemoval(side.Life.Entity!, item.Entity, seedItem.Facts);
+            if (runsUnsupported) { Skip(SessionCriticalStepOutcome.ScriptUnsupported); return side; }
+            if (runsFailure != GameSessionFailure.None) { failure = runsFailure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
             var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(landed))]);
             if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
+            if (runs is not null)
+            {
+                var changes = runs.Changes;
+                runs.Commit();
+                if (changes) Revise();
+                ItemRunOutput?.Invoke(runs.Messages, runs.EyeCandies);
+            }
             // ARC-WORLD-103: a dropped item a dressed NPC wore is worn no more.
             _inventory.Unwear(item.Entity);
             // ARC-WORLD-1284 (VPG1): the drop's removal 0x467860 sets NPC flag 0x40 on the NPC.
@@ -294,6 +305,28 @@ public sealed partial class GameSessionOwner
     // The hero, or an NPC whose chain of leaders reaches the PC (0x4BBFE0 reads 0x45DDA0, ARC-WORLD-2119), avoids only a spotted trap on the drop's path; another NPC avoids
     // every trap (0x4BBFE0).
     private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || PcLeads(who.Entity!) ? DropOwner.PcSide : DropOwner.Npc;
+
+    // ARC-SCRIPT-2856 (ledger PI2, VP1, VP11; exe read 0x467860, 0x467CB0): the item event scripts of the removal an NPC's drop makes of a worn item, planned and not applied: wield off (25) then remove item (28), the item as the attachee and the NPC as the
+    // triggerer, read from the NPC's stats and changing its effect list (<see cref="NpcWearerScripts"/>). Nothing to run (no such script on the item) is a null plan; no host context for the NPC, or a run the session cannot apply, is Unsupported (the item
+    // stays, as a drop script no host ran); a host callback that moved the session is a stale version. The runs' changes are applied by the caller with the drop.
+    private (ItemScriptRuns? Runs, GameSessionFailure Failure, bool Unsupported) PlanNpcDropRemoval(string npc, string item, SessionItemFacts facts)
+    {
+        var (wieldOff, removeOwn) = (facts.HasScript(SessionScriptPoint.WieldOff), facts.HasScript(SessionScriptPoint.RemoveItem));
+        if (!wieldOff && !removeOwn) return (null, GameSessionFailure.None, false);
+        SessionNpcWieldScripts? scripts;
+        try { scripts = NpcWearerScripts?.Invoke(npc); }
+        catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { scripts = null; }
+        if (scripts is null) return (null, GameSessionFailure.None, true);
+        var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
+        var runs = new ItemScriptRuns(this, scripts.Host, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity },
+            new NpcWearer(npc, scripts.Target, NpcStatsOverSheet(npc, scripts.Stored))) { NpcTriggerer = true };
+        if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item, npc, null);
+        if (runs.Failure == GameSessionFailure.None && removeOwn) runs.Run(SessionScriptPoint.RemoveItem, item, npc, null);
+        ThrowIfDisposed();
+        if (_revision != revision || _actor.Map != map || _inventory.SeedGeneration != seeds || _flags.Version != flagVersion) return (null, GameSessionFailure.StaleVersion, false);
+        if (runs.Failure == GameSessionFailure.None) runs.Prepare();
+        return runs.Failure != GameSessionFailure.None ? (null, GameSessionFailure.None, true) : (runs, GameSessionFailure.None, false);
+    }
 
     private bool _inDropScript;
 
