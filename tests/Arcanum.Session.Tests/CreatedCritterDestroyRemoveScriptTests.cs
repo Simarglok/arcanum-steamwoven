@@ -165,4 +165,43 @@ public sealed class CreatedCritterDestroyRemoveScriptTests
         var again = owner.DestroyCreatedObject(owner.Version, critters[0].Entity, scripts: host);
         Assert.AreEqual((GameSessionDisposition.NoChange, 0, 0), (again.Disposition, again.Messages.Count, host.RemoveAsks.Length));
     }
+
+    [TestMethod]
+    public void A_list_whose_runs_cannot_be_applied_destroys_none_of_its_critters_and_commits_nothing()
+    {
+        var (owner, critters, host) = With(critters: 2);
+        using var _ = owner;
+        Script(host, C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.AddEffect, ((byte)0, 0), (Number, 50), (Number, 5)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var before = owner.Version.Revision;
+        var refused = owner.DestroyCreatedObjects(owner.Version, [critters[0].Entity, critters[1].Entity], host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, (bool?)false), (refused.Disposition, refused.Failure, owner.Version.Revision, ReadFlag(owner, 3)));
+        Assert.IsTrue(critters.All(critter => owner.QueryCreatedObject(critter.Entity) is not null), "both critters stand");
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count, "nothing is dropped");
+    }
+
+    [TestMethod]
+    public void A_critter_of_a_map_other_than_the_shown_one_with_a_scripted_item_refuses_and_one_without_is_destroyed()
+    {
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        using var _ = owner;
+        var other = new SessionMapId(Exterior.RuntimeMap + 1);
+        var plain = InventoryStateTests.Facts(SessionItemType.Generic, 5600);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new([], [
+            new SessionSeedItem("relic", plain with { ScriptPoints = [SessionScriptPoint.RemoveItem], Invulnerable = true }, Spot), new SessionSeedItem("glass", plain with { Invulnerable = true }, Spot)])).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(other, new([], [])).Failure);
+        var host = new Host(owner, "relic");
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        var scripted = owner.CreateCritterNear(owner.Version, Prototype, other, new(100, 201), new OpenMap()).Object!;
+        var quiet = owner.CreateCritterNear(owner.Version, Prototype, other, new(110, 201), new OpenMap()).Object!;
+        foreach (var (critter, item) in new[] { (scripted, "relic"), (quiet, "glass") })
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition, item);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, critter.Entity, item, Accept, scripts: host).Disposition, item);
+        }
+        host.Asked.Clear();
+        var refused = owner.DestroyCreatedObject(owner.Version, scripted.Entity, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0), (refused.Disposition, refused.Failure, host.RemoveAsks.Length), "the host answers for the shown map alone: no run, no destroy");
+        Assert.IsNotNull(owner.QueryCreatedObject(scripted.Entity));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyCreatedObject(owner.Version, quiet.Entity, scripts: host).Disposition, "an item with no point needs no run");
+    }
 }
