@@ -31,7 +31,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-SCRIPT-2880 (IE3): the same for several items one destroy takes out of the dying holder in order (the inventory-on-destroy walk, IE3): one run set, so a later run reads what the earlier ones did. Items without a point 28 run nothing.
-    /// ARC-SCRIPT-2885 (PI2, VP1; exe read 0x467860 → 0x467CB0): an item the NPC holder WORE when it is taken out (the removal sees its inventory location 1000..1008) runs its wield-off script (25) first, then 28, per item, 25 with no other gate (the
+    /// ARC-SCRIPT-2885 (PI2, VP1; the removal's wield-off step for a worn slot): an item the NPC holder WORE when it is taken out (the removal sees its inventory location 1000..1008) runs its wield-off script (25) first, then 28, per item, 25 with no other gate (the
     /// holder's life or destroy state is not asked). The NPC is then the wearer of the runs (its stats and effect list, <paramref name="wearerOf"/>, default <see cref="NpcWearerScripts"/>); with no context for it, an item with a worn point 25 refuses the
     /// removal (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, as a drop's script no host ran), the original's runs being not skippable here.
     /// </summary>
