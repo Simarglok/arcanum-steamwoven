@@ -1587,7 +1587,8 @@ changes. Check: `ARC-DEV-361 self-test HD font glyphs PASS` (synthetic 6 × 5 gl
 glyph without an entry, 254 against 199 on a black canvas at 1:1; the pixel checks need a window).
 
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
-  (H)** requests the other profile. `H` acts on a fresh press while the world owns input; under the
+  (H)** requests the other value than the **saved** HD value (ARC-UI-2221: not the other than the canvas profile, which can differ from it after a pack-problem
+  fallback to Legacy or under `ARC_VISUAL_PROFILE`; the first press changes the saved value even where the canvas has nothing to change). `H` acts on a fresh press while the world owns input; under the
   palette or UI focus it is ignored and the HUD says so, and an open dialog or inventory window owns
   every key (the switch itself is safe then too: the native smoke requests it during a dialog).
   A request during a pending switch toggles back to the active profile, which cancels the switch.
