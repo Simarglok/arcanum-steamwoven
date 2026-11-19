@@ -2114,6 +2114,14 @@ keeps going under it too.
   the folder it was launched from (the folder of the `.app`, or of the exe); a translocated app, or a folder that cannot
   take a written file, falls back to the user folder's `reports` with the reason. A source run uses its user folder;
   an automated run its isolated folder. No upload.
+- **Copy in Load Game (ARC-DEV-2947).** In a game with a save, Send also writes the same snapshot, details and preview into the
+  save folder the Load Game window lists (`SaveLibrary`: `saves/` or `saves/map/`, an automated run's isolated folder) as a new
+  numbered slot, highest plus one, never an existing slot or the quick save. Its description is `Bug report YYYY-MM-DD HH:MM - first
+  words` (`BugReportWriter.LoadMenuName`: plain ASCII hyphen and Latin-1 characters only, since the save list's bitmap font draws
+  characters up to 255 and skips the rest; Russian letters are transliterated, at most 40 characters of the text, the date alone
+  when nothing drawable is left). A failed copy is listed under "Not written" and never fails the report; `report.md` names the slot.
+  The copy is the newest file of the list, so it tops the Load Game list and is also what F8 and Continue load next (the newest save
+  by file date, `GameSaveLibrary.Latest`); load the player's own save by hand after a report when that matters.
 - **Owner check tag (ARC-DEV-2189).** While the owner has a step open on the QA page (`./arcanum qa`, [toolchain](../workflow/toolchain.md#owner-qa-page-arc-dev-2187)),
   Ctrl+B reads its id `ARC-TYPE-NNN#k` from the one-line file `local/qa/active-check.txt` (git-ignored; found above the launch
   folder of a packaged game or above the project folder of a checkout or its worktree; `ARC_QA_ACTIVE_CHECK` names the file
