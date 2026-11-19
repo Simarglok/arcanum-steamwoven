@@ -178,7 +178,7 @@ public partial class TerrainViewerApp
             Require(_turnBasedSetting && session.QueryCombatRound() is null, "Space turned the setting on without a round: " + _turnBasedNotice);
             // ARC-UI-1114: the combat HUD (action-point lamps, turn-order list) is drawn while a round runs; this stage reads it.
             _combatHudForSelfTest = true;
-            _combatHudFontForSelfTest = AreaArtFontFace.SyntheticForSelfTest();
+            _combatHudFontForSelfTest = TextFonts()?.Text ?? AreaArtFontFace.SyntheticForSelfTest(); // the game's own font when it read
             // ARC-UI-1888: ARC_AREA_HUD_BARS=1 draws the interface bars of the game's art (the lamp panel then draws the game's own art over them; the readbacks make the graphics composite).
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_HUD_BARS") == "1") _gameBarForSelfTest = true;
             // ARC_AREA_HUD_CAPTURE=<ignored path prefix> saves readbacks of the HUD for the graphics composite (never committed).
