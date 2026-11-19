@@ -9,6 +9,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class OwnerQaTests
 {
     private static readonly DateTime Now = new(2026, 11, 15, 12, 0, 0, DateTimeKind.Utc);
+    private const string NowTs = "2026-11-15T12:00:00Z";
     private string _folder = null!;
 
     [TestInitialize]
@@ -68,7 +69,7 @@ public sealed class OwnerQaTests
         Assert.AreEqual("abc1234567", root.GetProperty("build").GetString());
         Assert.AreEqual("game", root.GetProperty("src").GetString());
         var results = OwnerQaFiles.ReadResults(_folder);
-        Assert.AreEqual(new OwnerQaResult("differs", "no flash \"here\"\nline two", "2026-11-15_10-00-00"), results["ARC-DEV-100#1"]);
+        Assert.AreEqual(new OwnerQaResult("differs", "no flash \"here\"\nline two", "2026-11-15_10-00-00", NowTs), results["ARC-DEV-100#1"]);
     }
 
     [TestMethod]
@@ -140,9 +141,14 @@ public sealed class OwnerQaTests
         Assert.AreEqual("ARC-UI-200#1", session.CurrentId, "the first open step: the first is marked, the second is `same` in the list");
         Assert.AreEqual("ARC-UI-200#1", session.Rows().Single().Id);
         session.Filter = OwnerQaFilter.All;
+        CollectionAssert.AreEqual(new[] { "ARC-UI-200#1" }, session.Rows().Select(step => step.Id).ToArray(), "the answered group is collapsed");
+        session.AnsweredShown = true;
         CollectionAssert.AreEqual(new[] { "ARC-UI-200#1", "ARC-DEV-100#1", "ARC-DEV-100#2" }, session.Rows().Select(step => step.Id).ToArray());
         Assert.IsNull(session.SetCurrent("ARC-DEV-100#2"));
         session.Filter = OwnerQaFilter.Section;
+        session.AnsweredShown = false;
+        CollectionAssert.AreEqual(new[] { "ARC-DEV-100#2" }, session.Rows().Select(step => step.Id).ToArray());
+        session.AnsweredShown = true;
         CollectionAssert.AreEqual(new[] { "ARC-DEV-100#2", "ARC-DEV-100#1" }, session.Rows().Select(step => step.Id).ToArray());
         Assert.AreEqual("ARC-DEV-100#2", BugReportCheck.ReadActive(Path.Combine(_folder, BugReportCheck.FileName), DateTime.UtcNow));
         Assert.IsNotNull(session.SetCurrent("ARC-NOPE-1#1"));
@@ -157,11 +163,56 @@ public sealed class OwnerQaTests
         Assert.AreEqual("open", session.ResultOf("ARC-DEV-100#1")!.Status);
         Assert.IsNull(session.Mark("differs", "no flash", Now));
         var result = session.ResultOf("ARC-DEV-100#1")!;
-        Assert.AreEqual(new OwnerQaResult("differs", "no flash", "2026-11-15_10-00-00"), result);
+        Assert.AreEqual(new OwnerQaResult("differs", "no flash", "2026-11-15_10-00-00", NowTs), result);
         Assert.IsNull(session.RecordReport("2026-11-15_10-05-00", "", Now));
-        Assert.AreEqual(new OwnerQaResult("differs", "no flash", "2026-11-15_10-05-00"), session.ResultOf("ARC-DEV-100#1"));
+        Assert.AreEqual(new OwnerQaResult("differs", "no flash", "2026-11-15_10-05-00", NowTs), session.ResultOf("ARC-DEV-100#1"));
         Assert.IsNotNull(session.Mark("open", "", Now));
         Assert.IsTrue(ResultLines().All(line => line.Contains("\"build\":\"abc1234567\"", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void A_step_with_a_sent_report_is_answered_leaves_the_active_list_and_a_reopen_brings_it_back()
+    {
+        WriteChecks();
+        var session = new OwnerQaSession(_folder, "b");
+        Assert.AreEqual("ARC-DEV-100#1", session.CurrentId);
+        Assert.IsFalse(session.IsAnswered(session.Steps[0]));
+        Assert.AreEqual(1, session.AnsweredCount, "`same` in the list counts as answered");
+        // the report path keeps the shown status (open) yet the step is answered (ARC-DEV-2768)
+        Assert.IsNull(session.RecordReport("2026-11-15_10-00-00", "works", Now));
+        Assert.AreEqual("open", session.ResultOf("ARC-DEV-100#1")!.Status);
+        Assert.IsTrue(session.IsAnswered(session.Steps[0]));
+        Assert.AreEqual("2026-11-15", session.AnsweredDate(session.Steps[0]));
+        Assert.AreEqual(2, session.AnsweredCount);
+        // a fresh overlay starts on the next unanswered step, not on the answered one
+        var next = new OwnerQaSession(_folder, "b");
+        Assert.AreEqual("ARC-UI-200#1", next.CurrentId);
+        Assert.IsFalse(next.AdvanceToNextOpen(out _), "no other unanswered step");
+        Assert.AreEqual("ARC-UI-200#1", next.CurrentId);
+        next.Filter = OwnerQaFilter.All;
+        Assert.AreEqual(1, next.Rows().Count, "answered steps are in the collapsed group");
+        next.AnsweredShown = true;
+        CollectionAssert.AreEqual(new[] { "ARC-UI-200#1", "ARC-DEV-100#1", "ARC-DEV-100#2" }, next.Rows().Select(step => step.Id).ToArray(), "the group is at the end");
+        // reopen: an open result without a report (the note stays); the step is active again, also when the list said `same`
+        Assert.IsNull(next.SetCurrent("ARC-DEV-100#1"));
+        Assert.IsNull(next.Reopen(Now));
+        Assert.AreEqual(new OwnerQaResult("open", "works", null, NowTs), next.ResultOf("ARC-DEV-100#1"));
+        Assert.IsFalse(next.IsAnswered(next.Steps[0]));
+        Assert.IsNull(next.SetCurrent("ARC-DEV-100#2"));
+        Assert.IsNull(next.Reopen(Now));
+        Assert.IsFalse(next.IsAnswered(next.Steps[1]), "reopening clears an answer taken from the list");
+        Assert.AreEqual("open", next.EffectiveStatus(next.Steps[1]));
+    }
+
+    [TestMethod]
+    public void A_tagged_report_is_recorded_with_the_status_the_step_shows()
+    {
+        WriteChecks();
+        Assert.IsNull(OwnerQaFiles.RecordReportFor(_folder, "ARC-DEV-100#2", "2026-11-18_22-02-38", "works correctly", "b", Now));
+        Assert.AreEqual(new OwnerQaResult("same", "works correctly", "2026-11-18_22-02-38", NowTs), OwnerQaFiles.ReadResults(_folder)["ARC-DEV-100#2"]);
+        Assert.IsNull(OwnerQaFiles.RecordReportFor(_folder, "ARC-DEV-100#1", "2026-11-18_22-03-00", "", "b", Now));
+        Assert.AreEqual("open", OwnerQaFiles.ReadResults(_folder)["ARC-DEV-100#1"].Status);
+        Assert.IsNotNull(OwnerQaFiles.RecordReportFor(_folder, "bad", "2026-11-18_22-03-00", "", "b", Now));
     }
 
     [TestMethod]
@@ -197,7 +248,7 @@ public sealed class OwnerQaTests
         // the page changes the note and the report of the step while the window is open: the game's mark keeps them
         OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#2", "same", "page note", "2026-11-15_11-00-00", "page", Now);
         Assert.IsNull(session.Mark("differs", "game note", Now));
-        Assert.AreEqual(new OwnerQaResult("differs", "game note", "2026-11-15_11-00-00"), session.ResultOf("ARC-DEV-100#2"));
+        Assert.AreEqual(new OwnerQaResult("differs", "game note", "2026-11-15_11-00-00", NowTs), session.ResultOf("ARC-DEV-100#2"));
     }
 
     [TestMethod]

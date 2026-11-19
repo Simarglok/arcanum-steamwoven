@@ -7,8 +7,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>One owner check as the QA page writes it into <c>checks.json</c> (ARC-DEV-2186 step format).</summary>
 public sealed record OwnerQaStep(string Id, string Section, string Step, string Expected, string ListStatus);
 
-/// <summary>The latest recorded result of a step in <c>results.jsonl</c> (status, note, report folder name).</summary>
-public sealed record OwnerQaResult(string Status, string Note, string? Report);
+/// <summary>The latest recorded result of a step in <c>results.jsonl</c> (status, note, report folder name, the UTC time of the event).</summary>
+public sealed record OwnerQaResult(string Status, string Note, string? Report, string? Ts = null);
 
 /// <summary>Which steps the overlay lists.</summary>
 public enum OwnerQaFilter { Open, Section, All }
@@ -121,7 +121,8 @@ public static class OwnerQaFiles
                     if (step is null || status is not ("open" or "same" or "differs" or "cannot-test")) continue;
                     var note = root.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
                     var report = root.TryGetProperty("report", out var r) && r.ValueKind == JsonValueKind.String && r.GetString() is { Length: > 0 } text ? text : null;
-                    results[step] = new(status, note, report);
+                    var ts = root.TryGetProperty("ts", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+                    results[step] = new(status, note, report, ts);
                 }
                 catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException) { }
             }
@@ -164,6 +165,21 @@ public static class OwnerQaFiles
         {
             return error.Message;
         }
+    }
+
+    /// <summary>ARC-DEV-2768: records the folder name of a report sent for <paramref name="step"/> (the overlay's Send and a Ctrl+B report
+    /// tagged with the step), keeping the status the step shows (recorded, else the list's, else open) and its note, so the step counts as
+    /// answered. Null when written, else the reason.</summary>
+    public static string? RecordReportFor(string folder, string step, string reportFolder, string note, string build, DateTime utcNow)
+    {
+        var result = ReadResults(folder).GetValueOrDefault(step);
+        var status = result?.Status;
+        if (status is null)
+        {
+            var listed = ReadChecks(folder).Steps.FirstOrDefault(item => item.Id == step)?.ListStatus;
+            status = listed is "same" or "differs" or "cannot-test" ? listed : "open";
+        }
+        return AppendResult(folder, step, status, note.Length > 0 ? note : result?.Note ?? "", reportFolder, build, utcNow);
     }
 
     /// <summary>The page's write lock (<c>.lock</c> in the QA folder, an flock of the Python page): a .NET open with FileShare.None takes
@@ -215,6 +231,8 @@ public sealed class OwnerQaSession
     public string? Problem { get; private set; }
     public string? CurrentId { get; private set; }
     public OwnerQaFilter Filter { get; set; } = OwnerQaFilter.Open;
+    /// <summary>ARC-DEV-2768: whether the collapsed "answered" group at the end of the list is expanded.</summary>
+    public bool AnsweredShown { get; set; }
     public IReadOnlyList<OwnerQaStep> Steps => _steps;
 
     /// <summary>Reads the list and the results again; the current step stays when it is still in the list.</summary>
@@ -227,7 +245,11 @@ public sealed class OwnerQaSession
         if (CurrentId is null || _steps.All(step => step.Id != CurrentId))
         {
             var active = BugReportCheck.ReadActive(Path.Combine(Folder, BugReportCheck.FileName), DateTime.UtcNow);
-            CurrentId = active is not null && _steps.Any(step => step.Id == active) ? active : _steps.FirstOrDefault(step => EffectiveStatus(step) == "open")?.Id;
+            // ARC-DEV-2768: an active step that is already answered (its report was sent in an earlier run) is not offered again: the next
+            // unanswered step is current, when there is one; the answered one stays reachable in the collapsed group.
+            var firstOpen = _steps.FirstOrDefault(step => !IsAnswered(step))?.Id;
+            var activeStep = active is not null ? _steps.FirstOrDefault(step => step.Id == active) : null;
+            CurrentId = activeStep is not null && (!IsAnswered(activeStep) || firstOpen is null) ? active : firstOpen;
             if (CurrentId is not null && CurrentId != active) OwnerQaFiles.WriteActive(Folder, CurrentId);   // the plate's step is the one Ctrl+B tags
         }
     }
@@ -240,20 +262,37 @@ public sealed class OwnerQaSession
     /// <summary>The recorded status, else the list's own (open when neither is a status).</summary>
     public string EffectiveStatus(OwnerQaStep step) => _results.TryGetValue(step.Id, out var result) ? result.Status : step.ListStatus is "same" or "differs" or "cannot-test" ? step.ListStatus : "open";
 
-    /// <summary>The listed steps: the current one first, then the others of the filter in list order.</summary>
+    /// <summary>ARC-DEV-2768: a step is answered when it has a status other than open (marked here, on the page or in the list) or a report
+    /// folder recorded for it (a Ctrl+B report tagged with the step counts). Reopening it writes open without a report.</summary>
+    public bool IsAnswered(OwnerQaStep step) => EffectiveStatus(step) != "open" || ResultOf(step.Id)?.Report is not null;
+
+    /// <summary>The UTC day (yyyy-MM-dd) of the step's latest recorded event, or "" when it has none (an answer taken from the list).</summary>
+    public string AnsweredDate(OwnerQaStep step) => ResultOf(step.Id)?.Ts is { Length: >= 10 } ts ? ts[..10] : "";
+
+    public int AnsweredCount => _steps.Count(IsAnswered);
+
+    /// <summary>The listed steps: the current one first, then the unanswered others of the filter in list order, then (only while
+    /// <see cref="AnsweredShown"/>) the answered others of the filter: the "answered" group is collapsed at the end.</summary>
     public IReadOnlyList<OwnerQaStep> Rows()
     {
         var current = Current;
-        bool Shown(OwnerQaStep step) => Filter switch
-        {
-            OwnerQaFilter.Open => EffectiveStatus(step) == "open",
-            OwnerQaFilter.Section => current is not null && step.Section == current.Section,
-            _ => true,
-        };
+        bool Shown(OwnerQaStep step) => Filter != OwnerQaFilter.Section || (current is not null && step.Section == current.Section);
         var rows = new List<OwnerQaStep>();
         if (current is not null) rows.Add(current);
-        rows.AddRange(_steps.Where(step => step.Id != CurrentId && Shown(step)));
+        var others = _steps.Where(step => step.Id != CurrentId && Shown(step)).ToList();
+        rows.AddRange(others.Where(step => !IsAnswered(step)));
+        if (AnsweredShown) rows.AddRange(others.Where(IsAnswered));
         return rows;
+    }
+
+    /// <summary>Clears the answer of the current step: an <c>open</c> result with no report (the note stays). Null when done, else the reason.</summary>
+    public string? Reopen(DateTime utcNow)
+    {
+        if (CurrentId is null) return "no current step";
+        _results = OwnerQaFiles.ReadResults(Folder);
+        var problem = OwnerQaFiles.AppendResult(Folder, CurrentId, "open", ResultOf(CurrentId)?.Note ?? "", null, Build, utcNow);
+        if (problem is null) Reload();
+        return problem;
     }
 
     /// <summary>Makes a step the current one (the page and Ctrl+B follow). Null when done, else the reason.</summary>
@@ -282,7 +321,7 @@ public sealed class OwnerQaSession
         for (var offset = 1; offset <= _steps.Count; offset++)
         {
             var step = _steps[(start + offset + _steps.Count) % _steps.Count];
-            if (step.Id != CurrentId && EffectiveStatus(step) == "open") { problem = SetCurrent(step.Id); return true; }
+            if (step.Id != CurrentId && !IsAnswered(step)) { problem = SetCurrent(step.Id); return true; }
         }
         return false;
     }
@@ -302,9 +341,7 @@ public sealed class OwnerQaSession
     {
         if (Current is not { } step) return "no current step";
         _results = OwnerQaFiles.ReadResults(Folder);
-        var status = EffectiveStatus(step);
-        var result = ResultOf(step.Id);
-        var problem = OwnerQaFiles.AppendResult(Folder, step.Id, status, note.Length > 0 ? note : result?.Note ?? "", folderName, Build, utcNow);
+        var problem = OwnerQaFiles.RecordReportFor(Folder, step.Id, folderName, note, Build, utcNow);
         if (problem is null) Reload();
         return problem;
     }

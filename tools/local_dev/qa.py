@@ -301,6 +301,35 @@ def list_reports(directory: Path) -> list[dict]:
     return found
 
 
+def _iso_epoch(ts: object) -> float | None:
+    try:
+        return datetime.datetime.strptime(str(ts), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()
+    except ValueError:
+        return None
+
+
+def answered_info(entry: dict, result: dict | None, reports: list[dict]) -> dict:
+    """ARC-DEV-2768: whether a step is answered, how and when. A step is answered when its status is not ``open`` (a mark, or the
+    list's own), or a report folder is recorded for it, or a Ctrl+B report whose ``Check:`` line names it exists (a report sent
+    without the overlay is not in ``results.jsonl``). Reopening writes an ``open`` result without a report: reports older than
+    that event no longer count. ``answeredBy`` is ``mark`` | ``report`` | None; ``answeredAt`` is a local ``YYYY-MM-DD`` or ''."""
+    recorded = bool(result and result["recorded"])
+    cutoff = 0.0
+    if recorded and entry["status"] == "open" and not entry["report"]:      # a reopen (or the page's own open)
+        cutoff = _iso_epoch(result["ts"]) or 0.0
+    tagged = next((item for item in reports if item["check"] == entry["id"] and item["epoch"] > cutoff), None)   # newest first
+    if entry["status"] != "open":
+        moment = _iso_epoch(result["ts"]) if recorded else None
+        day = datetime.datetime.fromtimestamp(moment).strftime("%Y-%m-%d") if moment else ""
+        return {"answered": True, "answeredBy": "mark", "answeredAt": day}
+    if entry["report"]:
+        named = next((item for item in reports if item["name"] == entry["report"]), None)
+        return {"answered": True, "answeredBy": "report", "answeredAt": named["time"][:10] if named else entry["report"][:10]}
+    if tagged:
+        return {"answered": True, "answeredBy": "report", "answeredAt": tagged["time"][:10]}
+    return {"answered": False, "answeredBy": None, "answeredAt": ""}
+
+
 # ---------------------------------------------------------------------------------------------------------------- GitHub
 
 
@@ -418,6 +447,7 @@ class QaApp:
         results, bad = self.store.read()
         with self._guard:
             parsed, commit, warning = self.parsed, self.commit, self.warning
+        reports = list_reports(self.reports_dir)
         sections = []
         for section in parsed.sections:
             if not section.steps:
@@ -431,10 +461,11 @@ class QaApp:
                          "issue": result["issue"] if result else None, "issueUrl": result["issueUrl"] if result else None,
                          "issueError": result["issueError"] if result else None, "recorded": bool(result and result["recorded"]),
                          "isNew": step.id in self.new_ids}
+                entry.update(answered_info(entry, result, reports))
                 steps.append(entry)
             sections.append({"code": section.code, "title": section.title, "steps": steps})
         return {"sections": sections, "commit": commit, "ref": self.ref, "warning": warning, "badLines": bad,
-                "problems": [problem.format() for problem in parsed.problems], "reports": list_reports(self.reports_dir)}
+                "problems": [problem.format() for problem in parsed.problems], "reports": reports}
 
     # active check -----------------------------------------------------------------------------------------------------
 
@@ -473,6 +504,17 @@ class QaApp:
             current = self.store.read()[0].get(step.id, {})
             if status == "differs" and current.get("issue") is None:
                 self._create_issue(step, current)
+            return self.store.read()[0][step.id]
+
+    def reopen(self, step_id: object) -> dict:
+        """ARC-DEV-2768: clear the answer of a step: an ``open`` result with no report (the note stays); the step is listed again."""
+        step = self.parsed.by_id().get(step_id) if isinstance(step_id, str) else None
+        if step is None:
+            raise ValueError(f"unknown step {step_id!r}")
+        with self.store.locked():
+            current = self.store.read()[0].get(step.id) or {}
+            self.store.append({"kind": "result", "ts": now_iso(), "step": step.id, "status": "open", "note": str(current.get("note") or ""),
+                               "report": None, "reopen": True})
             return self.store.read()[0][step.id]
 
     def _create_issue(self, step: owner_checks.Step, current: dict) -> None:
@@ -611,6 +653,11 @@ def make_handler(app: QaApp, token: str, port_of):
             if parts.path == "/api/result":
                 try:
                     self._json(200, app.save(payload))
+                except ValueError as error:
+                    self._json(400, {"error": str(error)})
+            elif parts.path == "/api/reopen":
+                try:
+                    self._json(200, app.reopen(payload.get("step")))
                 except ValueError as error:
                     self._json(400, {"error": str(error)})
             elif parts.path == "/api/active":
