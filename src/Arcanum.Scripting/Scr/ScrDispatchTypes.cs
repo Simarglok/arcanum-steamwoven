@@ -459,8 +459,10 @@ public interface IScrSpellQueries
     int? MasteredCollege(ScrObjectRef obj);
 }
 
-/// <summary>The game clock as the story commands read it (ledger SQ1, SQ5): the day index (0 on the first day) and the hour and minute of the day.</summary>
-public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
+/// <summary>The game clock as the story commands read it (ledger SQ1, SQ5): the day index (0 on the first day) and the hour and minute of the day.
+/// ARC-SCRIPT-2824 (ledger TQ17): <paramref name="MillisecondOfDay"/> (the clock's own, −1 for "from the hour and minute") and <paramref name="StartHour"/> (the module's start hour,
+/// 15 for the installed startup) give call script at its time of day.</summary>
+public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute, long MillisecondOfDay = -1, int StartHour = 0)
 {
     /// <summary>Whether it is day (0x45ACF0): the hour is 6 to 17.</summary>
     public bool IsDay => Hour is >= 6 and <= 17;
@@ -472,6 +474,24 @@ public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
     /// <summary>Get hours since startup (0x45A890): whole hours of the game's age, the day index times 24 plus the hour.</summary>
     [OriginalFunction(0x45A890, OriginalFunctionScope.Full)]
     public long HoursSinceStartup() => DayIndex * 24 + Hour;
+
+    /// <summary>
+    /// Call script at's "now" (ledger TQ17, TE2): the whole seconds of the day counted from the module's start hour, not from midnight: the clock's millisecond
+    /// of the day plus a day, less the start hour's milliseconds, divided by 1000 and reduced to a day of 86400 seconds. 0..86399.
+    /// </summary>
+    public int SecondsSinceStartHour()
+    {
+        var ms = MillisecondOfDay >= 0 ? MillisecondOfDay : (Hour * 60L + Minute) * 60_000L;
+        return (int)((ms + 86_400_000L - StartHour * 3_600_000L) / 1000 % 86_400);
+    }
+}
+
+/// <summary>ARC-SCRIPT-2824: the game clock a host reads for call script at. A host whose admission set holds that action implements it (<see cref="IScrStoryQueries"/> extends it); a host
+/// that does not ends the dispatch with <see cref="ScrStop.NotModelled"/> when the action runs, as a host with no clock does.</summary>
+public interface IScrTimeQueries
+{
+    /// <summary>The game clock, or null when the host holds none (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
+    ScrGameTime? Time();
 }
 
 /// <summary>
@@ -479,10 +499,8 @@ public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
 /// actions (<see cref="Time"/>), the global quest state, the PC's rumor knowledge and the game-wide quelled set, and the PC's blessings and curses. A host whose
 /// admission set holds one implements this interface; the interpreter asks only for what a clause names.
 /// </summary>
-public interface IScrStoryQueries
+public interface IScrStoryQueries : IScrTimeQueries
 {
-    /// <summary>The game clock, or null when the host holds none (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
-    ScrGameTime? Time();
     /// <summary>The quest's game-wide state (0x4C51A0, 2 until a PC completes or botches it); 0 for a number the host's quest table does not hold.</summary>
     int GlobalQuestState(int quest);
     /// <summary>Whether the object is a PC that has learned the rumor (0x4C58D0); false for any other object and for a rumor number the host does not hold; null for an object the
