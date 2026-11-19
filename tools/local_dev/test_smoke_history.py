@@ -23,6 +23,9 @@ ARC-DEV-399 stage-time Upper ms=5
 
 class StageHistoryTests(unittest.TestCase):
     def setUp(self) -> None:
+        pin = patch.object(smoke.run_queue, "playing_state", return_value=None)  # ARC-DEV-2902: never the live owner-playing state
+        pin.start()
+        self.addCleanup(pin.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.queue = self.root / "run-queue"

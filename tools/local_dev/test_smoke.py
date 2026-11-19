@@ -405,6 +405,7 @@ class PlanTests(unittest.TestCase):
 
 class ExecuteTests(unittest.TestCase):
     def setUp(self) -> None:
+        patched = mock.patch.object(run_queue, "playing_state", return_value=None); patched.start(); self.addCleanup(patched.stop)  # ARC-DEV-2902: never the live owner-playing state (game process, real queue folder)
         self.temp = tempfile.TemporaryDirectory()
 
     def tearDown(self) -> None:
