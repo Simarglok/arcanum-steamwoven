@@ -180,7 +180,7 @@ public partial class AreaWorldMapArtView : Control
     internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     /// <summary>A mouse move inside the view during a drag (the edge scroll of WM99).</summary>
     internal void DragForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; if (_dragging) DragEdgeScroll(windowPoint); }
-    internal void SetOffsetForSelfTest((int X, int Y) offset) { _offset = AreaWorldMapArtLayout.Clamp(offset, MapMax); Redraw(); }
+    internal void SetOffsetForSelfTest((int X, int Y) offset) { FitPicture(); _offset = AreaWorldMapArtLayout.Clamp(offset, MapMax); Redraw(); }
 
     public override void _Ready()
     {
@@ -519,7 +519,13 @@ public partial class AreaWorldMapArtView : Control
         : _kind == AreaWorldMapKind.Map ? MapPixelAt(at)
         : _kind == AreaWorldMapKind.Town ? AreaTownMapLayout.ToPicture(at.X, at.Y, _townOffset) : AreaWorldMapArtLayout.ZoomedToPicture(at.X, at.Y, _map.Data.Width);
 
-    private (long X, long Y)? MapPixelAt(Vector2 at) { FitPicture(); return AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset, PixelsPerUnit); }
+    // A point on the black margin beside a picture smaller than the view (an HD window beyond 2000 picture pixels) is no picture pixel: no waypoint, note or readout.
+    private (long X, long Y)? MapPixelAt(Vector2 at)
+    {
+        FitPicture();
+        var width = _map?.Data.Width ?? AreaWorldMapArtLayout.PictureSize;
+        return AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset, PixelsPerUnit) is { } pixel && pixel.X >= 0 && pixel.Y >= 0 && pixel.X < width && pixel.Y < width ? pixel : null;
+    }
 
     private IReadOnlyList<(long X, long Y)> MarkerPixels()
     {
@@ -677,6 +683,7 @@ public partial class AreaWorldMapArtView : Control
             {
                 // WM34: a click in the continent view zooms in on the clicked point (not in a town-map sector).
                 _kind = AreaWorldMapKind.Map;
+                FitPicture();
                 _offset = AreaWorldMapArtLayout.CentreOn(zoomTo.X, zoomTo.Y, MapMax, PixelsPerUnit);
                 ClearDescription();
             }
