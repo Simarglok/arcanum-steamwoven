@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -79,10 +80,48 @@ public partial class TerrainViewerApp
             return new { ObjectLights = "shared" };
         }
         if (observed == 0) throw new InvalidOperationException($"OBJECT_LIGHTS_TERRAIN_NOT_OBSERVED tried={tried}");
+        var toggled = ObserveSceneryToggleLights(driver, area, all);
         GD.Print("ARC-RENDER-030 native-smoke object lights PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = area.Snapshot.CatalogueMap, Hour = driver.Clock.Hour, Lights = local.LightCount, ObjectLights = local.ObjectLightCount,
-            NightOnlyDiffers = !ReferenceEquals(all.AtHour(0), all.AtHour(12)), Observed = observed, Dark = dark, Tried = tried, ViewMs = viewMs }));
+            NightOnlyDiffers = !ReferenceEquals(all.AtHour(0), all.AtHour(12)), Observed = observed, Dark = dark, Tried = tried, ViewMs = viewMs, SceneryToggle = toggled }));
         return new { ObjectLights = observed };
+    }
+
+    // ARC-SCRIPT-2585 (ledger OT10): a script's toggle state of a scenery that carries a light switches the light off in the lighting the canvas gets, and the record's removal puts it back.
+    // The record is the one the toggle writes (SessionItemOff.Key); it is restored before this returns. "none" when the map has no lit scenery.
+    private string ObserveSceneryToggleLights(AreaAmbientDriver driver, AreaLoadResult area, AreaLocalLighting all)
+    {
+        if (_areaSession is not { } session || ObjectTargets() is not { } targets) return "no-targets";
+        var map = new Arcanum.Session.SessionMapId(area.Snapshot.RuntimeMap);
+        bool LightOff(AreaObjectKey owner) => LightsNow(all, driver)!.Field.Source.Lights.Where(l => l.Owner == owner).All(l => (l.Flags & StationaryLightFlags.Off) != 0);
+        void Record(string entity, long? value)
+        {
+            if (session.ApplyChanges(session.Version, null, [new(map, Arcanum.Session.SessionItemOff.Key(entity), value)]).Disposition != Arcanum.Session.GameSessionDisposition.Changed)
+                throw new InvalidOperationException("SCENERY_LIGHT_RECORD_REFUSED " + entity);
+            TickCarriedLight();
+        }
+        var tried = 0;
+        foreach (var light in all.AtHour(driver.Selection.Hour).Field.Source.Lights)
+        {
+            if (light.Owner is not { } owner || (light.Flags & StationaryLightFlags.Off) != 0 || targets.EntityOfKey(owner) is not { } entity || tried >= 12) continue;
+            tried++;
+            Record(entity, 1);
+            try
+            {
+                // A container or a portal is no scenery: its record lists nothing and its light stays.
+                if (!targets.SceneryOffStates(session).ContainsKey(owner)) { if (LightOff(owner)) throw new InvalidOperationException("SCENERY_LIGHT_OFF_FOR_NON_SCENERY " + entity); continue; }
+                if (!LightOff(owner)) throw new InvalidOperationException("SCENERY_LIGHT_STAYED_ON " + entity);
+                var others = all.AtHour(driver.Selection.Hour).Field.Source.Lights.Count(l => l.Owner is not null && l.Owner != owner && (l.Flags & StationaryLightFlags.Off) == 0);
+                if (LightsNow(all, driver)!.Field.Source.Lights.Count(l => l.Owner is not null && l.Owner != owner && (l.Flags & StationaryLightFlags.Off) == 0) != others)
+                    throw new InvalidOperationException("SCENERY_LIGHT_OTHERS_CHANGED " + entity);
+            }
+            finally { Record(entity, null); }
+            if (LightOff(owner)) throw new InvalidOperationException("SCENERY_LIGHT_NOT_RESTORED " + entity);
+            GD.Print("ARC-SCRIPT-2585 native-smoke scenery light PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = area.Snapshot.CatalogueMap, Entity = entity, Tried = tried }));
+            return "toggled";
+        }
+        GD.Print($"ARC-SCRIPT-2585 native-smoke scenery light SKIP (map {_readyMapName}: no scenery with a light that is on, tried {tried})");
+        return "none";
     }
 
     private async Task<bool> ObserveTerrainLitAsync(AreaLoadResult area, AreaDrawCommand command, Arcanum.Data.Lighting.AmbientColor plain, Func<Vector2, (double R, double G, double B)> tintAt)

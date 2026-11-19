@@ -463,11 +463,13 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
 - **New parts.** `ChromeRoundView` lays the round hole's brass ring around the circle (the part of the ring that lies beyond a square hole's sides, in the frames,
   and the ring in the corners of the lens, so both match) and keeps the square rim a square hole would get from being drawn; with `Shape` it also gives the circle's edge an
   anti-aliased alpha (the lenses: their circle touches the frame's sides, so the hole finder takes it for the outside of the frame). `ChromeGrid.Closed` also draws the
-  line of the last column and row (the pit of the loot and barter grids goes on for the scroll bar's chain). `ChromeKeep.Round` keeps only the inscribed circle (the barter
-  window's medallion and the follower buttons' plates, so the square of the old wood around them is not copied).
+  line of the last column and row (the pit of the loot and barter grids goes on for the scroll bar's chain). `ChromeKeep.Round` keeps only the inscribed circle (the follower
+  buttons' plates, so the square of the old wood around them is not copied).
 - **Inventory.** The paper doll's portrait ring (223) is now the same `ChromeRoundView` ring (its opaque box behind the live view is kept; `Shape` false), so it matches
   the lens 233.
-- **Kept.** The scroll bar's chain, the barter window's medallion and the follower buttons' plates stay pictures. The drop, use and gamble boxes (344 to 348) stay art as in
+  ARC-UI-2762 (owner report 2026-11-18): the paper doll, loot, barter and follower frames no longer paint that second ring (or the barter medallion kept around the lens): outside the circle it showed as cut
+  arcs at the four sides next to the lens art's own ring. Like the map frame (ARC-UI-2694) they give the lens square a `ChromeBare` hole (no rim) and the lens art 198/231/232/233 carries the one ring.
+- **Kept.** The scroll bar's chain and the follower buttons' plates stay pictures (ARC-UI-2762: the barter window's medallion no longer does). The drop, use and gamble boxes (344 to 348) stay art as in
   the inventory (the glow and the corners are the state). The curved flourishes of the boxes are not drawn (as in S3).
 - **Doll frames (ARC-UI-1750, issue #1750).** The barter doll 337 (`Barter_PD`, 358 × 243, drawn since ARC-UI-1917, IW29) is `loot_pd.art`'s frame cut 23 pixels shorter at the top (the same columns, bottom aligned),
   so `barter_pd.art` has the same pit and 21-pixel grid 23 pixels higher and keeps the two slot pits (the weapon's red one with the dagger, the armour's blue one with the shield) as the original's picture. The hero's doll cover 341
@@ -800,7 +802,7 @@ S14 draws the reading windows (book, note, newspaper, telegram, plaque) in the g
 `WrtnBookLArro` and 496 `WrtnBookRArro` (18 × 22, three frames); the round view's lens 231 is the barter window's recipe ([S4](#viewer-slice-s4-arc-ui-1194)).
 
 - **Table.** Every background is the wood of the table with what lies on it, sampled at the origin (132, 0) so the grain continues the side bar's without a seam (the side bar, `ChromeHoles.None`, is plain wood: its round hole is the live view and 231 draws the ring).
-  The book is the logbook's book of [S7](#viewer-slice-s7-arc-ui-1196): a cloth cover, the two stacks of page edges, the two parchment pages that meet at the fold and the clasps at its ends (the lit top and bottom plates). The note and the telegram are one
+  The book is the logbook's book of [S7](#viewer-slice-s7-arc-ui-1196): a cloth cover, the two stacks of page edges, the two parchment pages that meet at the fold and the clasps at its ends (the lit top and bottom plates). ARC-UI-2720: the materials are sampled in window coordinates, so the book's recipe carries its own fold (`ChromeRecipe.FoldX` = the art's 320 plus the corner 132, where the pages meet and the clasps stand); the logbook's book keeps its 286. Before this the shade of the fold lay at the window's 286, left of the page join. The note and the telegram are one
   parchment sheet each; the telegram has the two boxes of its form and the double rule under its title as one-unit ink lines (`ChromePlate` of `ChromeMaterial.Dark` without bevel). The newspaper (and the alternate one) is one sheet with the boxes of its two EXTRA marks,
   the double rule under the masthead and the rules between its four columns (the first starts below the headline's rectangle). The plaque's inner panel holds its text rectangle. The plaque is a slate slab (`ChromeMaterial.Slate`, as the stone of the dialog box in [S10](#viewer-slice-s10-arc-ui-1819)) with a second raised panel inside it. No picture is kept.
 - **Page buttons.** As the logbook's page turners ([S7](#viewer-slice-s7-arc-ui-1196)): the parchment page under the button at the button's own origin and the Legacy arrow (`ChromeGlyph`).

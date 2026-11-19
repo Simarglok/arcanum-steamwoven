@@ -148,6 +148,9 @@ public sealed class AreaUseScriptHostTests
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
+            // ARC-SCRIPT-2752 (SX3): 723 has the triggerer use its item (the attachee) with pick locks on the extra object, modifier 5, then skips the default (the shape of the installed lockpicks' 29010).
+            Write("scr/00723pick.scr", Program(Do(new(ScrCatalogue.Action.UseItemWithSkill, (Triggerer, 0), (Attachee, -1), (12, 0), N(14), N(5))), Do(Skip)));
+            Write("scr/00724skill.scr", Program(Do(new(ScrCatalogue.Action.UseItemWithSkill, (Triggerer, 0), (Attachee, -1), (12, 0), N(10), N(0))), Do(Skip)));
             // 720: raises the story state, sets a quest (for the PC and for the gate, which is ignored), marks an area, learns a rumor
             // and adds a reputation (ARC-SCRIPT-019).
             Write("scr/00720story.scr", Program(Do(new(ScrCatalogue.Action.SetStoryState, N(5))), Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))),
@@ -777,6 +780,55 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
+    // ARC-SCRIPT-2788: a follower recruited from another sector of the shown (main) map has no row in the shown window or the loaded maps' rows; the party's carried body row
+    // lets the tile's script run for it, and a refusal names the clause that failed.
+    [TestMethod]
+    public void A_tile_script_runs_for_a_carried_follower_whose_row_the_shown_window_does_not_hold()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 707);
+            var followerRow = Row(20, 16, 0, 9000);
+            var follower = new ScrObjectRef(1, AreaUseScriptHost.EntityId(followerRow));
+            AreaUseScriptHost With(bool carried) => new(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => carried && obj == follower ? followerRow : null));
+
+            var ran = With(true).RunPlaced(tile, session.Rules.Scripts, null, follower);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(707, ran.Run!.Script, "the tile's script ran, with the carried follower as its triggerer");
+
+            var refused = With(false).RunPlaced(tile, session.Rules.Scripts, null, follower);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, refused.Outcome);
+            StringAssert.Contains(refused.Detail, "no object row", "the refusal names the missing row, not the map");
+            var wrongMap = With(true).RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(2, follower.Code));
+            StringAssert.Contains(wrongMap.Detail, "no object row");
+
+            // The carried row answers only while that follower's own tile script runs: the other readers keep their answers for a body outside the window.
+            Assert.IsFalse(With(true).KnowsObject(follower));
+
+            // A carried row that is no NPC's is refused by its type; a follower of another map that does not stand here, by the map.
+            var thing = Row(21, 3, 0, 9000);
+            var thingRef = new ScrObjectRef(1, AreaUseScriptHost.EntityId(thing));
+            var typed = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == thingRef ? thing : null)).RunPlaced(tile, session.Rules.Scripts, null, thingRef);
+            StringAssert.Contains(typed.Detail, "not an NPC");
+            var farRow = Row(22, 16, 0, 9000, map: 2);
+            var far = new ScrObjectRef(2, AreaUseScriptHost.EntityId(farRow));
+            var farRun = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == far ? farRow : null)).RunPlaced(tile, session.Rules.Scripts, null, far);
+            StringAssert.Contains(farRun.Detail, "does not stand on the shown map");
+
+            // A row the shown window holds wins over the carried one.
+            var shownRow = Row(23, 16, 0, 9000);
+            var shownRef = new ScrObjectRef(1, AreaUseScriptHost.EntityId(shownRow));
+            var other = Row(23, 3, 0, 9000);
+            var both = new AreaUseScriptHost(session, 1, [Gate(0), shownRow], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == shownRef ? other : null)).RunPlaced(tile, session.Rules.Scripts, null, shownRef);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, both.Outcome, both.Detail);
+        });
+    }
+
     // ARC-SCRIPT-052 (TD1–TD3): a tile's stop attacking and destroy of the NPC who steps on it; the destroyed NPC leaves the map's objects.
     [TestMethod]
     public void A_tile_stops_the_npc_who_steps_on_it_attacking_and_destroys_him()
@@ -1043,6 +1095,69 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (stop.Outcome, stop.Run!.Outcome));
             Assert.IsTrue(host.GlobalFlag(32), "the effects apply either way, as the original's run does");
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(2, Entity(6), session.Rules.Scripts).Outcome, "not a row of a loaded map");
+        });
+    }
+
+    // ARC-SCRIPT-2789: an item's use script may loop over everyone in the vicinity (Joachim's note to Virgil, 1567): the item set admits the two vicinity kinds, the door's and scenery's use set does not. A script the item set refuses (772's neighbour 752 stops attacking, a placed-set
+    // command) is a refused run, which applied nothing: the reading goes on (ReadingGoesOn), as it does after run default, and stops only after skip default or rejected effects.
+    [TestMethod]
+    public void An_item_use_script_may_loop_over_the_vicinity_and_a_refused_one_lets_the_reading_go_on()
+    {
+        Assert.IsTrue(AreaUseScriptHost.ItemUseAdmission.FocusKinds.Contains(ScrFocusKind.EveryoneInVicinity));
+        Assert.IsTrue(AreaUseScriptHost.ItemUseAdmission.FocusKinds.Contains(ScrFocusKind.AnyoneInVicinity));
+        Assert.IsFalse(AreaUseScriptHost.Admission.FocusKinds.Contains(ScrFocusKind.EveryoneInVicinity), "a door's or scenery's use keeps its own set");
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var items = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20)), new SessionSeedItem(Entity(7), Facts(61), new CellCoord(17, 20)), new SessionSeedItem(Entity(8), Facts(62), new CellCoord(18, 20))]),
+                new[] { Row(6, 13, 772, 60), Row(7, 13, 752, 61), Row(8, 13, 721, 62) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+            var host = new AreaUseScriptHost(session, 1, [], [items], content);
+            var loop = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (loop.Outcome, loop.Run!.Outcome), loop.Detail);
+            Assert.IsTrue(host.GlobalFlag(45), "the loop ran to its end and the script went on");
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(loop), "skip default stops the reading, as in the original");
+
+            var refused = host.RunItemUse(1, Entity(7), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, refused.Outcome, refused.Detail);
+            Assert.IsTrue(AreaUseScriptHost.ReadingGoesOn(refused), "a refused run is a gap of the model, not the original's stop");
+
+            var go = host.RunItemUse(1, Entity(8), session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.ReadingGoesOn(go), go.Detail);
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(new(AreaScriptedUseOutcome.EffectsRejected, null, [], null, "x")));
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "x")));
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(new(AreaScriptedUseOutcome.TeleportRefused, null, [], null, "x")));
+        });
+    }
+
+    // ARC-SCRIPT-2752 (SX3): the use item with skill of an item's use script starts the NPC user's goal 40 through the AI host; the hero as the user, another skill and a target that is no portal leave the run unapplied.
+    [TestMethod]
+    public void An_item_s_use_item_with_skill_starts_the_npc_users_goal_40_for_pick_locks_on_a_portal_only()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(8, 16, 0, 9000);
+            var items = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20)), new SessionSeedItem(Entity(7), Facts(61), new CellCoord(17, 20))]),
+                new[] { Row(6, 13, 723, 60), Row(7, 13, 724, 61) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+            var asked = new List<(string Npc, string? Item, string Target, int Skill, int Modifier)>();
+            var portal = true;
+            var openable = new AreaScriptOpenable(new SessionOpenable(new SessionMapId(1), "oid:door"), new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Portal, 0, 0, 0), new Arcanum.Simulation.Locks.PortalArt(true, 3, 7), 3);
+            AreaUseScriptHost Open(bool ai) => new(session, 1, [npc], [items], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                Openable: _ => portal ? openable : null, ScriptUseItemWithSkill: ai ? (who, item, target, skill, modifier) => { asked.Add((who, item, target, skill, modifier)); return "started"; } : null));
+            var user = new ScrObjectRef(1, AreaUseScriptHost.EntityId(npc));
+            var host = Open(true);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:door", user);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), (string?)Entity(6), "oid:door", 14, 5) }, asked, "the starter is asked with the user, the item, the target, the skill and the modifier");
+            Assert.AreEqual("started", host.LastSkillUse);
+            asked.Clear();
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(7), session.Rules.Scripts, "oid:door", user).Outcome, "only pick locks takes the modifier");
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:door").Outcome, "the hero's goal 40 is the hero host's");
+            portal = false;
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:crate", user).Outcome, "a target that is no portal");
+            portal = true;
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Open(false).RunItemUse(1, Entity(6), session.Rules.Scripts, "oid:door", user).Outcome, "no AI host");
+            Assert.AreEqual(0, asked.Count, "a refused run starts nothing");
         });
     }
 

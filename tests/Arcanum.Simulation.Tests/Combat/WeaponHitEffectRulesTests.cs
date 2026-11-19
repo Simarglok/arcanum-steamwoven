@@ -26,4 +26,15 @@ public sealed class WeaponHitEffectRulesTests
         Assert.IsNull(WeaponHitEffectRules.Index(6060, 5));
         Assert.IsNull(WeaponHitEffectRules.Index(6060, -1));
     }
+
+    [TestMethod]
+    public void The_projectile_speed_entry_sets_the_steps_a_tick_and_zero_is_the_default()
+    {
+        // ARC-RENDER-2035 (PF4, 0x435870 → 0x42F6A0): the weapon list's kind-2 entry (message 10g + 3) is read at the flight start; its Proj Speed is the steps of every tick, 4 for none.
+        Assert.AreEqual(102, WeaponHitEffectRules.Index(6069, WeaponHitEffectRules.Projectile), "Bronwyck's Gun: 20 groups, kind 2");
+        Assert.AreEqual(1, WeaponHitEffectRules.StepsPerTick(1));
+        Assert.AreEqual(2, WeaponHitEffectRules.StepsPerTick(2));
+        Assert.AreEqual(ProjectileRules.DefaultStepsPerTick, WeaponHitEffectRules.StepsPerTick(0), "no entry or none written: four steps");
+        Assert.AreEqual(ProjectileRules.DefaultStepsPerTick, WeaponHitEffectRules.StepsPerTick(-3), "a negative speed (none installed) keeps the default; the original takes no step");
+    }
 }

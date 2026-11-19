@@ -163,9 +163,10 @@ public partial class AreaReadingArtView : Control
     /// nor taller than it with the window's 41 + 399 rows, and the window stands at (0, 41 × scale).</summary>
     internal static (float Scale, Vector2 Position) ReadingScale(Vector2 size, bool hd)
     {
-        // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
-        if (AreaGameBarPanel.ZoneScreen(size, AreaReadingArtLayout.Window.Y) is { } zone)
-            return ((float)zone.Scale, new Vector2((float)zone.X, (float)Math.Round(zone.Y + AreaReadingArtLayout.Window.Y * zone.Scale)));
+        // ARC-UI-2714: with the Steamwoven layout the window stands in the window zone like every other menu window (its top at the zone's 800 × 400 body's top, not at the 800 × 600 screen's body, which at
+        // 16:9 lies up to 12.5 units above the zone), so that the lens, the same everywhere, does not jump when the window changes.
+        if (AreaGameBarPanel.ZoneWindow(size, AreaReadingArtLayout.Window.Width, AreaReadingArtLayout.Window.Height + 1) is { } zone)
+            return ((float)zone.Scale, new Vector2((float)zone.X, (float)zone.Y));
         var fit = MathF.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight);
         var factor = AreaGameBarPanel.ScreenFactor(size);
         var whole = MathF.Min(MathF.Round(fit, MidpointRounding.AwayFromZero), MathF.Min(MathF.Floor(size.X / AreaGameBarLayout.ScreenWidth), MathF.Floor(size.Y / (AreaReadingArtLayout.Window.Y + AreaReadingArtLayout.Window.Height))));

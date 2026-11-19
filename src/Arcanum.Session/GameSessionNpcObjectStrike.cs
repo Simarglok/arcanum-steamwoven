@@ -25,6 +25,8 @@ public sealed record SessionNpcObjectAttack(SessionCritterCombat Attacker)
     public Func<bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483: as <see cref="SessionNpcAttack.HitScripts"/>, for a hit on an object.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionAttack.ArmourScripts"/>, for the NPC's own critical self-hit (the only damage step an NPC's strike on an object has).</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
 }
 
 public sealed partial class GameSessionOwner
@@ -89,6 +91,9 @@ public sealed partial class GameSessionOwner
         if (!ValidWear(attackerSide, objectSide, targetBroken: false, wear: null)) return RejectObject(GameSessionFailure.InvalidWear);
         var attackerStatus = LifeRules.Evaluate(attackerRecord.State, attackerFacts!);
         SessionNpcAttackValues values;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's: the NPC's wielded weapon takes no wear from it.
+        if (arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)
+            attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes; a shot in flight carries its own.
         if (arrow is not null) values = arrow.Values;
         else
@@ -183,6 +188,8 @@ public sealed partial class GameSessionOwner
         if (damage.Recipient == DamageRecipient.Attacker)
         {
             // A critical self-hit: the NPC takes the damage and its own armour and weapon the wear (as ARC-WORLD-092's attack on a critter does); it has no killer.
+            // ARC-SCRIPT-2828 (0x4B47F8): the NPC's worn armour runs its critical-hit script on a critical self-hit, before the hit points are written.
+            NotifyArmourCritical(attack.ArmourScripts, resolution, attack.AttackerWorn, QueryLife(attacker.Target).View?.Status);
             var applied = ApplyDamage(Version, attacker.Target, LifeDamage.FromAttack(resolution)!);
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version) { Ammunition = spentAmmo, Shots = flying };

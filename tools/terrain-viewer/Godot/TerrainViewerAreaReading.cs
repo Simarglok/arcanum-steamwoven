@@ -102,11 +102,19 @@ public partial class TerrainViewerApp
     {
         var not = reading ? "not read" : "not used";
         if (_readyArea?.Snapshot is not { } snapshot || UseScriptHost(snapshot) is not { } host) return $"{not}: its use script needs a game session";
-        if (_areaSession!.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is not { Entity: not null } held)
-            return $"{not}: its use script runs only for an item taken from a map";
-        var ran = Awarded(host, host.RunItemUse(held.Origin.RuntimeMap, item, _areaSession.Rules.Scripts, target));
+        // ARC-SCRIPT-1594 (VT8): a made item or one of the starting kit owns no origin map and runs its prototype's use script, named by the shown map.
+        var originMap = _areaSession!.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is { Entity: not null } held ? held.Origin.RuntimeMap
+            : _areaSession.QueryPrototypeItemKind(item) is not null ? CurrentAreaMap : 0;
+        if (originMap == 0) return $"{not}: its use script runs only for an item taken from a map, made or in the starting kit";
+        var ran = Awarded(host, host.RunItemUse(originMap, item, _areaSession.Rules.Scripts, target));
         var lines = ran.Lines.Count > 0 ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
         GD.Print($"ARC-SCRIPT-020 item use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}{lines}");
+        // ARC-SCRIPT-2789: a use script the host refuses is a gap of the model, not an answer of the original: the reading goes on without the script's effects (a use that consumes the item stays stopped: its effects are the use).
+        if (reading && AreaUseScriptHost.ReadingGoesOn(ran))
+        {
+            if (ran.Outcome is AreaScriptedUseOutcome.Refused) GD.Print($"ARC-SCRIPT-2789 item use script not modelled, the reading goes on without its effects detail={ran.Detail}");
+            return null;
+        }
         if (ran.Outcome is not AreaScriptedUseOutcome.NoTeleport) return $"{not}: its use script was refused (" + ran.Detail + ")";
         return ran.Run?.Outcome == ScrOutcome.SkipDefault ? (reading ? "its use script stopped the reading" : "its use script stopped the use") + lines : null;
     }

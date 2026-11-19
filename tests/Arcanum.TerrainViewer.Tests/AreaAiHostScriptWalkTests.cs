@@ -106,6 +106,21 @@ public sealed class AreaAiHostScriptWalkTests
     }
 
     [TestMethod]
+    public void A_script_use_item_with_skill_starts_goal_40_with_the_skill_and_the_modifier_and_refuses_what_the_host_does_not_run()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        StringAssert.Contains(host.ScriptUseItemWithSkill("npc:nobody", null, f.B, 14, 5), "not an NPC");
+        StringAssert.Contains(host.ScriptUseItemWithSkill("pc", null, f.B, 14, 5), "not an NPC", "the hero's goal 40 is the hero host's");
+        Assert.IsNull(host.RunOf(f.A), "SX3: nothing is queued by a refusal");
+        Assert.AreEqual("started", host.ScriptUseItemWithSkill(f.A, null, f.B, AiExecutorRules.PickLocksSkill, 5));
+        var run = host.RunOf(f.A)!;
+        Assert.AreEqual((GoalType.UseItemWithSkill, f.B, AiExecutorRules.PickLocksSkill, 5, (string?)null), (run.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill!.Value, run.Bottom.Modifier, run.Bottom.Item),
+            "SX3: goal 40 with the target, the skill and the modifier");
+        Assert.AreEqual(1, host.Session.QueryGoals().RunsOf(f.A).Length);
+    }
+
+    [TestMethod]
     public void A_script_prone_interrupts_the_runs_at_level_4_and_shows_the_fall_with_no_goal()
     {
         var (f, host) = Open();

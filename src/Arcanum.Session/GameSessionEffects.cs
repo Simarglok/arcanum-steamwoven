@@ -158,6 +158,13 @@ internal sealed class EffectDomain
             .Where(c => c.Kind == EffectAttributeKind.Special && c.Attribute == (int)special)
             .Select(c => new EffectModifier(Operator(c.Operator), c.Value))];
 
+    /// <summary>ARC-AI-2750: the changes of the stat with the source's index <paramref name="stat"/> (the stats the character owner does not model, the level and the alignment) over the entries in list order, the hero's innate rules first.</summary>
+    internal static ImmutableArray<EffectModifier> StatChanges(IEnumerable<SessionEffect> entries,
+        IReadOnlyDictionary<int, SessionEffectDefinition> definitions, int stat, IEnumerable<SessionEffectDefinition>? innate = null) =>
+        [.. (innate ?? []).SelectMany(rule => rule.Changes).Concat(entries.SelectMany(entry => definitions.TryGetValue(entry.Number, out var rule) ? rule.Changes : []))
+            .Where(c => c.Kind == EffectAttributeKind.Stat && c.Attribute == stat)
+            .Select(c => new EffectModifier(Operator(c.Operator), c.Value))];
+
     /// <summary>
     /// ARC-MAGIC-027 (MA-2): the resistance changes of the entries (the five resistances in the source's order, list order within each), for the effective resistance function
     /// (<see cref="CombatantRules.Resistances(DamageResistances, Arcanum.Simulation.Equipment.EquipmentResistances, int, bool, EffectResistances)"/>). A number without a rule has no changes.

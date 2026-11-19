@@ -70,7 +70,7 @@ public sealed class AreaTalkQueryTests
                 If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(7)), new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag)), new(ScrCatalogue.Action.DoNothing)),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             // Line 1's action field holds spaces only; line 2 acts.
-            Write("dlg/00790float.dlg", Encoding.Latin1.GetBytes("{1}{Not now, @pcname@.}{Not now, lady.}{}{}{}{  }\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
+            Write("dlg/00790float.dlg", Encoding.Latin1.GetBytes("{1}{Not now, @pcname@, said @npcname@.}{Not now, lady.}{}{}{}{  }\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
             // 792: get reaction of the attachee toward the triggerer into local 0, set global flag 100 when it is 62 (not the original's 50 for a non-NPC pair), skip default (ARC-DEV-178, B19).
             Write("scr/00792reaction.scr", Program(
                 Do(new(ScrCatalogue.Action.GetReaction, (Attachee, -1), (Triggerer, -1), (Local, 0))),
@@ -132,9 +132,9 @@ public sealed class AreaTalkQueryTests
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
     private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50,
         Func<string, int, int, bool, string>? damage = null, Func<string, int, string>? heal = null, Func<string, string, string>? attack = null,
-        Func<string?, string, int, bool, bool, string>? cast = null, AreaObjectRecord? neighbour = null, Func<string, int?>? standardReaction = null)
+        Func<string?, string, int, bool, bool, string>? cast = null, AreaObjectRecord? neighbour = null, Func<string, int?>? standardReaction = null, GameSessionOwner? heroSession = null, Func<AreaObjectRecord, string?>? npcName = null)
     {
-        var session = ConversationSessionFixture.Create(Map);
+        var session = heroSession ?? ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
@@ -142,7 +142,7 @@ public sealed class AreaTalkQueryTests
         var use = new AreaUseScriptHost(session, useMap, neighbour is null ? [row] : [row, neighbour], [], content,
             new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
                 StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack, ScriptCast: cast, StandardReaction: standardReaction));
-        var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
+        var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use, NpcName = npcName };
         return new(session, speaker, host);
     }
 
@@ -190,8 +190,27 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "get area read 7");
             // The diagnostic profile: a male PC named [PC]; the separators-only action field runs nothing.
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, [PC].", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, [PC], said [NPC].", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
             Assert.AreEqual(0, talk.Host.TakeFloats().Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_float_line_names_the_hero_and_the_speaker_from_the_session_and_the_name_source()
+    {
+        // ARC-SCRIPT-2787 (0x416B00): @pcname@ is the hero's player name and @npcname@ the speaker's shown name, not the diagnostic placeholders.
+        WithContent(content =>
+        {
+            var hero = ConversationSessionFixture.CreateWithHero(Map);
+            Assert.AreEqual(GameSessionDisposition.Changed, hero.SetHeroPlayerName(hero.Version, Encoding.Latin1.GetBytes("Zed")).Disposition);
+            using var talk = Create(content, 790, (7, false), heroSession: hero, npcName: row => "Wren of " + row.Type);
+            Assert.IsTrue(talk.Host.Apply(talk.Run().Effects));
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, Zed, said Wren of 16.", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
+
+            // A source with no text for the speaker prints an empty name; a hero with no name set prints an empty one.
+            using var bare = Create(content, 790, (7, false), heroSession: ConversationSessionFixture.CreateWithHero(Map), npcName: _ => null);
+            Assert.IsTrue(bare.Host.Apply(bare.Run().Effects));
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(bare.Host.Object(bare.Speaker), "Not now, , said .", bare.Host.Pc) }, bare.Host.TakeFloats().ToArray());
         });
     }
 

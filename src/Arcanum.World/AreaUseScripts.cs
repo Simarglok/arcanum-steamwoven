@@ -53,6 +53,7 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
 /// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
 /// ARC-SCRIPT-2514 (BS3c, 0x43CCA0 → 0x423FF0, 0x459740): <see cref="ObjectDestroyed"/> is told each shown-map scenery or container a script's destroy applied, right after the session recorded it, so the viewer ends the object's goal runs (its loop, eye-candy overlays and hover) and the spell runs aimed at or cast from it; without it the runs stay as before.
+/// ARC-SCRIPT-2788: <see cref="CarriedRow"/> answers the body row of a companion the party carries (named by its home map and entity) when the shown map's window and the loaded maps' rows hold none (a follower recruited from another sector of the main map), so a tile script it steps onto runs for it; without it only those rows are read.
 /// ARC-SCRIPT-2519 (TI5c, F2, 0x502880, 0x502930): <see cref="NpcFacing"/> answers the facing an NPC of the shown map stands in now (its mover's, else its map art's rotation) so the made critter of a transform takes it; without it (or for an NPC it does not know) the made critter keeps its prototype's art facing.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -67,7 +68,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
     Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
-    Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null);
+    Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null,
+    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null, Func<ScrObjectRef, AreaObjectRecord?>? CarriedRow = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -212,10 +214,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.UseItemWithSkill, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-SCRIPT-2789: the set an item's use script runs under (<see cref="RunItemUse"/>): <see cref="Admission"/> with the focus kinds everyone (8) and anyone (9) in the vicinity, in actions (the loop over the critters around the item, as
+    /// <see cref="PlacedAdmission"/> has it), which <see cref="CrittersNearItem"/> answers around the item's own location field. Joachim's note to Virgil (use script 1567) loops over everyone near the note and calls Virgil's script 1687 on him; without the kinds the run was refused at its
+    /// line 4 and the whole use was lost. A use click on a door or scenery keeps <see cref="Admission"/>.
+    /// </summary>
+    public static ScrAdmissionSet ItemUseAdmission { get; } = new("S4-area-item-use-vicinity", Admission.Conditions, Admission.Actions, Admission.ValueKinds,
+        Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
     /// ratio, <see cref="PowerRatio"/>), play script eye candy (120; the use host shows none) and destroy (68; of the item being used only, <see cref="ObjectStateRefusal"/>).</summary>
@@ -436,6 +446,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
+    // ARC-SCRIPT-2788: the NPC triggerer of the tile script RunPlaced runs now (the one object CarriedRow may answer for).
+    private ScrObjectRef? _placedTriggerer;
 
     /// <summary>ARC-WORLD-081: the create objects of the runs applied since the last call, in order.</summary>
     public IReadOnlyList<AreaScriptCreation> TakeCreations()
@@ -476,6 +488,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// needs; the viewer sets it once the tables are read. Without it such an action is refused (<see cref="AreaScriptStory.Apply"/>).
     /// </summary>
     public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
+
+    /// <summary>ARC-SCRIPT-2787: where an object's shown name comes from for <c>@npcname@</c> in a printed or floated line (<see cref="AreaDialogNames.NpcNameSource"/>); null: the diagnostic placeholder.</summary>
+    public Func<AreaObjectRecord, string?>? NpcName { get; set; }
 
     // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
     public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
@@ -925,7 +940,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map), else of an item the hero wears (a made or kit item has no row, ARC-SCRIPT-1562); null for any other (not modelled).
     private int? ComplexityOf(ScrObjectRef item) => Row(item) is { } row
         ? Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Item is { } fields ? fields.MagickTechComplexity : null
-        : _session.QueryWornComplexity(item.Code);
+        : _session.QueryWornComplexity(item.Code) ?? PrototypeItemComplexity(item);
+
+    /// <summary>ARC-SCRIPT-1594 (VT8): the magick-tech complexity of a made or kit item's prototype (the original makes every object as a copy of its prototype, which holds the value until something writes it), as the viewer reads it
+    /// (<see cref="AreaInventoryHost.PrototypeComplexity"/>); null without the source or for an item that stands on no prototype of the session.</summary>
+    public Func<int, int?>? PrototypeComplexity { get; set; }
+
+    private int? PrototypeItemComplexity(ScrObjectRef item) =>
+        IsPrototypeItem(item) && _session.QueryPrototypeItemKind(item.Code) is { } kind ? PrototypeComplexity?.Invoke(kind.Prototype) : null;
+
+    // ARC-SCRIPT-1594 (VT8): an item of the shown map's session that owns no object row: one the session made (a made item) or the starting kit holds, wherever it lies or is carried; its slots and prototype come from the session.
+    private bool IsPrototypeItem(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is null && _session.QueryPrototypeItemKind(obj.Code) is not null;
 
     /// <summary>The identified test is not answered by the use host (its set holds no condition that asks it).</summary>
     public bool? IsIdentified(ScrObjectRef obj) => null;
@@ -1052,6 +1077,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
         // ARC-DEV-371: a critter created at run time is in none of the maps' rows.
         if (obj.Map == _shownMap && _world?.CreatedRow?.Invoke(obj.Code) is { } created) return created;
+        // ARC-SCRIPT-2788: a carried follower's body row (its home sector may lie outside the shown window).
+        // Only for the NPC whose tile script runs now (RunPlaced): the other row readers keep their answers for a body outside the window.
+        if (_placedTriggerer is { } stepping && stepping == obj && _world?.CarriedRow?.Invoke(obj) is { } carried) return carried;
         return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
 
@@ -1088,6 +1116,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-WORLD-110 its script is 0 once the trap state removed the trap it names (docs/world/trap-state-runtime.md).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
+        // ARC-SCRIPT-1594 (VT8): a made or kit item reads the slot the session kept for it, else its prototype's element.
+        if (IsPrototypeItem(attachee)) return _session.QueryItemScriptSlot(attachee.Code, point) is { } own ? new(own.Script, own.LocalFlags, own.Counters) : null;
         if (Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, point) is not { } loaded) return null;
         if (!KeptAsMapChanges(point)) return loaded;
         long? Read(string property) => _session.QueryObjectChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
@@ -1099,7 +1129,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1244,6 +1274,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The hero's side: the PC's follower or waiting NPC (the host's own reads that mean the hero's party, not the script leader query).
     private bool FollowsPc(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc;
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     // SG1: the PC's own entry (botched reads as 6); any other object the quest's global state. A number outside the quest
@@ -1393,7 +1424,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
@@ -1415,7 +1446,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
@@ -1440,7 +1471,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var npc = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc));
+            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc), npc);
         }
         finally { _clicked = null; }
     }
@@ -1467,7 +1498,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = TakingDamageAdmission });
-            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _inTakingDamage = false; _clicked = previous; }
     }
@@ -1506,11 +1537,37 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             try
             {
                 var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = CombatPointAdmission });
-                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
             }
             finally { _clicked = previous; }
         }
         finally { _itemUse = previousItem; }
+    }
+
+    /// <summary>The object type of an armour piece (armour, shields, helmets, gauntlets, boots, rings and medallions), which the damage apply's armour loop asks (0x4B47F8: type 7).</summary>
+    private const int ArmourType = 7;
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (0x4B4390, the loop at 0x4B47F8, GT201; ledger TQ23): the critical-hit script (point 34) of each armour piece <paramref name="worn"/> (an entity of the victim's wear slots 1000–1008, in slot order; an item of another
+    /// type, a weapon or a generic item, runs none) for a critical damage step on a living critter: the attacker is the triggerer, <paramref name="victim"/> (the one who takes the damage: the attacker itself on a critical self-hit) the extra
+    /// object, line 0, through <see cref="RunCombatPoint"/> (its set, its slot kept as map changes); the answers are ignored. A piece the host cannot read (no row) or with no script at the point runs nothing. Returns the runs, one per piece
+    /// that was asked, in order.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> RunArmourCritical(IReadOnlyList<ScrObjectRef> worn, ScrObjectRef attacker, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(worn); ArgumentNullException.ThrowIfNull(rules);
+        var runs = new List<AreaScriptedUse>(worn.Count);
+        foreach (var piece in worn)
+        {
+            // An item the host was not given a map of is read by identity, as its use is (the type is the row's).
+            var previous = _itemUse;
+            _itemUse = piece;
+            bool armour;
+            try { armour = Row(piece)?.Type == ArmourType; }
+            finally { _itemUse = previous; }
+            if (armour) runs.Add(RunCombatPoint(ScrPoint.CriticalHit, piece, attacker, victim, rules));
+        }
+        return runs;
     }
 
     /// <summary>
@@ -1530,7 +1587,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1568,7 +1625,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1597,9 +1654,36 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _dangerRunDepth--; _clicked = previous; }
+    }
+
+    private int _combatPassDepth;
+
+    /// <summary>
+    /// ARC-SCRIPT-2820 (TQ12, exe read 2026-11-19): the start-combat (15) or end-combat (16) script of <paramref name="npc"/>, an NPC of the shown map, through the script dispatcher (0x441980) at the two places the original calls it: the AI gate 0x4A8570 (16 in real
+    /// time only, then 15, on every AI pass of an NPC in combat mode; the NPC's danger source as the triggerer, none without one) and the turn-based subturn end 0x4B7630 (16 for the outgoing non-PC actor, the actor as the triggerer too). The NPC is the attachee, no extra object,
+    /// line 0, under <see cref="DyingAdmission"/> (the set of the other NPC combat scripts); its slot is kept as map changes (<see cref="SlotProperty"/>). Both callers ignore the answer. An NPC that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// The original has no guard; a script whose effects reach the same pass again runs nested, so the depth is bounded (<see cref="MaxDangerRunDepth"/>).
+    /// </summary>
+    public AreaScriptedUse RunCombatPassPoint(int point, string npc, ScrObjectRef? triggerer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(npc); ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.StartCombat or ScrPoint.EndCombat)) throw new ArgumentOutOfRangeException(nameof(point), "Not a start-combat or end-combat point.");
+        var attachee = new ScrObjectRef(_shownMap, npc);
+        if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_combatPassDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested combat pass scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (npc, row);
+        _combatPassDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a combat pass script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _combatPassDepth--; _clicked = previous; }
     }
 
     /// <summary>
@@ -1623,7 +1707,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _raiseRunDepth--; _clicked = previous; }
     }
@@ -1676,7 +1760,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = Remember(rules), Admission = BustAdmission });
-            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1702,7 +1786,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Destroy, attachee, attachee, null), this, new() { Rules = Remember(rules), Admission = DestroyPointAdmission });
-            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1715,7 +1799,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private bool DestroyScenery(ScrObjectRef obj)
     {
         if (AlreadyDestroyed(obj) || _destroyingScenery.Contains(obj.Code)) return true;
-        switch (RunDestroyPointGate(obj))
+        switch (RunDestroyPointGate(obj, false))
         {
             case DestroyPointFate.Failed: return false;
             case DestroyPointFate.Kept: return true;
@@ -1739,14 +1823,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-2501 / ARC-SCRIPT-2644 (TD2): runs the destroy point (2) of <paramref name="obj"/> as the first step of its object destroy (0x43CCA0) and says what follows: <see cref="DestroyPointFate.Proceed"/> (no point, or it answered to go on, or the point's run
     /// destroyed the object itself), <see cref="DestroyPointFate.Kept"/> (the point answered 0), <see cref="DestroyPointFate.Failed"/> (the run did not apply: nothing is destroyed on a guess). The object's own destroy that the point raises again is left to the running one.
     /// </summary>
-    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj)
+    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj, bool forBreak)
     {
         if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 }) return DestroyPointFate.Proceed;
         _destroyingScenery.Add(obj.Code);
         try
         {
             var ran = RunDestroyPoint(obj.Code, _lastRules ?? _session.Rules.Scripts);
-            LastDestroyPointRun = ran;
+            // ARC-SCRIPT-2686: only a break's or an item's gate keeps its run for the viewer (a script's destroy has its own caller to show it); ARC-SCRIPT-2749: every run is kept in order, so two deleting steps in one pass show both.
+            if (forBreak) KeepDestroyPointRun(ran);
             // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return DestroyPointFate.Failed;
             if (DyingStops(ran)) return DestroyPointFate.Kept;
@@ -1768,18 +1853,55 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_content is null || Row(obj) is not { } row) return true;
         obj = new ScrObjectRef(_shownMap, EntityId(row));
         if (_destroyingScenery.Contains(obj.Code)) return true;
-        return RunDestroyPointGate(obj) == DestroyPointFate.Proceed;
+        return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed;
     }
 
-    /// <summary>ARC-SCRIPT-2644: the run of the destroy point a break's gate made last (its award, message and float queues belong to the viewer's break step); taken once, null when none ran since.</summary>
-    public AreaScriptedUse? TakeBreakDestroyRun()
+    /// <summary>
+    /// ARC-SCRIPT-2722 (ledger TD2, OD12): the session's gate for the break's item deletion (<see cref="GameSessionOwner.AttachItemDestroyGate"/>): an item that is hit again after its first break is deleted through the object destroy
+    /// (the break's items case, ledger BS3g), which runs the item's destroy point (2) first (the item as the triggerer and the attachee). The answer 0, or a run that did not apply, keeps the item. False: the item stays. An item carried here from another map reads the row of its origin map (ARC-SCRIPT-2749); an item that has no row the host reads (held by a critter with no origin map, a made or kit item: open), one with no destroy point, or one whose point is already running (it destroyed itself) answers true. The run is kept for the viewer
+    /// (<see cref="TakeDestroyPointRuns"/>).
+    /// </summary>
+    public bool ItemMayDestroy(string entity)
     {
-        var ran = LastDestroyPointRun;
-        LastDestroyPointRun = null;
-        return ran;
+        ArgumentNullException.ThrowIfNull(entity);
+        var obj = new ScrObjectRef(_shownMap, entity);
+        if (_content is null) return true;
+        // ARC-SCRIPT-2749: an item carried here from another map has no row of the shown map: its row is read by identity from its origin map (as an item's use script reads it), and stands as the row of the run for the gate's length.
+        var carried = Row(obj) is null ? CarriedItemRow(obj) : null;
+        var row = carried ?? Row(obj);
+        if (row is not { Type: >= FirstItemType and <= LastItemType }) return true;
+        obj = new ScrObjectRef(_shownMap, EntityId(row));
+        if (_destroyingScenery.Contains(obj.Code)) return true;
+        var previous = _clicked;
+        if (carried is not null) _clicked = (obj.Code, carried);
+        try { return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed; }
+        finally { _clicked = previous; }
     }
 
-    private AreaScriptedUse? LastDestroyPointRun { get; set; }
+    /// <summary>ARC-SCRIPT-2644: the oldest run of the destroy point a gate made and nobody took yet (its award, message and float queues belong to the viewer); null when none is waiting. <see cref="TakeDestroyPointRuns"/> takes them all.</summary>
+    public AreaScriptedUse? TakeBreakDestroyRun() => _destroyPointRuns.Count > 0 ? _destroyPointRuns.Dequeue() : null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2749 (ledger BS3g): every destroy-point run the gates made since the last take, oldest first (two deleting steps of one pass, such as an armour and a weapon wearing out under one attack, each keep their own run); the viewer shows their lines and awards.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> TakeDestroyPointRuns()
+    {
+        if (_destroyPointRuns.Count == 0) return [];
+        var runs = _destroyPointRuns.ToArray();
+        _destroyPointRuns.Clear();
+        return runs;
+    }
+
+    private readonly Queue<AreaScriptedUse> _destroyPointRuns = new();
+
+    // A host nobody drains (a test, a map with no viewer) keeps a bounded tail: the oldest run goes first.
+    private const int MaxPendingDestroyRuns = 64;
+
+    private void KeepDestroyPointRun(AreaScriptedUse ran)
+    {
+        while (_destroyPointRuns.Count >= MaxPendingDestroyRuns) _destroyPointRuns.Dequeue();
+        _destroyPointRuns.Enqueue(ran);
+    }
 
 
     // ARC-SCRIPT-2501: a scenery of the shown map.
@@ -1814,6 +1936,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
+    /// ARC-COMBAT-1878 (ledger TT5; 0x4BC7B0 → 0x4617F0): a new item of the prototype <paramref name="prototype"/> in the pack of the NPC <paramref name="npc"/> (<see cref="GameSessionOwner.AddItemToNpc"/>), as a follower's expert disarm makes the device for itself,
+    /// with the same weight, script and no-drop facts as <see cref="GiveHeroPrototypeItem"/>. Null when the world has no item data for the number. <paramref name="insertCheck"/> is the check of the NPC's pack (the viewer passes its diagnostic one, which accepts any item). A pack that refuses (no room, the insert check) is the result's refusal; the original's device then stays at the NPC's feet (not modelled).
+    /// </summary>
+    public InventoryMutationResult? GiveNpcPrototypeItem(string npc, int prototype, SessionInsertCheck insertCheck)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (_world?.Item(prototype) is not { } item) return null;
+        _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
+        _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+        _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
+        return _session.AddItemToNpc(_session.Version, npc, item.Kind, insertCheck);
+    }
+
+    /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD6): the ordinary trap script (the use slot, point 1) of <paramref name="row"/> run by the trap trigger (0x4BCB00)
     /// with <paramref name="triggerer"/> (null: none, a ranged attack or a damage with no attacker) as the triggerer and the object as the
     /// attachee, under <see cref="Admission"/>. Unlike a use it makes no spot attempt and no trap check first. Its slot is kept as map changes
@@ -1832,7 +1968,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1869,7 +2005,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
             if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
             var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1895,7 +2031,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1912,6 +2048,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
         // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
         return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2789: whether the reading of a written item goes on after its use script's run (<see cref="RunItemUse"/>). The original has no refused run: its interpreter runs every script to an end (the dispatcher answers 0 "skip default" or 1 "run default", ledger IU rows) and the
+    /// reading (item use) goes on unless the answer is 0, so a script this host refuses (a command outside the set, a question it cannot answer, a script file it cannot read) is only a gap of the model, never the original's stop. A refused run applied nothing,
+    /// so the reading goes on without its effects (as a door's use and a bed's rest hook go on, <see cref="UseStops"/>, <see cref="AreaBedAnswer.NotModelled"/>); a run that applied goes on with run default and stops with skip default. Effects the host rejected
+    /// (<see cref="AreaScriptedUseOutcome.EffectsRejected"/>), a changed script file and a refused teleport leave the reading stopped as before: part of the run is known to have been wanted.
+    /// </summary>
+    public static bool ReadingGoesOn(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome == AreaScriptedUseOutcome.Refused || ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != ScrOutcome.SkipDefault;
     }
 
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
@@ -1936,16 +2084,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        // ARC-SCRIPT-1594 (VT8): a made item or one of the starting kit owns no object row and no origin map; it is named by the shown map.
         var item = new ScrObjectRef(originMap, entity);
+        if (Row(item) is null && IsPrototypeItem(new ScrObjectRef(_shownMap, entity))) item = new ScrObjectRef(_shownMap, entity);
         // ARC-SCRIPT-1590 (IU2): an NPC of the shown map that eats or drinks is the user, the triggerer of the script, and its own list loses the item the script destroys.
         if (user is { } npc && !IsPc(npc) && (npc.Map != _shownMap || Row(npc) is not { Type: NpcType })) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the user is not an NPC of the shown map");
         _itemUse = item;
         _itemUser = user is { } holder && !IsPc(holder) ? holder : null;
         try
         {
-            if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+            if (Row(item) is null && !IsPrototypeItem(item)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = ItemUseAdmission });
+            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item), item);
         }
         finally { _itemUse = null; _itemUser = null; }
     }
@@ -1988,8 +2138,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         // ARC-DEV-328: the original keeps one object wherever it stands (FM1), so a companion carried here runs the tile's script as any NPC does; it is named by
         // its home map, and the viewer's live cell for it (<see cref="AreaScriptWorld.CritterCell"/>) says it stands here.
-        if (triggerer is { } npc && (Row(npc) is not { Type: NpcType } || (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)))
-            return new(AreaScriptedUseOutcome.Refused, null, [], null, "the triggerer is not an NPC of the shown map");
+        _placedTriggerer = triggerer;
+        try
+        {
+        if (triggerer is { } npc)
+        {
+            var row = Row(npc);
+            // ARC-SCRIPT-2788: the refusal names the clause that failed (the row, its type, or the map the NPC stands on).
+            if (row is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} has no object row the host reads");
+            if (row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} is not an NPC (object type {row.Type})");
+            if (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)
+                return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} does not stand on the shown map {_shownMap}");
+        }
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.
         var slot = PlacedSlot(placed);
@@ -1999,6 +2159,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             : ScrDispatcher.RunSector(new(slot, Pc), this, options);
         var source = placed.Trigger == MapTransitionTrigger.TileEntry ? ScrSource.Tile : ScrSource.Sector;
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
+        }
+        finally { _placedTriggerer = null; }
     }
 
     /// <summary>
@@ -2016,7 +2178,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-WORLD-2038 (TT20): records a script's teleport of an NPC in the session's one change-of-place slot (the object moves at the next ping), after <see cref="NpcTeleportRefusedBecause"/> answered null and the run applied.</summary>
     public void RequestNpcTeleport(ScrTeleport teleport) => _world!.RequestNpcTeleport!(teleport);
 
-    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write)
+    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write, ScrObjectRef? attachee = null)
     {
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
@@ -2048,7 +2210,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Lines)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            // ARC-SCRIPT-2787 (0x44B390 → 0x416B00): @pcname@ is the triggerer (the hero) and @npcname@ the attachee of the running script.
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, attachee is { } at ? Row(at) : null)));
             if (printed.Status != ScrPrintedLineStatus.Shown) continue;
             lines.Add(printed.Text);
             printedLines.Add(new(line.Kind, printed.Text));
@@ -2059,7 +2222,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Floats)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, Row(line.Speaker) ?? (attachee is { } at2 ? Row(at2) : null))));
             if (printed.Status != ScrPrintedLineStatus.Shown) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: float line {line.Line} of script {line.Script} is not a plain line");
             floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
@@ -2072,6 +2235,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-WORLD-114: likewise a toggle state or kill the viewer cannot apply.
         if (ObjectStateRefusal(effects) is { } refusedState)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedState}");
+        // ARC-SCRIPT-2752 (ledger SX3): likewise a use item with skill the AI host cannot start.
+        if (SkillUseRefusal(effects) is { } refusedSkill)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedSkill}");
         // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map; such a run applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
         // ARC-WORLD-2358 (ledger TT20): the hero's teleport of the same run is allowed (the dialog opens inside the run and ends it, the ping takes the request at the next frame), a teleport of an NPC together with the conversation
         // is not (the speaker may be the one that moves): that pair stays refused.
@@ -2374,6 +2540,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // runs changed, as map changes.
         foreach (var stored in effects.SlotWrites)
             if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
+        // ARC-SCRIPT-2752 (SX3): the use-item-with-skill starter of each request in order, after the run's other effects (SkillUseRefusal checked them; a slot write that fails after it leaves the goal started); the original ignores the starter's answer, so a refusal of the gate or the table goes on.
+        foreach (var use in effects.SkillUses)
+            LastSkillUse = _world!.ScriptUseItemWithSkill!(use.Source.Code, use.Item?.Code, use.Target.Code, use.Skill, use.Modifier);
         // ARC-SCRIPT-1481: the item in use that the run destroyed keeps no slot (a counter raised after the destroy would be an orphan map change).
         if (_itemUse is { } gone && _session.IsItemDestroyed(gone.Code)) return true;
         return effects.Writeback is not { } writeback || writeSlot(writeback);
@@ -2750,6 +2919,27 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return true;
     }
 
+    /// <summary>The answer of the last use item with skill (79) a run applied (<see cref="AreaScriptWorld.ScriptUseItemWithSkill"/>), for the tests and the log.</summary>
+    public string? LastSkillUse { get; private set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2752 (ledger SX3, SX4; the lockpicks' and the skeleton key's use scripts carry it): a use item with skill (79) is applied for an NPC of the shown map as the source, with the pick-locks skill (14: the
+    /// check takes the modifier) on a portal of the shown map; the AI host starts the goal 40. The refusal text of any other request, which leaves the run unapplied whole: no AI host, the hero as the source (its goal runs
+    /// are the hero host's), a source that is no NPC of the shown map, another skill, a target that is no portal of the shown map (a container's lock is not wired).
+    /// </summary>
+    private string? SkillUseRefusal(ScrEffects effects)
+    {
+        foreach (var use in effects.SkillUses)
+        {
+            if (_world?.ScriptUseItemWithSkill is null) return "use item with skill needs the AI host";
+            if (IsPc(use.Source)) return "use item with skill by the hero is not modelled (the hero's goal 40 is the hero host's)";
+            if (!ShownNpc(use.Source)) return $"use item with skill by {use.Source.Code}, which is no NPC of the shown map, is not modelled";
+            if (use.Skill != Arcanum.Simulation.Ai.AiExecutorRules.PickLocksSkill) return $"use item with skill {use.Skill} is not modelled (only pick locks takes the modifier)";
+            if (use.Target.Map != _shownMap || _world.Openable?.Invoke(use.Target) is not { Art: not null }) return $"use item with skill on {use.Target.Code}, which is no portal of the shown map, is not modelled";
+        }
+        return null;
+    }
+
     // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
     // of the shown map only; a kill needs the world's kill (ARC-SCRIPT-1360: an NPC its map data has off is switched on by a toggle, see NpcOff). ARC-SCRIPT-052: destroy takes an NPC of the shown map out of the world unless it follows the PC (the party removal is not
     // read) or has a destroy-point script (the destroy event is audit slice 4); stop attacking acts on the PC or an NPC of the shown map.
@@ -3124,7 +3314,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-2198: whether <see cref="WriteObjectSlot(ScrWriteback)"/> can store the slot (an object of the shown map with the loaded element at a point kept as map changes), a pure lookup.</summary>
     internal bool CanWriteObjectSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Attachee: { } attachee } && KeptAsMapChanges(writeback.Point)
-        && Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, writeback.Point) is not null;
+        && (IsPrototypeItem(attachee) || Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, writeback.Point) is not null);
 
     /// <summary>ARC-SCRIPT-2198: stores the slot of another object a talk run wrote (change script, a call-ex callee's result) as map changes, as a use run does.</summary>
     internal bool WriteObjectSlot(ScrWriteback writeback) => CanWriteObjectSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
@@ -3137,7 +3327,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     internal bool WriteUseSlot(ScrWriteback writeback) => CanWriteUseSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
 
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee) =>
-        writeback.Attachee == attachee && ObjectSlotEdits(writeback) is { } edits && _session.ApplyChanges(_session.Version, null, edits).Disposition != GameSessionDisposition.Rejected;
+        writeback.Attachee == attachee && IsPrototypeItem(attachee) ? WritePrototypeItemSlot(writeback, attachee)
+        : writeback.Attachee == attachee && ObjectSlotEdits(writeback) is { } edits && _session.ApplyChanges(_session.Version, null, edits).Disposition != GameSessionDisposition.Rejected;
+
+    // ARC-SCRIPT-1594 (VT8): the slot a run left on a made or kit item is the session's (the item owns no row, so no map change keeps it); an item the run destroyed keeps none.
+    private bool WritePrototypeItemSlot(ScrWriteback writeback, ScrObjectRef item) =>
+        !KeptAsMapChanges(writeback.Point) ? false
+        : _session.IsItemDestroyed(item.Code) ? true
+        : _session.StoreItemScriptSlot(_session.Version, new(item.Code, writeback.Point, writeback.Slot.Script, writeback.Slot.LocalFlags, writeback.Slot.Counters)).Disposition != GameSessionDisposition.Rejected;
 
     // The map changes that keep a slot write of an object: the loaded element's three parts, each cleared where it is back at its loaded value (ARC-DEV-096: where the object's record sits, which may be another map than the attachee's). Null for a write the
     // host does not keep (no row, a point outside the kept ones, no loaded element).

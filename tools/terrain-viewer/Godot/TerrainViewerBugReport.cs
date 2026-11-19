@@ -167,6 +167,7 @@ public partial class TerrainViewerApp
         other.Add(("Platform", $"{OS.GetName()} {OS.GetVersion()}, {Engine.GetArchitectureName()}, Godot {godot}, window {GetViewport().GetVisibleRect().Size}"));
         other.Add(("Debug mode", DebugMode ? "on (ARC-DEV-050)" : "off"));
         other.Add(("Report key", BugReportKeyName));
+        other.Add(("Resources", ResourceReportText())); // ARC-DEV-1398
         return new(build.IsPackage ? $"{build.Text} (commit {build.Commit})" : build.Text,
             session?.Rules.Mode.ToString() ?? "no game session",
             _readyArea is null ? "no map shown" : $"{SaveLocation()} (runtime map {CurrentAreaMap})", hero, combat, other);
@@ -207,16 +208,17 @@ public partial class TerrainViewerApp
     {
         try
         {
-            var file = BugReportCheck.FindActiveFile(
-                [BugReportLocation.LaunchFolder(OS.GetExecutablePath()), ProjectSettings.GlobalizePath("res://")],
-                ViewerAutomatedStorage.Automated, System.Environment.GetEnvironmentVariable(BugReportCheck.FileVariable));
-            return BugReportCheck.ReadActive(file, DateTime.UtcNow);
+            return BugReportCheck.ReadActive(BugReportActiveCheckFile(), DateTime.UtcNow);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
         {
             return null;
         }
     }
+
+    private static string? BugReportActiveCheckFile() => BugReportCheck.FindActiveFile(
+        [BugReportLocation.LaunchFolder(OS.GetExecutablePath()), ProjectSettings.GlobalizePath("res://")],
+        ViewerAutomatedStorage.Automated, System.Environment.GetEnvironmentVariable(BugReportCheck.FileVariable));
 
     private static BugReportPlaces BugReportPlacesNow()
     {
@@ -239,11 +241,32 @@ public partial class TerrainViewerApp
         }
         var result = WriteBugReportMoment(moment, text, check);
         _bugReport = null;
+        RecordTaggedBugReport(result, check);
         _bugReportPanel.ShowOutcome(result.Folder is null ? "The report could not be written: " + string.Join("; ", result.Failed)
             : (result.Saved ? "The report is saved in\n" : "The report is INCOMPLETE in\n") + result.Folder
               + (result.Fallback ? $"\n\nThe folder beside the game could not be used ({result.FallbackReason}), so it is in your user folder." : "")
               + (result.Failed.Count == 0 ? "" : "\n\nNot written: " + string.Join("; ", result.Failed)));
         _hud?.SetNotice(result.Status);
+    }
+
+    /// <summary>ARC-DEV-2768: a Ctrl+B report tagged with an owner check is recorded in the QA folder's results (the folder of the
+    /// active-check file), so the check counts as answered and leaves the active list. Best effort: nothing here fails a report.</summary>
+    private static void RecordTaggedBugReport(BugReportResult result, string? check)
+    {
+        if (check is null || result.Folder is null) return;
+        try
+        {
+            var file = BugReportActiveCheckFile();
+            var folder = file is null ? null : System.IO.Path.GetDirectoryName(file);
+            if (folder is null || !System.IO.Directory.Exists(folder)) return;
+            var build = ViewerBuild.Current;
+            var problem = OwnerQaFiles.RecordReportFor(folder, check, System.IO.Path.GetFileName(result.Folder.TrimEnd('/', '\\')), "", build.Commit ?? build.Text, DateTime.UtcNow);
+            if (problem is not null) GD.Print("ARC-DEV-2768 tagged report not recorded: " + problem);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException or System.IO.IOException)
+        {
+            GD.Print("ARC-DEV-2768 tagged report not recorded: " + error.Message);
+        }
     }
 
     /// <summary>Writes the report folder of a kept moment (ARC-DEV-2190: also the owner-checks overlay's Send) and remembers the result.</summary>

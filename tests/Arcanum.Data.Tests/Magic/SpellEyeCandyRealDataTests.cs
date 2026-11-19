@@ -103,4 +103,20 @@ public sealed class SpellEyeCandyRealDataTests
             Assert.IsTrue(EyeCandyArt.Translucent(entry.Art!.Value), "additive");
         }
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_weapon_list_gives_a_projectile_speed_to_nine_weapons_only()
+    {
+        // ARC-RENDER-2035 (PF4, 0x435870 → 0x4CE300): the kind-2 entry (message 10g + 3) of the weapon list carries the weapon's projectile speed: Bronwyck's Gun (prototype 6069) 1, the eight weapons 6184 to 6191 2; every other entry none.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in eye-candy check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var read = SpellEyeCandyTable.OpenWeapon(stack);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status, $"{read.Refusal}");
+        var entries = read.Table!.Entries;
+        var withSpeed = Enumerable.Range(0, entries.Count).Where(i => entries[i].ProjectileSpeed != 0).ToArray();
+        CollectionAssert.AreEqual(new[] { 6069 }.Concat(Enumerable.Range(6184, 8)).Select(prototype => (prototype - 20 - 6029) * 5 + 2).ToArray(), withSpeed);
+        Assert.AreEqual(1, entries[withSpeed[0]].ProjectileSpeed);
+        Assert.IsTrue(withSpeed.Skip(1).All(i => entries[i].ProjectileSpeed == 2));
+    }
 }

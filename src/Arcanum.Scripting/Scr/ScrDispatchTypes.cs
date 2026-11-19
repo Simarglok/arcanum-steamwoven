@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Raise = 18, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Raise = 18, Heartbeat = 19, TakingDamage = 23, StartCombat = 15, EndCombat = 16, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
         Hit = 7, Miss = 8,
         // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
@@ -97,6 +97,11 @@ public interface IScrHost
     ScrObjectRef? Player();
     /// <summary>The critter's leader, or null when it follows no one.</summary>
     ScrObjectRef? Leader(ScrObjectRef critter);
+    /// <summary>
+    /// ARC-SCRIPT-1899: whether two references name one object. The original keeps one critter wherever it stands, so a carried follower named by its home map and the same one named by the map that shows it are one object; a host that
+    /// can tell them apart answers by identity. The default is the plain reference test (the following test uses it to compare a leader with the second object of the condition).
+    /// </summary>
+    bool SameObject(ScrObjectRef a, ScrObjectRef b) => a == b;
     /// <summary>An NPC with the jilted flag; false for anything that is not an NPC.</summary>
     bool IsJilted(ScrObjectRef critter);
     /// <summary>A player character (the dialog action starts a conversation only for one).</summary>

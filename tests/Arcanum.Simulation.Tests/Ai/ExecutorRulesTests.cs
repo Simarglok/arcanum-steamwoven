@@ -141,7 +141,8 @@ public sealed class ExecutorRulesTests
         public int Unconceal(string id) { Calls.Add("unconceal"); Movers[id] = Mover(id) with { Concealed = false }; return 200; }
         public void Face(string id, string toward) => Calls.Add($"face {toward}");
         public void PlaySound(string id, int sound) => Calls.Add($"sound {sound}");
-        public AiAttackSwing BeginAttack(string id, string target) { Calls.Add($"swing {target}"); return new(400, 600); }
+        public bool AttackArtMissing;
+        public AiAttackSwing BeginAttack(string id, string target) { Calls.Add($"swing {target}"); return AttackArtMissing ? AiAttackSwing.NoArt : new(400, 600); }
         public void Hit(string id, string target) => Calls.Add($"hit {target}");
         public void SetNoFlee(string id) => Calls.Add("no-flee");
         public AiCastGoalStart StartCast(string id, int run) => throw new AssertFailedException("no cast here");
@@ -154,6 +155,7 @@ public sealed class ExecutorRulesTests
         public AiActionSwing BeginAction(string id, AiActionAnimation animation) => new(AiActionStart.Started, 300, 300);
         public bool AttemptSkill(string id, string target, int skill, string? item) => false;
         public void AttemptPickLocks(string id, string target, string? item) { }
+        public void AttemptSkillWithItem(string id, string target, string? item, int skill, int modifier) { }
         public bool ThrowItem(string id, string item, CellCoord tile) => true;
         public void PickUp(string id, string item) { }
         public string? ItemHolder(string item) => null;
@@ -319,6 +321,18 @@ public sealed class ExecutorRulesTests
         CollectionAssert.AreEqual(new[] { 400, 600, 0 }, steps.Select(s => s.DelayMs).ToArray());
         Assert.AreEqual(AiRunEnd.Finished, steps[^1].End);
         Assert.AreEqual(AiExecutorReason.AttackHit, steps[^1].Reason);
+    }
+
+    [TestMethod]
+    public void AnAttackStartThatFailsForAMissingArtEndsTheGoalWithNoHit()
+    {
+        // ARC-COMBAT-1932 (0x42B9C0): the node fails when the attack ART exists in no file; the goal ends, no action frame and no hit step.
+        var world = Arena(1);
+        world.AttackArtMissing = true;
+        var steps = Drive(AttackRun(), world, Steamwoven);
+        CollectionAssert.AreEqual(new[] { "swing pc" }, world.Calls, "the start was asked, no hit followed");
+        Assert.AreEqual(AiExecutorReason.AttackNoArt, steps[^1].Reason);
+        Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End);
     }
 
     [TestMethod]

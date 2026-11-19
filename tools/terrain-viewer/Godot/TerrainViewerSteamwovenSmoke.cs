@@ -134,6 +134,15 @@ public partial class TerrainViewerApp
                     // The top band's art ends on the board's edge and the bottom band's starts on it: each strip lies inside its own band (the bottom one may hang over the frame's bottom edge by under 3 px · f).
                     Require(plan.TopStripY >= layout.Top.Band.Y && plan.TopStripY + (int)Math.Round(41 * plan.StripScale) == layout.Top.Band.Bottom, $"[{tag}] the top strip stands on its band's lower edge");
                     Require(plan.BottomStripY == layout.Bottom.Band.Y, $"[{tag}] the bottom strip hangs from its band's upper edge");
+                    // ARC-UI-2767: the Fate Points and Sleep balls stand in the middle of the ring the strip draws round their hole (the ring's centre is read from the strip's Legacy hole, the ball's from its node).
+                    foreach (var ball in new[] { AreaBarButton.FatePoints, AreaBarButton.Sleep })
+                    {
+                        var ring = panel.RingCentreForSelfTest(ball);
+                        Require(ring is not null, $"[{tag}] the {ball} button has a ring round its hole");
+                        var off = panel.BallCentreForSelfTest(ball) - ring!.Value;
+                        GD.Print($"ARC-UI-2767 steamwoven [{tag}] {ball} ball centre minus ring centre: ({off.X:F3}, {off.Y:F3}) px");
+                        Require(Math.Abs(off.X) <= 0.01f && Math.Abs(off.Y) <= 0.01f, $"[{tag}] the {ball} ball is centred in its ring (off by {off} px)");
+                    }
                     // The boards fill each band over the whole frame width in the strips' own device pixels, one texel per pixel.
                     var (topBoard, bottomBoard, backdropShown) = panel.BoardsForSelfTest;
                     Require(panel.BoardsShownForSelfTest && !backdropShown, $"[{tag}] the boards show and no backdrop shows with no menu");
@@ -325,12 +334,8 @@ public partial class TerrainViewerApp
 
     private static SteamwovenWindowPlace ZoneBody(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, 800, 400);
     private static SteamwovenWindowPlace ZoneScreen(SteamwovenHudPlan plan) => SteamwovenWindowZone.Screen(plan, AreaShopArtLayout.Window.Y);
-    // The reading window is the screen's body: its top left is the body's, 41 units below the screen's.
-    private static SteamwovenWindowPlace ZoneReading(SteamwovenHudPlan plan)
-    {
-        var screen = ZoneScreen(plan);
-        return screen with { Y = Math.Round(screen.Y + AreaReadingArtLayout.Window.Y * screen.Scale, MidpointRounding.AwayFromZero) };
-    }
+    // ARC-UI-2714: the reading window stands in the zone like the others: its top left is the zone body's (its 800 x 399 under the body's top).
+    private static SteamwovenWindowPlace ZoneReading(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, AreaReadingArtLayout.Window.Width, AreaReadingArtLayout.Window.Height + 1);
 
     // ARC-UI-2614: a container of the map for the loot window (See Contents: no open attempt, a locked one shows its items too), null when the map has none.
     private AreaInventoryTarget? SteamwovenLootTarget()
@@ -465,6 +470,12 @@ public partial class TerrainViewerApp
         var places = string.Join(" ", lenses.Select(rect => $"({(rect.Position.X - plan.Layout.WindowZone.X) / unit:F2},{(rect.Position.Y - plan.Layout.WindowZone.Y) / unit:F2},{rect.Size.X / unit:F2})"));
         // ARC-UI-2694: every lens is the same 89 units square (the cover art 198's) within a device pixel, at the same scale as the window.
         foreach (var rect in lenses) require(Math.Abs(rect.Size.X - 89 * unit) <= 1 && Math.Abs(rect.Size.Y - 89 * unit) <= 1, $"[{tag}] the {name} lens is 89 units square ({rect.Size.X / unit:F2} x {rect.Size.Y / unit:F2})");
+        // ARC-UI-2714: every lens of the generated interface stands at the one common place (within a unit: the reading window's origin is a fraction of a unit off the zone's).
+        foreach (var rect in lenses)
+        {
+            var (lensX, lensY) = ((rect.Position.X - plan.Layout.WindowZone.X) / unit, (rect.Position.Y - plan.Layout.WindowZone.Y) / unit);
+            require(Math.Abs(lensX - AreaLensPlace.X) <= 1 / unit && Math.Abs(lensY - AreaLensPlace.Y) <= 1 / unit, $"[{tag}] the {name} lens stands at the common place ({AreaLensPlace.X}, {AreaLensPlace.Y}) (at {lensX:F2}, {lensY:F2})");
+        }
         GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count} places(units from the zone corner)={places}");
         using var captured = GetViewport().GetTexture().GetImage();
         if (captured is null) return;
@@ -499,7 +510,7 @@ public partial class TerrainViewerApp
         foreach (var (edge, ratio) in seams)
         {
             GD.Print($"ARC-UI-2576 seam [{tag}] {name} {edge} R={(ratio is { } r ? r.ToString("F2") : "n/a")} zone={zone} band={band}");
-            // The windows' own look switch ("Diagnostic view", a wide button with a border) lies just below the zone's bottom edge, so that edge is printed and not gated.
+            // The windows' own look switch ("Diagnostic view", a wide button with a border; debug-only since ARC-UI-2764) lay just below the zone's bottom edge, so that edge is printed and not gated.
             if (ratio is { } measured && edge != "bottom") require(measured <= SteamwovenSeam.Limit, $"[{tag}] the {name} window's {edge} join of the zone has seam ratio {measured:F2} > {SteamwovenSeam.Limit}");
         }
     }

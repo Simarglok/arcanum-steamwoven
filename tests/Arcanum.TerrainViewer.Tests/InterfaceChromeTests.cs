@@ -441,8 +441,9 @@ public sealed class InterfaceChromeTests
                 CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
                 // The silhouette is the Legacy one: a frame without a hole is opaque in every pixel; one with the 89 x 89 hole is opaque everywhere more than two pixels
                 // outside the hole's box and clear in the hole's middle.
-                Assert.AreEqual(hole ? 0 : 255, Pixel(a, pw, (int)(60.5 * scale), (int)(61.5 * scale)).A, $"{file} middle of the round view at {scale}");
-                int x0 = (int)(16 * scale) - 2, x1 = (int)Math.Ceiling(105 * scale) + 2, y0 = (int)(17 * scale) - 2, y1 = (int)Math.Ceiling(106 * scale) + 2;
+                Assert.AreEqual(hole ? 0 : 255, Pixel(a, pw, (int)((AreaLensPlace.X + 44.5) * scale), (int)((AreaLensPlace.Y + 44.5) * scale)).A, $"{file} middle of the round view at {scale}");
+                // ARC-UI-2714: the recipe moves the hole to the common place (the loot, follower and barter frames carry it at the Legacy (16, 17)).
+                int x0 = (int)(AreaLensPlace.X * scale) - 2, x1 = (int)Math.Ceiling((AreaLensPlace.X + 89) * scale) + 2, y0 = (int)(AreaLensPlace.Y * scale) - 2, y1 = (int)Math.Ceiling((AreaLensPlace.Y + 89) * scale) + 2;
                 for (var y = 0; y < ph; y++)
                 for (var x = 0; x < pw; x++)
                     if (!hole || x < x0 || x >= x1 || y < y0 || y >= y1)
@@ -787,12 +788,29 @@ public sealed class InterfaceChromeTests
         Assert.AreEqual(ChromeKind.Panel, recipe.Kind);
         // ARC-UI-2694: the window frame draws no ring of its own around the lens's circle (the lens art 198 carries the one ring inside its square): its square takes no rim.
         Assert.AreEqual(0, recipe.Parts.OfType<ChromeRoundView>().Count());
-        Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (25, 24, 89, 89)), "the lens's square takes no rim");
+        Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (AreaLensPlace.X, AreaLensPlace.Y, 89, 89)), "the lens's square takes no rim"); // ARC-UI-2714: at the common place; the recipe moves the Legacy (25, 24) hole there
         Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < 119 && keep.Y < 119 && keep.X + keep.Width > 19 && keep.Y + keep.Height > 19), "no kept picture over the portrait's ring");
         // 140 and 199 (the waypoint panel's pieces) and 219 and 220 (the two landscape pictures) are drawn by no window of the viewer; the picture stays art.
         foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART" })
             Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file, new byte[] { 1 }), 0, 1, 1, new byte[4])), file);
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("MAPMAIN.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void The_inventory_family_frames_draw_no_ring_of_their_own_around_the_lens_so_the_lens_art_carries_the_one_ring()
+    {
+        // ARC-UI-2762: a second ring outside the circle (painted on the frame) showed as arcs at the four sides of the lens in the inventory, loot and barter windows.
+        foreach (var file in new[] { "pdoll.art", "loot.art", "barter.art", "barter_follower.art", "mapmain.art" })
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(0, recipe.Parts.OfType<ChromeRoundView>().Count(), $"{file} draws no ring around the lens");
+            Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (AreaLensPlace.X, AreaLensPlace.Y, 89, 89)), $"{file}: the lens's square at the common place takes no rim");
+            Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < AreaLensPlace.X + 89 && keep.Y < AreaLensPlace.Y + 89 && keep.X + keep.Width > AreaLensPlace.X - 4 && keep.Y + keep.Height > AreaLensPlace.Y - 4 && keep.Round),
+                $"{file}: no kept round picture brings the old ring around the lens");
+        }
+        // The lens arts carry the one ring, inside their square.
+        foreach (var file in new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" })
+            CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5, Inward: true) }, Recipe(file).Parts.ToArray(), file);
     }
 
     [TestMethod]
@@ -837,7 +855,7 @@ public sealed class InterfaceChromeTests
         var one = InterfaceChromeRenderer.Render(recipe, 800, 400, legacy, [], 0, 1);
         // The square hole of the map view gets the brass rim every hole gets (its ink line is the outer pixel); the round portrait view does not get one around its square's corner.
         Assert.IsTrue(Pixel(one, 800, 149, 200).R < 60, "the map view's rim");
-        Assert.IsTrue(Pixel(one, 800, 24, 24).R > 60, "no square rim at the portrait's corner");
+        Assert.IsTrue(Pixel(one, 800, AreaLensPlace.X - 1, AreaLensPlace.Y - 1).R > 60, "no square rim at the portrait's corner"); // ARC-UI-2714: the hole stands at the common place
         // The readout plates are sunk black pits.
         Assert.IsTrue(Pixel(one, 800, 727, 168).R < 12 && Pixel(one, 800, 727, 200).R < 12, "the two readout plates are black");
     }
@@ -1167,6 +1185,22 @@ public sealed class InterfaceChromeTests
         }
     }
 
+    // ARC-UI-2714: a recipe with a lens place of the Legacy frame moves the hole to the common place before it paints (the schematics frame has it at (50, 26)).
+    [TestMethod]
+    public void The_schematics_frame_has_its_lens_hole_moved_to_the_common_place()
+    {
+        var legacy = Flat(800, 400, (90, 60, 30), (50, 26, 89, 89));
+        foreach (var scale in new[] { 1.0, 2.0 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, legacy, [], 0, scale);
+            var width = (int)(800 * scale);
+            Assert.AreEqual(0, Pixel(a, width, (int)((AreaLensPlace.X + 44) * scale), (int)((AreaLensPlace.Y + 44) * scale)).A, $"the common place is clear at {scale}");
+            Assert.AreEqual(0, Pixel(a, width, (int)((AreaLensPlace.X + 15) * scale), (int)((AreaLensPlace.Y + 44) * scale)).A, $"the circle's left part, where the Legacy frame was opaque, is clear at {scale}");
+            Assert.AreEqual(255, Pixel(a, width, (int)(125 * scale), (int)(100 * scale)).A, $"the Legacy hole's right part is closed at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, legacy, [], 0, scale), $"deterministic at {scale}");
+        }
+    }
+
     [TestMethod]
     public void The_side_panels_square_hole_is_plain_and_a_covers_hole_has_a_cloth_edge_not_a_brass_one()
     {
@@ -1174,9 +1208,12 @@ public sealed class InterfaceChromeTests
         var withHole = Flat(165, 400, (90, 60, 30), (25, 24, 89, 89));
         var sideA = InterfaceChromeRenderer.Render(Recipe("logbooks_side.art"), 165, 400, withHole, [], 0, 2);
         var sideB = InterfaceChromeRenderer.Render(Recipe("logbooks_side.art"), 165, 400, Flat(165, 400, (90, 60, 30)), [], 0, 2);
-        Assert.AreEqual(Pixel(sideB, 330, 48, 100), Pixel(sideA, 330, 48, 100), "left of the hole");
-        Assert.AreEqual(Pixel(sideB, 330, 229, 100), Pixel(sideA, 330, 229, 100), "right of the hole");
-        Assert.AreEqual(0, Pixel(sideA, 330, 100, 100).A, "the hole stays clear");
+        // ARC-UI-2714: the generated art carries the hole at the common place (11, 9) in place of the Legacy (25, 24): the old place is closed, the new one clear.
+        Assert.AreEqual(Pixel(sideB, 330, 2 * (AreaLensPlace.X - 2), 100), Pixel(sideA, 330, 2 * (AreaLensPlace.X - 2), 100), "left of the hole");
+        Assert.AreEqual(Pixel(sideB, 330, 2 * (AreaLensPlace.X + 89 + 2), 100), Pixel(sideA, 330, 2 * (AreaLensPlace.X + 89 + 2), 100), "right of the hole");
+        Assert.AreEqual(0, Pixel(sideA, 330, 2 * (AreaLensPlace.X + 44), 2 * (AreaLensPlace.Y + 44)).A, "the hole stays clear");
+        Assert.AreEqual(255, Pixel(sideA, 330, 2 * 110, 2 * 70).A, "the Legacy hole's place is closed where it lies outside the common one");
+        Assert.AreEqual(Pixel(sideB, 330, 2 * 110, 2 * 70), Pixel(sideA, 330, 2 * 110, 2 * 70), "and filled with the frame's own wood");
         // The page art: a cloth frame with a hole at (14, 12, 537, 331). The cloth next to the hole is darker than a few units further in, and not brass-coloured.
         var frame = Flat(561, 355, (100, 40, 45), (14, 12, 537, 331));
         var cover = InterfaceChromeRenderer.Render(Recipe("book_quests.art"), 561, 355, frame, [], 0, 2);
@@ -1351,7 +1388,7 @@ public sealed class InterfaceChromeTests
         var with = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(), [], 0, Scale);
         var without = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(holes: false), [], 0, Scale);
         // The lens's square and a tab slot are holes with no rim: the wood beside them is the wood of the frame with no hole.
-        var (lx, ly, lw, lh) = AreaSchematicWindowLayout.RoundView;
+        var (lx, ly, lw, lh) = (AreaLensPlace.X, AreaLensPlace.Y, 89, 89); // ARC-UI-2714: the recipe moves the Legacy (50, 26) hole to the common place
         Assert.AreEqual(Pixel(without, 1600, (lx - 2) * Scale, (ly + 40) * Scale), Pixel(with, 1600, (lx - 2) * Scale, (ly + 40) * Scale), "beside the lens's square");
         Assert.AreEqual(Pixel(without, 1600, (lx + lw + 1) * Scale, (ly + 40) * Scale), Pixel(with, 1600, (lx + lw + 1) * Scale, (ly + 40) * Scale));
         Assert.AreEqual(0, Pixel(with, 1600, (lx + 40) * Scale, (ly + 40) * Scale).A, "the lens's square stays clear");
@@ -1814,6 +1851,26 @@ public sealed class InterfaceChromeTests
             Assert.IsTrue(At(paper, 300, 83) < At(paper, 300, 70) - 80, $"the masthead's rule is ink on the paper at {scale}");
             var telegram = Paint("TeleBackground.ART");
             Assert.IsTrue(At(telegram, 186, 60) < At(telegram, 195, 60) - 80, $"the form box's edge is ink on the paper at {scale}");
+        }
+    }
+
+    [TestMethod]
+    public void The_reading_books_fold_shade_lies_where_the_two_pages_meet_at_every_scale()
+    {
+        Assert.AreEqual((int)AreaReadingArtLayout.BookFold, Recipe("BookBackground.ART").Parts.OfType<ChromePlate>().Single(p => p.X == 320).X, "the fold is where the right page starts");
+        // ARC-UI-2720: the shade of the fold is sampled in window coordinates, so the book (at (132, 0)) must carry its own fold x; the darkest column of the page rows is the fold.
+        foreach (var scale in new[] { 1.0, 2.0, 3.0 })
+        {
+            var pixels = InterfaceChromeRenderer.Render(Recipe("BookBackground.ART"), ReadingBackgroundWidth, ReadingBackgroundHeight, Flat(ReadingBackgroundWidth, ReadingBackgroundHeight, (150, 120, 90)), [], 0, scale);
+            var width = InterfaceChromeRenderer.PixelSize(ReadingBackgroundWidth, ReadingBackgroundHeight, scale).Item1;
+            var best = 0; var bestLuma = double.MaxValue;
+            for (var x = (int)(100 * scale); x < (int)(540 * scale); x++)
+            {
+                double sum = 0;
+                for (var y = (int)(60 * scale); y < (int)(340 * scale); y += (int)scale) sum += Luma(Pixel(pixels, width, x, y));
+                if (sum < bestLuma) { bestLuma = sum; best = x; }
+            }
+            Assert.AreEqual(AreaReadingArtLayout.BookFold, best / scale, 1.0, $"the fold of the book lies at its page join at {scale}");
         }
     }
 

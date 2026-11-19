@@ -289,6 +289,44 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
+    public void The_use_item_with_skill_node_picks_at_once_with_the_modifier_and_the_other_skills_take_the_attempt_of_goal_34()
+    {
+        // ARC-SCRIPT-2752 (0x428E10, ledger SX4): pick locks through goal 40 runs the check with the goal's modifier (the plain attempt has none); a lock the scene does not name changes nothing.
+        var door = new SessionPickLockTarget(new(new(1), "door:1"), new(OpenableKind.Portal, LockRules.LockedBit, 0, 0), 0);
+        var (_, host, npc, _) = Open(hero: true, tweak: scene => scene with { PickLockTarget = target => target == "door:1" ? door : null });
+        host.AttemptPickLocks(npc, "door:1", null);
+        var plain = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PickLock!.Check!.Check.Difficulty;
+        host.AttemptSkillWithItem(npc, "door:1", null, AiExecutorRules.PickLocksSkill, 30);
+        var notice = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill);
+        Assert.AreEqual(AiExecutorRules.PickLocksSkill, notice.Skill);
+        Assert.AreEqual(plain + 30, notice.PickLock!.Check!.Check.Difficulty, "the modifier is the check's invocation modifier");
+        host.AttemptSkillWithItem(npc, "door:9", null, AiExecutorRules.PickLocksSkill, 30);
+        Assert.IsNull(host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PickLock);
+        Assert.AreEqual("pick locks door:9: no lock target", host.TraceOf(npc)!.Skill);
+    }
+
+    [TestMethod]
+    public void A_followers_lock_pick_is_goal_forty_with_no_animation_and_its_attempt_is_the_sessions_pick()
+    {
+        // ARC-COMBAT-1878 (0x571CB0 → 0x4352C0, descriptor 0x5AA5D0): the use-item-with-skill goal walks near, then its attempt node is the shared pick-locks check at once: no skill animation, no timer.
+        var door = new SessionPickLockTarget(new(new(1), "door:1"), new(OpenableKind.Portal, LockRules.LockedBit, 0, 0), 0);
+        var doorCell = new CellCoord(15, 20);
+        var (session, host, npc, _) = Open(hero: true, tweak: scene => scene with { PickLockTarget = target => target == "door:1" ? door : null, ObjectFacts = id => id == "door:1" ? new AreaAiObjectFacts(1, doorCell) : null });
+        doorCell = new(host.Tile(npc)!.Value.X + 3, host.Tile(npc)!.Value.Y);
+        Assert.IsTrue(host.Lockable("door:1") && !host.Lockable("door:9"), "a lock the scene names is lockable (0x441CF0)");
+        Assert.IsTrue(host.StartPickLocks(npc, "door:1", null), host.TraceOf(npc)?.Perform);
+        Assert.AreEqual(GoalType.UseItemWithSkill, host.RunOf(npc)!.Bottom.Goal);
+        var now = 0L;
+        var notices = Run(host, npc, ref now);
+        var trace = host.TraceOf(npc);
+        var locks = notices.SingleOrDefault(n => n.Kind == AreaAiNoticeKind.Skill) ?? throw new AssertFailedException($"no skill notice after {now} ms: notices={string.Join(",", notices.Select(n => n.Kind))} perform={trace?.Perform} step={trace?.Step} skill={trace?.Skill} item={trace?.Item}");
+        Assert.AreEqual(AiExecutorRules.PickLocksSkill, locks.Skill);
+        Assert.IsNotNull(locks.PickLock, host.TraceOf(npc)?.Skill);
+        Assert.IsTrue(now < 5_000, $"no 13.2 s animation: the run took {now} ms");
+        StringAssert.StartsWith(host.TraceOf(npc)!.Skill, "pick locks door:1");
+    }
+
+    [TestMethod]
     public void An_npc_picks_the_lock_the_scene_names_through_the_session_with_its_own_skill()
     {
         // ARC-COMBAT-1776 (0x42A4E0): the pick-locks attempt is the session's PickLockByNpc on the lock the scene names, with the NPC's sheet and no action points of its own.

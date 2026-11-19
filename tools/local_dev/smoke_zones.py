@@ -25,8 +25,8 @@ import subprocess
 from typing import Callable, Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
-CORE, WALK, CONTAINER_CLICK, CRASH_SITE, CENSUS, COMPLETE = ("core", "walk", "container-click", "crash-site", "census",
-                                                           "complete")
+CORE, WALK, CONTAINER_CLICK, CRASH_SITE, CENSUS, SOAK, COMPLETE = ("core", "walk", "container-click", "crash-site", "census",
+                                                                 "soak", "complete")
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,8 @@ ZONES: dict[str, Zone] = {zone.name: zone for zone in (
          stages=("container-click",)),
     Zone(CRASH_SITE, "the Crash Site smoke: the pinned exterior and the cave", crash_site=True),
     Zone(CENSUS, "every map of the catalogue opened in turn", stages=("census",)),
+    Zone(SOAK, "the leak soak: windows, quick save and load and map exits in a loop for ARC_SOAK_STAGE_MINUTES (6 by default), the "
+               "resource counters watched for growth (ARC-DEV-1398); only on request, never part of a PR or the complete run", stages=("soak",)),
 )}
 HEAVY = tuple(name for name in ZONES if name != CORE)
 CHOICES = (*ZONES, COMPLETE)
@@ -55,6 +57,9 @@ CHOICES = (*ZONES, COMPLETE)
 PR_COMPLETE = (CORE, CRASH_SITE)
 # The batteries of the full chain already vouch for these two stages, so the complete run does not list them again.
 IN_BATTERIES = frozenset({"map", "resources"})
+# ARC-DEV-1398: a zone that runs only when named (`--zones soak`, or `--stages soak`): a diff never selects it, `complete` leaves it out (the
+# daily build must not grow by minutes of a leak check whose limits are tuned by hand).
+ON_REQUEST = frozenset({SOAK})
 
 
 def zone_stages(name: str, known: Sequence[str]) -> tuple[str, ...]:
@@ -69,12 +74,12 @@ def zone_stages(name: str, known: Sequence[str]) -> tuple[str, ...]:
 def complete_stages(known: Sequence[str]) -> tuple[str, ...]:
     """Every stage the complete run lists after its batteries: all of them but the two the batteries vouch for, the core
     stages first and the heavy zones' last."""
-    return tuple(stage for name in ZONES for stage in zone_stages(name, known) if stage not in IN_BATTERIES)
+    return tuple(stage for name in ZONES if name not in ON_REQUEST for stage in zone_stages(name, known) if stage not in IN_BATTERIES)
 
 
 def stages_of(zones: Sequence[str], known: Sequence[str]) -> tuple[str, ...]:
     """The stages of the chosen zones (all of them for `complete`), the core stages first."""
-    return tuple(dict.fromkeys(stage for name in ZONES if name in zones or COMPLETE in zones
+    return tuple(dict.fromkeys(stage for name in ZONES if name in zones or (COMPLETE in zones and name not in ON_REQUEST)
                                for stage in zone_stages(name, known)))
 
 

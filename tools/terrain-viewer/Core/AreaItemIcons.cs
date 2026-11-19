@@ -20,7 +20,11 @@ public sealed record AreaItemIcon(AreaItemIconStatus Status, AreaInterfaceFrame?
 /// <summary>ARC-UI-108: what an item window needs beyond the item's fields: the local PC, the labels, and the session with the item's
 /// entity when the session keeps state for it (the units of an ammunition stack, the spell charges left, the condition); without them the
 /// fields' own values are read.</summary>
-public sealed record AreaItemWindowContext(SessionItemViewer Viewer, AreaGameBarTexts Texts, GameSessionOwner? Session = null, string? Entity = null);
+public sealed record AreaItemWindowContext(SessionItemViewer Viewer, AreaGameBarTexts Texts, GameSessionOwner? Session = null, string? Entity = null)
+{
+    /// <summary>ARC-UI-2766: the coins of a gold pile as the session holds them (the hero's counter, a loot or barter holder's pile); null reads the item's own stored quantity.</summary>
+    public int? GoldCoins { get; init; }
+}
 
 /// <summary>Explicit limits of the inventory art one viewer run reads from one module: distinct art ids, one file's size and the pixels
 /// of all frames kept. An art id past them is refused and kept refused.</summary>
@@ -140,7 +144,7 @@ public sealed class AreaItemIcons : IDisposable
             var (units, charges, condition) = EntityState(window, fields);
             lines = AreaItemWindowLines.Build(new(fields, facts.Identified, window.Viewer)
             {
-                EffectsText = EffectsText(item.EffectsDescription), Units = units, GoldQuantity = item.GoldQuantity, Charges = charges, Condition = condition,
+                EffectsText = EffectsText(item.EffectsDescription), Units = units, GoldQuantity = window.GoldCoins ?? item.GoldQuantity, Charges = charges, Condition = condition,
             }, window.Texts.Text, AmmoName);
         }
         return new(HotkeyBarRules.ItemTypeIcon(facts), name ?? fallbackName, colour) { Lines = lines };

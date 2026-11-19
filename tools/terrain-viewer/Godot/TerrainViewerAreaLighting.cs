@@ -111,7 +111,27 @@ public partial class TerrainViewerApp
     // The hour's form posed at the animation time (AtHour first: a posed view keeps no day form). Pure: the draw-time
     // companion delegate calls it too.
     private AreaLocalLighting? LightsNow(AreaLocalLighting? local, AreaAmbientDriver driver) =>
-        local?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
+        SceneryLit(local)?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
+
+    // ARC-SCRIPT-2585 (ledger OT10): a scenery a script's toggle state (56) switched off or on keeps its lights in step with the flag. The sceneries' states are the session's
+    // (AreaObjectTargets.SceneryOffStates, one dictionary while nothing changes); the lighting made of them is kept per loaded lighting and per states, so a draw costs two reference tests.
+    private static readonly IReadOnlyDictionary<AreaObjectKey, bool> NoSceneryStates = new Dictionary<AreaObjectKey, bool>();
+    private IReadOnlyDictionary<AreaObjectKey, bool> _sceneryStatesPushed = NoSceneryStates;
+    private (AreaLocalLighting Basis, IReadOnlyDictionary<AreaObjectKey, bool> States, AreaLocalLighting Result)? _sceneryLit;
+
+    private IReadOnlyDictionary<AreaObjectKey, bool> SceneryLightStates() =>
+        _areaSession is { } session && ObjectTargets() is { } targets && targets.SceneryOffStates(session) is { Count: > 0 } states ? states : NoSceneryStates;
+
+    private AreaLocalLighting? SceneryLit(AreaLocalLighting? local)
+    {
+        if (local is null) return null;
+        var states = SceneryLightStates();
+        if (states.Count == 0) return local;
+        if (_sceneryLit is { } known && ReferenceEquals(known.Basis, local) && ReferenceEquals(known.States, states)) return known.Result;
+        var result = local.WithObjectsOff(states);
+        _sceneryLit = (local, states, result);
+        return result;
+    }
 
     /// <summary>Per frame, after the clock's frame: the animation time follows the frame clocks (<see cref="FrameClockTap"/>); a light
     /// that changed its frame or offsets pushes a new view.</summary>
@@ -340,6 +360,8 @@ public partial class TerrainViewerApp
         var size = HeroCarriedSize();
         var glows = EyeCandyLightKey();
         var npcs = NpcCarriedLights().Key;
+        // ARC-SCRIPT-2585: a scenery's toggle changed the lights of the shown map: the canvas is given the lighting again.
+        if (SceneryLightStates() is var scenery && !ReferenceEquals(scenery, _sceneryStatesPushed)) { _sceneryStatesPushed = scenery; PushAreaAmbient(); }
         if (_carriedKey is { } known && known.Size == size && known.Lit == lit && known.EyeCandy == glows && known.Npcs == npcs && ReferenceEquals(known.Lighting, lighting)) return;
         _carriedKey = (size, lighting, lit, glows, npcs);
         _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));

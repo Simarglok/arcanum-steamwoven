@@ -13,7 +13,7 @@ namespace Arcanum.World;
 /// would change it, so the loaded slot is always current), the game's scripts and DLGs (ARC-SCRIPT-011 content, data
 /// fixes of the session's rules), the session's global flags, the player (<see cref="AreaScriptHost.PcCode"/> on the
 /// actor's map) and the session party for the follower conditions. A printed line uses the hero's gender (the diagnostic
-/// male PC without a hero) and the diagnostic PC name; a line naming <c>@npcname@</c> is unsupported (whose name it is
+/// male PC without a hero) and the hero's player name (ARC-SCRIPT-2787; the placeholder without a hero); a line naming <c>@npcname@</c> is unsupported (whose name it is
 /// on an item run is not read), so the session refuses that transfer. Everything else the viewer does not model answers "no". It only reads.
 /// </summary>
 public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWorldHost
@@ -154,6 +154,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         AreaScriptHost.PcCode => Player(),
         var leader => new ScrObjectRef(critter.Map, leader),
     };
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     public SessionPrintedLine PrintedLine(int script, int line) => ReadLine(script, line, npcTriggerer: false);
@@ -182,11 +183,15 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         if (npcTriggerer && read.Document!.TryGetRecord(line, out var both) && both is not null && !both.Text.Bytes.SequenceEqual(both.AlternateText.Bytes))
             return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} differs by gender and the NPC's gender is not read");
         var alternate = !npcTriggerer && (_session.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc).Gender != DialogPcGender.Male;
-        var printed = ScrPrintedLine.Read(read.Document!, line, alternate, AreaConversationProfile.Diagnostic.Names);
+        var printed = ScrPrintedLine.Read(read.Document!, line, alternate, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, null));
         if (printed.Status != ScrPrintedLineStatus.Shown) return new(SessionPrintedLineStatus.Unsupported, string.Empty, printed.Detail);
         if (read.Document!.TryGetRecord(line, out var record) && record is not null &&
             System.Text.Encoding.Latin1.GetString((alternate ? record.AlternateText : record.Text).Bytes.ToArray()).Contains("@npcname@", StringComparison.OrdinalIgnoreCase))
             return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} names the NPC");
+        // ARC-SCRIPT-2787 (0x44B390): @pcname@ is the triggerer; an NPC triggerer's name (the unknown-critter description, taken with no observer) is not read.
+        if (npcTriggerer && read.Document!.TryGetRecord(line, out var named) && named is not null &&
+            System.Text.Encoding.Latin1.GetString((alternate ? named.AlternateText : named.Text).Bytes.ToArray()).Contains("@pcname@", StringComparison.OrdinalIgnoreCase))
+            return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} names the triggering NPC");
         return new(SessionPrintedLineStatus.Shown, printed.Text, printed.Detail);
     }
 }

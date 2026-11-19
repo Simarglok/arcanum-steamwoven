@@ -26,7 +26,7 @@ public static partial class AiExecutorRules
     [
         GoalType.RunToTile, GoalType.MoveNearTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.MoveNear, GoalType.PickupItem, GoalType.AttemptPickup, GoalType.Attack,
         GoalType.AttemptAttack, GoalType.Follow, GoalType.Flee, GoalType.CastSpell, GoalType.AttemptSpell, GoalType.UseSkill, GoalType.AttemptSkill,
-        GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
+        GoalType.ThrowItem, GoalType.UseItem, GoalType.UseItemWithSkill, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
         GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile, GoalType.Animate, GoalType.AnimateKneelMagicHands, GoalType.AnimateReverse,
         GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor, GoalType.PleaseMove,
@@ -457,6 +457,7 @@ public static partial class AiExecutorRules
         GoalType.AttemptPickLocks => AttemptPickLocksNode(owner, top, world),
         GoalType.ThrowItem => ThrowItemNode(owner, top, world),
         GoalType.UseItem => UseItemNode(owner, top, world),
+        GoalType.UseItemWithSkill => UseItemWithSkillNode(owner, top, world),
         GoalType.PickupItem => PickupNode(owner, top, world),
         GoalType.AttemptPickup => AttemptPickupNode(owner, top, world),
         GoalType.AnimateStunned => StunNode(owner, top, world),
@@ -569,6 +570,7 @@ public static partial class AiExecutorRules
                 if (!Check(world, owner, cost)) return new(Move.Kill, Reason: AiExecutorReason.Unpaid);
                 Consume(world, owner, cost);
                 var swing = world.BeginAttack(owner, target);
+                if (swing.Failed) return End(AiExecutorReason.AttackNoArt);
                 return Next(2, Math.Max(swing.ActionFrameMs, 1)) with { Top = goal with { RestMs = Math.Max(swing.RestMs, 0) } };
             case 2:
                 // The action frame: in reach → the hit step; out of reach → no hit, the action points are spent.

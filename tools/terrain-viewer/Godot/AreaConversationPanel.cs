@@ -318,7 +318,9 @@ public partial class AreaConversationPanel : CanvasLayer
         // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2); ARC-UI-050:
         // b: for the barter window (BT7); ARC-UI-088: c-e for the NPC's sheet (WN2).
         // ARC-UI-2028: a reply that leads to the NPC's last line closes the window in the same call; the host floats the line (ledger DF1).
-        if (IsWindowEnd(conversation.End?.Kind) || AreaConversationText.EndsWithNpcLine(conversation)) CloseRequested?.Invoke();
+        // ARC-SCRIPT-2761 (reply handler 0x567E30): a reply whose response ends the conversation (0, or -N back to the script) closes the dialog (0x5678D0) in the same call and the script resumes at once; the original
+        // has no window with a single Close left for the player to click, so the next speaker's line (a resumed script's own conversation) follows the player's line. The diagnostic chrome keeps the finished dialog's ledger and its Close.
+        if (IsWindowEnd(conversation.End?.Kind) || AreaConversationText.EndsWithNpcLine(conversation) || (_chromeHidden && result.Status == DialogConversationSelectStatus.Ended)) CloseRequested?.Invoke();
     }
 
     /// <summary>Diagnostic leave: closes an awaiting dialog without a reply effect, or dismisses a finished one.</summary>
@@ -352,7 +354,7 @@ public partial class AreaConversationPanel : CanvasLayer
     }
 
     /// <summary>One reply row (a button, in the band's geometry), added to the stack; <paramref name="chosen"/> runs after the pressing signal returns.</summary>
-    private void AddReplyRow(string name, string text, bool blocked, Action chosen)
+    private void AddReplyRow(string name, string text, bool blocked, Action chosen, string? reason = null)
     {
         var button = new Button
         {
@@ -361,6 +363,9 @@ public partial class AreaConversationPanel : CanvasLayer
             FocusMode = Control.FocusModeEnum.All, ActionMode = BaseButton.ActionModeEnum.Press,
         };
         if (_originalRows) StyleBandRow(button);
+        // ARC-UI-2791: the Original band shows the original's rows only (no grey, no tooltip); Steamwoven marks a reply the runtime cannot run by grey and a tooltip.
+        if (_originalRows) blocked = false;
+        else if (reason is not null) button.TooltipText = reason;
         button.SetMeta(ReplyTextMeta, text);
         if (_fonts is null) button.Text = text;
         else
@@ -398,7 +403,9 @@ public partial class AreaConversationPanel : CanvasLayer
             foreach (var option in conversation.Options)
             {
                 var token = option.Token;
-                AddReplyRow($"Reply{option.Number}", AreaConversationText.OptionText(option, NumberedReplies), option.Block is not null, () => ChooseToken(token));
+                var reason = AreaConversationText.BlockReason(option);
+                if (reason is not null) GD.Print($"ARC-UI-2791 dialog reply {option.Number} cannot run ({reason})");
+                AddReplyRow($"Reply{option.Number}", AreaConversationText.OptionText(option, NumberedReplies), reason is not null, () => ChooseToken(token), reason);
             }
         }
         var outcome = conversation is null ? string.Empty : AreaConversationText.Outcome(conversation);
@@ -517,10 +524,10 @@ public partial class AreaConversationPanel : CanvasLayer
     private static void SetRowFontColour(Button button, (byte R, byte G, byte B) colour)
     {
         var tint = new Color(colour.R / 255f, colour.G / 255f, colour.B / 255f);
-        foreach (var name in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color" }) button.AddThemeColorOverride(name, tint);
+        foreach (var name in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color" }) button.AddThemeColorOverride(name, tint);
     }
 
-    /// <summary>The row the pointer or the keyboard focus is on draws lit: the original's second font, yellow (ledger DH6; a blocked row, which the original has none of, stays grey).</summary>
+    /// <summary>The row the pointer or the keyboard focus is on draws lit: the original's second font, yellow (ledger DH6; a blocked row, which the original has none of, stays unlit, ARC-UI-2791).</summary>
     private void LightRows()
     {
         for (var i = 0; i < _buttons.Count; i++)
@@ -585,7 +592,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2022 (ledger DH4, DH11, DB3): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
-    /// 400 px view else the view height minus 181; the view is the part the bars leave free (the original's iso window, (0, 41, 800, 400) with the
+    /// 400 px view else the view height minus 181 (with the bars shown it ends 1 px above the bottom bar's top edge, ARC-UI-2770); the view is the part the bars leave free (the original's iso window, (0, 41, 800, 400) with the
     /// interface on, ledger DB3), so the band lies above the bottom bar. The stack inside it is 6 px in on both sides. A diagnostic panel that is still drawn sits above the band.
     /// </summary>
     private void PlaceBand(Vector2 window, float panelHeight)
@@ -594,7 +601,7 @@ public partial class AreaConversationPanel : CanvasLayer
         // ARC-UI-2268: the band is drawn at the screen's whole factor, as the bars are; its geometry (and the view it sits in) is counted in the original's pixels.
         var factor = AreaGameBarPanel.ScreenFactor(window);
         var left = AreaGameBarPanel.FreeLeft + DialogReplyBand.BoxLeft((int)(free.X / factor), _bandWidth) * factor;
-        var top = freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
+        var top = BandTop(window);
         _band.Scale = new(factor, factor);
         _band.Position = new(left, top);
         _band.Size = new(_bandWidth, DialogReplyBand.Height);
@@ -603,6 +610,19 @@ public partial class AreaConversationPanel : CanvasLayer
         _options.Position = new(DialogReplyBand.TextX, 0);
         _options.Size = new(_bandWidth - DialogReplyBand.Margins, DialogReplyBand.Height);
         _panel.Position = new(_panel.Position.X, Mathf.Round(Math.Max(freeTop, top - panelHeight - 8)));
+    }
+
+    /// <summary>
+    /// ARC-UI-2770: the band's top in a window of <paramref name="window"/> px. With the bars shown the band rests on the bottom bar's top edge, ending 1 original px above it (the original's 299 of its
+    /// 400 px view, whatever the view's height here); without them the full-screen rule of 0x4C9720 stands (view height minus 181).
+    /// </summary>
+    internal static float BandTop(Vector2 window)
+    {
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(window);
+        var factor = AreaGameBarPanel.ScreenFactor(window);
+        return AreaGameBarPanel.BottomInset > 0
+            ? freeTop + free.Y - (DialogReplyBand.Height + DialogReplyBand.BarGap) * factor
+            : freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
     }
 
     /// <summary>ARC-UI-2024: the panel's top left corner: centred, its bottom 24 px above the bottom bar (the view's bottom without the bars), and not above

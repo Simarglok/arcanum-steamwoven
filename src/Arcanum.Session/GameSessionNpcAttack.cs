@@ -31,6 +31,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, as <see cref="SessionAttack.HitScripts"/>; an NPC's shot that flies asks at its strike.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionAttack.ArmourScripts"/>: the worn armour of whoever takes a critical damage step (the target, or the attacker on a critical self-hit).</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-DEV-282 (PF1, PF2): the host can fly a shot. A bow or firearms attack whose wielded weapon has a projectile art (<see cref="SessionWearItem.MissileArt"/>) is then decided now and its hit's damage waits for the strike (<see cref="GameSessionOwner.LandNpcShot"/>); the result names the shots in flight. Without it (or without the art) the attack lands at once, as ARC-DEV-273's.</summary>
     public bool Flight { get; init; }
     /// <summary>ARC-AI-1756 (0x4B3170, SC16): the target is the occupant the attack pulled out of a bed it struck (the record's target replaced), so the check carries -30 (<see cref="AttackRequest.TargetWasInBed"/>).</summary>
@@ -66,6 +68,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483: as <see cref="SessionNpcAttack.HitScripts"/>.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionNpcAttack.ArmourScripts"/>.</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-MAGIC-1188: as <see cref="SessionNpcAttack.ItemTriggers"/>, for the attack on the struck critter (the thrown item is the event's weapon; the thrower's worn items exclude it).</summary>
     public ISessionItemTriggers? ItemTriggers { get; init; }
     /// <summary>ARC-COMBAT-1717 (PF1, PF6, PF7, PF10; 0x4B3C00 → 0x4B3170): the host can fly the thrown weapon. The throw is then decided now (the check and a miss's scatter, rolled as ever) and the weapon leaves
@@ -108,6 +112,9 @@ public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int 
 {
     /// <summary>ARC-COMBAT-1717: the projectile art of the weapon an NPC threw (its missile art field, a scenery art faced in the flight's direction), as the shot carried it; null for an arrow and for a weapon without one (the viewer flies the item's own art).</summary>
     public uint? ThrownArt { get; init; }
+
+    /// <summary>ARC-COMBAT-2693: the shot is a generic item's (a grenade: no weapon block, the damage of its weight, <see cref="WeaponKind.ThrownItem"/>); its check is carried for the stray strike only, and the viewer draws it on the size arc of an item that is no weapon.</summary>
+    public bool Generic { get; init; }
 
     /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
     public const string HeroTarget = "\0hero";
@@ -213,6 +220,7 @@ public sealed partial class GameSessionOwner
             DropMap = request.DropMap,
             TakingDamage = request.TakingDamage,
             HitScripts = request.HitScripts,
+            ArmourScripts = request.ArmourScripts,
             ItemTriggers = request.ItemTriggers,
             Flight = request.Flight,
         };
@@ -334,7 +342,7 @@ public sealed partial class GameSessionOwner
     public SessionNpcShotFacts? QueryNpcShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) { ThrownArt = arrow.ThrownArt } : null;
+        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) { ThrownArt = arrow.ThrownArt, Generic = arrow.Values.Weapon.Kind == WeaponKind.ThrownItem } : null;
     }
 
     private const string HeroArrowTarget = SessionNpcShotFacts.HeroTarget;
@@ -367,6 +375,9 @@ public sealed partial class GameSessionOwner
         if (strike is { } shotId && (!_npcArrows.TryGetValue(shotId, out arrow) || arrow.Shooter != attacker.Entity || !arrow.Hit && arrow.Target == targetKey))
             return RejectAttack(GameSessionFailure.InvalidAttack);
         SessionNpcAttackValues values;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's, not the wielded weapon's: the NPC's weapon takes no wear from it.
+        if (arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)
+            attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes.
         if (arrow is not null) values = arrow.Values;
         else
@@ -532,6 +543,9 @@ public sealed partial class GameSessionOwner
         // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
         if (attack.TakingDamage is { } asks && !asks(recipient))
             return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
+        // ARC-SCRIPT-2828 (0x4B47F8): the victim's worn armour runs its critical-hit script after the victim's own and before the hit points are written.
+        NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.AttackerWorn,
+            QueryLife(recipient == DamageRecipient.Target ? targetLife : attacker.Target).View?.Status);
         // ARC-DEV-312: the attacker is the killer of a target it kills (a critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage, killer: recipient == DamageRecipient.Target ? attacker.Entity : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)

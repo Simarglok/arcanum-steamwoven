@@ -235,6 +235,39 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11): a combat click on a critter with the hero's wielded weapon "default throwing" starts the throw goal 37 at the critter's <b>tile</b>, never at the critter itself (the
+    /// builder writes the item and a location only), so the throw rolls as a throw at a location: the line of fire names only a living, non-shoot-through blocker before the tile, and a hit lands on the tile striking nothing. The item
+    /// is the session's choice (<see cref="GameSessionOwner.QueryDefaultThrowItem"/>: a spare of the weapon's prototype, else the wielded one); the throw goal needs no walk and takes the throw's points (<see cref="BeginThrowSwing"/>). True
+    /// when the click was taken (a throw started, or refused with its notice); false when the weapon stays in the hand and the attack goal starts as without the flag.
+    /// </summary>
+    private bool TryDefaultThrowClick(AreaCombatTarget target) => TryDefaultThrowAt(NpcCell(target.Row), target.Entity);
+
+    /// <summary>
+    /// ARC-COMBAT-2735 (ledger RH2, TW1): the Alt attack on a door, window, container, scenery or wall with a "default throws" weapon wielded: the attack start builds the throw goal with the object's <b>location</b> as for any
+    /// attacker target, so the click throws at the object's tile and strikes no object unless the line of fire names a blocker. True when the click was taken; false when the weapon stays in the hand.
+    /// </summary>
+    private bool TryDefaultThrowObjectClick(AreaObjectRecord row, string entity) =>
+        _areaSession is { } owner && LiveCell(owner, row) is { } tile && TryDefaultThrowAt(tile, entity);
+
+    private bool TryDefaultThrowAt(CellCoord tile, string targetName)
+    {
+        if (_areaSession is not { } owner || _inventoryHost is null || HeroRunsHost() is null || _worldActor.Session is not AreaGridSession) return false;
+        // A click while the weapon waits on the cursor for the throw goal's first node is a repeat click: the goal is pending, the click is taken (the original's start branch ignores an equal goal).
+        if (_gameCursorItem is { } waiting) return waiting.Item == _defaultThrowCursorItem && HeroRunsHost()?.ThrowRun is not null;
+        if (HeroDefaultThrowWeight() is not { } weight || owner.QueryDefaultThrowItem(new(weight)) is not { } item) return false;
+        _gameCursorItem = new GameCursorItem(item, _inventoryHost.ItemName(owner, item, _hoverNames?.Catalog), owner, CurrentAreaMap);
+        _defaultThrowCursorItem = item;
+        var started = ThrowGameCursorItem(tile);
+        // A throw that did not start leaves the weapon where it is: the cursor holds it only until the throw goal's first node (HeroThrowEnds clears it when that node refuses).
+        if (!started) { _gameCursorItem = null; _defaultThrowCursorItem = null; }
+        GD.Print($"ARC-COMBAT-2524 default-throw-click item={item} target={targetName} tile={tile.X},{tile.Y} started={started}");
+        return true;
+    }
+
+    // ARC-COMBAT-2524: the wielded weapon the default-throw click put on the cursor for the throw goal (null when none waits).
+    private string? _defaultThrowCursorItem;
+
     // The throw run in progress: the item, its tile and name while the hero's swing plays (the cursor is empty from the swing's start, TT2).
     private sealed record HeroThrowSwing(GameCursorItem Held, CellCoord Tile, AreaAttackPlayer Player, ActorDiagnosticAction Action, int Octant)
     {
@@ -306,9 +339,7 @@ public partial class TerrainViewerApp
         var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
         var rate = RealTimeCombatRules.AttackFramesPerSecond(rateTable, weapon, speed, art.RawFramesPerSecond);
         var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, weaponSpeed), weapon);
-        var target = session.Chart.ToChart(new(tile.X, tile.Y));
-        var octant = AreaCombatHost.Facing(session.State.CommittedCell, target) is { } facing ? DiagnosticGridActor.Octant(facing)
-            : DiagnosticGridActor.RenderState(session.State).Facing;
+        var octant = HeroThrowOctant(session, tile);
         _gameCursorItem = null;
         _throwSwing = new HeroThrowSwing(held, tile, new AreaAttackPlayer(clip, WorldMilliseconds()), action, octant);
         _worldActor.AttackPose = (action, octant, 0);
@@ -319,6 +350,32 @@ public partial class TerrainViewerApp
         var end = moments[^1];
         var actionMs = (int)Math.Max(1, hit.Kind == AttackUpdateKind.Hit ? hit.AtMs : end.AtMs);
         return new Arcanum.Simulation.Ai.AiAttackSwing(actionMs, (int)Math.Max(1, end.AtMs - actionMs));
+    }
+
+    /// <summary>The hero's facing octant for a throw at <paramref name="tile"/>: toward the tile, else the facing it has.</summary>
+    private int HeroThrowOctant(AreaGridSession session, CellCoord tile) =>
+        AreaCombatHost.Facing(session.State.CommittedCell, session.Chart.ToChart(new(tile.X, tile.Y))) is { } facing ? DiagnosticGridActor.Octant(facing)
+            : DiagnosticGridActor.RenderState(session.State).Facing;
+
+    /// <summary>
+    /// ARC-RENDER-2035 (ledger RH10, the throw's kind-1 swing): the prototype number of the item the hero throws when it is a weapon object (type 5), else null. The weapon list's swing and projectile-speed entries are read only for a weapon; a thrown
+    /// non-weapon (a grenade, a potion) has none. Read before the throw: the item leaves the pack with it.
+    /// </summary>
+    private int? HeroThrownWeaponPrototype(GameSessionOwner owner, string item) =>
+        item == SessionHeroGrid.GoldEntity ? null
+        : (HeroItemKind(owner, item) ?? PlacedItemKind(owner, item) ?? RowlessItemKind(owner, item)) is { Type: SessionItemType.Weapon } kind ? kind.Prototype : null;
+
+    /// <summary>The held throws' swing effects the viewer asked (smoke seam): the thrown weapon's prototype and whether its kind-1 entry played.</summary>
+    internal readonly List<(int Prototype, bool Played)> HeroThrowSwingsForSelfTest = [];
+
+    /// <summary>The steps per tick of the projectiles the viewer launched (smoke seam), by launch order.</summary>
+    internal readonly List<int> ProjectileStepsForSelfTest = [];
+
+    /// <summary>Appends to a smoke seam list, keeping the newest 256 so normal play never grows it without bound.</summary>
+    private static void RecordForSelfTest<T>(List<T> list, T value)
+    {
+        if (list.Count >= 256) list.RemoveAt(0);
+        list.Add(value);
     }
 
     /// <summary>The throw goal's action frame (0x42AB90 → 0x4B3C00): the item is thrown through the session. False when the swing is gone or the session refuses.</summary>
@@ -343,6 +400,12 @@ public partial class TerrainViewerApp
     internal void HeroThrowEnds(string item, Arcanum.Simulation.Ai.AiExecutorReason reason)
     {
         _throwPressed = null;
+        // ARC-COMBAT-2524: a default throw whose first node refused (no points, no throw ART) leaves the weapon in the hand: the cursor it waited on is emptied.
+        if (_defaultThrowCursorItem == item)
+        {
+            _defaultThrowCursorItem = null;
+            if (_gameCursorItem?.Item == item) _gameCursorItem = null;
+        }
         // A throw that never began (unpaid, no ART) has said why; one cut after the item left has nothing to say; only a swing cut before it left leaves the item in the pack.
         if (_throwSwing is { } swing && swing.Held.Item == item)
         {
@@ -405,6 +468,8 @@ public partial class TerrainViewerApp
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(), ItemTriggers = ItemTriggersNow(),
             // ARC-COMBAT-1955: the removal's and the throw script (point 6) of the item run through the shown map's item script host.
             Scripts = _inventoryHost.ItemScripts(owner),
+            // ARC-SCRIPT-2828: the worn armour's critical-hit scripts on a critical self-hit of the throw at a location (a struck critter's hit lands through LandShot).
+            ArmourScripts = HeroArmourScripts(SessionSpellCaster.Hero),
         };
         var aimed = struck?.Goal;
         if (aimed is not null)
@@ -425,6 +490,8 @@ public partial class TerrainViewerApp
         if (_heldThrowSeedForSelfTest is { } seed) { owner.RestoreRandom(new SessionRandomState(seed, 0)); _heldThrowSeedForSelfTest = null; }
         // ARC-COMBAT-2698: the refused weapon's sound fields are read while it is still the hero's (the refusal's sound plays after it left the list).
         var thrownSounds = EntitySounds(held.Item);
+        // ARC-RENDER-2035: the thrown weapon's prototype, read while the item is still the hero's.
+        var thrownWeapon = HeroThrownWeaponPrototype(owner, held.Item);
         var result = owner.ThrowHeroItem(owner.Version, request);
         // A struck critter that died meanwhile refuses the attack: the original's press throws at the location anyway.
         if (aimed is not null && result.Disposition == GameSessionDisposition.NoChange && owner.QueryHeroLife() is { Status.IsActive: true })
@@ -468,6 +535,11 @@ public partial class TerrainViewerApp
             return result;
         }
         if (result.Disposition == GameSessionDisposition.NoChange) { SetHeldThrowNotice("the hero cannot act (the item stays in the pack)"); RefreshAreaStatus(); return null; }
+        // ARC-RENDER-2035 (RH10, 0x4B3C00 → 0x4B3170): the throw's swing, the weapon list's kind 1 on the hero turned to its facing, for a thrown weapon object only (a thrown non-weapon plays none); every throw that was taken, hit or miss,
+        // after the refusals above (a refused script or an attack out of ammunition ends before the swing).
+        if (thrownWeapon is { } swung)
+            RecordForSelfTest(HeroThrowSwingsForSelfTest, (swung, SpellCasterNow() is { } caster && caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, swung,
+                _throwSwing is { } swinging && swinging.Held.Item == held.Item ? swinging.Octant : _worldActor.Session is AreaGridSession gridNow ? HeroThrowOctant(gridNow, tile) : 0)));
         var (art, unfaced) = HeldThrowArt(held.Item, wearable);
         var hit = result.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
         // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a throw sends no attack event at the throw; the projectile's end alerts only the object it strikes. A throw decided a hit raises it here for the aimed critter (the arrival's
@@ -476,7 +548,7 @@ public partial class TerrainViewerApp
         foreach (var shot in result.Shots)
             // ARC-COMBAT-2435: a hit with no struck critter flies to its tile and strikes nothing (the targetless hit shot, ProjectileRules.Cross); a miss flies toward its scattered tile and strikes what it passes.
             FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null,
-                sizeArc: facts.Kind.Type != SessionItemType.Weapon);
+                sizeArc: facts.Kind.Type != SessionItemType.Weapon, weaponPrototype: thrownWeapon);
         SetHeldThrowNotice($"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? (result.Attack?.Resolution is null ? "" : hit ? ": it lands there" : result.Destination is { } scattered ? $": it missed and flies to {scattered.X},{scattered.Y}" : ": it missed") : hit ? $": it will hit {aimed.Entity}" : ": it missed"));
         // A critical miss turned on the hero at once (its result is the attack's); a strike waits for the flight.
         if (aimed is not null && result.Attack is { } attack && (result.Shots.Count == 0 || attack.Life is not null)) FinishCritterHit(aimed, attack, selfHitReachesTaunt: false, thrownItem: held.Item); // ARC-AI-1639: a held throw has weapon type 3 (0x465D80), which skips the attack end's taunt call

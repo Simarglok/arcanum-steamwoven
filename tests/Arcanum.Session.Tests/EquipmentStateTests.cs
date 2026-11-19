@@ -32,7 +32,7 @@ public sealed class EquipmentStateTests
     private static EquipmentItem Mail(int normal = 0, ArmorSizes sizes = ArmorSizes.Medium) => new()
     {
         Kind = EquipmentItemKind.Armor,
-        Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = sizes, AcAdjustment = 12, Resistances = new(normal, 0, 0, 0, 0) },
+        Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = sizes, AcAdjustment = 12, Resistances = new(normal, 0, 0, 0, 0), SilentMoveAdjustment = -7, MagicSilentMoveAdjustment = 3 },
     };
 
     private static EquipmentItem Ring(int ac) => new()
@@ -218,7 +218,7 @@ public sealed class EquipmentStateTests
         var shieldJson = ",{\"slot\":\"Shield\",\"entity\":\"kit:2\",\"item\":{\"kind\":\"Armor\",\"complexity\":0,\"noDrop\":false," +
             "\"broken\":false,\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null," +
             "\"armor\":{\"coverage\":\"Shield\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":0,\"magicAc\":0," +
-            "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}},\"scripts\":[],\"itemSpells\":false}";
+            "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0,\"silentMove\":0,\"magicSilentMove\":0}},\"scripts\":[],\"itemSpells\":false}";
         // ARC-UI-019: a worn item has no grid slot.
         var paired = text.Replace("],\"durability\":", shieldJson + "],\"durability\":", StringComparison.Ordinal)
             .Replace("{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1},", "", StringComparison.Ordinal);
@@ -334,11 +334,33 @@ public sealed class EquipmentStateTests
             "{\"slot\":\"Armor\",\"entity\":\"kit:2\",\"item\":{\"kind\":\"Armor\",\"complexity\":0,\"noDrop\":false,\"broken\":false," +
             "\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null,\"armor\":{\"coverage\":\"Torso\"," +
             "\"sizes\":2,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":12,\"magicAc\":0,\"resistances\":[4,0,0,0,0]," +
-            "\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}},\"scripts\":[],\"itemSpells\":false}],\"durability\":");
+            "\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0,\"silentMove\":-7,\"magicSilentMove\":3}},\"scripts\":[],\"itemSpells\":false}],\"durability\":");
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryEquipment().Worn.ToArray(), restored.QueryEquipment().Worn.ToArray());
         Assert.AreEqual(owner.QueryHeroEquipmentCombat(), restored.QueryHeroEquipmentCombat());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        // ARC-AI-1578: both silent-move adjustments of the worn armour come back, so a restored sneaking hero is as loud as before the save.
+        var armor = restored.QueryEquipment().Worn.Single(w => w.Slot == EquipmentSlot.Armor).Item.Armor!;
+        Assert.AreEqual((-7, 3), (armor.SilentMoveAdjustment, armor.MagicSilentMoveAdjustment));
+    }
+
+    // ARC-AI-1578: a schema 105 save holds no silent-move fields; the step gives each worn armour 0 and the load then reads it as the older load did.
+    [TestMethod]
+    public void ASchema105SaveGivesWornArmourNoSilentMoveAdjustments()
+    {
+        using var owner = Owner();
+        Ok(owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, Wearable(2, Mail(normal: 4)), Drawn, Accept), owner, 1);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var older = text.Replace(",\"silentMove\":-7,\"magicSilentMove\":3", "").Replace("\"schemaVersion\":" + GameSessionSnapshot.CurrentSchemaVersion + ",", "\"schemaVersion\":105,");
+        Assert.IsFalse(older.Contains("silentMove", StringComparison.Ordinal));
+        var upgraded = GameSessionSnapshotCodec.TryDecode(older);
+        Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.Snapshot!.SchemaVersion);
+        var armor = upgraded.Snapshot.Equipment.Worn.Single().Item.Armor!;
+        Assert.AreEqual((0, 0), (armor.SilentMoveAdjustment, armor.MagicSilentMoveAdjustment));
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.equipment[0].item.armor.silentMove"),
+            (GameSessionSnapshotCodec.TryDecode(older.Replace("\"unarmedBonus\":0", "\"unarmedBonus\":0,\"silentMove\":1")).Failure,
+             GameSessionSnapshotCodec.TryDecode(older.Replace("\"unarmedBonus\":0", "\"unarmedBonus\":0,\"silentMove\":1")).Path));
     }
 
     [TestMethod]

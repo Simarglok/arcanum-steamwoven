@@ -52,7 +52,7 @@ public partial class TerrainViewerApp
             if (request.Object.Code == AreaScriptHost.PcCode) owner = SessionSpellCaster.Hero;
             else if (request.Object.Map == CurrentAreaMap) owner = caster.CastIdOf(request.Object.Code);
             else { GD.Print($"ARC-SCRIPT-1592 script-eye-candy dropped number={request.Number} object={request.Object.Code} (map {request.Object.Map} is not the shown map)"); continue; }
-            // An object the draw has no cell for (an item that is neither a map row nor on the ground, or an object an earlier action of the run destroyed) would hold a run nobody sees: not played (ledger VT9; a map item the hero carried keeps its row's cell, which is a recorded limit).
+            // An object the draw has no cell for (an item that is neither a map row nor on the ground, or an object an earlier action of the run destroyed) would hold a run nobody sees: not played (ledger VT9; ARC-SCRIPT-2020: a map item the hero carries or an NPC, a container or a pile holds has none, a moved one plays at its ground cell).
             if (_areaSession is not { } session || EyeCandyCell(session, owner) is not { } cell) { GD.Print($"ARC-SCRIPT-1592 script-eye-candy dropped number={request.Number} object={owner} (no cell to draw on)"); continue; }
             if (EyeCandyHostNow() is not { } host) continue;
             // ARC-SCRIPT-1829: the entry's art turns to the object's facing (0x502880 into 0x502930) and its sound plays at the object's cell (0x41B930; a looping one is held until the run ends).

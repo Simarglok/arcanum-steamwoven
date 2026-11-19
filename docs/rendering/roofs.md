@@ -92,6 +92,14 @@ as the state, so any map with roofs works the same way:
   not covers the bodies on those tiles: they are not drawn. The pick does not
   test the cover (RF10), so a covered body is still picked where its frame is
   opaque and no roof pixel is hit.
+  A body is tested on the tile it stands on now, not on its stored tile
+  (ARC-WORLD-037 for a companion, ARC-WORLD-2792 for an NPC the AI host walked
+  or made, `AreaRoofCover.Place`): an NPC that walks out of a roofed building is
+  drawn, one that walks in is hidden. The viewer recalculates the cover when a
+  walked NPC's covered state flips, not at each step. The native smoke stage
+  `npc-roof` (`ARC-WORLD-2792 native-smoke npc-roof PASS`, main map at sector
+  1450,1323) switches on Farkhus, who stands in the shack at T0, walks him out
+  and checks the roof lets go of him and his body is drawn where he stands.
 - **Picking.** A click whose point, moved 120 down, falls on a tile with an
   unfilled roof and on an opaque pixel of that roof's frame picks no object
   (`HitCandidate` and the pixel test, RF10).

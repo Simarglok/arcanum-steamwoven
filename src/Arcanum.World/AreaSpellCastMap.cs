@@ -341,7 +341,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(parent);
         if (_lineOfFire() is not { } map) return new(0, null);
-        var trace = LineOfFireRules.Trace(new(checked((int)parent.Location.X), checked((int)parent.Location.Y)), 0, 0,
+        var (offsetX, offsetY) = ParentOffset?.Invoke(parent.Id) ?? (0, 0);
+        var trace = LineOfFireRules.Trace(new(checked((int)parent.Location.X), checked((int)parent.Location.Y)), offsetX, offsetY,
             new(checked((int)tile.X), checked((int)tile.Y)), map, _session.Rules.Combat);
         var blocker = trace.Blocker is { } row && row.WorldX is { } x && row.WorldY is { } y
             ? new SpellObjectFacts(Id(row), row.Type, new(checked((uint)x), checked((uint)y)), Flags(row, ObjectFlagsSlot), Flags(row, SpellFlagsSlot))
@@ -469,6 +470,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// <summary>ARC-AI-2124 (GW9): told right after a hit with an attacker (a spell's damage on an object, a zero hit that only the witnesses read) was queued, inside the damage step that made it: the original runs the object's break and the guard witnesses
     /// (0x4AEE50) there, before the cast's next step, so the shown map takes the queued hits at once (<see cref="TakeObjectHits"/>) instead of at the cast log's flush. A damage with no attacker (script, burn, trap) does not call it and waits for the flush. Null: nothing happens.</summary>
     public Action? ObjectHitMade { get; set; }
+
+    /// <summary>ARC-COMBAT-1934 (0x4ADE00, ledger RA7, VC56): the pixel offset of a caster (object fields 3 and 4, plus the step shift of a walking NPC) that the line of fire of its cast starts at.
+    /// The viewer sets it to the AI host's (<see cref="AreaAiHost.ShooterOffset"/>); unset or a hero or unknown parent: the cell centre (0, 0).</summary>
+    public Func<string, (int X, int Y)>? ParentOffset { get; set; }
 
     /// <summary>ARC-TECHNOLOGY-1760 (OD4, OD15): the attacker of the context that strikes <c>Target</c> now (a trap's shot: the shooter object's cast id), kept on the hit that reaches that object only (not on damage a script or an item event of the
     /// strike deals to another object) as the BUST breaker (<see cref="AreaObjectHit.Source"/>). Null: damage with no attacker. The host sets it around one strike and clears it.</summary>

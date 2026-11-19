@@ -26,4 +26,18 @@ public sealed partial class GameSessionOwner
     /// <summary>Whether the break's destroy branch may destroy: false when the attached gate refused (the object's destroy point answered 0, TD2).</summary>
     private bool BreakMayDestroy(SessionObjectTarget target, ObjectHitOutcome hit) =>
         !(hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled) || _objectDestroyGate is not { } gate || gate(target);
+
+    private Func<string, bool>? _itemDestroyGate;
+
+    /// <summary>
+    /// ARC-SCRIPT-2722 (ledger OD12, TD2): attaches the host's answer to the break's item deletion. An item that is hit again after its first break is deleted through the object destroy, which runs the item's
+    /// destroy point (2) first; a 0 answer keeps it (<see cref="ItemDurabilityResult.DestroyKept"/>: the item stays at 0 hit points, still broken). Asked for the break of an item after a hit (<c>AttackObject</c> on an item,
+    /// <see cref="DamageItemUnattacked"/>) and, since ARC-SCRIPT-2749, for an item the wear paths delete (<see cref="ApplyAttackWear"/>, <see cref="ApplyArmorWear"/>), once per deleting break and before the deletion is written; <paramref name="gate"/> gets the item's entity and answers true to delete (an item the host holds no script for answers true).
+    /// Not state: never saved, the host attaches it again after a restore; null detaches it, and without one every deleting break deletes.
+    /// </summary>
+    public void AttachItemDestroyGate(Func<string, bool>? gate)
+    {
+        ThrowIfDisposed();
+        _itemDestroyGate = gate;
+    }
 }

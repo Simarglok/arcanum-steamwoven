@@ -123,7 +123,7 @@ transfer `StaleVersion`. Without a host the item is refused, as before.
 
 The AREA viewer passes `AreaItemScriptHost` when the game's script content loaded: an item's slot from its area row,
 scripts and DLGs from the content stack (the session's data-fix rules), the session's flags, the player and the party;
-the printed line uses the hero's gender (male without a hero) and the diagnostic PC name; a line naming
+the printed line uses the hero's gender (male without a hero) and the hero's player name (the placeholder without a hero; a line naming an NPC triggerer is refused too, ARC-SCRIPT-2787); a line naming
 `@npcname@` is `Unsupported` (whose name it would be on an item run is not read), so such an item is refused. Lines a
 script prints during Virgil's `IN` reach `SessionDialogInventoryPort.LastResult`, but the conversation panel does not show
 them yet (no Crash Site `IN` gives a scripted item). The status line and the loot window show the printed text after the item's name.

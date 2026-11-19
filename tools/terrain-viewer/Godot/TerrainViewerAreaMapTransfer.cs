@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
     /// A guarded left press on a map-mode trigger object. ARC-DEV-174 (MIG13 S11b): the click is an <see cref="ObjectClickRequest"/>, the hero's use goal 38 of the goal table (<see cref="StartUseClick"/>): its steps test the range,
     /// walk the hero within use range (goal 8) and ask for the use in the last node, which <see cref="ApplyUse"/> applies at the frame's next safe point.
     /// </summary>
-    private bool TryAreaMapUse(Vector2 screen)
+    private bool TryAreaMapUse(Vector2 screen, bool shift = false)
     {
         if (_mapTransfers is null || _worldActor.Session is not AreaGridSession || AreaObjectAtScreen(screen) is not { } hit
             || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null && !_mapTransfers.IsBed(hit))) return false;
@@ -178,7 +178,7 @@ public partial class TerrainViewerApp
             _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
             return true;
         }
-        return StartUseClick(hit);
+        return StartUseClick(hit, shift);
     }
 
     /// <summary>A cell from which the use rule accepts a use of the trigger (so a walk-to-use ends where the use runs).</summary>
@@ -327,19 +327,27 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y), flags, seconds)}");
             },
             // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
-            ObjectDestroyed: EndDestroyedObjectRuns);
+            ObjectDestroyed: EndDestroyedObjectRuns,
+            // ARC-SCRIPT-2752 (SX3): a script's use item with skill (79) starts the NPC's goal 40 in the AI host.
+            ScriptUseItemWithSkill: (npc, item, target, skill, modifier) => AreaAiHostNow()?.ScriptUseItemWithSkill(npc, item, target, skill, modifier) ?? "no AI host",
+            // ARC-SCRIPT-2788: a carried follower's body row comes from its template (its home sector may lie outside the shown window).
+            CarriedRow: obj => _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map)?.Template.Speaker.Row);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
             // ARC-DEV-316: an item taken on another map runs its use script on the row of its home map, read on demand.
             OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
+            // ARC-SCRIPT-1594 (VT8): a made or kit item's use script reads its power ratio from the prototype's complexity.
+            PrototypeComplexity = inventory is null ? null : inventory.PrototypeComplexity,
             // ARC-SCRIPT-1165 (E5-c): a script's add blessing and add curse take their effect from the module's tables.
             BlessingEffects = BlessingEffectOf,
             // ARC-SCRIPT-1164 (E5-b): a script's create item enters the holder's list under the inventory host's insert check.
             InsertCheck = inventory?.InsertCheck,
             // ARC-MAGIC-1823: a script's transfer item from the hero runs the item's wield-off, remove-item and insert-item scripts (the hero's give does).
             ItemScripts = inventory?.ItemScripts(owner),
+            // ARC-SCRIPT-2787: a printed or floated line's @npcname@ is the shown name of the script's attachee (the description tables, as the hover reads them).
+            NpcName = AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog),
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);

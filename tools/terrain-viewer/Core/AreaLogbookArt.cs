@@ -59,7 +59,7 @@ public static class AreaLogbookArtLayout
     /// the table's rectangle 0x5C3418 (25, 24, 89, 89) for the interface's view-window mode (0x550DA0, 1, IW33): the game view's square around the
     /// hero is copied into the rectangle and the art is drawn over it. The art is no reason for the diagnostic list: the lens is drawn when it reads.</summary>
     public const int LensArt = 198;
-    public static (int X, int Y, int Side) Lens { get; } = (25, 24, AreaInventoryHole.Side);
+    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((25, 24)).X, AreaLensPlace.Corner((25, 24)).Y, AreaInventoryHole.Side); // ARC-UI-2714: the common place with the generated interface
 
     /// <summary>Every art number the window reads: <see cref="ArtNumbers"/> and the lens's art.</summary>
     public static IReadOnlyList<int> LoadedArtNumbers { get; } = [.. ArtNumbers, LensArt];

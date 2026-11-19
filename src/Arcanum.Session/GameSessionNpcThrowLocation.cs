@@ -15,7 +15,8 @@ public sealed partial class GameSessionOwner
     /// location and lands striking nothing (<see cref="SessionNpcShotFacts.LocationTarget"/>); a miss flies toward its scattered tile (a thrown weapon's check is carried, so the critters it passes take a forced hit); a critical
     /// miss turns on the thrower: its damage step, then the wear and critical steps. The item leaves the NPC's hand first (a revision of its own, no decay) and lies on the thrower's cell while it flies; a host that cannot fly a thrown weapon
     /// lands it at once on the hit location or the scatter tile. A random stream that cannot give the rolls (the bounded project stream) throws the item unrolled instead of refusing it after its scripts ran.
-    /// NOT READY: a generic item's flight carries no check, so a critter a missed grenade passes ends it without a strike; the self-hit's sounds, floaters and the thrower's death reaction are the host's.
+    /// ARC-COMBAT-2693: a generic item's flight carries its check too (<see cref="SessionNpcShotFacts.Generic"/>), so a critter a missed grenade passes takes a forced hit with the damage of the item's weight (the stray strike of 0x4B2870).
+    /// The self-hit's sounds, floaters and the thrower's death reaction are the host's.
     /// </summary>
     private SessionNpcThrowResult ThrowNpcAtLocation(GameSessionVersion expected, SessionNpcThrow request, bool generic, bool struck)
     {
@@ -127,10 +128,14 @@ public sealed partial class GameSessionOwner
         {
             var shot = new SessionShot(++_nextShot);
             _npcShots[shot] = new NpcShot(request.Thrower.Entity!, new SessionThrownShot(request.Item, range));
-            // A thrown weapon carries its check: a hit strikes nothing, a miss strikes the critters it passes with a forced hit (the strike is the weapon's as thrown). A generic item's flight is free.
+            // A thrown weapon carries its check: a hit strikes nothing, a miss strikes the critters it passes with a forced hit (the strike is the weapon's as thrown).
+            // ARC-COMBAT-2693 (0x4B2870): a generic item (a grenade) carries its check too, with the damage of its weight (WeaponKind.ThrownItem), so a critter a missed grenade passes takes a forced hit as a weapon's stray does.
             if (values is not null)
                 _npcArrows[shot] = new NpcArrow(request.Thrower.Entity!, values with { Weapon = weapon, Skill = CombatSkill.Throwing, SkillLevel = level, Training = training }, resolution, hit,
                     SessionNpcShotFacts.LocationTarget, request.Item) { ThrownArt = request.ThrowerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.MissileArt };
+            else
+                _npcArrows[shot] = new NpcArrow(request.Thrower.Entity!, new SessionNpcAttackValues(thrower, weapon, CombatSkill.Throwing, level, training, 0, 0, 0, range, true), resolution, hit,
+                    SessionNpcShotFacts.LocationTarget, request.Item);
             shots = [shot];
         }
 
@@ -144,6 +149,8 @@ public sealed partial class GameSessionOwner
         var recipientOfDamage = resolution.Damage.Recipient;
         // The thrower's taking-damage script comes first in the damage apply (GT198, GT199); a veto ends the step.
         if (request.TakingDamage is { } asks && !asks(recipientOfDamage)) return Done(Attack(recipientOfDamage) with { Vetoed = true });
+        // ARC-SCRIPT-2828 (0x4B47F8): the thrower's worn armour runs its critical-hit script on a critical self-hit, after its own taking-damage script and before the hit points are written.
+        NotifyArmourCritical(request.ArmourScripts, resolution, request.ThrowerWorn, QueryLife(request.Thrower.Target).View?.Status);
         var applied = ApplyDamage(Version, request.Thrower.Target, damage, killer: null);
         if (applied.Disposition == GameSessionDisposition.Rejected) return Done(Attack(recipientOfDamage) with { StepFailure = applied.Failure });
         var outcome = applied.Outcome!;

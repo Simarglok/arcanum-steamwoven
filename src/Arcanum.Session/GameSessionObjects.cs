@@ -164,6 +164,8 @@ public sealed record SessionObjectAttack
     public Func<bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483: as <see cref="SessionAttack.HitScripts"/>, for a hit on an object.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionAttack.ArmourScripts"/>, for the hero's own critical self-hit (the only damage step an attack on an object has).</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
 }
 
 /// <summary>What the host does after an object hit: the scripts, sounds and visual effects the session does not run.</summary>
@@ -193,6 +195,9 @@ public enum SessionObjectHostSteps
     /// <summary>ARC-SCRIPT-2646, ARC-SCRIPT-2669 (ledger OD7, BS3c, 0x43F1C0 → 0x424070): a break of a container, scenery, trap, door or window starts with the per-owner interrupt of the object's goal runs at level 5, whatever branch follows: a scenery's loop (goal 1 or 77, priority 1)
     /// ends, its overlays (no-interrupt goals) stay; a door's runs (70, 71, 72, priority 3) end, its attempt goals (12, 50) are the opener's runs and no-interrupt. The host runs it before the BUST script and, for a destroying break, before the kill that <see cref="ObjectDestroyed"/> names (the door host owns a door's runs).</summary>
     ObjectBroken = 1 << 8,
+    /// <summary>ARC-SCRIPT-2686 (ledger TD2, OD7–OD11; ARC-SCRIPT-2722 for an item's deleting break, OD12): the break's destroy branch ran the object's destroy point (2) and it kept the object (a skip default, a run that did not apply, or a point that changed the object's own state): the object is not destroyed
+    /// although the hit's damage and a container's spill usually stand (not when the point changed the object's own state), and the sound stands. <see cref="ObjectDestroyed"/> is left out with it; a door has no <see cref="ObjectDestroyed"/> step, so this names its kept case too.</summary>
+    DestroyKept = 1 << 9,
 }
 
 /// <summary>
@@ -481,6 +486,8 @@ public sealed partial class GameSessionOwner
         if (damage.Recipient == DamageRecipient.Attacker)
         {
             // A critical self-hit: the hero takes the damage and its own armour and weapon the wear (ARC-COMBAT-007).
+            // ARC-SCRIPT-2828 (0x4B47F8): the hero's worn armour runs its critical-hit script on a critical self-hit, before the hit points are written.
+            NotifyArmourCritical(attack.ArmourScripts, resolution, attack.HeroWorn, QueryLife(SessionLifeTarget.Hero).View?.Status);
             var applied = ApplyDamage(Version, SessionLifeTarget.Hero, LifeDamage.FromAttack(resolution)!);
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version)
@@ -520,13 +527,14 @@ public sealed partial class GameSessionOwner
         else
         {
             var item = attack.Item!;
-            itemResult = DamageItem(Version, item.Entity, item.Baseline, amount);
+            itemResult = DamageItem(Version, item.Entity, item.Baseline, amount, destroyPoint: true);
             if (itemResult.Value.Disposition == GameSessionDisposition.Rejected)
                 return new(Disposition(changed), GameSessionFailure.None, resolution, null, itemResult, null, null, SessionObjectHostSteps.None,
                     itemResult.Value.Failure, Version) { Ammunition = ammunition, Shots = flying };
             broken = itemResult.Value.Break != ItemBreakStep.None;
             host = broken ? SessionObjectHostSteps.WitnessesHearBreak : SessionObjectHostSteps.WitnessesHearAttack;
             if (broken && attack.ItemFacts!.Trapped) host |= SessionObjectHostSteps.TrapFires;
+            if (itemResult.Value.DestroyKept) host |= SessionObjectHostSteps.DestroyKept;
             host |= itemResult.Value.Break switch
             {
                 ItemBreakStep.Broken => SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound,
@@ -713,6 +721,7 @@ public sealed partial class GameSessionOwner
         steps |= SessionObjectHostSteps.ObjectBroken;
         if (baseline.Trapped) steps |= SessionObjectHostSteps.TrapFires;
         if (!kept && hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled && baseline.Kind != DamageableObjectKind.Portal) steps |= SessionObjectHostSteps.ObjectDestroyed;
+        if (kept && hit.Break is ObjectBreak.Destroyed or ObjectBreak.ContainerSpilled) steps |= SessionObjectHostSteps.DestroyKept;
         return steps | hit.Break switch
         {
             ObjectBreak.WindowBusted or ObjectBreak.SceneryRespawns => SessionObjectHostSteps.BustScript,

@@ -25,6 +25,9 @@ public static partial class TerrainViewerSelfTest
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
     // ARC-UI-2027: one reply whose action is a final line (FL 10): the dialog ends on the NPC's line of node 10.
+    // ARC-SCRIPT-2761: one reply that returns to the script (response -2).
+    internal const string ReturnToScriptDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{-2}{}";
+
     internal const string FinalLineDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{FL 10}{10}{Fine.}{}{}{}{}{}";
 
     // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
@@ -53,7 +56,8 @@ public static partial class TerrainViewerSelfTest
             Require(panel.IsOpen && panel.NpcLineForSelfTest == "Greetings, [PC]. The road is closed.", "panel shows the substituted NPC line");
             Require(lines.Count == 1 && lines[0] == "P:Greetings, [PC]. The road is closed.", $"the open hands the NPC line out as a persistent bubble: {string.Join("|", lines)}");
             Require(panel.ButtonsForSelfTest.Count == 3 && panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "eligible replies in order");
-            Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].Text.Contains("UnsupportedInteraction"), "generated barter is shown blocked");
+            Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].TooltipText.Contains("UnsupportedInteraction") && !panel.ButtonsForSelfTest[2].Text.Contains("not supported"),
+                "generated barter is shown blocked, the reason in the tooltip and not in the row text (ARC-UI-2791)");
             panel.Choose(3);
             Require(conversation.Turn == 1 && panel.OutcomeForSelfTest.Contains("UnsupportedTransition"), "blocked reply runs nothing");
             Require(picks == 0 && lines.Count == 1, "a reply that was not processed keeps the bubble");
@@ -79,6 +83,9 @@ public static partial class TerrainViewerSelfTest
             await ScreenshotAsync(host, "original-chrome-hidden");
             Require(panel.ChromeShownForSelfTest == (false, false, false, false, false) && !panel.LeaveOfferedForSelfTest && panel.ButtonsForSelfTest.Count > 0,
                 $"Original shows only the reply rows: {panel.ChromeShownForSelfTest}");
+            // ARC-UI-2791: the Original band draws the blocked reply as any row: its own text, no suffix, no tooltip (it still chooses nothing).
+            Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].TooltipText.Length == 0 && !panel.ButtonsForSelfTest[2].Text.Contains("not supported")
+                && !(panel.ButtonsForSelfTest[2].GetMeta("replyText").AsString().Contains("not supported")), "Original: a blocked reply is a plain row without the diagnostic suffix");
             var closedAtCancel = closed;
             panel.Cancel();
             Require(closed == closedAtCancel && panel.IsOpen && conversation.Phase == DialogConversationPhase.AwaitingSelection, "Original: the cancel does not leave an awaiting dialog");
@@ -234,6 +241,24 @@ public static partial class TerrainViewerSelfTest
             panel.Choose(1);
             Require(finalConversation.End?.Kind == DialogEndKind.NpcFinalLine && AreaConversationText.EndsWithNpcLine(finalConversation) && finalConversation.NpcLine?.Text == "Fine." && closed == closedBefore + 1 && !panel.IsOpen,
                 "the final line ends the dialog and closes the window at once");
+            // ARC-SCRIPT-2761 (0x567E30 → 0x5678D0): a reply that returns to the script (-N) closes the window at once in the original's setting (the script's next conversation follows the player's line); the diagnostic chrome keeps the finished dialog and its Close.
+            foreach (var hidden in new[] { true, false })
+            {
+                var returning = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(ReturnToScriptDialog)),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, session.Flags, state));
+                panel.DiagnosticChromeHidden = hidden;
+                panel.Open("Synthetic NPC", returning);
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                var closedAt = closed;
+                panel.Choose(1);
+                Require(returning.End?.Kind == DialogEndKind.ReturnToScript && (hidden ? closed == closedAt + 1 && !panel.IsOpen : closed == closedAt && panel.IsOpen && panel.LeaveOfferedForSelfTest),
+                    $"a reply back to the script {(hidden ? "closes the window at once" : "keeps the diagnostic Close")}");
+                if (panel.IsOpen) panel.Leave();
+            }
+            panel.DiagnosticChromeHidden = false;
             GD.Print("ARC-SCRIPT-005 self-test PASS synthetic conversation panel; original runtime parity NOT_VERIFIED");
         }
         finally { panel.QueueFree(); }
@@ -497,6 +522,12 @@ public partial class TerrainViewerApp
                         var at = AreaConversationPanel.PanelPosition(view, 752, 100);
                         TerrainViewerSelfTest.Require(at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset,
                             $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} view {view.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        // ARC-UI-2770: with the bars shown the reply band rests on the bottom bar's top edge (the original's own 1 px above it), in both settings.
+                        var bandFactor = AreaGameBarPanel.ScreenFactor(view);
+                        var bandBottom = AreaConversationPanel.BandTop(view) + DialogReplyBand.Height * bandFactor;
+                        var barTop = view.Y - AreaGameBarPanel.BottomInset;
+                        TerrainViewerSelfTest.Require(Math.Abs(barTop - bandBottom - DialogReplyBand.BarGap * bandFactor) < .01f,
+                            $"{rules}: the reply band's bottom edge rests on the bottom bar (band bottom {bandBottom}, bar top {barTop}, factor {bandFactor})");
                         // DB2: the clock and the pane buttons are consumed without effect while the dialog is open.
                         var presses = _skillBarPressesForSelfTest + _spellBarPressesForSelfTest;
                         ClockButton(); SkillBarReleased(0, true); SpellBarSpellReleased(0, true);

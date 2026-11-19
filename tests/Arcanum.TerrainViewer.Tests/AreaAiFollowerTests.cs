@@ -115,7 +115,8 @@ public sealed class AreaAiFollowerTests
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
         CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null,
-        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false, int companionCharisma = 20)
+        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false, int companionCharisma = 20,
+        Func<AreaAiNpc, AreaAiAttackArtRequest, AreaAiAttackArt?>? attackArt = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -187,6 +188,7 @@ public sealed class AreaAiFollowerTests
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
             AlertedSound = alertedSound, FollowFacts = followFacts, Parameters = table,
             Spells = caster is null ? null : () => caster,
+            AttackArt = attackArt,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         built = host;
@@ -435,6 +437,26 @@ public sealed class AreaAiFollowerTests
         var facts = host.LeaderUnwaitFacts(enemy);
         Assert.IsNotNull(facts);
         Assert.AreEqual((140, -1000, 12), (facts.LeaderAlignment, facts.NpcAlignment, facts.LeaderCharisma));
+    }
+
+    // ARC-AI-2155 (0x4B0490 for stats 0x11 and 0x13, every hostility reader): the facts the kill-on-sight, good-follower, target-choice and morale readers take carry the NPC's level and alignment with the effect list
+    // laid over the stored values (clamped), and the hero's carry its stored alignment instead of 0.
+    [TestMethod]
+    public void Hostility_facts_carry_the_level_and_alignment_the_stat_getter_gives()
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: 12, companionAlignment: 40, table: ParameterAt(8, 5));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        var before = host.Find(companion) ?? throw new AssertFailedException("no facts");
+        Assert.AreEqual(40, before.Alignment, "the stored base");
+        var target = scene.Combat.Build(session, companion).Combat?.Target ?? throw new AssertFailedException("the companion has no combat build");
+        EffectChange Change(int stat, EffectChangeOperator op, int value) => new(EffectAttributeKind.Stat, stat, op, value);
+        Assert.AreEqual(GameSessionFailure.None, session.AddNpcEffect(session.Version, target,
+            new SessionEffectDefinition(152, [Change(AreaCompanionData.AlignmentStat, EffectChangeOperator.Add, 100), Change(AreaCompanionData.LevelStat, EffectChangeOperator.Add, 3)]), EffectCause.Spell).Failure);
+        var after = host.Find(companion) ?? throw new AssertFailedException("no facts");
+        Assert.AreEqual((140, before.Level + 3), (after.Alignment, after.Level), "base plus the effect");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ChangeHeroAlignment(session.Version, 250).Disposition);
+        Assert.AreEqual((250, 250), (session.QueryHero()?.Alignment, host.Find(Pc)?.Alignment), "the hero's stored alignment, not 0");
+        Assert.AreEqual((0, 0), (host.AlignmentOf(enemy), host.Find(enemy)?.Alignment), "an NPC with no effect keeps its stored alignment");
     }
 
     // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any
@@ -706,6 +728,31 @@ public sealed class AreaAiFollowerTests
         Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), enemy), "the target's critter flags are not read");
         Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), Pc));
         Assert.IsFalse(host.HealSkillAccepts(enemy, Entity(2), companion), "the healer's are");
+    }
+
+    // ARC-COMBAT-2769: a companion's attack run asks the viewer for the attack ART of its body like an NPC's (0x432700), and the host keeps its play (the pose the viewer draws the companion in).
+    // The drawing itself (the viewer drew the companion's stand only) is the ai-follower smoke's check; this holds the host half it relies on.
+    [TestMethod]
+    public void A_companions_attack_run_asks_for_its_attack_art_and_the_host_plays_it()
+    {
+        var asked = new List<(string Npc, AreaAiAttackArtRequest Wanted)>();
+        var (_, host, _, enemy, companion) = Open(attackArt: (npc, wanted) =>
+        {
+            asked.Add((npc.Entity, wanted));
+            return new AreaAiAttackArt(wanted.Animation, wanted.Weapon, wanted.Shield, 9, 5, 15);
+        });
+        host.HeroAttacked(enemy);
+        host.Perform(companion);
+        AreaAiNotice? swing = null;
+        for (var frame = 0; frame < 400 && swing is null; frame++)
+        {
+            host.Frames().AdvanceHost(50);
+            swing = host.DrainNotices().FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Swing && n.Npc == companion);
+        }
+        Assert.IsNotNull(swing, "the companion swings at the enemy");
+        Assert.IsTrue(asked.Any(a => a.Npc == companion), $"the companion's attack asked for its attack ART: {string.Join(", ", asked)}");
+        Assert.IsNotNull(swing!.Play?.Art, "the swing carries the ART the host timed the attack with");
+        Assert.IsNotNull(host.AttackPose(companion, host.NowMs), "the host holds the companion's attack pose for the viewer's drawing");
     }
 
     [TestMethod]
@@ -1935,9 +1982,24 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(host.StartPickLocks(companion, "door:1", null), "the host does not run it");
         var (_, running, _, _, runner) = Open();
         Assert.IsNull(running.FirstLockpicks(runner), "it holds no lockpicks");
-        Assert.IsTrue(running.StartPickLocks(runner, "door:1", null), $"goal 33 with skill 14 starts: {running.TraceOf(runner)?.Perform}");
+        Assert.IsTrue(running.StartPickLocks(runner, "door:1", null), $"goal 40 with skill 14 starts: {running.TraceOf(runner)?.Perform}");
         var run = running.RunOf(runner);
-        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.UseSkill, "door:1", AiExecutorRules.PickLocksSkill), (run!.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill));
+        // ARC-COMBAT-1878 (0x571CB0 → 0x4352C0): both branches of the follower's lock pick are the use-item-with-skill goal (40), not the timed pick-lock goal 33; with no lockpicks it has no item.
+        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.UseItemWithSkill, "door:1", AiExecutorRules.PickLocksSkill, (string?)null), (run!.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill, run.Bottom.Item));
+    }
+
+    [TestMethod]
+    public void The_chooser_lists_the_followers_of_a_follower_after_the_direct_ones()
+    {
+        // ARC-COMBAT-1878 (0x441260): the all-followers list recurses into each follower's own array: an NPC under the companion is a candidate too, after the companion.
+        var scene = Open(enemyAt: new(4, 20));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        CollectionAssert.AreEqual(new[] { companion }, host.FollowerSkillUsers().Select(user => user.Loaded.Entity).ToArray(), "before the join only the companion");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        CollectionAssert.AreEqual(new[] { companion, enemy }, host.FollowerSkillUsers().Select(user => user.Loaded.Entity).ToArray(), "the direct follower, then its own follower");
+        Assert.IsFalse(host.FollowerSkillUsers().Single(user => user.Loaded.Entity == enemy).LedByPc, "the NPC under a companion is not led by the PC itself");
+        Assert.AreEqual(enemy, host.ChooseSkillUser(user => user is null ? 5 : user.Loaded.Entity == enemy ? 9 : 6)?.Loaded.Entity, "the follower of a follower can be the best");
+        Assert.IsTrue(host.StartPickLocks(enemy, "door:1", null), $"the host runs it as its own NPC: {host.TraceOf(enemy)?.Perform}");
     }
 
     // ARC-SCRIPT-1996 (ledger HLR7, HLR8, HLR10, HLR11): the healer talk's host answers for a companion, which the host runs through its follower list and not its NPC list.

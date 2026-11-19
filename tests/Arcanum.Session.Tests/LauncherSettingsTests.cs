@@ -67,6 +67,14 @@ public sealed class LauncherSettingsTests
         Assert.IsTrue(Read("""{"schema":1}""").HoldToQuit, "an older file without the key reads as on");
         Assert.IsTrue(LauncherSettingsCodec.Deserialize("""{"schema":1,"holdToQuit":"no"}""").Defaulted.Contains("holdToQuit"), "a bad value is defaulted and named");
 
+        // ARC-UI-2771: a first start (no file, or a file without a display line) is fullscreen; a stored choice is kept.
+        Assert.AreEqual(LauncherWindowMode.Fullscreen, LauncherSettings.Defaults.Display.WindowMode);
+        Assert.AreEqual(LauncherWindowMode.Fullscreen, LauncherSettingsCodec.Deserialize(null).Settings.Display.WindowMode, "no file");
+        Assert.AreEqual(LauncherWindowMode.Fullscreen, Read("""{"schema":1}""").Display.WindowMode, "no display line");
+        Assert.AreEqual("fullscreen", (string)JsonNode.Parse(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults))!["display"]!["window"]!);
+        var windowed = LauncherSettings.Defaults with { Display = LauncherDisplay.Default with { WindowMode = LauncherWindowMode.Windowed } };
+        Assert.AreEqual(LauncherWindowMode.Windowed, Read(LauncherSettingsCodec.Serialize(windowed)).Display.WindowMode, "a stored window is kept");
+        Assert.AreEqual(LauncherWindowMode.Windowed, Read("""{"schema":1,"display":{"window":"windowed","monitor":-1,"uiScale":100}}""").Display.WindowMode);
         Assert.AreEqual(LauncherSettings.Defaults, Read(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults)));
         Assert.AreEqual(LauncherSettings.Defaults, Read("""{"schema":1}"""), "missing keys take their defaults");
         var bare = new GameFolderIdentity(null, null, null, false, []);

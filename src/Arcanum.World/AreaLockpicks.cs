@@ -10,6 +10,14 @@ namespace Arcanum.World;
 /// </summary>
 public static class AreaLockpicks
 {
+    /// <summary>ARC-SCRIPT-2752: the lockpicks without their use script point, for the use-item-with-skill goal whose use script is the one that asked for it (the session refuses lockpicks with a use script, since it runs none).</summary>
+    public static SessionLockpick WithoutUseScript(SessionLockpick lockpick)
+    {
+        ArgumentNullException.ThrowIfNull(lockpick);
+        return lockpick.ScriptPoints is { } points && points.Contains(SessionLockpick.UseScript)
+            ? lockpick with { ScriptPoints = [.. points.Where(p => p != SessionLockpick.UseScript)] } : lockpick;
+    }
+
     public static SessionLockpick? From(string entity, CombatFields fields)
     {
         ArgumentNullException.ThrowIfNull(fields);

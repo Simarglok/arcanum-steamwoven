@@ -253,6 +253,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
+        // ARC-COMBAT-2524 (RH2, TW1, TW11): the attack start of a "default throws" weapon starts the throw goal at the critter's location instead of the attack goal.
+        if (TryDefaultThrowClick(target)) return true;
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30 (an equal goal is ignored with the auto attack option on, queued beneath the running attack with it off).
         if (_attack is { } running && running.Entity == target.Entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
@@ -302,9 +304,13 @@ public partial class TerrainViewerApp
     /// <summary>ARC-COMBAT-008: a guarded left press with Alt in combat mode on a door, window, container, scenery or (ARC-COMBAT-1941) a wall, Shift picking the attempt attack without a walk: the original's click
     /// gives these the attack goal (ledger OD14; an item on the ground is picked up and a trap walked to, as without combat mode): true
     /// when the press belongs to combat.</summary>
-    private bool TryAreaObjectAttack(Vector2 screen, bool shift = false)
+    private bool TryAreaObjectAttack(Vector2 screen, bool shift = false) =>
+        AttackMapActive && HeroInCombatMode && AreaObjectAtScreen(screen) is { } key && AreaObjectAttackClick(key, shift);
+
+    /// <summary>The Alt attack click on the object <paramref name="key"/> once the press picked it (<see cref="TryAreaObjectAttack"/>): true when the click belongs to combat.</summary>
+    private bool AreaObjectAttackClick(AreaObjectKey key, bool shift)
     {
-        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key) return false;
+        if (!AttackMapActive || !HeroInCombatMode) return false;
         AreaObjectAttackTarget? target = ObjectTargets()?.Target(_areaSession!, key, AreaTrapped);
         // ARC-COMBAT-1941 (VC62): a wall is no object target (it has no damage baseline) but takes the attack goal all the same.
         var wall = target is null && _readyArea?.Snapshot.Objects.FirstOrDefault(o => o.Key == key) is { Type: 0, WorldX: not null, WorldY: not null } row ? row : null;
@@ -319,6 +325,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-1943 (0x54ED30): a polymorphed hero's click on a container is refused silently before the Alt attack; Body of Air then refuses every attack goal with line 25.
         if (target?.Kind == Arcanum.Simulation.Combat.DamageableObjectKind.Container && HeroClickSpells().Polymorphed) return true;
         if (RefuseAttackInBodyOfAir()) return true;
+        // ARC-COMBAT-2735 (RH2, TW1): a "default throws" weapon throws at the object's location, never at the object (the attack start builds the throw goal for any attacker target).
+        if (TryDefaultThrowObjectClick(target?.Row ?? wall!, target?.Entity ?? AttackGoal.WallEntity(wall!))) return true;
         if (target?.Refusal is not null)
         {
             _attackNotice = $"cannot attack: {target.Refusal}";
@@ -351,7 +359,7 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-261 (GT198): the struck object's taking-damage script, with the hero as the attacker.
             TakingDamage = () => TakingDamageGoesOn(struckEntity, SessionSpellCaster.Hero),
-            HitScripts = HeroHitScripts(struckEntity),
+            HitScripts = HeroHitScripts(struckEntity), ArmourScripts = HeroArmourScripts(struckEntity),
             DropMap = AreaDropMapNow(), Flight = flight is not null,
             // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
             Throw = flight is null ? null : HeroThrow(goal),
@@ -362,7 +370,7 @@ public partial class TerrainViewerApp
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line.
-            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, target.Row, null, target, null);
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, target.Row, null, target, null, weaponBefore);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
@@ -937,7 +945,7 @@ public partial class TerrainViewerApp
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
             // ARC-COMBAT-1973 (RH5): the weapon's hit scripts (7, 34) with the wall as the extra object and the wall's taking-damage script (23), as for any struck object.
             TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(wall), SessionSpellCaster.Hero),
-            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)),
+            HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(wall)), ArmourScripts = HeroArmourScripts(AreaUseScriptHost.EntityId(wall)),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
@@ -947,7 +955,7 @@ public partial class TerrainViewerApp
         HeroOutOfAmmunition(result.Resolution?.Refusal, wall, false);
         if (result.Shot is { } shot)
         {
-            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, wall, null, null, null);
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, wall, null, null, null, weaponBefore);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
@@ -992,7 +1000,7 @@ public partial class TerrainViewerApp
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line; a missed throw flies to its scattered tile.
-            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, struck.Row, struck, null, result.Scatter);
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, struck.Row, struck, null, result.Scatter, weaponBefore);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             // A critical miss turned on the hero at the shot; anything else waits for the strike.
@@ -1029,6 +1037,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-261 (GT198): the struck NPC's taking-damage script, with the hero as the attacker; the hero's own (a critical self-hit) has none.
             TakingDamage = recipient => recipient != Arcanum.Simulation.Combat.DamageRecipient.Target || TakingDamageGoesOn(struck.Entity, SessionSpellCaster.Hero),
             HitScripts = HeroHitScripts(struck.Entity),
+            // ARC-SCRIPT-2828: the worn armour's critical-hit scripts of a critical damage step on the struck NPC (or on the hero on a critical self-hit).
+            ArmourScripts = HeroArmourScripts(struck.Entity),
             Aim = struck.Aim, Distance = distance,
             // ARC-COMBAT-015: the bow and firearms skills read the line of fire's cost and blocker (SC8).
             LineOfFire = line,

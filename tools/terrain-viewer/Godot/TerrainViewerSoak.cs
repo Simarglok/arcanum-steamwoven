@@ -12,6 +12,8 @@ namespace Arcanum.TerrainViewer;
 /// window or the character editor over the main menu and leaves it idle; <c>ARC_SOAK_MINUTES</c> ends the viewer by itself with a
 /// summary line (the log's last row, after a <c>#</c>). Development opt-in through the environment: no argument, no change for the
 /// player. How to run it: docs/workflow/mac-crash-forensics.md ("Soak in the creation window").
+/// ARC-DEV-1398: the same timer also prints the resource line (<see cref="ViewerResourceLine.Prefix"/>) to the viewer log every 30 s in
+/// every run but a self-test, with or without a soak, and the latest reading goes into the bug report (Ctrl+B).
 /// </summary>
 public partial class TerrainViewerApp
 {
@@ -19,20 +21,28 @@ public partial class TerrainViewerApp
     private readonly List<ViewerSoakSample> _soakSamples = [];
     private long _soakStartMsec;
     private bool _soakWindowOpened;
+    private bool _resourceLogStarted;
 
-    /// <summary>Reads the soak environment and starts the counters (once, at the start; a self-test starts none).</summary>
+    /// <summary>Starts the resource line (once, at the start; a self-test starts none) and, when the soak environment asks, the soak's CSV.</summary>
     private void StartSoak()
     {
-        if (SelfTestBootstrap || _soak is not null) return;
+        if (SelfTestBootstrap || _resourceLogStarted) return;
+        _resourceLogStarted = true;
+        _soakStartMsec = (long)Time.GetTicksMsec();
         var settings = ViewerSoakSettings.Read(System.Environment.GetEnvironmentVariable, out var problem);
-        if (problem is not null) { GD.Print("ARC-DEV-2279 soak refused: " + problem); return; }
-        if (settings is null) return;
-        try { System.IO.File.WriteAllText(settings.LogPath, ViewerSoakSample.Header + "\n"); }
-        catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        { GD.Print($"ARC-DEV-2279 soak refused: the log '{settings.LogPath}' cannot be written ({failure.Message})"); return; }
-        _soak = settings; _soakStartMsec = (long)Time.GetTicksMsec();
-        GD.Print($"ARC-DEV-2279 soak start pid={System.Environment.ProcessId} log={settings.LogPath} interval={settings.IntervalSeconds}s minutes={(settings.RunMinutes?.ToString() ?? "-")} window={settings.Window}");
-        var timer = new Godot.Timer { WaitTime = settings.IntervalSeconds, OneShot = false, Autostart = true, ProcessCallback = Godot.Timer.TimerProcessCallback.Idle };
+        if (problem is not null) GD.Print("ARC-DEV-2279 soak refused: " + problem);
+        else if (settings is not null)
+        {
+            try
+            {
+                System.IO.File.WriteAllText(settings.LogPath, ViewerSoakSample.Header + "\n");
+                _soak = settings;
+                GD.Print($"ARC-DEV-2279 soak start pid={System.Environment.ProcessId} log={settings.LogPath} interval={settings.IntervalSeconds}s minutes={(settings.RunMinutes?.ToString() ?? "-")} window={settings.Window}");
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            { GD.Print($"ARC-DEV-2279 soak refused: the log '{settings.LogPath}' cannot be written ({failure.Message})"); }
+        }
+        var timer = new Godot.Timer { WaitTime = _soak?.IntervalSeconds ?? ViewerResourceLine.DefaultIntervalSeconds, OneShot = false, Autostart = true, ProcessCallback = Godot.Timer.TimerProcessCallback.Idle };
         timer.Timeout += SoakTick;
         AddChild(timer);
         SoakTick();
@@ -40,20 +50,30 @@ public partial class TerrainViewerApp
 
     private void SoakTick()
     {
-        if (_soak is not { } soak) return;
         var elapsed = (int)(((long)Time.GetTicksMsec() - _soakStartMsec) / 1000);
         try
         {
-            var sample = ReadSoakSample(elapsed);
-            _soakSamples.Add(sample);
-            System.IO.File.AppendAllText(soak.LogPath, sample.Line() + "\n");
+            var sample = ReadResourceSample(elapsed);
+            GD.Print(sample.Text()); // ARC-DEV-1398: the resource line, in the log of every run (and so in the bug report's log window)
+            if (_soak is { } soak)
+            {
+                _soakSamples.Add(sample);
+                System.IO.File.AppendAllText(soak.LogPath, sample.Line() + "\n");
+            }
         }
         // A reading must never end the viewer (the process's thread list can fail while a thread exits): the row is skipped.
         catch (Exception failure) { GD.Print("ARC-DEV-2279 soak reading skipped: " + failure.Message); }
-        if (soak.RunMinutes is { } minutes && elapsed >= minutes * 60) EndSoak();
+        if (_soak is { RunMinutes: { } minutes } && elapsed >= minutes * 60) EndSoak();
     }
 
-    private ViewerSoakSample ReadSoakSample(int elapsed)
+    /// <summary>ARC-DEV-1398: a fresh reading as the report's "Resources" line ("not readable" when the reading fails).</summary>
+    private string ResourceReportText()
+    {
+        try { return ReadResourceSample((int)(((long)Time.GetTicksMsec() - _soakStartMsec) / 1000)).Text(); }
+        catch (Exception failure) { return "not readable: " + failure.Message; }
+    }
+
+    private ViewerSoakSample ReadResourceSample(int elapsed)
     {
         long Monitor(Performance.Monitor monitor) => (long)Performance.GetMonitor(monitor);
         using var process = Process.GetCurrentProcess();
@@ -61,7 +81,7 @@ public partial class TerrainViewerApp
             Monitor(Performance.Monitor.RenderTextureMemUsed), Monitor(Performance.Monitor.RenderVideoMemUsed), Monitor(Performance.Monitor.RenderBufferMemUsed),
             Monitor(Performance.Monitor.ObjectCount), Monitor(Performance.Monitor.ObjectResourceCount), Monitor(Performance.Monitor.ObjectNodeCount),
             Monitor(Performance.Monitor.ObjectOrphanNodeCount), Monitor(Performance.Monitor.MemoryStatic), GC.GetTotalMemory(false), GcLiveBytes(),
-            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), process.WorkingSet64, process.Threads.Count);
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), process.WorkingSet64, process.Threads.Count, ViewerResourceLine.OpenFileDescriptors());
     }
 
     /// <summary>The bytes that survived the latest full collection (blocking or background), 0 before the first.</summary>

@@ -47,6 +47,7 @@ public static class InterfaceHd
     {
         if (ReferenceEquals(pack, Pack) && enabled == Enabled && generated == Generated) return false;
         Pack = pack; Enabled = enabled; Generated = generated;
+        AreaLensPlace.Unified = generated; // ARC-UI-2714: the generated window arts carry the lens at the common place
         HdOptimizedStore.Attach(pack, enabled);
         RefreshTextures();
         Changed?.Invoke();

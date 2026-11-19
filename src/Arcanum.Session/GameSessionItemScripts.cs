@@ -92,6 +92,35 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1594 (VT8, SA3): keeps the slot a run left on an item the session made from a prototype (a made item or one of the starting kit, which own no object row). The first write to such an item copies every point of the prototype's array
+    /// onto it (the original's setter deep-copies the whole array into an instance that owns none, <see cref="ItemScriptRuns"/>), then the written point replaces its copy. A slot equal to the one the item reads now changes nothing. Refused for an
+    /// invalid entity or a point or script number outside the store's range (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an entity that is no made or kit item (<see cref="GameSessionFailure.ItemNotAvailable"/>), a full
+    /// slot store (<see cref="GameSessionFailure.BudgetExceeded"/>) and an exhausted revision. One revision.
+    /// </summary>
+    public GameSessionMutationResult StoreItemScriptSlot(GameSessionVersion expected, SessionItemScriptSlot slot)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(slot);
+        if (!SessionValidation.Entity(slot.Entity) || slot.Point is < 0 or >= ScrPoint.Count || slot.Point == ScrPoint.DialogOverride
+            || slot.Script is < 0 or > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (MadeKind(slot.Entity) is null) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        var now = QueryItemScriptSlot(slot.Entity, slot.Point);
+        if (now is { } same && same.Script == slot.Script && same.LocalFlags == slot.LocalFlags && same.Counters == slot.Counters
+            || now is null && slot is { Script: 0, LocalFlags: 0, Counters: 0 }) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        var writes = new Dictionary<(string Entity, int Point), ScrSlot>();
+        foreach (var element in InheritedSlots(slot.Entity))
+            if (element is not { Script: 0, LocalFlags: 0, Counters: 0 }) writes[(slot.Entity, element.Point)] = new(element.Script, element.LocalFlags, element.Counters);
+        writes[(slot.Entity, slot.Point)] = new(slot.Script, slot.LocalFlags, slot.Counters);
+        if (writes.Keys.Count(key => !_inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _inventory.ScriptSlots.Count)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        foreach (var (key, value) in writes) _inventory.ScriptSlots[key] = value;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
+    /// <summary>
     /// ARC-UI-1458 (FR-ITEM-008, FR-MAGIC-007): the saved kind of an item the session holds that stands on a prototype and owns no object row in any
     /// map: a made item (<c>made:n</c>) or one of the starting kit (<c>kit:n</c>), wherever it is now: the hero's lists, the ground, or an NPC's
     /// or container's list. A viewer describes such an item (the item window of an Identify, of a hover) from it, since no map row names its
@@ -863,13 +892,13 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-DEV-366: <see cref="QueryHeroScriptStat"/> with the hero's effect list replaced by <paramref name="entries"/> (a move's earlier runs
-    /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values
-    /// (effects on them are not read, GS3); null for a stat the session does not hold and without a hero.
+    /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values with the
+    /// changes of that stat in the trial list laid over them (ARC-AI-2750); null for a stat the session does not hold and without a hero.
     /// </summary>
     private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, IReadOnlyList<int>? stored = null)
     {
         if (_hero is null) return null;
-        if (stat is ScriptStatLevel or ScriptStatAlignment) return QueryHeroScriptStat(stat);
+        if (stat is ScriptStatLevel or ScriptStatAlignment) return HeroLevelAlignmentStat(stat, entries, definitions);
         if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || QueryHeroLife() is not { } life) return null;
         var trial = TrialHero(stored);
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
@@ -1067,6 +1096,7 @@ public sealed partial class GameSessionOwner
         public bool IsTrapObject(ScrObjectRef attachee) => host.IsTrapObject(attachee);
         public ScrObjectRef? Player() => host.Player();
         public ScrObjectRef? Leader(ScrObjectRef critter) => host.Leader(critter);
+        public bool SameObject(ScrObjectRef a, ScrObjectRef b) => host.SameObject(a, b);
         public bool IsJilted(ScrObjectRef critter) => host.IsJilted(critter);
         public bool IsPc(ScrObjectRef critter) => host.IsPc(critter);
 
