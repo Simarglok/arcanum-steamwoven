@@ -25,7 +25,7 @@ that they draw Legacy in HD mode. No image, hash or pixel of the game is in this
 | of which only frames the viewer never draws (vial frames 1 to 14, marker frame 1) | 4 files |
 | Fonts the viewer draws, with HD glyph frames | 26 of 26 (221 to 223 of 225 frames each, 24 with 223; the missing frames carry no ink, except possibly one glyph of font 497, see Fonts) |
 | Portrait bitmaps (`portrait\`), with an HD frame | 126 of 126 |
-| Bitmaps outside `art/interface` that the pack cannot hold (no entry kind) | 113 (45 slides, 65 world-map tiles, 3 splash) |
+| Bitmaps outside `art/interface` that the pack cannot hold (no entry kind) | 57,635 (45 slides, 65 world-map bitmaps, 3 splash, 57,522 town-map tiles; the 6,677 tiles of the Vormantown module come on top, see [below](#bitmaps-outside-artinterface)) |
 | Lighting arts needed | 0 (the relit look is computed; it reads no pack art) |
 
 The gap that matters for the owner is small: **13 single arts and 61 schematic pictures** (plus art 787, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
@@ -121,6 +121,47 @@ Font 486 `LatinXCN30Font` is in the pack with 223 frames, so [#2843](https://git
 
 Priority of the font gap overall: **none**.
 
+## World map and town map screen (travel, ARC-RES-2983)
+
+Added on 2026-11-19 after the owner noted that the world map and travel screen was not visible in this census ([#2983](https://github.com/Simarglok/arcanum-steamwoven/issues/2983)).
+The interface arts of the window were already inside the totals above (they sit in the pack's `world-map` and `hud-bar` folders), but nothing named them as one screen,
+and its bitmaps (the 64 map tiles, `Map_Zoomed`, every town-map tile) were counted only partly or not at all. The window has three views, all on art 138 (windows G12 map view,
+G13 continent view, G14 town map of the [interface census](../ui/steamwoven-interface-census.md)). Travel is drawn in the same window ([viewer status](../project/status/viewer.md): Travel starts the journey in the window): the party marker, the waypoint markers and the
+route lines; the route lines are drawn by code (no art).
+
+**Interface arts of the window** (art numbers from `AreaWorldMapArtLayout`, `tools/terrain-viewer/Core/AreaWorldMapArt.cs`, sizes from the [arts table](../ui/steamwoven-interface-census-arts.tsv), 2026-11-19; pack status from the installed pack's `index.tsv`):
+
+| Art | Name | Size (Legacy) | Role | In the pack |
+| ---: | --- | --- | --- | --- |
+| 138 | `mapmain` | 800x400 | Window frame with the hole for the map picture, all three views | Complete (1 of 1) |
+| 139 | `navbutton` | 45x45 | Compass button | Complete (2 of 2) |
+| 811, 812, 813 | `MapZoomBut`, `MapWholeBut`, `MapTravelBut` | 111x56, 106x56, 57x57 | Zoom, whole-map and Travel buttons | Complete (2 of 2 each) |
+| 217 | `Nav_Cvr` | 207x35 | Cover over the view's bottom edge | Complete (1 of 1) |
+| 198 | `PCWinCvr` | 89x89 | The lens over the window's top left | Complete (1 of 1) |
+| 840 | `NewTimes16Font` | 4x21 glyphs | Area names and marker labels | 223 of 225 frames (the two missing carry no ink, see Fonts) |
+| 205, 206, 814 | `MM_Loc`, `MM_WayP`, `MM_LocNew` | 9x9, 9x9, 11x11 | Area, waypoint and newly found area markers | Frame 0 in the pack (the viewer reads frame 0 only); 814 has both frames |
+| 141, 142, 143, 144 | `mm_chest`, `mm_note`, `mm_ques`, `mm_skull` | 16x18, 13x17, 11x14, 19x18 | Note markers (town-map notes, quill notes) | Complete (1 of 1 each) |
+| **204** | `MM_Cross` | 11x11 and 13x13 | **The party marker**, drawn while the party stands and travels | **Missing, 2 of 2 frames** (row P2 in the table of real gaps) |
+| 193, 194, 195, 558 | `TMap_But`, `WMap_But`, `WMap_ON`, `TMap_ON` | 34x34 | The top strip's Map button (opens this window; the lit faces) | Complete |
+| 140, 199 | `wp_main`, `WP_Cover` | 130x152 | Not drawn by any window | Not needed ([see above](#not-drawn-by-the-viewer)) |
+
+So of the window's own interface arts only **one is missing, the party marker 204**, which is the one art the player watches move during travel.
+
+**Bitmaps of the window outside `art/interface`** (no entry kind in the pack; sizes from the viewer code and the [ledger](../research/ledger/ui-audio.md#world-map-window-arc-ui-073) rows WM53, WM77, WM78; counts from the directory of `modules/Arcanum.dat`, 2026-11-19, listed not decoded):
+
+| Group | Files | Size | View | Note |
+| --- | ---: | --- | --- | --- |
+| `worldmap\SmallMapChunks001..064.bmp` | 64 | 250x250, 8 bit | Map view: the 2000x2000 picture of the continent is these 64 tiles (8x8) | The one picture the player looks at during travel |
+| `worldmap\Map_Zoomed.bmp` | 1 | 365x365, 8 bit | Continent view (the zoom button) | Drawn in the window with black margins of 68 px |
+| `townmap\<town>\<town>NNNNNN.bmp` | 57,522 in 114 folders | 64x32 8-bit files, 256x128 screen pixels per tile (scale 0.25) | Town map (a PC in a sector with a town map), the tile under the PC marker and the fog | Largest: Tarant 6,191, Shrouded Hills 3,441, Caladon 3,193, Ashbury 2,991 |
+| `townmap\<town>\<town>.tmi` | 114 | 48-byte record | Town map layout (columns, rows, origin, scale 0.25) | Data, not art; no HD frame needed |
+| `Vormantown.dat` `townmap\` | 6,677 tiles | same | Town maps of the Vormantown module | Same question; the module is a separate archive of the installation |
+
+None of these can be in the pack today. The map tiles and `Map_Zoomed` were already in the decision issue [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952);
+the **town-map tiles were not** (they were "not listed" here), and they are by far the largest group (57.5 thousand files against 113 images for slides, world-map bitmaps and splash).
+They are map pictures, like the world map, so the answer of #2952 for the world-map tiles decides them as well; a redraw of 57.5 thousand tiles is not a realistic job, so
+if the owner picks B for the world map, the town maps are a separate, much bigger decision.
+
 ## Bitmaps outside `art/interface`
 
 The pack format holds interface ARTs (`sprite` entries) and portraits (`portrait` entries) only. Other bitmaps that the interface draws cannot be in the pack today.
@@ -129,11 +170,11 @@ The pack format holds interface ARTs (`sprite` entries) and portraits (`portrait
 | --- | ---: | --- | --- | --- |
 | `portrait\` heroes and NPCs | 126 | 64x64 (78), 128x128 (48) | Sheet, hover panel, loot, barter, follower frames, creation, pre-made browser | **Complete**: all 126 have a `portrait` entry |
 | `slide\` and `module template\slide\` | 42 + 3 | 800x600 | Ending slides, death cover, credits | No entry kind; priority N until [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952) is decided |
-| `worldmap\` | 65 | 250x250 (64), 365x365 (1) | World map window (64 tiles) | Same |
+| `worldmap\` | 65 | 250x250 (64), 365x365 (1) | World map window (64 tiles and `Map_Zoomed`; [section above](#world-map-and-town-map-screen-travel-arc-res-2983)) | Same |
 | `art\splash\` | 3 | 800x400 | Not found drawn by a window ([census](../ui/steamwoven-interface-census.md): `splash2` has no window row) | Same, lower |
 | `players\` | 24 | 64x64 (12), 128x128 (12) | Saved multiplayer characters (`.mpc`); the pre-made browser reads `portrait\`, not these | N (network play) |
 | `modules\arcanum\save\` | 3 | 468x300 | Save slot screenshots written by the game at run time | N (not shipped art) |
-| `townmap\` | not listed | small | Town map tiles under the town map window | Not counted: not interface chrome; same question as the slides ([#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952)) |
+| `townmap\` | 57,522 (114 town maps; 6,677 more in `Vormantown.dat`) | 256x128 per tile | Town map window ([section above](#world-map-and-town-map-screen-travel-arc-res-2983)) | Same question as the slides ([#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952), scope widened by #2983); by far the largest group |
 
 ## Lighting
 
@@ -148,7 +189,8 @@ lighting, not HD art. **Missing lighting images: 0.**
 | [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) | The 13 single arts of the table above | Decide A (redraw and add) or B (accept Legacy) per priority |
 | [#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) | 61 schematic record pictures | Same |
 | [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) | Art 787 | Existing |
-| [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952) | Slides, world-map tiles, splash | Decide whether HD covers them |
+| [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952) | Slides, world-map tiles and `Map_Zoomed`, town-map tiles, splash | Decide whether HD covers them |
+| [#2983](https://github.com/Simarglok/arcanum-steamwoven/issues/2983) | This section (census correction) | None |
 
 No art is made by a thread; frames reach the pack by the owner's pipeline and `hd_pack.py plan/apply --add-new` with the game closed ([HD pack workflow](../workflow/hd-pack.md)).
 Re-run the census after a pack change by repeating the join of the method above; the numbers of this note are of the pack installed on 2026-11-19 (7,075 entries, the redraw build of 2026-11-08 with the traced and Codex fonts and the portraits added since).
