@@ -18,7 +18,10 @@ public static class SteamwovenWindowZone
 
     /// <summary>The scale of one original unit in device pixels: `f · 3.6` (the exact fraction of the layout, as a double).</summary>
     public static double UnitScale(SteamwovenHudPlan plan) =>
-        (plan.Layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator)).ToDouble();
+        plan.Column?.UnitScale ?? (plan.Layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator)).ToDouble();
+
+    /// <summary>ARC-UI-2890: the window zone of the plan: the column's (as wide as the column, at its unit scale `3.6 · k · f`) in column mode, else the full-width layout's.</summary>
+    public static PixelRect ZoneOf(SteamwovenHudPlan plan) => plan.WindowZone;
 
     /// <summary>
     /// A window <paramref name="widthUnits"/> × <paramref name="heightUnits"/> units in the window zone of a window of <paramref name="width"/> × <paramref name="height"/> device pixels, centred in the zone; null
@@ -44,7 +47,7 @@ public static class SteamwovenWindowZone
     /// <summary>The same for a plan already built.</summary>
     public static SteamwovenWindowPlace Body(SteamwovenHudPlan plan, int widthUnits, int heightUnits)
     {
-        var zone = plan.Layout.WindowZone;
+        var zone = ZoneOf(plan);
         var unit = UnitScale(plan);
         var x = Math.Round(zone.X + (zone.Width - widthUnits * unit) / 2, MidpointRounding.AwayFromZero);
         var y = Math.Round(zone.Y + (zone.Height - heightUnits * unit) / 2, MidpointRounding.AwayFromZero);
@@ -63,7 +66,7 @@ public static class SteamwovenWindowZone
     public static SteamwovenWindowPlace Screen(SteamwovenHudPlan plan, int bodyTopUnits)
     {
         var frame = plan.Layout.Frame;
-        var zone = plan.Layout.WindowZone;
+        var zone = ZoneOf(plan);
         var unit = UnitScale(plan);
         var screenHeight = AreaGameBarLayout.ScreenHeight * unit;
         var x = Math.Round(zone.X + (zone.Width - ScreenWidthUnits * unit) / 2, MidpointRounding.AwayFromZero);
