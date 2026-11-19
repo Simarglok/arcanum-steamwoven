@@ -1054,6 +1054,9 @@ public sealed partial class GameSessionOwner
                 if (kill.Disposition == GameSessionDisposition.Rejected) stepFailure = kill.Failure;
             }
         }
+        // ARC-COMBAT-2873: the kill step's alignment step (0x45DC90, flag 1) follows the award and comes before the kill log (the hero is the killer's PC leader); it needs no experience data.
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
+            stepFailure = RunKillAlignment(target);
         // ARC-UI-097: the hero's kill and injury log (0x4F5330 after the death's experience, 0x4F5690 in the damage function): the NPC the hero
         // killed, or the hero's own critical self-hit (the attacker is the victim: the self-inflicted cause).
         if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
