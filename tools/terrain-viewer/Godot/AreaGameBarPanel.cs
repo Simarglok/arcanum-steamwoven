@@ -202,6 +202,31 @@ public partial class AreaGameBarPanel : CanvasLayer
     public static SteamwovenWindowPlace? ZoneScreen(Vector2 size, int bodyTopUnits) =>
         SteamwovenOn ? SteamwovenWindowZone.Screen((int)size.X, (int)size.Y, bodyTopUnits) : null;
 
+    private static (int Width, int Height, SteamwovenLayoutOptions Options, SteamwovenFullScreenPlan? Plan)? _columnMenuPlan;
+
+    /// <summary>
+    /// ARC-UI-2891: the column-mode plan of the full-screen and two-strip menus for a window of <paramref name="size"/> (the 800 × 600 plate fitted to the window's height, black beside it), or null while the layout is
+    /// off (the HD option or the generated interface off), the column option is not set (<see cref="SteamwovenHud.Options"/>) or the window is below f = 0.25. Looked up once per size and options (the views ask several times a frame).
+    /// </summary>
+    public static SteamwovenFullScreenPlan? ColumnMenuPlan(Vector2 size)
+    {
+        var options = SteamwovenHud.Options;
+        if (!SteamwovenOn || options.Column is null) return null;
+        var (width, height) = ((int)size.X, (int)size.Y);
+        if (_columnMenuPlan is { } last && last.Width == width && last.Height == height && Equals(last.Options, options)) return last.Plan;
+        var plan = SteamwovenColumnMenu.Plan(width, height, options);
+        _columnMenuPlan = (width, height, options, plan);
+        return plan;
+    }
+
+    /// <summary>
+    /// ARC-UI-2891: the place of a two-strip screen (the save and load lists, the pre-made, new-character and shop windows: an 800 × 600 screen whose 800 × 400 body lies between its own two strips,
+    /// <paramref name="bodyTopUnits"/> from its top). With the column option it is the fitted plate (the window's height from edge to edge, centred); otherwise the window zone's place (<see cref="ZoneScreen"/>);
+    /// null while the layout is off.
+    /// </summary>
+    public static SteamwovenWindowPlace? TwoStripScreen(Vector2 size, int bodyTopUnits) =>
+        ColumnMenuPlan(size) is { } plan ? SteamwovenColumnMenu.Place(plan) : ZoneScreen(size, bodyTopUnits);
+
     /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
     public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
 

@@ -1,112 +1,123 @@
 # TRD: Steamwoven interface — layout, kit, pipeline and work breakdown
 
-Status: **requirements for implementation, 2026-11-16** (work item ARC-UI-2447). The decision and its reasons are in
+Status: **requirements, rewritten 2026-11-19** (work item ARC-DOC-2893, [#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893)) after the owner's verdict on the column check ([#2892](https://github.com/Simarglok/arcanum-steamwoven/issues/2892)); first written 2026-11-16 (ARC-UI-2447). The decision and its reasons are in
 the [ADR](steamwoven-interface-adr.md); this page says what to build and how it is checked. Epic:
 [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446). Every requirement has an id `SWI-<area>-<n>`;
-issues and PRs cite the ids. Values marked *provisional* are fixed by the named owner decision. Nothing here is
-implemented yet.
+issues and PRs cite the ids. Values marked *provisional* are fixed by the named owner decision. **State at 2026-11-19:** the column model of the layout is merged ([#2889](https://github.com/Simarglok/arcanum-steamwoven/issues/2889)); the viewer draws the column in
+[#2890](https://github.com/Simarglok/arcanum-steamwoven/issues/2890) (play screen and windows; by owner decision it already carries the 4:3 scale rule of SWI-LAY-1..3, and its PR lists which points of [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) it covers) and [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891) (full-screen menus); #2925 completes the rule (the follower group at the window's edge and the points #2890 leaves);
+[#2936](https://github.com/Simarglok/arcanum-steamwoven/issues/2936) puts the Original look in the same composition; [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926) removes the full-width layout. The kit, its tools and the runtime composition are not built. The rules below are the target; the [superseded rules](#superseded-rules-of-2026-11-16) are what the 2026-11-16 text said.
 
 ## Terms
 
 | Term | Meaning |
 | --- | --- |
-| Master | A part as authored for the 3840 × 2160 reference screen, in master pixels (px). |
+| Composition | The one centred 4:3 block of the Steamwoven interface: the original 800 × 600 units, top strip 41, window zone (or the world) 400, bottom strip 159. |
+| Master | A part as authored for the master composition of 2880 × 2160 px, which is the 3840 × 2160 reference screen without its 480 px side areas (the sides show the world or black). Measured in master pixels (px). |
 | Step | One of the four baked sets: ×1, ×2/3, ×1/2, ×1/3 of the masters. |
-| Frame | The rectangle of the window the interface is laid out in (the window minus any black bars). |
-| `f` | Device pixels per master pixel for the current frame. |
+| `s` | Device pixels per UI unit for the current window (fractional). |
+| `f` | Device pixels per master pixel for the current window: `f = s / 3.6`. |
 | UI unit | One pixel of the original 800 × 600 layout. In the master, 1 unit = 3.6 px. |
-| Band | Top panel, middle band (world or menu backdrop), bottom panel. |
-| Centre block | The 2880 px (800 units) wide part of a band that keeps the original layout. |
-| Sides | The parts of a band left and right of the centre block. |
-| Family | A group of menus whose backgrounds share one material and so one backdrop. |
-| Original look / Steamwoven look | The interface with the HD option off / on ([ADR](steamwoven-interface-adr.md#context)). |
+| Strip | The top strip (800 × 41 units) or the bottom strip (800 × 159 units) of the composition. |
+| Window zone | The 800 × 400 units between the strips: the world on the play screen, a menu window when one is open. |
+| Sides | The parts of the window left and right of the composition (above and below it when the window is narrower than 4:3). They show the world or black, never wood. |
+| Family | A group of menus whose backgrounds share one material and so one window-background set. |
+| Original look / Steamwoven look | The interface with the HD option off / on ([ADR](steamwoven-interface-adr.md#context)). Both use the one composition ([Original look in the composition](#original-look-in-the-composition)); they differ in art, in what the sides show and in the world's scale. |
 
 ## Screen frame and scale
 
-- **SWI-LAY-1** The reference screen is 3840 × 2160. For a window of W × H device pixels,
-  `f = min(W / 3840, H / 2160)`.
-- **SWI-LAY-2** An aspect from 16:10 to 16:9 inclusive is laid out natively: the frame is the whole window.
-- **SWI-LAY-3** A narrower window (4:3, 5:4) gets a frame of W × round(2400 · f), centred, black bars at the top and
-  bottom. A wider window (21:9, 32:9) gets a frame of round(3840 · f) × H, centred, black bars at the sides. A bar
-  under 4 px per side is dropped: the frame is the whole window and the sides take the difference.
-- **SWI-LAY-4** The baked step is the smallest of ×1, ×2/3, ×1/2, ×1/3 that is ≥ `f`. Above ×1 (5K screens) the ×1
+- **SWI-LAY-1** The Steamwoven layout is the composition scaled to the window. For a window of W × H device pixels,
+  `s = min(W / 800, H / 600)` (fractional) and `f = s / 3.6 = min(W / 2880, H / 2160)`. At the 3840 × 2160 reference `s` = 3.6, `f` = 1 and the composition is the master composition, 2880 × 2160 px.
+- **SWI-LAY-2** Every aspect is supported by scaling the one centred composition; there is no other layout. 4:3 is native: the composition fills the window and there are no sides. A wider window (16:10, 16:9, 21:9, 32:9)
+  is height-limited: the composition has the window's full height and the sides are left and right of it. A narrower window (5:4 and below) is width-limited: the composition has the window's full width, centred, with black above and below.
+- **SWI-LAY-3** The composition is `800 · s` × `600 · s` px, centred; its left, right, top and bottom edges are each the `round` of their own exact position (halves up), so its device size is the difference of two rounded edges (2560 × 1600: 213 and 2347, a width of 2134) and the sides are `round` of their own exact edge too. The sides show **the world** on the play screen and in windows opened over it (the world is drawn to the window's edges, not
+  cropped to the composition, and is dimmed and desaturated while a window is open), and **black** beside full-screen menus and two-strip menus; the strip above and below a width-limited composition is always black. Nothing is drawn as wood in a gap: there are no gap rectangles, no frame bars at 16:10 and wider, and no
+  pillarbox at 21:9 and 32:9.
+- **SWI-LAY-4** The baked step is the smallest of ×1, ×2/3, ×1/2, ×1/3 that is ≥ `f`. Above ×1 (`f` > 1: 5K screens, 3840 × 2400) the ×1
   set is scaled up (a recorded limit, see [open questions](#open-questions)). Below ×1/3 the ×1/3 set is scaled down
-  to `f` = 0.25; below 0.25 the Steamwoven interface is not supported and the Original look is used.
+  to `f` = 0.25; below 0.25 (a window narrower than 720 px at 4:3) the Steamwoven interface is not offered and the Original look, which has its own composition scale (SWI-ORG-1), is used.
 - **SWI-LAY-5** The run-time scale is `f / step`. `f`, the step choice and the test for an exact step are computed
-  exactly (integers or rationals, for example `3 · W ≥ 2 · 3840`), never with floating-point equality. When it is exactly 1 the parts are drawn at whole device pixels with
+  exactly (integers or rationals; for a width-limited window `f` is exactly the step 2/3 when `3 · W = 2 · 2880` and is at most 2/3 when `3 · W ≤ 2 · 2880`), never with floating-point equality. When it is exactly 1 the parts are drawn at whole device pixels with
   no filtering; otherwise with linear filtering from the baked set.
 - **SWI-LAY-6** W × H are device (backing) pixels, including the macOS backing scale.
-- **SWI-LAY-7** Every master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
-  (6 px = 4, 3 and 2 px). A device position is `round(master position · f)`, computed per edge (not per size), so
-  neighbouring parts share their edges; halves round up. The two panel heights are the exception: each is `round(height · f)`
-  from the frame's own top or bottom edge, as the reference table below shows (1680 × 945: bottom panel 200, where rounding the bottom panel's top edge would give 199).
+- **SWI-LAY-7** Every kit master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
+  (6 px = 4, 3 and 2 px); the strip heights are the open exception ([open questions](#open-questions)). A device position is `round(master position · f)`, computed per edge (not per size), so
+  neighbouring parts share their edges; halves round up. The two strips are the exception: each is `round(units · s)` high from the composition's own top or bottom edge (41 and 159 units) and the window zone is what is left
+  between them, so a strip never loses a pixel to a neighbour's rounding.
 
-Reference table (band heights at the default values of SWI-LAY-10; "bars" are per side, horizontal / vertical). The layout
-model's unit tests use these numbers ([#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450)):
+Reference table of the target model (exact numbers; "sides" and "black" are the widths left / right and above / below the composition). The layout model's unit tests use these numbers ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925), SWI-VER-1):
 
-| Window | Frame | `f` | Step | Run-time scale | Top | Middle | Bottom | Centre | Side | Bars |
-| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 3840 × 2160 | 3840 × 2160 | 1.0000 | 1 | 1.000 | 120 | 1584 | 456 | 2880 | 480 | 0 / 0 |
-| 2560 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 0 / 0 |
-| 1920 × 1080 | 1920 × 1080 | 0.5000 | 1/2 | 1.000 | 60 | 792 | 228 | 1440 | 240 | 0 / 0 |
-| 1280 × 720 | 1280 × 720 | 0.3333 | 1/3 | 1.000 | 40 | 528 | 152 | 960 | 160 | 0 / 0 |
-| 3840 × 2400 | 3840 × 2400 | 1.0000 | 1 | 1.000 | 120 | 1824 | 456 | 2880 | 480 | 0 / 0 |
-| 2560 × 1600 | 2560 × 1600 | 0.6667 | 2/3 | 1.000 | 80 | 1216 | 304 | 1920 | 320 | 0 / 0 |
-| 1920 × 1200 | 1920 × 1200 | 0.5000 | 1/2 | 1.000 | 60 | 912 | 228 | 1440 | 240 | 0 / 0 |
-| 1280 × 800 | 1280 × 800 | 0.3333 | 1/3 | 1.000 | 40 | 608 | 152 | 960 | 160 | 0 / 0 |
-| 3024 × 1964 | 3024 × 1890 | 0.7875 | 1 | 0.787 | 95 | 1436 | 359 | 2268 | 378 | 0 / 37 |
-| 3456 × 2234 | 3456 × 2160 | 0.9000 | 1 | 0.900 | 108 | 1642 | 410 | 2592 | 432 | 0 / 37 |
-| 2880 × 1800 | 2880 × 1800 | 0.7500 | 1 | 0.750 | 90 | 1368 | 342 | 2160 | 360 | 0 / 0 |
-| 1366 × 768 | 1366 × 768 | 0.3556 | 1/2 | 0.711 | 43 | 563 | 162 | 1024 | 171 | 0 / 0 |
-| 1600 × 900 | 1600 × 900 | 0.4167 | 1/2 | 0.833 | 50 | 660 | 190 | 1200 | 200 | 0 / 0 |
-| 1680 × 945 | 1680 × 945 | 0.4375 | 1/2 | 0.875 | 53 | 692 | 200 | 1260 | 210 | 0 / 0 |
-| 3440 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 440 / 0 |
-| 5120 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 1280 / 0 |
-| 1024 × 768 | 1024 × 640 | 0.2667 | 1/3 | 0.800 | 32 | 486 | 122 | 768 | 128 | 0 / 64 |
-| 5120 × 2880 | 5120 × 2880 | 1.3333 | 1 | 1.333 | 160 | 2112 | 608 | 3840 | 640 | 0 / 0 |
+| Window | `s` | `f` | Step | Run-time scale | Composition | Top strip | Window zone | Bottom strip | Sides | Black |
+| --- | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: | --- | --- |
+| 3840 × 2160 | 3.6000 | 1.0000 | 1 | 1.000 | 2880 × 2160 | 148 | 1440 | 572 | 480 / 480 | 0 / 0 |
+| 2560 × 1440 | 2.4000 | 0.6667 | 2/3 | 1.000 | 1920 × 1440 | 98 | 960 | 382 | 320 / 320 | 0 / 0 |
+| 1920 × 1080 | 1.8000 | 0.5000 | 1/2 | 1.000 | 1440 × 1080 | 74 | 720 | 286 | 240 / 240 | 0 / 0 |
+| 1280 × 720 | 1.2000 | 0.3333 | 1/3 | 1.000 | 960 × 720 | 49 | 480 | 191 | 160 / 160 | 0 / 0 |
+| 3840 × 2400 | 4.0000 | 1.1111 | 1 | 1.111 | 3200 × 2400 | 164 | 1600 | 636 | 320 / 320 | 0 / 0 |
+| 2560 × 1600 | 2.6667 | 0.7407 | 1 | 0.741 | 2134 × 1600 | 109 | 1067 | 424 | 213 / 213 | 0 / 0 |
+| 1920 × 1200 | 2.0000 | 0.5556 | 2/3 | 0.833 | 1600 × 1200 | 82 | 800 | 318 | 160 / 160 | 0 / 0 |
+| 1280 × 800 | 1.3333 | 0.3704 | 1/2 | 0.741 | 1066 × 800 | 55 | 533 | 212 | 107 / 107 | 0 / 0 |
+| 3024 × 1964 | 3.2733 | 0.9093 | 1 | 0.909 | 2618 × 1964 | 134 | 1310 | 520 | 203 / 203 | 0 / 0 |
+| 3456 × 2234 | 3.7233 | 1.0343 | 1 | 1.034 | 2978 × 2234 | 153 | 1489 | 592 | 239 / 239 | 0 / 0 |
+| 2880 × 1800 | 3.0000 | 0.8333 | 1 | 0.833 | 2400 × 1800 | 123 | 1200 | 477 | 240 / 240 | 0 / 0 |
+| 1366 × 768 | 1.2800 | 0.3556 | 1/2 | 0.711 | 1024 × 768 | 52 | 512 | 204 | 171 / 171 | 0 / 0 |
+| 1600 × 900 | 1.5000 | 0.4167 | 1/2 | 0.833 | 1200 × 900 | 62 | 599 | 239 | 200 / 200 | 0 / 0 |
+| 1680 × 945 | 1.5750 | 0.4375 | 1/2 | 0.875 | 1260 × 945 | 65 | 630 | 250 | 210 / 210 | 0 / 0 |
+| 3440 × 1440 | 2.4000 | 0.6667 | 2/3 | 1.000 | 1920 × 1440 | 98 | 960 | 382 | 760 / 760 | 0 / 0 |
+| 5120 × 1440 | 2.4000 | 0.6667 | 2/3 | 1.000 | 1920 × 1440 | 98 | 960 | 382 | 1600 / 1600 | 0 / 0 |
+| 1024 × 768 | 1.2800 | 0.3556 | 1/2 | 0.711 | 1024 × 768 | 52 | 512 | 204 | 0 / 0 | 0 / 0 |
+| 1280 × 1024 | 1.6000 | 0.4444 | 1/2 | 0.889 | 1280 × 960 | 66 | 640 | 254 | 0 / 0 | 32 / 32 |
+| 5120 × 2880 | 4.8000 | 1.3333 | 1 | 1.333 | 3840 × 2880 | 197 | 1920 | 763 | 640 / 640 | 0 / 0 |
 
-The two MacBook rows (3024 × 1964, 3456 × 2234) are narrower than 16:10 and get bars of 37 px; in macOS full screen
-the area beside the camera notch is usually left out, which may make the window 16:10 already (to check on the
-device, not a requirement).
+The composition's edges are rounded one by one (SWI-LAY-3), so the sides of an odd leftover are equal (2560 × 1600: 213 / 213, a 2134 px composition). The strip columns are the strips' device heights by SWI-LAY-7 (`round(41 · s)`, `round(159 · s)`); the window zone is the rest, so it is 400 · `s` to within a pixel (1600 × 900: 599). The two MacBook rows (3024 × 1964, 3456 × 2234) are 16:10-like and scale like any other
+height-limited window; in macOS full screen the area beside the camera notch is usually left out, which may change the window's size (to check on the device, not a requirement).
 
-Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-11-16 from
-[store.steampowered.com/hwsurvey](https://store.steampowered.com/hwsurvey/Steam-Hardware-Software-Survey-Welcome-to-Steam)):
-1920 × 1080 50.23 %, 2560 × 1440 21.82 %, 2560 × 1600 5.46 %, 3840 × 2160 5.05 %, 3440 × 1440 3.23 %,
+Why every aspect: in the Steam Hardware Survey of October 2026 (primary display, read 2026-11-16 from
+[store.steampowered.com/hwsurvey](https://store.steampowered.com/hwsurvey/Steam-Hardware-Software-Survey-Welcome-to-Steam)) 1920 × 1080 is 50.23 %, 2560 × 1440 21.82 %, 2560 × 1600 5.46 %, 3840 × 2160 5.05 %, 3440 × 1440 3.23 %,
 1920 × 1200 2.97 %, 1366 × 768 2.25 %; 16:10 resolutions together about 11 %; 2560 × 1080, 3440 × 1440 and
-5120 × 1440 together about 4.3 %; no 4:3 resolution is listed (all below the 3.30 % "Other").
+5120 × 1440 together about 4.3 %; no 4:3 resolution is listed (all below the 3.30 % "Other"). Scaling one composition costs nothing per aspect, so the 2026-11-16 rule of a frame with bars for narrower and wider screens is dropped (owner verdict 2026-11-19).
 
 ## Play screen layout
 
-- **SWI-LAY-10** Three bands: top panel 120 px, bottom panel 456 px (master; **owner decision 2026-11-17**,
-  [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453), after the [prototype](#prototype-of-the-play-screen-arc-ui-2452)'s comparison of this pair with the original strips' own 150 and 570: the original's
-  41 and 159 units × 3.6 = 147.6 and 572.4, rounded to the grid), and the middle band = frame height − top − bottom. Both heights are multiples of 6 and together at most 720, so the window zone of SWI-BDR-2 always fits
-  a 16:9 middle band; at 120 and 456 the middle band is 1584 px at 16:9 and 1824 px at 16:10, and the zone has 72 px above and below it at 16:9. The layout model's options hold the pair in one place.
-- **SWI-LAY-11** Each panel spans the whole frame width. The centre block (2880 px, the width of the window zone of SWI-BDR-2) is centred; the sides take the
-  rest. **Owner decision 2026-11-18 (reverses the choice of 2026-11-17 in [#2526](https://github.com/Simarglok/arcanum-steamwoven/issues/2526); ARC-UI-2608 reverted): variant A, the whole HUD scales proportionally, one centre scale k = 0.8 with a 2304 px block, the sides take the rest, nothing is squashed. The owner took 0.8 for a proportional reduction; variant B, tried in the viewer (PR #2642), looked squashed. The text below describes variant B, which the layout model (`SteamwovenControls`) still computes and the viewer does not use; it is not the rule in force:** in B the centre block keeps its
-  width, so every horizontal offset and width of a control is the original's × 3.6 snapped to the 6 px grid, and the HUD text (message window, clock, counters) has the scale `f · 3.6` of the windows' text. Only the vertical
-  placement fits the band, because the bands cannot hold the original strips (147.6 and 572.4 px at that scale): the kit's hardware is drawn for them. The rule per band (G = the 6 px grid; centred = `floor_G((band − height) / 2)`,
-  a shift of at most 3 px; the numbers are for 120 and 456; the layout model, `SteamwovenControls`, holds the same rule for any pair):
-  - top panel T: a button (Character, Logbook, Map, Inventory) is a square of `min(120, T − 24)` = 96 (12 px above and below), Fate Points and Sleep `min(84, T − 48)` = 72, the clock window 462 wide and `min(108, T − 36)` = 84 high, all
-    centred; the experience strip hangs over the band's lower edge, 1380 × 48 with its top `T − 12`;
-  - bottom panel B: the three right-hand buttons (Skills, Spells, Schematics) are squares of `min(138, floor_G((B − 96) / 3))` = 120 at tops 18, 18 + side + 30 and 18 + 2 · (side + 30) (the original's stagger of x kept); the Combat button is the same square, centred; the two
-    vials (102 wide, `min(318, floor_G(B − 36))` = 318 high) and the message window (1380 wide, `min(294, floor_G(B − 36))` = 294 high) are centred, the hover image is `min(228, message height − 48)` = 228 square at (24, 24) in the message window.
-  The rectangles at 120 / 456, in master px from the centre block's left edge and the band's top edge (x, y, width × height):
-  top: Character 12, 12, 96; Logbook 150, 12, 96; Map 282, 12, 96; Inventory 414, 12, 96; Fate Points 564, 24, 72; Sleep 2178, 24, 72; clock 2334, 18, 462 × 84; experience strip 762, 108, 1380 × 48;
-  bottom: Combat 312, 168, 120; Skills 2496, 18, 120; Spells 2334, 168, 120; Schematics 2496, 318, 120; health vial 48, 66, 102 × 318; fatigue vial 2712, 66, 102 × 318; message window 762, 78, 1380 × 294; hover image 786, 102, 228.
-  A control's device rectangle takes each edge from its own exact master position, from the centre block's left edge and the band's top edge, halves up (SWI-LAY-7). The original positions the model reads are the bar layout's
-  (the viewer's test compares them).
-- **SWI-LAY-12** A panel is the panel board (one continuous material for both panels) plus hardware layers (sockets,
-  rings, vial housings, the message window frame, rails, buttons). The sides show the same board: same material, tone
-  and texture, no visible join at the centre block's edges (measured by SWI-VER-5). At this stage the sides have no controls and no decor.
+- **SWI-LAY-10** The composition's three bands are the original's: top strip 41 units, window zone 400, bottom strip 159 (master 147.6, 1440 and 572.4 px, which are off the 6 px grid: [open question](#open-questions); device heights by SWI-LAY-7). Only this pair (k = 1) exists: the thin pair of
+  120 / 456 master px (owner decision 2026-11-17, [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453)) and `k` = 0.8 are retired, because the strips and an open window together are exactly 4:3 at the original proportions and the composition fills the height.
+- **SWI-LAY-11** The HUD is the original layout at `s`: every control sits at its original unit position and size × `s`, the HUD text (message window, clock, counters) is drawn at the same scale, and nothing is re-laid by a layout
+  model. The strips are composition-wide (800 units). Elements that stand at an edge over the world (the spell pane, the combat list, text bubbles and floaters) are placed against the window's edges, not against the composition; the follower group has its own rule, SWI-LAY-16.
+- **SWI-LAY-12** A strip is one image (the strip art) plus hardware layers over it (sockets, rings, vial housings, the message window frame, rails, buttons; hardware is a separate layer, not baked into the strip). There is **no board and no sides**:
+  beside the composition the world shows. Each strip's outer ends carry an **end cap** (a brass edge and a soft shadow on the world, kit kind `cap`), so the strip does not end in a bare cut.
 - **SWI-LAY-13** Hit areas are the rectangles (or circles) of the drawn parts from the layout, not the original's
   pixel masks.
-- **SWI-LAY-14** With no menu open the middle band is the world view. The out-of-sight rules follow the owner decision
+- **SWI-LAY-14** With no menu open the window zone is the world view, and the world is visible at the sides to the window's edges (at the scale of SWI-LAY-17). The out-of-sight rules follow the owner decision
   of 2026-11-07 ([decisions](../architecture/decisions.md), "Out-of-sight rules and the view": Steamwoven tests the
-  drawn view).
+  drawn view); how wide the drawn world may be on an ultrawide window is an [open question](#open-questions).
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
-  ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)).
+  ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)): the original's fonts (HD frames in HD), sizes per step in the
+  [font note](steamwoven-interface-fonts.md).
+- **SWI-LAY-16** The follower group moves as one: the portraits, the scroll arrows and the show/hide button (FP1: the button 67 × 13 units at (0, 428), the arrows at (0, 415) and (33, 415), the portraits at x 11, y 50 + 62 per slot) keep their original heights at the composition's scale `s`
+  and stand at the **window's** left edge, over the world, instead of the composition's. The button stands on a small brass backing of its own (a kit part of the strips batch). At 4:3 the group is identical to the original ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925)).
+
+- **SWI-LAY-17** **World zoom (owner decision 2026-11-19, [#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937)).** The world zoom stays a **player setting for now**: the existing in-game zoom option is kept and not changed by this layout. The **working reference look is the composition's scale `s`** (option B of the issue; the default is not fixed, see below): the world scales with the interface, the play view inside the window zone shows the same area as the original (800 × 400 units), the sides add only what lies beyond it, and sprites match the interface's size. Not chosen as the reference: world pixels at 1× (A, much more world on a large screen, small sprites). The HD sprites question stays closed (world frames 1×, decision 2026-11-15). The Original look draws its world at `s` only inside the composition (SWI-ORG-3). **To revisit:** by the owner's report (to verify in the viewer) the game runs today with a 200 % world zoom at 2560 × 1440 in full screen and the owner is fully happy with it; the composition's `s` there is 2.4 (240 %). The final default (the setting's default and its steps relative to `s`) is decided with the owner later.
+
+## Superseded rules of 2026-11-16
+
+Owner verdict 2026-11-19 ([#2892](https://github.com/Simarglok/arcanum-steamwoven/issues/2892)): the full-width layout read as a letterboxed film and the column's wood in vertical gaps "looks poor", so the layout above replaces these rules. Their ids are reused by the rules above or by [Window backgrounds and plates](#window-backgrounds-and-plates); code comments that cite the old meanings are removed with the full-width code ([#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926)).
+
+| Old rule (2026-11-16 / 2026-11-17 / 2026-11-18) | Now |
+| --- | --- |
+| SWI-LAY-1..3: `f = min(W / 3840, H / 2160)`, a frame of 16:10 to 16:9, a 16:10 frame with bars for narrower windows, a 16:9 frame with bars (pillarbox) for 21:9 and 32:9, bars under 4 px dropped | SWI-LAY-1..3: `s = min(W / 800, H / 600)`, one composition at every aspect, world or black at the sides |
+| the reference table of the 16:10 / 16:9 frames (bands 120 / 456, centre block 2880, sides, bars) | the reference table above |
+| SWI-LAY-10: thin strips 120 and 456 master px (and the prototype's `k` = 0.8 centre block) | SWI-LAY-10: the original 41 / 400 / 159 units, `k` = 1 |
+| SWI-LAY-11: panels span the whole frame, the sides continue the board, variant A (`k` = 0.8, 2304 px block) or variant B (controls placed by the layout model in the bands) | SWI-LAY-11: the original layout at `s`; no layout-model placement of controls |
+| SWI-LAY-12: one continuous board for both panels, the sides show the same board without a join | SWI-LAY-12: strip art, no board, no sides, end caps |
+| SWI-BDR-1: a menu's backdrop fills the whole middle band; SWI-BDR-3: a 3840 × 1824 backdrop master with crops and cover scaling; SWI-BDR-5: halves continue outwards to the frame's edges; SWI-BDR-6: a 3840 × 2400 full-screen master covering the panels; SWI-BDR-7: sides continued outwards without a join | SWI-BDR-1..8 below: window backgrounds of the zone's size, full-screen plates of the composition's size, nothing outward |
+| kit kinds: a full-width `board` (one image for both panels); a `backdrop` that continues outwards | kit kinds below: `board` is the strip art, `backdrop` a window background or a plate, `cap` is new |
+| the open question of the window zone's vertical place on 16:10 | closed: the composition is exactly 4:3, the zone is directly under the top strip |
 
 ## Prototype of the play screen (ARC-UI-2452)
+
+> **Historical record of the full-width prototype (2026-11-16 to 2026-11-18), superseded 2026-11-19.** The strips' boards and the 120 / 456 panel pair, the `k` = 0.8 stand-in scale, the side boards, the per-family backdrop pieces over the whole middle band and the full-screen menu backdrop over the whole frame
+> are replaced by the [composition](#screen-frame-and-scale) and [Window backgrounds and plates](#window-backgrounds-and-plates); the code goes in [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926), which also trims this section. What stays valid: windows stand in the window zone at the unit scale (now `s`, SWI-BDR-1..2),
+> the one wood of a family and its tone rules (ARC-UI-2763), the one lens place (#2714), the seam gate of SWI-VER-5, the strips' painted-at-scale check and the generated chrome as the placeholder and fallback (SWI-RUN-3).
+
 
 Slice [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452): the viewer lays the play screen out by the layout model with the **generated chrome** as the placeholder, to judge sizes and proportions before any
 Codex art. It is on while the HD option and the generated interface are both on (`AreaGameBarPanel.SteamwovenOn`); with the HD option off, or with the generated interface off, the whole-factor layout is unchanged (the strips and the
@@ -151,43 +162,60 @@ bars' captures are pixel-identical to `origin/main`; only the changing text of t
   viewport takes the size as its logical render target and the window is given the size's width (ARC-UI-2696: the content scale mode Viewport draws the target at the window's size, so a narrower window, the default 1280 wide for a 2560 target, has a stretch of 0.5 and every generated texture, the strips' and the windows' wood, is painted at that stretch, clamped to one pixel per unit, and drawn up again, softer than the boards, which are painted at the target's scale: the captures showed two woods; the height is the operating system's to limit and does not matter, the paint reads the stretch across; the smoke checks that the strips are painted at the scale they are drawn at; it also checks ([#2767](https://github.com/Simarglok/arcanum-steamwoven/issues/2767)) that the Fate Points and Sleep balls stand in the middle of the brass ring the strip draws round their hole (the Legacy hole's centre, `AreaBarRingFit`; the original's places were a pixel off it); `ARC_STEAMWOVEN_FIT_WINDOW=0` keeps the old window for a comparison, the check then only prints), and saves `<prefix>-hud-steamwoven-VARIANT-WxH[-menu].png` (local, never in git). The older generated-interface smokes run with the layout
   suspended (`SteamwovenHud.Suspended`): they measure the whole-factor geometry.
 
-## Menu backdrops
+## Original look in the composition
 
-- **SWI-BDR-1** An open menu window fills the whole middle band (full width and height) with its backdrop.
-- **SWI-BDR-2** The window zone, 2880 × 1440 px (the original 800 × 400 units), is centred in the middle band
-  (vertical placement: [open questions](#open-questions)); window content (paper doll, grids, pages, buttons) sits in
-  it at the original offsets × 3.6, snapped to the grid. The zone scale is `f · 3.6`; the HUD is at 0.8 of it (SWI-LAY-11, variant A of #2526), so its centre block (2304 px) is narrower than the zone.
-- **SWI-BDR-3** A backdrop master is 3840 × 1824 px (the middle band of a 16:10 frame at ×1: 2400 − 120 − 456). A shorter middle band
-  shows its centred crop (16:9: 1584 px). A middle band a few pixels taller than 16:10 allows (a bar under 4 px dropped by
-  SWI-LAY-3) gets the backdrop scaled uniformly to cover it, centred.
-- **SWI-BDR-4** Menus whose original backgrounds share a material share one backdrop (a family). The families are
+Owner decision 2026-11-19 ([#2936](https://github.com/Simarglok/arcanum-steamwoven/issues/2936)): the Original look (HD option off, Legacy art) uses the same layout as the Steamwoven look, instead of the whole-factor strips and the fitted windows of today (inconsistent in the 2026-11-18 comparison: tiny strips at 1920 × 1080, large windows). This supersedes "Original is untouched" of the 2026-11-16 ADR.
+
+- **SWI-ORG-1** The original 800 × 600 screen is one centred composition scaled with `s = min(W / 800, H / 600)`, as SWI-LAY-1..2: strips, windows, full-screen menus and the follower group at their original places inside it.
+- **SWI-ORG-2** Everything outside the composition is **black** at every aspect, never the world.
+- **SWI-ORG-3** The world is drawn at the composition's scale, so the play view shows exactly the original 800 × 400 area, and the out-of-sight rules keep the fixed 800 × 400 view (decision 2026-11-07): a wider drawn world would show spawns at the edges.
+- **SWI-ORG-4** Legacy art is scaled with sharp pixel scaling at fractional `s`: nearest to the next whole factor, then a smooth downscale to `s` (or an equivalent shader), so pixels stay crisp and even; at whole `s` the output equals nearest scaling.
+- **SWI-ORG-5** Hit testing follows the drawn composition; the Steamwoven look is unchanged by this requirement. The smoke `legacy` variant ([#2672](https://github.com/Simarglok/arcanum-steamwoven/issues/2672)) captures it.
+
+## Window backgrounds and plates
+
+Rewritten 2026-11-19 (it was "Menu backdrops": a backdrop filling the whole middle band, continued outwards). Nothing is drawn beyond the composition except the world (play screen and in-play windows) or black.
+
+- **SWI-BDR-1** A menu window of the middle band stands in the window zone of the composition; the world beside it (the sides) is dimmed and desaturated while it is open (presentation only; the values are in the layout options, [#2890](https://github.com/Simarglok/arcanum-steamwoven/issues/2890)). The dim takes no pointer: input under an open window is as it is today (modal). No backdrop is drawn outside the zone.
+- **SWI-BDR-2** The window zone is 800 × 400 units (2880 × 1440 px master) directly under the top strip. Window content (paper doll, grids, pages, buttons) sits in it at the original offsets × `s`; in a master the offsets are × 3.6, snapped to the 6 px grid. The window art fills the zone exactly, so
+  there is no gap and no gap wood at any aspect (the composition is 4:3 by construction, which also closes the former question of the zone's vertical place on a 16:10 band).
+- **SWI-BDR-3** A window background master is 2880 × 1440 px, the size of the zone: no crop, no cover scaling, no part that lies outside the composition. A two-strip menu (save, load, pre-made characters, new character) has the same 2880 × 1440 background between its own two strips (art 335, 336).
+- **SWI-BDR-4** Menus whose original backgrounds share a material share one family. The families are
   fixed by the census ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)): eight families (BD-A to BD-H) and the
-  panel board, listed in the [census](steamwoven-interface-census.md#backdrop-families).
-- **SWI-BDR-5** A two-part window (inventory, loot, barter: left 358 units, right 442 units; the census finds two more, the logbook 165 + 635 and the reading window 132 + 668, [census](steamwoven-interface-census.md#two-part-windows-and-full-screen-menus)) splits at 1290 px from the
-  centre block's left edge (358 × 3.6 = 1288.8, snapped). The left material runs from the frame's left edge to the
-  split, the right material from the split to the frame's right edge.
-- **SWI-BDR-6** A full-screen menu (an original 800 × 600 background: main menu, options and the others the census
-  finds) has a 3840 × 2400 master that covers the whole frame, panels included; a shorter frame shows the centred
-  crop, a slightly taller one (SWI-LAY-3) the master scaled to cover. Its 800 × 600 zone is 2880 × 2160 px, centred.
-- **SWI-BDR-7** Each backdrop is made from its own original background: the centre after the original, the sides
-  continued outwards from the centre's edges in the same material, with no visible join (measured by SWI-VER-5).
+  strips, listed in the [census](steamwoven-interface-census.md#backdrop-families). Windows of one family keep one wood (the tone rules of the inventory family, ARC-UI-2763, and the one lens place, [#2714](https://github.com/Simarglok/arcanum-steamwoven/issues/2714), stay).
+- **SWI-BDR-5** A two-part window (inventory, loot, barter: left 358 units, right 442 units; the logbook 165 + 635 and the reading window 132 + 668, [census](steamwoven-interface-census.md#two-part-windows-and-full-screen-menus)) is two masters inside the zone, split at 1290 px from the zone's left edge
+  (358 × 3.6 = 1288.8, snapped). Each half keeps its own material; neither continues outwards.
+- **SWI-BDR-6** A full-screen menu (an original 800 × 600 background: main menu, options and the others the census finds) is a **plate**, a 2880 × 2160 master that is the composition itself with the strips hidden. The sides beside it are black.
+- **SWI-BDR-7** Each background and plate is made from its own original art. The only joins inside the composition are the two-part split (a designed join of two arts, exempt from the seam gate) and the zone's edges against the strips, which are measured by SWI-VER-5.
+- **SWI-BDR-8** The kit has no full-width board, no outward backdrops and no gap wood: they are not kit parts and no batch makes them.
 
-## Column mode (ARC-UI-2889)
+## Layout model and its state
 
-Owner decision 2026-11-19 (epic [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446), after the 1920 × 1080 / 2560 × 1440 comparison of [#2672](https://github.com/Simarglok/arcanum-steamwoven/issues/2672)): the full-width panels with wood sides read as a letterboxed film, so
-the **column** hypothesis is tested. The full-width rules above stay as they are (default); the column is an option of the layout model (`SteamwovenLayoutOptions.Column`, presets `ColumnOriginal` k = 1 and `ColumnThin` k = 0.8,
-`WithWorldToEdges()`), computed into `SteamwovenLayout.Column` (`SteamwovenColumnPlan`) by the same builder. The frame, bars, step and run-time scale are SWI-LAY-1..7 unchanged. If the owner accepts the column, it replaces the full-width rules of SWI-LAY-11, SWI-BDR-1 and SWI-BDR-5.
+The layout model is `SteamwovenLayout` in `Arcanum.Presentation`, with the column plan `SteamwovenColumnPlan` ([#2889](https://github.com/Simarglok/arcanum-steamwoven/issues/2889), merged 2026-11-19). The viewer draws it in
+[#2890](https://github.com/Simarglok/arcanum-steamwoven/issues/2890) and [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891), still under their contract of before the verdict.
 
-- **Strip scale** `s = 3.6 · k · f` device px per original unit; k = 1 is the original strips' own heights (150 and 570 master px), k = 0.8 the thin pair (120 and 456). The options' panel heights must be the strips' (`IsValid`).
-- **Column** `2880 · k · f` wide, centred in the frame (each edge `round` of its own exact position, halves up, so the width is `round(2880 · k · f)` within a pixel), over the frame's whole height. The top strip stands at the
-  frame's top and the bottom strip at its bottom, both column-wide with the full-width layout's heights (`round(150 · k · f)` and `round(570 · k · f)` from the frame's edges).
-- **Window zone** (800 × 400 units at `s`) is column-wide and centred in the middle band between the strips, kept inside it; `GapAbove` and `GapBelow` are the column's rectangles above and below it, which take the window's wood
-  (empty at 16:9 with k = 1: 150 + 1440 + 570 = 2160 master px; 216 master px each at 16:9 with k = 0.8; 120 master px each at 16:10 with k = 1, 80 px at 2560 × 1600).
-- **Full-screen zone** (800 × 600 units at `s`) is column-wide and centred in the whole frame, strips included, with its own gaps in the column.
-- **World** `WorldLeft` and `WorldRight`: the frame left and right of the column over the frame's height. With `WorldToEdges` they run to the window's edges above 16:9 instead of ending at the frame's edges (the 21:9
-  question); a letterboxed frame (narrower than 16:10) keeps its vertical extent. No wood sides and no full-width backdrops; the old members of the layout (bands, centre block, split, backdrops, controls) are still the full-width ones and a column viewer does not draw them.
+- **As merged (#2889):** the column is an option of the model (`SteamwovenLayoutOptions.Column`; presets `ColumnOriginal`, `k` = 1, and `ColumnThin`, `k` = 0.8; `WithWorldToEdges()`); it computes the strip scale `s = 3.6 · k · f`, a column `2880 · k · f` wide inside the 16:10 to 16:9 frame (the frame, bars, step and run-time scale of the 2026-11-16 SWI-LAY-1..7), the window zone and
+  full-screen zone centred in the column, `GapAbove` / `GapBelow` rectangles for the window's wood, and `WorldLeft` / `WorldRight`. The full-width members (bands, centre block, split, backdrops, controls) are still the model's default.
+- **Target (the scale rule is carried by [#2890](https://github.com/Simarglok/arcanum-steamwoven/issues/2890) for the viewer's `column` choice; [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) completes it):** the column plan takes SWI-LAY-1..7 and SWI-LAY-16: `s = min(W / 800, H / 600)`, `f = s / 3.6`, the step and run-time scale from `f`, no frame bars, no gap rectangles and no gap wood, the world to the window's edges (dimmed under an open window, SWI-BDR-1), black sides for full-screen and two-strip menus, black above and below a window narrower than 4:3, and the
+  `column-thin` preset removed. The unit tests (`SteamwovenColumnTests`) carry the reference table above and 1280 × 1024 (SWI-VER-1).
+- **Removal ([#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926)):** the full-width plan and its presets, the side boards and the per-family full-middle backdrops of the viewer, the layout option's `full-width` and `column-thin` choices, their smoke variants and checks; the `legacy` capture variant ([#2672](https://github.com/Simarglok/arcanum-steamwoven/issues/2672)) stays. The
+  [prototype section](#prototype-of-the-play-screen-arc-ui-2452) above is trimmed to what remains in the same PR.
 
-Unit tests: `SteamwovenColumnTests` (exact numbers at eight sizes and 1024 × 768 for both presets, tiling at more sizes).
+### Menus in the column (ARC-UI-2891)
+
+Issue [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891). **Owner decision 2026-11-19 (after the first composite of the column plan's full-screen zone):** in column mode every **full-screen menu** (main, single player, new game, in-play, options: `AreaMenuArtView`, `AreaMainMenuPanel`)
+and every **two-strip screen** (pre-made, new character, shop and the save and load lists: their 800 × 600 screen, whose 800 × 400 body lies between its own two strips) is **scaled up to fill the window's height from edge to edge**, centred, and everything beside it is **black**.
+The column plan's full-screen zone (a plate at `3.6 · k · f` with wood gaps at 16:10 and k = 0.8) is not used by the menus; k makes no difference to them.
+
+- **Plate.** `SteamwovenColumnMenu.Fit(width, height)`: scale `min(width / 800, height / 600)` device px per unit (the whole height from 4:3 and wider; a window narrower than 4:3 is limited by its width and has black above and below), the rectangle centred (the top left rounded from its exact position, halves up; the far edges rounded up, so the black starts after the drawn plate): 1920 × 1080 s = 1.8, the plate 1440 × 1080 at x = 240; 2560 × 1600 s = 8/3, 2134 × 1600 at x = 213; 1920 × 1200 s = 2, 1600 × 1200 at x = 160. The plan is `SteamwovenFullScreen.Plan(w, h, options)` (the plate fitted, the rest of the layout unchanged); the two-strip views take their place from
+  `AreaGameBarPanel.TwoStripScreen`, which is `SteamwovenColumnMenu.Place` with the column option on and the window zone's place with it off, as before. The fractional scale is sampled Linear, as in the full-width layout.
+- **Black, nothing else.** No wood sides, no vignette, no full-width backdrop, no wood gap (the plate leaves none). `SteamwovenColumnMenu.BlackRects` are the rectangles around the plate (`SteamwovenColumnSidesView`, which also takes the pointer over the whole window: the menu is modal).
+- **Hit testing** is the control's own transform, so it follows the drawn plate; `SteamwovenFullScreenPlan.HitTest` is the same mapping as plain numbers (unit-tested; a pointer on the black hits nothing).
+- Unchanged: the full-width layout (the option off), HD off (the whole-factor plate and the pack's 16:9 plate), the Credits and View Intro black fills.
+
+Unit tests: `SteamwovenColumnMenuTests` (the plate and the black at the AC5 sizes, 4:3 and a narrower window, tiling of the window by the black and the plate, hit tests, the full-width plan unchanged). Smoke: `./arcanum smoke pr --stages menu --main-menu --env ARC_AREA_MENU_COLUMN=1 [--env ARC_STEAMWOVEN_SIZES=WxH,...] [--env ARC_AREA_MENU_CAPTURE=PATH.png]`
+(default sizes 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200, 3440 × 1440, 1280 × 800) checks, for the main and options windows and the pre-made and new-character screens, the plate's scale and place against `Fit`, its full height, the black rectangles, no full-width backdrop, the labels' hit tests and the pixels of the black, and saves
+`PATH-column-WINDOW-WxH.png`; with the column option off, and with it on but the HD option off, nothing of it shows. The same pass runs on the save list inside the save window's smoke (`SaveListColumnForSmoke`, saved with `ARC_AREA_SAVE_CAPTURE`).
 
 ### The fitted column (owner decision 2026-11-19, ARC-UI-2890)
 
@@ -224,9 +252,10 @@ Part kinds:
 | Kind | What | Examples |
 | --- | --- | --- |
 | material | a surface, seamless where it must be | wood, dark wood, brass, iron, paper, parchment |
-| board | the panel board, one continuous image for both panels | wood of the top and bottom panels |
-| backdrop | the full middle band (or full frame) of a family | inventory left/right, logbook, schematic paper |
-| hardware | fixed metal or frame pieces over a board or backdrop | brass rings, sockets, vial housings, rails, frames |
+| board | a strip: the art of the top or of the bottom strip, 2880 px wide (the kind's id is kept from the census; it names the strip art, not a full-width board) | the HUD strips, the two-strip menu strips |
+| backdrop | a window background (2880 × 1440 px, the window zone) or a full-screen plate (2880 × 2160 px, the composition) of a family; never wider than the composition | inventory left/right, logbook, schematic paper, main menu |
+| cap | the end cap of a strip: a brass edge and the soft shadow on the world (a new part, no original art) | the strips' outer ends |
+| hardware | fixed metal or frame pieces over a strip or a window background | brass rings, sockets, vial housings, rails, frames |
 | plate | a button's body | round and square plates by size |
 | glyph | a symbol on a transparent background | button symbols |
 | state | an overlay for a button state | hover, pressed, disabled |
@@ -249,7 +278,7 @@ Part kinds:
   disabled) are generated together on one sheet, so they match.
 - **SWI-KIT-6** A gauge is glass, housing and liquid as layers; the fill level is drawn from the value, not from a frame
   sequence.
-- **SWI-KIT-7** Order of production: board and backdrops, then buttons and glyphs, sheets, the schematic, gauges and
+- **SWI-KIT-7** Order of production: the strips, end caps and window backgrounds, then buttons and glyphs, sheets, the schematic, gauges and
   decor; icons, portraits and cursors last (the owner: all interface art is redrawn).
 
 ## Generation pipeline
@@ -267,7 +296,7 @@ Part kinds:
 | 9. Runtime | agent ([#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)) | composed interface | code in git |
 
 - **SWI-GEN-1** Context images come first: whole-screen redraws of the key screens (HUD, inventory, character,
-  logbook, schematic, one reading window, main menu) at the frame size, so Codex sees what each part is for. Parts are
+  logbook, schematic, one reading window, main menu) at the master composition size (2880 × 2160), so Codex sees what each part is for. Parts are
   then generated with a crop of the context image as reference.
 - **SWI-GEN-2** The approved material sheet freezes the tones and textures; every later part is generated against it
   and colour-locked to it.
@@ -277,7 +306,7 @@ Part kinds:
   comes from the prompt library `tools/steamwoven_ui/prompts/` (text only).
 - **SWI-GEN-4** A generation becomes a master only through the fit tool (size, grid, alpha clean-up, low-frequency
   colour lock, provenance record).
-- **SWI-GEN-5** The board and the backdrops are made by the method the owner picks
+- **SWI-GEN-5** The strips and the window backgrounds are made by the method the owner picks
   ([#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458)) from the comparison
   ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)).
 - **SWI-GEN-6** Every generated image has a provenance record: generator and version, date, prompt id and the hash of
@@ -292,13 +321,13 @@ Part kinds:
 - **SWI-RUN-1** The bake makes the four step sets from the masters, resampled in linear light with premultiplied
   alpha; every baked length is exactly the master length times the step; two runs give identical bytes; each set has
   a manifest with sizes and hashes.
-- **SWI-RUN-2** The runtime takes the step from SWI-LAY-4 and composes the layers of each part (board, hardware,
-  plates, glyphs, states).
+- **SWI-RUN-2** The runtime takes the step from SWI-LAY-4 and composes the layers of each part (strips with their end caps, hardware,
+  plates, glyphs, states) inside the composition.
 - **SWI-RUN-3** A missing part falls back to the generated chrome
   ([ARC-RES-122](../rendering/hd-interface-density.md)), so the HD option always draws a complete interface.
-- **SWI-RUN-4** With the HD option off the output is byte-identical to today.
-- **SWI-RUN-5** Only the backdrop of the open window is resident (a ×1 backdrop is about 25.8 MB as raw RGBA); the
-  board and the HUD hardware stay loaded.
+- **SWI-RUN-4** With the HD option off the Legacy art, its fonts and the original rules are unchanged; only the layout is the composition of SWI-ORG-1..5 ([#2936](https://github.com/Simarglok/arcanum-steamwoven/issues/2936)). The 2026-11-16 requirement that the output stays byte-identical is superseded (owner decision 2026-11-19).
+- **SWI-RUN-5** Only the background of the open window is resident (a ×1 window background is about 16.6 MB as raw RGBA, a full-screen plate about 24.9 MB); the
+  strips, their end caps and the HUD hardware stay loaded.
 
 ## Provenance and storage
 
@@ -315,19 +344,18 @@ Part kinds:
 
 Agent-checkable (acceptance criteria of the slices):
 
-- **SWI-VER-1** Layout model unit tests reproduce the [reference table](#screen-frame-and-scale) exactly.
+- **SWI-VER-1** Layout model unit tests reproduce the [reference table](#screen-frame-and-scale) exactly (the target model of [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925)).
 - **SWI-VER-2** The manifest validator passes on the real manifest and fails each synthetic bad manifest.
 - **SWI-VER-3** Fit tool tests on synthetic fixtures: exact output size; no halo (in the semi-transparent edge band the
   mean colour difference to the nearest opaque interior is within the bound the tool documents); the colour lock
   leaves the high-frequency energy within 10 % of the input.
 - **SWI-VER-4** Bake: exact sizes and identical bytes on a second run.
-- **SWI-VER-5** Surfaces: seam ratio R ≤ 1.5 at every join (the measure of
-  [ARC-RES-094 U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4)); side-versus-centre colour and texture
-  statistics within the bounds that [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) fixes; until
-  then only the seam ratio is a gate.
+- **SWI-VER-5** Surfaces: seam ratio R ≤ 1.5 at every join inside the composition (a window zone's edge against the strips, the parts of one strip; the measure of
+  [ARC-RES-094 U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4); the designed split of a two-part window is exempt, SWI-BDR-5); there are no sides to match, so the former side-versus-centre statistics are dropped. [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) may add
+  repetition and sharpness bounds for the surfaces it compares; until then only the seam ratio is a gate.
 - **SWI-VER-6** Smoke captures (local only) at 3840 × 2160, 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200,
-  1280 × 800, 1366 × 768, 3440 × 1440 and 1024 × 768.
-- **SWI-VER-7** Byte-identical output with the HD option off (SWI-RUN-4).
+  1280 × 800, 1366 × 768, 3440 × 1440, 5120 × 1440 (32:9), 1024 × 768 (4:3) and 1280 × 1024 (5:4); the owner's composite shows 16:9, 16:10, 21:9, 4:3 and 5:4.
+- **SWI-VER-7** With the HD option off the Legacy art is drawn unchanged at whole `s` (pixel check against nearest scaling) and the out-of-sight rules are the original's (SWI-RUN-4, SWI-ORG-3).
 
 Owner gates (separate issues, never acceptance criteria): proportions
 [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453), material sheet
@@ -338,35 +366,48 @@ its issue).
 ## Work breakdown
 
 One issue is one work item ([Definition of Ready](../workflow/tasks.md#definition-of-ready)); the issues carry the
-acceptance criteria. Start any issue that is `status:ready`; the order below is the dependency order.
+acceptance criteria. Start any issue that is `status:ready`; the order below is the dependency order. State at 2026-11-19.
 
 | Phase | Issue | Result | Blocked by |
 | --- | --- | --- | --- |
-| 0. Decisions | [#2447](https://github.com/Simarglok/arcanum-steamwoven/issues/2447) | this TRD and the ADR | — |
+| 0. Decisions | [#2447](https://github.com/Simarglok/arcanum-steamwoven/issues/2447) | the first ADR and TRD (2026-11-16, done) | — |
 | 0. Decisions | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) | owner: provenance and distribution — decided: originals are Codex inputs, kit local only | — |
 | 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | Codex runner — decided: the owner runs Codex (closed, not planned) | — |
-| 1. Geometry | [#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450) | layout model (SWI-LAY, SWI-BDR) | — |
-| 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | prototype with generated chrome ([done](#prototype-of-the-play-screen-arc-ui-2452)) | #2450 |
-| 1. Geometry | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) | owner: panel proportions — decided 2026-11-17: 120 / 456 | #2452 |
-| 2. Census | [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451) | census, families, production issues | — |
+| 0. Decisions | [#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893) | this rewrite: the ADR amendment, the TRD, the replacement production issues | #2892 |
+| 1. Geometry | [#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450) | layout model of the full-width frame (done; its model is superseded) | — |
+| 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | full-width prototype with generated chrome (done, [historical](#prototype-of-the-play-screen-arc-ui-2452)) | #2450 |
+| 1. Geometry | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) | owner: panel proportions — decided 2026-11-17: 120 / 456 (retired 2026-11-19, SWI-LAY-10) | #2452 |
+| 1. Geometry | [#2889](https://github.com/Simarglok/arcanum-steamwoven/issues/2889) | column model in the layout model (done) | — |
+| 1. Geometry | [#2890](https://github.com/Simarglok/arcanum-steamwoven/issues/2890), [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891), [#2924](https://github.com/Simarglok/arcanum-steamwoven/issues/2924) | the column in the viewer: play screen and windows, full-screen and two-strip menus, creation editor and shop (finish as contracted) | #2889 |
+| 1. Geometry | [#2892](https://github.com/Simarglok/arcanum-steamwoven/issues/2892) | owner's column check — verdict 2026-11-19 (closed) | #2890, #2891 |
+| 1. Geometry | [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) | complete the 4:3 rule: the follower group at the window's edge (SWI-LAY-16) and the points #2890 leaves (SWI-LAY-1..3) | #2890 |
+| 1. Geometry | [#2936](https://github.com/Simarglok/arcanum-steamwoven/issues/2936) | the Original look in the composition (SWI-ORG) | #2890 |
+| 1. Geometry | [#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937) | owner: world zoom in the Steamwoven look — decided 2026-11-19: stays a player setting, composition scale is the reference (SWI-LAY-17); the default is to be revisited | — |
+| 1. Geometry | [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926) | remove the full-width layout | #2925, #2893 |
+| 2. Census | [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451) | census, families, production batches (done) | — |
 | 2. Census | [#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454) | kit manifest and validator | #2451 |
-| 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images, material sheet, prompts | #2451 |
+| 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images at the composition size, material sheet, prompts | #2451 |
 | 3. Style | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) | owner: material sheet | #2455 |
-| 3. Style | [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) | 4K surface method comparison | #2456 |
+| 3. Style | [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) | surface method comparison on a strip and a window background | #2456 |
 | 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method | #2457 |
 | 4. Tools | [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459) | fit tool | #2454 |
 | 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
-| 5. Runtime | [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) | runtime composition, window integration issues | #2450, #2460 |
-| 5. Runtime | [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) | fonts at the four steps | #2450, #2451 |
-| 6. Production | [#2472](https://github.com/Simarglok/arcanum-steamwoven/issues/2472) to [#2487](https://github.com/Simarglok/arcanum-steamwoven/issues/2487) (created by #2451, [batch table](steamwoven-interface-census.md#production-batches)) | one batch per family or part group | fit, bake, material sheet (backdrops also the surface method) |
+| 5. Runtime | [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) | runtime composition of the strips, caps, window backgrounds and plates, window integration issues | #2925, #2460 |
+| 5. Runtime | [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) | fonts at the four steps | #2451 |
+| 6. Production | [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) to [#2935](https://github.com/Simarglok/arcanum-steamwoven/issues/2935) (replace the full-width #2472 to #2480, [batch table](steamwoven-interface-census.md#production-batches)) | strips with caps (B-BOARD), window backgrounds (BD-A to BD-G), full-screen plates (BD-H) | fit, bake, material sheet, surface method |
+| 6. Production | [#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481) to [#2487](https://github.com/Simarglok/arcanum-steamwoven/issues/2487) (unchanged) | hardware, buttons, gauges, icons, schematic pictures, cursors | fit, bake, material sheet |
 | 6. Integration | created by #2461 | one issue per window | runtime, its batch |
 
-Ready now: #2450; the census (#2451) is done and unblocks #2454 and #2455 (#2462 still waits for #2450), and follow-ups #2489 (capture hooks) and #2490 (open facts).
+Ready now: [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) (fonts), [#2490](https://github.com/Simarglok/arcanum-steamwoven/issues/2490) (open facts), and the window-zone defects [#2615](https://github.com/Simarglok/arcanum-steamwoven/issues/2615) and
+[#2641](https://github.com/Simarglok/arcanum-steamwoven/issues/2641) (re-check them against the column after #2925). The kit track (#2454, #2455, #2457, #2461, production) was waiting for this rewrite. Replaced and closed as not planned on 2026-11-19: #2472 to #2480, #2578, #2638, #2643.
+
+**No batch makes gap wood** (the former idea of the 16:10 and thin-panel gaps): the composition is exactly 4:3 and has no gaps, SWI-BDR-8.
 
 ## Open questions
 
 - The player's `uiScale` setting (50–300 %) in the Steamwoven look: ignored (the interface is proportional by design)
   or a multiplier on `f` with the run-time scale absorbing it.
-- Screens above ×1 (5K): scale the ×1 set up (current requirement) or add a ×4/3 set.
-- Vertical place of the window zone in a taller (16:10) middle band: centred (current requirement) or right under the
-  top panel as in the original.
+- Screens above ×1 (`f` > 1: 5K, 3840 × 2400): scale the ×1 set up (current requirement) or add a ×4/3 set.
+- **Maximum world width on ultrawide windows (new, 2026-11-19).** The world is drawn to the window's edges beside the composition (SWI-LAY-3) at the composition's scale (SWI-LAY-17), and Steamwoven tests the drawn view for the out-of-sight rules (decision 2026-11-07), so a 32:9 window (5120 × 1440: 1600 px = 667 units of world each side of an 800-unit composition) sees
+  far more than the original's 800-unit view and than a 16:9 window does. Open: no limit (the drawn view decides, current requirement), a maximum drawn world width with black beyond it, or the rules keeping the 16:9 view. The owner decides after #2925's composite at 21:9; listed as open in the [decisions](../architecture/decisions.md) row of 2026-11-19.
+- **Strip master heights.** The strips are 41 and 159 units = 147.6 and 572.4 master px, which are not multiples of the 6 px grid (SWI-LAY-7): author them at 150 and 570 (the grid; the model's former band heights, drawn at the exact unit height) or at 148 and 572 (the rounded units of the reference table). Fixed with the first batch, [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927).

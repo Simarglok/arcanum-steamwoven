@@ -1,8 +1,8 @@
 # Census of the Steamwoven interface: windows, art, kit kinds, reuse and backdrop families (ARC-RES-2451)
 
-Status: **census, 2026-11-16** (work item ARC-RES-2451, [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451),
+Status: **census, 2026-11-16; production batches reissued 2026-11-19** for the 4:3 composition ([#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893): the full-width batches #2472 to #2480 were closed, their replacements are #2927 to #2935; the facts below stand, the backdrop masters are now window backgrounds and plates) (work item ARC-RES-2451, [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451),
 epic [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446)). It supplies the facts that the
-[TRD](steamwoven-interface-trd.md) leaves to the census: the families of [SWI-BDR-4](steamwoven-interface-trd.md#menu-backdrops), the
+[TRD](steamwoven-interface-trd.md) leaves to the census: the families of [SWI-BDR-4](steamwoven-interface-trd.md#window-backgrounds-and-plates), the
 parts for the kit manifest (SWI-KIT-1), the text that fonts must draw (SWI-LAY-15) and the production batches. Requirements touched
 (status unchanged): [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002), [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004),
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007).
@@ -22,7 +22,7 @@ no frames). Screenshots stayed local ([below](#screenshots)).
 - **Baked text**: every non-font art was looked at on contact sheets (decoded locally with the project's ART decoder, 2026-11-16).
 - **Kit kind**: one of the [asset kit](steamwoven-interface-trd.md#asset-kit) kinds, assigned by role, name and size; judgement, to be
   confirmed when the manifest is built.
-- Nothing here changes behaviour; the Original look is untouched.
+- Nothing here changes behaviour (the census itself; the Original look's layout is changed by the 2026-11-19 decision, not by this note).
 
 ## Summary
 
@@ -31,7 +31,7 @@ no frames). Screenshots stayed local ([below](#screenshots)).
 | Windows and HUD states (rows below) | 53 |
 | Interface arts (files) | 815 |
 | Rows of the TSV (799 numbered messages with a file, some of them naming one file twice, plus 25 files with no message) | 824 |
-| Numbered arts in `interface.mes` without a file under `art\interface` (portraits, world map tiles, masks) | 47 |
+| Numbered arts in `interface.mes` without a file under `art\interface` (portraits, world map tiles, masks; all dead rows, [below](#findings-and-open-points)) | 47 |
 | Bitmap font arts (not kit parts, drawn text: [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)) | 33 |
 | Arts with a window row (drawn by a window) | 497 |
 | Arts drawn as members of a family (schematic record pictures, written-object pictures, hotkey slots) | 155 |
@@ -107,8 +107,8 @@ Every art that a window draws, or that the family rows below name, is assigned o
 
 | Kind | Arts | What the original arts of this kind are |
 | --- | ---: | --- |
-| board | 4 | the four strips (top and bottom of the HUD, top and bottom of the two-strip menus) |
-| backdrop | 28 | window and menu backgrounds, doll and cover layers of the inventory family, pop-up bases that are full panels |
+| board | 4 | the four strips (top and bottom of the HUD, top and bottom of the two-strip menus); the id names the strip art of the 4:3 composition (TRD asset kit) |
+| backdrop | 28 | window backgrounds (2880 x 1440) and full-screen plates (2880 x 2160), doll and cover layers of the inventory family, pop-up bases that are full panels |
 | sheet | 28 | reading-window papers, book pages, the iron right panels of the character sheet, script-given pictures (maps, murals) |
 | hardware | 69 | slot and socket housings, lens rings, pop-up and pane frames, option control plates, covers |
 | plate | 157 | button bodies with their frames (idle, hover or pressed, disabled): the kit splits each into plate, ring, glyph and states (SWI-KIT-5) |
@@ -118,7 +118,7 @@ Every art that a window draws, or that the family rows below name, is assigned o
 | picture | 384 | icons and pictures on transparent backgrounds: items, spells, skills, critters, status, schematic records, hover rings |
 | cursor | 12 | the cursor set |
 
-No original art is assigned the kinds `material`, `grid` or `decor`: those are new parts the kit makes (the material sheet of [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456); the schematic grid is painted into art 365 today and the inventory grids into the pack arts, so each becomes its own `grid` layer when the backdrop is redrawn; the corner and rivet decor has no original art).
+No original art is assigned the kinds `material`, `grid`, `decor` or `cap` (the strips' end caps): those are new parts the kit makes (the material sheet of [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456); the schematic grid is painted into art 365 today and the inventory grids into the pack arts, so each becomes its own `grid` layer when the backdrop is redrawn; the corner and rivet decor has no original art).
 Fonts are listed with kind `font` and belong to [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462), not to the kit.
 
 
@@ -179,10 +179,9 @@ Notes: several original numbers are one file (432, 437, 438, 444 and 445 are all
 
 ## Backdrop families
 
-A family is a group of windows whose backgrounds share one material and so one backdrop master set ([SWI-BDR-4](steamwoven-interface-trd.md#menu-backdrops)).
+A family is a group of windows whose backgrounds share one material and so one window-background set ([SWI-BDR-4](steamwoven-interface-trd.md#window-backgrounds-and-plates)).
 Materials are read from the decoded arts (judgement, 2026-11-16); the material sheet ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455),
-[#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) fixes the tones. The panel board is the same dark wood in the original strips
-and in the backdrops, so one wood family underlies A, B (main page), C, D (side), E, G and the board; the families differ in what is laid on the wood.
+[#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) fixes the tones. The strips are the same dark wood as the window backgrounds, so one wood family underlies A, B (main page), C, D (side), E, G and the strips; the families differ in what is laid on the wood.
 
 | Family | Name | Windows | Material | Structure | Arts |
 | --- | --- | --- | --- | --- | ---: |
@@ -194,12 +193,12 @@ and in the backdrops, so one wood family underlies A, B (main page), C, D (side)
 | BD-F | Schematic parchment | G15 | aged parchment with a printed grid, brass buttons at the left | one 800 x 400 background; the grid is painted in | 1 |
 | BD-G | Two-strip menus | M05, M06 (745), M07 (766), M08 (765) | wood with brass trim, black fields | one 800 x 400 background between strips 336 and 335 (the board) | 5 |
 | BD-H | Full-screen menus | M01, M02, M03 (329, 331 painted scene), M04 (556 options wood), M13, M14 (not built) | a painted still life (lamp, skull, pocket watch) and an options plate of wood | full-screen 800 x 600; no strips | 8 |
-| BOARD | Panel board | H01, H02, H03, H04, H05, H06, H09, H19, M05-M10 | dark wood with brass | the four strips 184, 185, 335, 336; hardware over them is [B-HARDWARE](#production-batches) | 4 |
+| BOARD | Strips (the former panel board) | H01, H02, H03, H04, H05, H06, H09, H19, M05-M10 | dark wood with brass | the four strips 184, 185, 335, 336; hardware over them is [B-HARDWARE](#production-batches) | 4 |
 
 ### Two-part windows and full-screen menus
 
-- **Two-part** (a left and a right master with their own material; the split of [SWI-BDR-5](steamwoven-interface-trd.md#menu-backdrops)): the inventory family (left 358, right 442 units), the logbook (165 + 635), the reading window (132 + 668). The character sheet is one backdrop with a panel laid over it.
-- **Full-screen menus** (800 x 600 original, a 3840 x 2400 master that covers the panels too, [SWI-BDR-6](steamwoven-interface-trd.md#menu-backdrops)): the main menu and new game menu (329), the single-player menu (331), options (556); credits and View Intro have only the black fill (art 2) and the movie screen is bitmaps (M12, no interface art).
+- **Two-part** (a left and a right master inside the 2880 x 1440 window zone, each with its own material and none continued outwards; the split of [SWI-BDR-5](steamwoven-interface-trd.md#window-backgrounds-and-plates)): the inventory family (left 358, right 442 units), the logbook (165 + 635), the reading window (132 + 668). The character sheet is one backdrop with a panel laid over it.
+- **Full-screen menus** (800 x 600 original, a 2880 x 2160 plate, the composition with the strips hidden, [SWI-BDR-6](steamwoven-interface-trd.md#window-backgrounds-and-plates)): the main menu and new game menu (329), the single-player menu (331), options (556); credits and View Intro have only the black fill (art 2) and the movie screen is bitmaps (M12, no interface art).
 - **Two-strip menus** (an 800 x 400 backdrop between the strips 336 and 335): save and load (745), the pre-made browser (766), new character (765); the character editor and opening shop reuse the strips and the character sheet or barter backdrop.
 - **Windows without a backdrop of their own**: the pop-ups (fate 292, sleep 565, dialog box 822), the bottom-strip panes (frames 354, 274, 564, 291, 200, 298) and the lens rings. They sit on the world or the board; the kit draws them as hardware.
 
@@ -236,19 +235,19 @@ All other arts (the strips, the inventory family, buttons, tabs, icons, the sche
 
 ## Production batches
 
-One issue per batch, created by this census ([FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007)); every issue is blocked by the fit tool [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459), the bake tool [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) and the approval of the material sheet [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456); the board and backdrop batches also by the surface method [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458). The order follows SWI-KIT-7: board and backdrops first, then hardware, buttons and glyphs, sheets, the schematic and gauges, then icons, pictures and cursors. Each batch ends with the owner's look check in its thread. Arts per batch (kit kinds assigned in the TSV column `batch`):
+One issue per batch, created by this census ([FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007)); every issue is blocked by the fit tool [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459), the bake tool [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) and the approval of the material sheet [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456); the strip and background batches also by the surface method [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458). **Reissued 2026-11-19:** the full-width issues #2472 to #2480 (closed, not planned) are replaced by #2927 to #2935 for the 4:3 composition; the batch codes and the TSV column `batch` stay, B-BOARD now means the strips, their end caps and the follower-button backing, and no batch makes gap wood (TRD SWI-BDR-8). The order follows SWI-KIT-7: strips, end caps and window backgrounds first, then hardware, buttons and glyphs, sheets, the schematic and gauges, then icons, pictures and cursors. Each batch ends with the owner's look check in its thread. Arts per batch (kit kinds assigned in the TSV column `batch`):
 
 | Batch | Issue | Covers | Arts |
 | --- | --- | --- | ---: |
-| B-BOARD | [#2472](https://github.com/Simarglok/arcanum-steamwoven/issues/2472) | panel board | 4 |
-| BD-A | [#2473](https://github.com/Simarglok/arcanum-steamwoven/issues/2473) | inventory family backdrop | 8 |
-| BD-B | [#2474](https://github.com/Simarglok/arcanum-steamwoven/issues/2474) | character sheet backdrop and right panels | 7 |
-| BD-C | [#2475](https://github.com/Simarglok/arcanum-steamwoven/issues/2475) | logbook backdrop | 6 |
-| BD-D | [#2476](https://github.com/Simarglok/arcanum-steamwoven/issues/2476) | reading desk and written-object pictures | 20 |
-| BD-E | [#2477](https://github.com/Simarglok/arcanum-steamwoven/issues/2477) | world map frame | 1 |
-| BD-F | [#2478](https://github.com/Simarglok/arcanum-steamwoven/issues/2478) | schematic parchment backdrop | 1 |
-| BD-G | [#2479](https://github.com/Simarglok/arcanum-steamwoven/issues/2479) | two-strip menu backdrops | 5 |
-| BD-H | [#2480](https://github.com/Simarglok/arcanum-steamwoven/issues/2480) | full-screen menu backdrops | 8 |
+| B-BOARD | [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) | strips, end caps and the follower-button backing | 4 |
+| BD-A | [#2928](https://github.com/Simarglok/arcanum-steamwoven/issues/2928) | inventory family window background | 8 |
+| BD-B | [#2929](https://github.com/Simarglok/arcanum-steamwoven/issues/2929) | character sheet window background and right panels | 7 |
+| BD-C | [#2930](https://github.com/Simarglok/arcanum-steamwoven/issues/2930) | logbook window background | 6 |
+| BD-D | [#2931](https://github.com/Simarglok/arcanum-steamwoven/issues/2931) | reading desk and written-object pictures | 20 |
+| BD-E | [#2932](https://github.com/Simarglok/arcanum-steamwoven/issues/2932) | world map frame | 1 |
+| BD-F | [#2933](https://github.com/Simarglok/arcanum-steamwoven/issues/2933) | schematic parchment window background | 1 |
+| BD-G | [#2934](https://github.com/Simarglok/arcanum-steamwoven/issues/2934) | two-strip menu backgrounds | 5 |
+| BD-H | [#2935](https://github.com/Simarglok/arcanum-steamwoven/issues/2935) | full-screen menu plates | 8 |
 | B-HARDWARE | [#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481) | hardware: frames, slots, lens rings, pop-up panels | 69 |
 | B-BUTTONS | [#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482) | button plates, glyphs, state overlays | 178 |
 | B-GAUGES | [#2483](https://github.com/Simarglok/arcanum-steamwoven/issues/2483) | gauges and readouts | 56 |
@@ -264,7 +263,11 @@ The game window itself (the world, 800 x 400 at (0, 41)) is not a window of the 
 - The strips and every wood backdrop show one material, a dark streaked wood; the families differ in what is laid on it (grids, doll wells, brass, iron panels, paper). That favours one material sheet for the wood, brass, iron, paper and parchment, and one wood backdrop method for A, B, C, D, E and G ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)).
 - The TRD names two-part windows of the inventory family only; the census finds two more (logbook 165 + 635 units, reading window 132 + 668 units) and the two-strip menus (save, load, pre-made, new character) whose strips 335 and 336 are not the HUD strips. TRD SWI-BDR-5 and SWI-BDR-4 point here for the list.
 - The schematic window carries 134 record pictures of 295 x 225 (the largest batch by count) and the written-object pictures 12 of 668 x 400; both are script- or record-given pictures, not chrome.
-- 47 numbered messages of `interface.mes` (world map tile and mask arts 149 to 164, the portrait sets 570 to 581 and 602 on, a few single arts) have no file under `art\interface` in this installation, so they have no row; they are bitmaps or live elsewhere and need their own reading ([#2490](https://github.com/Simarglok/arcanum-steamwoven/issues/2490)).
-- Open facts (marked `?` in the local working files, none changes a family or a kind): the scroll-bar chain art ids of the inventory family (236, 237, 316, 319 are candidates), which frames of the lit button arts are drawn, the y of the load indicator in the combat UI, the idle, hover and pressed meaning of most button frames, the unit of the schematic slot overlays 830 and 831, the follower portrait art, the weapon-pane slot icons by spell. They are read with the slices that need them ([#2490](https://github.com/Simarglok/arcanum-steamwoven/issues/2490)).
+- **The 47 numbered messages of `interface.mes` without a file are dead rows** (read in [ARC-RES-2490](https://github.com/Simarglok/arcanum-steamwoven/issues/2490), ledger [OF1 to OF4](../research/ledger/ui-audio.md#open-facts-of-the-steamwoven-interface-census-arc-res-2490)): no code builds any of the numbers, so they need no kit part and no row. The world map tiles and masks 149 to 164 are dead (the map draws the module's `worldmap` bitmaps and shows no interface art behind it besides frame 138); the race body set 570 to 581, the pre-made hero set 602 to 613, `PGC_DonnT` 326 and `hover-pc` 374 are dead (portraits are `portrait\` and `Players\` bitmaps, which are not interface arts); 617 is an item art, 783 to 785 dead skill category icons, 493 a source control file.
+- **Scroll bars** (ledger [OF5 to OF7](../research/ledger/ui-audio.md#open-facts-of-the-steamwoven-interface-census-arc-res-2490)): one widget draws every scroll bar (inventory family, save and load, sheet auto-level schemes, multiplayer). Its chain is the arrows 317 and 318 (three frames) and the thumb 238, 787 (stretched to the bar width) and 240; **there is no track art, the window background is the track**. Loot, steal and barter use it (17 x 256 at (330, 136); barter 17 x 224 at (330, 168)). The census candidates 236, 237 and 319 are unused arts; 316 is drawn only by the main menu list thumb. The kit therefore needs the chain of five arts and no track; 236, 237 and 319 can leave the B-BUTTONS and B-GAUGES batches (left to the plan of [#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893)).
+- **Button frames** (ledger [OF9, OF10](../research/ledger/ui-audio.md#open-facts-of-the-steamwoven-interface-census-arc-res-2490)): one rule for every button: idle frame 0, **pressed frame 1, hover frame 2**, a frame past the art's count wraps to 0; **there is no disabled frame** (a window hides a button instead). Two-frame arts (137, 139, 747, the lit arts) have no hover look, 561 is always frame 0, the fourth frame of 23 and 24 is never drawn. The lit arts 558 to 561 and 195 are the Character, Logbook, Map and Inventory faces of the top strip: a lit art replaces the button's idle art, with no blink.
+- **Schematic slot overlays 830 and 831** (ledger [OF8](../research/ledger/ui-audio.md#open-facts-of-the-steamwoven-interface-census-arc-res-2490)): 99 x 67 window pixels, drawn 1:1 over the two component slots at (579, 181) and (579, 277) of the schematic window, 831 when the hero carries an acceptable component and 830 when not.
+- **Load indicator 601** (ledger [OF11](../research/ledger/ui-audio.md#open-facts-of-the-steamwoven-interface-census-arc-res-2490)): the combat UI computes its place (x = window x + width - 42, y = window y + 54 for the combat interface window, so (758, 95) when that window is the usual game window (0, 41, 800 x 400)) but never draws it (nothing in the combat UI presents it, CH6); no reader of 601 that draws it on a load screen was found, so census row H10 stands only for the screenshot capture of #2489.
+- Still open, none changes a family or a kind: the follower portrait is a `portrait\` bitmap, not an interface art (ledger CH9, OF3); the weapon-pane slot icons by spell are read with the slice that needs them ([#2941](https://github.com/Simarglok/arcanum-steamwoven/issues/2941)); which main menu windows draw the thumb strip 316; the constants of the scroll thumb length.
 - Source conflicts to correct when touched: art 293 has 2 frames in the file, the ledger says 3; the to-hit icon widths of ledger row OH19 do not match the file order; CHW1 lists Health and Fatigue as baked into art 22 (see above).
 
