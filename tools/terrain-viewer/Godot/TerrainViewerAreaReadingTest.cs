@@ -374,19 +374,6 @@ public partial class TerrainViewerApp
                 foreach (var line in AreaReadingFlow.Newspaper(paper, FontOf))
                     GD.Print($"ARC-UI-1877 newspaper line font={line.Font} x={line.X} y={line.Y} glyphs={line.Glyphs.Count}");
             }
-            if (kind == WrittenSubtype.Note)
-            {
-                // ARC-UI-2765: one shot of the note in each candidate face (ARC_AREA_READING_NOTE_FONTS), then in the original's own (497).
-                foreach (var font in AreaReadingArtLayout.ExtraFontArts.Append(AreaReadingArtLayout.NoteFont))
-                {
-                    if (ReadingOpen) CloseReadingByPlayer();
-                    AreaReadingArtView.NoteFontOverride = font;
-                    _readingPanel!.DiagnosticLook = false;
-                    OpenReading(session.QueryWrittenDocument(fact, data.Texts), "capture", replaceWindows: true);
-                    await Shot($"note-font{font}");
-                }
-                AreaReadingArtView.NoteFontOverride = null;
-            }
             foreach (var look in new[] { "original", "diagnostic" })
             {
                 if (ReadingOpen) CloseReadingByPlayer();
