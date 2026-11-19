@@ -264,7 +264,7 @@ Part kinds:
 | 5. Parts | owner in Codex, per batch | raw generations | `local/steamwoven-ui/outbox/` |
 | 6. Fit | agent tool ([#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459)) | masters | `local/steamwoven-ui/masters/` |
 | 7. Look check | owner | per-batch composite | thread only |
-| 8. Bake | agent tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460)) | four step sets | per SWI-PRV |
+| 8. Bake | agent tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460), `tools/steamwoven_ui/bake.py`) | four step sets | `local/steamwoven-ui/baked/<step>/`, local only (SWI-PRV-4) |
 | 9. Runtime | agent ([#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)) | composed interface | code in git |
 
 - **SWI-GEN-1** Context images come first: whole-screen redraws of the key screens (HUD, inventory, character,
@@ -300,7 +300,7 @@ Part kinds:
 
 - **SWI-RUN-1** The bake makes the four step sets from the masters, resampled in linear light with premultiplied
   alpha; every baked length is exactly the master length times the step; two runs give identical bytes; each set has
-  a manifest with sizes and hashes.
+  a manifest with sizes and hashes. Tool and commands: [toolchain](../workflow/toolchain.md#steamwoven-kit-bake-arc-dev-2460) (`bake.py`, ARC-DEV-2460).
 - **SWI-RUN-2** The runtime takes the step from SWI-LAY-4 and composes the layers of each part (strips with their end caps, hardware,
   plates, glyphs, states) inside the composition.
 - **SWI-RUN-3** A missing part falls back to the generated chrome
@@ -319,6 +319,8 @@ Part kinds:
 - **SWI-PRV-2** The kit therefore exists only on the owner's devices (and those of a player who builds it from their own
   installation), like the HD pack; it is not shipped with the game. Reopening this needs a new owner decision.
 - **SWI-PRV-3** Composites for the owner are posted in the thread and never committed (owner rule 2026-11-11).
+- **SWI-PRV-4** Storage of the baked sets (ARC-DEV-2460): `local/steamwoven-ui/baked/<step>/` of the main checkout, written only by `bake.py`; not committed, not packaged and
+  not backed up (reproducible from the masters, which are backed up per the [HD pack workflow](../workflow/hd-pack.md); see the [toolchain section](../workflow/toolchain.md#steamwoven-kit-bake-arc-dev-2460)).
 
 ## Verification
 
