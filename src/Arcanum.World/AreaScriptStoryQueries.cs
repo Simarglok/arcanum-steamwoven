@@ -14,7 +14,7 @@ public static class AreaScriptStoryQueries
     {
         ArgumentNullException.ThrowIfNull(session);
         var clock = session.QueryClockSnapshot();
-        return new ScrGameTime(clock.DayIndex, clock.Hour, clock.Minute);
+        return new ScrGameTime(clock.DayIndex, clock.Hour, clock.Minute, clock.MillisecondOfDay, clock.ProfileBinding.StartHour);
     }
 
     /// <summary>A quest's game-wide state (2 until a PC completes or botches it); 0 for a number outside the quest range, which the session holds no state for.</summary>

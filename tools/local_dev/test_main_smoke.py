@@ -171,6 +171,7 @@ class QueueTests(unittest.TestCase):
 
 class RunTests(unittest.TestCase):
     def setUp(self) -> None:
+        patched = mock.patch.object(main_smoke.run_queue, "playing_state", return_value=None); patched.start(); self.addCleanup(patched.stop)  # ARC-DEV-2902: never the live owner-playing state (game process, real queue folder)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name).resolve()
         self.repo = self.root / "repo"

@@ -615,6 +615,29 @@ public sealed class WieldEventScriptTests
     }
 
     [TestMethod]
+    public void A_wield_script_s_call_script_at_waits_until_the_operands_time_of_day_counted_from_the_start_hour()
+    {
+        // ARC-SCRIPT-2824 (ledger TQ17, TE2): the item run reads the session's clock; the delay is in game milliseconds with no factor 8.
+        foreach (var (ahead, expected) in new[] { (3600, 3_600_000L), (86_399, 86_399_000L), (0, 1L) })
+        {
+            var (owner, host) = Owner();
+            using var _ = owner;
+            var clock = owner.QueryClockSnapshot();
+            var secondsOfCycle = (int)((clock.MillisecondOfDay + 86_400_000L - clock.ProfileBinding.StartHour * 3_600_000L) / 1000 % 86_400);
+            host.Programs[Shield] = Program(
+                Do(C(ScrCatalogue.Action.RemoveScriptCall, N(Shield), (Attachee, 0))),
+                Do(C(ScrCatalogue.Action.CallScriptAt, N(Shield), N(3), (Triggerer, 0), (Attachee, 0), N((secondsOfCycle + ahead) % 86_400))),
+                Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+            host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = Shield;
+            var worn = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), SessionScriptPoint.WieldOn), Drawn, Accept, host);
+            Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"ahead {ahead}");
+            var call = owner.QueryScriptCalls().Single();
+            Assert.AreEqual(new SessionScriptCall(Shield, 3, Role(owner, SessionEventKinds.PlayerEntity), Role(owner, "kit:3")), call.Call);
+            Assert.AreEqual(expected, call.DeadlineMs - owner.QueryClockSnapshot().GameTimestampMs, $"ahead {ahead}");
+        }
+    }
+
+    [TestMethod]
     public void A_powered_shield_s_wear_is_refused_with_nothing_changed_when_the_event_queue_has_no_room()
     {
         var (owner, host) = Owner();
