@@ -165,7 +165,8 @@ public sealed partial class GameSessionOwner
         var moved = container is not null ? TakeFromContainer(container, item, stack, count, newStackKind, heroInsert, scripts)
             : stack ? TakeAmmoFromNpc(Version, npc, item, count, newStackKind, heroInsert)
                 : TakeItemFromNpc(Version, npc, item, heroInsert, scripts, unwield: wornItem, npcWearer: npcWearer);
-        if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
+        // A recipient's transfer script that declined the item (DeclinedBy, ARC-SCRIPT-2827) leaves it with the hero: no payment.
+        if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is not null || total == 0) return moved;
         var paid = GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert);
         return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version } : paid with { Item = moved.Item, Version = Version };
     }
@@ -241,7 +242,8 @@ public sealed partial class GameSessionOwner
         var into = container ?? npc;
         var kind = container is null ? SessionHolderKind.Npc : SessionHolderKind.Container;
         var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts, slotWearer: slotWearer, slotPoints: slotPoints);
-        if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
+        // ARC-SCRIPT-2827: the merchant's transfer script declined the item (DeclinedBy): it stays with the hero and nothing is paid.
+        if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is not null || total == 0) return moved;
         var paid = TakeGoldFromNpc(Version, npc, (int)total);
         return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version }
             : paid with { Item = moved.Item, Version = Version, Scripts = moved.Scripts, InsertScript = moved.InsertScript, Messages = moved.Messages };

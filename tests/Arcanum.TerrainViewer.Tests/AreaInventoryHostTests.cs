@@ -65,7 +65,7 @@ public sealed class AreaInventoryHostTests
         Assert.IsTrue(AreaInventoryHost.Moved(moved));
         Assert.IsFalse(AreaInventoryHost.Moved(declined));
         Assert.AreEqual("the item's get script declined it — Not yet.", AreaInventoryHost.NotMoved(declined));
-        Assert.AreEqual("the PC's transfer script declined it", AreaInventoryHost.NotMoved(transfer));
+        Assert.AreEqual("the transfer script declined it", AreaInventoryHost.NotMoved(transfer));
         Assert.AreEqual("the PC cannot take it", AreaInventoryHost.NotMoved(new(GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, null, null, version)));
     }
 
