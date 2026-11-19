@@ -1231,3 +1231,40 @@ Read 2026-11-19 from the exports (Opus subagent; the token table 0x5A0750 row 72
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
 | FLM1 | action interpreter, case 3 `fl` (0x415BA0), final-line start (0x413A30), NPC-line builder (0x416840), record lookup (0x416AB0, compare 0x417E00) | The case stores N as the current line and calls 0x413A30, which calls the line builder. The lookup is a binary search by id over the loaded DLG's records and tests existence only, never the record's role. When no record has id N the builder sets the voice id to -1 and the text to a single space, returns 0 and shows no message; the case then sets the dialog state to 4 (final line) and the string goes on, so a later `co` still sets its flag and the attack runs at the string's end (CA2). The caller returns before the normal next-line step and the interface closes the dialog after showing the (blank) final line. No error, no fallback text. | modelled: the reply stays offered (no `TargetInvalid`), the line is blank, the dialog ends (`NpcFinalLine`), the string's other operations and the `co` event run. Installed: Fahrkus' "I will kill you" reply (dialog 2792, record 42, `fl 179 ,co`, no record 179) and 23 more replies in 8 files. A node that exists as a Player record is used by the original too (existence test only) but what it then does with the record's text prefixes and action is unread: 14 replies stay refused (#2804). jo/uw/et with a missing node are another routine (0x413A90) and unread. |
+
+## Script trigger conditions (ARC-RES-2815)
+
+Read 2026-11-19 from the exports in five slices (Opus subagents, one reader each). The full conditions, the Steamwoven host
+and the issue of each gap are rows TQ1–TQ28 of [script trigger conditions](../script-trigger-conditions.md); the rows here
+name the functions and the verdict. Corrections to TG2 and the audit are in that note's section 4.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TQ1 | object entry 0x441980, trap spot 0x4BBFE0/0x4BBE40 | Editor word or an empty slot: run default, no script; point 1 spot roll answers skip default without the script; no null, destroyed, off, map or mode test; writeback when changed. | F1; Steamwoven differs where a host gates on the shown map (TQ5, TQ13) |
+| TQ2 | hover description 0x57CCF0 (0x57CD93) | Examine for the local PC on every hover refresh, also at dialog start and in the portrait menu (return ignored there). | F1; partial in Steamwoven (#2829) |
+| TQ3 | interpreter 0x4449B0 | Whole-script gates: MP allow-list 997/999, native traps, two loads (first fails skip default, second run default), generator NPC run default, dialog-point dead/surrender/mind-control gates, auto-remove on both ends and past the last line. | F1 |
+| TQ4 | call script 0x44B030, call-ex 0x44B170 | Call script runs the interpreter directly at the caller's point for each pair with one shared header; call-ex goes through the entry. Both returns ignored. | F1 |
+| TQ5 | location change 0x444270, tile runner 0x4C0980, move 0x43E770 | Modes 1/2 run the tile script for a PC or NPC mover with no other gate; mode 0 none; placement, creation, teleport arrival re-run the tile; return ignored. | F1 (caller families partial) |
+| TQ6 | sector entry 0x4F2330 | Local PC on every mode-2 change, light and sound schemes then the script. | F1; Steamwoven differs (#2823) |
+| TQ7 | point 27 inside 0x4F2330 | Every direct follower of the PC, no map/distance/wait/alive gate. | F1; not modelled (#2822) |
+| TQ8 | change of place 0x4D3760/0x4D39A0, Teleported 0x43EAC0, path walk 0x4524C0 → 0x455350 | Non-waiting followers, recursively, to the same tile, each runs the arrival tile; path walk runs each tile before the move and the last tile twice. | F1 (event order not read) |
+| TQ9 | use goal node 0x428A10 (0x428C21) | Any actor on a portal after 2 AP in turn-based; 0 fails the node. | F1; agrees |
+| TQ10 | 0x428A10 (0x428CAB) | Any actor on other objects but containers, critters, beds. | F1; NPC part not modelled (#2826) |
+| TQ11 | open attempts 0x4AEB70, 0x4AED80 | Unlock before the lock test, also from path planning; 0 refuses. | F1; not modelled (#2825) |
+| TQ12 | AI gate 0x4A8570, subturn end 0x4B7630 | 16 then 15 on every AI pass in combat mode (16 real time only), 16 at each subturn end. | F1; not run (#2820) |
+| TQ13 | AI tick 0x4AD200/0x4AD420, fold 0x4F1CD0 → 0x4AD790, subturn hook 0x4B7010 | First heartbeat on each fold-flagged tick; heartbeat within 30 tiles, period 250 ms to 5 s; turn-based for the NPC turn actor. | F1; agrees (TG3 corrected) |
+| TQ14 | kill-on-sight 0x4AE120 | Will KOS after target validity from target finding, dialog start, reply step; 0 vetoes. | F1; not modelled (#2821) |
+| TQ15 | danger setter 0x4AABE0 | Enter on becoming combat, exit on leaving it for none, flee or surrender. | F1; agrees (ARC-AI-1530) |
+| TQ16 | guard witnesses 0x4AEE50, skill check 0x4C7160 | 11 for witnesses (exactly 1 reacts); failed steal or plant runs 33 then 11. | F1; 33 not modelled (#2825) |
+| TQ17 | action cases 54/55 of 0x447220, handler 0x445140, validation 0x45B620 | Kind-4 event; call at uses the time of day; destroyed or clearing drops the event, null references run as null. | F1 (cases partial); call at not modelled (#2824) |
+| TQ18 | item use 0x462CC0, loot window 0x572370, rest decision 0x57B180, move step 0x430CE3, component 0x452EEB, disarm 0x4BC7B0 | Use of items, containers and bodies (local PC), reversed bed polarity, trap step, magick-tech target as triggerer. | F1; agrees where hosted |
+| TQ19 | pickup 0x461810, drop 0x461AB0, transfer 0x461CA0, insert 0x466640, gold/ammo 0x4648C2/0x465977 | Get on ground items; drop/transfer before checks (0 refuses); insert ignored, pile attachee for gold/ammo. | F1; NPC parts partial (#2827) |
+| TQ20 | wield hooks 0x4677B0/0x467CB0, rewield 0x465530, removal 0x467860 | 24/25 on worn slots and on magick/tech point changes; 28 on every removal. | F1; partial (#2827) |
+| TQ21 | sale check 0x462170, hover quote 0x578330 | Exactly 1 to buy, skipped at haggle training 2+. | F1; not modelled (#2825) |
+| TQ22 | melee 0x4B3770, ranged 0x4B2F60, projectile 0x4B2870 | 7/34, 26 (target → attacker), 8/35; projectile landing and range rules. | F1; agrees |
+| TQ23 | damage apply 0x4B4390 (0x4B47F8) | 34/35 on worn armour after 23. | F1; not modelled (#2828) |
+| TQ24 | damage apply 0x4B4390 (0x4B446B), throw 0x4B3C00 | 23 with re-entry guard, 0 cancels damage; 6, 0 throws nothing. | F1; agrees where hosted |
+| TQ25 | kill 0x45DA20, destroy 0x43CCA0, heal applier 0x4B58C0 | 12 (0 skips death), 20 per follower of the killer's PC leader, 2 (0 keeps), 18 also when blocked. | F1; 20 not modelled (#2825) |
+| TQ26 | object break 0x43F1C0, portal bust 0x4F06E0, rest 0x57BAC0 | Bust on objects with broken art; leader sleeping per follower. | F1; agrees |
+| TQ27 | talk callback 0x57CC70, talk goal 21, dialog start 0x567460, resume 0x568480 | Range 5/10, dialog-point gates, generic greeting on run default, dialog start gates, resume line rule. | F1; agrees |
+| TQ28 | slides 0x569720 | 997 + n, null objects, uninitialised header words. | F1 |

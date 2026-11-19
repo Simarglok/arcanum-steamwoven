@@ -238,12 +238,14 @@ public enum AiHealStep
 /// list, and for <see cref="AiHealStep.Nothing"/>).</summary>
 public sealed record AiHealAttempt(string Target, AiHealStep Step, bool Found, AiChooserResult? Chooser);
 
-/// <summary>Why the heal step (0x4A8940) did not try anyone.</summary>
+/// <summary>Why the heal step (0x4A8940) did not try anyone. <see cref="Unknown"/> (ARC-AI-2793): the healer itself is not a critter the world holds
+/// (its window left it, or it was destroyed or moved away since the tick was scheduled): a typed stop, no exception.</summary>
 public enum AiHealStop
 {
     None,
     Asleep,
     Fleeing,
+    Unknown,
 }
 
 /// <summary>

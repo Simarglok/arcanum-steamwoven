@@ -16,6 +16,11 @@ supplied the names; every call site below was found by scanning all direct calls
 the point argument each one pushes. Behaviour is described in prose; no listing, byte or oracle output is in git. Original parity
 beyond the rows named here is **NOT_VERIFIED**.
 
+The firing conditions of every trigger kind (when, for whom, which gates, what the return changes) and the corrections to
+this note (TG2 callers, points 15 and 16, the first heartbeat, unlock, catching thief) are in
+[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ28); its section 2 is newer than the
+host column of section 2 here.
+
 ## Answer
 
 **Systemic, three causes.** A script of the original does not run in Steamwoven when (a) no Steamwoven host fires its trigger
