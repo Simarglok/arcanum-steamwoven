@@ -175,6 +175,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     private const string ArtMeta = "bar_art";
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
+    /// <summary>ARC-UI-2767: the centre of the button's box in window pixels through the strip's transform (the half size is scaled with the strip, unlike <see cref="ButtonCentreForSelfTest"/>'s global rect).</summary>
+    internal Vector2 BallCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalTransform() * (_buttons[button].Size * 0.5f);
     /// <summary>ARC-UI-2767: the centre, in window pixels, of the ring the generated top strip draws round the hole the button stands in (the centre of that hole's box scaled and placed with the strip); null when the button has no round hole (or no ring is drawn: the Original look).</summary>
     internal Vector2? RingCentreForSelfTest(AreaBarButton button)
     {

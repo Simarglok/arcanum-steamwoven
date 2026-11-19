@@ -139,7 +139,7 @@ public partial class TerrainViewerApp
                     {
                         var ring = panel.RingCentreForSelfTest(ball);
                         Require(ring is not null, $"[{tag}] the {ball} button has a ring round its hole");
-                        var off = panel.ButtonCentreForSelfTest(ball) - ring!.Value;
+                        var off = panel.BallCentreForSelfTest(ball) - ring!.Value;
                         GD.Print($"ARC-UI-2767 steamwoven [{tag}] {ball} ball centre minus ring centre: ({off.X:F3}, {off.Y:F3}) px");
                         Require(Math.Abs(off.X) <= 0.01f && Math.Abs(off.Y) <= 0.01f, $"[{tag}] the {ball} ball is centred in its ring (off by {off} px)");
                     }
