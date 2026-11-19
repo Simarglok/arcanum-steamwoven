@@ -267,7 +267,9 @@ public sealed partial class GameSessionOwner
     {
         if (LeaderKillingScript is not { } script) return;
         var map = _actor.Map.RuntimeMap;
-        foreach (var follower in FollowersOf(SessionEventKinds.PlayerEntity).ToArray())
+        // The original's array holds the living only (a follower that died earlier left it in its own kill step, 0x45DFC0); the session keeps a dead follower in its party order, so one with a death time is left out. The victim itself
+        // is still in the array when the loop runs (its party leave follows), so it is asked too.
+        foreach (var follower in FollowersOf(SessionEventKinds.PlayerEntity).Where(entity => entity == victim || !(_life.Critters.TryGetValue(entity, out var record) && record.DeathTimeMs is not null)).ToArray())
         {
             try { script(new(victim, map, follower)); }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { return; }

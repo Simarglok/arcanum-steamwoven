@@ -20,11 +20,12 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaLeaderKillingScriptTests
 {
     private const byte Triggerer = 0, Extra = 12, Number = 3, GlobalFlag = 4, Local = 2;
-    private const int PcType = 15, NpcType = 16, SeenFlag = 2371;
+    private const int PcType = 15, NpcType = 16, FollowerType = 14, SeenFlag = 2371;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
-    private static AreaObjectRecord Row(int index, int script, int point = ScrPoint.LeaderKilling)
+    // The follower rows have another object type (14) than the dead NPC (16) only so that a script can tell the two roles apart by type.
+    private static AreaObjectRecord Row(int index, int script, int point = ScrPoint.LeaderKilling, int type = NpcType)
     {
         var slots = new List<AreaSparseElement> { new(point, [0, 0, script]) };
         var fields = new List<AreaFieldValue>
@@ -32,7 +33,7 @@ public sealed class AreaLeaderKillingScriptTests
             new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, slots, null),
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, 0u, [], null),
         };
-        return new(Key(index), 0, NpcType, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
+        return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
@@ -68,7 +69,7 @@ public sealed class AreaLeaderKillingScriptTests
             }
             Write("tig.dat", AreaOwnerFixture.Dat());
             Write("modules/Syn.dat", AreaOwnerFixture.Dat());
-            // 921: only when the extra object is a PC (type 15) and the triggerer an NPC (type 16) does it set global flag 2371 and the attachee's local flag 1; the answer is skip default.
+            // 921: only when the extra object is a PC (type 15) and the triggerer the dead NPC (type 16, not the follower's 14) does it set global flag 2371 and the attachee's local flag 1; the answer is skip default.
             Write("scr/00921roles.scr", Program(
                 Do(new(ScrCatalogue.Action.GetObjectType, (Extra, 0), (Local, 0))),
                 Do(new(ScrCatalogue.Action.GetObjectType, (Triggerer, 0), (Local, 1))),
@@ -96,7 +97,7 @@ public sealed class AreaLeaderKillingScriptTests
         {
             using var session = ConversationSessionFixture.Create();
             var victim = Row(1, 0, ScrPoint.Heartbeat);
-            var follower = Row(2, 921);
+            var follower = Row(2, 921, type: FollowerType);
             var host = Host(session, content, victim, follower);
             var ran = host.RunLeaderKilling(AreaUseScriptHost.EntityId(follower), AreaUseScriptHost.EntityId(victim), host.Pc, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
@@ -115,7 +116,7 @@ public sealed class AreaLeaderKillingScriptTests
         {
             using var session = ConversationSessionFixture.Create();
             var victim = Row(1, 0, ScrPoint.Heartbeat);
-            var follower = Row(2, 921);
+            var follower = Row(2, 921, type: FollowerType);
             var host = Host(session, content, victim, follower);
             host.RunLeaderKilling(AreaUseScriptHost.EntityId(follower), AreaUseScriptHost.EntityId(victim), new ScrObjectRef(1, AreaUseScriptHost.EntityId(victim)), session.Rules.Scripts);
             Assert.IsFalse(Flag(session, SeenFlag), "an NPC extra object is not the PC leader");

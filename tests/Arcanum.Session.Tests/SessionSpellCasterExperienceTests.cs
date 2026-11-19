@@ -288,6 +288,20 @@ public sealed class SessionSpellCasterExperienceTests
     }
 
     [TestMethod]
+    public void A_follower_that_died_earlier_is_not_asked_but_the_victim_that_is_a_follower_is()
+    {
+        var record = Bolt(1000);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var asked = Watch(owner, Cat, Thug, Rat);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ApplyDamage(owner.Version, SessionLifeTarget.Critter(Cat, new LifeFacts(), default), new LifeDamage { HitPoints = 1_000 }).Disposition);
+        Assert.IsNotNull(owner.QueryLifeRecord(Cat)!.Value.DeathTimeMs);
+        CastAtRat(owner, caster, record);
+        CollectionAssert.AreEqual(new[] { Thug, Rat }, asked.Select(a => a.Request.Follower).ToArray(), "the dead Cat left the array; the dying Rat is still in it when the loop runs");
+    }
+
+    [TestMethod]
     public void A_kill_by_a_follower_of_the_hero_asks_the_loop_and_one_by_another_npc_does_not()
     {
         var record = Bolt(1000);
