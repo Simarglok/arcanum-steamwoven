@@ -257,7 +257,7 @@ public sealed class AreaBarter
     public SessionBarterOpenResult Open()
     {
         var opened = _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower && !Merchant.PcLeads, GoldKind(),
-            AreaInventoryHost.DiagnosticInsertCheck);
+            AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
         // ARC-UI-1740: the skill module's gambling roll is thrown before anyone can bet and saved with the session (SR12).
         if (opened.Disposition != GameSessionDisposition.Rejected) _session.EnsureGamblingRoll(_session.Version);
         return opened with { Version = _session.Version };
