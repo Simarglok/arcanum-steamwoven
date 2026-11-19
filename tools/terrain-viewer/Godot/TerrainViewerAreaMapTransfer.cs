@@ -344,6 +344,8 @@ public partial class TerrainViewerApp
             InsertCheck = inventory?.InsertCheck,
             // ARC-MAGIC-1823: a script's transfer item from the hero runs the item's wield-off, remove-item and insert-item scripts (the hero's give does).
             ItemScripts = inventory?.ItemScripts(owner),
+            // ARC-SCRIPT-2787: a printed or floated line's @npcname@ is the shown name of the script's attachee (the description tables, as the hover reads them).
+            NpcName = AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog),
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);
