@@ -178,6 +178,8 @@ public sealed class NpcAttackStateTests
             var result = owner.AttackByNpc(owner.Version, new SessionNpcAttack(rat) { Target = victim, HitScripts = heard.Add });
             if (result.Resolution?.Refusal != AttackRefusal.None) continue;
             var hit = result.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+            // ARC-SCRIPT-2841: a critical miss's self-hit tells the host as well (the NPC is its own victim).
+            if (result.Resolution?.Outcome == AttackOutcome.CriticalMiss) { Assert.AreEqual(before + 1, heard.Count); Assert.IsTrue(heard[^1].SelfHit); continue; }
             Assert.AreEqual(before + (hit ? 1 : 0), heard.Count);
             if (hit) { hits++; Assert.AreEqual((null, result.Resolution!.Outcome == AttackOutcome.CriticalHit, false, false), (heard[^1].Weapon, heard[^1].Critical, heard[^1].Projectile, heard[^1].Thrown)); }
             else misses++;

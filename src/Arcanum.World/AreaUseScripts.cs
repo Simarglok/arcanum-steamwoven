@@ -1258,7 +1258,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // ARC-DEV-265: the session holds the hero's arrays alone; another PC reads 0 (SessionScriptLimits.IsHero).
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
-    /// <summary>ARC-SCRIPT-2957 (ledger TQ31, addresses there): the interpreter's entry gate, which every object point of this host runs through (the other hosts answer false, #2988): an NPC (type 16) whose NPC flags (slot 69) carry the monster-generator bit 0x80000 runs no script and answers run default.</summary>
+    /// <summary>ARC-SCRIPT-2957 (ledger TQ32, addresses there): the interpreter's entry gate, which every object point of this host runs through (the other hosts answer false, #2988): an NPC (type 16) whose NPC flags (slot 69) carry the monster-generator bit 0x80000 runs no script and answers run default.</summary>
     public bool IsMonsterGenerator(ScrObjectRef attachee) => Row(attachee) is { Type: 16 } row && Number(row, NpcFlagsSlot) is { } flags && (flags & MonsterGeneratorNpcFlag) != 0;
     private const int NpcFlagsSlot = 69;
     private const long MonsterGeneratorNpcFlag = 0x80000;
@@ -3477,7 +3477,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // The old NPC stays on any refusal below: the made critter goes again (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
         ScrObjectRef? Undo()
         {
-            _session.DestroyCreatedObject(_session.Version, critter.Entity);
+            _session.DestroyCreatedObject(_session.Version, critter.Entity, scripts: ItemScripts);
             LastTransformed = null;
             return null;
         }

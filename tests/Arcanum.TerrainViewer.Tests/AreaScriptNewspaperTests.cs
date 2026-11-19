@@ -87,12 +87,12 @@ public sealed class AreaScriptNewspaperTests
         ScrDispatcher.RunObject(new(ScrPoint.Dialog, f.Npc, f.Host.Pc, null), f.Host, new() { Rules = f.Session.Rules.Scripts, Admission = AreaScriptHost.Admission });
 
     [TestMethod]
-    public void The_dialog_sets_hold_both_newspaper_actions_inside_S59()
+    public void The_dialog_sets_hold_both_newspaper_actions_inside_the_latest_set()
     {
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.QueueNewspaper) && set.Actions.Contains(ScrCatalogue.Action.FloatNewspaperHeadline), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
     }
 

@@ -3,6 +3,8 @@
 Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `8.0.425` with roll-forward disabled; [Directory.Build.props](../../Directory.Build.props) targets `net8.0`; [Directory.Packages.props](../../Directory.Packages.props) centralizes package versions. Godot adapters/labs use `Godot.NET.Sdk/4.7.2`, Godot **4.7.2 .NET** and matching .NET export templates. Development currently targets macOS. Version changes require a separate scoped decision; do not replace retained shared installations implicitly.
 
 The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
+The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. These three are task checks, run by a change to the manifest, the census tables or these tools, and are not in the root check list. It holds identifiers, sizes and verdicts only, never pixels.
+The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`.
 
 ## Process-local environment
 
@@ -1181,6 +1183,22 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
 ```
 
+## Steamwoven prompt library (ARC-RES-2455)
+
+[`tools/steamwoven_ui/prompt_library.py`](../../tools/steamwoven_ui/prompt_library.py), the prompts in `tools/steamwoven_ui/prompts/` (text only; design in the
+[TRD](../ui/steamwoven-interface-trd.md#prompt-library-and-handoff-arc-res-2455)). Standard-library Python (ImageMagick `magick` only for `refs`); it runs no
+Godot and no `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main checkout (a worktree has no `local/`),
+never git.
+
+```sh
+python3 -B tools/steamwoven_ui/prompt_library.py check        # task check: library, files, kinds against the TRD
+python3 -B tools/steamwoven_ui/prompt_library.py self-test    # task check: synthetic inbox and provenance
+python3 -B -m unittest tools.steamwoven_ui.test_prompt_library
+python3 -B tools/steamwoven_ui/prompt_library.py refs         # 800 x 600 layout references from the census screenshots
+python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
+python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
+```
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
@@ -1359,6 +1377,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Toggle state census (ARC-SCRIPT-2324) | `DAT_ROOT` = the installed game folder; `ARC_TOGGLE_STATE_REPORT` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~ToggleStateCensusRealData&TestCategory=RealData` (about 4 min); every installed script that runs toggle state by the focus kind of its object operand, the placed attachments of the 79 maps' windows that run one, and the static rows the map data stores off; [ledger OT8–OT9](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221) |
 | Toggled scenery lights survey (ARC-SCRIPT-2585) | `DAT_ROOT` = the installed game folder; `ARC_SCENERY_LIGHT_REPORT` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~SceneryToggleLightCensusRealData&TestCategory=RealData` (about 2 min); the sceneries of the 79 maps that carry a light, and the ones the scripts 1179 and 2407 toggle (named 1609 and 1668); [ledger OT10](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221) |
 | Armour critical points census (ARC-SCRIPT-2828) | `DAT_ROOT` = the installed game folder | Terrain viewer tests, `FullyQualifiedName~The_installed_critical_points_are_counted&TestCategory=RealData` (about 2 min); the installed critical-hit (34) and critical-miss (35) attachments by object type over the placed rows of the 81 maps and over every item prototype (2 weapon and 2 armour rows at 34, 2 weapon rows at 35, no prototype), and the armour scripts read against the combat-point set; script numbers only; `ARC_ARMOUR_CRITICAL_CENSUS` = a text file the report is written to (optional); a failure means the counts changed: update [trigger conditions TQ23](../research/script-trigger-conditions.md) |
+| Self-hit scripts census (ARC-SCRIPT-2841) | `DAT_ROOT` = the installed game folder; `ARC_SELF_HIT_CENSUS` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~The_installed_weapons_with_hit_and_critical_hit_scripts&TestCategory=RealData` (about 4 min); the installed hit (7), critical-hit (34) and critter-hits (26) attachments by object type over the placed rows of the 81 maps and every item prototype (26 placed weapon rows at 7, 2 at 34, 4 weapon prototypes at 7, 18 placed critter rows and 9 critter prototypes at 26); [ledger TQ31](../research/ledger/scripts.md) |
 | Generator held items census (ARC-WORLD-1707) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~GeneratorItemCensusRealDataTests&TestCategory=RealData` (seconds); the 83 items of the 27 installed monster generators against their prototypes (instance overrides, the item and object flags the session reads); counts only; a failure means the counts changed: update [ledger GS5](../research/ledger/npc-ai.md) |
 | Art number census (ARC-SCRIPT-1780) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~ObjectArtCensusRealData&TestCategory=RealData` (about 1 min); the art classes of the NPC prototypes and placed rows (787 placed unique NPCs) and the object each use of change art number names (none an NPC); [ledger AN16–AN17](../research/ledger/scripts.md#change-art-number-arc-script-1735-e5-a-tail) |
 | Hero sight and dialog scripts (ARC-SCRIPT-1863) | `DAT_ROOT` = the installed game folder | Scripting project, `FullyQualifiedName~ScrHeroSightCensusRealData&TestCategory=RealData` (the installed clauses of conditions 26, 28, 29); terrain viewer tests, `FullyQualifiedName~AreaHeroSightScriptRealData&TestCategory=RealData` (scripts 2602 and 1130 run under the use host; under a second each); [ledger CS17](../research/ledger/scripts.md) |

@@ -217,7 +217,39 @@ Unit tests: `SteamwovenColumnMenuTests` (the plate and the black at the AC5 size
 (default sizes 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200, 3440 × 1440, 1280 × 800) checks, for the main and options windows and the pre-made and new-character screens, the plate's scale and place against `Fit`, its full height, the black rectangles, no full-width backdrop, the labels' hit tests and the pixels of the black, and saves
 `PATH-column-WINDOW-WxH.png`; with the column option off, and with it on but the HD option off, nothing of it shows. The same pass runs on the save list inside the save window's smoke (`SaveListColumnForSmoke`, saved with `ARC_AREA_SAVE_CAPTURE`).
 
+### The fitted column (owner decision 2026-11-19, ARC-UI-2890)
+
+After the first captures the owner liked the column at 16:9 and rejected the wood fill in the gaps at 16:10. The choice `column` is now the **fitted column** (`SteamwovenColumnMode.FitHeight`, `SteamwovenLayoutOptions.ColumnFitted`): the strips and the open window are one 4:3 composition
+(41 + 400 + 159 = 600 units of the original's 800 × 600 screen) scaled to the frame's whole height, `u = frame height / 600` device px per unit, a column `800 · u` wide centred in the frame, the world (or black) at the sides. At 16:9 it is the k = 1 column within a pixel or two (`u = 3.6 · f`; the strips are exactly 41 and 159 units, without the sliver and overhang of the 150 and 570 px bands); at 16:10 the
+composition is scaled up (`4 · f`), so the window zone fills the middle band exactly and there are **no gaps and no wood fill**. Any aspect ratio is supported by the same rule: the frame is the whole window, or, where the window is taller than 4:3, a 4:3 band of the window's width centred
+vertically (black bars above and below, however thin); a wider window shows the world to its edges. The top strip is `round(41 u)` high, the bottom strip ends at the frame's bottom (`159 u`), so strip art and bands coincide (no sliver, no overhang). The HD art is to be generated for 3840 × 2160 and reduced
+for the other sizes. `column-thin` (k = 0.8, wood in the gaps) and the unfitted k = 1 column (`column-wood` in the smoke) stay for comparison; the wood pieces of `SteamwovenBackdrops` are drawn only for them. Unit tests: `SteamwovenColumnTests` (the fitted table at eleven sizes).
+
+### The column in the viewer (ARC-UI-2890)
+
+The viewer draws the column for the play screen and the middle-band windows of the #2575 hook; the full-screen menus (BD-H) and the two-strip screens' backdrops are [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891).
+The Godot-free parts are `SteamwovenHudPlan.Column` / `WindowZone`, `SteamwovenWindowZone`, `SteamwovenBackdrops.Pieces` and `SteamwovenColumnEdges`; the drawing is `AreaGameBarPanel` with `SteamwovenEdgeView`.
+
+- **Option (AC1).** The game setting `interface layout` (`AreaGameSettings.InterfaceLayout`, the settings line of the same name, a launcher row after the generated interface): `column` (the default while the owner tests the hypothesis), `column-thin` or `full-width`
+  (`SteamwovenLayoutChoices`). This run's `ARC_STEAMWOVEN_LAYOUT` (the same three words, for the launcher's `--env`) overrides it. It is read only while the generated interface is on; with the HD option or the generated interface off the whole-factor layout is unchanged.
+- **Play screen (AC2).** Both strips stand in the column at `Column.TopStrip` / `BottomStrip` (the top strip on the band's lower edge, as before); no side boards, no bottom board; the only board is the sliver of the strip's wood above the top strip where its 41 units
+  are a little lower than the band (as wide as the column). The world is drawn over the whole frame. **End caps** (placeholder art drawn from numbers, `SteamwovenEdgeView`): a brass edge of about one unit (a dark line, a highlight and mid brass, at least 2 px) over the outermost pixels of each strip's
+  end and, outside it, a shadow on the world, seven units wide, falling off with the square of the distance, clipped to the frame. While a menu window is open the middle band's ends are capped too.
+- **Windows (AC3).** `SteamwovenWindowZone.Body` / `Screen` use `Column.Window.Zone` and the column's unit scale `3.6 · k · f`, so every window of the hook is as wide as the column. The family's wood fills `GapAbove` and `GapBelow` (`SteamwovenBackdrops.Pieces`: one piece per gap, two for a
+  two-part family split at the zone's left edge plus the left part's units; none where the zone fills the middle band, 16:9 at k = 1); its grain continues the window art's from the zone's top left. The world left and right of the column (`Column.WorldLeft`, `WorldRight`) is dimmed while a menu window
+  is open: a screen-texture shader darkens and desaturates it (`SteamwovenWorldDim`, default 0.45 and 0.55, in the column options, `SteamwovenColumnMode.WorldDim`); presentation only, the dimming takes no pointer, so a click on the world is what it is under an open window today.
+- **Edge elements (AC4).** The follower portraits hang from the frame's left edge (`AreaGameBarPanel.EdgeScreen`, the strips' screen moved to the frame's left); the spell pane stands 12 px right of the frame's left edge and 12 px above its bottom (`EdgeRect`, `EdgeBottom`); the combat list 8 px
+  left of the frame's right edge and 8 px under its top (`EdgeTop`); the text bubbles' and floaters' view is the frame's width between the strips (`FreeRect`). What takes the strips' screen (the sleep and fate views, the windows' free width `FreeArea`, `FreeLeft`) is the column's.
+  A pane wider than the side (1280 × 800: 160 px each side) lies partly under the strip, which draws over it: a recorded limit.
+- **Smoke (AC5).** `ARC_STEAMWOVEN_VARIANTS` takes `column` and `column-thin` (the default list now ends with them; `legacy` and `thin` are the Original look and the full-width layout of the owner's comparison). For each size it checks the strips' places and width, the free area, the boards, the caps,
+  the edge elements, the brass edge read back, the dimming read back (the world's mean brightness falls under an open menu), then opens the inventory and every window of the hook (the zone place, the pieces of the wood, the seam ratio at the zone's top and bottom edges) and saves
+  `PREFIX-hud-steamwoven-column[-thin]-WxH[-menu|-WINDOW].png` (local, never in git).
+
 ## Asset kit
+
+**Master scale (ARC-RES-2949).** The kit stays at 3.6 px per unit (composition 2880 × 2160): the HD pack audit compared it with the pack's 4 px per unit
+(3200 × 2400) and recommends 3.6, because its steps draw the 16:9 and 21:9 sizes (720p, 1080p, 1440p, 2160p) without resampling and the kit, its tools
+and the layout already use it; a pack frame reused in the kit is area-resampled by 0.9 ([audit](../rendering/hd-pack-4x3-audit.md#kit-master-scale-36-or-4-px-per-unit)).
 
 Part kinds:
 
@@ -230,7 +262,7 @@ Part kinds:
 | hardware | fixed metal or frame pieces over a strip or a window background | brass rings, sockets, vial housings, rails, frames |
 | plate | a button's body | round and square plates by size |
 | glyph | a symbol on a transparent background | button symbols |
-| state | an overlay for a button state | hover, pressed, disabled |
+| state | an overlay for a button state | hover, pressed (the original has no disabled frame; disabled is a Steamwoven option) |
 | sheet | a document laid over a backdrop | newspaper, letter, book page, telegram, plaque |
 | grid | a grid as its own layer | the schematic grid, inventory cells |
 | picture | an image on a transparent background | items on the schematic, item and spell icons, portraits |
@@ -241,13 +273,13 @@ Part kinds:
 - **SWI-KIT-1** Every part is a row of the kit manifest `tools/steamwoven_ui/kit.json`
   ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)): id, kind, master size, anchor, layers,
   states, used-by windows, source original art ids (identifiers only), family, batch, provenance record id, status.
-  The manifest holds no pixels.
+  The manifest holds no pixels. **As built (ARC-DEV-2454):** `tools/steamwoven_ui/build_kit.py` makes it from the [census](steamwoven-interface-census.md) (one part per original art file; census rows with the same name and size are taken as one file and are one part with all their numbers in `source_arts`; master = original units × 3.6 snapped to the 6 px grid, halves up; the strips come out at 150 / 570 px, marked `provisional` until [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) fixes the open question), and `tools/steamwoven_ui/kit_check.py` validates it (unique ids, known kinds including `cap`, sizes on the grid and inside the composition, layers naming existing parts without a cycle, known windows, every census art a part or excluded, each part agreeing with its census rows in kind, batch, size, windows and frames, every window that draws art used, and the caps agreeing with their strip). Two census arts are kept with a note: art 2 `Black` (the census says no kit part is needed) and art 330 (network lobby, out of scope); a batch or the owner may drop them. The parts no original art feeds are rows of their own with an open size (`size_basis` `open`, fixed by their batch): the four end caps, the follower button's backing, the six materials, the inventory and schematic grid layers and the corner and rivet decor. The 65 census rows that are not kit parts (33 bitmap fonts, 24 network play, 8 unused tabs) are listed under `excluded`. The button's ring, glyph and state layers are not rows yet: B-BUTTONS ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) splits each plate when it produces them.
 - **SWI-KIT-2** A master is a PNG, RGBA 8 bit, sRGB, straight alpha, with sides that are multiples of 6 px.
 - **SWI-KIT-3** A part used in several windows (a reuse group of the census) is one part at one master size.
 - **SWI-KIT-4** A part with transparency has a clean edge: no halo of the generator's background colour (checked by
   the fit tool, SWI-VER-3).
 - **SWI-KIT-5** A button is plate + ring + glyph + state overlays. The states of one button size (idle, hover, pressed,
-  disabled) are generated together on one sheet, so they match.
+  disabled) are generated together on one sheet, so they match. The original has no disabled frame (idle 0, pressed 1, hover 2: [states note](steamwoven-interface-states.md#the-originals-state-rules)); a disabled overlay is a Steamwoven addition and an open question there.
 - **SWI-KIT-6** A gauge is glass, housing and liquid as layers; the fill level is drawn from the value, not from a frame
   sequence.
 - **SWI-KIT-7** Order of production: the strips, end caps and window backgrounds, then buttons and glyphs, sheets, the schematic, gauges and
@@ -257,12 +289,13 @@ Part kinds:
 
 | Step | Who | Output | Where it lives |
 | --- | --- | --- | --- |
-| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)) | [census note](steamwoven-interface-census.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
+| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451), states and animations [#2971](https://github.com/Simarglok/arcanum-steamwoven/issues/2971)) | [census note](steamwoven-interface-census.md), [states and animations note](steamwoven-interface-states.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
 | 2. Kit manifest | agent ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) | `kit.json`, validator | git |
 | 3. Context images | owner in Codex ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)) | whole-screen redraws of key screens | local |
 | 4. Material sheet | owner in Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
 | 5. Parts | owner in Codex, per batch | raw generations | `local/steamwoven-ui/outbox/` |
 | 6. Fit | agent tool ([#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459)) | masters | `local/steamwoven-ui/masters/` |
+| 6b. Assemble | agent tool ([#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972), [page](steamwoven-kit-assembly.md)) | clean base plus placed details baked into the HD frame of the original ART, one frame per original frame with its state | local |
 | 7. Look check | owner | per-batch composite | thread only |
 | 8. Bake | agent tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460)) | four step sets | per SWI-PRV |
 | 9. Runtime | agent ([#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)) | composed interface | code in git |
@@ -287,6 +320,14 @@ Part kinds:
   send anything to Codex. Handoff: the agent puts a batch's prompts, references and a short list of what to generate into
   `local/steamwoven-ui/inbox/<batch>/`, asks the owner in the thread, and the owner puts the results into
   `local/steamwoven-ui/outbox/<batch>/`; the agent then writes the provenance records (SWI-GEN-6) and runs the fit tool.
+
+### Prompt library and handoff (ARC-RES-2455)
+
+[#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455). `tools/steamwoven_ui/prompts/` is text only: `common.txt` (the rules of every prompt: layout truth is the original, one 4:3 composition, no text, colour lock to the sheet, painted look, transparent parts with a clean edge), one prompt per context screen (`ctx-hud`, `ctx-inventory`, `ctx-character`, `ctx-logbook`, `ctx-schematic`, `ctx-reading`, `ctx-main-menu`, each 2880 × 2160), the material sheet (`mat-sheet`, twelve swatches sampled from the approved contexts, 3840 × 2160) and one prompt per kit kind (`kind-*`, with the three backdrop variants: window background, half of a two-part window, full-screen plate), listed in `library.json` (id, group, kind, size, reference slots, batch). `references.json` holds the crop geometry of the 800 × 600 layout references built from the census screenshots (local only).
+
+- The tool `tools/steamwoven_ui/prompt_library.py` checks the library (unique ids, a prompt for every TRD kind and every context screen, declared sizes on the 6 px grid (a part's own size is checked when its prompt is composed and, with `provenance`, the aspect of each result, because the generator may return a smaller size; the strip heights stay an open question), plain ASCII, known placeholders and reference slots, the kinds against the asset kit table above), composes a prompt (common rules, body, reference slots) with its sha256, builds the layout references (`refs`, needs ImageMagick), builds a batch inbox (`inbox`: composed prompts, references, `batch.json`, `README.txt`) and, after the owner has put the results into the outbox, writes one provenance record per image (`provenance`: generator and version, date, prompt id and hash, reference hashes, who ran it, SWI-GEN-6). The inbox and outbox are `local/steamwoven-ui/inbox|outbox/<batch>/` of the main checkout.
+- Batches: `style-anchors-contexts` (the seven context images), then `style-anchors-sheet` (the material sheet, made from the approved contexts); the owner's approval of the sheet is [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456). Part prompts take the part id, a note and the size from the production batch that uses them.
+- Checks: `python3 -B tools/steamwoven_ui/prompt_library.py check`, `... self-test`, `python3 -B -m unittest tools.steamwoven_ui.test_prompt_library` (task checks, not part of `run_tests.py`).
 
 ## Bake and runtime
 
@@ -364,6 +405,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method | #2457 |
 | 4. Tools | [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459) | fit tool | #2454 |
 | 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
+| 4. Tools | [#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972) | kit assembly tool: base plus details at the original coordinates, baked per original frame (`tools/steamwoven_ui/assemble.py`, [page](steamwoven-kit-assembly.md); done) | #2893, #2971 |
 | 5. Runtime | [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) | runtime composition of the strips, caps, window backgrounds and plates, window integration issues | #2925, #2460 |
 | 5. Runtime | [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) | fonts at the four steps | #2451 |
 | 6. Production | [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) to [#2935](https://github.com/Simarglok/arcanum-steamwoven/issues/2935) (replace the full-width #2472 to #2480, [batch table](steamwoven-interface-census.md#production-batches)) | strips with caps (B-BOARD), window backgrounds (BD-A to BD-G), full-screen plates (BD-H) | fit, bake, material sheet, surface method |

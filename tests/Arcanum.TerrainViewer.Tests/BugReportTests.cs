@@ -143,6 +143,69 @@ public sealed class BugReportTests
     }
 
     [TestMethod]
+    public void The_load_menu_name_is_the_date_and_the_first_words_in_characters_the_save_font_draws()
+    {
+        var at = new DateTime(2026, 11, 19, 20, 5, 59, DateTimeKind.Local);
+        Assert.AreEqual("Bug report 2026-11-19 20:05 - The door did not open", BugReportWriter.LoadMenuName(at, "The door\r\n  did not\topen"));
+        Assert.AreEqual("Bug report 2026-11-19 20:05 - Dver ne otkrylas, ezh Sch", BugReportWriter.LoadMenuName(at, "Дверь не открылась, ёж Щ"),
+            "Russian letters become Latin ones, as the font draws only characters up to 255");
+        Assert.AreEqual("Bug report 2026-11-19 20:05", BugReportWriter.LoadMenuName(at, "\u2014 \u4E2D\u6587 \u0007"), "nothing drawable left gives the date alone");
+        Assert.AreEqual("Bug report 2026-11-19 20:05", BugReportWriter.LoadMenuName(at, null));
+        var long_ = BugReportWriter.LoadMenuName(at, new string('x', 300));
+        Assert.IsTrue(long_.Length <= GameSaveLimits.Default.MaxDescriptionLength, long_);
+        Assert.IsFalse(long_.Any(c => c > 255 || char.IsControl(c)));
+    }
+
+    [TestMethod]
+    public void A_report_also_saves_the_game_into_the_load_menu_under_a_new_slot_and_leaves_the_players_slots_alone()
+    {
+        using var session = Session();
+        var (save, refusal) = BugReportCapture.Save(session, Outside, s => AreaSaveList.Summary(s, "Bug report", "Crash Site"), Png);
+        Assert.IsNull(refusal);
+        var menu = new GameSaveLibrary(Path.Combine(_directory, "user", "saves"));
+        var own = AreaSaveList.Summary(session, "My own game", "Crash Site");
+        Assert.IsTrue(menu.Write("slot0003", session.Capture(), own).Saved);
+        Assert.IsTrue(menu.Write(GameSaveLibrary.AutoName, session.Capture(), own).Saved);
+        var before = File.ReadAllBytes(menu.Slot("slot0003").Path);
+        var places = new BugReportPlaces(Path.Combine(_directory, "game", "reports"), null, Path.Combine(_directory, "user", "reports"));
+        var result = BugReportWriter.Write(Content(screenshot: Png, save: save), places, menu);
+        Assert.IsTrue(result.Saved, result.Status);
+        Assert.AreEqual("slot0004", result.LoadMenuSlot, "the highest slot plus one, never an existing one");
+        Assert.AreEqual(0, result.Failed.Count, string.Join("; ", result.Failed));
+        var rows = menu.List().Entries;
+        Assert.AreEqual(3, rows.Count);
+        Assert.AreEqual("My own game", rows.Single(e => e.Name == "slot0003").DisplayDescription);
+        CollectionAssert.AreEqual(before, File.ReadAllBytes(menu.Slot("slot0003").Path), "the player's slot is untouched");
+        var copy = rows.Single(e => e.Name == "slot0004");
+        Assert.AreEqual(("Bug report 2026-10-28 20:43 - The door | did not open second line", GameSaveDetails.Present, true),
+            (copy.DisplayDescription, copy.Details, copy.HasThumbnail));
+        using var other = Session();
+        using var loaded = AreaQuickSave.Load(menu.Slot("slot0004"), other, _ => null).Owner ?? throw new AssertFailedException("the menu copy did not load");
+        Assert.AreEqual(Outside, loaded.QueryActor());
+        var report = File.ReadAllText(Path.Combine(result.Folder!, "report.md"));
+        StringAssert.Contains(report, "also in the game's own save list as `slot0004`");
+        // Without a save or without a library nothing is written there.
+        var noSave = BugReportWriter.Write(Content(), places, menu);
+        Assert.IsNull(noSave.LoadMenuSlot);
+        Assert.AreEqual(3, menu.List().Entries.Count);
+    }
+
+    [TestMethod]
+    public void A_load_menu_folder_that_cannot_take_the_copy_is_listed_and_does_not_fail_the_report()
+    {
+        using var session = Session();
+        var (save, _) = BugReportCapture.Save(session, Outside, s => AreaSaveList.Summary(s, "Bug report", "Crash Site"), Png);
+        var blocked = Path.Combine(_directory, "menu-file");
+        File.WriteAllText(blocked, "a file where the save folder would go");
+        var result = BugReportWriter.Write(Content(save: save), new(Path.Combine(_directory, "game", "reports"), null, Path.Combine(_directory, "user", "reports")),
+            new GameSaveLibrary(blocked));
+        Assert.IsTrue(result.Saved, result.Status);
+        Assert.IsNull(result.LoadMenuSlot);
+        Assert.IsTrue(result.Failed.Any(f => f.StartsWith("load menu", StringComparison.Ordinal)), result.Status);
+        Assert.IsTrue(File.Exists(Path.Combine(result.Folder!, "save", "slot0000.json")), "the report's own save is still written");
+    }
+
+    [TestMethod]
     public void A_folder_beside_the_game_that_cannot_be_written_falls_back_to_the_user_folder_and_says_why()
     {
         var blocked = Path.Combine(_directory, "game", "reports");

@@ -940,7 +940,7 @@ public sealed class ItemWorldScriptTests
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.DistanceBetween));
         // ARC-SCRIPT-2347 (IV13): the quest state condition, assign object and get object type are answered by the host's world part now.
         Assert.IsTrue(set.Conditions.Contains(ScrCatalogue.Condition.PcQuestState) && set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.GetObjectType));
-        Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
+        Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.Latest));
     }
 
     // ARC-SCRIPT-2375 (IV28): get and set story state of a point 21 script.

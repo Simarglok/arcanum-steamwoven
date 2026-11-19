@@ -301,7 +301,7 @@ public sealed class AreaMapTransfers
         WorldSectorCoordinate.Containing(new(to.X, to.Y)) != WorldSectorCoordinate.Containing(new(from.X, from.Y));
 
     /// <summary>
-    /// ARC-SCRIPT-2957 (ledger TQ7, TQ32): whether the hero's entered tile runs the followers' new-sector script (point 27), which the sector entry (addresses in the ledger) runs for the local PC's mode-2 location change only: a step that crosses a sector
+    /// ARC-SCRIPT-2957 (ledger TQ7, TQ33): whether the hero's entered tile runs the followers' new-sector script (point 27), which the sector entry (addresses in the ledger) runs for the local PC's mode-2 location change only: a step that crosses a sector
     /// border, and an arrival (<paramref name="from"/> equal to <paramref name="to"/>: map change, same-map teleport landing, push and path-walk relocation); a step inside one sector (mode 1) and a tile of the spell path walk
     /// (<paramref name="tileScriptOnly"/>, no sector entry) run none. A game load (no location-change call for the PC at all), a window move of the shown map (not a location change) and the new-game placement (no followers; the sector script
     /// there is #2850) never queue a step, so they run none.
