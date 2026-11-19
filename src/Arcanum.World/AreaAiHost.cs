@@ -2522,9 +2522,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private Action<SessionHitScriptEvent>? HitScriptsOf(string attacker, string? victim) =>
         _scene.HitScripts is not { } run || victim is null ? null : hit => run(attacker, victim, hit);
 
-    // ARC-SCRIPT-2828: the armour scripts of a critical damage step of an NPC's attack on <paramref name="victim"/> (null: no victim named, none run).
+    // ARC-SCRIPT-2828: the armour scripts of a critical damage step of an NPC's attack on <paramref name="victim"/> (null: a throw at a location or a strike on an object; only the attacker's own critical self-hit can reach the scripts then, so the attacker stands for it).
     private Action<SessionArmourCriticalEvent>? ArmourScriptsOf(string attacker, string? victim) =>
-        _scene.ArmourScripts is not { } run || victim is null ? null : armour => run(attacker, victim, armour);
+        _scene.ArmourScripts is not { } run ? null : armour => run(attacker, victim ?? attacker, armour);
 
     /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event. ARC-DEV-282: a bow or firearms attack whose weapon has a projectile
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
@@ -2680,7 +2680,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim), ArmourScripts = ArmourScriptsOf(id, null),
         });
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2780,7 +2780,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim),
+            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim), ArmourScripts = ArmourScriptsOf(shooter, null),
         });
         EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";

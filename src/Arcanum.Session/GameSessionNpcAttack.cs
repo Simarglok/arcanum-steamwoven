@@ -544,7 +544,8 @@ public sealed partial class GameSessionOwner
         if (attack.TakingDamage is { } asks && !asks(recipient))
             return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
         // ARC-SCRIPT-2828 (0x4B47F8): the victim's worn armour runs its critical-hit script after the victim's own and before the hit points are written.
-        NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.AttackerWorn, recipient == DamageRecipient.Target ? targetStatus : attackerStatus);
+        NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.AttackerWorn,
+            QueryLife(recipient == DamageRecipient.Target ? targetLife : attacker.Target).View?.Status);
         // ARC-DEV-312: the attacker is the killer of a target it kills (a critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage, killer: recipient == DamageRecipient.Target ? attacker.Entity : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)

@@ -147,6 +147,40 @@ public sealed class ArmourCriticalScriptStateTests
     }
 
     [TestMethod]
+    public void AHerosCriticalSelfHitTellsItsOwnWornPiecesAndAPlainSelfHitTellsNothing()
+    {
+        using var owner = Owner();
+        var blade = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(4, 9) }, SpeedFactor = 15, DamagesArmor = true, CriticalHitChart = CriticalHitChart.Cutting, CriticalMissChart = CriticalMissChart.Bladed },
+        };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, blade), (_, _) => true, _ => SessionInsertVerdict.Accepted).Failure);
+        var heroWorn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", new(1000, 0, 0, false)) };
+        var victim = Tough(Victim);
+        int critical = 0, plain = 0;
+        for (var attempt = 0; attempt < 6000 && (critical < 1 || plain < 1); attempt++)
+        {
+            var heard = new List<(SessionArmourCriticalEvent Event, int HitPoints)>();
+            var before = owner.QueryLife(SessionLifeTarget.Hero).View!.Status.HitPoints;
+            var result = owner.AttackCritter(owner.Version, new SessionAttack(victim)
+            {
+                HeroWorn = heroWorn, ArmourScripts = armour => heard.Add((armour, owner.QueryLife(SessionLifeTarget.Hero).View!.Status.HitPoints)),
+            });
+            if (result.Resolution?.Refusal != AttackRefusal.None || result.Recipient != DamageRecipient.Attacker || result.Resolution!.Damage is not { Prevented: DamagePrevention.None }) continue;
+            if (result.Resolution.CriticalSelfHit)
+            {
+                critical++;
+                Assert.AreEqual(1, heard.Count);
+                Assert.AreEqual((DamageRecipient.Attacker, before), (heard[0].Event.Recipient, heard[0].HitPoints), "before the hit points are written");
+                CollectionAssert.AreEqual(new[] { "kit:1" }, heard[0].Event.Worn.ToArray());
+            }
+            else { plain++; Assert.AreEqual(0, heard.Count, "a self-hit that is no critical tells nothing"); }
+        }
+        Assert.IsTrue(critical >= 1 && plain >= 1, $"critical self-hits {critical}, plain {plain}");
+    }
+
+    [TestMethod]
     public void NoHostAndNoWornPiecesRunNothing()
     {
         using var owner = Owner();

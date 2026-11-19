@@ -1029,7 +1029,7 @@ public sealed partial class GameSessionOwner
             { Ammunition = ammunition, Shots = flying, Scatter = scatter, Vetoed = true };
         // ARC-SCRIPT-2828 (0x4B47F8): the victim's worn armour runs its critical-hit script after the victim's own and before the hit points are written.
         NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.HeroWorn,
-            recipient == DamageRecipient.Target ? targetStatus : QueryLife(SessionLifeTarget.Hero).View?.Status);
+            QueryLife(recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero).View?.Status);
         // ARC-DEV-312: the hero is the killer of a target it kills (its critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage, killer: recipient == DamageRecipient.Target ? SessionSpellCaster.Hero : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
