@@ -495,6 +495,13 @@ public sealed partial class GameSessionOwner
     /// </summary>
     public Func<string, SessionNpcWieldScripts?>? NpcWearerScripts { get; set; }
 
+    /// <summary>
+    /// ARC-SCRIPT-2886 (exe read 0x467860, ledger PI2, VP11, TQ20): the host's item script host of the hero as the wearer of the item event scripts its worn item's removal runs (null when the host has none). A critical drop of the hero's worn item (a critical, an arm hit,
+    /// a spell's weapon block) with a wield-off (25) or remove-item (28) script runs them with the hero as the triggerer through it and applies their changes with the drop; with none set, or for a script the session cannot apply, the item stays
+    /// (<see cref="SessionCriticalStepOutcome.ScriptUnsupported"/>). Printed lines and eye candy go to <see cref="ItemRunOutput"/>.
+    /// </summary>
+    public Func<ISessionItemScriptHost?>? HeroWearerScripts { get; set; }
+
     /// <summary>ARC-SCRIPT-2856: where the host takes the printed lines and the eye candy requests of the item scripts a drop's removal ran (<see cref="NpcWearerScripts"/>), after their changes are applied; the drop's results carry no such lines.</summary>
     public Action<IReadOnlyList<SessionScriptMessage>, IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy>>? ItemRunOutput { get; set; }
 

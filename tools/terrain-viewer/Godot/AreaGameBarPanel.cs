@@ -35,10 +35,27 @@ public partial class AreaGameBarPanel : CanvasLayer
     private Control _boards = null!, _bars = null!;
     private SteamwovenBoardView _topBoard = null!, _bottomBoard = null!;
     // ARC-UI-2576: the backdrop of the open menu window's family: one view per piece (two for a two-part window, SWI-BDR-5).
-    private readonly SteamwovenBoardView[] _backdrops = new SteamwovenBoardView[2];
+    // ARC-UI-2890: in the column mode a two-part window's wood has up to four pieces (the gap above and the gap below the window, each split in two).
+    private readonly SteamwovenBoardView[] _backdrops = new SteamwovenBoardView[4];
+    // ARC-UI-2890: the column mode's end caps (brass edge and shadow on the strips' ends, on the middle band while a menu is open) and the dimming of the world at the sides while a menu window is open.
+    private SteamwovenEdgeView _caps = null!;
+    private readonly ColorRect[] _dim = [new() { Name = "DimLeft" }, new() { Name = "DimRight" }];
+    private ShaderMaterial? _dimMaterial;
     private CanvasLayer _backdropLayer = null!;
     private readonly ColorRect[] _barRects = [new() { Name = "BarLeft" }, new() { Name = "BarRight" }, new() { Name = "BarTop" }, new() { Name = "BarBottom" }];
     private SteamwovenBackdropFamily? _backdropFamily;
+
+    private const string DimShader = """
+        shader_type canvas_item;
+        uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
+        uniform float darken = 0.45;
+        uniform float desaturate = 0.55;
+        void fragment() {
+            vec3 c = texture(screen_tex, SCREEN_UV).rgb;
+            float grey = dot(c, vec3(0.299, 0.587, 0.114));
+            COLOR = vec4(mix(c, vec3(grey), desaturate) * (1.0 - darken), 1.0);
+        }
+        """;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -80,6 +97,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     public static Rect2 FreeRect(Vector2 size)
     {
         if (_freeWidth <= 0) return new Rect2(Vector2.Zero, size);
+        // ARC-UI-2890: in the column mode the free width of the windows is the column's, but what stands against the frame's edges (bubbles, floaters) is placed over the whole frame's width, between the strips.
+        if (_edgeFrame is { } frame) return new Rect2(frame.Position.X, TopInset, frame.Size.X, Math.Max(1, size.Y - TopInset - BottomInset));
         var (top, free) = FreeArea(size);
         return new Rect2(FreeLeft, top, free.X, free.Y);
     }
@@ -89,14 +108,34 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// window's top stands. <see cref="ScreenFrame"/> is the same screen with its origin counted from the bottom strip (for what sits on that strip).</summary>
     public static (Vector2 Origin, float Scale, float BottomEdge)? TopScreen { get; private set; }
 
+    /// <summary>ARC-UI-2890 (AC4): where the original's screen lies for what is placed against the frame's edge over the world (the follower portraits): in the column mode the screen's top left is the frame's left edge (the strips' scale, the
+    /// strips' bottom edge); otherwise the same as <see cref="TopScreen"/>.</summary>
+    public static (Vector2 Origin, float Scale, float BottomEdge)? EdgeScreen { get; private set; }
+
+    /// <summary>ARC-UI-2890 (AC4): the frame in the column mode (the world is drawn over all of it; the strips cover only the column), else null.</summary>
+    private static Rect2? _edgeFrame;
+
+    /// <summary>ARC-UI-2890 (AC4): the rectangle the elements against the frame's edges (the combat list, the spell pane) are placed in: the whole frame in the column mode, else <see cref="FreeRect"/>.</summary>
+    public static Rect2 EdgeRect(Vector2 size) => _edgeFrame ?? FreeRect(size);
+
+    /// <summary>ARC-UI-2890: the top of <see cref="EdgeRect"/>'s usable height: the frame's top in the column mode, else the top strip's inset.</summary>
+    public static float EdgeTop => _edgeFrame?.Position.Y ?? TopInset;
+
+    /// <summary>ARC-UI-2890: the bottom of the usable height for what stands at the left edge above the bottom strip: the frame's bottom in the column mode, else the window's bottom less the bottom strip.</summary>
+    public static float EdgeBottom(Vector2 size) => _edgeFrame?.End.Y ?? size.Y - BottomInset;
+
     /// <summary>ARC-UI-2510: raised after <see cref="TopScreen"/> changed (the layout turned on or off, a new window size): parts placed by it place themselves again.</summary>
     public static event Action? TopScreenChanged;
 
-    private static void SetTopScreen((Vector2, float, float)? next)
+    private static void SetTopScreen((Vector2, float, float)? next, (Vector2, float, float)? edge = null, Rect2? edgeFrame = null)
     {
-        if (TopScreen == next) return;
-        TopScreen = next;
+        var edgeNext = edge ?? next;
+        if (TopScreen == next && EdgeScreen == edgeNext && _edgeFrame == edgeFrame) return;
+        TopScreen = next; EdgeScreen = edgeNext;
+        var frameChanged = _edgeFrame != edgeFrame;
+        _edgeFrame = edgeFrame;
         TopScreenChanged?.Invoke();
+        if (frameChanged) InsetsChanged?.Invoke();
     }
 
     /// <summary>
@@ -316,10 +355,16 @@ public partial class AreaGameBarPanel : CanvasLayer
         _bars = new Control { Name = "Bars", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         foreach (var bar in _barRects) { bar.Color = Colors.Black; bar.MouseFilter = Control.MouseFilterEnum.Stop; _bars.AddChild(bar); }
         AddChild(_bars);
+        // ARC-UI-2890: the caps over the strips (and over the middle band's sides while a menu is open); the strips are children of this panel, so the caps come after them.
+        _caps = new SteamwovenEdgeView { Name = "EdgeCaps", Visible = false };
+        AddChild(_caps); MoveChild(_caps, _bars.GetIndex());
         _backdropLayer = new CanvasLayer { Name = "MenuBackdrop", Layer = 3, Visible = false };
+        // ARC-UI-2890: the world left and right of the column is dimmed and desaturated while a menu window is open (it reads the frame drawn so far; the pointer passes through, the clicks are the open window's as before).
+        _dimMaterial = new ShaderMaterial { Shader = new Shader { Code = DimShader } };
+        foreach (var dim in _dim) { dim.Color = Colors.White; dim.MouseFilter = Control.MouseFilterEnum.Ignore; dim.Material = _dimMaterial; dim.Visible = false; _backdropLayer.AddChild(dim); }
         for (var i = 0; i < _backdrops.Length; i++)
         {
-            _backdrops[i] = new SteamwovenBoardView { Name = i == 0 ? "Backdrop" : "BackdropRight", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+            _backdrops[i] = new SteamwovenBoardView { Name = i == 0 ? "Backdrop" : "Backdrop" + i, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
             _backdropLayer.AddChild(_backdrops[i]);
             _backdrops[i].Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
         }
@@ -540,6 +585,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
         InterfaceHd.SetFractionalScale(null);
         SetTopScreen(null);
+        _caps.Visible = false;
         if (_boards.Visible) { _boards.Visible = false; _bars.Visible = false; _backdropLayer.Visible = false; }
         foreach (var strip in _strips.Values) strip.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
         Factor = ScreenFactor(size);
@@ -573,8 +619,15 @@ public partial class AreaGameBarPanel : CanvasLayer
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, 0, 0);
         // ARC-UI-2510: the screen the portraits hang in (the top strip's top left, its bottom edge) and the frame the windows are centred in.
-        SetTopScreen((new Vector2(plan.StripLeft, plan.TopStripY), scale, plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale));
-        SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? plan.Layout.Frame.X : 0, Visible ? plan.Layout.Frame.Width : 0);
+        var bottomEdge = plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale;
+        var frame = plan.Layout.Frame;
+        // ARC-UI-2890: in the column mode the windows are centred in the column (the free width is the column's), the screen of the followers hangs from the frame's left edge, the edge frame is the whole frame.
+        var column = plan.Column;
+        var topScreen = (new Vector2(plan.StripLeft, plan.TopStripY), scale, bottomEdge);
+        var (freeLeft, freeWidth) = column is { } c ? (c.Column.X, c.Column.Width) : (frame.X, frame.Width);
+        // The insets first, then the screens and the edge frame: a subscriber of InsetsChanged that the edge frame's change wakes reads the new insets.
+        SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? freeLeft : 0, Visible ? freeWidth : 0);
+        SetTopScreen(topScreen, column is null ? null : (new Vector2(frame.X, plan.TopStripY), scale, bottomEdge), column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
         UpdateSteamwovenParts(plan);
     }
 
@@ -600,10 +653,25 @@ public partial class AreaGameBarPanel : CanvasLayer
         var (topRecipe, topLegacy, topW, topH) = ToneOf(AreaBarStrip.Top);
         var (bottomRecipe, bottomLegacy, bottomW, bottomH) = ToneOf(AreaBarStrip.Bottom);
         var top = layout.Top.Band; var bottom = layout.Bottom.Band; var middle = layout.Middle.Band;
-        if (top.Height > 0)
-            _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Bottom, Device(top), scale, originX, (top.Y - plan.TopStripY) / scale, topRecipe, topLegacy, topW, topH));
-        if (bottom.Height > 0)
-            _bottomBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Top, Device(bottom), scale, originX, (bottom.Y - plan.BottomStripY) / scale, bottomRecipe, bottomLegacy, bottomW, bottomH));
+        if (plan.Column is { } column)
+        {
+            // ARC-UI-2890: no wood sides. The strips stand in the column, and the only board is the sliver of the strip's wood above the top strip where its art is a little lower than the band (the original's 41 units are 147.6 px of the
+            // 150 px band): from the frame's top to a pixel under the strip's top, as wide as the column.
+            var sliver = Math.Min(plan.TopStripY - column.TopStrip.Y + 1, column.TopStrip.Height);
+            _bottomBoard.Visible = false;
+            _topBoard.Visible = plan.TopStripY > column.TopStrip.Y && sliver > 0;
+            if (_topBoard.Visible)
+                _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.None, Device(new PixelRect(column.TopStrip.X, column.TopStrip.Y, column.TopStrip.Width, sliver)), scale, 0, (column.TopStrip.Y - plan.TopStripY) / scale,
+                    topRecipe, topLegacy, topW, topH));
+        }
+        else
+        {
+            _topBoard.Visible = true; _bottomBoard.Visible = true;
+            if (top.Height > 0)
+                _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Bottom, Device(top), scale, originX, (top.Y - plan.TopStripY) / scale, topRecipe, topLegacy, topW, topH));
+            if (bottom.Height > 0)
+                _bottomBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Top, Device(bottom), scale, originX, (bottom.Y - plan.BottomStripY) / scale, bottomRecipe, bottomLegacy, bottomW, bottomH));
+        }
         var bars = layout.Bars; var (width, height) = ((int)GetViewport().GetVisibleRect().Size.X, (int)GetViewport().GetVisibleRect().Size.Y);
         SetBar(_barRects[0], 0, 0, bars.Left, height);
         SetBar(_barRects[1], width - bars.Right, 0, bars.Right, height);
@@ -618,15 +686,43 @@ public partial class AreaGameBarPanel : CanvasLayer
             if (i >= pieces.Count) { _backdrops[i].Visible = false; continue; }
             var piece = pieces[i];
             // ARC-UI-2643: the wood takes the tone of the window art it continues (the bottom strip's where that art is not read).
-            var tone = ToneOfArt(SteamwovenBackdrops.ToneArt(_backdropFamily!.Value, i));
+            var tone = ToneOfArt(SteamwovenBackdrops.ToneArt(_backdropFamily!.Value, piece.Part));
             if (tone.Legacy is null || tone.Recipe is null) tone = (bottomRecipe, bottomLegacy, bottomW, bottomH);
             _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, tone.Recipe, tone.Legacy, tone.Width, tone.Height));
             _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
         }
-        _backdropLayer.Visible = pieces.Count > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible);
+        // ARC-UI-2890: in the column mode the layer also holds the dimmed world, so it shows with an open menu even where the window leaves no gap (16:9 at k = 1: no wood piece).
+        var shown = pieces.Count > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible);
+        _backdropLayer.Visible = plan.Column is not null ? _backdropFamily is not null && Visible && middle.Height > 0 && _backdrops.Take(pieces.Count).All(backdrop => backdrop.Visible) : shown;
+        UpdateColumnParts(plan);
         // Holes follow the lens squares now showing; a hidden layer clears them (no stale holes for the next menu).
         if (_backdropLayer.Visible) ApplyBackdropHoles(); else foreach (var backdrop in _backdrops) backdrop.SetHoles([]);
     }
+
+    /// <summary>ARC-UI-2890: the caps of the column's strips (and of the middle band while a menu is open) and the dimmed world at the sides; nothing of it outside the column mode.</summary>
+    private void UpdateColumnParts(SteamwovenHudPlan plan)
+    {
+        var frame = plan.Layout.Frame;
+        var menuOpen = _backdropLayer.Visible;
+        _caps.Visible = plan.Column is not null && Visible;
+        _caps.Set(Visible ? SteamwovenColumnEdges.Parts(plan, menuOpen) : [], SteamwovenColumnEdges.BrassWidth(plan), SteamwovenColumnEdges.ShadowWidth(plan), frame);
+        var worlds = plan.Column is { } column ? new[] { column.WorldLeft, column.WorldRight } : [];
+        var dim = plan.Column?.Mode.WorldDim ?? SteamwovenWorldDim.Default;
+        _dimMaterial!.SetShaderParameter("darken", (float)dim.Darken);
+        _dimMaterial.SetShaderParameter("desaturate", (float)dim.Desaturate);
+        for (var i = 0; i < _dim.Length; i++)
+        {
+            var visible = menuOpen && i < worlds.Length && worlds[i].Width > 0 && worlds[i].Height > 0;
+            _dim[i].Visible = visible;
+            if (!visible) continue;
+            // The dim reads the frame drawn so far on layer 3: the edge elements under it (floaters, spell pane) are dimmed with the world, as the modal window says (presentation only).
+            _dim[i].Position = new Vector2(worlds[i].X, worlds[i].Y); _dim[i].Size = new Vector2(worlds[i].Width, worlds[i].Height);
+        }
+    }
+
+    /// <summary>ARC-UI-2890: the rectangles of the world dimmed now (empty with no menu open or outside the column mode), for the self-test.</summary>
+    internal IReadOnlyList<Rect2> DimmedWorldForSelfTest => [.. _dim.Where(dim => dim.Visible).Select(dim => new Rect2(dim.Position, dim.Size))];
+    internal IReadOnlyList<PixelRect> CapsForSelfTest => _caps.Visible ? _caps.PartsForSelfTest : [];
 
     private static void SetBar(ColorRect bar, int x, int y, int width, int height)
     {
@@ -659,4 +755,5 @@ public partial class AreaGameBarPanel : CanvasLayer
         SetTopScreen(null);
         SetInsets(0, 0, 0, 0);
     }
+
 }
