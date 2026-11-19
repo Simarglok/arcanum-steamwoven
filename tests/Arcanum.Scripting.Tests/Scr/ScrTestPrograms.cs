@@ -42,8 +42,11 @@ internal static class ScrTestPrograms
 }
 
 /// <summary>A host with fixed answers that records every question it was asked.</summary>
-internal sealed class FakeHost : IScrHost
+internal sealed class FakeHost : IScrHost, IScrTimeQueries
 {
+    /// <summary>The game clock the host answers (ARC-SCRIPT-2824, call script at); null: none, the dispatch ends NotModelled.</summary>
+    public ScrGameTime? Clock { get; set; }
+    public ScrGameTime? Time() => Clock;
     public Dictionary<(ScrObjectRef, int), ScrSlot> Slots { get; } = new();
     public Dictionary<int, ScrScriptLookup> Scripts { get; } = new();
     public HashSet<int> Flags { get; } = new();

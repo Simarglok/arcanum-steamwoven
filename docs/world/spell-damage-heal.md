@@ -86,7 +86,7 @@ blinding (0x200), an arm (0x400), the legs (0x800), a scar (0x1000) and the drop
 
 **The weapon block (ARC-MAGIC-1232, DW2, XR15).** A step that ran on a critter (not prevented, not already dead) with the dropped-weapon bit (`Weap_Dropped`, 0x2000: Disarm, one component of amount 0) takes the **target's**
 wielded weapon (slot 1004) through the session's critical drop (`GameSessionOwner.SpellWeaponDrop` → `CriticalDrop`, the step an attack's critical uses): CR14's drop place from the cast map's drop map
-(`ISpellCastMap.DropMap`; none lands the item on its holder's cell), the drop script (through the session's `DropScript` host, ARC-SCRIPT-2853: skip default refuses) and the no-drop flag refuse, the hero's weapon joins its placed items and an NPC's seed item lies loose, with decay. The zero amount is no exit
+(`ISpellCastMap.DropMap`; none lands the item on its holder's cell), the drop script (through the session's `DropScript` host, ARC-SCRIPT-2853: skip default refuses) and the no-drop flag refuse, an NPC's weapon with a wield-off (25) or remove-item (28) script runs them with the NPC as the triggerer through the session's `NpcWearerScripts` host context (ARC-SCRIPT-2856), the hero's weapon joins its placed items and an NPC's seed item lies loose, with decay. The zero amount is no exit
 (DW1), a spell's step has no critical procedure (an NPC's Disarm drops a PC's weapon), and a step the game stops has no weapon block. The step carries the drop in `SessionSpellDamageStep.Criticals` (message 19 floats from it),
 the cast host's log has `WeaponDropped`. The items by slot come from `ISpellCastMap.WornBySlot` (the area cast map lists an NPC's worn items, the hero's starting kit).
 
