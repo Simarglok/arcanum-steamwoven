@@ -154,7 +154,7 @@ log, look for:
 | Item use | `ARC-SCRIPT-2789 item use script not modelled` (hero reading), `ARC-SCRIPT-1590 item-use-refused` (NPC) |
 | Use click on the map | the status line `use refused: ...`; not logged |
 | Deferred calls | `ARC-WORLD-039 events ... refusal=` when the refusal counter grew |
-| Combat points, danger hook, dying, raise | `ARC-SCRIPT-1483 combat-point`, `ARC-AI-1530 danger-hook`, `ARC-DEV-312 dying`, `ARC-MAGIC-1167 raise-script` (only when the script ran) |
+| Combat points, danger hook, dying, raise | `ARC-SCRIPT-2820 combat-script` / `combat-script-refused` (points 15, 16, once per NPC, point and script), `ARC-SCRIPT-1483 combat-point`, `ARC-AI-1530 danger-hook`, `ARC-DEV-312 dying`, `ARC-MAGIC-1167 raise-script` (only when the script ran) |
 | Talk | the conversation does not open (`EntryNotAdmitted`); a companion's refused talk prints a `refused` notice |
 
 A gate refusal (the object is not on the shown map, has no row, the hero is the victim) has no run and is silent at
