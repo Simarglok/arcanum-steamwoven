@@ -19,6 +19,12 @@ public sealed record SteamwovenHudPlan(
 {
     /// <summary>The device-pixel gap of the top band above the top strip's art (the board shows there).</summary>
     public int TopGap => TopStripY - Layout.Top.Band.Y;
+
+    /// <summary>ARC-UI-2890: the column plan of the layout model (null: the full-width layout). In column mode the strips are `Column.TopStrip` and `Column.BottomStrip`, the windows stand in `Column.Window`, and the world shows left and right of the column.</summary>
+    public SteamwovenColumnPlan? Column => Layout.Column;
+
+    /// <summary>ARC-UI-2890: the window zone: the column's (column-wide, at the column's unit scale) in column mode, else the layout's.</summary>
+    public PixelRect WindowZone => Column?.Window.Zone ?? Layout.WindowZone;
 }
 
 /// <summary>ARC-UI-2452: the prototype's plan builder and the panel-height variant it runs with.</summary>
@@ -53,7 +59,8 @@ public static class SteamwovenHud
         var topK = new Ratio(options.TopPanelMaster, SteamwovenGrid.StripTopPanel);
         var bottomK = new Ratio(options.BottomPanelMaster, SteamwovenGrid.StripBottomPanel);
         var k = topK < bottomK ? topK : bottomK;
-        var unit = layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator) * k;
+        // ARC-UI-2890: the column's own strip scale (3.6 · k · f, or frame height / 600 in the fitted column).
+        var unit = layout.Column?.StripScale ?? layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator) * k;
         var stripWidth = unit * AreaGameBarLayout.ScreenWidth;
         var stripLeft = layout.Frame.X + (((Ratio)layout.Frame.Width - stripWidth) / 2).RoundHalfUp();
         var topStripY = layout.Top.Band.Bottom - (unit * AreaGameBarLayout.TopHeight).RoundHalfUp();
