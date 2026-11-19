@@ -44,7 +44,7 @@ elif args[:2] == ["login", "status"]:
 elif args[:1] == ["exec"]:
     prompt = sys.stdin.read()
     resume = args[1:2] == ["resume"]
-    log.write(json.dumps({"argv": args, "cwd": os.getcwd(), "has_key": any(k.startswith("OPENAI_") for k in os.environ), "prompt": prompt}) + "\n")
+    log.write(json.dumps({"argv": args, "cwd": os.getcwd(), "has_key": any(k.startswith("OPENAI_") or k == "CODEX_API_KEY" for k in os.environ), "prompt": prompt}) + "\n")
     log.flush()
     out_file = args[args.index("-o") + 1]
     item = re.search(r"^ITEM: (\S+)", prompt, re.M).group(1)
@@ -55,17 +55,23 @@ elif args[:1] == ["exec"]:
             sys.exit(1)
     spec = plan["items"][item]
     mode = spec["mode"]
+    if mode == "early_fail":
+        print("no session", file=sys.stderr)
+        sys.exit(2)
     say({"type": "thread.started", "thread_id": thread})
     say({"type": "turn.started"})
     if mode == "hang":
+        open(os.environ["FAKE_LOG"] + ".pid", "w").write(str(os.getpid()))
         time.sleep(60)
     if mode == "exit1":
         print("boom", file=sys.stderr)
         sys.exit(3)
-    if mode in ("ok", "nofile_ok", "aspect", "notpng", "badjson"):
+    if mode in ("ok", "nofile_ok", "aspect", "notpng", "badjson", "truncated"):
         if mode == "ok" or mode == "aspect":
             w, h = spec.get("size", [64, 48])
             open(item + ".png", "wb").write(png(w, h))
+        if mode == "truncated":
+            open(item + ".png", "wb").write(png(64, 48)[:-20])
         if mode == "notpng":
             open(item + ".png", "wb").write(b"not a png at all")
         message = "I made it." if mode == "badjson" else json.dumps({"ok": True, "path": item + ".png", "error": None})
@@ -135,6 +141,8 @@ class SuccessAndOrder(RunnerCase):
         before = tree_hashes(inbox)
         self.plan({"a": {"mode": "ok"}, "b": {"mode": "ok", "size": [128, 96]}})
         os.environ["OPENAI_API_KEY"] = "sk-must-not-pass"
+        os.environ["CODEX_API_KEY"] = "sk-must-not-pass-either"
+        self.addCleanup(os.environ.pop, "CODEX_API_KEY", None)
         code, results, _ = self.run_batch()
         self.assertEqual(0, code)
         self.assertEqual(["ok", "ok"], [results["a"].outcome, results["b"].outcome])
@@ -154,6 +162,8 @@ class SuccessAndOrder(RunnerCase):
         self.assertIn("SESSION RULES", first["prompt"])
         self.assertNotIn("SESSION RULES", second["prompt"])
         self.assertTrue(any(arg.startswith("--image=") for arg in first["argv"]))
+        self.assertTrue(any(arg.startswith("--image=") for arg in second["argv"]))  # references are attached on a resumed item too
+        self.assertEqual("-", second["argv"][-1])
         self.assertIn("ASPECT: 64:48", first["prompt"])
         self.assertEqual(before, tree_hashes(inbox))  # the inbox is never touched
         outbox = self.local / "outbox" / "t-batch"
@@ -240,8 +250,77 @@ class FailuresDoNotStopTheBatch(RunnerCase):
         self.assertEqual(1, code)
         self.assertEqual("timeout", results["a"].outcome)
         self.assertEqual("thread-0001", results["a"].thread_id)  # thread.started came before the hang
+        pid = int(Path(str(self.log) + ".pid").read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)  # the stopped codex is really gone
         self.assertEqual("ok", results["b"].outcome)
         self.assertEqual(["exec", "resume"], self.calls()[1]["argv"][:2])
+
+
+class MoreFailureShapes(RunnerCase):
+    def test_truncated_png_is_not_accepted(self) -> None:
+        self.make_batch()
+        self.plan({"a": {"mode": "truncated"}, "b": {"mode": "ok"}})
+        code, results, _ = self.run_batch()
+        self.assertEqual("not-png", results["a"].outcome)
+        self.assertFalse((self.local / "outbox" / "t-batch" / "a.png").exists())
+
+    def test_a_first_item_without_a_session_makes_the_next_start_a_fresh_one_with_the_rules(self) -> None:
+        self.make_batch()
+        self.plan({"a": {"mode": "early_fail"}, "b": {"mode": "ok"}})
+        code, results, _ = self.run_batch()
+        self.assertEqual("failed", results["a"].outcome)
+        self.assertEqual("ok", results["b"].outcome)
+        calls = self.calls()
+        self.assertEqual("exec", calls[1]["argv"][0])
+        self.assertNotEqual("resume", calls[1]["argv"][1])
+        self.assertIn("SESSION RULES", calls[1]["prompt"])
+
+    def test_overwrite_after_a_refusal_keeps_the_old_image_and_its_record(self) -> None:
+        self.make_batch(ids=("a",))
+        self.plan({"a": {"mode": "ok"}})
+        self.run_batch()
+        outbox = self.local / "outbox" / "t-batch"
+        old = (outbox / "a.png").read_bytes()
+        record = (outbox / "a.provenance.json").read_text()
+        self.plan({"a": {"mode": "refuse"}})
+        code, results, _ = self.run_batch(overwrite=True)
+        self.assertEqual("refused", results["a"].outcome)
+        self.assertEqual(old, (outbox / "a.png").read_bytes())
+        self.assertEqual(record, (outbox / "a.provenance.json").read_text())
+        self.assertEqual(1, len(list(outbox.glob("a.provenance.*.refused.json"))))
+
+
+class BatchFileIsConfinedAndComplete(RunnerCase):
+    def edit(self, change) -> None:
+        inbox = self.make_batch(refs=True)
+        manifest = json.loads((inbox / "batch.json").read_text())
+        change(manifest, inbox)
+        (inbox / "batch.json").write_text(json.dumps(manifest))
+        with self.assertRaises(cb.BatchError):
+            self.run_batch()
+        self.assertEqual([], self.calls())
+
+    def test_prompt_and_reference_paths_cannot_leave_the_inbox(self) -> None:
+        secret = Path(self.tmp.name) / "secret.txt"
+        secret.write_text("secret", encoding="utf-8")
+        self.edit(lambda m, i: m["items"][0].update(prompt_file="../../../secret.txt", prompt_sha256=hashlib.sha256(b"secret").hexdigest()))
+        self.edit(lambda m, i: m["items"][0]["references"][0].update(file=str(secret), sha256=hashlib.sha256(b"secret").hexdigest()))
+
+    def test_hashes_are_required(self) -> None:
+        self.edit(lambda m, i: m["items"][0].pop("prompt_sha256"))
+        self.edit(lambda m, i: m["items"][0]["references"][0].pop("sha256"))
+        self.edit(lambda m, i: m["items"][0]["references"][0].update(sha256="0" * 64))
+
+    def test_malformed_items_are_batch_errors_not_tracebacks(self) -> None:
+        self.edit(lambda m, i: m["items"].append("not an object"))
+        self.edit(lambda m, i: m["items"][0].update(references=["x"]))
+        self.edit(lambda m, i: m["items"][0]["references"].append({"sha256": "a"}))
+
+    def test_an_empty_only_runs_nothing(self) -> None:
+        self.make_batch()
+        self.assertEqual(2, cb.main(["run", "t-batch", "--local-root", str(self.local), "--codex", str(self.fake), "--only", ""]))
+        self.assertEqual([], self.calls())
 
 
 class StopsBeforeSending(RunnerCase):

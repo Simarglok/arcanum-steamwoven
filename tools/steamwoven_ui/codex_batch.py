@@ -93,11 +93,17 @@ def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
+PNG_END = b"\x00\x00\x00\x00IEND\xaeB`\x82"
+
+
 def png_size(path: Path) -> tuple[int, int]:
-    head = path.read_bytes()[:24]
-    if head[:8] != PNG_SIGNATURE or head[12:16] != b"IHDR":
-        raise ValueError(f"{path.name} is not a PNG")
-    return struct.unpack(">II", head[16:24])
+    """The pixel size of a whole PNG (signature, IHDR first, IEND last); a symlink, a truncated or a foreign file is refused."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"{path.name} is not a plain file")
+    blob = path.read_bytes()
+    if blob[:8] != PNG_SIGNATURE or blob[12:16] != b"IHDR" or not blob.endswith(PNG_END):
+        raise ValueError(f"{path.name} is not a whole PNG")
+    return struct.unpack(">II", blob[16:24])
 
 
 def aspect_within(size: tuple[int, int], want: list[int], tolerance: float = ASPECT_TOLERANCE) -> bool:
@@ -122,9 +128,15 @@ def load_batch(local_root: Path, batch: str) -> tuple[Path, list[Item]]:
         raise BatchError(f"{manifest_path}: needs \"batch\": \"{batch}\" and a non-empty \"items\" list")
     items, seen = [], set()
     for raw in manifest["items"]:
-        for key in ("id", "prompt_file", "outbox_file"):
+        if not isinstance(raw, dict):
+            raise BatchError(f"{manifest_path}: every item must be an object")
+        for key in ("id", "prompt_file", "outbox_file", "prompt_sha256"):
             if not isinstance(raw.get(key), str) or not raw[key]:
                 raise BatchError(f"{manifest_path}: an item lacks \"{key}\"")
+        refs = raw.get("references") or []
+        if not isinstance(refs, list) or not all(isinstance(r, dict) and isinstance(r.get("file"), str) and r["file"]
+                                                 and isinstance(r.get("sha256"), str) and r["sha256"] for r in refs):
+            raise BatchError(f"{raw['id']}: every reference needs \"file\" and \"sha256\"")
         if not re.fullmatch(r"[A-Za-z0-9._-]+", raw["id"]) or raw["id"] in seen:
             raise BatchError(f"{manifest_path}: item id {raw['id']!r} is not a plain unique name")
         seen.add(raw["id"])
@@ -155,20 +167,27 @@ def asked_aspect(item: Item) -> list[int] | None:
     return list(item.size) if item.size else None
 
 
+def inside_inbox(inbox: Path, item_id: str, relative: str) -> Path:
+    path = (inbox / relative).resolve()
+    if inbox.resolve() not in path.parents:
+        raise BatchError(f"{item_id}: {relative} is outside the inbox")
+    return path
+
+
 def item_inputs(inbox: Path, item: Item) -> tuple[str, list[Path]]:
-    """The prompt text and the reference files of an item, read from the inbox (checked against the recorded hashes)."""
-    prompt_path = inbox / item.prompt_file
+    """The prompt text and the reference files of an item, read from the inbox (confined to it, checked against the recorded hashes)."""
+    prompt_path = inside_inbox(inbox, item.id, item.prompt_file)
     if not prompt_path.is_file():
         raise BatchError(f"{item.id}: prompt file {item.prompt_file} is missing")
     text = prompt_path.read_text(encoding="utf-8")
-    if item.prompt_sha256 and prompt_library.sha256_text(text) != item.prompt_sha256:
+    if prompt_library.sha256_text(text) != item.prompt_sha256:
         raise BatchError(f"{item.id}: the prompt text does not match prompt_sha256 of batch.json")
     refs = []
     for ref in item.references:
-        path = inbox / ref["file"]
+        path = inside_inbox(inbox, item.id, ref["file"])
         if not path.is_file():
             raise BatchError(f"{item.id}: reference {ref['file']} is missing")
-        if ref.get("sha256") and sha256_file(path) != ref["sha256"]:
+        if sha256_file(path) != ref["sha256"]:
             raise BatchError(f"{item.id}: reference {ref['file']} does not match its sha256")
         refs.append(path)
     return text, refs
@@ -196,11 +215,14 @@ def precheck(codex: str) -> str:
     if version.returncode != 0:
         raise BatchError(f"codex --version failed: {version.stderr.strip()[:200]}")
     shown = version.stdout.strip()
-    features = run_plain(codex, ["features", "list"])
+    try:
+        features = run_plain(codex, ["features", "list"])
+        login = run_plain(codex, ["login", "status"])
+    except subprocess.TimeoutExpired as error:
+        raise BatchError(f"codex did not answer in time ({' '.join(error.cmd[1:3])})") from error
     enabled = [line.split() for line in features.stdout.splitlines() if line.split()[:1] == ["image_generation"]]
     if features.returncode != 0 or not enabled or enabled[0][-1] != "true":
         raise BatchError("the codex feature image_generation is not enabled (`codex features list`)")
-    login = run_plain(codex, ["login", "status"])
     text = (login.stdout + login.stderr).strip()
     if login.returncode != 0 or "logged in" not in text.lower():
         raise BatchError(f"codex is not logged in ({text[:200] or 'no output'}); the owner signs in with `codex login`")
@@ -247,16 +269,25 @@ def run_codex(command: list[str], prompt: str, cwd: Path, timeout: float) -> tup
     """Runs one command with the prompt on stdin; a time-out kills the whole process group. Returns (exit code, stdout, stderr, timed out)."""
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd,
                                env=codex_env(), start_new_session=True)
-    try:
-        out, err = process.communicate(prompt, timeout=timeout)
-        return process.returncode, out, err, False
-    except subprocess.TimeoutExpired:
+    def kill_group() -> None:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        out, err = process.communicate()
+
+    try:
+        out, err = process.communicate(prompt, timeout=timeout)
+        return process.returncode, out, err, False
+    except subprocess.TimeoutExpired:
+        kill_group()
+        try:
+            out, err = process.communicate(timeout=10)  # a descendant that left the group could hold the pipes open
+        except subprocess.TimeoutExpired:
+            out, err = "", ""
         return None, out or "", err or "", True
+    except BaseException:  # Ctrl-C or SIGTERM of the runner: the child leads its own session and would run on
+        kill_group()
+        raise
 
 
 def extract_json(text: str) -> dict | None:
@@ -331,7 +362,7 @@ def write_provenance(local_root: Path, batch: str, item: Item, result: ItemResul
                      thread_id: str | None, run_stamp: str) -> Path:
     outbox = local_root / "outbox" / batch
     outbox.mkdir(parents=True, exist_ok=True)
-    record = {"generator": f"codex-cli {version} image_gen", "date": datetime.date.today().isoformat(), "run": run_stamp, "batch": batch, "id": item.id,
+    record = {"generator": f"codex-cli {version} image_gen", "date": datetime.datetime.now(datetime.timezone.utc).date().isoformat(), "run": run_stamp, "batch": batch, "id": item.id,
               "prompt_sha256": prompt_library.sha256_text(prompt_text),
               "references": [{"file": ref["file"], "sha256": ref.get("sha256") or sha256_file(path)} for ref, path in zip(item.references, refs)],
               "thread_id": thread_id, "pixel_size": result.pixel_size, "asked_size": item.size, "asked_aspect": asked_aspect(item),
@@ -341,6 +372,8 @@ def write_provenance(local_root: Path, batch: str, item: Item, result: ItemResul
         record["image"] = item.outbox_file
         record["image_sha256"] = sha256_file(local_root / item.outbox_file)
     path = outbox / f"{item.id}.provenance.json"
+    if result.outcome != "ok" and (outbox / f"{item.id}.png").exists():
+        path = outbox / f"{item.id}.provenance.{run_stamp}.{result.outcome}.json"  # the old image keeps its own record
     path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -348,12 +381,11 @@ def write_provenance(local_root: Path, batch: str, item: Item, result: ItemResul
 def run_batch(local_root: Path, batch: str, codex: str = "codex", only: list[str] | None = None, timeout: float = DEFAULT_TIMEOUT,
               overwrite: bool = False, model: str | None = None, dry_run: bool = False, out=print) -> tuple[int, list[ItemResult]]:
     inbox, items = load_batch(local_root, batch)
-    if only:
+    if only is not None:
         unknown = [name for name in only if name not in {item.id for item in items}]
         if unknown:
             raise BatchError(f"--only names items not in the batch: {', '.join(unknown)}")
         items = [item for item in items if item.id in only]
-    inputs = {item.id: item_inputs(inbox, item) for item in items}
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     workdir = local_root / "codex-work" / batch / stamp
     todo, results = [], []
@@ -363,6 +395,7 @@ def run_batch(local_root: Path, batch: str, codex: str = "codex", only: list[str
             results.append(skipped)
             continue
         todo.append(item)
+    inputs = {item.id: item_inputs(inbox, item) for item in todo}
     version = "unknown"
     try:
         shown = precheck(codex)
@@ -438,7 +471,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"PRECHECK ok: {precheck(args.codex)}, image_generation on, logged in")
             return 0
         local = args.local_root or prompt_library.default_local_root()
-        only = [name for name in args.only.split(",") if name] if args.only else None
+        only = [name for name in args.only.split(",") if name] if args.only is not None else None
+        if only is not None and not only:
+            raise BatchError("--only names no item")
         code, _ = run_batch(local, args.batch, args.codex, only, args.timeout, args.overwrite, args.model, args.dry_run)
         return code
     except BatchError as error:
