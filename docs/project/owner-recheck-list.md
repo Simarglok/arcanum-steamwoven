@@ -1639,3 +1639,35 @@ Tooling, no original behaviour to compare: the steps check that the overlay and 
 | 1 | In a game press Ctrl+Q, pick a step in the list and press **Same**, then close with Escape and look at the page. | The overlay lists the steps with the current one first; the page shows that step as `same` within a moment; a plate with the current step stays at the top left of the game and takes no click. | open |
 | 2 | Press Ctrl+Q, pick another step, write a note, press **Send report**, then **Differs**. | A report folder appears in `artifacts/packages/macos/reports/` whose `report.md` has the line `Check: <step id>`; within about 20 seconds a GitHub issue for that step is created exactly once, and the page lists the report under the step. | open |
 | 3 | Stop the page and start the game without `./arcanum qa overlay on` (or after `./arcanum qa overlay off`), then press Ctrl+Q. | Nothing opens and nothing is drawn: a normal build is unchanged. | open |
+
+## ARC-RES-2815 — Where and when scripts fire (2026-11-19)
+
+Built from the [script trigger conditions](../research/script-trigger-conditions.md) (rows TQ1–TQ28, read in the original
+executable). Each step says where to go and what the original does. When a step goes wrong, send a Ctrl+B report from the
+overlay: its log shows a refused script by the lines of [section 5](../research/script-trigger-conditions.md#5-where-a-refused-run-shows-in-steamwoven)
+of that note (for example `heartbeat-refused`, `ScriptRefused`, `companion-tile ... Refused`, `item-use-refused`).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new game and stay by the plane wreck at the Crash Site. | Virgil starts talking by himself at once (his heartbeat opens his dialog, TQ13); the report log has no `heartbeat-refused` line for script 1100. | open |
+| 2 | At the Crash Site, with Virgil in the party, walk past the plane wreck so that Virgil steps onto the row of tiles beside it. | On Virgil's first step onto those tiles his remark on the flying machine opens (tile script 1695 waits for Virgil, not the hero); after you finish its last reply it does not come back (TQ5). | open |
+| 3 | Take Virgil to Shrouded Hills and walk him into the inn where Joachim stays. | Virgil's tile scripts at the inn run as he steps in (the scripts of the owner's report behind #2788); no `companion-tile ... Refused` in the log. A companion recruited on another map runs tile scripts like any critter (TQ5). | open |
+| 4 | Read "Joachim's Note to Virgil" from the inventory. | The reading window opens with the text (the note's use script runs first, TQ18). The note's script also schedules a call of Virgil's script for later (TQ17); whether and how Virgil reacts is the open gap #2806, so note what happens. | open |
+| 5 | With Virgil, repeat step 2 but leave his remark before its last reply; then let him step off the tiles and on again. | The remark opens again on his next step onto those tiles, because the script stops only when its own flag is set by the last reply; standing or turning on a tile does not re-run it (TQ5). | open |
+| 6 | Go near an NPC whose talk opens by itself (Wheel Clan, Vollinger's basement, the Void and Arronax's interior there, the Panarii temple, Drog's cave, Dernholm castle) and approach from farther than 30 tiles. | Nothing happens far away; within about 30 tiles the NPC starts the talk without a click (heartbeat, TQ13). If another dialog is open at that moment, that talk is lost, not opened later. | open |
+| 7 | Leave a town map, come back after a while (more than a few seconds of game time) and watch NPCs who stand at fixed posts. | On each return their sector's NPCs take the first heartbeat again: they go back to their posts or waypoints and re-equip their best items, and any first-heartbeat script runs again (TQ13). | open |
+| 8 | Click "talk" on a dead NPC, then on a surrendered one, then on a mind-controlled one (Charm). | Dead or surrendered: only a generic line floats over them and no dialog window opens, unless that NPC's script is written for it; mind-controlled: the special charmed dialog runs instead of its own (TQ27, TQ3). | open |
+| 9 | Try to sleep in several beds (inn beds, beds in houses). | A bed decides by its own use script with reversed polarity: a bed with no script, or whose script lets the default happen, says "You cannot sleep here."; only a bed whose script answers "skip default" lets you rest (TQ18). Note which beds let you sleep. | open |
+| 10 | In turn-based combat, open a door that has a script (for example a door that comments or refuses). | 2 AP are spent first, then the door's script decides whether it opens (TQ9). | open |
+| 11 | Watch an NPC walk through a scripted door in real time. | The door's use script runs for the NPC too (TQ9); its effect may differ from the hero's, since a script can test who opens. | open |
+| 12 | Fight an NPC whose weapon has a script (a poisoned or special weapon) and land a hit, then a miss. | The weapon's hit script runs on the hit (before the damage) and its miss script on the miss; a critical adds the critical point after it (TQ22). | open |
+| 13 | Kill an NPC with a death script (an NPC whose death starts a scene or sets a quest). | Its dying script runs at the kill, before the body falls; a script that answers "skip default" keeps the NPC alive (TQ25). | open |
+| 14 | Steal from an NPC with low Pick Pocket until you are caught, then pick a lock in view of a guard. | The robbed NPC (or the guard) reacts by its script; a plant is never caught at Master training (TQ16). | open |
+| 15 | Break a breakable object by attacking it (scenery such as a statue, a door, a weapon lying on the ground). | The object turns to its broken look and its bust script runs; an object with no broken look disappears (destroy script) (TQ26). | open |
+| 16 | Rest for some hours with followers in the party. | Each follower's "leader sleeping" script runs when you choose the duration (TQ26). | open |
+
+Known differences (documented, not bugs; each has its issue):
+
+- Points 15/16 run no script yet ([#2820](https://github.com/Simarglok/arcanum-steamwoven/issues/2820)); will-KOS scripts never veto ([#2821](https://github.com/Simarglok/arcanum-steamwoven/issues/2821)).
+- Followers' new-sector scripts (Virgil's 1568) do not run ([#2822](https://github.com/Simarglok/arcanum-steamwoven/issues/2822)); a sector script does not run on a same-sector arrival or teleport ([#2823](https://github.com/Simarglok/arcanum-steamwoven/issues/2823)).
+- Call at a time of day ([#2824](https://github.com/Simarglok/arcanum-steamwoven/issues/2824)), NPC use of scenery ([#2826](https://github.com/Simarglok/arcanum-steamwoven/issues/2826)), NPC and holder item moves ([#2827](https://github.com/Simarglok/arcanum-steamwoven/issues/2827)), armour critical scripts ([#2828](https://github.com/Simarglok/arcanum-steamwoven/issues/2828)) and examine at dialog start ([#2829](https://github.com/Simarglok/arcanum-steamwoven/issues/2829)) are not built.
