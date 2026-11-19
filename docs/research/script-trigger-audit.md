@@ -54,7 +54,7 @@ from line 0, static.
 | 0 | examine | 0x57CD93 | the description step of the world hover, hotkey bar and inventory pointer (`AreaUseScriptHost.RunExamine`, ARC-DEV-326); barter and dialog windows not | 54 (31) | under the use set |
 | 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2448 (ARC-SCRIPT-2248: a run of the opt-in trigger census with `ARC_SCRIPT_TRIGGER_CENSUS`, not pinned by a test, 3 more than the 2445 of ARC-SCRIPT-1734, since the use set admits toggle state, 56) |
 | 2 | destroy | 0x43CD0E | **none** | 26 (7) | — |
-| 3 | unlock | 0x4AEBC5, 0x4AEDC4 | **none** | 0 | — |
+| 3 | unlock | 0x4AEBC5, 0x4AEDC4 | open attempts of portals and containers, shown map (`RunUnlock`, use set; ARC-SCRIPT-2860) | 0 shown (1 on the main map) | — |
 | 4 | get | 0x4618F2 | hero's item moves (`SessionItemScripts`) | 0 | — |
 | 5 | drop | 0x461B2A | hero's item moves | 0 | — |
 | 6 | throw | 0x4B3C6A | **none** | 0 | — |
