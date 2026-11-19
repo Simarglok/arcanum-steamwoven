@@ -747,7 +747,7 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-2853: the drop script (point 5) of an item a critical, an arm hit or a spell's weapon block drops.
         session.DropScript = RunItemDropScript;
         // ARC-SCRIPT-2856: the wield-off and remove-item scripts (25, 28) of the worn item an NPC's drop takes off it, over the NPC's script context; their printed lines and eye candy are shown here.
-        session.NpcWearerScripts = npc => AreaEvents.NpcWieldScripts(CurrentAreaMap, npc);
+        session.NpcWearerScripts = npc => AreaEvents.NpcWieldScripts(session.QueryActor().Map, npc);
         session.ItemRunOutput = (lines, candies) => { PostScriptLines(lines); QueueScriptEyeCandies(candies); };
         // ARC-AI-1530: the danger setter's enter-combat and exit-combat scripts (slots 13 and 14) of an NPC of the shown map.
         session.DangerHookScript = RunDangerHook;
