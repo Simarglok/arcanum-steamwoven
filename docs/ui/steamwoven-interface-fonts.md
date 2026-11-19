@@ -22,8 +22,8 @@ the original's frames when it does not. Two consequences are recorded as limits,
 
 The kit master is 3840 x 2160 and the 4:3 composition is 2880 x 2160 master px for the original's 800 x 600 layout units, so one original
 pixel is **3.6 master px** ([epic plan 2026-11-19](https://github.com/Simarglok/arcanum-steamwoven/issues/2446)). A text is laid out in the
-original's units (glyph advance = the frame header's centre x, line = the tallest glyph; for every font in the table the space glyph is as
-tall as the tallest one, so the viewer's two line-height rules agree) and drawn at `3.6 x step`:
+original's units (glyph advance = the frame header's centre x, line = the tallest glyph; the viewer's `AreaArtFont.LineHeight` takes the space glyph's height and `AreaTextFontLayout.LineHeight` the tallest, and on the player's installation
+the two are equal for all 33 fonts, read locally on 2026-11-19, so either rule gives the `Line` column) and drawn at `3.6 x step`:
 
 | Step | Master x | Device line px per original px | HD glyph frame (4x art) drawn at |
 | --- | ---: | ---: | ---: |
@@ -44,7 +44,7 @@ Windows use the ids of the [census](steamwoven-interface-census.md). **Where thi
 font only for the arts a window draws and misses the text the code draws (font 229 is drawn in far more windows than the census says; 171, 486 and 27 in
 more places; font 483 is listed for G07 and M09 but never drawn, found by reading the viewer on 2026-11-19). `HD` is where the HD glyph frames of the installed pack
 came from: **A** Codex-generated (ARC-UI-1202, ARC-UI-2329), **B** traced locally from the original by [`tools/hd_font`](../workflow/hd-font.md) (ARC-DEV-361, ARC-UI-2309),
-**C** present in the pack, source not recorded in the workflow note (the Codex delivery ARC-UI-2845 names these four). `Line` is the original line height in
+**C** present in the installed pack (checked 2026-11-19), source not recorded in the workflow notes; a local delivery folder named ARC-UI-2845 holds these four, which is an unverified lead, and `hd-font.md` still says 300 and 370 stay Legacy (stale, the pack has them). `Line` is the original line height in
 original px; the four right-hand columns are the line height in device px at the four steps (`Line x 3.6 x step`, not rounded: rounding belongs to the layout).
 
 | ART | Font | Text role | Windows | HD | Line | x1 | x2/3 | x1/2 | x1/3 |
@@ -95,8 +95,9 @@ placeholders, vanished traces and the coloured frame 0 draw their original frame
    the rest of the 2.2 to 3.3 texels under it, which breaks thin strokes up (the right column of the readability composite below). The area-filtered column is the target:
    bake the glyph frames per step with the kit bake ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460)) or give the font textures mipmaps at the steps below 0.6.
    This is for the runtime composition slice ([#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)) and is its own issue, [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939).
-4. **Floor.** A line under about 10 device px has strokes of one pixel or less. At x1/3 that is only font 481 `Garmond6` (8.4 px, the telegram's form lines). Everything
-   else is 12 px or more at x1/3. Garmond6 is kept (it is the original's font and the line is a printed form); the owner judges it in the composite.
+4. **Floor.** The handheld rule of the old UI (`AreaUiScale.MinimumTextPx` = 9 px, ARC-GPAD-1377; [handheld scale](../input/handheld-ui-scale.md)) is a rule about that layout, not about
+   these steps. For Steamwoven a line under about 10 device px has strokes of one pixel or less. At x1/3 that is only font 481 `Garmond6` (8.4 px, the telegram's form lines). Everything
+   else is 12 px or more at x1/3. Garmond6 is kept (it is the original's font and the line is a printed form; at 8.4 px it is below that 9 px handheld minimum); the owner judges it in the composite.
 5. **No text is baked into a kit part** (SWI-LAY-15): labels, numbers and names come from the `.mes` files and the game state and are drawn with the fonts above.
 
 ## Readability sample at x1/3
@@ -104,7 +105,7 @@ placeholders, vanished traces and the coloured frame 0 draw their original frame
 A local composite for the owner (never committed; the game's glyphs are in it): `Strength 12  Dexterity 9  Gold 1,204` in seven of the fonts above, at the device scale of
 x1/3 (1.2 original px, 0.3 of the HD frame), shown at 3x nearest zoom so single device pixels are visible. Columns: the original bitmap font at 1.2x, the HD frames
 area-filtered, and the HD frames with the viewer's current plain bilinear sampling. It is a **model** (Pillow resampling over the same glyph metrics), not a capture of the viewer: the
-viewer cannot draw x1/3 text until the layout slices land. Reading it: Flare12, Morph15, Cloister18 (18 to 23 px lines) read well in the first two columns; Garmond9 and Garmond8
+viewer cannot draw x1/3 text until the layout slices land. The composite was posted to the owner in the task thread (AC3). The composite is not in git and no script for it is kept; what follows is the author's local reading of it, not a measurement. Reading it: Flare12, Morph15, Cloister18 (18 to 23 px lines) read well in the first two columns; Garmond9 and Garmond8
 (12 px) read, with thin serifs; Courier10 (14 px) reads; **Garmond6 (8.4 px) is marginal in every column, and plain bilinear sampling breaks every font up, worst the smallest**.
 
 ## Licences
@@ -116,7 +117,7 @@ No font file, glyph frame or outline is in git, and none is added.
 | The 33 original bitmap fonts (26 are drawn by the viewer, the table above) | Rasterised glyph frames in the game's `interface.mes` ARTs, read from the player's own installation | The game's own assets: no licence from this project, never copied into git, a package or the HD pack source; the typefaces behind them look like commercial designs (names such as Garamond, Georgia, Zurich, Courier, Bookman, Clarendon; no review done), so the shapes stay local |
 | HD glyph frames, group A (Codex) | Codex redraws of the original glyphs, owner-run, made from the original frames as input | Derived from the player's own game data (owner decision 2026-11-16, [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448): the HD content is derived, local only, not shipped); stays in the player's local HD pack |
 | HD glyph frames, group B (traced) | 4x coverage frames traced from the original frames by `tools/hd_font` | Derived the same way, local only. The tool depends on **potracer** (GPLv2+, a port of Potrace) in a private venv, never vendored and never linked; that the traced output is not covered by that licence is a judgement, not a legal opinion ([hd-font](../workflow/hd-font.md)) |
-| Group C (25, 300, 370, 486) | Frames in the installed pack | As group A or B: local, derived from the player's data; the delivery record is local (`local/hd-font`) |
+| Group C (25, 300, 370, 486) | Frames in the installed pack | Local, derived from the player's data like A and B; **the origin is not recorded** (unverified: see the HD note above), to be written down where the owner next touches the pack |
 | Godot's fallback font, system fonts, free look-alikes | **Not used for the Steamwoven interface** (owner rule) | Where the viewer still uses the Godot fallback font it is a defect against the rule, tracked below |
 
 ## Non-original text in the viewer today
