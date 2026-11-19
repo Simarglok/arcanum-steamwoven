@@ -106,6 +106,9 @@ public sealed record SessionLifeResult(GameSessionDisposition Disposition, GameS
 /// <summary>ARC-DEV-312: what the session tells the host's dying script (<see cref="GameSessionOwner.DyingScript"/>): the NPC that died, the map its life step ran on and the killer, an entity id (<see cref="SessionSpellCaster.Hero"/> for the hero) or none.</summary>
 public sealed record SessionDyingRequest(string Victim, int Map, string? Killer);
 
+/// <summary>ARC-SCRIPT-2859: what the session tells the host's leader-killing script (<see cref="GameSessionOwner.LeaderKillingScript"/>): the NPC that died (the triggerer), the map its damage step ran on and the follower of the hero whose script runs (the attachee).</summary>
+public sealed record SessionLeaderKillingRequest(string Victim, int Map, string Follower);
+
 /// <summary>ARC-COMBAT-1141: what the session tells the host's taking-damage script (<see cref="GameSessionOwner.TakingDamageScript"/>): the NPC about to take the damage, the map its life step runs on and the attacker, an entity id or none (the kill and the poison tick have none).</summary>
 public sealed record SessionTakingDamageRequest(string Victim, int Map, string? Attacker);
 
