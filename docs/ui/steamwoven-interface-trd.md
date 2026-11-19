@@ -230,7 +230,7 @@ Part kinds:
 | hardware | fixed metal or frame pieces over a strip or a window background | brass rings, sockets, vial housings, rails, frames |
 | plate | a button's body | round and square plates by size |
 | glyph | a symbol on a transparent background | button symbols |
-| state | an overlay for a button state | hover, pressed, disabled |
+| state | an overlay for a button state | hover, pressed (the original has no disabled frame; disabled is a Steamwoven option) |
 | sheet | a document laid over a backdrop | newspaper, letter, book page, telegram, plaque |
 | grid | a grid as its own layer | the schematic grid, inventory cells |
 | picture | an image on a transparent background | items on the schematic, item and spell icons, portraits |
@@ -247,7 +247,7 @@ Part kinds:
 - **SWI-KIT-4** A part with transparency has a clean edge: no halo of the generator's background colour (checked by
   the fit tool, SWI-VER-3).
 - **SWI-KIT-5** A button is plate + ring + glyph + state overlays. The states of one button size (idle, hover, pressed,
-  disabled) are generated together on one sheet, so they match.
+  disabled) are generated together on one sheet, so they match. The original has no disabled frame (idle 0, pressed 1, hover 2: [states note](steamwoven-interface-states.md#the-originals-state-rules)); a disabled overlay is a Steamwoven addition and an open question there.
 - **SWI-KIT-6** A gauge is glass, housing and liquid as layers; the fill level is drawn from the value, not from a frame
   sequence.
 - **SWI-KIT-7** Order of production: the strips, end caps and window backgrounds, then buttons and glyphs, sheets, the schematic, gauges and
@@ -257,7 +257,7 @@ Part kinds:
 
 | Step | Who | Output | Where it lives |
 | --- | --- | --- | --- |
-| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)) | [census note](steamwoven-interface-census.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
+| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451), states and animations [#2971](https://github.com/Simarglok/arcanum-steamwoven/issues/2971)) | [census note](steamwoven-interface-census.md), [states and animations note](steamwoven-interface-states.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
 | 2. Kit manifest | agent ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) | `kit.json`, validator | git |
 | 3. Context images | owner in Codex ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)) | whole-screen redraws of key screens | local |
 | 4. Material sheet | owner in Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
