@@ -66,7 +66,8 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-2174: the one HD setting is the profile (the interface and the relit look follow it); the game settings hold it, like any start.
             profile = _gameSettings.HdInterface ? VisualProfile.Hd : VisualProfile.Legacy;
-            _visualOrigin = !_visualStore.Persistent ? "default (automated run)" : _visualStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
+            // ARC-UI-2221: the profile comes from the game settings, so the origin is theirs too (their file, not the visual store's).
+            _visualOrigin = _gameSettingsOrigin;
         }
         HdPack? pack = null; var open = "none"; var found = 0;
         var fromEnvironment = !string.IsNullOrWhiteSpace(packPath);
@@ -158,8 +159,13 @@ public partial class TerrainViewerApp
         HdPackSourceResolver.Resolve(mode, customPath, PackFolders(), new HdFileProbe());
 
     /// <summary>Requests the other visual profile (H or the palette action), saves the request and
-    /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.</summary>
-    private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(_canvas.ToggledVisualProfile, via);
+    /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.
+    /// ARC-UI-2221: the other value than the saved HD value (the one setting, written at every request, so a pending switch is covered); the
+    /// canvas profile can differ from it (a pack-problem fallback, an ARC_VISUAL_PROFILE override), and toggling from that would write the saved value again.</summary>
+    private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(VisualToggleTarget(_gameSettings.HdInterface), via);
+
+    /// <summary>ARC-UI-2221: what a toggle asks for: the other value than the saved HD value.</summary>
+    internal static VisualProfile VisualToggleTarget(bool savedHd) => savedHd ? VisualProfile.Legacy : VisualProfile.Hd;
 
     /// <summary>ARC-UI-089: requests <paramref name="target"/> (an HD request names its target; the toggle asks for the other one).</summary>
     private VisualRequestOutcome RequestVisualProfile(VisualProfile target, string via)
@@ -168,10 +174,11 @@ public partial class TerrainViewerApp
         var outcome = _canvas.RequestVisualProfile(target);
         // Persisted at request time; a failure is reported and never blocks the switch.
         _visualKeyNotice = null;
-        if (outcome != VisualRequestOutcome.NoOp)
+        var on = target == VisualProfile.Hd;
+        // ARC-UI-2221: a request the canvas finds no change in (a fallback to Legacy while HD is saved On) still changes the saved value when it differs.
+        if (outcome != VisualRequestOutcome.NoOp || on != _gameSettings.HdInterface)
         {
             // ARC-UI-2174: the one HD value; the interface follows at once (the experimental generated interface is honoured only while HD is On, so Off clears it).
-            var on = target == VisualProfile.Hd;
             SaveGameSettings(_gameSettings with { HdInterface = on, GeneratedInterface = _gameSettings.GeneratedInterface && on });
             if (_visualStore is { } store)
                 _visualNotice = !store.Persistent ? "not saved (automated run)" : store.Save(target) ? null : "save FAILED, this run only";
