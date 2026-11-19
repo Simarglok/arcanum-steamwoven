@@ -1199,6 +1199,36 @@ python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
 python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
 ```
 
+## Steamwoven kit bake (ARC-DEV-2460)
+
+[`tools/steamwoven_ui/bake.py`](../../tools/steamwoven_ui/bake.py) makes the four step sets (x1, x2/3, x1/2, x1/3; folder names `x1`, `x2-3`, `x1-2`, `x1-3`) from the kit masters
+([TRD SWI-RUN-1](../ui/steamwoven-interface-trd.md#bake-and-runtime)); the standard-library PNG reader and writer is [`pngio.py`](../../tools/steamwoven_ui/pngio.py), shared with the assembly tool (8-bit RGBA masters only; canonical output).
+No numpy, Godot or `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main
+checkout, never git.
+
+- **Where things live:** masters `local/steamwoven-ui/masters/<part id>.png` (the fit tool's output, #2459); baked sets `local/steamwoven-ui/baked/<step>/<part id>.png` with
+  `<step>/manifest.json` (per part: master size and SHA-256, baked size, bytes, file SHA-256 and a SHA-256 of the raw pixels; plus a hash of the part list).
+  `baked/` is derived and fully reproducible from `masters/`, so it is **not backed up**: a changed master is rebaked, a part whose
+  master hash is unchanged is reused (`unchanged` in the log), and `--prune` removes only baked files this tool wrote whose master is gone.
+- **Backup** (a convention set by this page; no tool does it, the owner or an agent copies by hand; same spirit as the [HD pack](hd-pack.md) rules, kit decision SWI-PRV-1): the masters (and the prompt library's provenance records beside them) are the work that nothing
+  reproduces, so they are copied, never moved, to a folder **outside** `hd-packs/`, next to the HD backups: `~/Library/Application Support/Arcanum Steamwoven Game/steamwoven-ui-backups/<date>/`.
+  After a copy to another device, rebake there and compare the `pixels_sha256` values of the manifests (they do not depend on the zlib build; the file hashes do).
+- **Install:** the tool writes nothing outside `local/steamwoven-ui/baked/`. The runtime reads the sets in place (viewer of the owner's checkout); where a packaged game on a
+  player's own device keeps them is for the runtime slice [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461), because the kit is never shipped or committed (SWI-PRV-2).
+- **Exactness:** a master side must be a multiple of 6 px (so of 2 and 3); every baked length is the master length times the step, exactly; x1 is the master copied pixel for pixel; each
+  other pixel is the exact area average of the master pixels it covers in integer weights, taken in linear light (16-bit table) with premultiplied alpha, so no dark fringe and no
+  colour from transparent pixels; a fully transparent result has colour 0 (not at x1, which is the master unchanged). Two runs give identical bytes. Speed: pure Python, under a minute for all four sets of one 2880 x 2160 master (a full-screen plate); a
+  second bake reuses what is unchanged.
+- **Checks** against `kit.json`: the id must be a manifest part and a master of `units` size basis must have the manifest size (`provisional` only warns; `--no-kit` skips this for scratch masters).
+
+```sh
+python3 -B tools/steamwoven_ui/bake.py bake --dry-run          # plan: what would be baked, nothing written
+python3 -B tools/steamwoven_ui/bake.py bake [--steps x1-2,x1-3] [--only ID,...] [--prune]
+python3 -B tools/steamwoven_ui/bake.py verify                   # files, hashes and sizes of the sets against the manifests and masters
+python3 -B tools/steamwoven_ui/bake.py self-test                # task check: synthetic master, no file
+python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (also in the batched run_tests.py set)
+```
+
 ## Steamwoven Codex batch runner (ARC-DEV-3001)
 
 [`tools/steamwoven_ui/codex_batch.py`](../../tools/steamwoven_ui/codex_batch.py) runs one inbox batch of the Steamwoven kit through the owner's subscription
