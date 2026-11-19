@@ -247,6 +247,10 @@ The Godot-free parts are `SteamwovenHudPlan.Column` / `WindowZone`, `SteamwovenW
 
 ## Asset kit
 
+**Master scale (ARC-RES-2949).** The kit stays at 3.6 px per unit (composition 2880 × 2160): the HD pack audit compared it with the pack's 4 px per unit
+(3200 × 2400) and recommends 3.6, because its steps draw the 16:9 and 21:9 sizes (720p, 1080p, 1440p, 2160p) without resampling and the kit, its tools
+and the layout already use it; a pack frame reused in the kit is area-resampled by 0.9 ([audit](../rendering/hd-pack-4x3-audit.md#kit-master-scale-36-or-4-px-per-unit)).
+
 Part kinds:
 
 | Kind | What | Examples |
