@@ -104,7 +104,8 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
   of 2026-11-07 ([decisions](../architecture/decisions.md), "Out-of-sight rules and the view": Steamwoven tests the
   drawn view).
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
-  ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)).
+  ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)): the original's fonts (HD frames in HD), sizes per step in the
+  [font note](steamwoven-interface-fonts.md).
 
 ## Prototype of the play screen (ARC-UI-2452)
 
