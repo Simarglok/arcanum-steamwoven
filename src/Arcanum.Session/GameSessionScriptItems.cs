@@ -152,8 +152,8 @@ public sealed partial class GameSessionOwner
         if (item.Worn && item.ItemSpells) return new(item, $"transfer item of {item.Entity}, worn with item spells, is not modelled", GameSessionFailure.ItemEffectUnsupported);
         if (to is not null)
         {
-            // 0x4617F0 starts with the new holder's transfer script (point 32), which the session does not run, and the removal ends the item's spell runs.
-            if (HolderHasScript(to, kind, SessionScriptPoint.Transfer)) return new(item, $"transfer item into {to}, which has a transfer script, is not modelled", GameSessionFailure.HolderScriptUnsupported);
+            // 0x4617F0 starts with the new holder's transfer script (point 32); ARC-SCRIPT-2827: with itemScripts the give runs it (GiveItemTo) and the dry run below finds a run the session cannot apply, without them it is not run. The removal ends the item's spell runs.
+            if (itemScripts is null && HolderHasScript(to, kind, SessionScriptPoint.Transfer)) return new(item, $"transfer item into {to}, which has a transfer script, is not modelled", GameSessionFailure.HolderScriptUnsupported);
             if (HasItemRuns(item.Entity)) return new(item, $"transfer item: {item.Entity} is the source of a running spell", GameSessionFailure.ItemEffectUnsupported);
         }
         else
