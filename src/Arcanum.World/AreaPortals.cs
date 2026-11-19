@@ -193,7 +193,7 @@ public sealed class AreaPortals
     }
 
     /// <summary>
-    /// ARC-DEV-138 (MIG13 S7): what a use of the portal by the player will do, decided and not written (FR-SCENE-014): an open portal is to close (<see cref="AreaPortalUse.Closed"/>;
+    /// ARC-DEV-138 (MIG13 S7): what a use of the portal by the player will do, decided and not written (FR-SCENE-014; since ARC-SCRIPT-2860 the open attempt inside it runs the portal's unlock script, with its effects, when <see cref="UnlockScripts"/> is bound): an open portal is to close (<see cref="AreaPortalUse.Closed"/>;
     /// only a magically held door refuses, GT41), a closed one is to open when the player's open attempt succeeds (<see cref="AreaPortalUse.Opened"/>), else the attempt's
     /// refusal. The portal's own run does the change (<see cref="AreaDoorHost"/>).
     /// </summary>

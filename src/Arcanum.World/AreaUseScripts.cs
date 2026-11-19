@@ -1832,7 +1832,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-2860 (TQ11, exe read 2026-11-19, UL1-UL3): the unlock script (attachment point 3) of <paramref name="target"/>, a portal or container of the shown map, which both open attempts (0x4AEB70, 0x4AED80) run through the script
     /// dispatcher (0x441980) before the lock test: the opener (<paramref name="opener"/>: the PC or an NPC) as the triggerer, the object as the attachee, no extra object, line 0, under <see cref="UnlockAdmission"/>; its slot is kept as map
     /// changes (<see cref="SlotProperty"/>). The attempt reads the answer (<see cref="UnlockRefused"/>: 0 refuses the opening). A target that is not a row of the shown map, or has no script at the point, runs nothing. The original has no guard; a script
-    /// whose effects open or toggle the object reaches the attempt again nested, so a run inside a run is not made (<see cref="AreaScriptedUseOutcome.Refused"/>).
+    /// whose effects open or toggle its own object reaches the attempt again nested, so a run of the same object inside its own run is not made (another object's attempt runs) (<see cref="AreaScriptedUseOutcome.Refused"/>).
     /// </summary>
     public AreaScriptedUse RunUnlock(string target, ScrObjectRef opener, ScrRuleProfile rules)
     {
@@ -1840,19 +1840,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var attachee = new ScrObjectRef(_shownMap, target);
         if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Unlock) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
-        if (_unlockDepth > 0) return new(AreaScriptedUseOutcome.Refused, null, [], null, "an unlock script is already running: a nested open attempt does not run it again");
+        if (_unlocking.Contains(target)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "this object's unlock script is already running: a nested open attempt on it does not run it again");
         var previous = _clicked;
         _clicked = (target, row);
-        _unlockDepth++;
+        _unlocking.Add(target);
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Unlock, attachee, opener, null), this, new() { Rules = Remember(rules), Admission = UnlockAdmission });
             return Finish(run, _ => "a teleport from an unlock script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
-        finally { _unlockDepth--; _clicked = previous; }
+        finally { _unlocking.Remove(target); _clicked = previous; }
     }
 
-    private int _unlockDepth;
+    private readonly HashSet<string> _unlocking = new(StringComparer.Ordinal);
 
     /// <summary>ARC-SCRIPT-2860: the set an unlock script (point 3) runs under (<see cref="RunUnlock"/>): the set of the object use scripts (<see cref="Admission"/>), which admits the installed script 1151 of a door whole (opt-in check).</summary>
     public static ScrAdmissionSet UnlockAdmission => Admission;
