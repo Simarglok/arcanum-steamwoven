@@ -159,7 +159,8 @@ public partial class TerrainViewerApp
         public bool RunUseScript(string user, string item, string? target)
         {
             if (!facts.UseScript) return true;
-            if (app.ItemUseScript(item, reading: false, target: target) is not { } stopped) return true;
+            // ARC-SCRIPT-2789: a written item's use (the use icon, a double click) is its reading, so a refused script lets it go on as the Read button does.
+            if (app.ItemUseScript(item, reading: facts.Type == AreaItemUseFacts.WrittenType, target: target) is not { } stopped) return true;
             Message = stopped;
             // ARC-SCRIPT-1481: a use script that ate the item itself (the food script 30282 destroys it and heals) used it, though its answer stops the original's tail.
             if (app._areaSession!.IsItemDestroyed(item)) Message = "used: its use script used the item up";
