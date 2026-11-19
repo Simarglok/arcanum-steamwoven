@@ -91,7 +91,8 @@ public partial class TerrainViewerApp
                         var surround = screen.Sides();
                         await WaitGapsAsync(screen.Sides);
                         await CheckColumnCaseAsync(tag, layout, sides, surround, screen.Plate() ?? throw new InvalidOperationException($"[{tag}] the {screen.Name} view is not drawn"),
-                            panel.FrameBackdropForSelfTest.Shown, screen.Name is "main" or "options" ? art : null, frames, require);
+                            panel.FrameBackdropForSelfTest.Shown, screen.Name is "main" or "options" ? art : null,
+                            screen.Name is "main" or "options" ? art.EdgeTone : AreaMenuArtView.DefaultEdgeTone, frames, require);
                         await SaveAsync($"column-{tag}");
                         checkedCases++;
                     }
@@ -103,6 +104,14 @@ public partial class TerrainViewerApp
             SteamwovenHud.Options = SteamwovenLayoutOptions.Default;
             await frames(3);
             require(art.FullScreenPlan is { IsColumn: false } && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) is null, "with the column option off the full-width plan stands");
+            require(panel.ColumnSidesForSelfTest is { Shown: false } && panel.ColumnSidesForSelfTest.Sides.BlackForSelfTest.Count == 0, "with the column option off the column's surroundings are gone");
+            // The column option set with the HD option off: no column plan, the whole-factor plate stands (AC2).
+            SteamwovenHud.Options = SteamwovenLayoutOptions.ColumnOriginal;
+            _gameSettings = _gameSettings with { HdInterface = false };
+            SyncInterfaceHd();
+            await frames(3);
+            require(!InterfaceHd.Enabled && art.FullScreenPlan is null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) is null && !panel.ColumnSidesForSelfTest.Shown,
+                "with the HD option off the column option draws nothing: no plan, no surroundings");
             GD.Print($"ARC-UI-2891 native-smoke menu column PASS cases={checkedCases}");
         }
         finally
@@ -171,7 +180,7 @@ public partial class TerrainViewerApp
                     for (var wait = 0; wait < 1800 && sidesView.PaintPendingForSelfTest; wait++) await frames(1);
                     await frames(2);
                     var art = panel.ArtForSelfTest;
-                    await CheckColumnCaseAsync(tag, plan!, sides, sidesView, (art.Position, art.Scale.X), false, null, frames, require);
+                    await CheckColumnCaseAsync(tag, plan!, sides, sidesView, (art.Position, art.Scale.X), false, null, AreaMenuArtView.DefaultEdgeTone, frames, require);
                     if (capture is not null)
                     {
                         using var image = GetViewport().GetTexture().GetImage();
@@ -194,15 +203,13 @@ public partial class TerrainViewerApp
 
     /// <summary>The checks of one column case (the plate, the surroundings, the hit tests of a full-screen window, the pixels); shared by the main menu's pass and the save list's.</summary>
     private async Task CheckColumnCaseAsync(string tag, SteamwovenFullScreenPlan layout, SteamwovenColumnSides sides, SteamwovenColumnSidesView surround, (Vector2 Position, float Scale) plate,
-        bool frameBackdropShown, AreaMenuArtView? art, Func<int, Task> frames, Action<bool, string> require)
+        bool frameBackdropShown, AreaMenuArtView? art, Color tone, Func<int, Task> frames, Action<bool, string> require)
     {
         var (position, scale) = plate;
         // The plate: the column's full-screen zone, drawn at the strip scale.
         require(Math.Abs(scale - (float)layout.Factor) < 1e-4f, $"[{tag}] the plate is drawn at {layout.Factor:F4}, got {scale}");
         require(Math.Abs(position.X - layout.Zone.X) <= 1.01f && Math.Abs(position.Y - layout.Zone.Y) <= 1.01f, $"[{tag}] the plate stands at {layout.Zone}, got {position}");
         // The plate: the column's full-screen zone, drawn at the strip scale.
-        require(Math.Abs(scale - (float)layout.Factor) < 1e-4f, $"[{tag}] the plate is drawn at {layout.Factor:F4}, got {scale}");
-        require(Math.Abs(position.X - layout.Zone.X) <= 1.01f && Math.Abs(position.Y - layout.Zone.Y) <= 1.01f, $"[{tag}] the plate stands at {layout.Zone}, got {position}");
         // No full-width backdrop and no wood sides; the black and vignette rectangles are the plan's.
         require(!frameBackdropShown, $"[{tag}] no full-width backdrop shows");
         require(surround.Visible && surround.BlackForSelfTest.SequenceEqual(SteamwovenColumnMenu.BlackRects(layout)), $"[{tag}] the sides are the plan's black rectangles");
@@ -248,7 +255,12 @@ public partial class TerrainViewerApp
             var far = Pixel(1, rowY);
             var near = Pixel(layout.Zone.X - 2, rowY);
             if (sides == SteamwovenColumnSides.Black) require(Sum(far) == 0 && Sum(near) == 0, $"[{tag}] the sides are black (far {far}, near {near})");
-            else require(Sum(far) <= 12 && Sum(near) >= Sum(far), $"[{tag}] the vignette fades from the plate's edge tone ({near}) to black ({far})");
+            else
+        {
+            require(Sum(far) <= 12 && Sum(near) >= Sum(far), $"[{tag}] the vignette fades from the plate's edge tone ({near}) to black ({far})");
+            // A drawn vignette is lit beside the plate (a tone that is itself near black proves nothing).
+            if (tone.R8 + tone.G8 + tone.B8 >= 24) require(Sum(near) > 0, $"[{tag}] the vignette is drawn beside the plate: {near} for the tone {tone}");
+        }
             for (var g = 0; g < 2; g++)
                 if (wantGaps[g].Height >= 4)
                 {

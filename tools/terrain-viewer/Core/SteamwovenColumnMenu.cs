@@ -22,8 +22,11 @@ public static class SteamwovenColumnMenu
     /// <summary>The width of the vignette's fall-off in original units (the plate's edge to black).</summary>
     public const int VignetteUnits = 160;
 
-    /// <summary>What shows beside the column. A run-time option of the viewer (the smoke and the launcher set it); black by default.</summary>
-    public static SteamwovenColumnSides Sides { get; set; } = SteamwovenColumnSides.Black;
+    /// <summary>The environment variable that sets <see cref="Sides"/> at start (<c>black</c> or <c>vignette</c>).</summary>
+    public const string SidesVariable = "ARC_AREA_MENU_COLUMN_SIDES";
+
+    /// <summary>What shows beside the column. A run-time option of the viewer: the environment variable <see cref="SidesVariable"/> at start (the smoke sets it per case); black by default.</summary>
+    public static SteamwovenColumnSides Sides { get; set; } = ParseSides(System.Environment.GetEnvironmentVariable(SidesVariable)) ?? SteamwovenColumnSides.Black;
 
     /// <summary>Reads <c>black</c> or <c>vignette</c> (any case); null when the text is neither.</summary>
     public static SteamwovenColumnSides? ParseSides(string? text) => text?.Trim().ToLowerInvariant() switch

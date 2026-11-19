@@ -94,8 +94,9 @@ internal sealed partial class SteamwovenColumnSidesView : Control
     // A board shows once its first paint is in (until then the black of the window shows, as with the full-width backdrop).
     private void ShowPaintedGaps()
     {
-        _gapAbove.Visible = _wantAbove && _gapAbove.Texture is not null;
-        _gapBelow.Visible = _wantBelow && _gapBelow.Texture is not null;
+        // Not while a paint is pending: the old texture would be stretched over a gap of the new size.
+        _gapAbove.Visible = _wantAbove && _gapAbove.Texture is not null && !_gapAbove.Pending;
+        _gapBelow.Visible = _wantBelow && _gapBelow.Texture is not null && !_gapBelow.Pending;
     }
 
     public override void _Process(double delta)

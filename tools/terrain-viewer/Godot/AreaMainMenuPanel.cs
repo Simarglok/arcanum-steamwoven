@@ -512,7 +512,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (anyArt && AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column)
         {
             _frameBackdrop.Visible = false;
-            _sides.Present(column, SteamwovenColumnMenu.Sides, _art.Visible ? _art.EdgeTone : AreaMenuArtView.DefaultEdgeTone);
+            _sides.Present(column, SteamwovenColumnMenu.Sides, SteamwovenColumnMenu.Sides == SteamwovenColumnSides.Vignette && _art.Visible ? _art.EdgeTone : AreaMenuArtView.DefaultEdgeTone);
             return;
         }
         _sides.Clear();
