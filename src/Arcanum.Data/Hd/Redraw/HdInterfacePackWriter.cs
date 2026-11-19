@@ -35,7 +35,9 @@ public static class HdInterfacePackWriter
     {
         ArgumentException.ThrowIfNullOrEmpty(directory); ArgumentNullException.ThrowIfNull(frames);
         portraits ??= [];
-        // ARC-UI-2865: a write of interface frames replaces the pack's interface sprites and leaves its portraits; a write of portraits replaces the portraits and leaves the sprites.
+        // ARC-UI-2865: a write of interface frames replaces the pack's interface sprites and leaves its portraits; a write of portraits replaces only the portraits it names (by path)
+        // and leaves the sprites and every other portrait.
+        var portraitPaths = portraits.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
         if (!new HdPackOptions().Scales.Contains(scale)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"scale {scale} is not an accepted pack scale");
         var manifestPath = Path.Combine(directory, HdPack.ManifestFile);
         var written = new List<string>();
@@ -79,7 +81,7 @@ public static class HdInterfacePackWriter
             for (var i = entries.Count - 1; i >= 0; i--)
             {
                 var isPortrait = (string?)entries[i]!["kind"] == "portrait";
-                if ((string?)entries[i]!["slice"] == SliceName && (isPortrait ? portraits.Count > 0 : frames.Count > 0 || portraits.Count == 0))
+                if ((string?)entries[i]!["slice"] == SliceName && (isPortrait ? portraitPaths.Contains((string?)entries[i]!["portrait"]?["path"] ?? "") : frames.Count > 0 || portraits.Count == 0))
                 { oldFiles.Add((string)entries[i]!["file"]!); entries.RemoveAt(i); replaced++; }
             }
             var keys = new HashSet<(string, int)>(); var files = new List<(string File, byte[] Png, JsonObject Entry)>();

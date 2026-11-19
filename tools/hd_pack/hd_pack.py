@@ -299,7 +299,10 @@ def portrait_rows(keyed_entries: dict) -> dict:
     for e in keyed_entries.values():
         if e.get("kind") == "portrait":
             stem = e["portrait"]["path"].rsplit("/", 1)[-1].removesuffix(".bmp")
-            rows[layout.art_of(e["file"])] = ("portraits", "npcs" if stem.startswith("npc") else "heroes", False)
+            try:
+                rows[layout.art_of(e["file"])] = ("portraits", "npcs" if stem.startswith("npc") else "heroes", False)
+            except layout.LayoutError as err:
+                raise PackError(str(err)) from err
     return rows
 
 

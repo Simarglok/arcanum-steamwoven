@@ -67,6 +67,49 @@ public sealed class HdPortraitTests
         CollectionAssert.AreEqual(new[] { (byte)index, (byte)(index / 2), (byte)(255 - index), (byte)255 }, paletted.Rgba[at2..(at2 + 4)]);
     }
 
+    // An uncompressed paletted bitmap of 1, 4 or 8 bits: pixel (x, y) takes palette index (x * 3 + y) % colours; the palette has `colours` entries (biClrUsed) and entry i is (i * 5, i * 11, 200 - i).
+    private static byte[] PalettedBmp(int width, int height, int bits, int colours, bool useColourCount)
+    {
+        var stride = (width * bits + 31) / 32 * 4;
+        var data = new byte[stride * height];
+        for (var y = 0; y < height; y++)
+        for (var x = 0; x < width; x++)
+        {
+            var index = (x * 3 + y) % colours;
+            var at = (height - 1 - y) * stride + x * bits / 8;
+            data[at] |= (byte)(index << (8 - bits - x * bits % 8));
+        }
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write((byte)'B'); writer.Write((byte)'M'); writer.Write(54 + colours * 4 + data.Length); writer.Write(0); writer.Write(54 + colours * 4);
+        writer.Write(40); writer.Write(width); writer.Write(height); writer.Write((short)1); writer.Write((short)bits);
+        writer.Write(0); writer.Write(data.Length); writer.Write(0); writer.Write(0); writer.Write(useColourCount ? colours : 0); writer.Write(0);
+        for (var i = 0; i < colours; i++) { writer.Write((byte)(200 - i)); writer.Write((byte)(i * 11)); writer.Write((byte)(i * 5)); writer.Write((byte)0); }
+        writer.Write(data);
+        return stream.ToArray();
+    }
+
+    [TestMethod]
+    public void BitmapReaderDecodesOneFourAndEightBitImagesWithPaddingAndShortPalettes()
+    {
+        foreach (var (bits, colours, width, height, counted) in new[] { (1, 2, 11, 5, true), (4, 16, 7, 6, true), (4, 11, 9, 4, true), (8, 40, 7, 5, true), (8, 256, 13, 3, false) })
+        {
+            var image = PortraitBitmap.Decode(PalettedBmp(width, height, bits, colours, counted));
+            Assert.IsNotNull(image, $"{bits} bits, {colours} colours");
+            Assert.AreEqual((width, height), (image.Width, image.Height));
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var i = (x * 3 + y) % colours; var at = (y * width + x) * 4;
+                CollectionAssert.AreEqual(new[] { (byte)(i * 5), (byte)(i * 11), (byte)(200 - i), (byte)255 }, image.Rgba[at..(at + 4)], $"{bits} bits ({x},{y})");
+            }
+        }
+        // A palette that does not fit its bit depth, or an image that runs past the file, is refused.
+        Assert.IsNull(PortraitBitmap.Decode(PalettedBmp(4, 4, 1, 3, true)));
+        var truncated = PalettedBmp(7, 5, 8, 40, true);
+        Assert.IsNull(PortraitBitmap.Decode(truncated[..^1]));
+    }
+
     [TestMethod]
     public void BitmapReaderRefusesWhatItDoesNotTake()
     {
@@ -147,20 +190,48 @@ public sealed class HdPortraitTests
     }
 
     [TestMethod]
-    public void PortraitsCoexistWithInterfaceSpritesAndKeepTheirOwnReplacement()
+    public void PortraitAndInterfaceWritesLeaveEachOthersEntriesAlone()
     {
-        var directory = WritePack("coexist");
-        var (large, _) = Bitmaps();
-        // A later portrait write replaces only the portraits.
-        var replaced = HdInterfacePackWriter.Write(directory, "portraits-test", 2, [], DateTimeOffset.UnixEpoch,
-            [new("portrait/hum1_b.bmp", 8, 8, large.Rgba, Redraw(large, 2, tint: 40))]);
-        Assert.AreEqual(HdInterfaceWriteStatus.Written, replaced.Status, replaced.Detail);
-        Assert.AreEqual(2, replaced.Replaced);
+        const int Scale = 2;
+        var directory = Path.Combine(_root, "coexist");
+        var (large, small) = Bitmaps();
+        // One opaque 4 x 4 interface frame, redrawn as its 2x replica.
+        var spriteRgba = new byte[4 * 4 * 4];
+        for (var i = 0; i < 16; i++) { spriteRgba[i * 4] = (byte)(i * 9); spriteRgba[i * 4 + 1] = 40; spriteRgba[i * 4 + 2] = 90; spriteRgba[i * 4 + 3] = 255; }
+        var art = new HdInterfaceArt("synthetic.art", HdInterfaceKey.Identity("synthetic.art", new byte[160]), [new HdLegacyRaster(4, 4, spriteRgba)]);
+        var spriteHd = Redraw(new PortraitBitmapImage(4, 4, spriteRgba), Scale);
+        HdBuiltInterfaceFrame Frame() => new(art, 0, 4, 4, spriteHd, new(1, 1, 0, 0, 1));
+        HdBuiltPortrait Portrait(string path, PortraitBitmapImage bitmap, int tint) => new(path, bitmap.Width, bitmap.Height, bitmap.Rgba, Redraw(bitmap, Scale, tint));
+        string Listing() => string.Join("|", HdPack.Open(directory).Pack!.Entries.OrderBy(e => e.Key!.Value.ArtSha256, StringComparer.Ordinal).Select(e => $"{e.Kind}:{e.Sha256}"));
+
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "mixed", Scale, [Frame()], DateTimeOffset.UnixEpoch).Status);
+        var withPortraits = HdInterfacePackWriter.Write(directory, "mixed", Scale, [], DateTimeOffset.UnixEpoch,
+            [Portrait("portrait/hum1_b.bmp", large, 9), Portrait("portrait/hum1.bmp", small, 9)]);
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, withPortraits.Status, withPortraits.Detail);
+        Assert.AreEqual(0, withPortraits.Replaced);
         var pack = HdPack.Open(directory).Pack!;
-        Assert.AreEqual(1, pack.Entries.Count);
-        // An interface write (no frames) leaves portraits in place only when it carries none: it replaces the sprites of the slice, which are none here.
+        Assert.AreEqual((1, 2), (pack.Entries.Count(e => e.Kind == HdEntryKind.Sprite), pack.Entries.Count(e => e.Kind == HdEntryKind.Portrait)));
+        var spriteSha = pack.Entries.Single(e => e.Kind == HdEntryKind.Sprite).Sha256;
+        var smallSha = pack.Entries.Single(e => e.PortraitPath == "portrait/hum1.bmp").Sha256;
+
+        // A portrait-only write that names one portrait replaces that one and keeps the sprite and the other portrait byte for byte.
+        var replaced = HdInterfacePackWriter.Write(directory, "mixed", Scale, [], DateTimeOffset.UnixEpoch, [Portrait("portrait/hum1_b.bmp", large, 40)]);
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, replaced.Status, replaced.Detail);
+        Assert.AreEqual(1, replaced.Replaced);
+        pack = HdPack.Open(directory).Pack!;
+        Assert.AreEqual(3, pack.Entries.Count);
+        Assert.AreEqual(spriteSha, pack.Entries.Single(e => e.Kind == HdEntryKind.Sprite).Sha256);
+        Assert.AreEqual(smallSha, pack.Entries.Single(e => e.PortraitPath == "portrait/hum1.bmp").Sha256);
+        CollectionAssert.AreEqual(Redraw(large, Scale, 40), pack.ResolveSprite(HdPortraitKey.Query("portrait/hum1_b.bmp", 8, 8, large.Rgba), large.Rgba).Rgba);
         Assert.IsTrue(pack.VerifyIntegrity().Intact);
-        Assert.AreEqual(HdFrameStatus.Hd, pack.ResolveSprite(HdPortraitKey.Query("portrait/hum1_b.bmp", 8, 8, large.Rgba), large.Rgba).Status);
+
+        // An interface write replaces the slice's sprites and keeps every portrait.
+        var before = Listing();
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "mixed", Scale, [Frame()], DateTimeOffset.UnixEpoch).Status);
+        Assert.AreEqual(before, Listing());
+        pack = HdPack.Open(directory).Pack!;
+        Assert.AreEqual(2, pack.Entries.Count(e => e.Kind == HdEntryKind.Portrait));
+        Assert.AreEqual(3, pack.Entries.Count);
     }
 
     [TestMethod]

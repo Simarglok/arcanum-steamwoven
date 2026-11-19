@@ -447,7 +447,7 @@ rest of the pack, so nothing else changes:
 The viewer (`PortraitHd.Texture`) makes every portrait texture from the bitmap's own pixels and keeps its size (64 or 128), so every draw site keeps its on-screen
 size and layout; with the HD setting on and an entry for that bitmap it draws the redraw (mipmapped and filtered down for the 32 × 32 follower frames), per file,
 otherwise the BMP. Import: `hd_pack.py portraits-plan` writes the plan (kind `arcanum-steamwoven-hd-portrait-plan`) from the delivered redraws, the importer
-(`hd-interface-import --plan`) checks each redraw against the bitmap it reads from the game and writes the entries into a staging pack, and the update goes in with `apply --add-new`
+(`hd-interface-import --plan`) checks each redraw against the bitmap it reads from the game and writes the entries into a staging pack (a portrait plan replaces only the portraits it names; the pack's sprites and other portraits stay), and the update goes in with `apply --add-new`
 ([workflow](../workflow/hd-pack.md#portraits-arc-ui-2865)).
 
 ## Device budget file

@@ -14,9 +14,10 @@ namespace Arcanum.Tools.HdInterfaceCli;
 internal static class Program
 {
     private const string Usage = "usage: hd-interface-import --module PATH/modules/Arcanum.dat --plan PLAN.json --pack PACK_DIR [--dry-run]\n"
-        + "  --plan     an interface plan (kind arcanum-steamwoven-hd-interface-plan) or, ARC-UI-2865, a portrait plan (kind arcanum-steamwoven-hd-portrait-plan: the redraws of portrait\\*.bmp, written as 'portrait' entries)\n"
+
         + "  --module   the module archive of the installed game (as the viewer takes it)\n"
-        + "  --plan     the local import plan (kind arcanum-steamwoven-hd-interface-plan); image paths are relative to it\n"
+        + "  --plan     the local import plan; image paths are relative to it. Kind arcanum-steamwoven-hd-interface-plan, or (ARC-UI-2865) arcanum-steamwoven-hd-portrait-plan:\n"
+        + "             the redraws of portrait\\*.bmp, written as 'portrait' entries; a portrait plan replaces only the portraits it names and leaves the pack's other entries\n"
         + "  --pack     the pack directory: an existing pack gets the 'interface' slice added or replaced, a missing one is created\n"
         + "  --dry-run  build and report every frame, write nothing";
 

@@ -24,4 +24,15 @@ public static class PortraitHd
         var image = new Image();
         return image.LoadBmpFromBuffer(bytes) == Error.Ok && !image.IsEmpty() ? ImageTexture.CreateFromImage(image) : null;
     }
+
+    /// <summary>The smoke's check of one drawn portrait texture against <paramref name="pack"/>: the texture keeps <paramref name="size"/> (64 or 128), and when the pack holds an entry for
+    /// exactly this bitmap (same path key and Legacy pixels) the texture draws HD at the pack's scale. A texture with no HD question (an icon, no portrait, a bitmap the portrait
+    /// reader does not take) or a bitmap the pack has no entry for is fine and says so.</summary>
+    internal static (bool Ok, string Detail) Check(Texture2D? texture, HdPack pack, int size)
+    {
+        if (texture is not HdInterfaceTexture hd || hd.FrameForBoard?.Hd is not { } query) return (true, "no HD question for this portrait");
+        if (hd.GetWidth() != size || hd.GetHeight() != size) return (false, $"size {hd.GetWidth()}x{hd.GetHeight()}, expected {size}x{size}");
+        if (!pack.Entries.Any(e => e.Kind == HdEntryKind.Portrait && e.Key == query.Key && e.Legacy == query.Legacy)) return (true, "the pack has no entry for this bitmap: Legacy");
+        return hd.IsHd && hd.HdScale == pack.Scale ? (true, "HD") : (false, "the pack holds an entry for this bitmap but the portrait does not draw HD");
+    }
 }

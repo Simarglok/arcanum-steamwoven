@@ -38,6 +38,25 @@ public static partial class TerrainViewerSelfTest
         godot.Convert(Image.Format.Rgba8);
         Require(godot.GetData().AsSpan().SequenceEqual(decoded.Rgba), "the portrait reader and Godot decode a bitmap to the same pixels");
 
+        // The same for a paletted bitmap with a short palette and a row that needs padding (the portraits are 8-bit): 7 x 5, 40 colours.
+        {
+            const int PW = 7, PH = 5, Colours = 40;
+            var stride = (PW + 3) / 4 * 4;
+            using var stream = new MemoryStream();
+            using var writer = new BinaryWriter(stream);
+            writer.Write((byte)'B'); writer.Write((byte)'M'); writer.Write(54 + Colours * 4 + stride * PH); writer.Write(0); writer.Write(54 + Colours * 4);
+            writer.Write(40); writer.Write(PW); writer.Write(PH); writer.Write((short)1); writer.Write((short)8);
+            writer.Write(0); writer.Write(stride * PH); writer.Write(0); writer.Write(0); writer.Write(Colours); writer.Write(0);
+            for (var i = 0; i < Colours; i++) { writer.Write((byte)(200 - i)); writer.Write((byte)(i * 11)); writer.Write((byte)(i * 5)); writer.Write((byte)0); }
+            for (var y = PH - 1; y >= 0; y--) { for (var x = 0; x < PW; x++) writer.Write((byte)((x * 3 + y) % Colours)); writer.Write(new byte[stride - PW]); }
+            var paletted = stream.ToArray();
+            var own = PortraitBitmap.Decode(paletted);
+            var theirs = new Image();
+            Require(own is not null && theirs.LoadBmpFromBuffer(paletted) == Error.Ok, "the paletted bitmap decodes");
+            theirs.Convert(Image.Format.Rgba8);
+            Require(theirs.GetData().AsSpan().SequenceEqual(own!.Rgba), "the portrait reader and Godot decode a short-palette 8-bit bitmap to the same pixels");
+        }
+
         var hd = new byte[Side * Scale * Side * Scale * 4];
         for (var y = 0; y < Side * Scale; y++)
         for (var x = 0; x < Side * Scale; x++)

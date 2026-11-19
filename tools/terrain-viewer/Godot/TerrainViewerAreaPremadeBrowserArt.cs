@@ -230,10 +230,9 @@ public partial class TerrainViewerApp
                     // ARC-UI-2865: the window's large portrait keeps its 128 x 128 size and, when the pack holds portraits, draws the pack's redraw (the premade browser
                     // reads the same large file through the same texture call).
                     var packPortraits = _canvas!.HdSource!.Pack!.Entries.Count(e => e.Kind == Arcanum.Data.Hd.HdEntryKind.Portrait);
-                    var portrait = art.PortraitTextureForSelfTest as HdInterfaceTexture;
-                    require(portrait is not null && portrait.GetWidth() == 128 && portrait.GetHeight() == 128, "the creation window's portrait keeps its 128 x 128 size");
-                    require(packPortraits == 0 || portrait!.IsHd && portrait.HdScale == 4, $"the pack holds {packPortraits} portraits and the creation window's portrait draws HD");
-                    GD.Print($"ARC-UI-2865 native creation portrait HD PASS packPortraits={packPortraits} hd={portrait!.IsHd}");
+                    var (portraitOk, portraitDetail) = PortraitHd.Check(art.PortraitTextureForSelfTest, _canvas.HdSource.Pack, 128);
+                    require(portraitOk, "the creation window's portrait at 128 x 128: " + portraitDetail);
+                    GD.Print($"ARC-UI-2865 native creation portrait HD PASS packPortraits={packPortraits} {portraitDetail}");
                 }
                 using var image = GetViewport().GetTexture().GetImage();
                 require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
