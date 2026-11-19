@@ -1,4 +1,5 @@
 using Arcanum.Data.Hd;
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -147,15 +148,47 @@ public partial class AreaMenuArtView : Control
         {
             if (!AreaGameBarPanel.SteamwovenOn) return null;
             var size = GetViewportRect().Size;
-            // The window's size decides the plan: it is looked up once per size (the panel asks several times a frame).
-            if (_planSize != size) (_plan, _planSize) = (SteamwovenFullScreen.Plan((int)size.X, (int)size.Y), size);
+            // ARC-UI-2891: with the column option (SteamwovenHud.Options) the plate stands in the column's full-screen zone.
+            var options = SteamwovenHud.Options.Column is null ? null : SteamwovenHud.Options;
+            // The window's size and the column option decide the plan: it is looked up once per size (the panel asks several times a frame).
+            if (_planSize != size || !Equals(_planOptions, options)) (_plan, _planSize, _planOptions) = (SteamwovenFullScreen.Plan((int)size.X, (int)size.Y, options), size, options);
             return _plan;
         }
     }
 
     private SteamwovenFullScreenPlan? _plan;
     private Vector2 _planSize;
+    private SteamwovenLayoutOptions? _planOptions;
     private bool _hadPlan;
+
+    private Texture2D? _toneOf;
+    private Color _tone = DefaultEdgeTone;
+
+    /// <summary>ARC-UI-2891: the tone of the plate's own dark edge for the column's vignette: the average of the background's outermost columns on both sides, or a dark brown where it cannot be read.</summary>
+    internal static readonly Color DefaultEdgeTone = new(.09f, .06f, .04f);
+
+    internal Color EdgeTone
+    {
+        get
+        {
+            if (_background is null) return DefaultEdgeTone;
+            if (ReferenceEquals(_toneOf, _background)) return _tone;
+            _toneOf = _background;
+            _tone = DefaultEdgeTone;
+            using var image = _background.GetImage();
+            if (image is null || image.GetWidth() < 12 || image.IsCompressed()) return _tone;
+            double r = 0, g = 0, b = 0; var count = 0;
+            for (var x = 0; x < 6; x++)
+                for (var y = 0; y < image.GetHeight(); y += 4)
+                    foreach (var column in new[] { x, image.GetWidth() - 1 - x })
+                    {
+                        var pixel = image.GetPixel(column, y);
+                        (r, g, b, count) = (r + pixel.R, g + pixel.G, b + pixel.B, count + 1);
+                    }
+            if (count > 0) _tone = new Color((float)(r / count), (float)(g / count), (float)(b / count));
+            return _tone;
+        }
+    }
 
     private Texture2D? WidescreenBackground()
     {

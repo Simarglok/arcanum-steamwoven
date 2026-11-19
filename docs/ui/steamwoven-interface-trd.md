@@ -189,6 +189,23 @@ the **column** hypothesis is tested. The full-width rules above stay as they are
 
 Unit tests: `SteamwovenColumnTests` (exact numbers at eight sizes and 1024 × 768 for both presets, tiling at more sizes).
 
+### Menus in the column (ARC-UI-2891)
+
+Issue [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891). With the column option (`SteamwovenHud.Options.Column`, the HD option and the generated interface on) every **full-screen menu** (main, single player, new game, in-play, options: `AreaMenuArtView`, `AreaMainMenuPanel`)
+and every **two-strip screen** (pre-made, new character, editor, shop and the save and load lists: their 800 × 600 screen, whose 800 × 400 body lies between its own two strips) stands in the column plan's **full-screen zone**: the 800 × 600 plate centred in the whole frame at `s = 3.6 · k · f`
+(`SteamwovenFullScreen.Plan(w, h, options)`, `SteamwovenColumnMenu.Place`; the two-strip views take their place from `AreaGameBarPanel.TwoStripScreen`, which is the window zone's place with the column option off, as before).
+
+- **No wood sides, no full-width backdrop.** Outside the column the window is black (`SteamwovenColumnMenu.BlackRects`: left and right over the window's height, and above and below the column where a letterboxed frame leaves bars) or, with the **sides option** `Vignette`
+  (`SteamwovenColumnMenu.Sides`, `ARC_AREA_MENU_COLUMN_SIDES`; black by default), a soft fall-off of the plate's own edge tone (the average of the background art's outermost columns; a fixed dark brown for the two-strip screens) to black over 160 units at the plate's scale
+  (`VignetteRects`, `VignetteWeight`, a smooth step), hanging beside the plate over its own rows and stopping at the window's edge where the side is narrower.
+- **Gaps.** A vertical gap the plate leaves in the column (`SteamwovenColumnZone.GapAbove` and `GapBelow`: 80 px above and below at 2560 × 1600 with k = 1, 108 px at 1920 × 1080 with k = 0.8) takes the generated dark wood (`ChromeMaterial.WoodDark`, grain laid out in original units from the plate's top left); none where the plate fills the column.
+- **Hit testing** is the control's own transform, so it follows the drawn plate; `SteamwovenFullScreenPlan.HitTest` is the same mapping as plain numbers (unit-tested for the column plans, a pointer on a black side or in a gap hits nothing). The sides view takes the pointer over the whole window (the menu is modal).
+- Unchanged: the full-width layout (the option off), HD off (the whole-factor plate and the pack's 16:9 plate), the Credits and View Intro black fills.
+
+Unit tests: `SteamwovenColumnMenuTests` (plates, gaps and black rectangles at the AC5 sizes, tiling of the window by the black rectangles and the column for both presets, hit tests, vignette rectangles and weight). Smoke: `./arcanum smoke pr --stages menu --main-menu --env ARC_AREA_MENU_COLUMN=1 [--env ARC_AREA_MENU_COLUMN_SIDES=black,vignette] [--env ARC_STEAMWOVEN_SIZES=WxH,...] [--env ARC_AREA_MENU_CAPTURE=PATH.png]`
+(`column` and `column-thin` or a list in `ARC_AREA_MENU_COLUMN`; default sizes 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200, 3440 × 1440, 1280 × 800) checks, for the main and options windows and the pre-made and new-character screens, the plate's scale and place, the plan's black and vignette rectangles, the wood gaps, the labels' hit tests, and the pixels of the side
+and the gap, and saves `PATH-column-VARIANT-SIDES-WINDOW-WxH.png`; the same pass runs on the save list inside the save window's smoke (`SaveListColumnForSmoke`, saved with `ARC_AREA_SAVE_CAPTURE`).
+
 ## Asset kit
 
 Part kinds:

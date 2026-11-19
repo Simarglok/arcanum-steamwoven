@@ -25,6 +25,7 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaMainMenuPanel : CanvasLayer
 {
     private ColorRect _backdrop = null!;
+    private SteamwovenColumnSidesView _sides = null!;
     private SteamwovenBoardView _frameBackdrop = null!;
     private PanelContainer _panel = null!;
     private Label _header = null!;
@@ -125,6 +126,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
         // ARC-UI-2577: the generated backdrop of the Steamwoven full-screen menus (over the frame, under the art; the window outside the frame is the black of _backdrop).
         _frameBackdrop = new SteamwovenBoardView { Name = "MainMenuFrameBackdrop", Visible = false };
         AddChild(_frameBackdrop);
+        // ARC-UI-2891: with the column option the menus stand in the column: black or vignette sides and wood only in a vertical gap, instead of the full-width backdrop.
+        _sides = new SteamwovenColumnSidesView();
+        AddChild(_sides);
         _art = new AreaMenuArtView();
         _art.ButtonPressed += index => ButtonPressed?.Invoke(index);
         _art.SoundRequested += id => SoundRequested?.Invoke(id);
@@ -463,7 +467,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
+        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false; _sides.Clear();
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -500,9 +504,18 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
     }
 
-    /// <summary>ARC-UI-2577: the generated backdrop over the frame while a full-screen menu is drawn by the Steamwoven layout; shown once its first paint is in (until then the black of the window shows).</summary>
+    /// <summary>ARC-UI-2577: the generated backdrop over the frame while a full-screen menu is drawn by the Steamwoven layout; shown once its first paint is in (until then the black of the window shows).
+    /// ARC-UI-2891: with the column option every art window of this panel (the full-screen menus and the pre-made, new-character and shop screens) instead gets the column's surroundings: no full-width backdrop.</summary>
     private void UpdateFrameBackdrop()
     {
+        var anyArt = _art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible;
+        if (anyArt && AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column)
+        {
+            _frameBackdrop.Visible = false;
+            _sides.Present(column, SteamwovenColumnMenu.Sides, _art.Visible ? _art.EdgeTone : AreaMenuArtView.DefaultEdgeTone);
+            return;
+        }
+        _sides.Clear();
         var plan = _art.Visible ? _art.FullScreenPlan : null;
         if (plan is null) { _frameBackdrop.Visible = false; return; }
         var frame = plan.Frame;
@@ -511,6 +524,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
             (frame.X - plan.Zone.X) / plan.Factor, (frame.Y - plan.Zone.Y) / plan.Factor, null, null, 0, 0));
         _frameBackdrop.Visible = _frameBackdrop.Texture is not null;
     }
+
+    /// <summary>ARC-UI-2891: for the self-test: the column's surroundings (black rectangles, vignette, wood gaps) and whether they show.</summary>
+    internal (SteamwovenColumnSidesView Sides, bool Shown) ColumnSidesForSelfTest => (_sides, _sides.Visible);
 
     /// <summary>ARC-UI-2577: for the self-test: the generated backdrop and whether it shows.</summary>
     internal (SteamwovenBoardView Backdrop, bool Shown) FrameBackdropForSelfTest => (_frameBackdrop, _frameBackdrop.Visible);

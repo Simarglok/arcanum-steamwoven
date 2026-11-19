@@ -75,8 +75,8 @@ public partial class AreaShopArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
-        // ARC-UI-2575: with the Steamwoven layout the screen's 800 × 400 body lies in the window zone at the layout's unit scale.
-        if (AreaGameBarPanel.ZoneScreen(size, AreaShopArtLayout.Window.Y) is { } zone)
+        // ARC-UI-2575: with the Steamwoven layout the screen's 800 × 400 body lies in the window zone at the layout's unit scale; ARC-UI-2891: with the column option the whole 800 × 600 screen stands in the column's full-screen zone.
+        if (AreaGameBarPanel.TwoStripScreen(size, AreaShopArtLayout.Window.Y) is { } zone)
         {
             Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
             Position = new Vector2((float)zone.X, (float)zone.Y);

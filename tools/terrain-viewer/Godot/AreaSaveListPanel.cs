@@ -32,6 +32,7 @@ public partial class AreaSaveListPanel : CanvasLayer
     private Control _body = null!;
     private Control _contents = null!;
     private AreaSaveListArtView _art = null!;
+    private SteamwovenColumnSidesView _sides = null!;
     private StyleBoxFlat _panelStyle = null!;
     private string _newSaveLabel = AreaSaveListArtContent.ProjectNewSaveLabel;
     private IReadOnlyDictionary<int, string> _storyTexts = new Dictionary<int, string>();
@@ -53,6 +54,8 @@ public partial class AreaSaveListPanel : CanvasLayer
     /// <summary>True while the window shows the original's look.</summary>
     public bool ArtMode => IsOpen && _art.Visible;
     internal AreaSaveListArtView ArtForSelfTest => _art;
+    /// <summary>ARC-UI-2891: for the self-test: the column's surroundings of the list.</summary>
+    internal SteamwovenColumnSidesView ColumnSidesForSelfTest => _sides;
     internal string ArtDetailForSelfTest => _artDetail.Visible ? _artDetail.Text : "";
     /// <summary>True while the description field has the keyboard (typed keys go to it, not to the list).</summary>
     public bool TypingDescription => IsOpen && _description.Visible && _description.HasFocus();
@@ -71,6 +74,9 @@ public partial class AreaSaveListPanel : CanvasLayer
             ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
         };
         _panel.AddThemeStyleboxOverride("panel", _panelStyle);
+        // ARC-UI-2891: with the column option the list's 800 × 600 screen stands in the column; the sides are black or a vignette.
+        _sides = new SteamwovenColumnSidesView();
+        AddChild(_sides);
         _art = new AreaSaveListArtView();
         _art.RowPressed += row => RowRequested?.Invoke(row);
         _art.ButtonPressed += button =>
@@ -154,7 +160,7 @@ public partial class AreaSaveListPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _preview.Texture = null; _previewOf = null; _art.CloseView();
+        Hide(); _preview.Texture = null; _previewOf = null; _art.CloseView(); _sides.Clear();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -245,10 +251,13 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (_art.Visible)
         {
             _art.Place();
+            if (AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column) _sides.Present(column, SteamwovenColumnMenu.Sides, AreaMenuArtView.DefaultEdgeTone);
+            else _sides.Clear();
             _panel.Position = _art.Position + new Vector2(200, AreaSaveListArtLayout.BottomStripTop + 47) * _art.Scale;
             _panel.Size = new Vector2(400, AreaSaveListArtLayout.BottomStripHeight - 47) * _art.Scale;
             return;
         }
+        _sides.Clear();
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(900, size.X - 48));
         var height = Math.Max(1, Math.Min(640, size.Y - 48));
