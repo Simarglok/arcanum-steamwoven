@@ -159,6 +159,9 @@ public enum AiPipelineChoice
 /// </summary>
 public sealed record AiPassResult(bool MapClearing, AiGateResult? Gate, AiPipelineChoice? Choice)
 {
+    /// <summary>ARC-AI-2793: the pass ended before the gate because the host no longer holds the NPC (<see cref="IAiHost.Knows"/>).</summary>
+    public bool NotHeld { get; init; }
+
     /// <summary>Perform ran.</summary>
     public bool Performed => Choice is not null;
 }
@@ -178,6 +181,10 @@ public interface IAiHost
 {
     /// <summary>The distance in tiles to the local PC (0x441AE0); negative when there is none (another map, no PC).</summary>
     long DistanceToPc(string npc);
+    /// <summary>ARC-AI-2793: the host holds the NPC's row now (a window of its map, a companion, a created critter). A tick of an NPC the host
+    /// forgot (its window left it standing on its cell) runs its heartbeat but no pass: the pipeline reads rows the host no longer has. A host that
+    /// holds every NPC it is asked about keeps the default.</summary>
+    bool Knows(string npc) => true;
     /// <summary>Runs the NPC's script at <paramref name="point"/> with <paramref name="triggerer"/> (null: none) and the NPC as
     /// attachee; true when it answered "continue" (run default).</summary>
     bool RunScript(AiScriptPoint point, string npc, string? triggerer);

@@ -502,6 +502,14 @@ public sealed class SupportRulesTests
         w.Edit("healer", c => c with { Asleep = false });
         w.Dangers["healer"] = new(DangerState.Flee, "orc", null, null, []);
         Assert.AreEqual(AiHealStop.Fleeing, AiSupportRules.Heal(w, "healer", new Rolls(), Steamwoven).Stop);
+        // ARC-AI-2793: a healer the world no longer holds (a vanished wolf) is a typed stop, not an exception.
+        var gone = AiSupportRules.Heal(w, "vanished", new Rolls(), Steamwoven);
+        Assert.AreEqual((AiHealStop.Unknown, false), (gone.Stop, gone.Chose));
+        // A target that vanished from the world is skipped, as before.
+        w.Dangers["healer"] = new(DangerState.CombatFocus, "orc", "orc", null, []);
+        w.Critters.Remove("chief");
+        var skipped = AiSupportRules.Heal(w, "healer", new Rolls(1, 1), Steamwoven);
+        CollectionAssert.AreEqual(new[] { "healer", "squire" }, skipped.Attempts.Select(a => a.Target).ToArray());
     }
 
     [TestMethod]
