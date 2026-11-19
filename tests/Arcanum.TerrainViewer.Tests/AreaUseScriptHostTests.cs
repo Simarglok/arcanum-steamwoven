@@ -780,6 +780,55 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
+    // ARC-SCRIPT-2788: a follower recruited from another sector of the shown (main) map has no row in the shown window or the loaded maps' rows; the party's carried body row
+    // lets the tile's script run for it, and a refusal names the clause that failed.
+    [TestMethod]
+    public void A_tile_script_runs_for_a_carried_follower_whose_row_the_shown_window_does_not_hold()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 707);
+            var followerRow = Row(20, 16, 0, 9000);
+            var follower = new ScrObjectRef(1, AreaUseScriptHost.EntityId(followerRow));
+            AreaUseScriptHost With(bool carried) => new(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => carried && obj == follower ? followerRow : null));
+
+            var ran = With(true).RunPlaced(tile, session.Rules.Scripts, null, follower);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(707, ran.Run!.Script, "the tile's script ran, with the carried follower as its triggerer");
+
+            var refused = With(false).RunPlaced(tile, session.Rules.Scripts, null, follower);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, refused.Outcome);
+            StringAssert.Contains(refused.Detail, "no object row", "the refusal names the missing row, not the map");
+            var wrongMap = With(true).RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(2, follower.Code));
+            StringAssert.Contains(wrongMap.Detail, "no object row");
+
+            // The carried row answers only while that follower's own tile script runs: the other readers keep their answers for a body outside the window.
+            Assert.IsFalse(With(true).KnowsObject(follower));
+
+            // A carried row that is no NPC's is refused by its type; a follower of another map that does not stand here, by the map.
+            var thing = Row(21, 3, 0, 9000);
+            var thingRef = new ScrObjectRef(1, AreaUseScriptHost.EntityId(thing));
+            var typed = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == thingRef ? thing : null)).RunPlaced(tile, session.Rules.Scripts, null, thingRef);
+            StringAssert.Contains(typed.Detail, "not an NPC");
+            var farRow = Row(22, 16, 0, 9000, map: 2);
+            var far = new ScrObjectRef(2, AreaUseScriptHost.EntityId(farRow));
+            var farRun = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == far ? farRow : null)).RunPlaced(tile, session.Rules.Scripts, null, far);
+            StringAssert.Contains(farRun.Detail, "does not stand on the shown map");
+
+            // A row the shown window holds wins over the carried one.
+            var shownRow = Row(23, 16, 0, 9000);
+            var shownRef = new ScrObjectRef(1, AreaUseScriptHost.EntityId(shownRow));
+            var other = Row(23, 3, 0, 9000);
+            var both = new AreaUseScriptHost(session, 1, [Gate(0), shownRow], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == shownRef ? other : null)).RunPlaced(tile, session.Rules.Scripts, null, shownRef);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, both.Outcome, both.Detail);
+        });
+    }
+
     // ARC-SCRIPT-052 (TD1–TD3): a tile's stop attacking and destroy of the NPC who steps on it; the destroyed NPC leaves the map's objects.
     [TestMethod]
     public void A_tile_stops_the_npc_who_steps_on_it_attacking_and_destroys_him()
