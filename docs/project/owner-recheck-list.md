@@ -1670,4 +1670,4 @@ of that note (for example `heartbeat-refused`, `ScriptRefused`, `companion-tile 
 Known differences (documented, not bugs; each has its issue):
 
 - Will-KOS scripts never veto ([#2821](https://github.com/Simarglok/arcanum-steamwoven/issues/2821)).
-- Call at a time of day ([#2824](https://github.com/Simarglok/arcanum-steamwoven/issues/2824)), NPC and holder item moves ([#2827](https://github.com/Simarglok/arcanum-steamwoven/issues/2827)) are not built (examine at dialog start and in the portrait hover is built: HK25, HK26).
+- NPC and holder item moves ([#2827](https://github.com/Simarglok/arcanum-steamwoven/issues/2827)) are not built (examine at dialog start and in the portrait hover is built: HK25, HK26).
