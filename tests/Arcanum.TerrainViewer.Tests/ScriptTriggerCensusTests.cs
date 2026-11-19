@@ -30,6 +30,8 @@ public sealed class ScriptTriggerCensusTests
         ScrPoint.Use or AreaUseScriptHost.CatchingThiefPoint => AreaUseScriptHost.Admission,
         ScrPoint.Dialog => AreaScriptHost.SkillTalkAdmission,
         ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat => AreaUseScriptHost.HeartbeatAdmission,
+        // ARC-SCRIPT-2859 (TQ25): the leader-killing point (20) runs under the dying set (RunLeaderKilling).
+        ScrPoint.LeaderKilling => AreaUseScriptHost.DyingAdmission,
         // ARC-AI-2821 (TQ14): the will-KOS point (22) runs under the will-KOS set.
         ScrPoint.WillKos => AreaUseScriptHost.WillKosAdmission,
         // ARC-SCRIPT-1483: the hit step's points (hit, critter hits, critical hit) run under the placed set.

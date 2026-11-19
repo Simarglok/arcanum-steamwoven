@@ -1264,7 +1264,18 @@ name the functions and the verdict. Corrections to TG2 and the audit are in that
 | TQ22 | melee 0x4B3770, ranged 0x4B2F60, projectile 0x4B2870 | 7/34, 26 (target → attacker), 8/35; projectile landing and range rules. | F1; agrees |
 | TQ23 | damage apply 0x4B4390 (0x4B47F8), 0x4B6410, 0x4B3170, 0x4B3770, 0x4B2F60 | 34 on each worn type-7 piece (slots 1000–1008, slot order) for a critical damage on a living critter, after 23 and before the hit points are written; 35 unreachable (every damage apply with the critical flag has the hit flag: 0x4B6410 turns a critical miss into a hit on the attacker). | F1; agrees since ARC-SCRIPT-2828; the self-hit's weapon 7/34 and critter-hits 26 not run (#2841) |
 | TQ24 | damage apply 0x4B4390 (0x4B446B), throw 0x4B3C00 | 23 with re-entry guard, 0 cancels damage; 6, 0 throws nothing. | F1; agrees where hosted |
-| TQ25 | kill 0x45DA20, destroy 0x43CCA0, heal applier 0x4B58C0 | 12 (0 skips death), 20 per follower of the killer's PC leader, 2 (0 keeps), 18 also when blocked. | F1; 20 not modelled; 1 installed attachment (1014), #2859 |
+| TQ25 | kill 0x45DA20, destroy 0x43CCA0, heal applier 0x4B58C0 | 12 (0 skips death), 20 per follower of the killer's PC leader, 2 (0 keeps), 18 also when blocked. | F1; 20 run by ARC-SCRIPT-2859 (`RunLeaderKilling`, [LK1–LK3](#leader-killing-point-20-arc-script-2859)); 1 installed attachment (1014), admitted whole by the dying set |
 | TQ26 | object break 0x43F1C0, portal bust 0x4F06E0, rest 0x57BAC0 | Bust on objects with broken art; leader sleeping per follower. | F1; agrees |
 | TQ27 | talk callback 0x57CC70, talk goal 21, dialog start 0x567460, resume 0x568480 | Range 5/10, dialog-point gates, generic greeting on run default, dialog start gates, resume line rule. | F1; agrees |
 | TQ28 | slides 0x569720 | 997 + n, null objects, uninitialised header words. | F1 |
+
+### Leader killing, point 20 (ARC-SCRIPT-2859)
+
+Read in the kill step 0x45DA20 (exe export, 2026-11-19); behaviour in prose.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LK1 | kill step 0x45DA20 (the call 0x441980 with point 0x14) | The loop sits inside the death processing, so it runs only when the dying script (12) allowed the death. It follows, in this order: the kill notice, the experience award to the killer's PC leader (0x45F110, worth fifth), the leader's alignment step (0x45DC90), the kill log (0x4F5330). The whole block, award included, needs a killer and a PC leader behind it: the killer itself when it is a PC, else the chain of leaders of an NPC killer up to a PC (0x45DDA0); no PC leader (an NPC fighting another NPC, a death with no killer) runs nothing. | F1; built |
+| LK2 | list copy 0x4411C0 (field 0xF1) | The list is the PC leader's direct follower array, copied before any script runs (so a script that changes the party does not change the loop), each follower in array order, no map, distance, wait or alive gate. The dead NPC is still in its leader's array: the party leave (0x45DFC0, 0x45DE50) comes after the loop. | F1; built (the session's array order of the hero's followers; a follower that is not a row of the shown map runs nothing) |
+| LK3 | call 0x441980 arguments | Triggerer: the dead NPC; attachee: the follower; extra object: the PC leader; line 0; the return is ignored (no skip-default meaning). | F1; built (`AreaUseScriptHost.RunLeaderKilling`, the dying set, slot kept as map changes) |
+

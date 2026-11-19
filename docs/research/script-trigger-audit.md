@@ -71,7 +71,7 @@ from line 0, static.
 | 17 | buy object | 0x4621D7, 0x578446 | **none** | 0 | — |
 | 18 | resurrect | 0x4B5A46 | **none** | 8 (8) | — |
 | 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 98 (was 32; ARC-SCRIPT-1733: 95 before; ARC-SCRIPT-1771: 96 before; ARC-SCRIPT-1815: 97 before, the opt-in census reads the shown windows of the maps, so the 21 main-map sites of script 2231 beyond the Crash Site window are not in this count) |
-| 20 | leader killing | 0x45DB95 | **none** | 0 | — |
+| 20 | leader killing | 0x45DB95 | kill step, shown map (`RunLeaderKilling`, dying set; ARC-SCRIPT-2859) | 0 shown (1 on the main map) | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |
 | 23 | taking damage | 0x4B446B (ARC-DEV-254: 0x4B47F8 is points 34/35, not 23) | script damage, attacks, throws, spell damage, burns, traps, knockback bumps (`AreaUseScriptHost.RunTakingDamage`, ARC-DEV-261; not the kill, poison tick, acid) | 1 (1) | taking-damage set (heartbeat set plus 120 and 68, ARC-SCRIPT-2513) |

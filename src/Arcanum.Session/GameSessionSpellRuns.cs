@@ -437,6 +437,14 @@ public sealed partial class GameSessionOwner
     public Func<SessionDyingRequest, bool>? DyingScript { get; set; }
 
     /// <summary>
+    /// ARC-SCRIPT-2859 (exe read 2026-11-19, LK1–LK3): the host's leader-killing script (attachment point 20, 0x14) of one follower of the killer's PC leader, asked in the kill step (0x45DA20) after the kill's experience award, alignment step and
+    /// kill log: for each direct follower of the hero, in array order, when an NPC the hero or a follower the hero leads killed has died and its death was processed (a death the dying script stopped asks nothing). The request names the dead NPC
+    /// (the triggerer), the map the step ran on and the follower (the attachee); the PC leader is the extra object, always the hero. The answer is ignored, so the host returns nothing; a host that throws is not asked again for the other
+    /// followers of that death. None set: nothing runs. The host runs inside the damage step: it may write the session (the script's own stores) but not apply the same victim's life again.
+    /// </summary>
+    public Action<SessionLeaderKillingRequest>? LeaderKillingScript { get; set; }
+
+    /// <summary>
     /// ARC-COMBAT-1141 (GT198, GT210–GT212): the host's taking-damage script (attachment point 0x17) of an NPC whose damage the session applies from its own life calls that no hit path asks for: the script kill
     /// <see cref="GameSessionOwner.Kill"/> (0x45D900) and the poison damage tick (0x4B1170, <see cref="GameSessionOwner.PoisonDamageTick"/> and its event), both with no attacker. It is asked at the start of the damage apply, before the
     /// life step is computed; true is run default (the step goes on), false skip default: a vetoed kill takes no hit points and starts no death, and still pins the hit-point damage at 32000
