@@ -803,6 +803,29 @@ public sealed class AreaUseScriptHostTests
             StringAssert.Contains(refused.Detail, "no object row", "the refusal names the missing row, not the map");
             var wrongMap = With(true).RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(2, follower.Code));
             StringAssert.Contains(wrongMap.Detail, "no object row");
+
+            // The carried row answers only while that follower's own tile script runs: the other readers keep their answers for a body outside the window.
+            Assert.IsFalse(With(true).KnowsObject(follower));
+
+            // A carried row that is no NPC's is refused by its type; a follower of another map that does not stand here, by the map.
+            var thing = Row(21, 3, 0, 9000);
+            var thingRef = new ScrObjectRef(1, AreaUseScriptHost.EntityId(thing));
+            var typed = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == thingRef ? thing : null)).RunPlaced(tile, session.Rules.Scripts, null, thingRef);
+            StringAssert.Contains(typed.Detail, "not an NPC");
+            var farRow = Row(22, 16, 0, 9000, map: 2);
+            var far = new ScrObjectRef(2, AreaUseScriptHost.EntityId(farRow));
+            var farRun = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == far ? farRow : null)).RunPlaced(tile, session.Rules.Scripts, null, far);
+            StringAssert.Contains(farRun.Detail, "does not stand on the shown map");
+
+            // A row the shown window holds wins over the carried one.
+            var shownRow = Row(23, 16, 0, 9000);
+            var shownRef = new ScrObjectRef(1, AreaUseScriptHost.EntityId(shownRow));
+            var other = Row(23, 3, 0, 9000);
+            var both = new AreaUseScriptHost(session, 1, [Gate(0), shownRow], [Inventory()], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CarriedRow: obj => obj == shownRef ? other : null)).RunPlaced(tile, session.Rules.Scripts, null, shownRef);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, both.Outcome, both.Detail);
         });
     }
 

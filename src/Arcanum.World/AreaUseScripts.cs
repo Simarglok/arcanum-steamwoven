@@ -438,6 +438,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
+    // ARC-SCRIPT-2788: the NPC triggerer of the tile script RunPlaced runs now (the one object CarriedRow may answer for).
+    private ScrObjectRef? _placedTriggerer;
 
     /// <summary>ARC-WORLD-081: the create objects of the runs applied since the last call, in order.</summary>
     public IReadOnlyList<AreaScriptCreation> TakeCreations()
@@ -1065,7 +1067,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-DEV-371: a critter created at run time is in none of the maps' rows.
         if (obj.Map == _shownMap && _world?.CreatedRow?.Invoke(obj.Code) is { } created) return created;
         // ARC-SCRIPT-2788: a carried follower's body row (its home sector may lie outside the shown window).
-        if (_world?.CarriedRow?.Invoke(obj) is { } carried) return carried;
+        // Only for the NPC whose tile script runs now (RunPlaced): the other row readers keep their answers for a body outside the window.
+        if (_placedTriggerer is { } stepping && stepping == obj && _world?.CarriedRow?.Invoke(obj) is { } carried) return carried;
         return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
 
@@ -2059,6 +2062,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         // ARC-DEV-328: the original keeps one object wherever it stands (FM1), so a companion carried here runs the tile's script as any NPC does; it is named by
         // its home map, and the viewer's live cell for it (<see cref="AreaScriptWorld.CritterCell"/>) says it stands here.
+        _placedTriggerer = triggerer;
+        try
+        {
         if (triggerer is { } npc)
         {
             var row = Row(npc);
@@ -2077,6 +2083,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             : ScrDispatcher.RunSector(new(slot, Pc), this, options);
         var source = placed.Trigger == MapTransitionTrigger.TileEntry ? ScrSource.Tile : ScrSource.Sector;
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
+        }
+        finally { _placedTriggerer = null; }
     }
 
     /// <summary>
