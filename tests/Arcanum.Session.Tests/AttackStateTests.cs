@@ -180,7 +180,7 @@ public sealed class AttackStateTests
         using var owner = Owner();
         var tough = Combat(Npc(hpAdjustment: 5000));
         var heard = new List<(SessionHitScriptEvent Hit, int HitPointsThen, int HitPointsBefore)>();
-        var hits = 0; var criticals = 0; var misses = 0;
+        var hits = 0; var criticals = 0; var misses = 0; var selfHits = 0;
         for (var attempt = 0; attempt < 600 && (hits < 3 || misses < 3 || criticals < 1); attempt++)
         {
             var before = heard.Count;
@@ -197,6 +197,13 @@ public sealed class AttackStateTests
                 Assert.AreEqual((null, outcome == AttackOutcome.CriticalHit, false, false), (heard[^1].Hit.Weapon, heard[^1].Hit.Critical, heard[^1].Hit.Projectile, heard[^1].Hit.Thrown));
                 hits++; if (outcome == AttackOutcome.CriticalHit) criticals++;
             }
+            else if (outcome == AttackOutcome.CriticalMiss)
+            {
+                // ARC-SCRIPT-2841: the critical miss's self-hit tells the host too (the attacker is its own victim), before its damage step.
+                Assert.AreEqual(before + 1, heard.Count, "one event for a self-hit");
+                Assert.AreEqual((true, result.Resolution!.CriticalSelfHit), (heard[^1].Hit.SelfHit, heard[^1].Hit.Critical));
+                selfHits++;
+            }
             else
             {
                 Assert.AreEqual(before, heard.Count, "a miss tells nothing");
@@ -204,7 +211,7 @@ public sealed class AttackStateTests
             }
         }
         Assert.IsTrue(hits >= 3 && misses >= 3, $"hits {hits}, misses {misses}");
-        Assert.AreEqual(hits, heard.Count);
+        Assert.AreEqual(hits + selfHits, heard.Count);
         Assert.IsTrue(heard.All(entry => entry.HitPointsThen == entry.HitPointsBefore), "every event came before its hit's damage step");
         Assert.IsFalse(owner.AttackCritter(owner.Version, new SessionAttack(tough)).Vetoed, "no host: the hit goes on");
     }

@@ -127,6 +127,7 @@ src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowAtLocation,exempt,host
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
 src/Arcanum.Session/GameSessionHeroThrowScripts.cs,RunHeroThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
+src/Arcanum.Session/GameSessionHitScripts.cs,HitScriptEventOf,exempt,host
 src/Arcanum.Session/GameSessionHitScripts.cs,NotifyArmourCritical,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
