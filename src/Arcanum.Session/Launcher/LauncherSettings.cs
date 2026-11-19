@@ -11,14 +11,14 @@ public enum GameSource { Other, Gog }
 public enum LauncherWindowMode { Windowed, Fullscreen }
 
 /// <summary>The display the game starts with (stored only; the launcher screen applies it, ARC-RES-074 task 2):
-/// window or fullscreen, the monitor (<see cref="CurrentMonitor"/> is the one the system picks) and the UI scale in percent.</summary>
+/// window or fullscreen (fullscreen by default, ARC-UI-2771), the monitor (<see cref="CurrentMonitor"/> is the one the system picks) and the UI scale in percent.</summary>
 public sealed record LauncherDisplay(LauncherWindowMode WindowMode, int Monitor, int UiScalePercent)
 {
     public const int CurrentMonitor = -1;
     public const int MaxMonitor = 15;
     public const int MinUiScalePercent = 50;
     public const int MaxUiScalePercent = 300;
-    public static readonly LauncherDisplay Default = new(LauncherWindowMode.Windowed, CurrentMonitor, 100);
+    public static readonly LauncherDisplay Default = new(LauncherWindowMode.Fullscreen, CurrentMonitor, 100);
 
     public bool Valid => Enum.IsDefined(WindowMode) && Monitor is >= CurrentMonitor and <= MaxMonitor
                          && UiScalePercent is >= MinUiScalePercent and <= MaxUiScalePercent;
