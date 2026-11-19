@@ -104,7 +104,9 @@ def check(library: dict, prompts_dir: Path = PROMPTS, trd_text: str | None = Non
                 problems.append(f"{pid}: size must have two entries")
             else:
                 for side in size:
-                    if side is not None and side % MASTER_GRID:
+                    if side is not None and not isinstance(side, int):
+                        problems.append(f"{pid}: size side {side!r} is not an integer")
+                    elif side is not None and side % MASTER_GRID:
                         problems.append(f"{pid}: size side {side} is not a multiple of {MASTER_GRID}")
         if p.get("group") == "context" and p.get("size") != [MASTER_WIDTH, MASTER_HEIGHT]:
             problems.append(f"{pid}: a context image is {MASTER_WIDTH} x {MASTER_HEIGHT}")
@@ -124,6 +126,10 @@ def check(library: dict, prompts_dir: Path = PROMPTS, trd_text: str | None = Non
     for pid in library.get("context_screens", []):
         if pid not in ids:
             problems.append(f"context screen {pid} has no prompt")
+    listed = {p.get("file") for p in prompts}
+    for path in sorted(prompts_dir.glob("*.txt")):
+        if path.name != library.get("common", "common.txt") and path.name not in listed:
+            problems.append(f"orphan prompt file {path.name}")
     covered_screens = {p["id"] for p in prompts if p.get("group") == "context"}
     for pid in sorted(covered_screens - set(library.get("context_screens", []))):
         problems.append(f"context prompt {pid} is not in context_screens")
@@ -193,9 +199,13 @@ def build_inbox(library: dict, batch: str, local_root: Path, prompts_dir: Path =
     if spec is None:
         raise KeyError(f"unknown batch {batch}")
     inbox = local_root / "inbox" / batch
+    missing = [f"{pid}: reference {slot}" for pid in spec["prompts"]
+               for slot in next(p for p in library["prompts"] if p["id"] == pid).get("references", [])
+               if not reference_files(local_root, pid, slot, library["batches"])]
+    if missing:
+        raise FileNotFoundError("missing references: " + "; ".join(missing))
     (inbox / "prompts").mkdir(parents=True, exist_ok=True)
     items = []
-    missing = []
     for pid in spec["prompts"]:
         entry = next(p for p in library["prompts"] if p["id"] == pid)
         text = compose(library, pid, prompts_dir=prompts_dir)
@@ -203,8 +213,6 @@ def build_inbox(library: dict, batch: str, local_root: Path, prompts_dir: Path =
         refs = []
         for slot in entry.get("references", []):
             found = reference_files(local_root, pid, slot, library["batches"])
-            if not found:
-                missing.append(f"{pid}: reference {slot}")
             target = inbox / "refs" / pid
             for src in found:
                 target.mkdir(parents=True, exist_ok=True)
@@ -217,11 +225,11 @@ def build_inbox(library: dict, batch: str, local_root: Path, prompts_dir: Path =
              "For each item: give Codex the prompt text and the listed reference images, then save the result as the outbox file name.",
              f"Put the results into {local_root / 'outbox' / batch}/ and tell the agent in the thread.", ""]
     for item in items:
-        lines.append(f"- {item['id']}: {item['title']}; size {item['size'][0]} x {item['size'][1]}; prompt {item['prompt_file']}; "
+        size = item["size"] or [None, None]
+        shown = " x ".join(str(side) if side else "(see part note)" for side in size)
+        lines.append(f"- {item['id']}: {item['title']}; size {shown}; prompt {item['prompt_file']}; "
                      f"references {', '.join(r['file'] for r in item['references']) or 'none'}; result outbox/{batch}/{item['id']}.png")
     (inbox / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if missing:
-        raise FileNotFoundError("missing references: " + "; ".join(missing))
     return {"inbox": str(inbox), "items": len(items)}
 
 
@@ -239,6 +247,9 @@ def write_provenance(library: dict, batch: str, local_root: Path, generator: str
         if not image.is_file():
             raise FileNotFoundError(f"{item['id']}: result {item['outbox_file']} not in the outbox")
         width, height = png_size(image)
+        want = item.get("size") or [None, None]
+        if (want[0] and want[0] != width) or (want[1] and want[1] != height):
+            raise ValueError(f"{item['id']}: result is {width} x {height}, the prompt asks for {want[0]} x {want[1]}")
         record = {"image": item["outbox_file"], "image_sha256": sha256_file(image), "image_size": [width, height],
                   "prompt_id": item["id"], "prompt_sha256": item["prompt_sha256"],
                   "references": [{"file": r["file"], "sha256": r["sha256"]} for r in item["references"]],
@@ -342,6 +353,14 @@ def main(argv: list[str] | None = None) -> int:
     prov.add_argument("--run-by", default="owner")
     prov.add_argument("--local-root", type=Path)
     args = parser.parse_args(argv)
+    try:
+        return run(args)
+    except (KeyError, FileNotFoundError, ValueError, RuntimeError) as error:
+        print(f"PROMPT LIBRARY FAIL: {error}")
+        return 1
+
+
+def run(args: argparse.Namespace) -> int:
     library = load()
     if args.command == "self-test":
         return self_test()
@@ -353,6 +372,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if problems else 0
     if args.command == "show":
         values = {k: v for k, v in (("part_id", args.part_id), ("part_note", args.part_note), ("width", args.width), ("height", args.height)) if v}
+        for side in ("width", "height"):
+            if side in values and (not values[side].isdigit() or int(values[side]) % MASTER_GRID):
+                raise ValueError(f"--{side} must be a whole number of pixels, a multiple of {MASTER_GRID}")
         text = compose(library, args.id, values)
         print(text)
         print(f"sha256 {sha256_text(text)}")

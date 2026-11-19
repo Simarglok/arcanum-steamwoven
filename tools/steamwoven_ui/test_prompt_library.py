@@ -172,5 +172,89 @@ class InboxProvenanceTests(unittest.TestCase):
             lib.png_size(bad)
 
 
+class RefsAndCliTests(unittest.TestCase):
+    def test_magick_args_crop_patch_flip_resize(self) -> None:
+        args = lib.magick_args(Path("a.png"), {"crop": "800x200+240+441", "flip": True, "resize": "800x400!",
+                                               "patch": [{"from": "90x30+0+330", "to": "+0+374"}]})
+        self.assertEqual(["a.png", "-crop", "800x200+240+441", "+repage"], args[:4])
+        self.assertIn("-composite", args)
+        self.assertLess(args.index("-composite"), args.index("-flip"))
+        self.assertEqual(["-filter", "Lanczos", "-resize", "800x400!"], args[-4:])
+
+    def test_build_refs_command_order_and_size_check(self) -> None:
+        from unittest import mock
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, check):
+            calls.append(cmd)
+            if len(cmd) > 2 and cmd[-1].endswith("-800x600.png"):
+                Path(cmd[-1]).write_bytes(fake_png(800, 600))
+            elif cmd[-1].endswith("-2880x2160.png"):
+                Path(cmd[-1]).write_bytes(fake_png(2880, 2160))
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(lib.subprocess, "run", fake_run), mock.patch.object(lib.shutil, "which", lambda _: "magick"):
+            written = lib.build_refs(Path("shots"), Path(tmp))
+        self.assertEqual(14, len(written))
+        hud = next(c for c in calls if c[-1].endswith("ctx-hud-800x600.png"))
+        self.assertEqual("shots/H01-top-strip-clock-before.png", hud[1])
+        self.assertEqual("-append", hud[-2])
+        self.assertIn("shots/H02-bottom-strip-xp-before.png", hud)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(lib.subprocess, "run", lambda cmd, check: Path(cmd[-1]).write_bytes(fake_png(801, 600))), mock.patch.object(lib.shutil, "which", lambda _: "magick"):
+            with self.assertRaises(ValueError):
+                lib.build_refs(Path("shots"), Path(tmp))
+
+    def test_provenance_rejects_a_wrong_size(self) -> None:
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        library = lib.load()
+        (tmp / "refs").mkdir()
+        for screen in library["context_screens"]:
+            (tmp / "refs" / f"{screen}-800x600.png").write_bytes(fake_png(800, 600))
+        lib.build_inbox(library, "style-anchors-contexts", tmp)
+        outbox = tmp / "outbox" / "style-anchors-contexts"
+        outbox.mkdir(parents=True)
+        for screen in library["context_screens"]:
+            (outbox / f"{screen}.png").write_bytes(fake_png(2880, 2160))
+        (outbox / "ctx-hud.png").write_bytes(fake_png(1920, 1080))
+        with self.assertRaises(ValueError):
+            lib.write_provenance(library, "style-anchors-contexts", tmp, "g", "1", "owner")
+
+    def test_inbox_failure_writes_nothing(self) -> None:
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with self.assertRaises(FileNotFoundError):
+            lib.build_inbox(lib.load(), "style-anchors-contexts", tmp)
+        self.assertFalse((tmp / "inbox").exists())
+
+    def test_cli_errors_are_one_line_failures(self) -> None:
+        self.assertEqual(1, lib.main(["show", "nope"]))
+        self.assertEqual(1, lib.main(["show", "kind-board", "--width", "1441"]))
+        self.assertEqual(0, lib.main(["show", "kind-board", "--width", "2880", "--height", "150"]))
+
+    def test_orphan_prompt_file_and_bad_size_type(self) -> None:
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        prompts = tmp / "prompts"
+        shutil.copytree(lib.PROMPTS, prompts)
+        (prompts / "stray.txt").write_text("x", encoding="utf-8")
+        library = lib.load(prompts)
+        library["prompts"][-1]["size"] = ["12", 6]
+        text = "\n".join(lib.check(library, prompts))
+        self.assertIn("orphan prompt file stray.txt", text)
+        self.assertIn("is not an integer", text)
+
+    def test_main_checkout_of_a_worktree(self) -> None:
+        import subprocess
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        main = (tmp / "main").resolve()
+        main.mkdir()
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run([*git, "init", "-q"], cwd=main, check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x"], cwd=main, check=True)
+        subprocess.run([*git, "worktree", "add", "-q", str(tmp / "wt"), "-b", "w"], cwd=main, check=True)
+        self.assertEqual(main, lib.main_checkout(tmp / "wt"))
+
+
 if __name__ == "__main__":
     unittest.main()
