@@ -283,6 +283,7 @@ public partial class TerrainViewerApp
             {
                 _hoverLabel.Text = text;
                 SetHoverText(text);
+                _hoverBars?.SetFont(TextFonts()?.Text);
                 _hoverBars?.Show(HoverLife(key!.Value));
                 _hoverPanel.ResetSize();
                 // Below-right of the pointer, flipped inside the viewport so the text never covers the pointed spot.

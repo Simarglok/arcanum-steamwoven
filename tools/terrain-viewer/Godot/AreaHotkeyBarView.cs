@@ -25,7 +25,7 @@ public partial class AreaHotkeyBarView : Control
 {
     private readonly TextureRect[] _slots = new TextureRect[HotkeyBarRules.Entries];
     private readonly TextureRect[] _icons = new TextureRect[HotkeyBarRules.Entries];
-    private readonly Label[] _standIns = new Label[HotkeyBarRules.Entries];
+    private readonly AreaArtLabel[] _standIns = new AreaArtLabel[HotkeyBarRules.Entries];
     private readonly AreaArtLabel[] _counts = new AreaArtLabel[HotkeyBarRules.Entries];
     private readonly TextureRect[] _recent = new TextureRect[2];
     private TextureRect _light = null!;
@@ -73,6 +73,15 @@ public partial class AreaHotkeyBarView : Control
         set { _countFont = value; foreach (var count in _counts) if (count is not null) count.Face = value; }
     }
 
+    private AreaArtFontFace? _standInFont;
+
+    /// <summary>ARC-UI-2940: the font of the name an item entry shows when its icon art did not read (art 229); null draws no name.</summary>
+    public AreaArtFontFace? StandInFont
+    {
+        get => _standInFont;
+        set { _standInFont = value; foreach (var name in _standIns) if (name is not null) name.Face = value; }
+    }
+
     public override void _Ready()
     {
         Name = "HotkeyBar";
@@ -110,12 +119,12 @@ public partial class AreaHotkeyBarView : Control
                 StretchMode = TextureRect.StretchModeEnum.Keep, ClipContents = true,
             };
             AddChild(_icons[i]);
-            _standIns[i] = new Label
+            // ARC-UI-2940: the name of an item entry whose icon art did not read, in the original's text font (art 229; the HD redraw with the HD interface
+            // on) and nothing without the font: never Godot's default font.
+            _standIns[i] = new AreaArtLabel
             {
-                Name = "Name" + i, Position = slot.Position, Size = slot.Size, MouseFilter = MouseFilterEnum.Ignore, ClipText = true,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, AutowrapMode = TextServer.AutowrapMode.Arbitrary,
+                Name = "Name" + i, Position = slot.Position, Size = slot.Size, Align = AreaArtLabel.Alignment.Centre, Middle = true, ClipContents = true, Face = _standInFont,
             };
-            _standIns[i].AddThemeFontSizeOverride("font_size", AreaUiScale.MinimumTextPx); // ARC-GPAD-1377: no text under 9 px on the handheld
             AddChild(_standIns[i]);
             // The count is printed at the slot's left + 2 and the strip's top (HK12) in the title font (art 27, white; ARC-UI-2795, exe 0x57E140).
             _counts[i] = new AreaArtLabel { Name = "Count" + i, Position = new Vector2(HotkeyBarRules.SlotX[i] + 2, 0), Size = new Vector2(HotkeyBarRules.HitWidth, 20), Face = _countFont };

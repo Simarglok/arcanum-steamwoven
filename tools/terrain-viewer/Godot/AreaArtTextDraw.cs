@@ -26,6 +26,10 @@ public sealed class AreaArtFontFace
     }
 
     public AreaArtFont Font { get; }
+
+    /// <summary>ARC-UI-2940: a face of 225 synthetic glyph cells (5 × 12, advance 6) for self-tests that run without a game folder; draws white blocks.</summary>
+    internal static AreaArtFontFace SyntheticForSelfTest() =>
+        new(Enumerable.Repeat(new AreaInterfaceFrame(5, 12, Enumerable.Repeat((byte)255, 5 * 12 * 4).ToArray(), 6), 225).ToArray());
     public IReadOnlyList<AreaInterfaceFrame> Frames => _frames;
 
     /// <summary>A glyph frame's texture for <paramref name="blend"/>; null for an empty frame.</summary>

@@ -306,8 +306,19 @@ public partial class AreaHoverLifeBars : VBoxContainer
     public const int BarWidth = 120;
     private AreaLifeBar _health = null!;
     private AreaLifeBar _fatigue = null!;
-    private Label _healthText = null!;
-    private Label _fatigueText = null!;
+    private AreaArtLabel _healthText = null!;
+    private AreaArtLabel _fatigueText = null!;
+    private AreaArtFontFace? _font;
+
+    /// <summary>ARC-UI-2940: the font of the two texts (art 229, the original's, white); null draws no text.</summary>
+    public void SetFont(AreaArtFontFace? face)
+    {
+        _font = face;
+        foreach (var text in new[] { _healthText, _fatigueText })
+            if (text is not null) { text.Face = face; Fit(text); }
+    }
+
+    private void Fit(AreaArtLabel text) => text.CustomMinimumSize = _font is { } face ? new Vector2(text.TextWidth, AreaTextFontLayout.LineHeight(face.Frames)) : Vector2.Zero;
 
     internal (int Health, string HealthText, int Fatigue, string FatigueText, bool Poisoned)? ValuesForSelfTest =>
         Visible ? (_health.Filled, _healthText.Text, _fatigue.Filled, _fatigueText.Text, _health.FillColor == AreaLifeBar.PoisonedHealthColor) : null;
@@ -321,12 +332,12 @@ public partial class AreaHoverLifeBars : VBoxContainer
         Visible = false;
     }
 
-    private (AreaLifeBar, Label) Pair(string name)
+    private (AreaLifeBar, AreaArtLabel) Pair(string name)
     {
         var row = new HBoxContainer { Name = name, MouseFilter = MouseFilterEnum.Ignore };
         row.AddThemeConstantOverride("separation", 6);
         var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = 8, SizeFlagsVertical = SizeFlags.ShrinkCenter };
-        var text = new Label { Name = name + "Text", MouseFilter = MouseFilterEnum.Ignore };
+        var text = new AreaArtLabel { Name = name + "Text", Face = _font, Colour = (255, 255, 255) };
         row.AddChild(bar); row.AddChild(text); AddChild(row);
         return (bar, text);
     }
@@ -340,6 +351,7 @@ public partial class AreaHoverLifeBars : VBoxContainer
         _fatigue.SetFill(LifeBarRules.HoverFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), BarWidth), AreaLifeBar.FatigueColor);
         _healthText.Text = LifeBarRules.HoverText(life.Health, life.MaxHealth, shown.PcSide);
         _fatigueText.Text = LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, shown.PcSide);
+        Fit(_healthText); Fit(_fatigueText);
         Visible = true;
     }
 }
