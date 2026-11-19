@@ -138,7 +138,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-SCRIPT-2903 (IE3, DD4; exe 0x4639E0 → 0x467860): the remove-item scripts (point 28) of the items the planned drops take out of the dying created critters, each run with its critter as the triggerer and the item as the attachee, in the drops' order (each critter's
+    /// ARC-SCRIPT-2903 (IE3, DD4, DD11): the remove-item scripts (point 28) of the items the planned drops take out of the dying created critters, each run with its critter as the triggerer and the item as the attachee, in the drops' order (each critter's
     /// walk last item first), the result ignored: made and prepared before anything changes, as <see cref="DestroyMapNpc"/> does. The policy is that map NPC's: a run the session cannot apply, an item whose row or critter belongs to a map other than the shown one (the host answers for the shown map alone) or an item with the point and
     /// no script host refuses the destroy whole (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or the run's failure), never drops it with the script skipped; the destroy then changes nothing, so the critter stands until the refusal clears.
     /// </summary>
