@@ -288,6 +288,14 @@ Part kinds:
   `local/steamwoven-ui/inbox/<batch>/`, asks the owner in the thread, and the owner puts the results into
   `local/steamwoven-ui/outbox/<batch>/`; the agent then writes the provenance records (SWI-GEN-6) and runs the fit tool.
 
+### Prompt library and handoff (ARC-RES-2455)
+
+[#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455). `tools/steamwoven_ui/prompts/` is text only: `common.txt` (the rules of every prompt: layout truth is the original, one 4:3 composition, no text, colour lock to the sheet, painted look, transparent parts with a clean edge), one prompt per context screen (`ctx-hud`, `ctx-inventory`, `ctx-character`, `ctx-logbook`, `ctx-schematic`, `ctx-reading`, `ctx-main-menu`, each 2880 × 2160), the material sheet (`mat-sheet`, twelve swatches sampled from the approved contexts, 3840 × 2160) and one prompt per kit kind (`kind-*`, with the three backdrop variants: window background, half of a two-part window, full-screen plate), listed in `library.json` (id, group, kind, size, reference slots, batch). `references.json` holds the crop geometry of the 800 × 600 layout references built from the census screenshots (local only).
+
+- The tool `tools/steamwoven_ui/prompt_library.py` checks the library (unique ids, a prompt for every TRD kind and every context screen, declared sizes on the 6 px grid (a part's own size is checked when its prompt is composed and, with `provenance`, against the result; the strip heights stay an open question), plain ASCII, known placeholders and reference slots, the kinds against the asset kit table above), composes a prompt (common rules, body, reference slots) with its sha256, builds the layout references (`refs`, needs ImageMagick), builds a batch inbox (`inbox`: composed prompts, references, `batch.json`, `README.txt`) and, after the owner has put the results into the outbox, writes one provenance record per image (`provenance`: generator and version, date, prompt id and hash, reference hashes, who ran it, SWI-GEN-6). The inbox and outbox are `local/steamwoven-ui/inbox|outbox/<batch>/` of the main checkout.
+- Batches: `style-anchors-contexts` (the seven context images), then `style-anchors-sheet` (the material sheet, made from the approved contexts); the owner's approval of the sheet is [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456). Part prompts take the part id, a note and the size from the production batch that uses them.
+- Checks: `python3 -B tools/steamwoven_ui/prompt_library.py check`, `... self-test`, `python3 -B -m unittest tools.steamwoven_ui.test_prompt_library` (task checks, not part of `run_tests.py`).
+
 ## Bake and runtime
 
 - **SWI-RUN-1** The bake makes the four step sets from the masters, resampled in linear light with premultiplied
