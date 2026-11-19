@@ -249,6 +249,9 @@ public sealed class AreaMapTransfersTests
             return answer.Teleport is { } t && refuse(t) is { } refusal ? answer with { Outcome = AreaScriptedUseOutcome.TeleportRefused, Detail = refusal } : answer;
         };
         Assert.IsNull(transfers.EnterSector(new(cell.X + 1, cell.Y), cell), "a step inside the sector enters nothing");
+        // ARC-SCRIPT-2823 (TQ6): the hero's arrival (from == to) runs the sector script even on the same sector.
+        var arrived = transfers.EnterSector(cell, cell)!;
+        Assert.AreEqual((AreaUseOutcome.ScriptEnded, MapTransitionTrigger.SectorEntry), (arrived.Outcome, arrived.Site!.Trigger));
         var entered = transfers.EnterSector(new(sector.X * 64L - 1, cell.Y), cell)!;
         Assert.AreEqual((AreaUseOutcome.ScriptEnded, MapTransitionTrigger.SectorEntry, "line"), (entered.Outcome, entered.Site!.Trigger, transfers.LastScripted!.Lines.Single()));
         var stepped = transfers.Enter(cell).Single();
@@ -256,13 +259,13 @@ public sealed class AreaMapTransfersTests
         Assert.AreEqual((true, arrival, MapTransitionTrigger.TileEntry), (transfers.Pending!.SameMap, transfers.Pending.Arrival, transfers.Pending.Site.Trigger));
         // With a transfer pending the run still happens; only its teleport is dropped (TR4).
         Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.Enter(cell).Single().Outcome);
-        CollectionAssert.AreEqual(new[] { 601, 600, 600 }, ran);
+        CollectionAssert.AreEqual(new[] { 601, 601, 600, 600 }, ran);
         transfers.Clear();
         // ARC-DEV-351: the hero's arrival inside a same-map change of place runs the script, and its teleport is dropped, with nothing pending afterwards.
         var landed = transfers.Enter(cell, requestsRefused: true).Single();
         Assert.AreEqual((AreaUseOutcome.TransitionPending, "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE"), (landed.Outcome, landed.Reason));
         Assert.IsNull(transfers.Pending);
-        CollectionAssert.AreEqual(new[] { 601, 600, 600, 600 }, ran, "the script ran");
+        CollectionAssert.AreEqual(new[] { 601, 601, 600, 600, 600 }, ran, "the script ran");
 
         answers[600] = answers[600] with { Teleport = new(pc, 5001, 1, 1) };
         var refused = transfers.Enter(cell).Single();

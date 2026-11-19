@@ -284,11 +284,14 @@ public sealed class AreaMapTransfers
 
     /// <summary>ARC-SCRIPT-017: the player stepped from <paramref name="from"/> into <paramref name="to"/>; when that enters
     /// another sector whose script exists, the script runs (with a <see cref="PlacedRunner"/>), as the original runs a
-    /// sector script when the player enters its sector. Null otherwise.</summary>
+    /// sector script when the player enters its sector. ARC-SCRIPT-2823 (TQ6): the hero's arrival (a map change or a teleport
+    /// landing, <paramref name="from"/> equal to <paramref name="to"/>) is a mode-2 location change too (the original's mode 2), so
+    /// it runs the destination sector's script even though the sector did not change. Null otherwise.</summary>
     public AreaMapUseResult? EnterSector(AreaStepCell from, AreaStepCell to)
     {
         var sector = WorldSectorCoordinate.Containing(new(to.X, to.Y));
-        if (PlacedRunner is null || sector == WorldSectorCoordinate.Containing(new(from.X, from.Y)) || !_sectors.TryGetValue(sector, out var placed)) return null;
+        var arrival = from == to;
+        if (PlacedRunner is null || (!arrival && sector == WorldSectorCoordinate.Containing(new(from.X, from.Y))) || !_sectors.TryGetValue(sector, out var placed)) return null;
         LastScripted = null;
         return RunPlaced(placed);
     }
