@@ -39,10 +39,16 @@ public static class AreaDialogNames
     public static string? NpcName(Func<AreaObjectRecord, string?>? source, AreaObjectRecord? row) =>
         source is null ? null : row is null ? string.Empty : source(row) ?? string.Empty;
 
-    /// <summary>The viewer's NPC-name source: the speaker's description message taken as a recognized NPC (see the class remarks), from the loaded description tables.</summary>
+    /// <summary>The viewer's NPC-name source: the speaker's description message taken as a recognized NPC (see the class remarks), from the loaded description tables;
+    /// null while the tables are not loaded or when the name does not resolve to text (the caller prints it empty, never a diagnostic bracket text).</summary>
     public static Func<AreaObjectRecord, string?> NpcNameSource(Func<ObjectDescriptionCatalog?> catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        return row => catalog() is { } loaded ? AreaHoverIndex.Text(row, loaded, CritterRecognition.Recognized) : null;
+        return row =>
+        {
+            if (catalog() is not { } loaded) return null;
+            var resolution = ObjectDisplayName.Resolve(row, loaded, CritterRecognition.Recognized);
+            return resolution.Status == ObjectNameStatus.Resolved && MesText.Decode(resolution.Message!, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { } text } && text.Length > 0 ? text : null;
+        };
     }
 }

@@ -550,7 +550,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         {
             if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male,
-                AreaDialogNames.For(_session, _profile.Names, Speaker(line.Speaker) is { } floating ? AreaDialogNames.NpcName(NpcName, floating.Row) : null));
+                AreaDialogNames.For(_session, _profile.Names, AreaDialogNames.NpcName(NpcName, Speaker(line.Speaker)?.Row)));
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
             floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }

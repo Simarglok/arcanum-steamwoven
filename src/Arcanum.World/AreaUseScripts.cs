@@ -1432,7 +1432,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
@@ -1457,7 +1457,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var npc = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc));
+            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc), npc);
         }
         finally { _clicked = null; }
     }
@@ -1484,7 +1484,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = TakingDamageAdmission });
-            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _inTakingDamage = false; _clicked = previous; }
     }
@@ -1523,7 +1523,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             try
             {
                 var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = CombatPointAdmission });
-                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
             }
             finally { _clicked = previous; }
         }
@@ -1547,7 +1547,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1585,7 +1585,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1614,7 +1614,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _dangerRunDepth--; _clicked = previous; }
     }
@@ -1640,7 +1640,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _raiseRunDepth--; _clicked = previous; }
     }
@@ -1693,7 +1693,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = Remember(rules), Admission = BustAdmission });
-            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1719,7 +1719,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Destroy, attachee, attachee, null), this, new() { Rules = Remember(rules), Admission = DestroyPointAdmission });
-            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -2016,7 +2016,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             if (Row(item) is null && !IsPrototypeItem(item)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item), item);
         }
         finally { _itemUse = null; _itemUser = null; }
     }
