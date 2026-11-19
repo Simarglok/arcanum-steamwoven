@@ -54,6 +54,23 @@ public sealed class PickPocketRulesTests
     }
 
     [TestMethod]
+    public void AKillMovesTheLeadersAlignmentWithoutTheSecondHalving()
+    {
+        // ARC-COMBAT-2873 (0x45DC90 with flag 1): −trunc(a / 20) for a ≥ 0, trunc(a / 20) for a < 0 and b ≤ a, the same bounds.
+        Assert.AreEqual(-10, PickPocketRules.AlignmentAfterKill(200, 0, 0));
+        Assert.AreEqual(-5, PickPocketRules.AlignmentAfterKill(119, 0, 0), "119 / 20 = 5");
+        Assert.AreEqual(-1, PickPocketRules.AlignmentAfterKill(39, 0, 0), "39 / 20 = 1: a theft's second halving would make it 0");
+        Assert.IsNull(PickPocketRules.AlignmentAfterKill(19, 0, 0));
+        Assert.AreEqual(-300, PickPocketRules.AlignmentAfterKill(200, -295, -295), "the bound −100 − a");
+        Assert.IsNull(PickPocketRules.AlignmentAfterKill(200, -300, -300));
+        Assert.AreEqual(-260, PickPocketRules.AlignmentAfterKill(-200, -250, -250));
+        Assert.AreEqual(-300, PickPocketRules.AlignmentAfterKill(-200, -295, -295), "the bound a − 100");
+        Assert.IsNull(PickPocketRules.AlignmentAfterKill(-200, -199, -199), "a better killer is not changed");
+        Assert.IsNull(PickPocketRules.AlignmentAfterKill(-19, -500, -500));
+        Assert.AreEqual(PickPocketRules.AlignmentAfterTheft(200, 0, 0), PickPocketRules.AlignmentStep(200, 0, 0, halved: true), "the theft is the halved step");
+    }
+
+    [TestMethod]
     public void ATheftLowersTheThiefsBaseAlignmentDownToTheBound()
     {
         // A good victim (a ≥ 0): −trunc(trunc(a / 20) / 2).

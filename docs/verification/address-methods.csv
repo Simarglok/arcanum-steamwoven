@@ -97,6 +97,7 @@ src/Arcanum.Session/GameSessionExperience.cs,AwardHeroExperience,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordDamageExperience,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordNpcDamage,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordNpcKill,pending,
+src/Arcanum.Session/GameSessionExperience.cs,RunKillAlignment,exempt,host
 src/Arcanum.Session/GameSessionExperience.cs,RunLeaderKilling,exempt,host
 src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
@@ -455,6 +456,8 @@ src/Arcanum.Simulation/Party/CompanionFollow.cs,Interrupt,pending,
 src/Arcanum.Simulation/Reaction/CanSpeakRules.cs,Test,exempt,host
 src/Arcanum.Simulation/Reaction/ReactionRules.cs,PcHit,pending,
 src/Arcanum.Simulation/Skills/FollowerSkillRules.cs,AllFollowers,exempt,host
+src/Arcanum.Simulation/Skills/PickPocketRules.cs,AlignmentAfterKill,exempt,host
+src/Arcanum.Simulation/Skills/PickPocketRules.cs,AlignmentAfterTheft,exempt,host
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,Caught,pending,
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,NotAllowed,pending,
 src/Arcanum.Simulation/Skills/SkillCheckRules.cs,DifficultyReasons,pending,
