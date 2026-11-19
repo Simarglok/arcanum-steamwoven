@@ -568,7 +568,7 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 598	S_eye_gear	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
 599	S_spike_trap	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
 600	S_trap_springer	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
-601	loadindicator	40x50	30	gauge	B-GAUGES	H10	1	drawn	no		gauge or readout parts; the load screen draws it (H10); the combat UI computes the place (window x + width - 42, window y + 54) but never draws it (ledger OF11)
+601	loadindicator	40x50	30	gauge	B-GAUGES	H10	1	drawn	no		gauge or readout parts; no reader that draws it was found (H10 is the capture of #2489); the combat UI computes the place (window x + width - 42, window y + 54) but never draws it (ledger OF11)
 614	tb_iso	78x40	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
 615	tb_td	42x42	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
 616	FollowerFrame_PO	34x3	1	gauge	B-GAUGES	H07	1	drawn	no		gauge or readout parts
