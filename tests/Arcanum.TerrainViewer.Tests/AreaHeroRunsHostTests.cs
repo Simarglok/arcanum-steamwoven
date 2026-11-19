@@ -116,6 +116,9 @@ public sealed class AreaHeroRunsHostTests
         public AiAttackSwing? HeroBeginAttack(string target) { Attacks.Add("swing"); return new(300, 200); }
         public void HeroAttackHit(string target) => Attacks.Add("hit");
         public void AttackEnds(string target, AiExecutorReason reason) => Attacks.Add("ends " + reason);
+        // ARC-COMBAT-2736: the Shift use, loot or pickup out of reach ended at its first step.
+        public readonly List<(GoalType Goal, string Target)> NoWalkEnds = [];
+        public void HeroClickNoWalkEnds(GoalType goal, string target) => NoWalkEnds.Add((goal, target));
         // ARC-DEV-182: the throw goal 37 (animation: begin at once, action frame 300 ms, rest 200 ms).
         public readonly List<string> Throws = [];
         public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) { Throws.Add($"begin {item} {tile.X},{tile.Y}"); return new(300, 200); }
@@ -1197,6 +1200,29 @@ public sealed class AreaHeroRunsHostTests
         Assert.AreEqual(GoalRunFlags.NoWalk, f.Host.PickupRun!.Flags & Mask);
         Assert.IsTrue(f.Host.Pickup("obj:2", run: true));
         Assert.AreEqual(GoalRunFlags.Running, f.Host.PickupRun!.Flags & Mask);
+    }
+
+    [TestMethod]
+    public void AShiftUseLootOrPickupOutOfReachEndsAtItsFirstStepAndTellsTheViewer()
+    {
+        // ARC-COMBAT-2736 (GT148): the target stands 30 cells away; the no-walk flag ends the run at once, with no step, and the viewer is told so (its status line stops saying the goal started).
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: false, noWalk: true));
+        f.Run(400);
+        Assert.IsNull(f.Host.UseRun, "the run ended");
+        Assert.IsTrue(f.Host.Use("obj:1", container: true, run: false, noWalk: true));
+        f.Run(400);
+        Assert.IsTrue(f.Host.Pickup("obj:2", run: false, noWalk: true));
+        f.Run(400);
+        CollectionAssert.AreEqual(new[] { (GoalType.UseObject, "obj:1"), (GoalType.UseContainer, "obj:1"), (GoalType.PickupItem, "obj:2") }, f.Feet.NoWalkEnds);
+        Assert.AreEqual(0, f.Feet.Steps.Count);
+        Assert.AreEqual(0, f.Feet.Uses.Count + f.Feet.Pickups.Count);
+        // Without Shift the same click walks and acts, and the viewer is told nothing.
+        f.Feet.NoWalkEnds.Clear();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: false));
+        f.Run(4000);
+        Assert.AreEqual(1, f.Feet.Uses.Count);
+        Assert.AreEqual(0, f.Feet.NoWalkEnds.Count);
     }
 
     [TestMethod]

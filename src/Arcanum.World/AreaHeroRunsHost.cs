@@ -96,6 +96,8 @@ public interface IAreaHeroRunsViewer
     bool HeroAttackRepeats(string target) => false;
     /// <summary>An attack goal ends the run (the viewer clears the attack).</summary>
     void AttackEnds(string target, AiExecutorReason reason) { }
+    /// <summary>ARC-COMBAT-2736: a Shift click's use (38, 81) or pickup (15) run ended at its first step because the target was out of reach (no-walk flag 0x100, GT148/GT213): the viewer's status line says so (the original says nothing).</summary>
+    void HeroClickNoWalkEnds(GoalType goal, string target) { }
     /// <summary>ARC-DEV-182: the throw's start (the art 14, the action points); null when it cannot start.</summary>
     AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) => null;
     /// <summary>ARC-DEV-182: the throw at the action frame.</summary>
@@ -804,6 +806,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         _restartAfterStep = stepped.End is not (GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow or GoalStepperEnd.UnknownGoal);
         if (stepped.Answer.NextDelayMs is null && stepped.End is not GoalStepperEnd.Finished) RouteEnds++;
         if (IsHeroAttack(run) && stepped.Answer.NextDelayMs is null) LastAttackEnd = $"{stepped.End} {stepped.Step?.Reason}";
+        // ARC-COMBAT-2736: a Shift use, loot or pickup out of reach ends silently in the original; the status line of the viewer must not keep saying the goal started.
+        if ((IsHeroUse(run) || IsHeroPickup(run)) && stepped.Answer.NextDelayMs is null && stepped.Step?.Reason == AiExecutorReason.NoWalkStep && run.Bottom.Target is { } clicked) _viewer.HeroClickNoWalkEnds(run.Bottom.Goal, clicked);
         return stepped.Answer;
     }
 
