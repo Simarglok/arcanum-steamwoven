@@ -232,12 +232,16 @@ public sealed partial class GameSessionOwner
 
         // The drop's refusals (PI1): the item's drop script (point 5, the holder as triggerer; ARC-SCRIPT-2853: through the host's drop script, skip default refuses), then the no-drop flag.
         var script = hero ? HeroItemDropScript(item.Entity) : NpcItemSeed(side.Life.Entity!, item.Entity) is { } listed && listed.Facts.HasScript(SessionScriptPoint.Drop);
+        // A session limit, not part of the original's order: checked before the script runs, so a refusal of it repeats no script effects.
+        if (script && hero && _equipment.Worn[slot].ItemSpells) { Skip(SessionCriticalStepOutcome.ItemSpellsUnsupported); return side; }
         if (script)
         {
             var answer = AskDropScript(item.Entity, hero ? _inventory.Hero.PcItem(item.Entity)!.Value.Origin.RuntimeMap : _actor.Map.RuntimeMap, hero ? SessionSpellCaster.Hero : side.Life.Entity!);
             if (answer == SessionDropScriptAnswer.NotModelled) { Skip(SessionCriticalStepOutcome.ScriptUnsupported); return side; }
-            // The host's run may have written the session: its version is the drop's own from here on.
+            // The host's run may have written the session: its version is the drop's own from here on. A script that took its own item away (destroyed it, gave it away, unwielded it) leaves nothing to drop.
             revision = _revision;
+            var stillHeld = !Gone(item.Entity) && (hero ? _equipment.Worn.TryGetValue(slot, out var heldNow) && heldNow.Entity == item.Entity : NpcItemSeed(side.Life.Entity!, item.Entity) is not null);
+            if (!stillHeld) { Skip(SessionCriticalStepOutcome.NoItem); return side; }
             if (answer == SessionDropScriptAnswer.SkipDefault) { Skip(SessionCriticalStepOutcome.Refused); return side; }
         }
         if (hero && _equipment.Worn[slot].ItemSpells) { Skip(SessionCriticalStepOutcome.ItemSpellsUnsupported); return side; }
@@ -291,12 +295,17 @@ public sealed partial class GameSessionOwner
     // every trap (0x4BBFE0).
     private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || PcLeads(who.Entity!) ? DropOwner.PcSide : DropOwner.Npc;
 
+    private bool _inDropScript;
+
     // ARC-SCRIPT-2853: asks the host's drop script of the item; no host, or a host that throws, is not modelled.
     private SessionDropScriptAnswer AskDropScript(string item, int itemMap, string holder)
     {
-        if (DropScript is not { } ask) return SessionDropScriptAnswer.NotModelled;
+        // A drop script whose effects reach another drop (a damage that disarms) does not run a nested one: not modelled, as the taking-damage script's guard.
+        if (DropScript is not { } ask || _inDropScript) return SessionDropScriptAnswer.NotModelled;
+        _inDropScript = true;
         try { return ask(new(item, itemMap, holder, _actor.Map.RuntimeMap)); }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { return SessionDropScriptAnswer.NotModelled; }
+        finally { _inDropScript = false; }
     }
 
     // The seed listing of an NPC's item still in its list on the actor's map, or null (an added made item, another map's).

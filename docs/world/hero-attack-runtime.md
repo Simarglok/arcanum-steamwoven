@@ -99,13 +99,13 @@ it. The hero's item goes to the ground among its placed items (ARC-WORLD-059,
 the [drop cell](inventory-runtime.md#drop-cell-arc-combat-010)'s (ARC-COMBAT-010): with the host's `SessionAttack.DropMap` the
 session draws the distance 2..4 before the drop's refusals and one direction per try after them, and the item lands where the
 original's tries lead from its holder's cell (the hero's, or `SessionAttack.TargetCell` for an NPC); without a map it lands on the
-holder's cell and nothing is drawn (`HeroCellUnfit` when the landing cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script (`ScriptUnsupported`), no cell or no item data
+holder's cell and nothing is drawn (`HeroCellUnfit` when the landing cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script that no host ran (`ScriptUnsupported`; the host's `DropScript` runs it since ARC-SCRIPT-2853, and skip default is `Refused`), no cell or no item data
 (`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`). A dropped item is no
 longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
 is `InvalidAttack`, both before any roll.
 
-**Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record of a spell, burning, trap or script hit (0x4F5690; the attack steps write it since ARC-UI-097, ledger LB22), the worn armour's
-critical scripts (points 34, 35), the drop script and an NPC's ammunition (the stun's animation and duration are done: ARC-COMBAT-1741). Since
+**Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the PC's injury record of a spell, burning, trap or script hit (0x4F5690; the attack steps write it since ARC-UI-097, ledger LB22), the worn armour's
+critical scripts (points 34, 35) and an NPC's ammunition (the stun's animation and duration are done: ARC-COMBAT-1741). Since
 ARC-WORLD-106 an NPC's armour class, resistances and light come from the items the session's NPC wears
 ([NPC wear in combat](equipment-runtime.md#npc-wear-in-combat-arc-world-106)), so a dropped, destroyed or broken piece no longer
 counts.

@@ -125,4 +125,33 @@ public sealed class NpcDropScriptTests
         Assert.AreEqual(SessionCriticalStepOutcome.Dropped, steps.Single().Outcome);
         Assert.IsFalse(InList(owner));
     }
+
+    [TestMethod]
+    public void AScriptThatDestroysItsOwnItemLeavesNothingToDrop()
+    {
+        using var owner = Owner(5);
+        owner.DropScript = _ => { owner.DestroyObject(Sword); return SessionDropScriptAnswer.RunDefault; };
+        var steps = owner.SpellWeaponDrop(GolemCombat().Target, Worn(), GolemCell, null, out var failure);
+        Assert.AreEqual(GameSessionFailure.None, failure);
+        Assert.AreEqual(SessionCriticalStepOutcome.NoItem, steps.Single().Outcome);
+        Assert.AreEqual(DangerFlags.None, LookFor(owner));
+    }
+
+    [TestMethod]
+    public void ADropScriptThatReachesAnotherDropRunsNoNestedScript()
+    {
+        using var owner = Owner(5);
+        var asked = 0;
+        SessionCriticalStepOutcome? nested = null;
+        owner.DropScript = request =>
+        {
+            asked++;
+            nested = owner.SpellWeaponDrop(GolemCombat().Target, Worn(), GolemCell, null, out _).Single().Outcome;
+            return SessionDropScriptAnswer.RunDefault;
+        };
+        var steps = owner.SpellWeaponDrop(GolemCombat().Target, Worn(), GolemCell, null, out _);
+        Assert.AreEqual(1, asked);
+        Assert.AreEqual(SessionCriticalStepOutcome.ScriptUnsupported, nested);
+        Assert.AreEqual(SessionCriticalStepOutcome.Dropped, steps.Single().Outcome);
+    }
 }
