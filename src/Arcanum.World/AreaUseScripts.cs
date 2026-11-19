@@ -1490,7 +1490,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// and line 0, after the target validity test and before the rest of the kill-on-sight rule, under <see cref="WillKosAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The answer 0 ("skip default") vetoes the
     /// kill-on-sight (<see cref="WillKosVetoes"/>); anything else lets the evaluation go on. A refused or unapplied run, an NPC with no script at the point, and an NPC of another map veto nothing.
     /// </summary>
-    [OriginalFunction(0x4AE120, OriginalFunctionScope.Partial)]
     public AreaScriptedUse RunWillKos(AreaObjectRecord row, ScrObjectRef candidate, ScrRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(candidate); ArgumentNullException.ThrowIfNull(rules);
