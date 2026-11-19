@@ -468,18 +468,24 @@ honour `lock:false`, as ready frames already did.
 The native interface self-test compares a fractional edge against ordinary
 alpha blending and checks transparent RGB under the sheet's PremultAlpha
 material. The existing sheet smoke accepts `ARC_AREA_SHEET_HD_VERIFY=1` with an
-explicit `ARC_HD_PACK` (the full run is `./arcanum smoke crash-site --env ARC_HD_PACK=<pack> --env
-ARC_AREA_SHEET_HD_VERIFY=1 --env ARC_VISUAL_PROFILE=legacy`: `ARC_HD_PACK` alone makes the world profile HD, and the
-Crash Site smoke's later cave-lighting pixel observers compare Legacy source pixels, so they stop with
-`AREA_SOURCE_PIXEL_MISMATCH`; the legacy profile keeps the world as it was and the check still turns the interface HD): it temporarily enables interface HD, requires the
-character frames to resolve as HD and restores the in-memory setting. Existing
-`ARC_AREA_SHEET_CAPTURE` writes local-only readbacks; neither switch writes the
-player's settings. One known gap (ARC-UI-2915): art 787 `ScrllSlideM1` (the 11×1
-middle of the schemes page's scroll thumb, used since ARC-UI-1742) is not in the
-installed pack, which has only the 11×5 `ScrllSlideM` (art 239); the check
-prints it as a known pack gap (the frame draws Legacy in HD mode) and fails on
-any other refused frame. A pack frame for it is an owner decision (issue #2917);
-once the pack carries it, the frame resolves as HD and the message stops. Local redraw variants, removal masks and compositions are
+explicit `ARC_HD_PACK`: it temporarily enables interface HD, requires the
+character frames to resolve as HD and restores the in-memory setting. The full
+run is `./arcanum smoke crash-site --env ARC_HD_PACK=<pack> --env
+ARC_AREA_SHEET_HD_VERIFY=1 --env ARC_VISUAL_PROFILE=legacy`: `ARC_HD_PACK` alone
+makes the world profile HD, and the Crash Site smoke's later cave-lighting pixel
+observers compare Legacy source pixels, so they would stop with
+`AREA_SOURCE_PIXEL_MISMATCH`; the legacy profile keeps the world as it was and
+the check still turns the interface HD. Existing `ARC_AREA_SHEET_CAPTURE` writes
+local-only readbacks; neither switch writes the player's settings.
+
+One known gap (ARC-UI-2915): art 787 `ScrllSlideM1` (the 11×1 middle of the
+schemes page's scroll thumb, used since ARC-UI-1742) is not in the installed
+pack, which has only the 11×5 `ScrllSlideM` (art 239). The check prints it as a
+known pack gap (the frame draws Legacy in HD mode) and fails on any other
+refused frame. A pack frame for it is an owner decision (issue #2917); once the
+pack carries it, the frame resolves as HD and the message stops.
+
+Local redraw variants, removal masks and compositions are
 kept outside git. They are candidates, not owner acceptance.
 
 ## Top strip and left buttons (ARC-UI-116)
