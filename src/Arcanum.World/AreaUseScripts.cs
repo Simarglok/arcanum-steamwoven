@@ -1508,11 +1508,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         finally { _clicked = previous; }
     }
 
-    /// <summary>ARC-AI-2821: whether a will-KOS run (<see cref="RunWillKos"/>) vetoes the kill-on-sight: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way). A run that was not applied cancels nothing.</summary>
+    /// <summary>ARC-AI-2821: whether a will-KOS run (<see cref="RunWillKos"/>) vetoes the kill-on-sight: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way), but not a script file that cannot be opened (run default). A run that was not applied cancels nothing.</summary>
     public static bool WillKosVetoes(AreaScriptedUse ran)
     {
         ArgumentNullException.ThrowIfNull(ran);
-        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
+        // A script file that cannot be opened answers 1 ("run default") in the interpreter 0x4449B0 (the result local of 0x4449B0 is set to 1 when the file open fails), so a missing or unreadable file vetoes nothing, unlike the dispatcher's own skip default for it elsewhere.
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop is not (ScrStop.MissingScript or ScrStop.UnreadableScript);
     }
 
     // ARC-DEV-254 (GT198): the original's guard (global 0x5FC26C) is set around the point-0x17 script call only; a damage dealt while it runs skips the script.

@@ -879,7 +879,8 @@ public sealed class AreaHeartbeatScriptTests
             var none = Row(4, 16, 0, point: ScrPoint.WillKos);
             var other = Row(5, 16, 801); // a script at the heartbeat point only
             var door = Row(6, 3, 801, point: ScrPoint.WillKos); // not an NPC: the deciding NPC is one
-            var host = Host(session, content, null, vetoes, allows, byCandidate, none, other, door);
+            var absent = Row(7, 16, 999, point: ScrPoint.WillKos); // a script number with no file: the interpreter answers "run default"
+            var host = Host(session, content, null, vetoes, allows, byCandidate, none, other, door, absent);
             var rules = session.Rules.Scripts;
             var hero = host.Pc;
             var npcCandidate = new ScrObjectRef(1, AreaUseScriptHost.EntityId(allows));
@@ -890,6 +891,7 @@ public sealed class AreaHeartbeatScriptTests
             Assert.IsTrue(Vetoed(byCandidate, hero), "the script reads the candidate as its triggerer (the player)");
             Assert.IsFalse(Vetoed(byCandidate, npcCandidate), "an NPC candidate is let through");
             Assert.IsFalse(Vetoed(none, hero), "script 0");
+            Assert.IsFalse(Vetoed(absent, hero), "a script file that is missing vetoes nothing");
             Assert.IsFalse(Vetoed(other, hero), "no slot at the point");
             var refused = host.RunWillKos(door, hero, rules);
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, refused.Outcome);
