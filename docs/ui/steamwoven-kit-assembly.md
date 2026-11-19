@@ -70,8 +70,11 @@ PNG, 8 bit, not interlaced.
 - **Whole pixels.** Positions are exact (`3.6` is read as 18/5, not a binary float) and become whole master pixels by `master.position` and
   `master.snap` (the TRD's 6 px grid), then output pixels `round(master px x scale / master.scale)` (half up); a placement box in the report
   is in output pixels. With `anchor: center` the snapped point is the detail's centre and the top-left is `centre - w // 2` in output
-  pixels, so a centre-anchored detail is on the grid by its centre, not by its corner. A detail that leaves the frame is refused. The base is
-  the original frame size at the master scale in whole pixels (half up); the output is exactly `scale x w` by `scale x h`.
+  pixels, so a centre-anchored detail is on the grid by its centre, not by its corner. A detail that leaves the frame is refused (one that ends on the canvas edge and rounds one output pixel over it is moved back). The base is
+  the target kit part's size when the manifest fixes one (on the 6 px grid: a strip 41 units high is 150 px, not 147.6; a part more than one grid step
+  from the exact size is refused), else the original frame size at the master scale in whole pixels (half up); the output is exactly `scale x w`
+  by `scale x h`. The base and the details use one map from master to output pixels on each axis (`output / canvas`), so a detail stays where it
+  is on the base.
 - **Alpha.** The colour is the composed canvas; the alpha is the original's by the mode: `legacy` the parent texel's exact alpha;
   `legacySmooth` the original silhouette with a one-pixel anti-aliased edge (the importer's rule: texels whose 3 x 3 neighbourhood is
   uniform keep the parent's alpha, single-texel holes keep their centre, band pixels over a transparent parent take the nearest opaque
@@ -82,7 +85,8 @@ PNG, 8 bit, not interlaced.
   silhouette is refused and counted, so a frame never ships transparent colour where the pack shows it. An `alpha.legacy` picture with no
   alpha channel is refused (a grey or RGB PNG counts only with a `tRNS` colour key, which the reader applies).
 - **Limits.** `target.art` is letters, digits, `_ . -` (at most 80, not `.` or `..`); one frame or master canvas is at most 64 Mpx; numbers
-  are at most 32 characters and take no exponent; I/O errors and bad files end as `ASSEMBLE FAIL` and nothing is written.
+  are at most 32 characters and take no exponent; I/O errors and bad files end as `ASSEMBLE FAIL` and nothing is written; a PNG is decoded only up to what its header promises. All frames are
+  held in memory until every one has passed its gate (the write is all or nothing).
 
 ## Example (synthetic names)
 

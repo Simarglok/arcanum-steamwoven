@@ -34,6 +34,7 @@ VERSION = 1
 ALPHA_MODES = ("legacy", "legacySmooth", "masked")
 MIN_IOU_PERMILLE = 900  # the legacySmooth gate, fixed by the pack format
 ANCHORS = ("tl", "center")
+GRID = 6  # master pixels (SWI-LAY-7)
 POSITIONS = ("snap", "exact")
 MAX_SCALE = 16
 DEFAULT_STATE = "default"
@@ -222,10 +223,13 @@ def parse_layout(data, root: Path) -> Layout:
     details = {str(key): _image_set(item, f"details.{key}", root) for key, item in details_raw.items()}
 
     placements = []
-    for i, item in enumerate(top.get("placements", [])):
+    raw_placements = top.get("placements", [])
+    if not isinstance(raw_placements, list):
+        raise LayoutError("placements: must be a list")
+    for i, item in enumerate(raw_placements):
         item = _object(item, f"placements[{i}]", {"id", "detail", "at", "anchor", "frames", "states"})
         detail = item.get("detail")
-        if detail not in details:
+        if not isinstance(detail, str) or detail not in details:
             raise LayoutError(f"placements[{i}].detail: {detail!r} is not in details")
         at = item.get("at")
         if not isinstance(at, list) or len(at) != 2:
@@ -260,9 +264,18 @@ def load_layout(path: Path) -> Layout:
 
 # --- pixels -----------------------------------------------------------------------------------------------------------
 
-def canvas_size(layout: Layout) -> tuple[int, int]:
-    """The master canvas: the original frame size at the master scale, in whole pixels (half up)."""
-    return (max(1, round_half_up(layout.size[0] * layout.master_scale)), max(1, round_half_up(layout.size[1] * layout.master_scale)))
+def canvas_size(layout: Layout, part: dict | None = None) -> tuple[int, int]:
+    """The master canvas: the target kit part's size when the manifest fixes one (it is on the 6 px grid, so a strip 41 units high is 150 px,
+    not 147.6), else the original frame size at the master scale in whole pixels (half up). A part size more than one grid step from the
+    exact size is refused: it is another part."""
+    exact = (layout.size[0] * layout.master_scale, layout.size[1] * layout.master_scale)
+    size = part.get("size") if part else None
+    if size and isinstance(size, list) and len(size) == 2:
+        for given, want in zip(size, exact):
+            if abs(given - want) > GRID:
+                raise LayoutError(f"target.part: {part['id']} is {size[0]}x{size[1]} master px, the {layout.size[0]}x{layout.size[1]} unit frame is about {float(exact[0]):g}x{float(exact[1]):g}")
+        return int(size[0]), int(size[1])
+    return max(1, round_half_up(exact[0])), max(1, round_half_up(exact[1]))
 
 
 def blit(canvas: Image, detail: Image, x0: int, y0: int) -> None:
@@ -589,9 +602,9 @@ def assemble(layout: Layout, out_dir: Path | None = None, manifest: dict[str, di
     if manifest is not None:
         check_manifest(layout, manifest)
     width, height = layout.size
-    cw, ch = canvas_size(layout)
+    cw, ch = canvas_size(layout, manifest.get(layout.part) if manifest and layout.part else None)
     ow, oh = width * layout.scale, height * layout.scale
-    ratio = Fraction(layout.scale) / layout.master_scale  # output pixels per master pixel
+    rx, ry = Fraction(ow, cw), Fraction(oh, ch)  # output pixels per master pixel on each axis: the base and the details use the same map
     cache: dict[Path, Image] = {}  # one file is read once: a detail used in many places is one picture
     scaled: dict[tuple[Path, int, int], Image] = {}
 
@@ -606,8 +619,10 @@ def assemble(layout: Layout, out_dir: Path | None = None, manifest: dict[str, di
         what = f"frame {index} ({state})"
         base_path = layout.base.path_for(state, "base")
         base = _load(base_path, "base", cache)
+        if manifest is not None and layout.base.part is not None:
+            check_part_size(base, manifest[layout.base.part], "base")
         if (base.w, base.h) != (cw, ch):
-            raise LayoutError(f"base: {what} is {base.w}x{base.h}, the canvas is {cw}x{ch} ({width}x{height} units at {layout.master_scale} px per unit)")
+            raise LayoutError(f"base: {what} is {base.w}x{base.h}, the canvas is {cw}x{ch} ({width}x{height} units at {layout.master_scale} px per unit{', the size of ' + layout.part if layout.part and (cw, ch) != canvas_size(layout) else ''})")
         canvas = Image(ow, oh, bytearray(at_output_scale(base, ow, oh, base_path).data))
         report = FrameReport(index, state, frame_file(layout.art, index), (ow, oh))
         for placement in layout.placements:
@@ -619,12 +634,16 @@ def assemble(layout: Layout, out_dir: Path | None = None, manifest: dict[str, di
             master_detail = _load(detail_path, f"detail {placement.detail}", cache)
             if manifest is not None and layout.details[placement.detail].part is not None:
                 check_part_size(master_detail, manifest[layout.details[placement.detail].part], f"detail {placement.detail}")
-            detail = at_output_scale(master_detail, max(1, round_half_up(master_detail.w * ratio)), max(1, round_half_up(master_detail.h * ratio)), detail_path)
+            detail = at_output_scale(master_detail, max(1, round_half_up(master_detail.w * rx)), max(1, round_half_up(master_detail.h * ry)), detail_path)
             mx = units_to_px(placement.at[0], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} x")
             my = units_to_px(placement.at[1], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} y")
-            x, y = round_half_up(mx * ratio), round_half_up(my * ratio)
+            x, y = round_half_up(mx * rx), round_half_up(my * ry)
             if placement.anchor == "center":
                 x, y = x - detail.w // 2, y - detail.h // 2
+            if 0 < x + detail.w - ow <= 1 and x >= 1:  # a detail that ends on the master canvas's edge may round one pixel over it
+                x = ow - detail.w
+            if 0 < y + detail.h - oh <= 1 and y >= 1:
+                y = oh - detail.h
             if x < 0 or y < 0 or x + detail.w > ow or y + detail.h > oh:
                 raise LayoutError(f"placement {placement.ident}: the {detail.w}x{detail.h} detail at {x},{y} leaves the {ow}x{oh} frame")
             blit(canvas, detail, x, y)
@@ -672,7 +691,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         layout = load_layout(args.layout)
         report = assemble(layout, None if args.dry_run else args.out, load_manifest(args.manifest) if args.manifest else None)
-    except (LayoutError, ValueError) as error:
+    except (LayoutError, ValueError, TypeError) as error:
         print(f"ASSEMBLE FAIL: {error}", file=sys.stderr)
         return 1
     if args.json:

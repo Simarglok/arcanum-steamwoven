@@ -7,6 +7,7 @@ import zlib
 from dataclasses import dataclass
 
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
+MAX_PIXELS = 64 * 1024 * 1024
 
 
 class PngError(Exception):
@@ -81,8 +82,11 @@ def decode(blob: bytes) -> Image:
         raise PngError(f"unsupported PNG (depth {depth}, colour type {color}, interlace {interlace}): 8 bit, not interlaced only")
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
     stride = w * channels
+    if w < 1 or h < 1 or w * h > MAX_PIXELS:
+        raise PngError(f"picture size {w}x{h} is outside 1 to {MAX_PIXELS} pixels")
     try:
-        raw = zlib.decompress(bytes(idat))
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(bytes(idat), (stride + 1) * h + 1)  # never more than the header promises (a compression bomb stops here)
     except zlib.error as error:
         raise PngError(f"bad IDAT data: {error}") from error
     if len(raw) != (stride + 1) * h:

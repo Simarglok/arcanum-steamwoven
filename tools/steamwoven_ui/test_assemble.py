@@ -117,6 +117,14 @@ class PngTests(unittest.TestCase):
         self.assertEqual([rgb.pixel(x, 0)[3] for x in range(2)], [0, 255])
         self.assertFalse(pngio.decode(hand_png(0, 2, [bytes((1, 2))], [0])).source_alpha)
 
+    def test_a_picture_larger_than_its_header_allows_is_refused(self) -> None:
+        import struct
+        bomb = hand_png(6, 4, [bytes(16)] * 4, [0] * 4)
+        header = struct.pack(">IIBBBBB", 100000, 100000, 8, 6, 0, 0, 0)
+        forged = bomb.replace(struct.pack(">IIBBBBB", 4, 4, 8, 6, 0, 0, 0), header)  # the CRC no longer matches; the size check comes first
+        with self.assertRaisesRegex(pngio.PngError, "outside"):
+            pngio.decode(forged)
+
     def test_malformed_files_raise_png_error(self) -> None:
         good = hand_png(6, 1, [bytes(4)], [0])
         broken_header = good[:16] + good[17:]  # a 12 byte IHDR body
@@ -433,6 +441,39 @@ class ManifestTests(unittest.TestCase):
         with redirect_stdout(out), redirect_stderr(err):
             self.assertEqual(assemble.main([str(layout), "--dry-run", "--manifest", str(ws.root / "none.json")]), 1)
 
+    def test_the_canvas_is_the_parts_grid_size(self) -> None:
+        """A strip 41 units high is 150 master px in the manifest (the 6 px grid), not 147.6: the part's size is the base's size."""
+        parts = assemble.load_manifest()
+        strip = assemble.parse_layout(layout_dict(target={"part": "board.inttop", "art": "185", "size": [800, 41], "frames": 1}, master={"scale": "18/5"}), Path("."))
+        self.assertEqual(assemble.canvas_size(strip, parts["board.inttop"]), (2880, 150))
+        self.assertEqual(assemble.canvas_size(strip), (2880, 148))
+        with self.assertRaisesRegex(assemble.LayoutError, "target.part"):
+            assemble.canvas_size(strip, parts["plate.anatomical_but"])
+        # a whole assembly on a synthetic part: 10 x 8 units are 36 x 28.8 px, the part is 36 x 30
+        parts = dict(SYNTHETIC_PARTS, **{"plate.btn": dict(SYNTHETIC_PARTS["plate.btn"], size=[36, 30], frames=1, states=[])})
+        ws = Workspace(self)
+        ws.png("base.png", solid(36, 30, (1, 1, 1, 255)))
+        ws.png("g.png", solid(12, 12, (9, 9, 9, 255)))
+        ws.png("legacy.png", solid(10, 8, (0, 0, 0, 255)))
+        data = layout_dict(target={"part": "plate.btn", "art": "306", "size": [10, 8], "frames": 1}, master={"scale": "18/5"},
+                           base={"part": "plate.btn", "image": "base.png"}, details={"g": {"image": "g.png"}},
+                           placements=[{"id": "low", "detail": "g", "at": [0, "5"]}])  # 18 master px down: 18 x 32/30 = 19.2
+        report = assemble.assemble(assemble.load_layout(ws.layout(data)), None, parts)
+        self.assertEqual(report.frames[0].boxes[0].y, 19)  # the base's own vertical map (32 / 30), not 4 / 3.6
+        ws.png("base.png", solid(36, 29, (1, 1, 1, 255)))
+        with self.assertRaisesRegex(assemble.LayoutError, "kit part plate.btn is 36x30"):
+            assemble.assemble(assemble.load_layout(ws.layout(data)), None, parts)
+
+    def test_a_detail_on_the_canvas_edge_may_round_one_pixel_over(self) -> None:
+        ws = Workspace(self)
+        ws.png("base.png", solid(36, 29, (1, 1, 1, 255)))
+        ws.png("wide.png", solid(33, 29, (9, 9, 9, 255)))
+        ws.png("legacy.png", solid(10, 8, (0, 0, 0, 255)))
+        data = layout_dict(target={"art": "Edge", "size": [10, 8], "frames": 1}, scale=3, master={"scale": "18/5"},
+                           details={"wide": {"image": "wide.png"}}, placements=[{"detail": "wide", "at": ["5/6", 0]}])
+        box = assemble.assemble(assemble.load_layout(ws.layout(data))).boxes[0]
+        self.assertEqual(box.x + box.w, 30)
+
     def test_the_committed_manifest_speaks_the_same_language(self) -> None:
         parts = assemble.load_manifest()
         row = next(p for p in parts.values() if p["kind"] == "plate" and p["frames"] == 3 and p["states"] and p["source_arts"])
@@ -466,6 +507,8 @@ class LayoutTests(unittest.TestCase):
         self.check(lambda d: d["alpha"].update(legacy=["a", "b"]), "alpha.legacy")
         self.check(lambda d: d["placements"][0].update(detail="zz"), "not in details")
         self.check(lambda d: d["placements"][0].update(anchor="top"), "anchor")
+        self.check(lambda d: d.update(placements=5), "placements: must be a list")
+        self.check(lambda d: d["placements"][0].update(detail=[]), "not in details")
         self.check(lambda d: d["placements"][0].update(at=[1]), "at")
         self.check(lambda d: d["placements"][0].update(frames=[5]), "frames")
         self.check(lambda d: d["base"].update(images={"a": "b.png"}), "exactly one of image and images")
