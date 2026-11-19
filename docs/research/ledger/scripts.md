@@ -1241,7 +1241,7 @@ name the functions and the verdict. Corrections to TG2 and the audit are in that
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
 | TQ1 | object entry 0x441980, trap spot 0x4BBFE0/0x4BBE40 | Editor word or an empty slot: run default, no script; point 1 spot roll answers skip default without the script; no null, destroyed, off, map or mode test; writeback when changed. | F1; Steamwoven differs where a host gates on the shown map (TQ5, TQ13) |
-| TQ2 | hover description 0x57CCF0 (0x57CD93) | Examine for the local PC on every hover refresh, also at dialog start and in the portrait menu (return ignored there). | F1; partial in Steamwoven (#2829) |
+| TQ2 | hover description 0x57CCF0 (0x57CD93) | Examine for the local PC on every hover refresh, also at dialog start and in the follower portrait hover (return ignored there). | F1; built in Steamwoven: the dialog start (HK25) and the portrait hover (HK26) run it (ARC-UI-1120, ARC-UI-1281; #2829 found the TQ2 audit row stale) |
 | TQ3 | interpreter 0x4449B0 | Whole-script gates: MP allow-list 997/999, native traps, two loads (first fails skip default, second run default), generator NPC run default, dialog-point dead/surrender/mind-control gates, auto-remove on both ends and past the last line. | F1 |
 | TQ4 | call script 0x44B030, call-ex 0x44B170 | Call script runs the interpreter directly at the caller's point for each pair with one shared header; call-ex goes through the entry. Both returns ignored. | F1 |
 | TQ5 | location change 0x444270, tile runner 0x4C0980, move 0x43E770 | Modes 1/2 run the tile script for a PC or NPC mover with no other gate; mode 0 none; placement, creation, teleport arrival re-run the tile; return ignored. | F1 (caller families partial) |
