@@ -1215,7 +1215,7 @@ public partial class TerrainViewerApp
         // click-to-move goal, see _UnhandledInput), and wheel/+/- do not zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.
         // F11 is a host window control (not an M/Q game key), not a diagnostic.
         if (input is InputEventKey key && key.Pressed && !key.Echo && GetViewport().GuiGetFocusOwner() is null && key.Keycode == Key.F11)
-            GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
+            SwitchWindowMode(null);
         RefreshReadyStatus();
     }
     private void CaptureWorldCallbackActor(RawInputFrame raw, IntentFrame reduced)

@@ -14,16 +14,17 @@ public partial class AreaOwnerQaPanel : CanvasLayer
     private PanelContainer _panel = null!;
     private Label _header = null!;
     private Label _hint = null!;
-    private Button _open = null!, _section = null!, _all = null!;
+    private Button _open = null!, _section = null!, _all = null!, _answered = null!;
     private ItemList _list = null!;
     private Label _detail = null!;
     private TextEdit _note = null!;
     private Label _notice = null!;
-    private Button _same = null!, _differs = null!, _cannot = null!, _next = null!, _send = null!, _close = null!;
+    private Button _same = null!, _differs = null!, _cannot = null!, _reopen = null!, _next = null!, _send = null!, _close = null!;
     private OwnerQaSession? _session;
     private IReadOnlyList<OwnerQaStep> _rows = [];
     public event Action<string>? MarkRequested;
     public event Action? NextRequested;
+    public event Action? ReopenRequested;
     public event Action? SendRequested;
     public event Action? CloseRequested;
     public event Action<string>? StepChosen;
@@ -39,7 +40,7 @@ public partial class AreaOwnerQaPanel : CanvasLayer
     internal void PressForSelfTest(string name)
     {
         var button = name switch { "same" => _same, "differs" => _differs, "cannot-test" => _cannot, "next" => _next, "send" => _send, "close" => _close,
-            "open" => _open, "section" => _section, _ => _all };
+            "open" => _open, "section" => _section, "answered" => _answered, "reopen" => _reopen, _ => _all };
         button.EmitSignal(BaseButton.SignalName.Pressed);
     }
 
@@ -70,6 +71,9 @@ public partial class AreaOwnerQaPanel : CanvasLayer
         _section = Make("OwnerQaFilterSection", "This section", () => { _session!.Filter = OwnerQaFilter.Section; FilterChanged?.Invoke(); });
         _all = Make("OwnerQaFilterAll", "All", () => { _session!.Filter = OwnerQaFilter.All; FilterChanged?.Invoke(); });
         foreach (var button in new[] { _open, _section, _all }) { button.ToggleMode = true; filters.AddChild(button); }
+        // ARC-DEV-2768: the answered steps (a mark or a sent report) are a collapsed group at the end of the list; this button expands it.
+        _answered = Make("OwnerQaAnswered", "Answered", () => { _session!.AnsweredShown = !_session.AnsweredShown; FilterChanged?.Invoke(); });
+        _answered.ToggleMode = true; filters.AddChild(_answered);
         _list = new ItemList
         {
             Name = "OwnerQaList", CustomMinimumSize = new Vector2(480, 150), SizeFlagsVertical = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All,
@@ -87,10 +91,11 @@ public partial class AreaOwnerQaPanel : CanvasLayer
         _same = Make("OwnerQaSame", "Same", () => MarkRequested?.Invoke("same"));
         _differs = Make("OwnerQaDiffers", "Differs", () => MarkRequested?.Invoke("differs"));
         _cannot = Make("OwnerQaCannotTest", "Cannot test", () => MarkRequested?.Invoke("cannot-test"));
+        _reopen = Make("OwnerQaReopen", "Reopen", () => ReopenRequested?.Invoke());
         _next = Make("OwnerQaNext", "Next open", () => NextRequested?.Invoke());
         _send = Make("OwnerQaSend", "Send report", () => SendRequested?.Invoke());
         _close = Make("OwnerQaClose", "Close", () => CloseRequested?.Invoke());
-        foreach (var button in new[] { _same, _differs, _cannot, _next, _send, _close }) buttons.AddChild(button);
+        foreach (var button in new[] { _same, _differs, _cannot, _reopen, _next, _send, _close }) buttons.AddChild(button);
         foreach (var control in new Control[] { _header, _hint, filters, _list, _detail, _note, _notice, buttons }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         _panel.MinimumSizeChanged += ResizePanel;
@@ -123,13 +128,16 @@ public partial class AreaOwnerQaPanel : CanvasLayer
         for (var i = 0; i < _rows.Count; i++)
         {
             var row = _rows[i];
-            var mark = session.EffectiveStatus(row) switch { "same" => "[same]", "differs" => "[differs]", "cannot-test" => "[cannot]", _ => "[open]" };
+            var day = session.AnsweredDate(row);
+            var when = day.Length > 0 ? " " + day : "";
+            var mark = session.EffectiveStatus(row) switch { "same" => $"[same{when}]", "differs" => $"[differs{when}]", "cannot-test" => $"[cannot{when}]", _ => session.IsAnswered(row) ? $"[answered{when}]" : "[open]" };
             var text = row.Step.Length > 70 ? row.Step[..70] + "..." : row.Step;
             var line = (row.Id == session.CurrentId ? "> " : "  ") + row.Id + " " + mark + " " + text;
             if (rebuild) _list.AddItem(line); else _list.SetItemText(i, line);
         }
         var selected = _rows.ToList().FindIndex(row => row.Id == session.CurrentId);
         if (selected >= 0) _list.Select(selected);
+        _answered.Text = $"Answered ({session.AnsweredCount}) {(session.AnsweredShown ? "hide" : "show")}"; _answered.ButtonPressed = session.AnsweredShown;
         _open.ButtonPressed = session.Filter == OwnerQaFilter.Open; _section.ButtonPressed = session.Filter == OwnerQaFilter.Section; _all.ButtonPressed = session.Filter == OwnerQaFilter.All;
         _header.Text = $"Owner checks (the game is paused) - build {(session.Build.Length == 0 ? "?" : session.Build)}, list {(session.ListCommit.Length == 0 ? "?" : session.ListCommit)}";
         var current = session.Current;
@@ -140,7 +148,7 @@ public partial class AreaOwnerQaPanel : CanvasLayer
         else
         {
             var result = session.ResultOf(current.Id);
-            _detail.Text = $"{current.Id} - {current.Section}\nStep: {current.Step}\nExpected: {current.Expected}\nResult: {session.EffectiveStatus(current)}"
+            _detail.Text = $"{current.Id} - {current.Section}\nStep: {current.Step}\nExpected: {current.Expected}\nResult: {session.EffectiveStatus(current)}{(session.IsAnswered(current) ? " (answered)" : "")}"
                 + (result?.Report is { } report ? $", report {report}" : "") + (result?.Note is { Length: > 0 } note ? $"\nNote: {note}" : "");
             if (_note.Text.Length == 0 && result?.Note is { Length: > 0 } saved) _note.Text = saved;
         }

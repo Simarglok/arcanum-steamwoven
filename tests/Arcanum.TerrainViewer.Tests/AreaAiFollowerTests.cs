@@ -115,7 +115,8 @@ public sealed class AreaAiFollowerTests
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
         CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null,
-        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false, int companionCharisma = 20)
+        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false, int companionCharisma = 20,
+        Func<AreaAiNpc, AreaAiAttackArtRequest, AreaAiAttackArt?>? attackArt = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -187,6 +188,7 @@ public sealed class AreaAiFollowerTests
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
             AlertedSound = alertedSound, FollowFacts = followFacts, Parameters = table,
             Spells = caster is null ? null : () => caster,
+            AttackArt = attackArt,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         built = host;
@@ -726,6 +728,31 @@ public sealed class AreaAiFollowerTests
         Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), enemy), "the target's critter flags are not read");
         Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), Pc));
         Assert.IsFalse(host.HealSkillAccepts(enemy, Entity(2), companion), "the healer's are");
+    }
+
+    // ARC-COMBAT-2769: a companion's attack run asks the viewer for the attack ART of its body like an NPC's (0x432700), and the host keeps its play (the pose the viewer draws the companion in).
+    // The drawing itself (the viewer drew the companion's stand only) is the ai-follower smoke's check; this holds the host half it relies on.
+    [TestMethod]
+    public void A_companions_attack_run_asks_for_its_attack_art_and_the_host_plays_it()
+    {
+        var asked = new List<(string Npc, AreaAiAttackArtRequest Wanted)>();
+        var (_, host, _, enemy, companion) = Open(attackArt: (npc, wanted) =>
+        {
+            asked.Add((npc.Entity, wanted));
+            return new AreaAiAttackArt(wanted.Animation, wanted.Weapon, wanted.Shield, 9, 5, 15);
+        });
+        host.HeroAttacked(enemy);
+        host.Perform(companion);
+        AreaAiNotice? swing = null;
+        for (var frame = 0; frame < 400 && swing is null; frame++)
+        {
+            host.Frames().AdvanceHost(50);
+            swing = host.DrainNotices().FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Swing && n.Npc == companion);
+        }
+        Assert.IsNotNull(swing, "the companion swings at the enemy");
+        Assert.IsTrue(asked.Any(a => a.Npc == companion), $"the companion's attack asked for its attack ART: {string.Join(", ", asked)}");
+        Assert.IsNotNull(swing!.Play?.Art, "the swing carries the ART the host timed the attack with");
+        Assert.IsNotNull(host.AttackPose(companion, host.NowMs), "the host holds the companion's attack pose for the viewer's drawing");
     }
 
     [TestMethod]
