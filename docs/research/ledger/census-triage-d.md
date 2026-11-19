@@ -43,7 +43,7 @@ By band: 0x46 has 181 rows (117 out of scope, 49 not implemented, 14 partial, 1 
 
 | Address | Status | Method | What is left out |
 | --- | --- | --- | --- |
-| 461AB0 | partial | `GameSessionOwner.DropHeroItem` | Drop of an item by its owner: drop script, no-drop remove check, tile and placement; our drop is the hero only, and the NPC look-for bits it sets are not written. Read once (F1) and not compared branch by branch. |
+| 461AB0 | partial | `GameSessionOwner.DropHeroItem` | Drop of an item by its owner: drop script, no-drop remove check, tile and placement; the hero's drop and the critical, arm-hit and spell weapon drop of a critter go through it (the drop script through `DropScript`, ARC-SCRIPT-2853; the NPC look-for bits are written, ARC-WORLD-1288). Read once (F1) and not compared branch by branch. |
 | 462480 | partial | `SessionDialogItemHoldPort.NpcHolds` | Finds the first item whose name field equals a value in the inventory list of a container or critter (any other object holds nothing); our port answers yes or no for the dialog conditions in and ni, not the handle. Read once (F1) and not compared branch by bra |
 | 462540 | partial | `Technology.SchematicAssemblyRules.Find` | Searches a holder list for an item of a prototype under flags (skip worn items, match description, quick slot fallback); only the schematic assembly flag set 7 is reproduced. Read once (F1) and not compared branch by branch. |
 | 462C30 | partial | `Hotkeys.HotkeyRules.PlanItem` | First part answers 0 for an item with the use-box flag, else 6; the second part calls the hotkey placement hook dispatcher 0x460560 for an item with a held flag; the first part is the can-use test of the hotkey item plan. Read once (F1) and not compared branch |

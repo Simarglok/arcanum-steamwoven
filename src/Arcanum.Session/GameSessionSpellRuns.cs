@@ -446,6 +446,13 @@ public sealed partial class GameSessionOwner
     public Func<SessionTakingDamageRequest, bool>? TakingDamageScript { get; set; }
 
     /// <summary>
+    /// ARC-SCRIPT-2853 (exe read, ledger PI1, VP6, TQ19; 0x461AB0 → 0x441980): the host's drop script (attachment point 5) of an item that a critter drops through a critical, an arm hit or a spell's weapon drop, asked after the drop's distance is drawn and before the no-drop check:
+    /// the holder is the triggerer, the item the attachee. <see cref="SessionDropScriptAnswer.SkipDefault"/> refuses the drop (<see cref="SessionCriticalStepOutcome.Refused"/>, the item stays), <see cref="SessionDropScriptAnswer.NotModelled"/> leaves it unapplied
+    /// (<see cref="SessionCriticalStepOutcome.ScriptUnsupported"/>). The host may write the session (a version it moved is followed). A host that throws counts as not modelled. None set: an item with a drop script stays unapplied, as before. The body decay's drop runs no drop script (0x463860, ledger VP24).
+    /// </summary>
+    public Func<SessionDropScriptRequest, SessionDropScriptAnswer>? DropScript { get; set; }
+
+    /// <summary>
     /// ARC-AI-1530 (exe read 2026-11-13, ledger VB2-6): the host's enter-combat (slot 13, 0x4AAE29) and exit-combat (slot 14, 0x4AAF32) script of an NPC the danger setter 0x4AABE0 has just put into or taken out of FIGHT, the target (the
     /// new one, or the requested one on an exit, none when it has none) as the triggerer and the NPC as the attachee. It runs after the setter's writes are committed and its answer is ignored, as the original's: for an entering call the state bits are
     /// written before it and rules 8 (the reaction lowered toward the hero) and 9 (the focus := the target) after it, so the session holds those two back until the script has run. With a host set, every setter call of the session (the host's own, the attack

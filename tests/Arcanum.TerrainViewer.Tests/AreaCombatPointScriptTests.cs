@@ -22,6 +22,7 @@ public sealed class AreaCombatPointScriptTests
     private const byte Attachee = 1, Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0, Extra = 12;
     private const int AttackerIsNpc = 2410, VictimIsPc = 2411, AttacheeIsWeapon = 2412, CritterHitsTriggererIsPc = 2413, SecondHit = 2414, CriticalSeen = 2415;
     private const int ArmourType = 7, ArmourIsArmour = 2420, ArmourAttackerIsNpc = 2421, ArmourVictimIsPc = 2422;
+    private const int DropHolderIsNpc = 2430, DropItemIsWeapon = 2431;
     private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417, WallType = 0, WallSeen = 2418, WallDamaged = 2419;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
@@ -139,6 +140,9 @@ public sealed class AreaCombatPointScriptTests
             Write("scr/00924walldamage.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, WallDamaged), N(1))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             // ARC-SCRIPT-1704: 930 (an area weapon's shape, as 30064): damages every critter in the vicinity of the attachee (focus kind 8) by 5.
             Write("scr/00930vicinity.scr", Program(Do(new(ScrCatalogue.Action.Damage, (8, 0), N(5), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2853: 932 (an item's drop script): the holder is the triggerer (an NPC), the attachee the item (a weapon), the run default ends it; 933 skips the default (a drop it refuses).
+            Write("scr/00932drop.scr", Program([.. FlagIfType(Triggerer, NpcType, DropHolderIsNpc, 0), .. FlagIfType(Attachee, WeaponType, DropItemIsWeapon, 3), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
+            Write("scr/00933dropskip.scr", Program(Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -330,6 +334,38 @@ public sealed class AreaCombatPointScriptTests
             // Whatever the host makes of the wall as a damage target, the run neither throws nor cancels anything (no answer of a combat point cancels the hit).
             Assert.IsNotNull(ran.Run, ran.Detail);
             Assert.AreEqual(0, damaged.Count, "a wall is no damage target of a script (the damage step leaves it at once)");
+        });
+    }
+
+    // ARC-SCRIPT-2853 (0x461AB0 → 0x441980, ledger PI1, TQ19): an item's drop script (point 5) runs with the holder as the triggerer and the item as the attachee; skip default refuses the drop, run default and an item with no script let it go on.
+    [TestMethod]
+    public void The_drop_script_is_the_item_s_with_the_holder_as_triggerer_and_skip_default_refuses_the_drop()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = Row(1, WeaponType, 932, ScrPoint.Drop);
+            var refused = Row(3, WeaponType, 933, ScrPoint.Drop);
+            var plain = Row(4, WeaponType, 0, ScrPoint.Hit);
+            var holder = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, item, refused, plain, holder);
+            var rules = session.Rules.Scripts;
+            var ran = host.RunItemDrop(Ref(item), Ref(holder), rules);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual((ScrOutcome.RunDefault, 932), (ran.Run!.Outcome, ran.Run.Script));
+            Assert.IsTrue(Flag(session, DropHolderIsNpc), "the triggerer is the holder");
+            Assert.IsTrue(Flag(session, DropItemIsWeapon), "the attachee is the item");
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(ran));
+            Assert.IsFalse(AreaUseScriptHost.ItemDropRefuses(ran), "run default lets the drop go on");
+            var skipped = host.RunItemDrop(Ref(refused), Ref(holder), rules);
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(skipped));
+            Assert.IsTrue(AreaUseScriptHost.ItemDropRefuses(skipped), "skip default refuses the drop");
+            var none = host.RunItemDrop(Ref(plain), Ref(holder), rules);
+            Assert.IsNull(none.Run, "no script at the point");
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(none));
+            Assert.IsFalse(AreaUseScriptHost.ItemDropRefuses(none));
+            // The hero's handle is the holder of a hero's drop.
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(host.RunItemDrop(Ref(item), host.Pc, rules)));
         });
     }
 

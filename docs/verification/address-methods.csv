@@ -742,6 +742,7 @@ src/Arcanum.World/AreaUseScripts.cs,IsMonsterOfType,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsProwling,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
+src/Arcanum.World/AreaUseScripts.cs,ItemDropRefuses,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,Leader,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MakeFollowRefusal,exempt,host
@@ -760,6 +761,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunDestroyPointGate,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunItemDrop,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunItemUse,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
@@ -921,6 +923,7 @@ tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiWillKos,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,CarryTransformVitals,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunArmourScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunItemDropScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
