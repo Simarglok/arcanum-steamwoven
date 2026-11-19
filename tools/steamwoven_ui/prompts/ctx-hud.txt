@@ -1,0 +1,9 @@
+CONTEXT IMAGE - PLAY SCREEN (HUD)
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen, upscaled as a layout guide).
+
+Redraw the whole play-screen composition: the top strip (41 of 600 units high), the world area in the middle (400 units) and the bottom strip (159 units).
+- The world area is not part of the interface: keep it a calm, dark, neutral ground (a flat, dark, dusk-lit earth tone with no detail. Ignore whatever the reference shows there: it is only a placeholder). Do not paint a scene into it and do not redraw it as art; it only shows where the strips end.
+- Top strip: a wide dark-wood board with brass trim. Four square brass buttons at the left, a round clock face and a small landscape window (a day/night sky) at the right, a centred brass bridge with two empty sockets. Keep their positions exactly.
+- Bottom strip: left, a tall glass vial with a brass housing (red liquid) and a round brass button above its base; a counter plate; in the centre, a row of twelve small hot-key sockets over a long black message window framed in brass and riveted; right, a tall glass vial (blue liquid) with its housing and three round brass buttons. Keep the black message window empty.
+- Every button is a round or square brass-framed plate with its picture only where the original has one; leave all number counters blank.
+Goal: this is the style anchor for strips, end caps, vials, buttons, sockets and rails. Show how wood, brass, glass and iron meet at the strips' edges (a soft brass edge where a strip meets the world).

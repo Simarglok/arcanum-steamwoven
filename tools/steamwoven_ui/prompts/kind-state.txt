@@ -1,0 +1,4 @@
+KIND: STATE (button state overlay)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: PLATE (the approved plate this state belongs to), ORIGINAL (the original frames of this button).
+
+Draw the overlay of one state of a button (hover, pressed or lit) to lie over the approved plate: a glow, a darkening or a pressed-in bevel, as the part note says. Idle is the plate itself. All states of one size are drawn together on one sheet, one cell per state, same size and framing, so they match. Transparent background around the effect; the effect must not change the plate's outline.

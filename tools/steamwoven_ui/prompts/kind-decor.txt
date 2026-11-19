@@ -1,0 +1,4 @@
+KIND: DECOR (ornament that is not hardware)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: SHEET (brass, gold), CONTEXT crop.
+
+New part with no original art: a small ornament (corner piece, rivet, escutcheon) in the style of the brass and gold trim of the context images. Transparent background, clean edge, no halo, light from the upper left. A corner piece is drawn for the upper-left corner; the others are rotations or mirrors of it.

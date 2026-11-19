@@ -1182,6 +1182,22 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
 ```
 
+## Steamwoven prompt library (ARC-RES-2455)
+
+[`tools/steamwoven_ui/prompt_library.py`](../../tools/steamwoven_ui/prompt_library.py), the prompts in `tools/steamwoven_ui/prompts/` (text only; design in the
+[TRD](../ui/steamwoven-interface-trd.md#prompt-library-and-handoff-arc-res-2455)). Standard-library Python (ImageMagick `magick` only for `refs`); it runs no
+Godot and no `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main checkout (a worktree has no `local/`),
+never git.
+
+```sh
+python3 -B tools/steamwoven_ui/prompt_library.py check        # task check: library, files, kinds against the TRD
+python3 -B tools/steamwoven_ui/prompt_library.py self-test    # task check: synthetic inbox and provenance
+python3 -B -m unittest tools.steamwoven_ui.test_prompt_library
+python3 -B tools/steamwoven_ui/prompt_library.py refs         # 800 x 600 layout references from the census screenshots
+python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
+python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
+```
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
