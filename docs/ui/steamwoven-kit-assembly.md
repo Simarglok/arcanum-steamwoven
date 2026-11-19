@@ -44,6 +44,7 @@ PNG, 8 bit, not interlaced.
 
 | Field | Meaning |
 | --- | --- |
+| `target.part` | optional: the kit part (a `kit.json` id, [#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) this layout assembles; its row must have the layout's frame count and list every frame's state, and `target.art` must be one of its `source_arts` |
 | `target.art` | the original ART's identifier (a name or a number), used for the output file names |
 | `target.size` | `[w, h]` of one original frame in original units |
 | `target.frames` | the original's frame count (1 to 255) |
@@ -54,8 +55,8 @@ PNG, 8 bit, not interlaced.
 | `alpha.mode` | `legacy`, `legacySmooth` or `masked` ([the pack's rules](../formats/hd-pack.md#interface-art-arc-dev-242)) |
 | `alpha.legacy` | one picture, or one for each frame, whose **alpha channel** is the original frame's alpha at `target.size` (local, made from the player's own data) |
 | `frames` | one `{state}` for each original frame, in frame order; omitted: every frame is state `default` |
-| `base` | `{image}` or `{images: {state: path}}`: the clean material, exactly `target.size x master.scale` pixels (half up) |
-| `details` | `{id: {image}}` or `{id: {images: {state: path}}}`; an `images` entry named `default` serves the states it does not list |
+| `base` | `{image}` or `{images: {state: path}}`: the clean material, exactly `target.size x master.scale` pixels (half up); optional `part` names its kit part |
+| `details` | `{id: {image}}` or `{id: {images: {state: path}}}`; an `images` entry named `default` serves the states it does not list; optional `part` names the detail's kit part, and its picture must then have the part's master size when the manifest fixes one (SWI-KIT-3) |
 | `placements[]` | `{id, detail, at: [x, y], anchor, frames, states}`: `at` in original units (exact numbers), `anchor` `tl` (default, the detail's top-left corner) or `center`; `frames` (frame numbers) and `states` (names) limit where it is drawn, all frames by default |
 
 ## Rules
@@ -110,8 +111,14 @@ base and the glyph.
 - Tests: `python3 -B -m unittest tools.steamwoven_ui.test_assemble` (synthetic pictures only: PNG round trip, exact unit-to-pixel maps,
   a detail placed five times is pixel-identical (equal scales and 3.6 to 4), PNG filters, palette and colour keys decoded from hand-built files, a synthetic three-frame button with states, size and alpha gates for all three modes,
   refusals, the dry run); they also run in the batched `tools/local_dev/run_tests.py` through `test_steamwoven_assemble.py`.
-- The tool does not read ART files and does not know the kit manifest: the original frame size, frame count and alpha come from the layout
-  and from local pictures. The manifest `kit.json` and its validator ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454))
-  are separate; a later slice can generate layouts from manifest rows.
+- **The kit manifest** (`tools/steamwoven_ui/kit.json`, [#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) is the vocabulary:
+  a layout that names parts (`target.part`, `base.part`, `details.*.part`) is checked against it (`--manifest PATH`, default the committed
+  file): part ids exist, the target's frame count, states and original art match its row, a named detail has its part's master size, and the
+  layout works at the kit master of 3.6 px per unit (the manifest's sizes are master pixels). A layout without part names is not checked,
+  so a lab layout works without the manifest. The tool does not read ART files: the original frame size and alpha come from the layout and
+  from local pictures. A later slice can generate layouts from manifest rows.
+- The PNG reader and writer here (`pngio.py`) and the shared module of the bake tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460))
+  are two copies of the same standard library code; whichever merges second takes the first's module (follow-up issue
+  [#2991](https://github.com/Simarglok/arcanum-steamwoven/issues/2991)).
 - Masking the details out of the original to make the clean base, generating the pictures and the review are the owner's and Codex's
   steps ([pipeline](steamwoven-interface-trd.md#generation-pipeline)); the outputs are local and never go to git (no original or derived art in git).

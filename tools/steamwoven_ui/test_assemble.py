@@ -367,6 +367,83 @@ class AssembleTests(unittest.TestCase):
             assemble.assemble(assemble.load_layout(ws.layout(data)))
 
 
+SYNTHETIC_PARTS = {
+    "plate.btn": {"id": "plate.btn", "frames": 3, "states": ["idle", "hover", "pressed", "disabled"], "source_arts": ["306"], "size": [36, 29]},
+    "glyph.g": {"id": "glyph.g", "frames": 1, "states": [], "source_arts": ["7"], "size": [12, 12]},
+    "material.wood": {"id": "material.wood", "frames": 1, "states": [], "source_arts": [], "size": None},
+}
+
+
+class ManifestTests(unittest.TestCase):
+    """The layout speaks the kit manifest's language (tools/steamwoven_ui/kit.json, ARC-DEV-2454): part ids, frames, states, sizes."""
+
+    def part_layout(self, ws: Workspace, **changes) -> dict:
+        ws.png("base.png", solid(36, 29, (1, 1, 1, 255)))
+        ws.png("g.png", solid(12, 12, (9, 9, 9, 255)))
+        ws.png("legacy.png", solid(10, 8, (0, 0, 0, 255)))
+        data = layout_dict(target={"part": "plate.btn", "art": "306", "size": [10, 8], "frames": 3}, master={"scale": "18/5", "snap": 6},
+                           frames=[{"state": "idle"}, {"state": "pressed"}, {"state": "hover"}],
+                           base={"part": "material.wood", "image": "base.png"},
+                           details={"glyph": {"part": "glyph.g", "image": "g.png"}}, placements=[{"detail": "glyph", "at": [0, 0]}])
+        data.update(changes)
+        return data
+
+    def run_with(self, data: dict, ws: Workspace, parts=SYNTHETIC_PARTS):
+        return assemble.assemble(assemble.load_layout(ws.layout(data)), None, parts)
+
+    def test_a_layout_of_kit_parts_assembles(self) -> None:
+        ws = Workspace(self)
+        report = self.run_with(self.part_layout(ws), ws)
+        self.assertEqual([f.state for f in report.frames], ["idle", "pressed", "hover"])
+
+    def test_refusals_name_the_field(self) -> None:
+        cases = [
+            (lambda d: d["target"].update(part="plate.nope"), "not a part of the kit manifest"),
+            (lambda d: d["details"]["glyph"].update(part="glyph.zzz"), "details.glyph.part"),
+            (lambda d: (d["target"].update(frames=2), d.update(frames=[{"state": "idle"}, {"state": "hover"}])), "has 3"),
+            (lambda d: d["target"].update(art="999"), "not an original art"),
+            (lambda d: d.update(frames=[{"state": "idle"}, {"state": "glowing"}, {"state": "hover"}]), "not a state"),
+            (lambda d: d.update(master={"scale": 4}), "kit master"),
+        ]
+        for mutate, message in cases:
+            ws = Workspace(self)
+            data = self.part_layout(ws)
+            mutate(data)
+            if data["master"] == {"scale": 4}:
+                ws.png("base.png", solid(40, 32, (1, 1, 1, 255)))
+            with self.assertRaisesRegex(assemble.LayoutError, message):
+                self.run_with(data, ws)
+
+    def test_a_part_is_one_picture_at_one_size(self) -> None:
+        ws = Workspace(self)
+        data = self.part_layout(ws)
+        ws.png("g.png", solid(18, 12, (9, 9, 9, 255)))
+        with self.assertRaisesRegex(assemble.LayoutError, "kit part glyph.g is 12x12"):
+            self.run_with(data, ws)
+
+    def test_manifest_file_is_read_by_the_command(self) -> None:
+        ws = Workspace(self)
+        data = self.part_layout(ws)
+        manifest = ws.layout({"schema": 1, "parts": list(SYNTHETIC_PARTS.values())}, "kit.json")
+        layout = ws.layout(data)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = assemble.main([str(layout), "--dry-run", "--manifest", str(manifest)])
+        self.assertEqual(code, 0, err.getvalue())
+        with redirect_stdout(out), redirect_stderr(err):
+            self.assertEqual(assemble.main([str(layout), "--dry-run", "--manifest", str(ws.root / "none.json")]), 1)
+
+    def test_the_committed_manifest_speaks_the_same_language(self) -> None:
+        parts = assemble.load_manifest()
+        row = next(p for p in parts.values() if p["kind"] == "plate" and p["frames"] == 3 and p["states"] and p["source_arts"])
+        data = layout_dict(target={"part": row["id"], "art": row["source_arts"][0], "size": [10, 8], "frames": 3}, master={"scale": "18/5"},
+                           frames=[{"state": "idle"}, {"state": "pressed"}, {"state": "hover"}])
+        assemble.check_manifest(assemble.parse_layout(data, Path(".")), parts)
+        data["target"]["art"] = "none"
+        with self.assertRaisesRegex(assemble.LayoutError, "not an original art"):
+            assemble.check_manifest(assemble.parse_layout(data, Path(".")), parts)
+
+
 class LayoutTests(unittest.TestCase):
     def check(self, mutate, message: str) -> None:
         ws = Workspace(self)

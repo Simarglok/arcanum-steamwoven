@@ -88,6 +88,7 @@ class ImageSet:
     """An image for every state (`images`), or one for all of them (`image`). Paths are resolved against the layout file."""
     default: Path | None
     by_state: dict[str, Path]
+    part: str | None = None  # the kit part (tools/steamwoven_ui/kit.json id) this picture is, when the layout says so
 
     def path_for(self, state: str, what: str) -> Path:
         if state in self.by_state:
@@ -109,6 +110,7 @@ class Placement:
 
 @dataclass(frozen=True)
 class Layout:
+    part: str | None  # target.part: the kit part this layout assembles
     art: str
     size: tuple[int, int]
     frame_states: tuple[str, ...]
@@ -146,23 +148,29 @@ def _path(value, what: str, root: Path) -> Path:
 
 
 def _image_set(value, what: str, root: Path) -> ImageSet:
-    value = _object(value, what, {"image", "images"})
+    value = _object(value, what, {"image", "images", "part"})
+    part = value.get("part")
+    if part is not None and (not isinstance(part, str) or not part):
+        raise LayoutError(f"{what}.part: must be a kit part id")
     if ("image" in value) == ("images" in value):
         raise LayoutError(f"{what}: give exactly one of image and images")
     if "image" in value:
-        return ImageSet(_path(value["image"], f"{what}.image", root), {})
+        return ImageSet(_path(value["image"], f"{what}.image", root), {}, part)
     states = _object(value["images"], f"{what}.images", set(value["images"]) if isinstance(value["images"], dict) else set())
     if not states:
         raise LayoutError(f"{what}.images: no states")
     by_state = {str(state): _path(item, f"{what}.images.{state}", root) for state, item in states.items()}
-    return ImageSet(by_state.pop(DEFAULT_STATE, None), by_state)
+    return ImageSet(by_state.pop(DEFAULT_STATE, None), by_state, part)
 
 
 def parse_layout(data, root: Path) -> Layout:
     top = _object(data, "layout", _TOP)
     if top.get("kind") != KIND or top.get("version") != VERSION:
         raise LayoutError(f"layout: kind must be {KIND!r} and version {VERSION}")
-    target = _object(top.get("target"), "target", {"art", "size", "frames"})
+    target = _object(top.get("target"), "target", {"part", "art", "size", "frames"})
+    target_part = target.get("part")
+    if target_part is not None and (not isinstance(target_part, str) or not target_part):
+        raise LayoutError("target.part: must be a kit part id")
     art = target.get("art")
     if isinstance(art, int) and not isinstance(art, bool):
         art = str(art)
@@ -239,7 +247,7 @@ def parse_layout(data, root: Path) -> Layout:
                                     anchor, only, named, str(item.get("id", i))))
     if len({p.ident for p in placements}) != len(placements):
         raise LayoutError("placements: ids must be unique")
-    return Layout(art, (width, height), states, scale, master_scale, snap, position, mode, legacy_paths, base, details, tuple(placements))
+    return Layout(target_part, art, (width, height), states, scale, master_scale, snap, position, mode, legacy_paths, base, details, tuple(placements))
 
 
 def load_layout(path: Path) -> Layout:
@@ -463,6 +471,56 @@ def bake_alpha(color: Image, legacy: Image, scale: int, mode: str) -> tuple[Imag
     return out, False, uncovered
 
 
+# --- the kit manifest (tools/steamwoven_ui/kit.json, ARC-DEV-2454) ---------------------------------------------------------
+
+DEFAULT_MANIFEST = Path(__file__).resolve().parent / "kit.json"
+KIT_MASTER_SCALE = Fraction(18, 5)  # 3.6 master px per original unit (TRD "Master")
+
+
+def load_manifest(path: Path = DEFAULT_MANIFEST) -> dict[str, dict]:
+    """The manifest's parts by id. The manifest holds identifiers, sizes and states only (no pixels)."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return {part["id"]: part for part in data["parts"]}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise LayoutError(f"kit manifest {path}: {error}") from error
+
+
+def uses_parts(layout: Layout) -> bool:
+    return layout.part is not None or layout.base.part is not None or any(d.part is not None for d in layout.details.values())
+
+
+def check_manifest(layout: Layout, parts: dict[str, dict]) -> None:
+    """The layout speaks the manifest's language: every part it names exists; the target's frame count, states and original art
+    match its row; a layout that names parts works at the kit master scale (the manifest's sizes are master pixels)."""
+    named = {"target.part": layout.part, "base.part": layout.base.part, **{f"details.{k}.part": d.part for k, d in layout.details.items()}}
+    for where, ident in named.items():
+        if ident is not None and ident not in parts:
+            raise LayoutError(f"{where}: {ident!r} is not a part of the kit manifest")
+    if not uses_parts(layout):
+        return
+    if layout.master_scale != KIT_MASTER_SCALE:
+        raise LayoutError(f"master.scale: a layout that names kit parts works at the kit master of {KIT_MASTER_SCALE} px per unit (the manifest's sizes), not {layout.master_scale}")
+    if layout.part is not None:
+        row = parts[layout.part]
+        if row.get("frames") != len(layout.frame_states):
+            raise LayoutError(f"target.frames: {len(layout.frame_states)} frames, but part {layout.part} has {row.get('frames')} (the original's)")
+        sources = row.get("source_arts") or []
+        if sources and layout.art not in sources:
+            raise LayoutError(f"target.art: {layout.art!r} is not an original art of part {layout.part} ({', '.join(sources)})")
+        allowed = row.get("states") or []
+        for index, state in enumerate(layout.frame_states):
+            if allowed and state != DEFAULT_STATE and state not in allowed:
+                raise LayoutError(f"frames[{index}].state: {state!r} is not a state of part {layout.part} ({', '.join(allowed)})")
+
+
+def check_part_size(image: Image, part: dict | None, what: str) -> None:
+    """One part is one picture at one master size (SWI-KIT-3): a detail that is a kit part has the part's size when the manifest fixes it."""
+    size = part.get("size") if part else None
+    if size and (image.w, image.h) != (size[0], size[1]):
+        raise LayoutError(f"{what}: the picture is {image.w}x{image.h}, kit part {part['id']} is {size[0]}x{size[1]} master px")
+
+
 # --- assembling -------------------------------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -520,11 +578,16 @@ def _load(path: Path, what: str, cache: dict[Path, Image]) -> Image:
     return cache[path]
 
 
-def assemble(layout: Layout, out_dir: Path | None = None) -> Report:
+def assemble(layout: Layout, out_dir: Path | None = None, manifest: dict[str, dict] | None = None) -> Report:
     """Composes every frame at the pack scale and checks the pack's gates. The base and every detail are first brought from the master
     scale to the pack scale **once per picture** (the identity when the scales are equal), then placed at whole output pixels, so a
     detail placed N times is the same pixels in every place whatever the two scales are. With `out_dir` None nothing is written (the dry
-    run). A failure raises LayoutError; nothing is written then either."""
+    run). A layout that names kit parts is checked against `manifest` (the parts by id; the committed kit.json when None). A failure raises
+    LayoutError; nothing is written then either."""
+    if manifest is None and uses_parts(layout):
+        manifest = load_manifest()
+    if manifest is not None:
+        check_manifest(layout, manifest)
     width, height = layout.size
     cw, ch = canvas_size(layout)
     ow, oh = width * layout.scale, height * layout.scale
@@ -554,6 +617,8 @@ def assemble(layout: Layout, out_dir: Path | None = None) -> Report:
                 continue
             detail_path = layout.details[placement.detail].path_for(state, f"detail {placement.detail}")
             master_detail = _load(detail_path, f"detail {placement.detail}", cache)
+            if manifest is not None and layout.details[placement.detail].part is not None:
+                check_part_size(master_detail, manifest[layout.details[placement.detail].part], f"detail {placement.detail}")
             detail = at_output_scale(master_detail, max(1, round_half_up(master_detail.w * ratio)), max(1, round_half_up(master_detail.h * ratio)), detail_path)
             mx = units_to_px(placement.at[0], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} x")
             my = units_to_px(placement.at[1], layout.master_scale, layout.snap, layout.position, f"placement {placement.ident} y")
@@ -600,12 +665,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="folder for the HD frames (<art>-fNNN.png) and the report")
     parser.add_argument("--dry-run", action="store_true", help="compose, bake and gate-check everything, write nothing")
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
+    parser.add_argument("--manifest", type=Path, help="the kit manifest a layout that names parts is checked against (default tools/steamwoven_ui/kit.json)")
     args = parser.parse_args(argv)
     if args.out is None and not args.dry_run:
         parser.error("give --out DIR, or --dry-run")
     try:
         layout = load_layout(args.layout)
-        report = assemble(layout, None if args.dry_run else args.out)
+        report = assemble(layout, None if args.dry_run else args.out, load_manifest(args.manifest) if args.manifest else None)
     except (LayoutError, ValueError) as error:
         print(f"ASSEMBLE FAIL: {error}", file=sys.stderr)
         return 1

@@ -2,7 +2,9 @@
 
 Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `8.0.425` with roll-forward disabled; [Directory.Build.props](../../Directory.Build.props) targets `net8.0`; [Directory.Packages.props](../../Directory.Packages.props) centralizes package versions. Godot adapters/labs use `Godot.NET.Sdk/4.7.2`, Godot **4.7.2 .NET** and matching .NET export templates. Development currently targets macOS. Version changes require a separate scoped decision; do not replace retained shared installations implicitly.
 
-The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`). The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`.
+The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
+The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. These three are task checks, run by a change to the manifest, the census tables or these tools, and are not in the root check list. It holds identifiers, sizes and verdicts only, never pixels.
+The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`.
 
 ## Process-local environment
 
@@ -1179,6 +1181,22 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 
 ```sh
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
+```
+
+## Steamwoven prompt library (ARC-RES-2455)
+
+[`tools/steamwoven_ui/prompt_library.py`](../../tools/steamwoven_ui/prompt_library.py), the prompts in `tools/steamwoven_ui/prompts/` (text only; design in the
+[TRD](../ui/steamwoven-interface-trd.md#prompt-library-and-handoff-arc-res-2455)). Standard-library Python (ImageMagick `magick` only for `refs`); it runs no
+Godot and no `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main checkout (a worktree has no `local/`),
+never git.
+
+```sh
+python3 -B tools/steamwoven_ui/prompt_library.py check        # task check: library, files, kinds against the TRD
+python3 -B tools/steamwoven_ui/prompt_library.py self-test    # task check: synthetic inbox and provenance
+python3 -B -m unittest tools.steamwoven_ui.test_prompt_library
+python3 -B tools/steamwoven_ui/prompt_library.py refs         # 800 x 600 layout references from the census screenshots
+python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
+python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
 ```
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
