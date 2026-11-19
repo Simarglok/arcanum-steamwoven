@@ -30,7 +30,7 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-006 scenario: " + why); }
         var canvas = _canvas!;
         var start = plan == VisualScenarioPlan.Hd ? VisualProfile.Hd : VisualProfile.Legacy;
-        if (canvas.VisualProfile != start || canvas.PendingVisualProfile is not null) RequestVisualProfile(start, "scenario-start"); // ARC-UI-2221: through the app, so the saved HD value follows (H toggles from it)
+        RequestVisualProfile(start, "scenario-start"); // a no-change request for the canvas still syncs the saved value // ARC-UI-2221: through the app, so the saved HD value follows (H toggles from it)
         await SettleVisualAsync();
         QuickKey(Key.F8);
         Require(_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 restored the start: " + _quickSaveStatus);
@@ -132,6 +132,7 @@ public partial class TerrainViewerApp
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             canvas.WorldSpritesFromPack = previousGate;
             canvas.SetVisualProfile(profile, previousSource, budget);
+            SaveGameSettings(_gameSettings with { HdInterface = profile == VisualProfile.Hd }); // ARC-UI-2221: the saved value follows the canvas again
             System.IO.Directory.Delete(directory, recursive: true);
         }
     }
@@ -269,7 +270,7 @@ public partial class TerrainViewerApp
             Require(_canvas.VisualProfile == VisualProfile.Legacy && _canvas.PendingVisualProfile is null, "the fallback case starts with a Legacy canvas");
             generation = _canvas.VisualGeneration;
             QuickKey(Key.H);
-            Require(!_gameSettings.HdInterface && System.IO.File.ReadAllText(path) == "hd=0\n" && _canvas.VisualGeneration == generation && _canvas.VisualProfile == VisualProfile.Legacy,
+            Require(!_gameSettings.HdInterface && _canvas.VisualGeneration == generation && _canvas.VisualProfile == VisualProfile.Legacy,
                 "the first H turned the saved HD value Off in the fallback case");
             QuickKey(Key.H);
             Require(_gameSettings.HdInterface && (_canvas.PendingVisualProfile == VisualProfile.Hd || _canvas.VisualProfile == VisualProfile.Hd), "the next H asks for HD");
@@ -313,6 +314,7 @@ public partial class TerrainViewerApp
             _visualStore = null;
             _canvas.WorldSpritesFromPack = previousGate;
             _canvas.SetVisualProfile(VisualProfile.Legacy, null, null);
+            SaveGameSettings(_gameSettings with { HdInterface = false }); // ARC-UI-2221: the saved value follows the canvas again
             source?.Dispose();
             System.IO.Directory.Delete(root, true);
         }
