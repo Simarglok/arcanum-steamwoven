@@ -98,7 +98,7 @@ public sealed partial class GameSessionOwner
             if (holder.Items.FirstOrDefault(entry => entry.Entity == item) is not { } listed) return RejectPickPocket(GameSessionFailure.ItemNotAvailable);
             var facts = listed.Facts;
             kind = facts.Kind.Type == SessionItemType.Gold ? PickPocketItemKind.Gold : facts.AmmoType is not null ? PickPocketItemKind.Ammunition : PickPocketItemKind.Item;
-            if (kind == PickPocketItemKind.Gold && facts.HasScript(SessionScriptPoint.InsertItem)) return RejectPickPocket(GameSessionFailure.ItemScriptUnsupported);
+            if (kind == PickPocketItemKind.Gold && facts.HasScript(SessionScriptPoint.InsertItem) && scripts is null) return RejectPickPocket(GameSessionFailure.ItemScriptUnsupported);
             // ARC-DEV-1338 (PP12): the original steals a worn item too (PP3, its slot only raises the difficulty); the move takes it off its slot.
             // Keys and key rings are not modelled here: the steal inserts the item itself, and a stolen key would fold into the ring (ARC-WORLD-123, KY2) as a taken one does.
             if (kind == PickPocketItemKind.Item && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectPickPocket(GameSessionFailure.ItemTypeUnsupported);
@@ -190,10 +190,10 @@ public sealed partial class GameSessionOwner
             {
                 move = (direction, kind) switch
                 {
-                    (PickPocketDirection.Steal, PickPocketItemKind.Gold) => TakeGoldFromNpc(Version, npc, amount, item),
-                    (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck),
+                    (PickPocketDirection.Steal, PickPocketItemKind.Gold) => TakeGoldFromNpc(Version, npc, amount, item, scripts),
+                    (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck, scripts),
                     (PickPocketDirection.Steal, _) => TakeItemFromNpc(Version, npc, item, insertCheck, scripts, triggers, unwield: true, npcWearer: npcWearer),
-                    (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck),
+                    (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck, scripts),
                     _ => GiveItemToNpc(Version, npc, item, insertCheck, triggers, scripts),
                 };
             }
