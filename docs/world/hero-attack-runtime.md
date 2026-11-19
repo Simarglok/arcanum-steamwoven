@@ -99,7 +99,7 @@ it. The hero's item goes to the ground among its placed items (ARC-WORLD-059,
 the [drop cell](inventory-runtime.md#drop-cell-arc-combat-010)'s (ARC-COMBAT-010): with the host's `SessionAttack.DropMap` the
 session draws the distance 2..4 before the drop's refusals and one direction per try after them, and the item lands where the
 original's tries lead from its holder's cell (the hero's, or `SessionAttack.TargetCell` for an NPC); without a map it lands on the
-holder's cell and nothing is drawn (`HeroCellUnfit` when the landing cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script that no host ran (`ScriptUnsupported`; the host's `DropScript` runs it since ARC-SCRIPT-2853, and skip default is `Refused`), no cell or no item data
+holder's cell and nothing is drawn (`HeroCellUnfit` when the landing cell does not fit the packing). Not applied: an item the session added to the NPC (`NotSeedItem`), an item with a drop script that no host ran (`ScriptUnsupported`; the host's `DropScript` runs it since ARC-SCRIPT-2853, and skip default is `Refused`), an NPC's item with a wield-off or remove-item script and no host context (`ScriptUnsupported`; `NpcWearerScripts` runs them with the drop since ARC-SCRIPT-2856), no cell or no item data
 (`Unknown`); an item with the no-drop flag is `Refused`, as in the original (`SessionWearItem.NoDrop`). A dropped item is no
 longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
 is `InvalidAttack`, both before any roll.

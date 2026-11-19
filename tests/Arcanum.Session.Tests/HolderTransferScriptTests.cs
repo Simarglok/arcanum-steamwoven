@@ -182,4 +182,39 @@ public sealed class HolderTransferScriptTests
         Assert.AreEqual((GameSessionDisposition.Changed, (int?)SessionScriptPoint.Transfer), (moved.Disposition, moved.DeclinedBy));
         CollectionAssert.DoesNotContain(List(owner, "virgil"), "kit:1");
     }
+
+    // ARC-SCRIPT-2857 (ledger NT1, NT2, IE2; exe 0x464830 → 0x4617F0 → 0x461810): a new gold pile or ammunition stack is a created object with no parent, so 0x461810 does not forward it to the parented transfer 0x461CA0 and the recipient's
+    // transfer script (point 32) never runs for it: the move goes through the insert check alone, whatever the holder's scripts and wherever the coins or units come from.
+    private static readonly SessionItemKind GoldPile = new(SessionItemType.Gold, 9056, 3200, 33200);
+    private static readonly SessionItemKind Bullets = new(SessionItemType.Ammo, 7059, 3301, 33301);
+
+    [TestMethod]
+    public void A_new_gold_pile_is_not_refused_by_a_holders_transfer_script()
+    {
+        using var owner = Hero();
+        // The insert check still refuses, as for any holder, with nothing changed.
+        Assert.AreEqual((GameSessionFailure.InsertRefused, 0L), (owner.GiveGoldToNpc(owner.Version, "virgil", 40, GoldPile, _ => SessionInsertVerdict.NoRoom).Failure, owner.Version.Revision));
+        var checks = new List<string>();
+        var paid = owner.GiveGoldToNpc(owner.Version, "virgil", 40, GoldPile, item => { checks.Add(item.Entity); return SessionInsertVerdict.Accepted; });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (int?)null, "made:1"), (paid.Disposition, paid.Failure, paid.DeclinedBy, paid.Item));
+        CollectionAssert.AreEqual(new[] { "made:1" }, checks, "the insert check still runs");
+        Assert.AreEqual((40, 345), (owner.QueryNpcGold("virgil"), owner.QueryGold()));
+        CollectionAssert.AreEqual(new[] { "ring", "sword", "vest", "ring-copy", "made:1" }, List(owner, "virgil"));
+    }
+
+    [TestMethod]
+    public void A_new_ammunition_stack_and_a_barter_payment_pile_are_not_refused_by_a_transfer_script()
+    {
+        using var owner = Hero();
+        // The hero gets a stack from virgil's list, then gives part of it to the scripted merchant, which holds none: a new stack.
+        var source = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (1, 30)).Item!;
+        var stack = owner.TakeAmmoFromNpc(owner.Version, "virgil", source, 30, Bullets, Accept).Item!;
+        var given = owner.GiveAmmoToNpc(owner.Version, "merchant", stack, 10, Bullets, Accept);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (int?)null), (given.Disposition, given.Failure, given.DeclinedBy));
+        Assert.AreEqual((10, 20), (owner.QueryAmmo(given.Item!)!.Value.Units, owner.QueryAmmo(stack)!.Value.Units));
+        // A purchase pays into virgil, which has no pile: a new one.
+        var bought = owner.BarterBuy(owner.Version, "virgil", "ring", 1, 3, Bullets, GoldPile, Accept, Accept);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (bought.Disposition, bought.Failure));
+        Assert.AreEqual(3, owner.QueryNpcGold("virgil"), "the payment made a new pile in the scripted holder");
+    }
 }
