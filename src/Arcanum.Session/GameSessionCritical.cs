@@ -361,7 +361,7 @@ public sealed partial class GameSessionOwner
         try { host = HeroWearerScripts?.Invoke(); }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { host = null; }
         if (host is null) return (null, GameSessionFailure.None, true);
-        // The runs' commit and the drop's placement take a revision each, after the one the drop checked.
+        // Kept clear of the revision limit for the placement and a run's write, after the revision the drop checked.
         if (_revision >= long.MaxValue - 2) return (null, GameSessionFailure.RevisionExhausted, false);
         var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
         var runs = new ItemScriptRuns(this, host, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = worn.Item.MagickTechComplexity });
