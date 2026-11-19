@@ -140,6 +140,7 @@ first 100 objects of the list and no limit).
 
 - Static reading only (F2 where both readers agree); how often a marker is on screen at a crossing in play is not
   observed.
-- Not read: the order of the vicinity list (which 100 objects are kept; the window size was read by ARC-WORLD-081: the fixed 800 × 400 play view, PG13), the path
+- The order of the vicinity list (which 100 objects are kept) was read by ARC-SCRIPT-2960: tile rows by ascending y, tiles by ascending x, each tile in its draw order (ledger [VL5](ledger/scripts.md#vicinity-list-order-arc-script-2960); not modelled, #2976); the window size was read by ARC-WORLD-081 (the fixed 800 × 400 play view, PG13).
+- Not read: the path
   search's own rules, and how created objects are saved and reloaded for a template sector beyond [SS2 and SS5](ledger/world.md#main-map-streaming-arc-data-030).
 - Since ARC-WORLD-081 the viewer runs template sector scripts and creates their items; this study's own text above is unchanged.
