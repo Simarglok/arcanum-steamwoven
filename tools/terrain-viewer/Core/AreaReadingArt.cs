@@ -44,17 +44,6 @@ public static class AreaReadingArtLayout
 
     /// <summary>The font arts the fixed texts use: the telegram's form (481 and 479, 0x5CA538) and body (480), the newspaper's masthead (485, 484, 482; the alternate's 815) and the note (497).</summary>
     public const int NoteFont = 497, TelegramBodyFont = 480, TelegramFormFont = 481, TelegramNameFont = 479, MastheadFont = 485, MastheadSideFont = 484, MastheadLineFont = 482;
-    /// <summary>ARC-UI-2765: the faces a note's body is drawn in with the generated (Steamwoven) interface instead of the handwriting <see cref="NoteFont"/> (art 497, Pepper20: a
-    /// script face the owner could not read at the window's scale), best first: 840 (NewTimes16, a plain serif) and, for a note too long for the rectangle in it, 229 (Flare12, smaller). The first
-    /// that holds the whole text in the note's rectangle is drawn; a note neither holds keeps the original's face. All are optional fonts (the window falls back to the note's when one did not read).</summary>
-    public static IReadOnlyList<int> ReadableNoteFonts { get; } = [840, 229];
-
-    /// <summary>ARC-UI-2765: the faces a note's body tries, in order: <see cref="ReadableNoteFonts"/> with the generated interface, then always the original's <see cref="NoteFont"/>.</summary>
-    public static IReadOnlyList<int> NoteFontsFor(bool generated) => generated ? [.. ReadableNoteFonts, NoteFont] : [NoteFont];
-
-    /// <summary>ARC-UI-2765: more font arts the window loads (a local capture's candidates for the note face; empty in play).</summary>
-    public static IReadOnlyList<int> ExtraFontArts { get; set; } = [];
-
     public static IReadOnlyList<int> FixedFontArts { get; } = [TelegramNameFont, TelegramBodyFont, TelegramFormFont, MastheadLineFont, MastheadSideFont, MastheadFont, NoteFont, WrittenTexts.NewspaperAlternateFont];
 
     /// <summary>The arts without which the window is not drawn in the original's look (the alternate newspaper's 817 and 815 are optional).</summary>
@@ -103,7 +92,7 @@ public static class AreaReadingArtLayout
     public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
     /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts.</summary>
-    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(ReadableNoteFonts).Concat(ExtraFontArts).Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
+    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
 }
 
 /// <summary>
@@ -317,24 +306,14 @@ public static class AreaReadingFlow
         return lines;
     }
 
-    /// <summary>ARC-UI-2765: a note's body in the first of <paramref name="noteFonts"/> that holds the whole text in the note's rectangle, else in the last (the original's).</summary>
-    private static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, IReadOnlyList<int> noteFonts)
-    {
-        foreach (var number in noteFonts.Take(noteFonts.Count - 1))
-            // A word wider than the rectangle measures 0 high (a fit that draws nothing): it is no fit, so the next face is tried.
-            if (FitText(fontOf(number), number, document.Joined, false, AreaReadingArtLayout.NoteText) is { Whole: true, Lines.Count: > 0 } fit) return fit.Lines;
-        var last = noteFonts[^1];
-        return Draw(fontOf(last), last, document.Joined, AreaReadingArtLayout.NoteText, false);
-    }
-
-    /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none); a note's body is drawn in the first of <paramref name="noteFonts"/> that fits (ARC-UI-2765).</summary>
-    public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, IReadOnlyList<int>? noteFonts = null)
+    /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none).</summary>
+    public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontOf);
         return document.Subtype switch
         {
-            WrittenSubtype.Note => Note(document, fontOf, noteFonts ?? [AreaReadingArtLayout.NoteFont]),
+            WrittenSubtype.Note => Draw(fontOf(AreaReadingArtLayout.NoteFont), AreaReadingArtLayout.NoteFont, document.Joined, AreaReadingArtLayout.NoteText, false),
             WrittenSubtype.Telegram => Telegram(document, fontOf),
             WrittenSubtype.Newspaper => Newspaper(document, fontOf),
             WrittenSubtype.Plaque => Page(document.Body, (0, 0), AreaReadingArtLayout.PlaqueText, fontOf).Lines,

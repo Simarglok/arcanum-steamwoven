@@ -518,6 +518,12 @@ public partial class TerrainViewerApp
                         var at = AreaConversationPanel.PanelPosition(view, 752, 100);
                         TerrainViewerSelfTest.Require(at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset,
                             $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} view {view.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        // ARC-UI-2770: with the bars shown the reply band rests on the bottom bar's top edge (the original's own 1 px above it), in both settings.
+                        var bandFactor = AreaGameBarPanel.ScreenFactor(view);
+                        var bandBottom = AreaConversationPanel.BandTop(view) + DialogReplyBand.Height * bandFactor;
+                        var barTop = view.Y - AreaGameBarPanel.BottomInset;
+                        TerrainViewerSelfTest.Require(Math.Abs(barTop - bandBottom - DialogReplyBand.BarGap * bandFactor) < .01f,
+                            $"{rules}: the reply band's bottom edge rests on the bottom bar (band bottom {bandBottom}, bar top {barTop}, factor {bandFactor})");
                         // DB2: the clock and the pane buttons are consumed without effect while the dialog is open.
                         var presses = _skillBarPressesForSelfTest + _spellBarPressesForSelfTest;
                         ClockButton(); SkillBarReleased(0, true); SpellBarSpellReleased(0, true);
