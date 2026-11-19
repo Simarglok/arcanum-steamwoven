@@ -60,14 +60,14 @@ public sealed partial class GameSessionOwner
         if (pile is not null && !piles.Any(found => found.Entity == pile)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         var chosen = pile is null ? piles.Select(found => ((string Entity, int Quantity, SessionItemFacts? Facts)?)found).FirstOrDefault() : piles.First(found => found.Entity == pile);
-        return TakeGold(chosen, count, scripts);
+        return TakeGold(chosen, count, npc, scripts);
     }
 
-    private InventoryMutationResult TakeGold((string Entity, int Quantity, SessionItemFacts? Facts)? from, int count, ISessionItemScriptHost? scripts = null)
+    private InventoryMutationResult TakeGold((string Entity, int Quantity, SessionItemFacts? Facts)? from, int count, string holder, ISessionItemScriptHost? scripts = null)
     {
         if (from is not { } pile || pile.Quantity < count) return RejectItem(GameSessionFailure.GoldShort);
         // ARC-SCRIPT-2855 (NT1): the pile's insert-item script (21) runs first with the hero as the triggerer; the runs are applied with the move or the whole move is refused.
-        var insert = RunPileInsert(scripts, pile.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false);
+        var insert = RunPileInsert(scripts, pile.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, pile.Quantity == count ? holder : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         if ((long)_inventory.Gold + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
         var emptied = pile.Quantity == count;
@@ -184,7 +184,7 @@ public sealed partial class GameSessionOwner
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (NpcPile(from) is not { } source || source.Quantity < count) return RejectItem(GameSessionFailure.GoldShort);
         // ARC-SCRIPT-2855 (NT1): the source pile's insert-item script runs first with the destination NPC as the triggerer.
-        var insert = RunPileInsert(scripts, source.Entity, to, npcTriggerer: true);
+        var insert = RunPileInsert(scripts, source.Entity, to, npcTriggerer: true, source.Quantity == count ? from : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var emptied = source.Quantity == count;
         var target = NpcPile(to);
@@ -516,9 +516,9 @@ public sealed partial class GameSessionOwner
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
         // ARC-SCRIPT-2855 (AM4): the source stack's insert-item script (21) runs first with the hero as the triggerer.
-        var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false);
+        // ARC-SCRIPT-2879: a stack that goes at its last unit is deleted (0x43CCA0, AM4) out of its holder, which runs the stack's remove-item script (28) with the holder as the triggerer, as for an emptied gold pile (NT1).
+        var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, source.Units == count ? npc : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
-        // A stack that goes at its last unit is deleted (0x43CCA0, AM4), not removed: no remove-item event, as for an emptied gold pile (NT1).
         var into = HeroStackOfType(source.AmmoType);
         return MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
     }
@@ -544,7 +544,7 @@ public sealed partial class GameSessionOwner
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
         // ARC-SCRIPT-2855 (AM4): the hero's stack's insert-item script (21) runs first with the NPC as the triggerer.
-        var insert = RunPileInsert(scripts, source.Entity, npc, npcTriggerer: true);
+        var insert = RunPileInsert(scripts, source.Entity, npc, npcTriggerer: true, source.Units == count ? SessionEventKinds.PlayerEntity : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = NpcStackOfType(npc, source.AmmoType);
         var report = new CreatedScripts { Defer = true };

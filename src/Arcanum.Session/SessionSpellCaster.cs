@@ -1190,6 +1190,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         public ISpellRunHost SpellRuns => caster;
         public ISessionEventWorld Wrapped => events;
+        // ARC-SCRIPT-2879: the wrapped world's item script host, for the remove-item scripts of the pass's body walks.
+        public ISessionItemScriptHost? ItemScriptHost => events.ItemScriptHost;
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => events.CritterFacts(map, entity);
         public ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => (events as ISessionPartyEventWorld)?.ReactionNpcFacts(map, entity);
         public ReactionPcFacts? ReactionPcFacts() => (events as ISessionPartyEventWorld)?.ReactionPcFacts();

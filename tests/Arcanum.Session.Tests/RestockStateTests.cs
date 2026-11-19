@@ -405,7 +405,7 @@ public sealed class RestockStateTests
         Assert.IsTrue(Fire(owner, world, SessionEventKinds.RestockRetryDelayMs).Restocks.Single() is { Postponed: false, Decision.Step: RestockStep.Regenerate });
     }
 
-    private sealed class NoMap : ISpellCastMap
+    internal sealed class NoMap : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) => null;
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
