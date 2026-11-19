@@ -35,32 +35,40 @@ public sealed partial class GameSessionOwner
     /// holder's life or destroy state is not asked). The NPC is then the wearer of the runs (its stats and effect list, <paramref name="wearerOf"/>, default <see cref="NpcWearerScripts"/>); with no context for it, an item with a worn point 25 refuses the
     /// removal (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, as a drop's script no host ran), the original's runs being not skippable here.
     /// </summary>
-    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts, Func<string, SessionNpcWieldScripts?>? wearerOf = null)
+    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, IReadOnlyList<int> Points)> items, string? holder, ISessionItemScriptHost scripts, Func<string, SessionNpcWieldScripts?>? wearerOf = null) =>
+        RunRemovalScripts([.. items.Select(item => (item.Item, holder, item.Points))], scripts, wearerOf);
+
+    /// <summary>
+    /// ARC-SCRIPT-2903 (IE3): the same for items that leave several holders in one step (the created critters one destroy takes out, each item run with its own dying holder as the triggerer, in the order given): one run set, so a later run reads what the earlier ones did.
+    /// ARC-SCRIPT-2885: a worn item's 25 runs with the NPC as the wearer of the whole set, so worn 25 items of two different holders in one set are refused (a limit: <see cref="GameSessionFailure.ItemScriptUnsupported"/>).
+    /// </summary>
+    private RemovalScripted RunRemovalScripts(IReadOnlyList<(string Item, string? Holder, IReadOnlyList<int> Points)> items, ISessionItemScriptHost scripts, Func<string, SessionNpcWieldScripts?>? wearerOf = null)
     {
-        var npcHolder = holder is not null && KnownNpc(holder);
         var scripted = items
-            .Select(item => (item.Item, WieldOff: npcHolder && item.Points.Contains(SessionScriptPoint.WieldOff) && NpcItemWorn(holder!, item.Item), Remove: item.Points.Contains(SessionScriptPoint.RemoveItem)))
+            .Select(item => (item.Item, item.Holder, WieldOff: item.Holder is not null && item.Points.Contains(SessionScriptPoint.WieldOff) && KnownNpc(item.Holder) && NpcItemWorn(item.Holder, item.Item), Remove: item.Points.Contains(SessionScriptPoint.RemoveItem)))
             .Where(item => item.WieldOff || item.Remove).ToArray();
         if (scripted.Length == 0) return new(null, null);
         if (scripted.Any(item => ItemRowOfOtherMap(item.Item))) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
         NpcWearer? wearer = null;
-        if (scripted.Any(item => item.WieldOff))
+        var wearers = scripted.Where(item => item.WieldOff).Select(item => item.Holder!).Distinct(StringComparer.Ordinal).ToArray();
+        if (wearers.Length > 1) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+        if (wearers.Length == 1)
         {
             SessionNpcWieldScripts? context;
-            try { context = (wearerOf ?? NpcWearerScripts)?.Invoke(holder!); }
+            try { context = (wearerOf ?? NpcWearerScripts)?.Invoke(wearers[0]); }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { context = null; }
             if (context is null) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
-            wearer = new NpcWearer(holder!, context.Target, NpcStatsOverSheet(holder!, context.Stored));
+            wearer = new NpcWearer(wearers[0], context.Target, NpcStatsOverSheet(wearers[0], context.Stored));
         }
         // As LootItem's runs, made before the commit: the admitted commands read nothing the unlink changes, so running before it is the same as after (the original runs the script after the unlink).
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
         var complexities = scripted.ToDictionary(item => item.Item, item => _inventory.Weights.TryGetValue(item.Item, out var weight) ? weight.Complexity : 0, StringComparer.Ordinal);
-        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, complexities, wearer) { NpcTriggerer = npcHolder };
+        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, complexities, wearer) { NpcTriggerer = scripted.All(item => item.Holder is not null && KnownNpc(item.Holder)) };
         foreach (var item in scripted)
         {
-            if (item.WieldOff) runs.Run(SessionScriptPoint.WieldOff, item.Item, holder!, null);
+            if (item.WieldOff) runs.Run(SessionScriptPoint.WieldOff, item.Item, item.Holder!, null);
             if (runs.Failure != GameSessionFailure.None) break;
-            if (item.Remove) runs.Run(SessionScriptPoint.RemoveItem, item.Item, holder ?? SessionEventKinds.PlayerEntity, null);
+            if (item.Remove) runs.Run(SessionScriptPoint.RemoveItem, item.Item, item.Holder ?? SessionEventKinds.PlayerEntity, null);
             if (runs.Failure != GameSessionFailure.None) break;
         }
         ThrowIfDisposed();

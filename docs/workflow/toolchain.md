@@ -4,6 +4,7 @@ Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `
 
 The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. These three are task checks, run by a change to the manifest, the census tables or these tools, and are not in the root check list. It holds identifiers, sizes and verdicts only, never pixels.
+The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`.
 
 ## Process-local environment
 
