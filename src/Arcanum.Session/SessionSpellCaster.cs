@@ -1209,6 +1209,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => ai.ScanCombatants(map);
         public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => ai.CombatantFacts(map, entity);
         public long DistanceToPc(string npc) => ai.DistanceToPc(npc);
+        public bool Knows(string npc) => ai.Knows(npc);
         public bool RunScript(AiScriptPoint point, string npc, string? triggerer) => ai.RunScript(point, npc, triggerer);
         public bool RunWaypoints(string npc) => ai.RunWaypoints(npc);
         public void RunStandpoints(string npc) => ai.RunStandpoints(npc);
