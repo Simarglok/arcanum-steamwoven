@@ -96,6 +96,8 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
 
     /// <summary>ARC-SCRIPT-2879: the shown map's item script host, for the remove-item scripts of a restock's clear and a body's inventory walk.</summary>
     public ISessionItemScriptHost? ItemScriptHost => _itemScripts?.Invoke();
+    /// <summary>ARC-SCRIPT-2887: the item script host the regeneration's created items run their get and insert-item scripts through (null without one: such an item is then not created).</summary>
+    public ISessionItemScriptHost? ItemScripts(SessionMapId map) => _itemScripts?.Invoke();
 
     /// <summary>
     /// ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need: the item script host, the NPC's life target and its stored stats (the combat host's, with what a spell wrote laid over them); null when the host has
