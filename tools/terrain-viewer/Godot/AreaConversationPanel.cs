@@ -354,7 +354,7 @@ public partial class AreaConversationPanel : CanvasLayer
     }
 
     /// <summary>One reply row (a button, in the band's geometry), added to the stack; <paramref name="chosen"/> runs after the pressing signal returns.</summary>
-    private void AddReplyRow(string name, string text, bool blocked, Action chosen)
+    private void AddReplyRow(string name, string text, bool blocked, Action chosen, string? reason = null)
     {
         var button = new Button
         {
@@ -363,6 +363,9 @@ public partial class AreaConversationPanel : CanvasLayer
             FocusMode = Control.FocusModeEnum.All, ActionMode = BaseButton.ActionModeEnum.Press,
         };
         if (_originalRows) StyleBandRow(button);
+        // ARC-UI-2791: the Original band shows the original's rows only (no grey, no tooltip); Steamwoven marks a reply the runtime cannot run by grey and a tooltip.
+        if (_originalRows) blocked = false;
+        else if (reason is not null) button.TooltipText = reason;
         button.SetMeta(ReplyTextMeta, text);
         if (_fonts is null) button.Text = text;
         else
@@ -400,7 +403,9 @@ public partial class AreaConversationPanel : CanvasLayer
             foreach (var option in conversation.Options)
             {
                 var token = option.Token;
-                AddReplyRow($"Reply{option.Number}", AreaConversationText.OptionText(option, NumberedReplies), option.Block is not null, () => ChooseToken(token));
+                var reason = AreaConversationText.BlockReason(option);
+                if (reason is not null) GD.Print($"ARC-UI-2791 dialog reply {option.Number} cannot run ({reason})");
+                AddReplyRow($"Reply{option.Number}", AreaConversationText.OptionText(option, NumberedReplies), reason is not null, () => ChooseToken(token), reason);
             }
         }
         var outcome = conversation is null ? string.Empty : AreaConversationText.Outcome(conversation);
@@ -519,10 +524,10 @@ public partial class AreaConversationPanel : CanvasLayer
     private static void SetRowFontColour(Button button, (byte R, byte G, byte B) colour)
     {
         var tint = new Color(colour.R / 255f, colour.G / 255f, colour.B / 255f);
-        foreach (var name in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color" }) button.AddThemeColorOverride(name, tint);
+        foreach (var name in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color" }) button.AddThemeColorOverride(name, tint);
     }
 
-    /// <summary>The row the pointer or the keyboard focus is on draws lit: the original's second font, yellow (ledger DH6; a blocked row, which the original has none of, stays grey).</summary>
+    /// <summary>The row the pointer or the keyboard focus is on draws lit: the original's second font, yellow (ledger DH6; a blocked row, which the original has none of, stays unlit, ARC-UI-2791).</summary>
     private void LightRows()
     {
         for (var i = 0; i < _buttons.Count; i++)

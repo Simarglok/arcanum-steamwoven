@@ -175,10 +175,14 @@ public sealed class AreaConversationTests
         var conversation = DialogConversation.Start(document, Request(), new DialogConversationPorts(state, state, session.Flags, state));
         CollectionAssert.AreEqual(new[]
         {
-            "1. [generated 'b:' phrase; generic text not loaded]  (not supported here: UnsupportedInteraction)",
+            "1. [generated 'b:' phrase; generic text not loaded]",
             "2. [generated 'k:' phrase; generic text not loaded]",
-            "3. x  (not supported here: UnsupportedOperation, record 4 Action op 0)",
+            "3. x",
         }, conversation.Options.Select(AreaConversationText.Option).ToArray());
+        // ARC-UI-2791: the blocked reason stays out of the row text and is offered separately (log, tooltip).
+        CollectionAssert.AreEqual(new[] { "not supported here: UnsupportedInteraction", null, "not supported here: UnsupportedOperation, record 4 Action op 0" },
+            conversation.Options.Select(AreaConversationText.BlockReason).ToArray());
+        Assert.IsFalse(conversation.Options.Any(option => AreaConversationText.OptionText(option, numbered: false).Contains("not supported")));
 
         var stopped = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{wa 1}{2}{x}{}{1}{}{0}{}")), Request(),
             new DialogConversationPorts(state, state, session.Flags, state));
