@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     private string? _areaRoofCompanionCells;
     // ARC-WORLD-2792: the AI host's walked NPCs are covered where they stand now; their cover flags (not their cells) decide a new publish, so a step inside one room costs nothing.
     private string? _areaRoofMoverCells, _areaRoofPublishedMoverCells;
-    private (AreaAiHost? Host, long Movers, long Roofs)? _areaRoofMoverStamp;
+    private (AreaAiHost? Host, long Movers, long Roofs, string Companions)? _areaRoofMoverStamp;
     private Dictionary<(long, long), AreaRoofDraw> _areaRoofDraws = new();
     private Dictionary<(long, long), AreaDrawCommand[]> _areaRoofTileCommands = new();
     private Dictionary<(long, long), AreaObjectKey[]> _areaRoofBodies = new();
@@ -63,12 +63,18 @@ public partial class TerrainViewerApp
         var signature = string.Join(";", companions.Select(c => $"{c.Key.SourceIndex}@{c.Cell.X},{c.Cell.Y}"));
         // ARC-WORLD-2792 (ledger RF10): an NPC the AI host walked is covered where it stands now, not on its T0 tile: one that came out of a roofed building is drawn, one that went in is hidden.
         var host = _aiHost is { } ai && ai.Scene.RuntimeMap == CurrentAreaMap ? ai : null;
-        var moverStamp = (host, host?.Movers.Version ?? -1, grid.Revision);
+        var moverStamp = (host, host?.Movers.Version ?? -1, grid.Revision, signature);
         if (_areaRoofMoverStamp != moverStamp)
         {
             _areaRoofMoverStamp = moverStamp;
-            _areaRoofMoverCells = host is null ? "" : string.Join(";", host.Movers.All.Where(m => companions.All(c => c.Key != m.Key))
-                .Select(m => $"{m.Entity}:{(grid.IsCovered(m.Cell.X, m.Cell.Y, true, AreaRoofIndoor) ? 1 : 0)}"));
+            // The key is in the string: a window move re-keys a mover (AreaAiHost.Rebind) without changing its covered state, and the cover set is by key.
+            var held = companions.Select(c => c.Key).ToHashSet();
+            var cells = new System.Text.StringBuilder();
+            if (host is not null)
+                foreach (var m in host.Movers.All)
+                    if (!held.Contains(m.Key))
+                        cells.Append(m.Entity).Append('@').Append(m.Key.SourceIndex).Append(':').Append(m.Key.Offset).Append(grid.IsCovered(m.Cell.X, m.Cell.Y, true, AreaRoofIndoor) ? "+;" : "-;");
+            _areaRoofMoverCells = cells.ToString();
         }
         lap?.Step("publish");
         if (grid.Revision != _areaRoofRevision || signature != _areaRoofCompanionCells || _areaRoofMoverCells != _areaRoofPublishedMoverCells)
