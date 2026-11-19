@@ -340,8 +340,25 @@ public partial class TerrainViewerApp
         if (CreatedCell(owner, obj) is { } created) return created;
         // ARC-SCRIPT-1829: a created critter (where its mover stands, else its created cell) and an item lying on the shown map (made, created or dropped: the placed item's cell); an item nobody has put on the ground has no place to draw.
         if (CreatedCritterCell(owner, obj) is { } critter) return critter;
-        if (_spellCastMap?.Row(obj) is { } row) return LiveCell(owner, row);
+        if (_spellCastMap?.Row(obj) is { } row) return row.Type is >= 5 and <= 14 ? GroundItemEyeCandyCell(owner, obj, row) : LiveCell(owner, row);
         return owner.QueryPlacedItems().FirstOrDefault(i => i.Entity == obj && i.Map == new SessionMapId(CurrentAreaMap)) is { } item ? item.Cell : null;
+    }
+
+    private (GameSessionOwner Session, long Revision, long Seeds, int Map, IReadOnlyDictionary<string, SessionGroundItem>? Ground)? _eyeCandyGround;
+
+    /// <summary>
+    /// ARC-SCRIPT-2020: where a map item row's script eye candy is anchored. The original anchors the effect on the object itself, so an item shows it only where it is drawn: the cell the ground inventory gives now (the map row's cell
+    /// while it lies there, the placed cell after a drop, a throw or a push), none when the item is carried (taken by the hero, held by an NPC, in a container or a junk pile), destroyed or switched off. A map with no inventory seed keeps
+    /// the row's own cell (nothing can have moved or taken its items).
+    /// </summary>
+    private CellCoord? GroundItemEyeCandyCell(GameSessionOwner owner, string obj, AreaObjectRecord row)
+    {
+        var stamp = (owner, owner.Version.Revision, owner.QueryInventorySeedGeneration(), CurrentAreaMap);
+        if (_eyeCandyGround is not { } known || known.Session != stamp.owner || known.Revision != stamp.Revision || known.Seeds != stamp.Item3 || known.Map != stamp.CurrentAreaMap)
+            _eyeCandyGround = known = (owner, stamp.Revision, stamp.Item3, CurrentAreaMap, owner.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.GroupBy(g => g.Item.Entity).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal));
+        if (known.Ground is not { } ground) return LiveCell(owner, row);
+        if (!ground.TryGetValue(obj, out var lying) || owner.QueryItemOff(new SessionMapId(CurrentAreaMap), obj, lying.Item.Facts.OffInData)) return null;
+        return lying.Cell;
     }
 
     /// <summary>ARC-SCRIPT-1829: the cell of a critter the session created on the shown map (a summoned or generated one), where the AI has moved it, else where it was made; null for another kind, another map or one that is gone.</summary>
