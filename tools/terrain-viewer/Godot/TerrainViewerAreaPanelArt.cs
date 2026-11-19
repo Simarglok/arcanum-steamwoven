@@ -89,10 +89,9 @@ public partial class TerrainViewerApp
     /// <summary>A read portrait's texture, made once; null when it did not read or decode.</summary>
     private Texture2D? PortraitTexture(int id)
     {
-        if (_portraitContent?.Portraits.GetValueOrDefault(id) is not { Status: AreaPortraitStatus.Ready, Bytes: { } bytes }) return null;
+        if (_portraitContent?.Portraits.GetValueOrDefault(id) is not { Status: AreaPortraitStatus.Ready, Bytes: not null }) return null;
         if (_portraitTextures.TryGetValue(id, out var known)) return known;
-        var image = new Image();
-        Texture2D? texture = image.LoadBmpFromBuffer(bytes) == Error.Ok && !image.IsEmpty() ? ImageTexture.CreateFromImage(image) : null;
+        var texture = PortraitHd.Texture(_portraitContent.Portraits[id]); // ARC-UI-2865: draws the pack's HD portrait when the HD setting is on
         if (texture is null) GD.Print($"ARC-UI-024 portrait {id}: the image did not decode");
         _portraitTextures[id] = texture;
         return texture;
