@@ -46,6 +46,8 @@ public sealed record AreaAiScene
     public Func<AreaStepAssessment, IReadOnlyList<string>>? ClosedPortalsOf { get; init; }
     /// <summary>ARC-DEV-209: the live passage of every door and window of the shown map (<see cref="AreaPortals.Passages"/>), which the planners and the step tests read in place of the T0 edge rules; null: T0.</summary>
     public Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? Passages { get; init; }
+    /// <summary>ARC-SCRIPT-2860 (TQ11, UL3): the same passage as one walker asks it (<see cref="AreaPortals.Passages(GameSessionOwner, string)"/>): a portal's unlock script runs for that walker as the triggerer at the step test. Null: every walker reads <see cref="Passages"/>.</summary>
+    public Func<string, IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? PassagesOf { get; init; }
     /// <summary>ARC-DEV-118: told after the host touched sectors in the session's cache (a planner reading a goal in an unloaded sector, RL11), so the
     /// chart reads what entered the cache.</summary>
     public Action? SectorsTouched { get; init; }
@@ -1967,7 +1969,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (from == to) return true;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(to));
-        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward), PassagesFor(id)).Assess(chart, direction) == RouteStepVerdict.Open;
     }
 
     public AiAttackFacts AttackFacts(string id, string target)
@@ -2006,7 +2008,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
         if (touch) TouchPath(from, to);
-        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target), _scene.Passages);
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target), PassagesFor(id));
         RoutePlan plan;
         switch (request.Kind)
         {
@@ -2077,7 +2079,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, PassagesFor(id)).Assess(chart, direction) == RouteStepVerdict.Open;
         // ARC-MAGIC-1189 (TT10): on a step that can start, a trap the walker spots on the next tile blocks it, which ends the walk as a step that cannot start does (EX20);
         // a step that cannot start anyway rolls nothing, as the hero's step gate (asked for an open step only).
         if (open && TrapSpottedOn(id, next)) return AiStepBlock.CannotStart;
@@ -3731,7 +3733,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (Tile(npc) is not { } from || Tile(target ?? Pc) is not { } to) return null;
         // The target is no exception: the direct attempt treats it as any other blocker of a line through its cell.
-        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(npc, null), _scene.Passages);
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(npc, null), PassagesFor(npc));
         return RoutePlanner.AwayTile(source, ToChart(from), ToChart(to), range) is { } tile ? ToWorld(tile) : null;
     }
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);
@@ -3942,6 +3944,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return Started(npc, RunOf(npc), AiExecutorRules.StartSpreadOut(this, npc, Pc));
     }
 
+    // ARC-SCRIPT-2860 (UL3): the live passages as the walker walker asks them (its unlock-script runs name it), else the scene's shared ones.
+    private Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? PassagesFor(string walker) =>
+        _scene.PassagesOf is { } of ? () => of(walker) : _scene.Passages;
+
     /// <summary>
     /// ARC-AI-1315: the blocked-step test of goal 68's tile choice (0x425760): the step from the object's tile to the neighbouring <paramref name="next"/> is clear when no living
     /// critter stands on it and the terrain, walls and objects let the step through (the route source's verdict, with the moved records and the other movers' cells as the planner
@@ -3953,7 +3959,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (LivingCritterOn(next, id)) return false;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, null), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, null), PassagesFor(id)).Assess(chart, direction) == RouteStepVerdict.Open;
     }
 
     public AiFleeing PerformFleeing(string npc)
