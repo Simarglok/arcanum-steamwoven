@@ -80,7 +80,7 @@ debug-only "Diagnostic view" (ARC-UI-2764).
   the modal window: an exit tile transfer, a scripted dialog or an input-device change ends the run ("the attempt did not happen"), the
   camera does not follow the hero meanwhile, and a victim that steps off between the goal's range test and the attempt is still robbed
   (one cell of slack, as the smoke tolerates).
-- **The thief's own script** (point 33) is not run: the viewer's hero carries no scripts. A victim's catching-thief script that the
+- **The thief's own script** (point 33) is not run for the hero thief: the viewer's hero carries no scripts. An NPC thief's (script action 115, ARC-DEV-246) runs through `AreaAiScene.CaughtThief` → `AreaUseScriptHost.RunCaughtThief` (ARC-SCRIPT-2858: the thief attached, the victim the triggerer, answer ignored) before the victim's point 11. A victim's catching-thief script that the
   script host cannot run (an action outside its admission set, no content) stops the consequences as Not ready, with nothing applied.
 - **Worn items** (ARC-DEV-1338, [PP12](../research/ledger/skills.md#pick-pocket-arc-skills-010)): the original steals a worn item (its slot raises the difficulty, SC11), and so does the session. The steal's move
   is `TakeItemFromNpc` with `unwield`, as the loot of a body and the barter window's doll take one: the insert check sees the item unwielded (inventory location −1), wield-off (25) and

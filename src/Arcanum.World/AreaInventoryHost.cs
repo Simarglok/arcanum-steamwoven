@@ -981,7 +981,7 @@ public sealed class AreaInventoryHost
     /// <summary>Plain text for a transfer that did not move the item: a gate script that declined it (ARC-SCRIPT-041, with what it
     /// printed), or the refusal.</summary>
     public static string NotMoved(InventoryMutationResult result) => result.DeclinedBy is { } point
-        ? (point == SessionScriptPoint.Get ? "the item's get script declined it" : "the PC's transfer script declined it") + Printed(result)
+        ? (point == SessionScriptPoint.Get ? "the item's get script declined it" : "the transfer script declined it") + Printed(result)
         : Refusal(result.Failure, result.Verdict);
 
     /// <summary>Plain text for a transfer refusal shown in the window and the status line; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal
