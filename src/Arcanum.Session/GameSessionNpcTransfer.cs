@@ -197,7 +197,7 @@ public sealed partial class GameSessionOwner
         if (records > _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         string targetPile;
-        var report = new CreatedScripts();
+        var report = new CreatedScripts { Defer = true };
         if (target is { } existing) targetPile = existing.Entity;
         else
         {
@@ -206,6 +206,7 @@ public sealed partial class GameSessionOwner
             targetPile = created.Value.Entity;
         }
         insert.Runs?.Commit();
+        report.CommitPending();
         if (emptied) DestroyObject(source.Entity);
         else _inventory.Piles[source.Entity] = source.Quantity - count;
         _inventory.Piles[targetPile] = (target?.Quantity ?? 0) + count;
@@ -546,7 +547,7 @@ public sealed partial class GameSessionOwner
         var insert = RunPileInsert(scripts, source.Entity, npc, npcTriggerer: true);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = NpcStackOfType(npc, source.AmmoType);
-        var report = new CreatedScripts();
+        var report = new CreatedScripts { Defer = true };
         return MoveUnits(source, count, into, into is null ? () => NewNpcStack(npc, newStackKind, source.AmmoType, count, insertCheck, scripts: scripts, report: report) : null, insert, report);
     }
 
@@ -597,6 +598,7 @@ public sealed partial class GameSessionOwner
             verdict = SessionInsertVerdict.Accepted;
         }
         insert.Runs?.Commit();
+        report?.CommitPending();
         if (emptied) DestroyObject(source.Entity);
         else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
         Revise();
@@ -641,6 +643,16 @@ public sealed partial class GameSessionOwner
         internal List<SessionItemScriptRun> Runs { get; } = [];
         internal List<SessionScriptMessage> Messages { get; } = [];
         internal ScrRunResult? Insert { get; set; }
+
+        /// <summary>The move also has a source pile whose own insert-item runs commit first (the original runs the source's 21 before the new item's scripts): the new item's runs wait in <see cref="Pending"/> for <see cref="CommitPending"/>.</summary>
+        internal bool Defer { get; init; }
+        internal ItemScriptRuns? Pending { get; set; }
+
+        internal void CommitPending()
+        {
+            Pending?.Commit();
+            Pending = null;
+        }
 
         /// <summary>The result with the created object's script runs, lines and answer added after its own.</summary>
         internal InventoryMutationResult Apply(InventoryMutationResult result) => Runs.Count == 0 ? result
@@ -706,7 +718,8 @@ public sealed partial class GameSessionOwner
             StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
             if (runs is not null)
             {
-                runs.Commit();
+                if (report is { Defer: true }) report.Pending = runs;
+                else runs.Commit();
                 if (report is not null)
                 {
                     report.Runs.AddRange(runs.Runs);

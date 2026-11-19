@@ -94,17 +94,18 @@ public sealed partial class GameSessionOwner
         if (piles.Length == 0 && marked.Count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, 0, null, 0, Version);
         if (_revision == long.MaxValue) return Refuse(GameSessionFailure.RevisionExhausted);
         string? pile = target?.Entity;
-        var report = new CreatedScripts();
+        var report = new CreatedScripts { Defer = true };
         if (piles.Length > 0 && target is null)
         {
             // 0x464830 creates the first pile with its coins and moves it in (0x4617F0); the later piles join it.
             var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal, scripts: scripts, report: report);
-            if (created is null) return Refuse(refusal!.Value.Failure);
+            if (created is null) return Refuse(refusal!.Value.Failure) with { Messages = refusal.Value.Messages };
             pile = created.Value.Entity;
             if (identify) marked.Add(pile);
         }
         if (pile is not null) _inventory.Piles[pile] = (int)((target?.Quantity ?? 0) + coins);
         insert.Runs?.Commit();
+        report.CommitPending();
         foreach (var entry in piles) DestroyObject(entry.Entity);
         _inventory.Identified.UnionWith(marked);
         Revise();
@@ -176,8 +177,9 @@ public sealed partial class GameSessionOwner
                 : TakeItemFromNpc(Version, npc, item, heroInsert, scripts, unwield: wornItem, npcWearer: npcWearer);
         // A recipient's transfer script that declined the item (DeclinedBy, ARC-SCRIPT-2827) leaves it with the hero: no payment.
         if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is not null || total == 0) return moved;
-        var paid = GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert);
-        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version } : paid with { Item = moved.Item, Version = Version };
+        var paid = GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert, scripts);
+        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version, Scripts = [.. moved.Scripts, .. paid.Scripts], Messages = [.. moved.Messages, .. paid.Messages] }
+            : paid with { Item = moved.Item, Version = Version };
     }
 
     /// <summary>
@@ -357,7 +359,7 @@ public sealed partial class GameSessionOwner
         var insert = RunPileInsert(scripts, source.Entity, holder, npcTriggerer: false);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = ContainerStackOfType(holder, source.AmmoType);
-        var report = new CreatedScripts();
+        var report = new CreatedScripts { Defer = true };
         return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind, scripts, report) : null, insert, report);
     }
 }

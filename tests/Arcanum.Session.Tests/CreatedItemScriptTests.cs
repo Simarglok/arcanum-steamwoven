@@ -16,7 +16,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class CreatedItemScriptTests
 {
-    internal const int GetScript = 703, InsertScript = 704;
+    internal const int GetScript = 703, InsertScript = 704, SourceScript = 706;
     internal const int GoldProto = 9056, AmmoProto = 7059;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionItemKind GoldPile = new(SessionItemType.Gold, GoldProto, 3200, 33200);
@@ -30,7 +30,10 @@ public sealed class CreatedItemScriptTests
             [InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.PrintLine, (Number, 6), (Number, 0)), C(ScrCatalogue.Action.ReturnRunDefault)),
         };
 
-        public ScrSlot? Slot(ScrObjectRef attachee, int point) => null;
+        /// <summary>The entities that carry a source insert-item script (SourceScript) of their own, as a seed row's slot.</summary>
+        public HashSet<string> Scripted { get; } = new(StringComparer.Ordinal);
+
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => point == SessionScriptPoint.InsertItem && Scripted.Contains(attachee.Code) ? new ScrSlot(SourceScript, 0, 0) : null;
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
         public bool GlobalFlag(int index) => session.Flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), session.FlagVersion, new FlagId(index))).Value ?? false;
         public int StoryState() => throw new InvalidOperationException("not admitted");
@@ -50,14 +53,15 @@ public sealed class CreatedItemScriptTests
     internal static Func<int, IReadOnlyList<SessionPrototypeScript>?> Prototypes { get; } = prototype =>
         prototype is GoldProto or AmmoProto ? new SessionPrototypeScript[] { new(SessionScriptPoint.Get, GetScript, 0, 0), new(SessionScriptPoint.InsertItem, InsertScript, 0, 0) } : null;
 
-    private static GameSessionOwner Hero(bool attach = true)
+    private static GameSessionOwner Hero(bool attach = true, bool scriptedCoins = false)
     {
         var owner = CreateWith(HalfElf());
         var seed = Seed();
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed with
         {
             Holders = [.. seed.Holders, new("archer", SessionHolderKind.Npc, false, false, [], ["arrows"])],
-            Items = [.. seed.Items, new SessionSeedItem("arrows", Facts(SessionItemType.Ammo, 3300, quantity: 30) with { AmmoType = 0 }, null)],
+            Items = [.. seed.Items.Select(item => scriptedCoins && item.Entity == "coins" ? item with { Facts = Facts(SessionItemType.Gold, 3200, quantity: 5, scripts: SessionScriptPoint.InsertItem) } : item),
+                new SessionSeedItem("arrows", Facts(SessionItemType.Ammo, 3300, quantity: 30) with { AmmoType = 0 }, null)],
         }).Failure);
         if (attach) owner.AttachItemScripts(Prototypes);
         return owner;
@@ -145,5 +149,42 @@ public sealed class CreatedItemScriptTests
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, (int?)SessionScriptPoint.Get), (refused.Disposition, refused.Failure, refused.DeclinedBy));
         Assert.AreEqual(revision, owner.Version.Revision);
         Assert.AreEqual(30, owner.QueryHeroAmmo().Single(stack => stack.Entity == "made:1").Units, "the hero's stack keeps every unit");
+    }
+
+    [TestMethod]
+    public void The_source_piles_insert_script_runs_before_the_new_piles_scripts_and_both_apply_with_the_move()
+    {
+        using var owner = Hero(scriptedCoins: true);
+        var host = new Host(owner);
+        host.Scripted.Add("coins");
+        // The source's 21 sets flag 3; the new pile's get and insert-item scripts follow it (the original's order; each run is planned against the state before the move, so a later run does not see an earlier run's pending flag: the documented limit).
+        host.Programs[SourceScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var moved = owner.MoveGoldBetweenNpcs(owner.Version, "merchant", "archer", 5, GoldPile, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, "made:1", 1L), (moved.Disposition, moved.Item, owner.Version.Revision));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.InsertItem, "coins"), (SessionScriptPoint.Get, "made:1"), (SessionScriptPoint.InsertItem, "made:1") }, Points(moved));
+        Assert.AreEqual(true, ReadFlag(owner, 3));
+    }
+
+    [TestMethod]
+    public void A_new_piles_insert_script_that_the_session_cannot_apply_refuses_the_whole_move()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.AddEffect, ((byte)0, 0), (Number, 50), (Number, 5)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var revision = owner.Version.Revision;
+        var given = owner.GiveGoldToNpc(owner.Version, "virgil", 40, GoldPile, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, revision, 0), (given.Disposition, given.Failure, owner.Version.Revision, owner.QueryNpcGold("virgil")));
+        Assert.AreEqual(false, ReadFlag(owner, 3) == true, "the get run's flag was not applied either");
+    }
+
+    [TestMethod]
+    public void An_insert_check_refusal_after_the_get_script_applies_none_of_the_scripts_effects()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        var refused = owner.GiveGoldToNpc(owner.Version, "virgil", 40, GoldPile, _ => SessionInsertVerdict.NoRoom, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, SessionInsertVerdict.NoRoom), (refused.Disposition, refused.Failure, refused.Verdict));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:1") }, Points(refused));
+        Assert.AreEqual(false, ReadFlag(owner, 3) == true);
     }
 }
