@@ -56,7 +56,8 @@ public static partial class TerrainViewerSelfTest
             Require(panel.IsOpen && panel.NpcLineForSelfTest == "Greetings, [PC]. The road is closed.", "panel shows the substituted NPC line");
             Require(lines.Count == 1 && lines[0] == "P:Greetings, [PC]. The road is closed.", $"the open hands the NPC line out as a persistent bubble: {string.Join("|", lines)}");
             Require(panel.ButtonsForSelfTest.Count == 3 && panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "eligible replies in order");
-            Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].Text.Contains("UnsupportedInteraction"), "generated barter is shown blocked");
+            Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].TooltipText.Contains("UnsupportedInteraction") && !panel.ButtonsForSelfTest[2].Text.Contains("not supported"),
+                "generated barter is shown blocked, the reason in the tooltip and not in the row text (ARC-UI-2791)");
             panel.Choose(3);
             Require(conversation.Turn == 1 && panel.OutcomeForSelfTest.Contains("UnsupportedTransition"), "blocked reply runs nothing");
             Require(picks == 0 && lines.Count == 1, "a reply that was not processed keeps the bubble");
@@ -82,6 +83,9 @@ public static partial class TerrainViewerSelfTest
             await ScreenshotAsync(host, "original-chrome-hidden");
             Require(panel.ChromeShownForSelfTest == (false, false, false, false, false) && !panel.LeaveOfferedForSelfTest && panel.ButtonsForSelfTest.Count > 0,
                 $"Original shows only the reply rows: {panel.ChromeShownForSelfTest}");
+            // ARC-UI-2791: the Original band draws the blocked reply as any row: its own text, no suffix, no tooltip (it still chooses nothing).
+            Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].TooltipText.Length == 0 && !panel.ButtonsForSelfTest[2].Text.Contains("not supported")
+                && !(panel.ButtonsForSelfTest[2].GetMeta("replyText").AsString().Contains("not supported")), "Original: a blocked reply is a plain row without the diagnostic suffix");
             var closedAtCancel = closed;
             panel.Cancel();
             Require(closed == closedAtCancel && panel.IsOpen && conversation.Phase == DialogConversationPhase.AwaitingSelection, "Original: the cancel does not leave an awaiting dialog");

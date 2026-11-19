@@ -1450,9 +1450,13 @@ public static class AreaConversationText
             _ when option.Text.Length > 0 => option.Text,
             _ => "[no reply qualifies: generated farewell; generic text not loaded]",
         };
-        var block = option.Block is { } blocked ? $"  (not supported here: {blocked.Kind}{Where(blocked.Source)})" : string.Empty;
-        return numbered ? $"{option.Number}. {text}{block}" : $"{text}{block}";
+        // ARC-UI-2791: the reply row is the reply's own text only; the reason a reply cannot run is BlockReason (log, tooltip), never part of the row.
+        return numbered ? $"{option.Number}. {text}" : text;
     }
+
+    /// <summary>ARC-UI-2791: why the runtime cannot run this reply (a project diagnostic for the log and the Steamwoven tooltip), or null when it runs.</summary>
+    public static string? BlockReason(DialogOption option) =>
+        option.Block is { } blocked ? $"not supported here: {blocked.Kind}{Where(blocked.Source)}" : null;
 
     /// <summary>ARC-UI-2028 (ledger DF1–DF3): the dialog ended with the NPC's last line (a final line, the last words after an insult, a refusal to talk on): the original says it as a
     /// bubble and closes the dialog at once, so no window shows it.</summary>
