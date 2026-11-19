@@ -200,7 +200,7 @@ public sealed partial class DialogConversation
                 Turn++;
                 if (plan!.Target is null)
                 {
-                    // ARC-SCRIPT-2790 (FLM1): the node is not in the DLG; the blank final line has no text and no action (the original shows a single space and ends the talk).
+                    // ARC-SCRIPT-2790 (FLM1): the node is not in the DLG; the blank final line has no text and no action (the original shows a single space and ends the talk). The talk ends here, so the turn limit (which Admit tests only for a next step) is not checked.
                     CurrentNode = new DialogNodeId(plan.Reply.Action!.OfType<ConversationFinalLine>().Last().Node);
                     NpcLine = new DialogNpcLine(CurrentNode, string.Empty);
                     if (replyCombat is not { } missingCombat || StartCombat(missingCombat))

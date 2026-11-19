@@ -8,7 +8,7 @@ namespace Arcanum.Scripting.Tests.Dialog;
 
 /// <summary>
 /// Opt-in census of ARC-SCRIPT-2790 (<c>DAT_ROOT</c>, the game folder): the Player replies whose action string holds a final line <c>fl N</c> to a node that is not an NPC record of the same DLG.
-/// A node absent from the DLG is no error in the original (the line stays blank, the string goes on, the dialog ends; ledger FM1) and the reply is offered; a node that is a Player record stays
+/// A node absent from the DLG is no error in the original (the line stays blank, the string goes on, the dialog ends; ledger FLM1) and the reply is offered; a node that is a Player record stays
 /// greyed as <c>TargetInvalid</c> until the original's use of such a record is read (follow-up issue). Only counts and ids are printed, never original text.
 /// </summary>
 [TestClass]
