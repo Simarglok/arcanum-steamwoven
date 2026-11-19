@@ -2469,7 +2469,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
                     // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
-                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code).Disposition : _session.DestroyUsedItem(_session.Version, used.Code).Disposition;
+                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts).Disposition : _session.DestroyUsedItem(_session.Version, used.Code, ItemScripts).Disposition;
                     if (removed == GameSessionDisposition.Rejected) return false;
                     continue;
                 }
@@ -2716,7 +2716,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             case ScrObjectStateChange.DestroyItemNamed:
             {
-                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value);
+                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value, ItemScripts);
                 LastNamedItem = destroyed;
                 return destroyed.Disposition != GameSessionDisposition.Rejected;
             }
@@ -3071,7 +3071,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_itemUse is { } used && used.Equals(request.Object))
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
-                    if ((_itemUser is { } eater ? _session.NpcItemRemovalRefusal(eater.Code, used.Code) : _session.UsedItemDestructionRefusal(used.Code)) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
+                    if ((_itemUser is { } eater ? _session.NpcItemRemovalRefusal(eater.Code, used.Code, ItemScripts) : _session.UsedItemDestructionRefusal(used.Code, ItemScripts)) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
                     continue;
                 }
                 // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first; ARC-WORLD-2502: so is a container, whose invulnerable items the session's budgets may refuse to lay down.
@@ -3249,7 +3249,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value, ItemScripts);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }
