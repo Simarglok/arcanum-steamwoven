@@ -5,6 +5,7 @@ using Arcanum.Input;
 using Arcanum.Presentation.Audio;
 using Arcanum.Presentation.Display;
 using Arcanum.Presentation.Hud;
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session.Launcher;
 using Arcanum.Session.Settings;
 using Arcanum.World;
@@ -46,6 +47,8 @@ public static class ViewerSettingsConfig
     /// <summary>The line the HD setting had before ARC-UI-2174; read only when <see cref="Hd"/> is absent, never written.</summary>
     public const string HdInterface = "hd interface";
     public const string GeneratedInterface = "generated interface";
+    /// <summary>ARC-UI-2890: the layout of the generated interface: <c>column</c>, <c>column-thin</c> or <c>full-width</c> (an unknown word reads as the default).</summary>
+    public const string InterfaceLayout = "interface layout";
     public const string HdPack = "hd pack";
     public const string HdPackPath = "hd pack path";
     /// <summary>The line of the old HD graphics setting (ARC-UI-2174: no longer read or written; an old file keeps it).</summary>
@@ -54,7 +57,7 @@ public static class ViewerSettingsConfig
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, GeneratedInterface, InterfaceLayout, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -115,6 +118,7 @@ public static class ViewerSettingsConfig
             HdInterface = hdInterface,
             // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
             GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
+            InterfaceLayout = SteamwovenLayoutChoices.TryParse(read.Get(InterfaceLayout)) ?? defaults.InterfaceLayout,
             HdPackSource = HdPackSourceResolver.TryParseMode(read.Get(HdPack)?.ToLowerInvariant(), out var mode) ? mode : defaults.HdPackSource,
             HdPackPath = folder,
             Pad = Choice(read, PadSchemeLine, defaults.Pad),
@@ -134,7 +138,7 @@ public static class ViewerSettingsConfig
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
             new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)), new(AutoSwitch, Flag(settings.AutoSwitchWeapons)), new(FollowerSkills, Flag(settings.FollowerSkills)),
             new(ViolenceFilter, Flag(settings.ViolenceFilter)), new(Brightness, Number(settings.Brightness)), new(TextDuration, Number(settings.TextDuration)),
-            new(Hd, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
+            new(Hd, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)), new(InterfaceLayout, SteamwovenLayoutChoices.Name(settings.InterfaceLayout)),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
             new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),
         ];

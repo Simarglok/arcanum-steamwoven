@@ -189,6 +189,26 @@ the **column** hypothesis is tested. The full-width rules above stay as they are
 
 Unit tests: `SteamwovenColumnTests` (exact numbers at eight sizes and 1024 × 768 for both presets, tiling at more sizes).
 
+### The column in the viewer (ARC-UI-2890)
+
+The viewer draws the column for the play screen and the middle-band windows of the #2575 hook; the full-screen menus (BD-H) and the two-strip screens' backdrops are [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891).
+The Godot-free parts are `SteamwovenHudPlan.Column` / `WindowZone`, `SteamwovenWindowZone`, `SteamwovenBackdrops.Pieces` and `SteamwovenColumnEdges`; the drawing is `AreaGameBarPanel` with `SteamwovenEdgeView`.
+
+- **Option (AC1).** The game setting `interface layout` (`AreaGameSettings.InterfaceLayout`, the settings line of the same name, a launcher row after the generated interface): `column` (the default while the owner tests the hypothesis), `column-thin` or `full-width`
+  (`SteamwovenLayoutChoices`). This run's `ARC_STEAMWOVEN_LAYOUT` (the same three words, for the launcher's `--env`) overrides it. It is read only while the generated interface is on; with the HD option or the generated interface off the whole-factor layout is unchanged.
+- **Play screen (AC2).** Both strips stand in the column at `Column.TopStrip` / `BottomStrip` (the top strip on the band's lower edge, as before); no side boards, no bottom board; the only board is the sliver of the strip's wood above the top strip where its 41 units
+  are a little lower than the band (as wide as the column). The world is drawn over the whole frame. **End caps** (placeholder art drawn from numbers, `SteamwovenEdgeView`): a brass edge of about one unit (a dark line, a highlight and mid brass, at least 2 px) over the outermost pixels of each strip's
+  end and, outside it, a shadow on the world, seven units wide, falling off with the square of the distance, clipped to the frame. While a menu window is open the middle band's ends are capped too.
+- **Windows (AC3).** `SteamwovenWindowZone.Body` / `Screen` use `Column.Window.Zone` and the column's unit scale `3.6 · k · f`, so every window of the hook is as wide as the column. The family's wood fills `GapAbove` and `GapBelow` (`SteamwovenBackdrops.Pieces`: one piece per gap, two for a
+  two-part family split at the zone's left edge plus the left part's units; none where the zone fills the middle band, 16:9 at k = 1); its grain continues the window art's from the zone's top left. The world left and right of the column (`Column.WorldLeft`, `WorldRight`) is dimmed while a menu window
+  is open: a screen-texture shader darkens and desaturates it (`SteamwovenWorldDim`, default 0.45 and 0.55, in the column options, `SteamwovenColumnMode.WorldDim`); presentation only, the dimming takes no pointer, so a click on the world is what it is under an open window today.
+- **Edge elements (AC4).** The follower portraits hang from the frame's left edge (`AreaGameBarPanel.EdgeScreen`, the strips' screen moved to the frame's left); the spell pane stands 12 px right of the frame's left edge and 12 px above its bottom (`EdgeRect`, `EdgeBottom`); the combat list 8 px
+  left of the frame's right edge and 8 px under its top (`EdgeTop`); the text bubbles' and floaters' view is the frame's width between the strips (`FreeRect`). What takes the strips' screen (the sleep and fate views, the windows' free width `FreeArea`, `FreeLeft`) is the column's.
+  A pane wider than the side (1280 × 800: 160 px each side) lies partly under the strip, which draws over it: a recorded limit.
+- **Smoke (AC5).** `ARC_STEAMWOVEN_VARIANTS` takes `column` and `column-thin` (the default list now ends with them; `legacy` and `thin` are the Original look and the full-width layout of the owner's comparison). For each size it checks the strips' places and width, the free area, the boards, the caps,
+  the edge elements, the brass edge read back, the dimming read back (the world's mean brightness falls under an open menu), then opens the inventory and every window of the hook (the zone place, the pieces of the wood, the seam ratio at the zone's top and bottom edges) and saves
+  `PREFIX-hud-steamwoven-column[-thin]-WxH[-menu|-WINDOW].png` (local, never in git).
+
 ## Asset kit
 
 Part kinds:

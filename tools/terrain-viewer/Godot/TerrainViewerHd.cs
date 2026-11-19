@@ -1,5 +1,6 @@
 using Arcanum.Data.Hd;
 using Arcanum.Input;
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session.Settings;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -214,6 +215,22 @@ public partial class TerrainViewerApp
         // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
         HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
+        SyncInterfaceLayout();
+    }
+
+    private SteamwovenLayoutChoice? _appliedInterfaceLayout;
+
+    /// <summary>ARC-UI-2890 (AC1): the layout the game option chooses (the <c>interface layout</c> line; this run's ARC_STEAMWOVEN_LAYOUT overrides it with column, column-thin or full-width), given to the layout model once a change.</summary>
+    internal SteamwovenLayoutChoice EffectiveInterfaceLayout =>
+        SteamwovenLayoutChoices.TryParse(System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LAYOUT")) ?? _gameSettings.InterfaceLayout;
+
+    private void SyncInterfaceLayout()
+    {
+        var choice = EffectiveInterfaceLayout;
+        if (_appliedInterfaceLayout == choice) return;
+        _appliedInterfaceLayout = choice;
+        SteamwovenHud.Options = SteamwovenLayoutChoices.Options(choice);
+        _gameBarPanel?.Relayout();
     }
 
     /// <summary>ARC-RENDER-2060, ARC-RENDER-2076, ARC-UI-2174: the relit look is a component of HD, not a setting of its own: it is on exactly while the active

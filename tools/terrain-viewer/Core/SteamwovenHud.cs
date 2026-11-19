@@ -19,6 +19,12 @@ public sealed record SteamwovenHudPlan(
 {
     /// <summary>The device-pixel gap of the top band above the top strip's art (the board shows there).</summary>
     public int TopGap => TopStripY - Layout.Top.Band.Y;
+
+    /// <summary>ARC-UI-2890: the column plan of the layout model (null: the full-width layout). In column mode the strips are `Column.TopStrip` and `Column.BottomStrip`, the windows stand in `Column.Window`, and the world shows left and right of the column.</summary>
+    public SteamwovenColumnPlan? Column => Layout.Column;
+
+    /// <summary>ARC-UI-2890: the window zone: the column's (column-wide, at the column's unit scale) in column mode, else the layout's.</summary>
+    public PixelRect WindowZone => Column?.Window.Zone ?? Layout.WindowZone;
 }
 
 /// <summary>ARC-UI-2452: the prototype's plan builder and the panel-height variant it runs with.</summary>
