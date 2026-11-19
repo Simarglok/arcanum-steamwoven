@@ -156,7 +156,7 @@ public sealed class DestroyRemoveScriptTests
     }
 
     [TestMethod]
-    public void The_lines_the_remove_item_script_of_a_used_up_item_printed_are_the_results_messages()
+    public void The_used_up_items_remove_item_lines_come_with_its_result()
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
         using var _ = owner;
@@ -165,7 +165,7 @@ public sealed class DestroyRemoveScriptTests
         var host = new Host(owner, "nectar");
         host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.PrintLine, (Number, 7), (Number, 0)), C(ScrCatalogue.Action.ReturnRunDefault));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "nectar", Accept).Disposition);
-        var used = owner.DestroyUsedItem(owner.Version, "nectar", host);
+        var used = owner.DestroyUsedItemWithLines(owner.Version, "nectar", host);
         Assert.AreEqual(GameSessionDisposition.Changed, used.Disposition);
         CollectionAssert.AreEqual(new[] { new SessionScriptMessage(RemoveScript, 7, 0, $"line 7 of {RemoveScript}") }, used.Messages.ToArray(), "the hero is the triggerer: the plain line variant");
         Assert.IsTrue(owner.IsItemDestroyed("nectar"));

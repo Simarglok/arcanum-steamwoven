@@ -363,6 +363,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
+    // ARC-SCRIPT-2881: the lines the remove-item script (28) of the item a use script destroyed printed during the apply in flight, read by the use after it.
+    private readonly List<SessionScriptMessage> _removalMessages = [];
     private readonly List<AreaScriptFade> _fades = [];
     private int _fadeClears;
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
@@ -2436,19 +2438,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
             || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
-        var removalMark = _removalLines.Count;
-        if (!Apply(effects, write))
-        {
-            _removalLines.RemoveRange(removalMark, _removalLines.Count - removalMark);
-            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
-        }
-        // ARC-SCRIPT-2880 (IE3): the lines the remove-item scripts of the run's destroys printed (the item in use, destroy item named, the items a destroyed NPC or container gives up) join the run's printed lines, after its own.
-        foreach (var removed in _removalLines.Skip(removalMark))
-        {
-            lines.Add(removed.Text);
-            printedLines.Add(new(removed.Kind, removed.Text));
-        }
-        _removalLines.RemoveRange(removalMark, _removalLines.Count - removalMark);
+        // ARC-SCRIPT-2881: the lines the used-up item's remove-item script (28) printed with the deletion follow the run's own, also when a later action of the run was refused (the deletion and its 28 are committed by then).
+        var removalFrom = _removalMessages.Count;
+        var applied = Apply(effects, write);
+        var removalLines = _removalMessages.GetRange(removalFrom, _removalMessages.Count - removalFrom);
+        _removalMessages.RemoveRange(removalFrom, removalLines.Count);
+        foreach (var message in removalLines) { lines.Add(message.Text); printedLines.Add(new(message.Kind, message.Text)); }
+        if (!applied) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects") { Printed = [.. removalLines.Select(m => new AreaPrintedLine(m.Kind, m.Text))] };
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
@@ -2467,15 +2463,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})") { Printed = printedLines };
     }
 
-    // ARC-SCRIPT-2880: the lines the remove-item scripts printed in the destroys the run being applied makes, in order; the run's result takes them. Bounded: a host that never ends a run (a call outside one) keeps the first lines only.
-    private readonly List<SessionScriptMessage> _removalLines = [];
-    private const int MaxPendingRemovalLines = 256;
-
-    private void NoteRemovalLines(IReadOnlyList<SessionScriptMessage> lines)
-    {
-        foreach (var line in lines)
-            if (_removalLines.Count < MaxPendingRemovalLines) _removalLines.Add(line);
-    }
+    // ARC-SCRIPT-2880: the lines the remove-item scripts of the destroys the run being applied makes printed join the used-up item's (ARC-SCRIPT-2881) in one list, which the run's result takes.
+    private void NoteRemovalLines(IReadOnlyList<SessionScriptMessage> lines) => _removalMessages.AddRange(lines);
 
     private GameSessionMutationResult NotedRemoval(GameSessionMutationResult result) { NoteRemovalLines(result.Messages); return result; }
 
@@ -2574,9 +2563,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
                     // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
-                    // ARC-SCRIPT-2880: the lines the removal's script printed are shown with the run's.
-                    var removed = _itemUser is { } eater ? NotedRemoval(_session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts)).Disposition : NotedRemoval(_session.DestroyUsedItem(_session.Version, used.Code, ItemScripts)).Disposition;
-                    if (removed == GameSessionDisposition.Rejected) return false;
+                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts) : _session.DestroyUsedItemWithLines(_session.Version, used.Code, ItemScripts);
+                    if (removed.Disposition == GameSessionDisposition.Rejected) return false;
+                    _removalMessages.AddRange(removed.Messages);
                     continue;
                 }
                 // ARC-SCRIPT-2501 (BS3): a scenery of the shown map; ARC-WORLD-2502: a container of it (its destroy point first, then the destroy with the drop of its invulnerable items).
@@ -3506,9 +3495,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
         }
         // ARC-SCRIPT-2880: the lines the removal scripts of the dropped items print have no run to join here (the talk host shows none of a transform's), so they are not kept.
-        var removalMark = _removalLines.Count;
+        var removalMark = _removalMessages.Count;
         var destroyed = NotedRemoval(_session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true, scripts: ItemScripts));
-        _removalLines.RemoveRange(removalMark, _removalLines.Count - removalMark);
+        _removalMessages.RemoveRange(removalMark, _removalMessages.Count - removalMark);
         if (destroyed.Disposition == GameSessionDisposition.Rejected) return Undo();
         CarryFacing();
         return new ScrObjectRef(_shownMap, critter.Entity);

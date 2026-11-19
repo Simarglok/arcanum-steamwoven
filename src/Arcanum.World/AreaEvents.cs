@@ -94,6 +94,9 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
 
     private readonly Func<ISessionItemScriptHost?>? _itemScripts;
 
+    /// <summary>ARC-SCRIPT-2887: the item script host the regeneration's created items run their get and insert-item scripts through (null without one: such an item is then not created).</summary>
+    public ISessionItemScriptHost? ItemScripts(SessionMapId map) => _itemScripts?.Invoke();
+
     /// <summary>
     /// ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need: the item script host, the NPC's life target and its stored stats (the combat host's, with what a spell wrote laid over them); null when the host has
     /// no script host or does not know the NPC's combat values.
