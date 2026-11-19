@@ -120,15 +120,87 @@ public sealed class ScrDeferredCallTests
     }
 
     [TestMethod]
-    public void The_S5_set_and_call_at_staying_outside()
+    public void The_S5_set_takes_call_at_beside_call_in()
     {
         Assert.IsTrue(ScrAdmissionSet.S3.IsSubsetOf(ScrAdmissionSet.S5));
-        CollectionAssert.AreEquivalent(ScrAdmissionSet.S3.Actions.Append(54).Append(125).ToArray(), ScrAdmissionSet.S5.Actions.ToArray());
+        CollectionAssert.AreEquivalent(ScrAdmissionSet.S3.Actions.Append(54).Append(55).Append(125).ToArray(), ScrAdmissionSet.S5.Actions.ToArray());
         Assert.AreSame(ScrAdmissionSet.S5, new ScrRunOptions().Admission);
-        var at = Run(With(Program(Do(C(55, N(5), N(0), (Triggerer, 0), (Attachee, 0), N(3600))), Do(C(1)))));
-        Assert.AreEqual((ScrOutcome.Refused, ScrRefusalCode.ActionNotAdmitted, 55), (at.Outcome, at.Refusal!.Code, at.Refusal.Type));
         Assert.IsTrue(ScrRuleProfile.Original.CallDelayWraps);
         Assert.IsFalse(ScrRuleProfile.Steamwoven.CallDelayWraps);
+    }
+
+    // ARC-SCRIPT-2824 (ledger TQ17, TE2): call script at schedules the call for the operand's time of day, counted from the start hour (15 for the installed startup), in game seconds
+    // (no factor 8); the roles and the line are call in's.
+    private static ScrGameTime At(int hour, int minute, int second = 0, int startHour = 15) =>
+        new(0, hour, minute, ((hour * 60L + minute) * 60 + second) * 1000, startHour);
+
+    private static long CallAt(int operand, ScrGameTime now, ScrRunOptions? options = null)
+    {
+        var host = With(Program(Do(C(55, N(5), N(0), (Triggerer, 0), (Attachee, 0), N(operand))), Do(C(1))));
+        host.Clock = now;
+        return Run(host, options).Effects.Calls.Single().DelayMs;
+    }
+
+    [TestMethod]
+    public void Call_at_waits_for_the_operands_time_of_day_counted_from_the_start_hour()
+    {
+        // At the start hour the clock reads 0: operand 3600 is an hour away, with no factor 8.
+        Assert.AreEqual(3_600_000L, CallAt(3600, At(15, 0)));
+        // 15:30 reads 1800: operand 3600 is 30 minutes away; operand 600 (already past) is the next day's, 23 h 40 min away.
+        Assert.AreEqual(1_800_000L, CallAt(3600, At(15, 30)));
+        Assert.AreEqual((86_400 - 1_800 + 600) * 1000L, CallAt(600, At(15, 30)));
+        // Midnight reads 9 hours (32,400 s) into the cycle of a 15:00 start: operand 43200 is 3 h 0 min away.
+        Assert.AreEqual((43_200 - 32_400) * 1000L, CallAt(43_200, At(0, 0)));
+        // 14:59:59 reads 86399: operand 0 is one second away; operand 86399 (the same second) fires in 1 ms, not tomorrow.
+        Assert.AreEqual(1_000L, CallAt(0, At(14, 59, 59)));
+        Assert.AreEqual(1L, CallAt(86_399, At(14, 59, 59)));
+        // A target equal to now is 0 seconds, raised to 1 ms (sub_45A950).
+        Assert.AreEqual(1L, CallAt(0, At(15, 0)));
+        Assert.AreEqual(1L, CallAt(7_200, At(17, 0)));
+        // The whole seconds count: 15:00:00.9 still reads 0 (the clock's milliseconds are divided by 1000).
+        Assert.AreEqual(1L, CallAt(0, new ScrGameTime(0, 15, 0, 54_000_900, 15)));
+        // The day index changes nothing, and a start hour of 0 counts from midnight.
+        Assert.AreEqual(3_600_000L, CallAt(3600, new ScrGameTime(40, 15, 0, 54_000_000, 15)));
+        Assert.AreEqual(3_600_000L, CallAt(7200, At(1, 0, 0, 0)));
+        // An operand over a day is reduced to the day (the C remainder): 90000 is 3600.
+        Assert.AreEqual(3_600_000L, CallAt(90_000, At(15, 0)));
+    }
+
+    [TestMethod]
+    public void Call_at_with_a_negative_operand_follows_the_rule_mode()
+    {
+        // Steamwoven reduces the operand to a day first: -3600 is 82800, so at the start hour the call is 23 hours away.
+        Assert.AreEqual(82_800_000L, CallAt(-3600, At(15, 0)));
+        // Original keeps the signed remainder: -3600 - 0 is negative, one day is added once (82800 s), the same here; a remainder that stays negative after the day is read as the
+        // unsigned 32-bit millisecond count (a huge delay).
+        Assert.AreEqual(82_800_000L, CallAt(-3600, At(15, 0), Original));
+        Assert.AreEqual((long)unchecked((uint)((-86_399 - 86_399 + 86_400) * 1000)), CallAt(-86_399, At(14, 59, 59), Original));
+        Assert.AreEqual(1_000L, CallAt(-86_399, At(15, 0)), "-86399 reduces to 1");
+    }
+
+    [TestMethod]
+    public void Call_at_needs_a_clock_and_gives_the_same_roles_and_line_as_call_in()
+    {
+        var host = With(Program(Do(C(55, N(2023), N(4), (Triggerer, 0), (Attachee, 0), N(3600))), Do(C(55, N(7), N(0), (Extra, 0), (Player, 0), N(3600))), Do(C(1))));
+        // A host with no clock ends the dispatch with nothing applied (as the clock actions do).
+        var none = Run(host);
+        Assert.AreEqual(ScrStop.NotModelled, none.Stop);
+        Assert.AreEqual(0, none.Effects.Calls.Count);
+        host.Clock = At(15, 0);
+        CollectionAssert.AreEqual(new[]
+        {
+            new ScrCallRequest(ScrCallKind.Schedule, 2023, 4, Pc, Npc, 3_600_000),
+            new ScrCallRequest(ScrCallKind.Schedule, 7, 0, null, Pc, 3_600_000),
+        }, Run(host).Effects.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void The_time_of_day_without_the_clocks_own_milliseconds_reads_the_hour_and_minute()
+    {
+        // A host that gives the hour and minute only (the story clock tests') reads the minute's start.
+        Assert.AreEqual(54_000, new ScrGameTime(0, 15, 0, -1, 0).SecondsSinceStartHour());
+        Assert.AreEqual(0, new ScrGameTime(0, 15, 0, -1, 15).SecondsSinceStartHour());
+        Assert.AreEqual(43_200 + 60, new ScrGameTime(3, 3, 1, -1, 15).SecondsSinceStartHour());
     }
 
     private static (Clause, Clause, Clause)[] ProgramLines() =>

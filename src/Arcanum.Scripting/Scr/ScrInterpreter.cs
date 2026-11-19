@@ -314,6 +314,16 @@ internal sealed class ScrInterpreter
                 _calls.Add(new(ScrCallKind.Schedule, script, at, triggerer, attachee, CallDelay(Get(a, 4))));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.CallScriptAt:
+            {
+                // ARC-SCRIPT-2824 (TQ17, TE2; case 55 of 0x447220, one body with call in): the same operands and the same kind-4 Script event, but the delay is the time to the operand's
+                // time of day (counted from the start hour) in game seconds, with no factor 8. The "now" is the clock the host answers; a host with none ends the dispatch with nothing applied.
+                var script = Get(a, 0); var at = Get(a, 1);
+                var triggerer = OptionalObject(a, 2); var attachee = OptionalObject(a, 3);
+                var time = (_host as IScrTimeQueries)?.Time() ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                _calls.Add(new(ScrCallKind.Schedule, script, at, triggerer, attachee, CallAtDelay(Get(a, 4), time)));
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.RemoveScriptCall:
                 _calls.Add(new(ScrCallKind.Remove, Get(a, 0), 0, null, OptionalObject(a, 1), 0));
                 return (Step.Next, 0);
@@ -1418,6 +1428,19 @@ internal sealed class ScrInterpreter
             return Math.Max(1L, unchecked(Math.Max(1u, ms) * 8u));
         }
         return seconds <= 0 ? 8L : seconds * 8000L;
+    }
+
+    // ARC-SCRIPT-2824 (TQ17): call script at. The operand is reduced to a day with the signed C remainder (a negative operand stays negative), the clock's seconds of the day
+    // (counted from the start hour) are taken off, a negative difference gets one day added, and the seconds become milliseconds with 0 raised to 1, as call in's
+    // (sub_45A950). Original keeps what a negative operand leaves (the 32-bit count read unsigned, a huge delay); Steamwoven reduces the operand to 0..86399 first, so every
+    // delay is at most a day. A target equal to now fires in 1 ms, not tomorrow.
+    private long CallAtDelay(int operand, ScrGameTime time)
+    {
+        var target = _options.Rules.CallDelayWraps ? operand % 86_400 : (int)(((long)operand % 86_400 + 86_400) % 86_400);
+        var seconds = target - time.SecondsSinceStartHour();
+        if (seconds < 0) seconds += 86_400;
+        var ms = unchecked((uint)(seconds * 1000));
+        return Math.Max(1L, _options.Rules.CallDelayWraps ? ms : seconds * 1000L);
     }
 
     private ScrObjectRef? OptionalObject(ScrClause c, int slot) => FocusObject((ScrFocusKind)c.Kind(slot), c.Value(slot));
