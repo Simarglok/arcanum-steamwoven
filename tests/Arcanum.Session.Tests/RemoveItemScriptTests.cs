@@ -102,6 +102,16 @@ public sealed class RemoveItemScriptTests
     }
 
     [TestMethod]
+    public void Without_a_script_host_an_npc_item_with_a_remove_item_script_is_refused_not_deleted_with_it_skipped()
+    {
+        using var owner = Hero();
+        var refused = owner.RemoveItemFromNpc(owner.Version, "corpse", "torn");
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0L), (refused.Disposition, refused.Failure, owner.Version.Revision));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.NpcItemRemovalRefusal("corpse", "torn"));
+        Assert.IsFalse(owner.IsItemDestroyed("torn"));
+    }
+
+    [TestMethod]
     public void An_item_without_a_remove_item_script_runs_nothing_under_a_host()
     {
         using var owner = Hero();

@@ -376,7 +376,8 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (UsedItemDestructionRefusal(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
+        if (UsedItemDestructionRefusalCore(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
+        if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the hero as the triggerer, made and prepared before anything applies and committed with the deletion (the lines it prints are not shown: this result carries none).
         var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(entity, null, HeroItemPoints(entity), scripts);
@@ -395,12 +396,21 @@ public sealed partial class GameSessionOwner
     public GameSessionFailure? UsedItemDestructionRefusal(string entity, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
+        if (UsedItemDestructionRefusalCore(entity) is { } refusal) return refusal;
+        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
+        // Without one an item with a remove-item script is refused, never deleted with the script skipped (the spell path's spent scroll or food: #2881).
+        if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return GameSessionFailure.ItemScriptUnsupported;
+        if (scripts is not null && RunRemovalScript(entity, null, HeroItemPoints(entity), scripts).Done is { } dry) return dry.Failure;
+        return null;
+    }
+
+    // The refusals of the destruction that no script decides.
+    private GameSessionFailure? UsedItemDestructionRefusalCore(string entity)
+    {
         if (!SessionValidation.Entity(entity)) return GameSessionFailure.InvalidItem;
         if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null) return GameSessionFailure.ItemNotAvailable;
         if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return GameSessionFailure.InventoryMismatch;
         if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
-        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
-        if (scripts is not null && RunRemovalScript(entity, null, HeroItemPoints(entity), scripts).Done is { } dry) return dry.Failure;
         return null;
     }
 

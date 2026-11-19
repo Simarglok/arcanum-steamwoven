@@ -29,6 +29,7 @@ public sealed partial class GameSessionOwner
     {
         if (!points.Contains(SessionScriptPoint.RemoveItem)) return new(null, null);
         if (ItemRowOfOtherMap(item)) return new(RejectItem(GameSessionFailure.ItemScriptUnsupported), null);
+        // As LootItem's runs, made before the commit: the admitted commands read nothing the unlink changes, so running before it is the same as after (the original runs the script after the unlink).
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
         var complexity = _inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0;
         var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity }) { NpcTriggerer = holder is not null && KnownNpc(holder) };

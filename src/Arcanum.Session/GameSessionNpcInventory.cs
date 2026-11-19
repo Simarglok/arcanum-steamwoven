@@ -106,7 +106,8 @@ public sealed partial class GameSessionOwner
         if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item))
             return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (NpcItemRemovalRefusal(npc, item) is { } refusal) return RejectItem(refusal);
+        if (NpcItemRemovalRefusalCore(npc, item) is { } refusal) return RejectItem(refusal);
+        if (scripts is null && NpcItemPoints(npc, item).Contains(SessionScriptPoint.RemoveItem)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the NPC as the triggerer, made and prepared before anything applies and committed with the deletion.
         var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(item, npc, NpcItemPoints(npc, item), scripts);
         if (removal.Done is { } refused) return refused;
@@ -121,6 +122,17 @@ public sealed partial class GameSessionOwner
     public GameSessionFailure? NpcItemRemovalRefusal(string npc, string item, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
+        if (NpcItemRemovalRefusalCore(npc, item) is { } refusal) return refusal;
+        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
+        // Without one an item with a remove-item script is refused, never deleted with the script skipped (the spell path's spent scroll or food: #2881).
+        if (scripts is null && NpcItemPoints(npc, item).Contains(SessionScriptPoint.RemoveItem)) return GameSessionFailure.ItemScriptUnsupported;
+        if (scripts is not null && RunRemovalScript(item, npc, NpcItemPoints(npc, item), scripts).Done is { } dry) return dry.Failure;
+        return null;
+    }
+
+    // The refusals of the deletion that no script decides.
+    private GameSessionFailure? NpcItemRemovalRefusalCore(string npc, string item)
+    {
         if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item)) return GameSessionFailure.InvalidItem;
         if (!KnownNpc(npc)) return GameSessionFailure.UnknownHolder;
         if (_inventory.NpcOf(item) != npc)
@@ -133,8 +145,6 @@ public sealed partial class GameSessionOwner
         else if (NpcWears(npc, item, InventoryDomain.MadeFacts(default))) return GameSessionFailure.WornItemUnsupported;
         if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
         if (_revision == long.MaxValue) return GameSessionFailure.RevisionExhausted;
-        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
-        if (scripts is not null && RunRemovalScript(item, npc, NpcItemPoints(npc, item), scripts).Done is { } dry) return dry.Failure;
         return null;
     }
 
