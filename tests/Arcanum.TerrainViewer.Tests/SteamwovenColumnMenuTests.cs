@@ -26,12 +26,12 @@ public sealed class SteamwovenColumnMenuTests
     [TestMethod]
     public void At_16_10_the_plate_is_scaled_up_to_the_height_instead_of_leaving_a_gap()
     {
-        // 1920 x 1200: s = 2, the plate 1600 x 1200. 2560 x 1600: s = 8/3, the plate 2133.3 wide, edges rounded from their own positions (213 and 2347).
+        // 1920 x 1200: s = 2, the plate 1600 x 1200. 2560 x 1600: s = 8/3, the plate 2133.3 wide, the top left rounded (213) and the far edge rounded up (2347).
         Assert.AreEqual(new PixelRect(160, 0, 1600, 1200), Original(1920, 1200).Zone);
         var plan = Original(2560, 1600);
         Assert.AreEqual(8.0 / 3, plan.Factor, 1e-9);
         Assert.AreEqual(new PixelRect(213, 0, 2134, 1600), plan.Zone);
-        Assert.AreEqual(new PixelRect(107, 0, 1066, 800), Original(1280, 800).Zone);
+        Assert.AreEqual(new PixelRect(107, 0, 1067, 800), Original(1280, 800).Zone);
     }
 
     [TestMethod]

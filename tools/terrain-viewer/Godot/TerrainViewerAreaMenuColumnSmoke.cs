@@ -7,11 +7,13 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-UI-2891: opt-in part of the menu smoke (ARC_AREA_MENU_COLUMN=1, or `column`): the full-screen menus (main, options) and the two-strip screens (pre-made, new character; the save list has its own pass inside
+    // ARC-UI-2891: opt-in part of the menu smoke (ARC_AREA_MENU_COLUMN=1): the full-screen menus (main, options) and the two-strip screens (pre-made, new character; the save list has its own pass inside
     // the save window's smoke, ARC_AREA_MENU_COLUMN with `--stages scene` or `menu`) in column mode of the Steamwoven layout (TRD "Column mode", owner decision 2026-11-19: the plate fills the window's height from edge
     // to edge, black beside it), at each size of ARC_STEAMWOVEN_SIZES (default: the AC5 sizes, 2560x1440, 1920x1080, 2560x1600, 1920x1200, 3440x1440, 1280x800): the plate's scale and place, the black rectangles, no
     // full-width backdrop, the pointer hitting the labels where they are drawn (the full-screen windows) and not on the black, the pixels of the black side. ARC_AREA_MENU_CAPTURE=PATH.png also saves
     // PATH-column-WINDOW-WxH.png (local, never in git). The window is not resized: the root viewport takes the size as its logical render target.
+    private static bool ColumnMenuSmokeOn() => System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_COLUMN") is { Length: > 0 } value && value != "0";
+
     private static IReadOnlyList<Vector2I> ColumnMenuSizes()
     {
         var text = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_SIZES");
@@ -162,6 +164,8 @@ public partial class TerrainViewerApp
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
+            // The window and its views take the restored size and layout before the caller measures them again.
+            await frames(4);
         }
     }
 

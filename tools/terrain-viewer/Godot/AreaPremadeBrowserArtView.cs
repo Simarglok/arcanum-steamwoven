@@ -79,7 +79,7 @@ public partial class AreaPremadeBrowserArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
-        // ARC-UI-2575: with the Steamwoven layout the screen's 800 × 400 body lies in the window zone at the layout's unit scale; ARC-UI-2891: with the column option the whole 800 × 600 screen stands in the column's full-screen zone.
+        // ARC-UI-2575: with the Steamwoven layout the screen's 800 × 400 body lies in the window zone at the layout's unit scale; ARC-UI-2891: with the column option the whole 800 × 600 screen is fitted to the window's height (SteamwovenColumnMenu.Fit).
         if (AreaGameBarPanel.TwoStripScreen(size, AreaShopArtLayout.Window.Y) is { } zone)
         {
             Scale = new Vector2((float)zone.Scale, (float)zone.Scale);

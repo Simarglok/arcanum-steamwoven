@@ -181,7 +181,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     }
 
     /// <summary>
-    /// ARC-UI-2891: the place of a two-strip screen (the save and load lists, the pre-made, new-character, editor and shop windows: an 800 × 600 screen whose 800 × 400 body lies between its own two strips,
+    /// ARC-UI-2891: the place of a two-strip screen (the save and load lists, the pre-made, new-character and shop windows: an 800 × 600 screen whose 800 × 400 body lies between its own two strips,
     /// <paramref name="bodyTopUnits"/> from its top). With the column option it is the fitted plate (the window's height from edge to edge, centred); otherwise the window zone's place (<see cref="ZoneScreen"/>);
     /// null while the layout is off.
     /// </summary>

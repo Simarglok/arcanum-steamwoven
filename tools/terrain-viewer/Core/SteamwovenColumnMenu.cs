@@ -12,15 +12,16 @@ public static class SteamwovenColumnMenu
 {
     /// <summary>
     /// The plate's scale and rectangle for a window of <paramref name="width"/> × <paramref name="height"/> device pixels: `min(width / 800, height / 600)` device pixels per original unit (the height fills the window from
-    /// edge to edge at 4:3 and wider; a window narrower than 4:3 is limited by its width), the rectangle centred, each edge rounded from its exact position, halves up.
+    /// edge to edge at 4:3 and wider; a window narrower than 4:3 is limited by its width), the rectangle centred: the top left rounded from its exact position (halves up), the far edges rounded up from the drawn extent.
     /// </summary>
     public static (double Factor, PixelRect Zone) Fit(int width, int height)
     {
         var factor = Math.Min(width / (double)AreaMenuArtLayout.ScreenWidth, height / (double)AreaMenuArtLayout.ScreenHeight);
         var left = (int)Math.Round((width - AreaMenuArtLayout.ScreenWidth * factor) / 2, MidpointRounding.AwayFromZero);
         var top = (int)Math.Round((height - AreaMenuArtLayout.ScreenHeight * factor) / 2, MidpointRounding.AwayFromZero);
-        var right = (int)Math.Round((width + AreaMenuArtLayout.ScreenWidth * factor) / 2, MidpointRounding.AwayFromZero);
-        var bottom = (int)Math.Round((height + AreaMenuArtLayout.ScreenHeight * factor) / 2, MidpointRounding.AwayFromZero);
+        // The plate is drawn from its rounded top left at the exact scale, so its far edges are rounded up: nothing of the drawn plate lies outside the rectangle, and the black starts after it.
+        var right = (int)Math.Ceiling(left + AreaMenuArtLayout.ScreenWidth * factor - 1e-9);
+        var bottom = (int)Math.Ceiling(top + AreaMenuArtLayout.ScreenHeight * factor - 1e-9);
         return (factor, PixelRect.FromEdges(left, top, right, bottom));
     }
 
