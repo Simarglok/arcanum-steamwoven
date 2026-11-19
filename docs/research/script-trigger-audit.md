@@ -18,7 +18,7 @@ beyond the rows named here is **NOT_VERIFIED**.
 
 The firing conditions of every trigger kind (when, for whom, which gates, what the return changes) and the corrections to
 this note (TG2 callers, points 15 and 16, the first heartbeat, unlock, catching thief) are in
-[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ29); its section 2 is newer than the
+[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ31); its section 2 is newer than the
 host column of section 2 here.
 
 ## Answer
@@ -158,7 +158,7 @@ carry their task code; the open ones are 5, 6, 7, 10, 11, 12, 13 and the rest of
 | 8 | Tile-script command groups | **Done in three groups**: ARC-SCRIPT-052 (S20, ledger TD1–TD3: call-ex, destroy, stop attacking), ARC-DEV-157 (S22, ledger GS1–GS4, bugs B20 and B23: get stat for the PC, vicinity loops) and ARC-DEV-298 (float line in the tile set; stage `tile-ghost`). Open: the remaining first refusals by group (action 32, action 22, change art 59, sector is blocked 45, condition 51, damage 60, play script eye candy 120, action 112, set day standpoint 45, monster generator disabled 46; 1779 stops at a computed goto) | tile scripts |
 | 9 | Examine, new sector, resurrect | **Examine done** by ARC-DEV-326 (ledger HK24; made items ARC-SCRIPT-1119). Point 27 for followers (0x4F24A3, Virgil's 1568) done by ARC-SCRIPT-2822; open: 18 (0x4B5A46) | 11 attachments |
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
-| 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1) | scripts that test "anyone near" |
+| 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1: read by ARC-SCRIPT-2960, built by #2975 and #2976) | scripts that test "anyone near" |
 | 12 | Item-script commands | toggle state (56) and loop for (18) at insert item, call script in (54) at wield on | 35 item attachments |
 | 13 | Conversation resume and DLG LF | TG8: "return to script" runs the speaker's dialog point; a use- or tile-opened talk then resumes his dialog slot, so its LF reads that slot; read the DLG LF field in the executable (now F0) | talks opened by use and tile scripts |
 
@@ -180,8 +180,7 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
 
 ## Unknowns
 
-- **U1** The order of the vicinity list (TG4) is not read; Steamwoven lists the NPC rows in snapshot order, then the PC. A script that
-  acts on the first object of a list (not a loop) may pick another object than the original.
+- **U1** ~~The order of the vicinity list (TG4) is not read.~~ Read by ARC-SCRIPT-2960 (ledger [VL1–VL6](ledger/scripts.md#vicinity-list-order-arc-script-2960)): the critters and containers are listed sector by sector, newest first inside a sector; the scenery and portals tile by tile in each tile's draw order. Steamwoven lists in snapshot order (the NPC rows, then the PC), so a script that acts on the first object of a list (not a loop) may pick another object than the original: issues #2975 and #2976.
 - **U2** A condition over a list focus kind (8, 9; SG6: every, or for the "any" kinds some) is not modelled; the critter vicinity
   kinds are admitted in actions only.
 - **U3** Whether mode 1 of the location change (same tile, TS2) really re-runs the tile script on every sub-tile offset change was
