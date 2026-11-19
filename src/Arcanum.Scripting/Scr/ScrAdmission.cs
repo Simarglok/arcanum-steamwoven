@@ -541,10 +541,17 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S64 { get; } = new("S64", S63.Conditions, S63.Actions, S63.ValueKinds, S63.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
 
+    /// <summary>
     /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S64"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
-    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most S65.
+    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most <see cref="Latest"/>, which is this set now.
     /// </summary>
     public static ScrAdmissionSet S65 { get; } = new("S65", S64.Conditions, S64.Actions, S64.ValueKinds, S64.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
+
+    /// <summary>
+    /// The top of the admission chain (ARC-SCRIPT-1881): the one set the interpreter runs at most (<see cref="ScrRunOptions"/> refuses anything outside it) and that every host set is checked against. The chain S1 .. S65 is linear, each set a
+    /// superset of the one it is built on (<c>ScrAdmissionChainTests</c> holds that). A slice that adds a set builds it on the current <see cref="Latest"/> and moves this one line, so two slices landing in turn never fork the chain.
+    /// </summary>
+    public static ScrAdmissionSet Latest => S65;
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script

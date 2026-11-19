@@ -674,7 +674,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-SCRIPT-1483: the combat-point scripts of a hero's hit on <paramref name="victim"/>, the hit event the session raised before its damage step.</summary>
-    private Action<SessionHitScriptEvent> HeroHitScripts(string victim) => hit => RunHitScripts(SessionSpellCaster.Hero, victim, hit);
+    private Action<SessionHitScriptEvent> HeroHitScripts(string victim) => hit => RunHitScripts(SessionSpellCaster.Hero, hit.SelfHit ? SessionSpellCaster.Hero : victim, hit);
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5; 0x4B3770, 0x4B2F60): the combat-point scripts of a hit, asked by the session before the damage step, through the shown map's use-script host

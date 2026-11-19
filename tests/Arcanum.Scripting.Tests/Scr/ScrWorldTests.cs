@@ -353,7 +353,7 @@ public sealed class ScrWorldTests
     }
 
     [TestMethod]
-    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_only_S64_admits_it()
+    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_the_sets_from_S64_admit_it()
     {
         // ARC-SCRIPT-2321 (AS1, AS2): the original builds one list for 15 and 16 (0x44B4E0), so a loop creates next to every object and the first-object read is the list's first.
         const byte AnyScenery = 16;

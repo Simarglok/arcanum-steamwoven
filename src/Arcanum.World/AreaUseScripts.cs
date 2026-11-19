@@ -3474,7 +3474,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // The old NPC stays on any refusal below: the made critter goes again (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
         ScrObjectRef? Undo()
         {
-            _session.DestroyCreatedObject(_session.Version, critter.Entity);
+            _session.DestroyCreatedObject(_session.Version, critter.Entity, scripts: ItemScripts);
             LastTransformed = null;
             return null;
         }
