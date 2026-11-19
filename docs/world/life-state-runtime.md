@@ -106,7 +106,7 @@ before this schema, so nothing is lost.
   heal are scheduled by every life step on the session's game event queue and saved with it
   ([session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024)); no host runs the pass yet. Body decay,
   encumbrance fatigue damage and the combat-focus wipe have no timer.
-- What other owners do on these events: alignment on a kill (the kill's experience is the session's
+- What other owners do on these events: alignment on a kill (done since ARC-COMBAT-2873: the session's `RunKillAlignment` runs 0x45DC90 with flag 1 after the award; the kill's experience is the session's
   [experience](experience-runtime.md) `RecordNpcKill`, ARC-WORLD-030, which a host calls), the party leaving of a dead follower,
   AI focus and near-death reactions, spell demaintenance on unconsciousness, item drops and wear, the death slide and
   return to the main menu for a dead PC, logbook injuries.
