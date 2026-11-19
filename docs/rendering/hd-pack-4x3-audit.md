@@ -16,7 +16,8 @@ sizes and measured numbers. The captures and composites stay on the owner's devi
   at `s`, so nothing in the pack depended on the full-width layout. The full-width pieces (side tiles, side boards, per-family full-middle backdrops)
   are generated at run time, not pack entries; their removal is [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926).
 - **The column does not sample the pack with nearest anywhere.** The issue's premise is out of date: since ARC-UI-112 a direct pack frame is drawn
-  trilinear with mipmaps, the strips and window frames are generated chrome whose pack pictures are area-averaged to the device scale (ARC-UI-141),
+  trilinear with mipmaps, the strips and window frames are generated chrome whose pack pictures are area-averaged to the paint scale by
+  `InterfaceChromeRenderer.ResamplePicture` (ARC-UI-141 in the code; the fractional own scale is ARC-UI-148),
   and the font glyphs are bilinear without mipmaps (ARC-UI-145). The presentation contract has no nearest rule for the interface.
 - **Two sampling changes are needed:** direct frames should be area-resampled once per scale instead of trilinear
   ([#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002)); glyphs need the area filter below `s` = 2, where bilinear without mipmaps
@@ -49,7 +50,7 @@ The recipe arts are the 45 names of `InterfaceChromeRecipes` (`tools/terrain-vie
 
 **Scale range.** At 4 px per unit the pack covers the composition up to `s` = 4. The sizes of the TRD run from `s` 1.2 (1280 × 720) through 1.33
 (1280 × 800), 1.8 (1920 × 1080), 2.4 (2560 × 1440), 2.67 (2560 × 1600), 3.6 (3840 × 2160) to 4.8 (5120 × 2880): the pack is minified everywhere
-except above 4, where it is magnified by at most 1.2. No kind needs a larger scale for the TRD's sizes.
+except above `s` = 4 (only 5120 × 2880), where it is magnified by at most 1.2. No kind needs a larger scale for the TRD's sizes.
 
 ## Sampling (AC2)
 
@@ -61,8 +62,8 @@ with the generated interface), placed at the original offsets: the pack's bottom
 1280 × 800, 1920 × 1080 and 3840 × 2160 (normalised cross-correlation 0.88 to 0.89; the rest is the generated wood and the HUD drawn over it).
 
 **Filters in the code** (origin/main, 2026-11-19): a direct pack frame is a `CanvasTexture` with `LinearWithMipmaps` and generated mipmaps
-(`InterfaceHd.cs`, ARC-UI-112; the canvas texture's filter wins over the parent node's); a generated frame is painted at the exact device scale with
-its pack picture averaged by `InterfaceChromeRenderer.ResamplePicture` (area filter, ARC-UI-141); a glyph is a `CanvasTexture` with `Linear`, no
+(`InterfaceHd.cs`, ARC-UI-112; the canvas texture's filter wins over the parent node's); a generated frame is painted at its draw scale (ARC-UI-141, fractional
+since ARC-UI-148) with its pack picture averaged by `InterfaceChromeRenderer.ResamplePicture` (area filter); a glyph is a `CanvasTexture` with `Linear`, no
 mipmaps (`AreaArtTextDraw.cs`, ARC-UI-145, the owner's choice at scales 2.5 to 3.5). Nothing draws a pack frame with nearest at a fractional `s`.
 
 **Measurement.** The GPU filters were reproduced on the pack's own frames (nearest: the texel under each pixel centre; bilinear without mipmaps;
@@ -125,7 +126,7 @@ Obsolete entries: the 41 frames of 23 network-play arts (not drawn, out of scope
 `main-menu-16x9.png` is an opaque 1664 × 936 plate whose middle 75 % registers with the 800 × 600 menu frame: 1.56 px per unit, well below the
 pack's own 4× table scene (`singleplayerback`, 3200 × 2400). It backs the table-scene menus only with the HD option on and the generated interface
 off; under any Steamwoven plan, the column included, the viewer does not draw it and the 4× art stands at `s` with black sides. Drawn in the column,
-its middle would be magnified at every size from 1920 × 1080 up (× 1.15 to × 2.31 at 3840 × 2160). Keep the painted sides as an exception, crop to
+its middle would be magnified at every size from 1920 × 1080 up (× 1.15 at 1920 × 1080 up to × 2.31 at 3840 × 2160). Keep the painted sides as an exception, crop to
 4:3, or drop: the owner decides ([#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003), with the consequences of each).
 
 ## Fonts, portraits, illustrations
