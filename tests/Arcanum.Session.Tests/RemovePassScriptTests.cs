@@ -151,6 +151,18 @@ public sealed class RemovePassScriptTests
     }
 
     [TestMethod]
+    public void A_pass_through_a_cast_host_gives_the_bodys_walk_the_wrapped_worlds_script_host()
+    {
+        using var owner = Owner();
+        var host = Hosted(owner, "bread", "ghost");
+        Kill(owner, "npc-1");
+        var caster = new SessionSpellCaster(owner, _ => null, new RestockStateTests.NoMap(), new World(host));
+        var fired = caster.ProcessEvents().BodyDecays.Single();
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 2, 0), (fired.Outcome, fired.Removals.Scripts.Count, fired.Removals.Skipped), "the wrapper forwards the host");
+        Assert.IsTrue(ReadFlag(owner, 3));
+    }
+
+    [TestMethod]
     public void A_bodys_walk_without_a_script_host_counts_the_skipped_removals_and_drops_as_before()
     {
         using var owner = Owner();
