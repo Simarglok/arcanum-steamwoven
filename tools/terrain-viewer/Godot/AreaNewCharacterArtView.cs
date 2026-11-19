@@ -42,6 +42,8 @@ public partial class AreaNewCharacterArtView : Control
     internal AreaNewCharacterView? ViewForSelfTest => Visible ? _view : null;
     internal AreaNewCharacterHover HoverForSelfTest => _hover;
     internal bool PortraitForSelfTest => Visible && _portrait is not null;
+    /// <summary>ARC-UI-2865: the portrait texture the window draws (the HD smoke reads whether it is the pack's redraw).</summary>
+    internal Texture2D? PortraitTextureForSelfTest => _portrait;
     internal AreaCharacterDescription? DescriptionForSelfTest => Visible && _view is { } view ? AreaNewCharacterArtLayout.Description(view, _hover) : null;
     internal int FrameForSelfTest(AreaNewCharacterArtButton button) => Frame(button);
     /// <summary>The window position of a screen point of the 800 × 600 screen.</summary>
