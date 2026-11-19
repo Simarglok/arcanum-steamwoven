@@ -81,24 +81,30 @@ public partial class TerrainViewerApp
 
             // 1. The story talk: the dialog opens with Kerghan's greeting; seven replies lead to script line 100.
             var clockBefore = session.QueryClockSnapshot().GameTimestampMs;
-            BeginConversation(speaker, replaceWindows: true);
-            Require(ConversationOpen && _conversationPanel!.Conversation is { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 }, $"the story dialog opened with Kerghan's greeting ({_conversationNotice})");
-            var storyReplies = 0;
-            foreach (var id in KerghanStoryReplies)
-            {
-                var option = Offered([id], $"story reply {storyReplies + 1}");
-                _conversationPanel!.Choose(option.Number); storyReplies++;
-                for (var i = 0; i < 2; i++) AreaSmokeFrame();
-            }
-            var finalStory = _conversationPanel!.Conversation;
-            Require(finalStory is { Phase: DialogConversationPhase.Ended, End: { Kind: DialogEndKind.ReturnToScript, ScriptLine.Value: 100 } }, $"the last story reply ends the dialog on script line 100: {finalStory?.Phase} {finalStory?.End?.Kind} {finalStory?.End?.ScriptLine}");
-            Require(session.QueryClockSnapshot().GameTimestampMs - clockBefore is >= 0 and < 60_000 && _scriptFades.Count == 0, "the clock and the fades wait for the dialog's close (F8: the script resumes after it)");
             // Movie 6 plays through the real decoder when it can; the other stages' movies stay off.
             _moviesForSelfTest = true; _moviePathForSelfTest = null; _movieTableForSelfTest = null; _movieSourceForSelfTest = null; _startupMoviesDone = true;
             var movies = MovieRefusal() is null;
             var playedBefore = _scriptFadesPlayed;
             GD.Print($"{KerghanTalkCode} kerghan-talk movie 6 {(movies ? "plays (installed table, real decoder)" : "passed over: " + MovieRefusal())}");
-            CloseAndRun();
+            BeginConversation(speaker, replaceWindows: true);
+            Require(ConversationOpen && _conversationPanel!.Conversation is { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 }, $"the story dialog opened with Kerghan's greeting ({_conversationNotice})");
+            var storyReplies = 0;
+            var finalStory = _conversationPanel!.Conversation;
+            foreach (var id in KerghanStoryReplies)
+            {
+                var option = Offered([id], $"story reply {storyReplies + 1}");
+                finalStory = _conversationPanel!.Conversation;
+                _conversationPanel!.Choose(option.Number); storyReplies++;
+                for (var i = 0; i < 2; i++) AreaSmokeFrame();
+            }
+            Require(finalStory is { Phase: DialogConversationPhase.Ended, End: { Kind: DialogEndKind.ReturnToScript, ScriptLine.Value: 100 } }, $"the last story reply ends the dialog on script line 100: {finalStory?.Phase} {finalStory?.End?.Kind} {finalStory?.End?.ScriptLine}");
+            // The Original setting closes the window at once on a reply that returns to the script (ARC-SCRIPT-2761); the diagnostic
+            // chrome (ARC_DIALOG_DIAGNOSTICS=1) keeps the finished dialog and its Close, and the script resumes after that.
+            if (DialogDiagnostics)
+            {
+                Require(session.QueryClockSnapshot().GameTimestampMs - clockBefore is >= 0 and < 60_000 && _scriptFades.Count == 0, "the clock and the fades wait for the dialog's close (F8: the script resumes after it)");
+                CloseAndRun();
+            }
             var jumped = session.QueryClockSnapshot().GameTimestampMs - clockBefore;
             Require(jumped is >= 10_800_000 and < 10_800_000 + 60_000, $"line 100 moved the game clock by 10,800 s (flag 2): {jumped} ms");
             if (movies)
@@ -126,16 +132,21 @@ public partial class TerrainViewerApp
             BeginScriptedConversation(speaker, new ScrDialogStart(new ScrObjectRef(map.RuntimeMap, AreaScriptHost.PcCode), new ScrObjectRef(map.RuntimeMap, entity), KerghanScript, 0, KerghanReturnNode));
             Require(ConversationOpen, $"the dialog opened at node {KerghanReturnNode} ({_conversationNotice})");
             var returnReplies = 0;
+            var finalReturn = _conversationPanel!.Conversation;
             foreach (var ids in KerghanReturnReplies)
             {
                 var option = Offered(ids, $"return reply {returnReplies + 1}");
+                finalReturn = _conversationPanel!.Conversation;
                 _conversationPanel!.Choose(option.Number); returnReplies++;
                 for (var i = 0; i < 2; i++) AreaSmokeFrame();
             }
-            var finalReturn = _conversationPanel!.Conversation;
             Require(finalReturn is { Phase: DialogConversationPhase.Ended, End: { Kind: DialogEndKind.ReturnToScript, ScriptLine.Value: 80 } }, $"the last reply ends the dialog on script line 80: {finalReturn?.Phase} {finalReturn?.End?.Kind} {finalReturn?.End?.ScriptLine}");
-            Require(!AreaUseScriptHost.Destroyed(session, map.RuntimeMap, entity), "Kerghan is not changed before the dialog's close");
-            CloseAndRun();
+            if (DialogDiagnostics)
+            {
+                Require(!AreaUseScriptHost.Destroyed(session, map.RuntimeMap, entity), "Kerghan is not changed before the dialog's close");
+                CloseAndRun();
+            }
+            else for (var i = 0; i < 5; i++) AreaSmokeFrame();
             Require(!ConversationOpen, "the change of shape's dialog closed");
             var made = session.QueryCreatedObjects(new SessionMapId(map.RuntimeMap)).Where(o => o.Kind == SessionCreatedKind.Critter && !madeBefore.Contains(o.Entity)).ToArray();
             Require(made.Length == 1 && made[0].Prototype - Arcanum.World.AreaPrototypeItems.PrototypeOffset == 27368, $"the change of shape made one created critter of prototype 27368 ({string.Join(",", made.Select(m => m.Prototype))})");
