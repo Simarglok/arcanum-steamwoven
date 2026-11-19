@@ -384,7 +384,7 @@ public partial class AreaWindowLifeBars : Control
     private (AreaLifeBar, AreaArtLabel) Line(string name, (int X, int Y) at)
     {
         var top = at.Y - AreaGameBarLayout.BottomTop;
-        var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = BarThickness, Position = new Vector2(at.X, top + (LineHeight - BarThickness) / 2) };
+        var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = BarThickness, Position = new Vector2(at.X, top) }; // ARC-UI-2795: the bar and its text start at the rectangle's top (exe 0x554640, 0x550A10)
         var text = new AreaArtLabel
         {
             Name = name + "Text", Align = AreaArtLabel.Alignment.Right, Position = new Vector2(at.X, top), Size = new Vector2(TextWidth, LineHeight), Face = _font,
