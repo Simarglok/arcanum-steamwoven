@@ -1,0 +1,8 @@
+MATERIAL SHEET
+Size: 3840 x 2160 (16:9 sheet; it is a reference, not a screen). References: CONTEXT (the approved context images of the HUD, inventory, character sheet, logbook, schematic, reading window and main menu).
+
+Make one flat, evenly lit material sheet: a grid of 4 columns by 3 rows of square swatches on a neutral mid-grey ground with 6 percent gaps. Every swatch is a flat top-down sample, no perspective, no shadow, no object on it, no text. The tones, grain scale and wear must be sampled from the CONTEXT images, not invented.
+Row 1: (1) dark streaked wood of the strips and window backgrounds, the main wood of the kit; (2) the same wood in its darker shade used inside wells and beside grids; (3) lighter, finer-grained desk wood of the reading window; (4) the soft red-brown panel wood of the main menu tablet.
+Row 2: (5) aged brass trim, polished on the edges, with a little dark patina in the recesses; (6) dull gold of the thin window trim and corner scrollwork; (7) pitted dark iron plate of the character sheet's right panel, with a few brass rivets; (8) black field: the matte black of grid wells, message window and plaques with a faint blue grid line pattern.
+Row 3: (9) cream paper of the book pages and notes; (10) aged parchment with a printed light grid and a slightly darker burnt edge; (11) dark olive and dark red cloth of the book covers; (12) glass: a clean sample of the vial glass with a soft highlight and a red-blue tint split.
+Goal: the colour and texture truth of the whole kit. Each swatch must be usable as a seamless-looking sample (no vignette, no gradient across the swatch, no border painted inside it).

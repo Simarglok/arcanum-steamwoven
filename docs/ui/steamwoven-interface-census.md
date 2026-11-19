@@ -10,6 +10,7 @@ parts for the kit manifest (SWI-KIT-1), the text that fonts must draw (SWI-LAY-1
 The machine-readable table of every interface art, with its kit kind, batch, windows, reuse count and baked-text finding, is
 [`steamwoven-interface-census-arts.tsv`](steamwoven-interface-census-arts.tsv) (identifiers, sizes and verdicts only: no pixels,
 no frames). Screenshots stayed local ([below](#screenshots)).
+The arts with several frames or states, their triggers and timing and the kit proposal for them are in [the states and animations note](steamwoven-interface-states.md) (ARC-UI-2971).
 
 ## Method and sources
 
@@ -111,7 +112,7 @@ Every art that a window draws, or that the family rows below name, is assigned o
 | backdrop | 28 | window backgrounds (2880 x 1440) and full-screen plates (2880 x 2160), doll and cover layers of the inventory family, pop-up bases that are full panels |
 | sheet | 28 | reading-window papers, book pages, the iron right panels of the character sheet, script-given pictures (maps, murals) |
 | hardware | 69 | slot and socket housings, lens rings, pop-up and pane frames, option control plates, covers |
-| plate | 157 | button bodies with their frames (idle, hover or pressed, disabled): the kit splits each into plate, ring, glyph and states (SWI-KIT-5) |
+| plate | 157 | button bodies with their frames (the original's idle, pressed and hover frames; no disabled frame): the kit splits each into plate, ring, glyph and states (SWI-KIT-5) |
 | glyph | 17 | map markers and the silhouettes that cover empty worn slots |
 | state | 12 | lit, on and refused overlays of buttons and boxes |
 | gauge | 56 | vials, bars, the clock, pips, scroll thumbs, counters |

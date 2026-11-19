@@ -230,7 +230,7 @@ Part kinds:
 | hardware | fixed metal or frame pieces over a strip or a window background | brass rings, sockets, vial housings, rails, frames |
 | plate | a button's body | round and square plates by size |
 | glyph | a symbol on a transparent background | button symbols |
-| state | an overlay for a button state | hover, pressed, disabled |
+| state | an overlay for a button state | hover, pressed (the original has no disabled frame; disabled is a Steamwoven option) |
 | sheet | a document laid over a backdrop | newspaper, letter, book page, telegram, plaque |
 | grid | a grid as its own layer | the schematic grid, inventory cells |
 | picture | an image on a transparent background | items on the schematic, item and spell icons, portraits |
@@ -247,7 +247,7 @@ Part kinds:
 - **SWI-KIT-4** A part with transparency has a clean edge: no halo of the generator's background colour (checked by
   the fit tool, SWI-VER-3).
 - **SWI-KIT-5** A button is plate + ring + glyph + state overlays. The states of one button size (idle, hover, pressed,
-  disabled) are generated together on one sheet, so they match.
+  disabled) are generated together on one sheet, so they match. The original has no disabled frame (idle 0, pressed 1, hover 2: [states note](steamwoven-interface-states.md#the-originals-state-rules)); a disabled overlay is a Steamwoven addition and an open question there.
 - **SWI-KIT-6** A gauge is glass, housing and liquid as layers; the fill level is drawn from the value, not from a frame
   sequence.
 - **SWI-KIT-7** Order of production: the strips, end caps and window backgrounds, then buttons and glyphs, sheets, the schematic, gauges and
@@ -257,7 +257,7 @@ Part kinds:
 
 | Step | Who | Output | Where it lives |
 | --- | --- | --- | --- |
-| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)) | [census note](steamwoven-interface-census.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
+| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451), states and animations [#2971](https://github.com/Simarglok/arcanum-steamwoven/issues/2971)) | [census note](steamwoven-interface-census.md), [states and animations note](steamwoven-interface-states.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
 | 2. Kit manifest | agent ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) | `kit.json`, validator | git |
 | 3. Context images | owner in Codex ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)) | whole-screen redraws of key screens | local |
 | 4. Material sheet | owner in Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
@@ -287,6 +287,14 @@ Part kinds:
   send anything to Codex. Handoff: the agent puts a batch's prompts, references and a short list of what to generate into
   `local/steamwoven-ui/inbox/<batch>/`, asks the owner in the thread, and the owner puts the results into
   `local/steamwoven-ui/outbox/<batch>/`; the agent then writes the provenance records (SWI-GEN-6) and runs the fit tool.
+
+### Prompt library and handoff (ARC-RES-2455)
+
+[#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455). `tools/steamwoven_ui/prompts/` is text only: `common.txt` (the rules of every prompt: layout truth is the original, one 4:3 composition, no text, colour lock to the sheet, painted look, transparent parts with a clean edge), one prompt per context screen (`ctx-hud`, `ctx-inventory`, `ctx-character`, `ctx-logbook`, `ctx-schematic`, `ctx-reading`, `ctx-main-menu`, each 2880 × 2160), the material sheet (`mat-sheet`, twelve swatches sampled from the approved contexts, 3840 × 2160) and one prompt per kit kind (`kind-*`, with the three backdrop variants: window background, half of a two-part window, full-screen plate), listed in `library.json` (id, group, kind, size, reference slots, batch). `references.json` holds the crop geometry of the 800 × 600 layout references built from the census screenshots (local only).
+
+- The tool `tools/steamwoven_ui/prompt_library.py` checks the library (unique ids, a prompt for every TRD kind and every context screen, declared sizes on the 6 px grid (a part's own size is checked when its prompt is composed and, with `provenance`, against the result; the strip heights stay an open question), plain ASCII, known placeholders and reference slots, the kinds against the asset kit table above), composes a prompt (common rules, body, reference slots) with its sha256, builds the layout references (`refs`, needs ImageMagick), builds a batch inbox (`inbox`: composed prompts, references, `batch.json`, `README.txt`) and, after the owner has put the results into the outbox, writes one provenance record per image (`provenance`: generator and version, date, prompt id and hash, reference hashes, who ran it, SWI-GEN-6). The inbox and outbox are `local/steamwoven-ui/inbox|outbox/<batch>/` of the main checkout.
+- Batches: `style-anchors-contexts` (the seven context images), then `style-anchors-sheet` (the material sheet, made from the approved contexts); the owner's approval of the sheet is [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456). Part prompts take the part id, a note and the size from the production batch that uses them.
+- Checks: `python3 -B tools/steamwoven_ui/prompt_library.py check`, `... self-test`, `python3 -B -m unittest tools.steamwoven_ui.test_prompt_library` (task checks, not part of `run_tests.py`).
 
 ## Bake and runtime
 

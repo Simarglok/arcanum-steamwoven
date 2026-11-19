@@ -1,0 +1,4 @@
+KIND: BACKDROP - WINDOW BACKGROUND
+Part: {part_id} - {part_note}. Size: {width} x {height} px (the window zone, 2880 x 1440). References: ORIGINAL (the original window background art), SHEET, CONTEXT crop of the window.
+
+Redraw the empty background of one window: only the surface of the window (wood, brass trim, black wells, grids, paper or parchment as the ORIGINAL has them). Leave every part that the game draws on top empty or absent: no buttons, no portraits, no icons, no items, no text, no numbers. Keep wells, plaques and frames where the ORIGINAL has them, because windows are laid out against them. The art fills the whole picture to its edges: no border outside it and no part that lies beyond the picture. Edges must meet the strips cleanly (the picture's top and bottom edges carry a thin brass trim line, nothing else).
