@@ -29,14 +29,14 @@ issues and PRs cite the ids. Values marked *provisional* are fixed by the named 
   `s = min(W / 800, H / 600)` (fractional) and `f = s / 3.6 = min(W / 2880, H / 2160)`. At the 3840 × 2160 reference `s` = 3.6, `f` = 1 and the composition is the master composition, 2880 × 2160 px.
 - **SWI-LAY-2** Every aspect is supported by scaling the one centred composition; there is no other layout. 4:3 is native: the composition fills the window and there are no sides. A wider window (16:10, 16:9, 21:9, 32:9)
   is height-limited: the composition has the window's full height and the sides are left and right of it. A narrower window (5:4 and below) is width-limited: the composition has the window's full width, centred, with black above and below.
-- **SWI-LAY-3** The composition is `round(800 · s)` × `round(600 · s)` px, centred, each edge the `round` of its own exact position (halves up). The sides show **the world** on the play screen and in windows opened over it (the world is drawn to the window's edges, not
+- **SWI-LAY-3** The composition is `800 · s` × `600 · s` px, centred; its left, right, top and bottom edges are each the `round` of their own exact position (halves up), so its device size is the difference of two rounded edges (2560 × 1600: 213 and 2347, a width of 2134) and the sides are `round` of their own exact edge too. The sides show **the world** on the play screen and in windows opened over it (the world is drawn to the window's edges, not
   cropped to the composition, and is dimmed and desaturated while a window is open), and **black** beside full-screen menus and two-strip menus; the strip above and below a width-limited composition is always black. Nothing is drawn as wood in a gap: there are no gap rectangles, no frame bars at 16:10 and wider, and no
   pillarbox at 21:9 and 32:9.
 - **SWI-LAY-4** The baked step is the smallest of ×1, ×2/3, ×1/2, ×1/3 that is ≥ `f`. Above ×1 (`f` > 1: 5K screens, 3840 × 2400) the ×1
   set is scaled up (a recorded limit, see [open questions](#open-questions)). Below ×1/3 the ×1/3 set is scaled down
-  to `f` = 0.25; below 0.25 the Steamwoven interface is not supported and the Original look is used.
+  to `f` = 0.25; below 0.25 (a window narrower than 720 px at 4:3) the Steamwoven interface is not offered and the Original look, which has its own composition scale (SWI-ORG-1), is used.
 - **SWI-LAY-5** The run-time scale is `f / step`. `f`, the step choice and the test for an exact step are computed
-  exactly (integers or rationals, for example `3 · W ≥ 2 · 2880` for a width-limited window), never with floating-point equality. When it is exactly 1 the parts are drawn at whole device pixels with
+  exactly (integers or rationals; for a width-limited window `f` is exactly the step 2/3 when `3 · W = 2 · 2880` and is at most 2/3 when `3 · W ≤ 2 · 2880`), never with floating-point equality. When it is exactly 1 the parts are drawn at whole device pixels with
   no filtering; otherwise with linear filtering from the baked set.
 - **SWI-LAY-6** W × H are device (backing) pixels, including the macOS backing scale.
 - **SWI-LAY-7** Every kit master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
@@ -53,11 +53,11 @@ Reference table of the target model (exact numbers; "sides" and "black" are the 
 | 1920 × 1080 | 1.8000 | 0.5000 | 1/2 | 1.000 | 1440 × 1080 | 74 | 720 | 286 | 240 / 240 | 0 / 0 |
 | 1280 × 720 | 1.2000 | 0.3333 | 1/3 | 1.000 | 960 × 720 | 49 | 480 | 191 | 160 / 160 | 0 / 0 |
 | 3840 × 2400 | 4.0000 | 1.1111 | 1 | 1.111 | 3200 × 2400 | 164 | 1600 | 636 | 320 / 320 | 0 / 0 |
-| 2560 × 1600 | 2.6667 | 0.7407 | 1 | 0.741 | 2133 × 1600 | 109 | 1067 | 424 | 214 / 213 | 0 / 0 |
+| 2560 × 1600 | 2.6667 | 0.7407 | 1 | 0.741 | 2134 × 1600 | 109 | 1067 | 424 | 213 / 213 | 0 / 0 |
 | 1920 × 1200 | 2.0000 | 0.5556 | 2/3 | 0.833 | 1600 × 1200 | 82 | 800 | 318 | 160 / 160 | 0 / 0 |
-| 1280 × 800 | 1.3333 | 0.3704 | 1/2 | 0.741 | 1067 × 800 | 55 | 533 | 212 | 107 / 106 | 0 / 0 |
-| 3024 × 1964 | 3.2733 | 0.9093 | 1 | 0.909 | 2619 × 1964 | 134 | 1310 | 520 | 203 / 202 | 0 / 0 |
-| 3456 × 2234 | 3.7233 | 1.0343 | 1 | 1.034 | 2979 × 2234 | 153 | 1489 | 592 | 239 / 238 | 0 / 0 |
+| 1280 × 800 | 1.3333 | 0.3704 | 1/2 | 0.741 | 1066 × 800 | 55 | 533 | 212 | 107 / 107 | 0 / 0 |
+| 3024 × 1964 | 3.2733 | 0.9093 | 1 | 0.909 | 2618 × 1964 | 134 | 1310 | 520 | 203 / 203 | 0 / 0 |
+| 3456 × 2234 | 3.7233 | 1.0343 | 1 | 1.034 | 2978 × 2234 | 153 | 1489 | 592 | 239 / 239 | 0 / 0 |
 | 2880 × 1800 | 3.0000 | 0.8333 | 1 | 0.833 | 2400 × 1800 | 123 | 1200 | 477 | 240 / 240 | 0 / 0 |
 | 1366 × 768 | 1.2800 | 0.3556 | 1/2 | 0.711 | 1024 × 768 | 52 | 512 | 204 | 171 / 171 | 0 / 0 |
 | 1600 × 900 | 1.5000 | 0.4167 | 1/2 | 0.833 | 1200 × 900 | 62 | 599 | 239 | 200 / 200 | 0 / 0 |
@@ -68,7 +68,7 @@ Reference table of the target model (exact numbers; "sides" and "black" are the 
 | 1280 × 1024 | 1.6000 | 0.4444 | 1/2 | 0.889 | 1280 × 960 | 66 | 640 | 254 | 0 / 0 | 32 / 32 |
 | 5120 × 2880 | 4.8000 | 1.3333 | 1 | 1.333 | 3840 × 2880 | 197 | 1920 | 763 | 640 / 640 | 0 / 0 |
 
-The strip columns are the strips' device heights by SWI-LAY-7 (`round(41 · s)`, `round(159 · s)`); the window zone is the rest, so it is 400 · `s` to within a pixel (1600 × 900: 599). The two MacBook rows (3024 × 1964, 3456 × 2234) are 16:10-like and scale like any other
+The composition's edges are rounded one by one (SWI-LAY-3), so the sides of an odd leftover are equal (2560 × 1600: 213 / 213, a 2134 px composition). The strip columns are the strips' device heights by SWI-LAY-7 (`round(41 · s)`, `round(159 · s)`); the window zone is the rest, so it is 400 · `s` to within a pixel (1600 × 900: 599). The two MacBook rows (3024 × 1964, 3456 × 2234) are 16:10-like and scale like any other
 height-limited window; in macOS full screen the area beside the camera notch is usually left out, which may change the window's size (to check on the device, not a requirement).
 
 Why every aspect: in the Steam Hardware Survey of October 2026 (primary display, read 2026-11-16 from
@@ -78,7 +78,7 @@ Why every aspect: in the Steam Hardware Survey of October 2026 (primary display,
 
 ## Play screen layout
 
-- **SWI-LAY-10** The composition's three bands are the original's: top strip 41 units, window zone 400, bottom strip 159 (master 147.6, 1440 and 572.4 px; device heights by SWI-LAY-7). Only this pair (k = 1) exists: the thin pair of
+- **SWI-LAY-10** The composition's three bands are the original's: top strip 41 units, window zone 400, bottom strip 159 (master 147.6, 1440 and 572.4 px, which are off the 6 px grid: [open question](#open-questions); device heights by SWI-LAY-7). Only this pair (k = 1) exists: the thin pair of
   120 / 456 master px (owner decision 2026-11-17, [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453)) and `k` = 0.8 are retired, because the strips and an open window together are exactly 4:3 at the original proportions and the composition fills the height.
 - **SWI-LAY-11** The HUD is the original layout at `s`: every control sits at its original unit position and size × `s`, the HUD text (message window, clock, counters) is drawn at the same scale, and nothing is re-laid by a layout
   model. The strips are composition-wide (800 units). Elements that stand at an edge over the world (the spell pane, the combat list, text bubbles and floaters) are placed against the window's edges, not against the composition; the follower group has its own rule, SWI-LAY-16.
@@ -94,7 +94,7 @@ Why every aspect: in the Steam Hardware Survey of October 2026 (primary display,
 - **SWI-LAY-16** The follower group moves as one: the portraits, the scroll arrows and the show/hide button (FP1: the button 67 × 13 units at (0, 428), the arrows at (0, 415) and (33, 415), the portraits at x 11, y 50 + 62 per slot) keep their original heights at the composition's scale `s`
   and stand at the **window's** left edge, over the world, instead of the composition's. The button stands on a small brass backing of its own (a kit part of the strips batch). At 4:3 the group is identical to the original ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925)).
 
-- **SWI-LAY-17** **World zoom (owner decision 2026-11-19, [#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937)).** The world zoom stays a **player setting for now**: the existing in-game zoom option is kept and not changed by this layout. The **reference look is the composition's scale `s`** (option B of the issue): the world scales with the interface, the play view inside the window zone shows the same area as the original (800 × 400 units), the sides add only what lies beyond it, and sprites match the interface's size. Not chosen as the reference: world pixels at 1× (A, much more world on a large screen, small sprites). The HD sprites question stays closed (world frames 1×, decision 2026-11-15). The Original look draws its world at `s` only inside the composition (SWI-ORG-3). **To revisit:** the owner is fully happy with the 200 % zoom the game has today at 2560 × 1440 in full screen, where `s` = 2.4 (240 %); the final default (the setting's default and its steps relative to `s`) is decided with the owner later.
+- **SWI-LAY-17** **World zoom (owner decision 2026-11-19, [#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937)).** The world zoom stays a **player setting for now**: the existing in-game zoom option is kept and not changed by this layout. The **working reference look is the composition's scale `s`** (option B of the issue; the default is not fixed, see below): the world scales with the interface, the play view inside the window zone shows the same area as the original (800 × 400 units), the sides add only what lies beyond it, and sprites match the interface's size. Not chosen as the reference: world pixels at 1× (A, much more world on a large screen, small sprites). The HD sprites question stays closed (world frames 1×, decision 2026-11-15). The Original look draws its world at `s` only inside the composition (SWI-ORG-3). **To revisit:** by the owner's report (to verify in the viewer) the game runs today with a 200 % world zoom at 2560 × 1440 in full screen and the owner is fully happy with it; the composition's `s` there is 2.4 (240 %). The final default (the setting's default and its steps relative to `s`) is decided with the owner later.
 
 ## Superseded rules of 2026-11-16
 

@@ -2,7 +2,7 @@
 
 Status: **accepted by the owner on 2026-11-16** (owner thread, work item ARC-UI-2447,
 [#2447](https://github.com/Simarglok/arcanum-steamwoven/issues/2447)) and **amended on 2026-11-19** (owner verdict of the column check [#2892](https://github.com/Simarglok/arcanum-steamwoven/issues/2892); work item ARC-DOC-2893,
-[#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893)): decisions 1, 2, 3 and 5 below are replaced by the [amendment](#amendment-of-2026-11-19), the rest stands; the open owner decisions are listed under
+[#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893)): decisions 1, 2, 3, 5 and 10 below are replaced by the [amendment](#amendment-of-2026-11-19), the rest stands; the open owner decisions are listed under
 [Open decisions](#open-decisions) and tracked as issues. Epic:
 [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446). Requirements and the work breakdown:
 [TRD](steamwoven-interface-trd.md). Requirements touched (status unchanged):
@@ -65,8 +65,8 @@ texture of the wood backgrounds).
 9. **Proportions are checked first.** Before any Codex art, the existing generated interface is reworked to the new
    layout to judge the sizes of panels and elements
    ([#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452), done; the check of the column, [#2892](https://github.com/Simarglok/arcanum-steamwoven/issues/2892), set the 2026-11-19 verdict).
-10. ~~**Original is untouched.**~~ **Superseded 2026-11-19** (point 7 of the [amendment](#amendment-of-2026-11-19)): the Original look keeps its art and rules but uses the composition. Was: with the HD option off the output stays byte-identical. Until the Steamwoven kit covers
-    a window, that window keeps today's HD-option drawing as the fallback.
+10. ~~**Original is untouched.**~~ **Superseded 2026-11-19** (point 7 of the [amendment](#amendment-of-2026-11-19)): the Original look keeps its art and rules but uses the composition. Was: with the HD option off the output stays byte-identical. Still valid: until the Steamwoven kit covers
+    a window, that window keeps today's HD-option drawing as the fallback (TRD SWI-RUN-3).
 
 ## Amendment of 2026-11-19
 
@@ -79,10 +79,10 @@ Owner verdict on the column check ([#2892](https://github.com/Simarglok/arcanum-
 3. **Every aspect by scaling.** 16:9 and 16:10 natively, 21:9 and 32:9 with the world to the window's edges (no pillarbox bars), 4:3 natively full screen, narrower than 4:3 width-limited with black above and below. The 16:10 frame with bars, the 16:9 pillarbox and the thin 120 / 456 strips are retired.
 4. **Master composition 2880 × 2160** inside the 3840 × 2160 reference; the baked steps ×1, ×2/3, ×1/2, ×1/3 and the run-time scale between them are unchanged (`f = s / 3.6`).
 5. **Kit** at the composition's size: strips (with end caps), window backgrounds (2880 × 1440), full-screen plates (2880 × 2160), hardware and the rest; no full-width board, no outward backdrop, no gap wood. The follower group (portraits, scroll arrows, show/hide button) moves as one to the window's left edge at its original heights; the button gets a small brass backing.
-6. **Open question recorded, one decided:** the world is now drawn to the window's edges while Steamwoven tests the drawn view for the out-of-sight rules (decision of 2026-11-07), so an ultrawide window sees a much wider world; whether a maximum world width is needed is open ([TRD open questions](steamwoven-interface-trd.md#open-questions)). **Decided the same day ([#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937)):** the world zoom stays a player setting for now (the existing in-game zoom option is kept), and the composition's scale is the reference look (the world scales with the interface and the play view in the window zone shows the same area as the original; TRD SWI-LAY-17). The owner is fully happy with today's 200 % zoom at 2560 × 1440 in full screen, where `s` = 2.4; the final default is to be revisited.
+6. **Open question recorded, one decided:** the world is now drawn to the window's edges while Steamwoven tests the drawn view for the out-of-sight rules (decision of 2026-11-07), so an ultrawide window sees a much wider world; whether a maximum world width is needed is open ([TRD open questions](steamwoven-interface-trd.md#open-questions)). **Decided the same day ([#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937)):** the world zoom stays a player setting for now (the existing in-game zoom option is kept), and the composition's scale is the working reference look (the world scales with the interface and the play view in the window zone shows the same area as the original; TRD SWI-LAY-17). By the owner's report (to verify) the game runs today at a 200 % zoom at 2560 × 1440 in full screen and the owner is fully happy with it, where `s` = 2.4; the final default is to be set with the owner.
 7. **The Original look uses the same composition** ([#2936](https://github.com/Simarglok/arcanum-steamwoven/issues/2936)): the HD-off interface is the original 800 × 600 screen as one centred 4:3 composition scaled with `s = min(W / 800, H / 600)`, Legacy art with sharp pixel scaling, **black** sides at every aspect, the world drawn at the composition's scale so the play view shows the original 800 × 400 area and the out-of-sight rules keep the fixed 800 × 400 view (decision 2026-11-07). This supersedes decision 10 ("Original is untouched", byte-identical output with the HD option off); art, fonts and rules of the Original look are unchanged ([TRD](steamwoven-interface-trd.md#original-look-in-the-composition)).
 
-Work: [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) scales the composition, [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926) removes the full-width layout, the TRD is rewritten by [#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893), and the full-width production batches #2472 to #2480
+Work: [#2890](https://github.com/Simarglok/arcanum-steamwoven/issues/2890) already carries the scale rule for the viewer's `column` choice and [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) completes it (the follower group at the window's edge and the points #2890 leaves), [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926) removes the full-width layout, the TRD is rewritten by [#2893](https://github.com/Simarglok/arcanum-steamwoven/issues/2893), and the full-width production batches #2472 to #2480
 (closed, not planned) are replaced by #2927 to #2935; the Original look's composition is [#2936](https://github.com/Simarglok/arcanum-steamwoven/issues/2936).
 
 ## Alternatives considered
@@ -90,7 +90,7 @@ Work: [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) scale
 | Alternative | Outcome | Why |
 | --- | --- | --- |
 | Per-file redraw fitted to the original pixels (ARC-RES-094 U3) | superseded for the Steamwoven interface | geometry bound to 800 × 600; no full width; files redrawn one by one drift in tone; the pixel-fit gates measure the wrong thing once the layout is ours |
-| Strip edge columns tiled at the sides (ARC-RES-093 C, ARC-RES-094 U4) | rejected | visible repetition; the sides must be the same painted material, not a repeated slice |
+| Strip edge columns tiled at the sides (ARC-RES-093 C, ARC-RES-094 U4) | rejected | visible repetition (now moot: the sides show the world or black, 2026-11-19) |
 | Generated chrome as the final look (ARC-RES-122) | rejected as the look, kept as the placeholder and fallback | the look; it stays useful for the proportions prototype and for parts the kit does not yet have |
 | Density (physical-size) scale (ARC-RES-122 concept 1) | not used by the Steamwoven interface | art is authored for four fixed steps and the interface is proportional to the screen; the player's `uiScale` is an open question |
 | A native 4:3 layout | **adopted 2026-11-19** as the composition itself (was: rejected, no measurable share) | the one 4:3 composition scaled to the screen is the layout at every aspect |
@@ -124,5 +124,5 @@ Work: [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) scale
 | Panel heights and proportions after the prototype — decided 2026-11-17: top 120 and bottom 456 master px; **retired 2026-11-19**: the original strips (41 / 159 units) | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) |
 | Approval of the material sheet | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) |
 | Method for the strips and window backgrounds | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) |
-| World zoom in the Steamwoven look — **decided 2026-11-19**: stays a player setting, the composition's scale is the reference; the default is to be revisited | [#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937) |
+| World zoom in the Steamwoven look — **decided 2026-11-19**: stays a player setting; working reference: the composition's scale; the default is to be set with the owner | [#2937](https://github.com/Simarglok/arcanum-steamwoven/issues/2937) |
 | The player's `uiScale` in the Steamwoven interface; behaviour above ×1 (5K screens); a maximum drawn world width on ultrawide windows; the strip master heights (150 / 570 or 148 / 572 px) | [TRD open questions](steamwoven-interface-trd.md#open-questions) |

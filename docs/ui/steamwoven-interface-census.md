@@ -22,7 +22,7 @@ no frames). Screenshots stayed local ([below](#screenshots)).
 - **Baked text**: every non-font art was looked at on contact sheets (decoded locally with the project's ART decoder, 2026-11-16).
 - **Kit kind**: one of the [asset kit](steamwoven-interface-trd.md#asset-kit) kinds, assigned by role, name and size; judgement, to be
   confirmed when the manifest is built.
-- Nothing here changes behaviour; the Original look is untouched.
+- Nothing here changes behaviour (the census itself; the Original look's layout is changed by the 2026-11-19 decision, not by this note).
 
 ## Summary
 
