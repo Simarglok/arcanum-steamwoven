@@ -227,13 +227,11 @@ public sealed partial class GameSessionOwner
             && splitFailure != GameSessionFailure.None) return Refused(splitFailure);
         var points = worn?.ScriptPoints ?? facts.ScriptPoints;
         // ARC-COMBAT-1955: the removal's scripts (0x467860: wield off for a worn item, then remove-item; the stack path of the split runs none, QW5) and the throw script (point 6) run under the host. ARC-COMBAT-2182: the throw script of a split
-        // stack runs for the stack the split makes (its entity is planned before the scripts, RunHeroThrowScripts). ARC-COMBAT-2183: a throw script that refuses gives the item back (0x4617F0), which runs its insert-item script after the throw script. NOT READY (refused): a split stack (ammunition, gold) with both, whose give-back merges into the stack it came from.
+        // stack runs for the stack the split makes (its entity is planned before the scripts, RunHeroThrowScripts). ARC-COMBAT-2183: a throw script that refuses gives the item back (0x4617F0), which runs its insert-item script after the throw script. ARC-SCRIPT-2855: a split stack (ammunition, gold) whose throw script refuses gives its units back by a merge, which runs the insert-item script (21) on the incoming stack before it is destroyed.
         var removal = worn is not null && points.Contains(SessionScriptPoint.WieldOff) || !split && points.Contains(SessionScriptPoint.RemoveItem);
         // A worn item's own record keeps only the wear events' points (21, 24, 25, 28), so the throw and insert-item points are read from the host's facts too.
         var throwScript = points.Contains(SessionScriptPoint.Throw) || facts.ScriptPoints.Contains(SessionScriptPoint.Throw);
-        if ((removal || throwScript) && request.Scripts is null ||
-            throwScript && split && (points.Contains(SessionScriptPoint.InsertItem) || facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem)))
-            return Refused(GameSessionFailure.ItemScriptUnsupported);
+        if ((removal || throwScript) && request.Scripts is null) return Refused(GameSessionFailure.ItemScriptUnsupported);
         if (!split && (facts.NoDrop || worn?.Item.NoDrop == true)) return Refused(GameSessionFailure.ItemNotDroppable);
         var triggers = request.ItemTriggers;
         if (triggers is null && (worn?.ItemSpells == true || HasItemRuns(request.Item))) return Refused(GameSessionFailure.ItemEffectUnsupported);

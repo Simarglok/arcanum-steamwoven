@@ -168,6 +168,8 @@ public partial class TerrainViewerApp
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _barterMessage = null; _barterStatus = null; _barterSession = session; _barterInShop = shop;
+        // ARC-SCRIPT-2855: a line the merchant's container piles' insert-item scripts printed at the open is the window's first message.
+        if (opened.Messages.Count > 0) _barterMessage = string.Join(" ", opened.Messages.Select(message => message.Text.Trim()));
         // ARC-DEV-339: the arrange button's layout flag is cleared at every open (ledger IW37).
         _arrangeLayout = InventoryArrangeLayout.Horizontal;
         _barterPanel.Docked = shop;

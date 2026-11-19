@@ -63,7 +63,7 @@ public sealed partial class GameSessionOwner
             if (runs.Failure == GameSessionFailure.None && throwScript) answer = runs.Run(SessionScriptPoint.Throw, attachee, SessionEventKinds.PlayerEntity, null);
             // ARC-COMBAT-2183 (0x4617F0 → 0x461810 → 0x466640, ledger TW3): a refusing throw script gives the item back through the item transfer, whose insertion runs the item's insert-item script (21) after the throw script, the hero as
             // the triggerer and its answer ignored. Run it here with the rest, before they are applied. (The give-back's own get script (point 16) is not run: the exe read of the gate is ARC-COMBAT-2183's leftover.)
-            if (runs.Failure == GameSessionFailure.None && answer?.Outcome == ScrOutcome.SkipDefault && !split
+            if (runs.Failure == GameSessionFailure.None && answer?.Outcome == ScrOutcome.SkipDefault
                 && (points.Contains(SessionScriptPoint.InsertItem) || request.Facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem)))
                 runs.Run(SessionScriptPoint.InsertItem, attachee, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();

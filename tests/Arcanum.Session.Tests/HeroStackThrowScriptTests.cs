@@ -204,13 +204,29 @@ public sealed class HeroStackThrowScriptTests
     }
 
     [TestMethod]
-    public void AStackThrowRefusesWithoutAHostAndWithAnInsertItemScript()
+    public void AStackThrowRefusesWithoutAHost()
     {
         using var owner = Hero();
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.ThrowHeroItem(owner.Version, Ammo(owner, null, 5)).Failure, "no host: as before");
-        var mixed = owner.ThrowHeroItem(owner.Version, Ammo(owner, new Host(), 5, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0), (mixed.Disposition, mixed.Failure, mixed.Scripts.Count), "the give-back would run the insert-item script");
         Assert.AreEqual(30, owner.QueryAmmo("made:2")!.Value.Units);
+    }
+
+    // ARC-SCRIPT-2855 (TQ19, 0x466640): a split stack whose throw script refuses is given back by a merge, which runs the insert-item script (21) on the incoming stack, the hero as the triggerer, before it is destroyed.
+    private const int InsertScript = 721;
+
+    [TestMethod]
+    public void ADeclinedStackThrowRunsTheInsertItemScriptOnTheIncomingSplitStack()
+    {
+        using var owner = Hero();
+        owner.AttachItemScripts(prototype => prototype is 7059 ? [new(SessionScriptPoint.Throw, ThrowScript, 0, 0), new(SessionScriptPoint.InsertItem, InsertScript, 0, 0)] : null);
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var declined = owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 12, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (declined.Disposition, declined.Failure, declined.ScriptDeclined));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Throw, "made:3"), (SessionScriptPoint.InsertItem, "made:3") }, declined.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.AreEqual((30, true), (owner.QueryAmmo("made:2")!.Value.Units, ReadFlag(owner, 3) == true), "the units merged back and the insert script's flag applied");
+        Assert.IsNull(owner.QueryAmmo("made:3"));
     }
 
     // A call the throw script schedules on its own item (call script in, the triggerer the hero, the attachee the item).
