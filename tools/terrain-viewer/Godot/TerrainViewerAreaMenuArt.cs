@@ -155,6 +155,8 @@ public partial class TerrainViewerApp
         require(_mainMenu!.Window == AreaMenuWindow.Main && panel.ArtMode, "Back returned to the main window");
         // ARC-UI-2577: the full-screen menus in the Steamwoven layout (opt-in, ARC_AREA_MENU_STEAMWOVEN=1).
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_STEAMWOVEN") == "1") await MenuSteamwovenForSmoke(require, Frames);
+        // ARC-UI-2891: the same menus in the column mode (opt-in, ARC_AREA_MENU_COLUMN=1).
+        if (ColumnMenuSmokeOn()) await MenuColumnForSmoke(require, Frames);
         GD.Print("ARC-UI-058 native-smoke menu art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             _menuArtContent!.Detail, Labels = labels, Places = places.Select(place => $"{place.X},{place.Y} {place.Width}x{place.Height}").ToArray() }));
     }

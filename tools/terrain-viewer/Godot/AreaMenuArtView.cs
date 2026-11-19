@@ -1,4 +1,5 @@
 using Arcanum.Data.Hd;
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -139,22 +140,25 @@ public partial class AreaMenuArtView : Control
         (_controls, _arrows, _controlFocus, _arrowHovered, _arrowHeld) = ([], [], -1, -1, -1);
     }
 
-    /// <summary>ARC-UI-2577 (SWI-BDR-6): the full-screen layout of the Steamwoven interface for the window now (the 800 × 600 zone centred in the frame at `f · 3.6`, the generated
-    /// backdrop over the frame, black outside it), or null while the layout is off (the HD option or the generated interface off, the older smokes' suspension, or a window below f = 0.25).</summary>
+    /// <summary>ARC-UI-2577 (SWI-BDR-6): the full-screen layout of the Steamwoven interface for the window now (full width: the 800 × 600 zone centred in the frame at `f · 3.6`, the generated
+    /// backdrop over the frame, black outside it; ARC-UI-2891 column mode: the plate fitted to the window's height, black beside it), or null while the layout is off (the HD option or the generated interface off, the older smokes' suspension, or a window below f = 0.25).</summary>
     internal SteamwovenFullScreenPlan? FullScreenPlan
     {
         get
         {
             if (!AreaGameBarPanel.SteamwovenOn) return null;
             var size = GetViewportRect().Size;
-            // The window's size decides the plan: it is looked up once per size (the panel asks several times a frame).
-            if (_planSize != size) (_plan, _planSize) = (SteamwovenFullScreen.Plan((int)size.X, (int)size.Y), size);
+            // ARC-UI-2891: with the column option (SteamwovenHud.Options) the plate is fitted to the window's height (SteamwovenColumnMenu.Fit).
+            var options = SteamwovenHud.Options.Column is null ? null : SteamwovenHud.Options;
+            // The window's size and the column option decide the plan: it is looked up once per size (the panel asks several times a frame).
+            if (_planSize != size || !Equals(_planOptions, options)) (_plan, _planSize, _planOptions) = (SteamwovenFullScreen.Plan((int)size.X, (int)size.Y, options), size, options);
             return _plan;
         }
     }
 
     private SteamwovenFullScreenPlan? _plan;
     private Vector2 _planSize;
+    private SteamwovenLayoutOptions? _planOptions;
     private bool _hadPlan;
 
     private Texture2D? WidescreenBackground()

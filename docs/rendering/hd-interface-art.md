@@ -1,6 +1,6 @@
 # HD interface art: methods for panels, frames, buttons and small art (ARC-RES-094)
 
-> **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): for the Steamwoven look the interface is a kit authored at 3840 × 2160 on a full-width layout, not per-file redraws fitted to the original pixels. The U3 recommendation, its geometry gates and the U4 side pieces no longer apply to that look. The census, the methods and the measurements stay valid as research and for the current HD-option fallback.
+> **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): for the Steamwoven look the interface is a kit authored at 3840 × 2160 on a full-width layout, not per-file redraws fitted to the original pixels. The U3 recommendation, its geometry gates and the U4 side pieces no longer apply to that look. The census, the methods and the measurements stay valid as research and for the current HD-option fallback. **Amended 2026-11-19** (owner verdict #2892): the layout is one centred 4:3 composition scaled to the screen with the world or black at the sides, not a full-width layout; see the [ADR amendment](../ui/steamwoven-interface-adr.md#amendment-of-2026-11-19).
 
 Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 redraws, strips and icons not usable in round 1; round 2 (refined tiles) is a candidate, not gated.** Work item ARC-RES-094, docs-only. Requirements:
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive layout, status unchanged),
@@ -471,11 +471,13 @@ material. The existing sheet smoke accepts `ARC_AREA_SHEET_HD_VERIFY=1` with an
 explicit `ARC_HD_PACK`: it temporarily enables interface HD, requires the
 character frames to resolve as HD and restores the in-memory setting. The full
 run is `./arcanum smoke crash-site --env ARC_HD_PACK=<pack> --env
-ARC_AREA_SHEET_HD_VERIFY=1 --env ARC_VISUAL_PROFILE=legacy`: `ARC_HD_PACK` alone
-makes the world profile HD, and the Crash Site smoke's later cave-lighting pixel
-observers compare Legacy source pixels, so they would stop with
-`AREA_SOURCE_PIXEL_MISMATCH`; the legacy profile keeps the world as it was and
-the check still turns the interface HD. Existing `ARC_AREA_SHEET_CAPTURE` writes
+ARC_AREA_SHEET_HD_VERIFY=1` (ARC-DEV-2923): `ARC_HD_PACK` alone makes the world
+profile HD (the relit look), and the Crash Site smoke's later cave-lighting
+pixel observers compare Legacy source pixels, so with the check requested the
+viewer starts with the Legacy world profile unless the run names one, and the
+check still turns the interface HD. An explicit `ARC_VISUAL_PROFILE=hd` is
+refused by the check at its start (the sheet smoke), not minutes later by
+`AREA_SOURCE_PIXEL_MISMATCH`. Existing `ARC_AREA_SHEET_CAPTURE` writes
 local-only readbacks; neither switch writes the player's settings.
 
 One known gap (ARC-UI-2915): art 787 `ScrllSlideM1` (the 11×1 middle of the
