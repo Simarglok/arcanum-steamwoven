@@ -15,7 +15,7 @@ public partial class TerrainViewerApp
     // fails when an installed script a host is meant to run is refused or does not run at a trigger Steamwoven hosts. It plays the triggers one after the other and reads the outcome of each:
     //  - TQ13/TQ27: Virgil's opening heartbeat runs and opens his dialog, whose script line runs (the `opening` stage's observation, reused whole: it fails when the heartbeat or the talk is refused or stops);
     //  - TQ5: every tile script of the window the placed set admits from line 0 (up to a dozen scripts) runs for the hero as the tile entry does, and for an NPC of the shown map as the AI's step does (up to four);
-    //  - TQ18: every written item (object type 13) of the window whose use script the use set admits from line 0 runs its use script as the item use does.
+    //  - TQ18: every written item (object type 13) of the window whose use script the item-use set admits from line 0 runs its use script as the item use does.
     // A script a host admits statically must not come back Refused, EffectsRejected or ContentUnavailable: that is the bug class of #2788 (a tile script refused for a carried follower) and #2789 (a note's use script refused).
     // The scripts the census baseline names as refused (tests ScriptTriggerRefusalBaseline.txt) are not played: the static admission check below leaves them out, so a gap issue of the epic stays an issue, not a failing run.
     private async Task RunAreaScriptTriggersStageAsync(TerrainLoadResult? mapMode)
@@ -53,7 +53,7 @@ public partial class TerrainViewerApp
                 Awarded(host, use); npcRuns++;
             }
         // Written items: the use script of each distinct admitted script runs as the item use does.
-        var items = area.Snapshot.Objects.Where(r => r.Type == ScriptTriggersWrittenItemType && AreaUseScriptHost.LoadedSlot(r, ScrPoint.Use) is { Script: > 0 } slot && Admitted(slot.Script, AreaUseScriptHost.Admission))
+        var items = area.Snapshot.Objects.Where(r => r.Type == ScriptTriggersWrittenItemType && AreaUseScriptHost.LoadedSlot(r, ScrPoint.Use) is { Script: > 0 } slot && Admitted(slot.Script, AreaUseScriptHost.ItemUseAdmission))
             .GroupBy(r => AreaUseScriptHost.LoadedSlot(r, ScrPoint.Use)!.Value.Script).Select(g => g.First()).Take(ScriptTriggersMaxScripts).ToArray();
         var itemRuns = 0;
         foreach (var row in items)
@@ -63,6 +63,9 @@ public partial class TerrainViewerApp
             Require(!Failed(use), $"the written item {AreaUseScriptHost.EntityId(row)} use script {script} runs: {use.Outcome} {use.Detail}");
             itemRuns++;
         }
+        // A half that played nothing is no guard: the stage says so instead of passing.
+        Require(npcRuns > 0, $"an NPC of the shown map ran a tile script ({npc ?? "no NPC row"}, {tiles.Length} tile scripts)");
+        Require(itemRuns > 0, "a written item of the window ran its use script (none of type 13 with an admitted use script)");
         GD.Print("ARC-DEV-2816 native-smoke script-triggers PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, TileScripts = tiles.Length, HeroTileRuns = heroRuns, NpcTileRuns = npcRuns, WrittenItemRuns = itemRuns,
             Parity = "NOT_VERIFIED" }));
     }

@@ -133,12 +133,23 @@ public sealed class ScriptTriggerCensusTests
     }
 
     /// <summary>
-    /// ARC-DEV-2816 (AC1; epic #2814, docs/research/script-trigger-conditions.md): the guard on the refusals of the installed scripts. Over the 79 maps, every script a trigger kind attaches (the object points the hosts run, and the tile and sector
+    /// ARC-DEV-2816 (AC1; epic #2814, docs/research/script-trigger-conditions.md): the guard on the refusals of the installed scripts. Over the 79 maps (the window each opens), every script a trigger kind attaches (the object points the hosts run, and the tile and sector
     /// scripts of the maps) is read against the admission set of the host that runs it; the scripts a host refuses are pinned in <c>ScriptTriggerRefusalBaseline.txt</c> as one row per trigger kind and script (kind, script, first refusal). A script
     /// refused at a kind that is not in the baseline fails the test naming the kind and the script, so a host change that narrows a set, or a new attachment the data gains, cannot refuse a script unseen. A script the baseline names that is admitted now
     /// fails too, so the file keeps saying what is still refused (the gap issues of #2814 shrink it). The first refusal column is informational (a script refused later at another command is the same row). Opt-in: <c>DAT_ROOT</c>;
     /// <c>ARC_SCRIPT_REFUSAL_BASELINE_WRITE</c>, when set, names the file the current rows are written to (to refresh the baseline).
     /// </summary>
+    // The set of the host that runs a point for an object of this type (ARC-DEV-2816): the item use of a placed item (types 5 to 14) runs under the vicinity-kind item-use set, the dying, destroy, bust and taking damage points under their own sets.
+    private static ScrAdmissionSet? RefusalHostSet(int point, int objectType) => point switch
+    {
+        ScrPoint.Use when objectType is >= 5 and <= 14 => AreaUseScriptHost.ItemUseAdmission,
+        ScrPoint.Dying => AreaUseScriptHost.DyingAdmission,
+        ScrPoint.Destroy => AreaUseScriptHost.DestroyPointAdmission,
+        ScrPoint.Bust => AreaUseScriptHost.BustAdmission,
+        ScrPoint.TakingDamage => AreaUseScriptHost.TakingDamageAdmission,
+        _ => HostSet(point),
+    };
+
     [TestMethod, TestCategory("RealData")]
     public void Refused_installed_scripts_per_trigger_kind_match_the_pinned_baseline()
     {
@@ -150,7 +161,8 @@ public sealed class ScriptTriggerCensusTests
             a.Kind == b.Kind ? a.Script.CompareTo(b.Script) : string.CompareOrdinal(a.Kind, b.Kind)));
         void Read(string kind, int script, ScrAdmissionSet set)
         {
-            if (content.Script(script) is not { Status: ScriptContentStatus.Read, Program: { } program }) return;
+            // A script the content cannot read is a row of its own, so it cannot pass unseen.
+            if (content.Script(script) is not { Status: ScriptContentStatus.Read, Program: { } program }) { current.TryAdd((kind, script), "unreadable"); return; }
             if (ScrAdmission.AdmitFrom(program, set, 0).Refusal is not { } refusal) return;
             var key = refusal.Code switch
             {
@@ -171,7 +183,7 @@ public sealed class ScriptTriggerCensusTests
             foreach (var row in result.Area.Snapshot.Objects.GroupBy(AreaUseScriptHost.EntityId).Select(g => g.First()))
             for (var point = 0; point < ScrPoint.Count; point++)
             {
-                if (point == ScrPoint.DialogOverride || HostSet(point) is not { } set || AreaUseScriptHost.LoadedSlot(row, point) is not { Script: > 0 } slot) continue;
+                if (point == ScrPoint.DialogOverride || RefusalHostSet(point, row.Type) is not { } set || AreaUseScriptHost.LoadedSlot(row, point) is not { Script: > 0 } slot) continue;
                 Read($"point {point}", slot.Script, set);
             }
             foreach (var placed in (result.MapTransitions?.Placed ?? []).Concat(result.MapTemplateScripts))

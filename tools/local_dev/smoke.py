@@ -258,7 +258,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "bed-blow": _needs(map=CAVE, only_map=True, own=True),  # ARC-COMBAT-2167: a cave NPC seated in a bed, the hero's blow on it; moves the clock
     "bed": _needs(map=CAVE, only_map=True, own=True),  # the cave's one scripted bed: the sleep window through it, kind-2 heal; moves the clock
     "created-scenery": _needs(portable=True), "object-art": _needs(portable=True), "created-critter": _needs(portable=True),
-    "script-critters": _needs(**_MAIN_ONLY), "script-eye-candy": _needs(**_MAIN_ONLY), "script-triggers": _needs(**_MAIN_ONLY), "weapon-hit": _needs(**_MAIN_ONLY), "encounters": _needs(sector=WILD, own=True),  # moves the clock by days and ends with the hero landed elsewhere; the wilderness sector has no named area or town map
+    "script-critters": _needs(**_MAIN_ONLY), "script-eye-candy": _needs(**_MAIN_ONLY), "script-triggers": _needs(own=True, **_MAIN_ONLY), "weapon-hit": _needs(**_MAIN_ONLY), "encounters": _needs(sector=WILD, own=True),  # moves the clock by days and ends with the hero landed elsewhere; the wilderness sector has no named area or town map
     "worn-light": _needs(), "relight": _needs(map=CAVE, own=True), "critter-light": _needs(map=LIGHT_MAP), "eye-light": _needs(),
     "summon-flash": _needs(portable=True), "summon-wall": _needs(portable=True), "summon-undead": _needs(portable=True),
     "tech-craft": _needs(map=CAVE, only_map=True, own=True),  # needs the cave's bullets; F8 replaces the session

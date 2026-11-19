@@ -1,14 +1,15 @@
-# ARC-DEV-2816: installed scripts a host refuses, one row per trigger kind and script (kind, script, first refusal).
+# ARC-DEV-2816: installed scripts a host refuses, one row per trigger kind and script (kind, script, first refusal); issue #2835 shrinks it. Rows of a fixed script are removed in the fix's PR.
 point 1	1177	focus 8
 point 1	1990	ComputedGoto
 point 1	2056	focus 8
 point 1	2319	focus 8
 point 1	2501	action 60
 point 1	2644	focus 8
-point 1	2942	focus 8
+point 1	2942	condition 22
 point 1	2948	focus 8
 point 1	2959	action 61
 point 1	3004	focus 8
+point 12	1528	action 40
 point 19	1179	action 120
 point 19	1570	action 7
 point 19	1904	action 7
@@ -24,9 +25,12 @@ point 19	30098	action 52
 point 19	30128	action 52
 point 19	30129	action 52
 point 25	30077	action 80
+point 30	2560	focus 19
+point 30	3046	action 52
 point 32	1272	action 127
 point 32	2142	condition 8
 point 32	2149	condition 8
+point 9	5	unreadable
 point 9	1000	action 33
 point 9	1089	action 33
 point 9	1116	action 21
