@@ -59,7 +59,8 @@ public static class SteamwovenHud
         var topK = new Ratio(options.TopPanelMaster, SteamwovenGrid.StripTopPanel);
         var bottomK = new Ratio(options.BottomPanelMaster, SteamwovenGrid.StripBottomPanel);
         var k = topK < bottomK ? topK : bottomK;
-        var unit = layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator) * k;
+        // ARC-UI-2890: the column's own strip scale (3.6 · k · f, or frame height / 600 in the fitted column).
+        var unit = layout.Column?.StripScale ?? layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator) * k;
         var stripWidth = unit * AreaGameBarLayout.ScreenWidth;
         var stripLeft = layout.Frame.X + (((Ratio)layout.Frame.Width - stripWidth) / 2).RoundHalfUp();
         var topStripY = layout.Top.Band.Bottom - (unit * AreaGameBarLayout.TopHeight).RoundHalfUp();

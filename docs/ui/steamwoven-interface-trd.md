@@ -189,6 +189,14 @@ the **column** hypothesis is tested. The full-width rules above stay as they are
 
 Unit tests: `SteamwovenColumnTests` (exact numbers at eight sizes and 1024 × 768 for both presets, tiling at more sizes).
 
+### The fitted column (owner decision 2026-11-19, ARC-UI-2890)
+
+After the first captures the owner liked the column at 16:9 and rejected the wood fill in the gaps at 16:10. The choice `column` is now the **fitted column** (`SteamwovenColumnMode.FitHeight`, `SteamwovenLayoutOptions.ColumnFitted`): the strips and the open window are one 4:3 composition
+(41 + 400 + 159 = 600 units of the original's 800 × 600 screen) scaled to the frame's whole height, `u = frame height / 600` device px per unit, a column `800 · u` wide centred in the frame, the world (or black) at the sides. At 16:9 it is the k = 1 column (`u = 3.6 · f`); at 16:10 the
+composition is scaled up (`4 · f`), so the window zone fills the middle band exactly and there are **no gaps and no wood fill**. Any aspect ratio is supported by the same rule: the frame is the whole window, or, where the window is taller than 4:3, a 4:3 band of the window's width centred
+vertically (black bars above and below, however thin); a wider window shows the world to its edges. The top strip is `round(41 u)` high, the bottom strip ends at the frame's bottom (`159 u`), so strip art and bands coincide (no sliver, no overhang). The HD art is to be generated for 3840 × 2160 and reduced
+for the other sizes. `column-thin` (k = 0.8, wood in the gaps) and the unfitted k = 1 column (`column-wood` in the smoke) stay for comparison; the wood pieces of `SteamwovenBackdrops` are drawn only for them. Unit tests: `SteamwovenColumnTests` (the fitted table at eleven sizes).
+
 ### The column in the viewer (ARC-UI-2890)
 
 The viewer draws the column for the play screen and the middle-band windows of the #2575 hook; the full-screen menus (BD-H) and the two-strip screens' backdrops are [#2891](https://github.com/Simarglok/arcanum-steamwoven/issues/2891).

@@ -15,7 +15,7 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void The_hud_plan_of_a_column_has_the_strips_scale_and_the_column_s_zone()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, options);
@@ -30,13 +30,13 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void A_window_stands_in_the_column_zone_at_the_column_s_unit_scale()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, options);
             var zone = plan.Column!.Window.Zone;
             var body = SteamwovenWindowZone.Body(plan, 800, 400);
-            var label = $"{w}x{h} k={options.Column!.K}";
+            var label = $"{w}x{h} k={options.Column!.K} fit={options.Column.FitHeight}";
             Assert.AreEqual(plan.Column.UnitScale, body.Scale, 1e-9, label);
             // An 800 x 400 window fills the zone (within a pixel: the zone's edges are rounded from their own exact position).
             Assert.AreEqual(zone.X, body.X, 1.0, label);
@@ -63,7 +63,7 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void The_gaps_take_the_family_s_wood_and_tile_with_the_window_zone_to_the_column()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
         {
@@ -181,7 +181,7 @@ public sealed class SteamwovenColumnViewerTests
             Assert.AreEqual(choice, SteamwovenLayoutChoices.TryParse(SteamwovenLayoutChoices.Name(choice)));
         Assert.IsNull(SteamwovenLayoutChoices.TryParse("wide"));
         Assert.IsNull(SteamwovenLayoutChoices.TryParse(null));
-        Assert.AreEqual(SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.Column));
+        Assert.AreEqual(SteamwovenLayoutOptions.ColumnFitted, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.Column));
         Assert.AreEqual(SteamwovenLayoutOptions.ColumnThin, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.ColumnThin));
         Assert.IsNull(SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.FullWidth).Column);
         Assert.AreEqual(SteamwovenLayoutOptions.Default, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.FullWidth));

@@ -213,4 +213,81 @@ public sealed class SteamwovenColumnTests
             Assert.AreEqual(Layout(w, h, SteamwovenLayoutOptions.Default), column with { Column = null }, $"{w}x{h}");
         }
     }
+
+    // ARC-UI-2890 (owner decision 2026-11-19): the fitted column: the strips and the window are one 4:3 composition scaled to the frame's height (u = height / 600), no gaps.
+    // Window, frame, column edges, top strip height, middle band bottom (= the bottom strip's top), all from an independent exact-fraction calculation.
+    private static readonly (int W, int H, int FrameX, int FrameW, int FrameH, int ColL, int ColR, int TopH, int MiddleBottom)[] FitTable =
+    [
+        (3840, 2160, 0, 3840, 2160, 480, 3360, 148, 1588),
+        (2560, 1440, 0, 2560, 1440, 320, 2240, 98, 1058),
+        (1920, 1080, 0, 1920, 1080, 240, 1680, 74, 794),
+        (2560, 1600, 0, 2560, 1600, 213, 2347, 109, 1176),
+        (1920, 1200, 0, 1920, 1200, 160, 1760, 82, 882),
+        (1280, 800, 0, 1280, 800, 107, 1173, 55, 588),
+        (3440, 1440, 0, 3440, 1440, 760, 2680, 98, 1058),
+        (1024, 768, 0, 1024, 768, 0, 1024, 52, 564),
+        (1280, 1024, 0, 1280, 960, 0, 1280, 66, 706),
+        (5120, 1440, 0, 5120, 1440, 1600, 3520, 98, 1058),
+        (1366, 768, 0, 1366, 768, 171, 1195, 52, 564),
+    ];
+
+    [TestMethod]
+    public void The_fitted_column_fills_the_frame_s_height_with_the_4_3_composition_and_has_no_gaps()
+    {
+        foreach (var row in FitTable)
+        {
+            var label = $"{row.W}x{row.H}";
+            var layout = Layout(row.W, row.H, SteamwovenLayoutOptions.ColumnFitted);
+            var plan = layout.Column!;
+            Assert.IsTrue(plan.Mode.FitHeight, label);
+            Assert.AreEqual(row.FrameW, layout.Frame.Width, label);
+            Assert.AreEqual(row.FrameH, layout.Frame.Height, label);
+            Assert.AreEqual(row.FrameX, layout.Frame.X, label);
+            Assert.AreEqual(row.ColL, plan.Column.X, label);
+            Assert.AreEqual(row.ColR, plan.Column.Right, label);
+            var topBottom = layout.Frame.Y + row.TopH;
+            Assert.AreEqual(topBottom, plan.TopStrip.Bottom, label);
+            Assert.AreEqual(layout.Frame.Y, plan.TopStrip.Y, label);
+            Assert.AreEqual(layout.Frame.Y + row.MiddleBottom, plan.BottomStrip.Y, label);
+            Assert.AreEqual(layout.Frame.Bottom, plan.BottomStrip.Bottom, label);
+            // The window zone is the middle band itself: no gap above or below; the full-screen zone is the whole frame.
+            Assert.AreEqual(PixelRect.FromEdges(row.ColL, topBottom, row.ColR, layout.Frame.Y + row.MiddleBottom), plan.Window.Zone, label);
+            Assert.AreEqual(0, plan.Window.GapAbove.Height, label);
+            Assert.AreEqual(0, plan.Window.GapBelow.Height, label);
+            Assert.AreEqual(layout.Middle.Band.Y, topBottom, label);
+            Assert.AreEqual(layout.Middle.Band.Bottom, layout.Frame.Y + row.MiddleBottom, label);
+            Assert.AreEqual(layout.Frame.Height, plan.FullScreen.Zone.Height, label);
+            // The unit scale is frame height / 600, and the column is 800 units wide (within a pixel).
+            Assert.AreEqual(row.FrameH / 600.0, plan.UnitScale, 1e-9, label);
+            Assert.AreEqual(800 * plan.UnitScale, plan.Column.Width, 1.0, label);
+            // The world fills the rest of the frame at the sides.
+            Assert.AreEqual(layout.Frame.Width, plan.WorldLeft.Width + plan.Column.Width + plan.WorldRight.Width, label);
+        }
+    }
+
+    [TestMethod]
+    public void At_16_9_the_fitted_column_is_the_original_strips_column_and_never_overflows_the_frame()
+    {
+        var fitted = Layout(3840, 2160, SteamwovenLayoutOptions.ColumnFitted).Column!;
+        var original = Layout(3840, 2160, SteamwovenLayoutOptions.ColumnOriginal).Column!;
+        Assert.AreEqual(original.Column, fitted.Column);
+        Assert.AreEqual(original.UnitScale, fitted.UnitScale, 1e-9);
+        // At 16:10 the composition is scaled up (4 f against 3.6 f); the column is 4:3, narrower than the frame.
+        var tall = Layout(2560, 1600, SteamwovenLayoutOptions.ColumnFitted);
+        Assert.IsTrue(tall.Column!.UnitScale > Layout(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal).Column!.UnitScale);
+        foreach (var (w, h) in new[] { (3840, 2160), (2560, 1600), (1920, 1200), (1280, 800), (1024, 768), (3440, 1440) })
+        {
+            var layout = Layout(w, h, SteamwovenLayoutOptions.ColumnFitted);
+            Assert.IsTrue(layout.Column!.Column.X >= layout.Frame.X && layout.Column.Column.Right <= layout.Frame.Right, $"{w}x{h}");
+            Assert.IsTrue(layout.Column.TopStrip.Bottom <= layout.Column.BottomStrip.Y, $"{w}x{h}");
+        }
+    }
+
+    [TestMethod]
+    public void The_fit_height_flag_needs_the_original_strips_k()
+    {
+        Assert.IsTrue(SteamwovenLayoutOptions.ColumnFitted.IsValid);
+        var thinFitted = SteamwovenLayoutOptions.ColumnThin with { Column = SteamwovenLayoutOptions.ColumnThin.Column! with { FitHeight = true } };
+        Assert.IsFalse(thinFitted.IsValid);
+    }
 }

@@ -36,8 +36,8 @@ public partial class TerrainViewerApp
         {
             // "before" is the whole-factor layout of the generated interface as it was (captured for the owner's comparison; no layout checks).
             // ARC-UI-2890: "column" and "column-thin" are the column mode (the original's strip width, the world at the sides; k = 1 and k = 0.8).
-            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, "column" => SteamwovenLayoutOptions.ColumnOriginal, "column-thin" => SteamwovenLayoutOptions.ColumnThin, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
-            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, column, column-thin, before, legacy or TOP-BOTTOM master px");
+            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, "column" => SteamwovenLayoutOptions.ColumnFitted, "column-wood" => SteamwovenLayoutOptions.ColumnOriginal, "column-thin" => SteamwovenLayoutOptions.ColumnThin, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
+            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, column, column-wood, column-thin, before, legacy or TOP-BOTTOM master px");
             list.Add((name, options));
         }
         return list;

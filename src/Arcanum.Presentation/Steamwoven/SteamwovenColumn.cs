@@ -12,11 +12,18 @@ public sealed record SteamwovenColumnMode(Ratio K, bool WorldToEdges = false)
     /// <summary>ARC-UI-2890: how the viewer dims and desaturates the world at the sides while a menu window is open (presentation only; the values are here, in the options, not in the viewer's code).</summary>
     public SteamwovenWorldDim WorldDim { get; init; } = SteamwovenWorldDim.Default;
 
+    /// <summary>
+    /// ARC-UI-2890 (owner decision 2026-11-19: no wood fill in the gaps): the strips and the open window are one 4:3 composition (41 + 400 + 159 = 600 units of the original's 800 × 600 screen) scaled to the frame's whole height, `u = frame height / 600`
+    /// device pixels per unit, the column `800 · u` wide; the window zone fills the middle band exactly, so there are no gaps, and the world (or the black bars) shows at the sides. At 16:9 it is the same as k = 1 (`u = 3.6 · f`); at 16:10 the
+    /// composition is scaled up (4 · f). Only with k = 1; the scale does not depend on the panel heights of the options.
+    /// </summary>
+    public bool FitHeight { get; init; }
+
     public static Ratio KOriginal => Ratio.One;
     public static Ratio KThin => new(4, 5);
 
     /// <summary>Only the two presets are defined: the strips' master heights are the original's 150 / 570 scaled by k, whole multiples of 6.</summary>
-    public bool IsValid => (K == KOriginal || K == KThin) && WorldDim.IsValid;
+    public bool IsValid => (K == KOriginal || K == KThin) && WorldDim.IsValid && (!FitHeight || K == KOriginal);
 
     /// <summary>The strips' master heights for <see cref="K"/>: 150 / 570 at k = 1, 120 / 456 at k = 0.8.</summary>
     public int TopStripMaster => (K * SteamwovenGrid.StripTopPanel).RoundHalfUp();
@@ -56,7 +63,7 @@ public sealed record SteamwovenWorldDim(double Darken, double Desaturate)
     public bool IsValid => Darken is >= 0 and <= 1 && Desaturate is >= 0 and <= 1;
 }
 
-/// <summary>ARC-UI-2890 (AC1): the layout the game option chooses: the column (the original's strip width, world at the sides; the default while it is tested), the column with the thinner strips, or the full-width panels.</summary>
+/// <summary>ARC-UI-2890 (AC1): the layout the game option chooses: the column (the strips and the window as one 4:3 composition scaled to the frame's height, the world at the sides; the default while it is tested), the column with the thinner strips (k = 0.8, wood in the gaps: kept for comparison), or the full-width panels.</summary>
 public enum SteamwovenLayoutChoice
 {
     Column,
@@ -87,10 +94,10 @@ public static class SteamwovenLayoutChoices
         _ => null,
     };
 
-    /// <summary>The layout options of a choice: <see cref="SteamwovenLayoutOptions.ColumnOriginal"/>, <see cref="SteamwovenLayoutOptions.ColumnThin"/> or the full-width default.</summary>
+    /// <summary>The layout options of a choice: <see cref="SteamwovenLayoutOptions.ColumnFitted"/>, <see cref="SteamwovenLayoutOptions.ColumnThin"/> or the full-width default.</summary>
     public static SteamwovenLayoutOptions Options(SteamwovenLayoutChoice choice) => choice switch
     {
-        SteamwovenLayoutChoice.Column => SteamwovenLayoutOptions.ColumnOriginal,
+        SteamwovenLayoutChoice.Column => SteamwovenLayoutOptions.ColumnFitted,
         SteamwovenLayoutChoice.ColumnThin => SteamwovenLayoutOptions.ColumnThin,
         SteamwovenLayoutChoice.FullWidth => SteamwovenLayoutOptions.Default,
         _ => throw new ArgumentOutOfRangeException(nameof(choice)),
