@@ -271,7 +271,7 @@ public sealed class NpcTransferStateTests
     public void Pile_scripts_coin_overflow_and_an_emptied_scripted_stack()
     {
         // The merchant's pile has an insert-item script (the event the original fires on the source pile first); an archer holds a seed
-        // stack with a remove-item script, which an emptying move deletes without that event (AM4, NT1); a hoarder's pile is nearly full.
+        // stack with a remove-item script, which an emptying move runs after its delete (ARC-SCRIPT-2879, IE3) and so refuses without a script host, as the insert-item event is (AM4, NT1); a hoarder's pile is nearly full.
         var seed = Seed();
         var custom = seed with
         {
@@ -287,7 +287,10 @@ public sealed class NpcTransferStateTests
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.TakeGoldFromNpc(owner.Version, "hoarder", int.MaxValue - 5).Failure, "the hero's gold past 32 bits");
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.GiveGoldToNpc(owner.Version, "hoarder", 6, GoldPile, Accept).Failure, "the pile past 32 bits");
         Assert.AreEqual((0L, 385), (owner.Version.Revision, owner.QueryGold()));
-        Changed(owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 30, Bullets with { Prototype = 7058 }, Accept), "made:1");
-        Assert.IsTrue(owner.IsItemDestroyed("arrows"));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 30, Bullets with { Prototype = 7058 }, Accept).Failure);
+        Assert.IsFalse(owner.IsItemDestroyed("arrows"));
+        // A move that leaves units behind removes nothing, so it needs no host.
+        Changed(owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 29, Bullets with { Prototype = 7058 }, Accept), "made:1");
+        Assert.IsFalse(owner.IsItemDestroyed("arrows"));
     }
 }

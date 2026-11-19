@@ -25,6 +25,8 @@ public sealed record SessionBodyDecayFiring(GameEvent Event, SessionMapId Map, s
 {
     public int Dropped { get; init; }
     public int Destroyed { get; init; }
+    /// <summary>ARC-SCRIPT-2879: the remove-item scripts (28) the walk ran, one per item with the point, with the corpse as the triggerer.</summary>
+    public SessionPassRemovals Removals { get; init; } = SessionPassRemovals.None;
 }
 
 /// <summary>
@@ -140,8 +142,11 @@ public sealed partial class GameSessionOwner
 
         // The items leave their holder in the walk's order (last first); each placement sees the items still to come as not yet dropped (as a container's spill does).
         var later = held2.Where(item => !item.Destroy).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-SCRIPT-2879 (0x463860 → 0x467860, BD3): every item of the walk, destroyed or dropped, runs its remove-item script (28) with the corpse as the triggerer after its unlink and before it is destroyed or laid down.
+        var removals = new PassRemovals(this, _passWorld?.ItemScriptHost, map);
         foreach (var (entity, placed, isSeed, destroy) in held2)
         {
+            removals.Run(at.Code, entity, PassItemPoints(map, entity));
             if (destroy) { DestroyObject(entity); continue; }
             later.Remove(entity);
             if (placed is not null)
@@ -160,7 +165,7 @@ public sealed partial class GameSessionOwner
         if (created is not null) DestroyObject(at.Code);
         CancelBodyDecay(at.Code);
         Revise();
-        _passBodyDecays?.Add(Report(SessionBodyDecayOutcome.Removed, held2.Count - destroyedItems.Length, destroyedItems.Length));
+        _passBodyDecays?.Add(Report(SessionBodyDecayOutcome.Removed, held2.Count - destroyedItems.Length, destroyedItems.Length) with { Removals = removals.Result });
         return GameEventHandlerOutcome.Completed;
     }
 

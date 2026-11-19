@@ -29,7 +29,7 @@ public sealed partial class GameSessionOwner
         _lootedPile = found.Entity;
         try
         {
-            var result = TakeGold((item, coins, facts), count, scripts);
+            var result = TakeGold((item, coins, facts), count, pile, scripts);
             // The pile the move emptied is destroyed (it left the junk pile), so its decay ends (the whole loot does the same).
             if (result.Disposition == GameSessionDisposition.Changed && coins == count) CancelDecay(item);
             return result;
@@ -58,7 +58,7 @@ public sealed partial class GameSessionOwner
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
         // ARC-SCRIPT-2855 (AM4): the stack's insert-item script (21) runs first with the hero as the triggerer.
-        var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false);
+        var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, source.Units == count ? pile : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = HeroStackOfType(source.AmmoType);
         var outer = _lootedPile;

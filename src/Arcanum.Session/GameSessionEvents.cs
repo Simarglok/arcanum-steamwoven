@@ -12,6 +12,9 @@ namespace Arcanum.Session;
 public interface ISessionEventWorld
 {
     LifeFacts? CritterFacts(SessionMapId map, string entity);
+
+    /// <summary>ARC-SCRIPT-2879: the shown map's item script host, which the remove-item scripts (point 28) of the pass's removals (a restock's clear, a body's inventory walk) run through; null: none run (counted as skipped).</summary>
+    ISessionItemScriptHost? ItemScriptHost => null;
 }
 
 /// <summary>An object a deferred script call names (ARC-SCRIPT-010): the runtime map and the session entity id.</summary>

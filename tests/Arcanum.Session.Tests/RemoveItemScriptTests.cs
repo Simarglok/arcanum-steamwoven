@@ -17,7 +17,7 @@ public sealed class RemoveItemScriptTests
     private const int RemoveScript = 702;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
-    private sealed class Host(GameSessionOwner session) : ISessionItemScriptHost
+    internal sealed class Host(GameSessionOwner session) : ISessionItemScriptHost
     {
         public Dictionary<(string, int), int> Slots { get; } = [];
         public Dictionary<int, ScrProgram> Programs { get; } = [];

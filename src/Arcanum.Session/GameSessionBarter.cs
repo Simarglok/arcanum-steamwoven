@@ -74,7 +74,7 @@ public sealed partial class GameSessionOwner
         var stock = box is null ? [] : _inventory.Current(seed, box, entry => DroppedCell(map, seed, entry)).ToArray();
         var piles = stock.Where(entry => entry.Facts.Kind.Type == SessionItemType.Gold && (entry.Facts.Quantity ?? 0) != 0).ToArray();
         // ARC-SCRIPT-2855 (BT11, NT1): each moved pile's insert-item script (21) runs first with the merchant as the triggerer, in the container's order.
-        var insert = piles.Length == 0 ? PileInsert.None : RunPileInserts(scripts, piles.Select(entry => entry.Entity).ToArray(), npc, npcTriggerer: true);
+        var insert = piles.Length == 0 ? PileInsert.None : RunPileInserts(scripts, piles.Select(entry => entry.Entity).ToArray(), npc, npcTriggerer: true, container);
         if (insert.Failure != GameSessionFailure.None) return Refuse(insert.Failure);
         var coins = piles.Sum(entry => (long)entry.Facts.Quantity!.Value);
         var target = piles.Length == 0 ? null : NpcPile(npc);
@@ -244,7 +244,7 @@ public sealed partial class GameSessionOwner
             if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
             if (NpcPile(npc) is not { } pile || pile.Quantity < total) return RejectItem(GameSessionFailure.GoldShort);
             // ARC-SCRIPT-2855: the payment's insert-item script (21 on the merchant's pile) is tried before the item moves, so a run the session cannot apply refuses the sale with nothing moved; the payment runs it again for real.
-            if (RunPileInsert(scripts, pile.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false) is { Failure: not GameSessionFailure.None } probe) return RejectItem(probe.Failure);
+            if (RunPileInsert(scripts, pile.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, pile.Quantity == total ? npc : null) is { Failure: not GameSessionFailure.None } probe) return RejectItem(probe.Failure);
             if (_inventory.Gold + total > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
             if (pile.Quantity == total ? !_durability.Records.ContainsKey(pile.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
                 : !_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
@@ -332,7 +332,7 @@ public sealed partial class GameSessionOwner
             var source = ContainerStacks(container).First(pair => pair.Stack.Entity == item).Stack;
             if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
             // ARC-SCRIPT-2855 (AM4): the container's stack's insert-item script runs first with the hero as the triggerer.
-            var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false);
+            var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, source.Units == count ? container : null);
             if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
             var hero = HeroStackOfType(source.AmmoType);
             return MoveUnits(source, count, hero, hero is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
@@ -354,7 +354,7 @@ public sealed partial class GameSessionOwner
         var source = _inventory.Ammo[stack];
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
         // ARC-SCRIPT-2855 (AM4): the hero's stack's insert-item script runs first with the container as the triggerer (no critter: the hero's reading of a printed line).
-        var insert = RunPileInsert(scripts, source.Entity, holder, npcTriggerer: false);
+        var insert = RunPileInsert(scripts, source.Entity, holder, npcTriggerer: false, source.Units == count ? SessionEventKinds.PlayerEntity : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = ContainerStackOfType(holder, source.AmmoType);
         return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind) : null, insert);

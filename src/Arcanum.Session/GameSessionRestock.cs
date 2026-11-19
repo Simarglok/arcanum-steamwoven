@@ -89,6 +89,8 @@ public sealed record SessionRestockRegeneration(string Holder, SessionRestockOut
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after the regeneration (RK15); null for a container and for a regeneration that
     /// changed nothing.</summary>
     public SessionNpcWield? Wield { get; init; }
+    /// <summary>ARC-SCRIPT-2879: the remove-item scripts (28) the clear ran, one per deleted item with the point, with the holder as the triggerer.</summary>
+    public SessionPassRemovals Removals { get; init; } = SessionPassRemovals.None;
 }
 
 /// <summary>ARC-UI-038: what a regeneration asked for directly did (<see cref="GameSessionOwner.RegenerateInventory"/>).</summary>
@@ -340,11 +342,17 @@ public sealed partial class GameSessionOwner
     private SessionRestockRegeneration Regenerate(ISessionRestockWorld world, SessionMapId map, RestockPlan plan)
     {
         if (plan.Outcome == SessionRestockOutcome.Unsupported) return new(plan.Holder, plan.Outcome, 0, 0, null, [], 0, 0);
-        foreach (var item in plan.Deleted) Discard(item);
+        // ARC-SCRIPT-2879 (0x463B30 → 0x467860, RK5): each deleted item leaves the list with its remove-item script (28) run, the holder as the triggerer, then it is destroyed.
+        var removals = new PassRemovals(this, world.ItemScriptHost, map);
+        foreach (var item in plan.Deleted)
+        {
+            removals.Run(plan.Holder, item, PassItemPoints(map, item));
+            Discard(item);
+        }
         if (plan.Set is null)
         {
             if (plan.Generates) _inventory.Generated.Add(new(map, plan.Holder));
-            return new(plan.Holder, plan.Outcome, plan.Deleted.Count, 0, null, [], 0, 0);
+            return new(plan.Holder, plan.Outcome, plan.Deleted.Count, 0, null, [], 0, 0) { Removals = removals.Result };
         }
         var loot = plan.Seed is { } draws ? RestockRules.GenerateOnce(plan.Set, draws) : RestockRules.Generate(plan.Set, new SessionRestockRolls(this));
         var insert = world.RestockInsertCheck(map, plan.Holder);
@@ -366,7 +374,7 @@ public sealed partial class GameSessionOwner
             else skipped++;
         }
         if (plan.Generates) _inventory.Generated.Add(new(map, plan.Holder));
-        return new(plan.Holder, plan.Outcome, plan.Deleted.Count, coins, pile, created.AsReadOnly(), refused, skipped);
+        return new(plan.Holder, plan.Outcome, plan.Deleted.Count, coins, pile, created.AsReadOnly(), refused, skipped) { Removals = removals.Result };
     }
 
     private enum RestockCreation { Created, Refused, Skipped }
