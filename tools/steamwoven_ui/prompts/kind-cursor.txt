@@ -1,0 +1,4 @@
+KIND: CURSOR (pointer art)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original cursor frame).
+
+Redraw one mouse pointer: keep the shape, the hot-spot position and the meaning (arrow, hand, sword, key, door, grab, no-entry) of the ORIGINAL, in the painted brass-and-ink look of the kit, readable at 32 px. A thin dark outline for contrast is allowed here. Transparent background, clean edge, no halo, no shadow, no text.

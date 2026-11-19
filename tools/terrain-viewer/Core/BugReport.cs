@@ -133,6 +133,9 @@ public sealed record BugReportResult(string? Folder, bool Fallback, string? Fall
 {
     public bool Saved => Folder is not null && Written.Contains(BugReportWriter.ReportFile);
 
+    /// <summary>ARC-DEV-2947: the slot of the report's copy in the game's save list (<c>slot0007</c>), null when none was written.</summary>
+    public string? LoadMenuSlot => Written.FirstOrDefault(item => item.StartsWith(BugReportWriter.LoadMenuPrefix, StringComparison.Ordinal))?[BugReportWriter.LoadMenuPrefix.Length..];
+
     /// <summary>The line the window and the log show.</summary>
     public string Status => Folder is null ? "the report could not be written: " + string.Join("; ", Failed)
         : (Saved ? "report saved to " : "report INCOMPLETE in ") + Folder
@@ -193,7 +196,38 @@ public static class BugReportWriter
     private const int MaxSameSecond = 99;
     private static int WindowSeconds => BugReportLogLimits.Default.WindowMilliseconds / 1000;
 
-    public static BugReportResult Write(BugReportContent content, BugReportPlaces places)
+    /// <summary>The longest part of the player's text the load menu's name keeps (the whole name stays within the save list's 80 characters).</summary>
+    private const int MenuTextChars = 40;
+    public const string LoadMenuPrefix = "load menu ";
+
+    private static readonly Dictionary<char, string> Latin = new()
+    {
+        ['а'] = "a", ['б'] = "b", ['в'] = "v", ['г'] = "g", ['д'] = "d", ['е'] = "e", ['ё'] = "e", ['ж'] = "zh", ['з'] = "z", ['и'] = "i", ['й'] = "y",
+        ['к'] = "k", ['л'] = "l", ['м'] = "m", ['н'] = "n", ['о'] = "o", ['п'] = "p", ['р'] = "r", ['с'] = "s", ['т'] = "t", ['у'] = "u", ['ф'] = "f",
+        ['х'] = "h", ['ц'] = "ts", ['ч'] = "ch", ['ш'] = "sh", ['щ'] = "sch", ['ъ'] = "", ['ы'] = "y", ['ь'] = "", ['э'] = "e", ['ю'] = "yu", ['я'] = "ya",
+    };
+
+    /// <summary>ARC-DEV-2947: the name the report's copy has in the Load Game list: <c>Bug report YYYY-MM-DD HH:MM - first words</c>. The
+    /// save list's bitmap font draws only characters up to 255 (an em dash or a Cyrillic letter would vanish), so the text is reduced to
+    /// plain one-line characters: Russian letters become Latin ones, other characters above 255 and control characters are dropped, and
+    /// the words are cut at <see cref="MenuTextChars"/>; a text with nothing left gives the date alone.</summary>
+    public static string LoadMenuName(DateTime takenLocal, string? text)
+    {
+        var head = "Bug report " + takenLocal.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        var plain = new StringBuilder();
+        foreach (var c in text ?? "")
+        {
+            var lower = char.ToLowerInvariant(c);
+            if (Latin.TryGetValue(lower, out var latin)) plain.Append(char.IsUpper(c) && latin.Length > 0 ? char.ToUpperInvariant(latin[0]) + latin[1..] : latin);
+            else if (char.IsWhiteSpace(c)) plain.Append(' ');
+            else if (c is >= ' ' and <= '~' or >= '\u00A1' and <= '\u00FF') plain.Append(c);
+        }
+        var words = string.Join(' ', plain.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (words.Length > MenuTextChars) words = words[..MenuTextChars].TrimEnd();
+        return words.Length == 0 ? head : head + " - " + words;
+    }
+
+    public static BugReportResult Write(BugReportContent content, BugReportPlaces places, GameSaveLibrary? gameSaves = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(places);
@@ -230,7 +264,29 @@ public static class BugReportWriter
             if (result.Saved) { saveName = result.Name; written.Add($"{SaveFolder}/{result.Name}.json"); if (result.Warning is not null) failed.Add($"{SaveFolder} details: {result.Warning}"); }
             else failed.Add($"{SaveFolder}: {AreaQuickSave.Describe(result)}");
         }
-        File(ReportFile, () => Text(Path.Combine(dir, ReportFile), Markdown(content, saveName, written, failed, fallbackReason)));
+        // ARC-DEV-2947: the same save again in the game's own save list under a new free slot, so the owner loads it from Load Game. A failure
+        // here is listed and never fails the report.
+        string? menuSlot = null;
+        if (content.Save is { } copy && gameSaves is not null)
+        {
+            var name = LoadMenuName(content.TakenLocal, content.Text);
+            try
+            {
+                var result = gameSaves.Create(copy.Snapshot, copy.Summary with { Description = name }, copy.Thumbnail);
+                if (result.Saved)
+                {
+                    menuSlot = result.Name;
+                    written.Add(LoadMenuPrefix + result.Name);
+                    if (result.Warning is not null) failed.Add($"load menu {result.Name} details: {result.Warning}");
+                }
+                else failed.Add($"load menu: {AreaQuickSave.Describe(result)}");
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                failed.Add($"load menu: {error.GetType().Name}: {error.Message}");
+            }
+        }
+        File(ReportFile, () => Text(Path.Combine(dir, ReportFile), Markdown(content, saveName, written, failed, fallbackReason, menuSlot)));
         return new(dir, fallback, fallbackReason, written, failed);
     }
 
@@ -298,7 +354,8 @@ public static class BugReportWriter
     }
 
     /// <summary>report.md: the player's text, the game state, the folder's files and how to read them.</summary>
-    public static string Markdown(BugReportContent content, string? saveName, IReadOnlyList<string> written, IReadOnlyList<string> failed, string? fallbackReason)
+    public static string Markdown(BugReportContent content, string? saveName, IReadOnlyList<string> written, IReadOnlyList<string> failed, string? fallbackReason,
+        string? menuSlot = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         var builder = new StringBuilder();
@@ -327,6 +384,8 @@ public static class BugReportWriter
         builder.Append(saveName is not null
             ? $"- `{SaveFolder}/{saveName}.json` (with `{saveName}.meta.json` and `{saveName}.png`): the game saved when the key was pressed, a save of the ordinary save list. A window open then (see Windows above) is not in the save: a save holds the game, not an open dialog, barter or map window. To load it, copy the files into the game's save folder (`saves/map/` in the packaged game) under a free slot number and choose it in Load Game.\n"
             : $"- `{SaveFolder}/`: no save: {content.SaveMissing ?? "not written"}.\n");
+        if (menuSlot is not null)
+            builder.Append(CultureInfo.InvariantCulture, $"- Load Game: the same save is also in the game's own save list as `{menuSlot}` ({LoadMenuName(content.TakenLocal, content.Text)}), so no copying is needed.\n");
         if (fallbackReason is not null) builder.Append(CultureInfo.InvariantCulture, $"\nThis folder is in the user folder because the folder beside the game could not be used: {fallbackReason}.\n");
         if (failed.Count > 0)
         {

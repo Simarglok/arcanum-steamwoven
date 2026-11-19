@@ -1,0 +1,4 @@
+KIND: PICTURE (image on transparent background)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original picture), SHEET (for tone).
+
+Redraw one picture (an item, spell or skill icon, a critter, a status icon, a schematic record picture, a portrait) in the painted, slightly worn look of the kit, keeping the subject, pose, silhouette and colour meaning of the ORIGINAL. Light from the upper left. Transparent background where the ORIGINAL is transparent, clean edge, no halo, no frame unless the ORIGINAL has one, no text.
