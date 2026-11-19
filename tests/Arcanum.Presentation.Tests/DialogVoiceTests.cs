@@ -36,4 +36,16 @@ public sealed class DialogVoiceTests
         Assert.AreEqual("play 9", Kinds(new DialogVoicePlayer().Update(first, 5, 9)), "the first turn seen speaks");
         Assert.ThrowsExactly<ArgumentNullException>(() => player.Update(null!, 0, 1));
     }
+
+    [TestMethod]
+    public void A_blank_final_line_without_a_voice_leaves_the_pick_to_stop_the_voice_of_the_node_before()
+    {
+        // ARC-SCRIPT-2807: a reply whose final line names a node absent from the DLG ends the talk with a blank line and voice −1 (ledger FLM1). The voice of the node before stops
+        // with the pick of that reply (every pick stops it), not with the blank line, which plays nothing and so needs no voice command of its own.
+        var player = new DialogVoicePlayer();
+        var conversation = new object();
+        Assert.AreEqual("play 7", Kinds(player.Update(conversation, 1, 7)));
+        Assert.AreEqual(DialogVoiceCommandKind.Stop, DialogVoicePlayer.Picked().Kind);
+        Assert.AreEqual("", Kinds(player.Update(conversation, 2, -1)), "the blank final line: no voice, no command");
+    }
 }
