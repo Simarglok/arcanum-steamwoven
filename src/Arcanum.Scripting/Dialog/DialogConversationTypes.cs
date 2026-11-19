@@ -768,7 +768,7 @@ public enum DialogOptionTransition
     ScriptLine,
     /// <summary>The reply action ends with JO (or UW): the NPC joins (or stops waiting) and the dialog continues at <see cref="DialogOption.Target"/>.</summary>
     Join,
-    /// <summary>The reply action ends with FL: the NPC speaks <see cref="DialogOption.Target"/> and the dialog ends.</summary>
+    /// <summary>The reply action ends with FL: the NPC speaks <see cref="DialogOption.Target"/> and the dialog ends (ARC-SCRIPT-2790: a node absent from the DLG leaves the target null: a blank final line).</summary>
     FinalLine,
     /// <summary>The reply action ends with ET (ARC-SKILLS-004): when the PC's skill is at least level 9 and trained, the dialog
     /// continues at <see cref="DialogOption.Target"/>; otherwise the source speaks a generated refusal (a frontier here).</summary>
