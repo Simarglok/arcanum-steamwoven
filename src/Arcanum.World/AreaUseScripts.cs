@@ -299,6 +299,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
 
     /// <summary>
+    /// ARC-SCRIPT-2822 (ledger TQ7): the set a follower's new-sector script (attachment point 27) runs under (<see cref="RunNewSector"/>): <see cref="HeartbeatAdmission"/> (which holds call script in, 54, through the session's queue, and remove this
+    /// script) plus get area (84), which Virgil's installed 1568 asks first (<see cref="AreaOf"/>). The original's executor (0x447220) has no per-point restriction; the narrow set keeps the scripts this host can apply whole.
+    /// </summary>
+    public static ScrAdmissionSet NewSectorAdmission { get; } = new("S2-area-new-sector-heartbeat-get-area",
+        HeartbeatAdmission.Conditions, HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.GetArea), HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
+    /// <summary>
     /// ARC-SCRIPT-2338 (ledger BS1, BS2): the set a BUST script (attachment point 30) runs under (<see cref="RunBust"/>): <see cref="HeartbeatAdmission"/> plus the story actions of <see cref="ScrAdmissionSet.S13"/> (set PC quest
     /// state 16, mark map location 49, set rumor 50, add and remove reputation 72 and 73) and play script eye candy (120). The original's script executor (0x447220) has no per-point restriction, so a bust script runs the same commands a use
     /// script does; the heartbeat set stays narrow because it runs every few seconds for every NPC near the PC, and a break runs once. The installed bust script 1734 (main map, the scenery that stops the script eye candy
@@ -1130,7 +1137,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.NewSector or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
         or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
@@ -1657,6 +1664,35 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2822 (ledger TQ7; 0x4F2330 → 0x441980 with point 0x1B): the new-sector script (attachment point 27) of <paramref name="follower"/>, a direct follower of the hero: the hero's sector entry (a crossing, and also the arrival, teleport and
+    /// placement of mode 2) runs it for every direct follower after the sector's own script (which may be none), the hero as the triggerer, the follower as the attachee, no extra object, line 0, under <see cref="NewSectorAdmission"/>; its slot is kept as map changes
+    /// (<see cref="SlotProperty"/>). The original tests only the follower's slot and the generator flag: no map, distance, waiting or alive gate, so a follower carried from another map (named by its home map) runs it as well, through its carried body row
+    /// (<see cref="AreaScriptWorld.CarriedRow"/>). The answer decides nothing. A follower with no row the host reads, or no script at the point, runs nothing.
+    /// </summary>
+    [OriginalFunction(0x4F2330, OriginalFunctionScope.Partial)]
+    public AreaScriptedUse RunNewSector(ScrObjectRef follower, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        // The carried body row answers for the one follower whose run is going (the one object CarriedRow may answer for).
+        var previousTriggerer = _placedTriggerer;
+        _placedTriggerer = follower;
+        try
+        {
+            if (Row(follower) is not { } row || Slot(follower, ScrPoint.NewSector) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            var previous = _clicked;
+            _clicked = (follower.Code, row);
+            try
+            {
+                var run = ScrDispatcher.RunObject(new(ScrPoint.NewSector, follower, Pc, null), this, new() { Rules = Remember(rules), Admission = NewSectorAdmission });
+                return Finish(run, _ => "a teleport from a new-sector script is not modelled", writeback => WriteObjectSlot(writeback, follower), follower);
+            }
+            finally { _clicked = previous; }
+        }
+        finally { _placedTriggerer = previousTriggerer; }
     }
 
     /// <summary>
