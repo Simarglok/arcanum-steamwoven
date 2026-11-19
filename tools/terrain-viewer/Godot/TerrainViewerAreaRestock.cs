@@ -47,10 +47,11 @@ public partial class TerrainViewerApp
         var view = GetViewport().GetVisibleRect();
         var inverse = _canvas.GetGlobalTransformWithCanvas().AffineInverse();
         var rect = new Rect2(inverse * view.Position, inverse * view.End - inverse * view.Position).Abs();
-        // ARC-UI-2936: in the Original look the rule keeps the original's fixed 800 x 400 window centred on the view's centre (decision 2026-11-07, option b), not what the zoom shows.
+        // ARC-UI-2936: in the Original look the rule keeps the original's fixed 800 x 400 window centred on the play view's middle (decision 2026-11-07, option b), not what the zoom shows.
         if (OriginalCompositionFactor > 0)
         {
-            var (x, y, width, height) = OriginalComposition.OutOfSightWindow(rect.GetCenter().X, rect.GetCenter().Y);
+            var middle = inverse * new Vector2(view.Position.X + view.Size.X / 2, view.Position.Y + view.Size.Y * (float)(OriginalComposition.PlayViewCentreY / OriginalComposition.ScreenHeight));
+            var (x, y, width, height) = OriginalComposition.OutOfSightWindow(middle.X, middle.Y);
             return new(x, y, width, height);
         }
         return new(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y);

@@ -77,6 +77,12 @@ public static class OriginalComposition
     /// (world zoom <paramref name="wholeFactor"/>); any other setting scales from there, so the player's zoom option keeps working (owner decision 2026-11-19, #2937).</summary>
     public static double ZoomScale(int wholeFactor) => Math.Max(1, wholeFactor) / WorldZoomPolicy.DefaultZoom;
 
+    /// <summary>The play view's middle on the original's screen (the top strip's 41 units plus half of the 400-unit view), in units from the screen's top.</summary>
+    public const double PlayViewCentreY = AreaGameBarLayout.TopHeight + ViewHeight / 2.0;
+
+    /// <summary>The camera's shift in virtual screen pixels at the whole factor <paramref name="wholeFactor"/>: how far above the screen's middle the middle of the play view stands, so the camera's focus is drawn in the play view's middle.</summary>
+    public static double ViewShift(int wholeFactor) => (ScreenHeight / 2.0 - PlayViewCentreY) * wholeFactor;
+
     /// <summary>The out-of-sight window of the Original rules in world pixels: the fixed 800 × 400 rectangle centred on <paramref name="centreX"/>, <paramref name="centreY"/> (the view's centre).</summary>
     public static (double X, double Y, double Width, double Height) OutOfSightWindow(double centreX, double centreY) =>
         (centreX - ViewWidth / 2.0, centreY - ViewHeight / 2.0, ViewWidth, ViewHeight);

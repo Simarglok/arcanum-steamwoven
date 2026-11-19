@@ -245,34 +245,39 @@ public partial class TerrainViewerApp
         var wanted = OriginalCompositionWanted;
         var size = _originalCompositionTarget ?? window.Size;
         var factor = wanted && size.X > 0 && size.Y > 0 ? OriginalComposition.WholeFactor(size.X, size.Y) : 0;
-        var zoomScale = factor == 0 ? 1 : OriginalComposition.ZoomScale(factor);
-        if (_camera is not null && _camera.ZoomScale != zoomScale)
+        var virtualSize = factor == 0 ? Vector2I.Zero : new Vector2I(OriginalComposition.ScreenWidth * factor, OriginalComposition.ScreenHeight * factor);
+        var contentSet = window.ContentScaleMode == Window.ContentScaleModeEnum.Viewport && window.ContentScaleAspect == Window.ContentScaleAspectEnum.Keep && window.ContentScaleSize == virtualSize;
+        var changed = factor != OriginalCompositionFactor;
+        if (changed || (factor != 0 && !contentSet))
         {
-            _camera.ZoomScale = zoomScale;
-            if (IsWorld && _readyActorPlan is not null) _camera.ResizeWorld(WorldAnchor, WorldViewport);
+            if (factor == 0)
+            {
+                window.ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
+                window.ContentScaleSize = Vector2I.Zero;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.ContentScaleFactor = 1;
+            }
+            else
+            {
+                window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.ContentScaleFactor = 1;
+                window.ContentScaleSize = virtualSize;
+            }
+            // The picture beside the virtual screen is the window's clear colour: black while the composition stands, the project's colour again after it.
+            if (changed) RenderingServer.SetDefaultClearColor(factor == 0 ? (Color)ProjectSettings.GetSetting("rendering/environment/defaults/default_clear_color", new Color(0.3f, 0.3f, 0.3f)) : Colors.Black);
+            OriginalCompositionFactor = factor;
+            if (changed) { _gameBarPanel?.Relayout(); GD.Print($"ARC-UI-2936 original composition factor={factor} window={size.X}x{size.Y}"); }
+        }
+        // The camera after the window: the viewport the new content scale gives is not read until the next frame, so the camera is told it.
+        var (zoomScale, viewShift) = factor == 0 ? (1.0, 0.0) : (OriginalComposition.ZoomScale(factor), OriginalComposition.ViewShift(factor));
+        if (_camera is not null && (_camera.ZoomScale != zoomScale || _camera.ViewShift != viewShift))
+        {
+            _camera.ZoomScale = zoomScale; _camera.ViewShift = viewShift;
+            var viewport = factor != 0 ? new Vector2(virtualSize.X, virtualSize.Y) : GetViewport() == window ? new Vector2(window.Size.X, window.Size.Y) : WorldViewport;
+            if (IsWorld && _readyActorPlan is not null) _camera.ResizeWorld(WorldAnchor, viewport);
             else _camera.ReapplyZoom();
         }
-        if (factor == OriginalCompositionFactor && (factor == 0 || window.ContentScaleSize == new Vector2I(OriginalComposition.ScreenWidth * factor, OriginalComposition.ScreenHeight * factor))) return;
-        if (factor == 0)
-        {
-            window.ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
-            window.ContentScaleSize = Vector2I.Zero;
-            window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
-            window.ContentScaleFactor = 1;
-        }
-        else
-        {
-            var (width, height) = OriginalComposition.VirtualSize(size.X, size.Y);
-            window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
-            window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
-            window.ContentScaleFactor = 1;
-            window.ContentScaleSize = new Vector2I(width, height);
-        }
-        var changed = factor != OriginalCompositionFactor;
-        // The picture beside the virtual screen is the window's clear colour: black while the composition stands, the project's colour again after it.
-        if (changed) RenderingServer.SetDefaultClearColor(factor == 0 ? (Color)ProjectSettings.GetSetting("rendering/environment/defaults/default_clear_color", new Color(0.3f, 0.3f, 0.3f)) : Colors.Black);
-        OriginalCompositionFactor = factor;
-        if (changed) { _gameBarPanel?.Relayout(); GD.Print($"ARC-UI-2936 original composition factor={factor} window={size.X}x{size.Y}"); }
     }
 
     private SteamwovenLayoutChoice? _appliedInterfaceLayout;

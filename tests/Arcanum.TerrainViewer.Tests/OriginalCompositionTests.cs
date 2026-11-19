@@ -78,4 +78,17 @@ public sealed class OriginalCompositionTests
         Assert.AreEqual((600.0, 800.0, 800.0, 400.0), OriginalComposition.OutOfSightWindow(1000, 1000));
         Assert.AreEqual((-400.0, -200.0, 800.0, 400.0), OriginalComposition.OutOfSightWindow(0, 0));
     }
+
+    [TestMethod]
+    public void The_camera_focus_stands_in_the_middle_of_the_play_view_between_the_strips()
+    {
+        // The play view is the 400 units below the 41-unit top strip: its middle is at 241 units, 59 above the screen's middle (300).
+        var centre = OriginalComposition.PlayViewCentreY;
+        Assert.AreEqual(241.0, centre, 1e-9);
+        Assert.AreEqual(59.0, OriginalComposition.ViewShift(1), 1e-9);
+        Assert.AreEqual(236.0, OriginalComposition.ViewShift(4), 1e-9);
+        // At the default zoom setting the shift in world pixels is the same 59 at every factor (the camera's offset is the shift over the zoom on screen).
+        foreach (var whole in new[] { 1, 2, 3, 4 })
+            Assert.AreEqual(59.0, OriginalComposition.ViewShift(whole) / (WorldZoomPolicy.DefaultZoom * OriginalComposition.ZoomScale(whole)), 1e-9);
+    }
 }

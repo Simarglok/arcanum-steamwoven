@@ -63,6 +63,8 @@ public sealed class TerrainCameraController
     /// <summary>ARC-UI-2936: the factor between the player's zoom setting (<see cref="State"/>) and the camera's zoom on screen. 1 normally; in the Original look it is the virtual screen's whole factor over the setting's default,
     /// so the default setting shows the original's 800 × 400 view and the zoom option keeps working from there.</summary>
     public double ZoomScale { get; set; } = 1;
+    /// <summary>ARC-UI-2936: screen pixels the camera's focus (the actor) stands above the viewport's centre: in the Original look the play view is the 400-unit band between the strips, whose middle is above the screen's.</summary>
+    public double ViewShift { get; set; }
     private double Floored(double zoom, Vector2 viewport) => Math.Max(zoom, ZoomFloor(viewport) / ZoomScale);
 
     public void Fit(Vector2 viewport)
@@ -140,7 +142,12 @@ public sealed class TerrainCameraController
         _state = _state with { X = _center.X, Y = _center.Y, FitMode = false };
         Apply();
     }
-    private void Apply() { _camera.Position = new Vector2((float)_state.X, (float)_state.Y); _camera.Zoom = Vector2.One * (float)(_state.Zoom * ZoomScale); }
+    private void Apply()
+    {
+        var zoom = _state.Zoom * ZoomScale;
+        _camera.Position = new Vector2((float)_state.X, (float)_state.Y); _camera.Zoom = Vector2.One * (float)zoom;
+        _camera.Offset = new Vector2(0, (float)(ViewShift / zoom));
+    }
     /// <summary>Applies a changed <see cref="ZoomScale"/> to the camera at once.</summary>
     public void ReapplyZoom() => Apply();
 }
