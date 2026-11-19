@@ -117,9 +117,11 @@ public partial class TerrainViewerApp
             }
             for (var close = 0; close < 8 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(!ConversationOpen, "his conversation closed");
+            // ARC-SCRIPT-2822 (ledger TQ7, 0x4F2330): the hero's entry into another sector runs the new-sector script (point 27) of every direct follower, Virgil's installed 1568 here, whatever the sector's own script is.
+            var newSector = place == "wreck" ? NewSectorFollowerCheck(map, line.Value.Pc, template.Entity, Require) : null;
             GD.Print(passLine + " " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Tile = wreck, Virgil = from, Pc = map.Chart.ToWorld(line.Value.Pc), Frames = frames, Node = node,
-                Script = dialogScript, WorldMapOpened = worldMapOpened, WorldMapStatus = worldMapStatus, Parity = "NOT_VERIFIED" }));
+                Script = dialogScript, WorldMapOpened = worldMapOpened, WorldMapStatus = worldMapStatus, NewSector = newSector, Parity = "NOT_VERIFIED" }));
         }
         finally
         {
@@ -127,6 +129,32 @@ public partial class TerrainViewerApp
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
         await Task.CompletedTask;
+    }
+
+    // ARC-SCRIPT-2822: queues the hero's step across the nearest sector border east of its cell (a tile with no jump point or script, so only the sector entry matters) and returns what the follower's point-27 run reported.
+    private string NewSectorFollowerCheck(AreaMapRuntime map, CellCoord heroCell, string follower, Action<bool, string> Require)
+    {
+        var world = map.Chart.ToWorld(heroCell);
+        var border = (world.X / 64 + 1) * 64;
+        long? row = null;
+        for (var dy = 0; dy < 24 && row is null; dy++)
+        {
+            Arcanum.Data.Traversal.AreaStepCell Cell(long x) => new(x, world.Y + dy);
+            if (!_mapTransfers!.ScriptTiles.Contains(Cell(border)) && !_mapTransfers.TriggerCells.Contains(Cell(border))) row = world.Y + dy;
+        }
+        Require(row is not null, "a tile past the sector border with no jump point or script");
+        _newSectorRuns.Clear();
+        _mapEntered.Enqueue(new(new(border - 1, row!.Value), new(border, row.Value)));
+        for (var frame = 0; frame < 20 && !_newSectorRuns.Any(r => r.Follower == follower); frame++) AreaSmokeFrame();
+        var run = _newSectorRuns.FirstOrDefault(r => r.Follower == follower);
+        Require(run.Follower == follower, $"Virgil's new-sector script ran on the hero's sector entry at {border},{row} (runs {_newSectorRuns.Count})");
+        Require(run.Outcome != AreaScriptedUseOutcome.Refused && run.Script == 1568, $"script 1568 ran at point 27 without a refusal: script {run.Script} {run.Outcome} {run.Detail}");
+        // The same step inside one sector enters none.
+        _newSectorRuns.Clear();
+        _mapEntered.Enqueue(new(new(border + 2, row.Value), new(border + 3, row.Value)));
+        for (var frame = 0; frame < 5; frame++) AreaSmokeFrame();
+        Require(_newSectorRuns.Count == 0, "a step inside one sector runs no new-sector script");
+        return $"{border},{row} script {run.Script} {run.Outcome}";
     }
 
     /// <summary>ARC-UI-071 (B29): the open conversation panel draws in the original's font art when the viewer read it, every shown text with its lines.</summary>

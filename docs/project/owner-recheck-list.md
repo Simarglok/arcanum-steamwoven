@@ -1665,9 +1665,9 @@ of that note (for example `heartbeat-refused`, `ScriptRefused`, `companion-tile 
 | 14 | Steal from an NPC with low Pick Pocket until you are caught, then pick a lock in view of a guard. | The robbed NPC (or the guard) reacts by its script; a plant is never caught at Master training (TQ16). | open |
 | 15 | Break a breakable object by attacking it (scenery such as a statue, a door, a weapon lying on the ground). | The object turns to its broken look and its bust script runs; an object with no broken look disappears (destroy script) (TQ26). | open |
 | 16 | Rest for some hours with followers in the party. | Each follower's "leader sleeping" script runs when you choose the duration (TQ26). | open |
+| 17 | With Virgil in the party, walk across any sector border (and take a map change with him). | On each sector entry Virgil's new-sector script (1568) runs; the log has an `ARC-SCRIPT-2822 new-sector` line for his script, with no `Refused` outcome (TQ7). | open |
 
 Known differences (documented, not bugs; each has its issue):
 
 - Will-KOS scripts never veto ([#2821](https://github.com/Simarglok/arcanum-steamwoven/issues/2821)).
-- Followers' new-sector scripts (Virgil's 1568) do not run ([#2822](https://github.com/Simarglok/arcanum-steamwoven/issues/2822)); a sector script does not run on a same-sector arrival or teleport ([#2823](https://github.com/Simarglok/arcanum-steamwoven/issues/2823)).
 - Call at a time of day ([#2824](https://github.com/Simarglok/arcanum-steamwoven/issues/2824)), NPC and holder item moves ([#2827](https://github.com/Simarglok/arcanum-steamwoven/issues/2827)) are not built (examine at dialog start and in the portrait hover is built: HK25, HK26).
