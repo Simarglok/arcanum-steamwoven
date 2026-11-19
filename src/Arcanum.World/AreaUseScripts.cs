@@ -158,6 +158,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
     /// <summary>ARC-SKILLS-010: the catching-thief point (11) whose slot an NPC's run keeps as map changes too, under <c>scr11.*</c>.</summary>
     public const int CatchingThiefPoint = 11;
+    /// <summary>ARC-SCRIPT-2858: the thief's caught-thief point (33).</summary>
+    public const int CaughtThiefPoint = ScrPoint.CaughtThief;
     /// <summary>ARC-WORLD-114: the map-change key of an NPC a script's toggle state (56) switched off (value 1; absent while it is as its
     /// map data has it). The original flips object flag 0x2; an NPC switched off is neither drawn nor in the object lists, and its AI
     /// passes stop at the gate (<see cref="SwitchedOff"/>).</summary>
@@ -1129,7 +1131,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1452,6 +1454,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
+    /// ARC-SCRIPT-2858 (TQ16, exe read 2026-11-19): the caught-thief script (point 33) of <paramref name="thief"/>, an NPC of the shown map, which a noticed failed steal or plant of an NPC thief runs through the script dispatcher (0x441980, 0x4C7160) just before the
+    /// victim's catching-thief script (point 11, <see cref="RunCatchingThief"/>): the thief is the attachee, the victim (<paramref name="victim"/>: the hero or an NPC) the triggerer, no extra object here (the original passes the attempt's object), line 0, under
+    /// <see cref="CaughtThiefAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The original ignores the answer (the next call is made whatever it is). A thief that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunCaughtThief(string thief, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(thief); ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, thief);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.CaughtThief) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var previous = _clicked;
+        _clicked = (thief, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.CaughtThief, attachee, victim, null), this, new() { Rules = Remember(rules), Admission = CaughtThiefAdmission });
+            return Finish(run, _ => "a teleport from a caught-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-SCRIPT-2858: the set a caught-thief script (point 33) runs under (<see cref="RunCaughtThief"/>): the set of the other NPC point scripts (<see cref="DyingAdmission"/>).</summary>
+    public static ScrAdmissionSet CaughtThiefAdmission => DyingAdmission;
+
+    /// <summary>
     /// ARC-WORLD-114: an NPC's first-heartbeat (10) or heartbeat (19) script, which the AI tick runs with the NPC as the attachee and
     /// the triggerer (0x4AD200), under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>).
     /// Its toggle state switches an NPC of the shown map off and back on (<see cref="OffProperty"/>), its kill goes to the world's
@@ -1474,6 +1501,46 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc), npc);
         }
         finally { _clicked = null; }
+    }
+
+    /// <summary>
+    /// ARC-AI-2821 (ledger TQ14; exe 0x4AE120): the set a will-KOS script (attachment point 22) runs under (<see cref="RunWillKos"/>): <see cref="HeartbeatAdmission"/> plus the is-wielding-item condition (21, scripts 1157 and 2833), get stat (33, script 2764) and call script (7, scripts 1157 and 2833), which the installed
+    /// verdict scripts use to read what the candidate wields and its stats and to call a shared verdict script. The test is asked on every kill-on-sight evaluation of the deciding NPC (target finding 0x4AB460, dialog start 0x412FD0 and the reply step 0x413130 all reach it), so the script runs as often as a heartbeat does
+    /// and holds the heartbeat's narrow set; a script outside it is refused and the evaluation goes on as without one.
+    /// </summary>
+    public static ScrAdmissionSet WillKosAdmission { get; } = new("S2-area-will-kos-heartbeat-wielding-stat-call",
+        HeartbeatAdmission.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem), HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.GetStat).Append(ScrCatalogue.Action.CallScript),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
+    /// <summary>
+    /// ARC-AI-2821 (ledger TQ14; exe 0x4AE120, the call 0x441980(candidate, npc, none, 22)): the will-KOS script (attachment point 22) of <paramref name="row"/>, the NPC that decides, run with <paramref name="candidate"/> as the triggerer, no extra object
+    /// and line 0, after the target validity test and before the rest of the kill-on-sight rule, under <see cref="WillKosAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The answer 0 ("skip default") vetoes the
+    /// kill-on-sight (<see cref="WillKosVetoes"/>); anything else lets the evaluation go on. A refused or unapplied run, an NPC with no script at the point, and an NPC of another map veto nothing.
+    /// </summary>
+    public AreaScriptedUse RunWillKos(AreaObjectRecord row, ScrObjectRef candidate, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(candidate); ArgumentNullException.ThrowIfNull(rules);
+        var entity = EntityId(row);
+        if (row.Key.RuntimeMap != _shownMap || row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, "not an NPC of the shown map");
+        var attachee = new ScrObjectRef(_shownMap, entity);
+        if (Slot(attachee, ScrPoint.WillKos) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (entity, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.WillKos, attachee, candidate, null), this, new() { Rules = Remember(rules), Admission = WillKosAdmission });
+            return Finish(run, _ => "a teleport from a will-KOS script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-AI-2821: whether a will-KOS run (<see cref="RunWillKos"/>) vetoes the kill-on-sight: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way), but not a script file that cannot be opened (run default). A run that was not applied cancels nothing.</summary>
+    public static bool WillKosVetoes(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        // A script file that cannot be opened answers 1 ("run default") in the interpreter 0x4449B0 (the result local of 0x4449B0 is set to 1 when the file open fails), so a missing or unreadable file vetoes nothing, unlike the dispatcher's own skip default for it elsewhere.
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop is not (ScrStop.MissingScript or ScrStop.UnreadableScript);
     }
 
     // ARC-DEV-254 (GT198): the original's guard (global 0x5FC26C) is set around the point-0x17 script call only; a damage dealt while it runs skips the script.

@@ -145,6 +145,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-SCRIPT-1590 (0x441980, item use 0x462CC0): runs the use script (point 1) of an item an NPC holds, the NPC as the user and triggerer and the target (the entity the use names, "pc" for the hero) as the extra object, and answers whether the use goes on (a script that
     /// ran default, or none that runs: refused, not applied); false when it skipped the default (the food script 30282 always does, after it destroyed the item); null: no NPC's item use runs a script, and the use goes on as the script let it.</summary>
     public Func<string, string, string?, bool>? ItemUseScript { get; init; }
+    /// <summary>ARC-AI-2821 (ledger TQ14, exe 0x4AE120): runs the will-KOS script (attachment point 22) of the deciding NPC (first argument) with the candidate (second, "pc" for the hero) as the triggerer and answers whether the kill-on-sight evaluation goes on: false when the script vetoed it (skipped the default); true when it ran default, has no script or could not run (refused, not applied). Null: no will-KOS script runs.</summary>
+    public Func<string, string, bool>? WillKos { get; init; }
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
@@ -156,6 +158,8 @@ public sealed record AreaAiScene
     public Func<string, TrapClass>? TargetTrapClass { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
+    /// <summary>ARC-SCRIPT-2858 (TQ16, 0x4C7160): the NPC thief's own caught-thief script (point 33) of a noticed failed pick pocket: the thief (the attachee) and the victim (the triggerer; the hero is "pc"); run just before <see cref="CatchingThief"/> and its answer is ignored; null: no script runs.</summary>
+    public Action<string, string>? CaughtThief { get; init; }
     /// <summary>ARC-AI-2084 (ledger GW5): a guard witness's catching-thief script (point 11, 0x4AEE50) after it saw or heard the actor at an act on a portal, container or scenery: the witness (the attachee), the actor (the triggerer; the hero is "pc") and the guarded object (the script's extra object); true when the witness goes on ("run default", or no script that runs), false when the script skipped the default and the witness is left out. Null: no script runs.</summary>
     public Func<string, string, string, bool>? GuardCatchingThief { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
@@ -1370,7 +1374,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-DEV-193: the dialog reply step's hostile check (0x413130 → 0x45D8D0, 0x4AE120; ledger HR1–HR3): the speaker is alive (a critter this
     /// host does not know counts as not alive, as the original's null object does) and the AI turns kill-on-sight toward the hero now
-    /// (<see cref="HostilityRules.KillOnSight"/>; the will-kos script is not hosted, <see cref="AllowsKillOnSight"/>).
+    /// (<see cref="HostilityRules.KillOnSight"/>; the will-kos script is asked through <see cref="AllowsKillOnSight"/>).
     /// </summary>
     public bool HostileToHero(string npc)
     {
@@ -3342,7 +3346,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-DEV-246 (MIG13 S14l, GT204–GT209): an NPC's pick pocket of gold at the attempt's action frame (goal 86 node 4 → the shared check and the pick-pocket case of 0x4C7160; only a script's steal, action 115, starts it: the AI
     /// starts no pick pocket). The session's <see cref="GameSessionOwner.PickPocketByNpc"/> with the thief's sheet and the victim's measured facts (its effective perception, its state, whether it is unaware of the thief); the victim is the PC
     /// or an NPC of the map. A noticed failure runs the victim's catching-thief script with the thief as the triggerer (<see cref="AreaAiScene.CatchingThief"/>; any answer but run default stops there) and then the attack event of the thief on the
-    /// victim (loudness 1). Answers the check's success (run flag 0x40000). NOT READY: the thief's own caught-thief script (point 33), the thief's alignment change and the victim's "item stolen" mark (the session keeps no NPC alignment or
+    /// victim (loudness 1). Answers the check's success (run flag 0x40000). The thief's own caught-thief script (point 33, ARC-SCRIPT-2858) runs first (<see cref="AreaAiScene.CaughtThief"/>). NOT READY: the thief's alignment change and the victim's "item stolen" mark (the session keeps no NPC alignment or
     /// critter flags 2), the follower-of-the-thief stop (only the PC leads here), the gold pile's art size (1 × 1) and an insert check for a thief with no pile (accepted).
     /// </summary>
     private bool PickPocketAttempt(string id, string target)
@@ -3372,8 +3376,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.PickPocketByNpc(_session.Version, steal);
         Trace(id).Skill = $"pick pocket {target} {result.Disposition} {result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} moved={result.Moved} noticed={result.Noticed}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickpocketSkill, PickPocket = result });
-        // PP7: a noticed failure's victim script, then (unless it stopped them) the attack event of the thief on the victim.
-        if (result.Noticed && (_scene.CatchingThief?.Invoke(target, id) ?? true)) AttackEvent(id, target);
+        // PP7: a noticed failure's thief script (point 33, answer ignored), then the victim's script (point 11) and (unless it stopped them) the attack event of the thief on the victim (0x4C7160).
+        if (result.Noticed)
+        {
+            _scene.CaughtThief?.Invoke(id, target);
+            if (_scene.CatchingThief?.Invoke(target, id) ?? true) AttackEvent(id, target);
+        }
         return result.Check?.Success == true && result.Disposition == GameSessionDisposition.Changed;
     }
 
@@ -4247,7 +4255,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return query.View?.Effective ?? 0;
     }
 
-    public bool AllowsKillOnSight(string npc, string candidate) => true;
+    /// <summary>ARC-AI-2821 (0x4AE120, ledger TQ14): the will-KOS script (point 22) of the NPC with the candidate as the triggerer; its "skip default" vetoes the kill-on-sight (<see cref="AreaAiScene.WillKos"/>). Every kill-on-sight evaluation asks it: target finding, the dialog start and the dialog reply step.</summary>
+    public bool AllowsKillOnSight(string npc, string candidate) => _scene.WillKos?.Invoke(npc, candidate) != false;
 
     public HostilityParameters Parameters(string npc) => Row(npc) is { } row
         ? new(row.FleeDistance, row.HostileReaction, row.HostileAlignmentGap, row.GoodFollowerStop) : default;
