@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
@@ -286,6 +287,71 @@ public sealed class ScriptTriggerCensusTests
             Assert.IsFalse(Read(number, AreaScriptHost.SkillAdmission).IsAdmitted, $"{number} under the plain dialog set");
         }
         if (Environment.GetEnvironmentVariable("ARC_GROUP_FOCUS_REPORT") is { Length: > 0 } output) File.WriteAllLines(output, report);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (ledger TQ23; AC1): the installed attachments of the critical-hit (34) and critical-miss (35) points by object type, over the placed rows of every map the data opens whole and over every item prototype, so the armour pieces
+    /// the damage apply's loop runs (object type 7, <see cref="AreaUseScriptHost.RunArmourCritical"/>) are counted apart from the weapons whose points the hit step runs. Every script of an armour piece is read against the combat-point set
+    /// (<see cref="AreaUseScriptHost.CombatPointAdmission"/>). Numbers and script numbers only; <c>ARC_ARMOUR_CRITICAL_CENSUS</c>, when set, receives the report. Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_critical_points_are_counted_by_object_type_and_the_armour_scripts_are_read_against_the_combat_point_set()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var report = new List<string>();
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        // Placed rows: the entity rows of the maps (one per entity), by point and object type.
+        var placed = new SortedDictionary<(int Point, int Type), (int Rows, SortedSet<int> Scripts)>();
+        var maps = 0;
+        foreach (var map in WorldCatalog.Open(stack).Maps)
+        {
+            // A map the installed data does not open whole is skipped, as the other whole-map censuses do.
+            Arcanum.Data.Area.AreaSnapshot? snapshot;
+            try { snapshot = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default).Area?.Snapshot; }
+            catch (Exception error) when (error is InvalidOperationException or Arcanum.Data.Area.AreaException) { report.Add($"skipped {map.Name}: {error.Message}"); continue; }
+            if (snapshot is null) continue;
+            maps++;
+            foreach (var row in snapshot.Objects.GroupBy(AreaUseScriptHost.EntityId).Select(g => g.First()))
+                foreach (var point in new[] { ScrPoint.CriticalHit, ScrPoint.CriticalMiss })
+                    if (AreaUseScriptHost.LoadedSlot(row, point) is { Script: > 0 } slot)
+                    {
+                        var (rows, scripts) = placed.GetValueOrDefault((point, row.Type), (0, new SortedSet<int>()));
+                        scripts.Add(slot.Script);
+                        placed[(point, row.Type)] = (rows + 1, scripts);
+                    }
+        }
+        report.Add($"maps read {maps}");
+        foreach (var ((point, type), (rows, scripts)) in placed) report.Add($"placed point {point} type {type}: rows {rows} scripts {string.Join(",", scripts)}");
+        // Prototypes: every installed item prototype, by point and object type.
+        var prototypes = ContentPrototypes.Open(stack);
+        var byPrototype = new SortedDictionary<(int Point, int Type), (int Prototypes, SortedSet<int> Scripts)>();
+        foreach (var number in prototypes.Numbers)
+            if (Arcanum.Data.Combat.CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { Item: not null } fields)
+                foreach (var attachment in fields.Object.ScriptAttachments.Where(a => a.Script > 0 && a.Point is ScrPoint.CriticalHit or ScrPoint.CriticalMiss))
+                {
+                    var (count, scripts) = byPrototype.GetValueOrDefault((attachment.Point, fields.Object.Type), (0, new SortedSet<int>()));
+                    scripts.Add(attachment.Script);
+                    byPrototype[(attachment.Point, fields.Object.Type)] = (count + 1, scripts);
+                }
+        foreach (var ((point, type), (count, scripts)) in byPrototype) report.Add($"prototype point {point} type {type}: prototypes {count} scripts {string.Join(",", scripts)}");
+        // Every script an armour piece (type 7) holds at the points, read against the combat-point set.
+        var armourScripts = placed.Where(p => p.Key.Type == 7).SelectMany(p => p.Value.Scripts).Concat(byPrototype.Where(p => p.Key.Type == 7).SelectMany(p => p.Value.Scripts)).Distinct().Order().ToArray();
+        foreach (var number in armourScripts)
+        {
+            var status = content.Script(number).Status;
+            var admission = status == ScriptContentStatus.Read ? ScrAdmission.AdmitFrom(content.Script(number).Program!, AreaUseScriptHost.CombatPointAdmission, 0) : null;
+            report.Add($"armour script {number}: {status} admitted={admission?.IsAdmitted} refusal={admission?.Refusal?.Code}:{admission?.Refusal?.Type}");
+        }
+        if (Environment.GetEnvironmentVariable("ARC_ARMOUR_CRITICAL_CENSUS") is { Length: > 0 } output) File.WriteAllLines(output, report);
+        // The installed data (ARC-SCRIPT-2828, 81 maps read whole): critical hit (34) sits on 2 weapon rows (30047, 30064) and 2 armour rows (30219, 30237); critical miss (35) on 2 weapon rows (30046, 30050) and no armour; no item
+        // prototype carries either point; both armour scripts are admitted whole by the combat-point set.
+        Assert.AreEqual(81, maps);
+        CollectionAssert.AreEqual(new[] { (ScrPoint.CriticalHit, 5), (ScrPoint.CriticalHit, 7), (ScrPoint.CriticalMiss, 5) }, placed.Keys.ToArray());
+        Assert.AreEqual((2, 2, 2), (placed[(ScrPoint.CriticalHit, 5)].Rows, placed[(ScrPoint.CriticalHit, 7)].Rows, placed[(ScrPoint.CriticalMiss, 5)].Rows));
+        CollectionAssert.AreEqual(new[] { 30219, 30237 }, placed[(ScrPoint.CriticalHit, 7)].Scripts.ToArray());
+        Assert.AreEqual(0, byPrototype.Count, "no item prototype carries the critical points");
+        Assert.IsTrue(armourScripts.All(number => content.Script(number).Status == ScriptContentStatus.Read && ScrAdmission.AdmitFrom(content.Script(number).Program!, AreaUseScriptHost.CombatPointAdmission, 0).IsAdmitted), "the armour scripts run whole");
     }
 
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",

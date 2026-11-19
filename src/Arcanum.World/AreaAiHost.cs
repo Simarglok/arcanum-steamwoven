@@ -178,6 +178,8 @@ public sealed record AreaAiScene
     public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the combat-point scripts (hit 7, critter hits 26, critical hit 34) of an NPC's hit, asked before its damage step: the attacker, the victim (the hero is <c>"pc"</c>) and the session's hit event in. Null: none run.</summary>
     public Action<string, string, SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828 (0x4B47F8): the critical-hit scripts (point 34) of the worn armour of whoever takes a critical damage step of an NPC's attack: the attacker, the victim (the hero is <c>"pc"</c>) and the session's armour event in. Null: none run.</summary>
+    public Action<string, string, SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
@@ -2520,6 +2522,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private Action<SessionHitScriptEvent>? HitScriptsOf(string attacker, string? victim) =>
         _scene.HitScripts is not { } run || victim is null ? null : hit => run(attacker, victim, hit);
 
+    // ARC-SCRIPT-2828: the armour scripts of a critical damage step of an NPC's attack on <paramref name="victim"/> (null: a throw at a location or a strike on an object; only the attacker's own critical self-hit can reach the scripts then, so the attacker stands for it).
+    private Action<SessionArmourCriticalEvent>? ArmourScriptsOf(string attacker, string? victim) =>
+        _scene.ArmourScripts is not { } run ? null : armour => run(attacker, victim ?? attacker, armour);
+
     /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event. ARC-DEV-282: a bow or firearms attack whose weapon has a projectile
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
@@ -2674,7 +2680,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, victim), HitScripts = HitScriptsOf(id, victim), ArmourScripts = ArmourScriptsOf(id, null),
         });
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2774,7 +2780,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim),
+            TakingDamage = TakingDamageOfObject(shooter, victim), HitScripts = HitScriptsOf(shooter, victim), ArmourScripts = ArmourScriptsOf(shooter, null),
         });
         EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
@@ -2804,6 +2810,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, target),
             HitScripts = HitScriptsOf(id, target),
+            ArmourScripts = ArmourScriptsOf(id, target),
             // ARC-MAGIC-1188: the damage step's item events (the NPC's worn items fire as any attacker's, 0x4B4390) through the cast host's trigger host.
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
@@ -3501,6 +3508,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, struck?.Who),
             HitScripts = HitScriptsOf(id, struck?.Who),
+            ArmourScripts = ArmourScriptsOf(id, struck?.Who),
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-COMBAT-1717: a thrown weapon flies when the scene can fly a thrown item (the viewer); otherwise it lands at once.
             Flight = _scene.LaunchThrown is not null,

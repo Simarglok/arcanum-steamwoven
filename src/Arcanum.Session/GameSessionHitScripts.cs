@@ -1,3 +1,6 @@
+using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
+
 namespace Arcanum.Session;
 
 /// <summary>
@@ -18,3 +21,27 @@ public readonly record struct SessionHitScriptEvent(string? Weapon, bool Critica
 /// lies hidden on the hero's cell (a landing that transforms it, as a creature item's, removes the row the host would read afterwards); an item the session does not list counts as a weapon, and so does an NPC's.
 /// </summary>
 public readonly record struct SessionShotEndScripts(string Attacker, string Weapon, bool Critical, bool Thrown, string? Target, bool IsWeapon = true);
+
+/// <summary>
+/// ARC-SCRIPT-2828 (ledger TQ23; 0x4B4390, 0x4B47F8): what the session tells the host's armour scripts of a critical damage step on a living critter: the original's damage apply runs, after the victim's taking-damage script
+/// (point 23) and before the hit points are written, the critical-hit script (point 34, <c>0x22</c>; the hit flag of the damage is set, also on a critical self-hit that a critical miss turned on the attacker, 0x4B6410) of each worn
+/// armour piece (object type 7, slots 1000–1008, in slot order) with the attacker as the triggerer and the victim as the extra object; the answers are ignored. <see cref="Recipient"/> says who took the damage (the attacker on a critical
+/// self-hit) and <see cref="Worn"/> lists the entities that critter wears in slot order, whatever their type: the host keeps the armour pieces. The attacker and the victim are the host's own (it built the attack).
+/// </summary>
+public readonly record struct SessionArmourCriticalEvent(DamageRecipient Recipient, IReadOnlyList<string> Worn);
+
+public sealed partial class GameSessionOwner
+{
+    /// <summary>
+    /// ARC-SCRIPT-2828 (0x4B4390, the loop at 0x4B47F8, GT201): tells <paramref name="scripts"/> of the armour a critical damage step reaches, right after the victim's taking-damage script let the damage go on. The step is critical when
+    /// the damage is a critical hit's on the target or a critical self-hit's on the attacker (context flag 4); it runs for a living victim only (hit points above 0 before the damage: the original returns for a dead critter before the loop) and
+    /// whatever its worn slots hold (<paramref name="worn"/>, null or empty: nothing). A prevented damage never gets here (the gates before the loop returned).
+    /// </summary>
+    private static void NotifyArmourCritical(Action<SessionArmourCriticalEvent>? scripts, AttackResolution resolution, IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? worn, LifeStatus? status)
+    {
+        if (scripts is null || resolution.Damage is not { } damage || worn is not { Count: > 0 } || status is not { HitPoints: > 0 }) return;
+        var critical = damage.Recipient == DamageRecipient.Target ? resolution.Outcome == AttackOutcome.CriticalHit : resolution.CriticalSelfHit;
+        if (!critical) return;
+        scripts(new(damage.Recipient, worn.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray()));
+    }
+}

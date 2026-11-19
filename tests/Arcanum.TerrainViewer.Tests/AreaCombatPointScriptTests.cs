@@ -21,6 +21,7 @@ public sealed class AreaCombatPointScriptTests
 {
     private const byte Attachee = 1, Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0, Extra = 12;
     private const int AttackerIsNpc = 2410, VictimIsPc = 2411, AttacheeIsWeapon = 2412, CritterHitsTriggererIsPc = 2413, SecondHit = 2414, CriticalSeen = 2415;
+    private const int ArmourType = 7, ArmourIsArmour = 2420, ArmourAttackerIsNpc = 2421, ArmourVictimIsPc = 2422;
     private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417, WallType = 0, WallSeen = 2418, WallDamaged = 2419;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
@@ -118,6 +119,8 @@ public sealed class AreaCombatPointScriptTests
             Write("scr/00914poison.scr", Program(Do(new(ScrCatalogue.Action.Damage, (Extra, 0), N(17), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 915: marks that the critical-hit point ran.
             Write("scr/00915critical.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, CriticalSeen), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2828: 931 (a worn armour piece's critical-hit script): the attachee is armour (type 7), the triggerer the attacker (an NPC) and the extra object the victim (the PC).
+            Write("scr/00931armour.scr", Program([.. FlagIfType(Attachee, ArmourType, ArmourIsArmour, 0), .. FlagIfType(Triggerer, NpcType, ArmourAttackerIsNpc, 3), .. FlagIfType(Extra, PcType, ArmourVictimIsPc, 6), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
             // ARC-SCRIPT-1562: the poison weapons' shape (the magick-tech adjustment 91, then get magick-tech adjustment 80 and the damage): 916 scales 100 by the cancel chance of the weapon, its wielder and the victim and deals the result as poison to the
             // victim; 917 scales 100 by the weapon's power ratio for the wielder and deals it; 918 plays eye candy 30 on the victim first.
             Write("scr/00916cancel.scr", Program(Do(new(ScrCatalogue.Action.GetMagickTechAdjustment, N(100), (Attachee, 0), (Triggerer, 0), (Extra, 0), (Local, 0))),
@@ -174,6 +177,29 @@ public sealed class AreaCombatPointScriptTests
                 Assert.IsTrue(Flag(session, VictimIsPc), $"point {point}: the extra object is the victim");
                 Assert.IsTrue(Flag(session, AttacheeIsWeapon), $"point {point}: the attachee is the weapon");
             });
+    }
+
+    // ARC-SCRIPT-2828 (0x4B47F8, ledger TQ23): a critical damage step runs the critical-hit point of each worn armour piece (object type 7) with the attacker as the triggerer and the victim as the extra object; a worn weapon runs none.
+    [TestMethod]
+    public void The_armour_critical_run_asks_each_worn_armour_piece_in_order_with_the_attacker_as_triggerer_and_the_victim_as_extra_and_skips_a_weapon()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var helm = Row(1, ArmourType, 931, ScrPoint.CriticalHit);
+            var weapon = Row(2, WeaponType, 915, ScrPoint.CriticalHit);
+            var vest = Row(3, ArmourType, 915, ScrPoint.CriticalHit);
+            var bare = Row(4, ArmourType, 915, ScrPoint.Hit);
+            var attacker = Row(5, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, helm, weapon, vest, bare, attacker);
+            var runs = host.RunArmourCritical([Ref(helm), Ref(weapon), Ref(vest), Ref(bare)], Ref(attacker), host.Pc, session.Rules.Scripts);
+            Assert.AreEqual(3, runs.Count, "the weapon is asked no point; each armour piece is, whether it holds a script or not");
+            Assert.AreEqual((931, 915, null), (runs[0].Run?.Script, runs[1].Run?.Script, runs[2].Run?.Script), "in the order given; the piece with no slot at the point runs nothing");
+            Assert.IsTrue(Flag(session, ArmourIsArmour), "the attachee is the armour piece");
+            Assert.IsTrue(Flag(session, ArmourAttackerIsNpc), "the triggerer is the attacker");
+            Assert.IsTrue(Flag(session, ArmourVictimIsPc), "the extra object is the victim");
+            Assert.IsTrue(Flag(session, CriticalSeen), "the second armour piece's script ran");
+        });
     }
 
     // ARC-COMBAT-1719 (0x4B2870): the two ends of a flight run the weapon's hit (7) and miss (8) scripts, and for a critical weapon shot the critical-hit (34) and critical-miss (35) ones, as the swing's do.
