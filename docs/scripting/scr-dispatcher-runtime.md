@@ -181,10 +181,15 @@ the script; a reset, reload or map change closes the panel without resuming.
 ## Deferred calls (ARC-SCRIPT-010, slice S5)
 
 - **`ScrAdmissionSet.S5`** (the default of `ScrRunOptions`) is S3 plus call
-  script in (54) and remove script call (125). Call script at (55) stays
-  outside: one installed line uses it and no run reaches it (ARC-RES-045), and
-  its time-of-day arithmetic counted from the module's start hour (TE2) is not
-  settled.
+  script in (54) and remove script call (125). ARC-SCRIPT-2824 adds call
+  script at (55) (ledger TQ17, TE2): the same call request, its delay the
+  seconds from the clock's time of day, counted from the module's start hour
+  (`ScrGameTime.SecondsSinceStartHour`, answered by `IScrTimeQueries`), to the
+  operand's time of day (the operand reduced to a day, one day added when the
+  difference is negative), in game milliseconds with no factor 8 and 0 raised
+  to 1. The Original switch `CallDelayWraps` keeps a negative operand's
+  remainder (the 32-bit count read unsigned); Steamwoven reduces the operand to
+  0..86399 first. A host with no clock ends the run `NotModelled`.
 - **Call script in** asks for a call (`ScrEffects.Calls`, in action order):
   script, line, triggerer and attachee (an absent role is stored as absent, as
   the original stores a null handle) and a game delay of the seconds × 8000 ms

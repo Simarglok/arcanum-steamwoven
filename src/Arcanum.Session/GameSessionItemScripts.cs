@@ -913,7 +913,7 @@ public sealed partial class GameSessionOwner
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are being rewielded only
     /// in the runs of an NPC's rewield (ARC-MAGIC-1644).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries, IScrQuestWrites, IScrCritterFieldQueries
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries, IScrQuestWrites, IScrCritterFieldQueries, IScrTimeQueries
     {
         // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds, the follower kinds (ARC-SCRIPT-2336) and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
         // (UnknownObject: the session refuses the move). The set admits no held-item, wielded-item or reputation question and asks a location for distance between only (ARC-SCRIPT-2426); random (ARC-SCRIPT-2377) draws from the move's copy of the session's generator, so no other is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
@@ -966,6 +966,13 @@ public sealed partial class GameSessionOwner
         }
 
         // ARC-SCRIPT-2377 (IV44): random (37) draws from the session's generator in the move (a trial copy of the stream the commit takes over), so the runs of a move continue one sequence and a refused move spends none.
+        // ARC-SCRIPT-2824 (TQ17): call script at reads the session's clock (a move leaves it where it is), its time of day counted from the profile's start hour.
+        public ScrGameTime? Time()
+        {
+            var clock = session.QueryClockSnapshot();
+            return new ScrGameTime(clock.DayIndex, clock.Hour, clock.Minute, clock.MillisecondOfDay, clock.ProfileBinding.StartHour);
+        }
+
         public int Random(int low, int high) => runs.Draw(low, high);
 
         // ARC-SCRIPT-2377 (IV45, CQ1, CQ2): get social class and get origin go to the host's world part; an object it reads no row for stops the run as an absent one does (UnknownObject: the session refuses the move). The faction and armor getters are not admitted.

@@ -101,10 +101,11 @@ public sealed class ScrAdmissionSet
         [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player]);
 
     /// <summary>The deferred-call set (ARC-SCRIPT-010): <see cref="S3"/> plus call script in (54) and remove script call
-    /// (125). Call script at (55) stays outside: one installed line uses it, none a run reaches (ARC-RES-045), and its
-    /// time-of-day arithmetic (TE2) is not settled.</summary>
+    /// (125). ARC-SCRIPT-2824 (ledger TQ17) adds call script at (55): the same deferred call, its delay the time to the operand's
+    /// time of day counted from the start hour (<see cref="ScrGameTime.SecondsSinceStartHour"/>); the host answers the clock
+    /// through <see cref="IScrTimeQueries"/> (one without it ends the run with <see cref="ScrStop.NotModelled"/>).</summary>
     public static ScrAdmissionSet S5 { get; } = new("S5", S3.Conditions,
-        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
+        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.CallScriptAt).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
 
     /// <summary>The print-line set (ARC-SCRIPT-013): <see cref="S5"/> plus print line (24), which hands a line of the running
     /// script's DLG and a number to the host as a <see cref="ScrPrintLine"/> effect (ledger IS1–IS3,

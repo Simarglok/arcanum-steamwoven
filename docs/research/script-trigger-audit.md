@@ -107,7 +107,7 @@ guard's crime notice 0x4AEFCD is not hosted), 12 dying, 23 taking damage and 0 e
 | Sector script | 0x4F2330 for the local player entering a sector (TS3); followers then get point 27. | Map mode, PC crossing a sector. Point 27 not run. |
 | Call script (7) | 0x44B030: the callee from its header at the caller's point, every triggerer × attachee pair (OV1, X11). | Use, tile and sector sets; not the talk or heartbeat sets. |
 | Call-ex (81) | 0x44B170 → 0x441980 (WE3, TG5). | Item set, heartbeat set, since ARC-SCRIPT-052 the tile and sector set; point 1 refused. |
-| Deferred calls (54, 55) | Game-time events (one shared handler, TG7). | Call in (54) through the session queue (talk and use sets); call at (55) refused. |
+| Deferred calls (54, 55) | Game-time events (one shared handler, TG7). | Call in (54) through the session queue (talk and use sets); call at (55) since ARC-SCRIPT-2824 through the same queue (delay to the operand's time of day). |
 | End-game slides | Scripts 997–999 from the slide UI (0x569720). | None. |
 | Native trap scripts | Inside the interpreter (0x4BCB70). | Trap state (ARC-WORLD-110). |
 
