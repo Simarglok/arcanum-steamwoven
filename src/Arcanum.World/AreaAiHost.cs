@@ -145,6 +145,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-SCRIPT-1590 (0x441980, item use 0x462CC0): runs the use script (point 1) of an item an NPC holds, the NPC as the user and triggerer and the target (the entity the use names, "pc" for the hero) as the extra object, and answers whether the use goes on (a script that
     /// ran default, or none that runs: refused, not applied); false when it skipped the default (the food script 30282 always does, after it destroyed the item); null: no NPC's item use runs a script, and the use goes on as the script let it.</summary>
     public Func<string, string, string?, bool>? ItemUseScript { get; init; }
+    /// <summary>ARC-AI-2821 (ledger TQ14, exe 0x4AE120): runs the will-KOS script (attachment point 22) of the deciding NPC (first argument) with the candidate (second, "pc" for the hero) as the triggerer and answers whether the kill-on-sight evaluation goes on: false when the script vetoed it (skipped the default); true when it ran default, has no script or could not run (refused, not applied). Null: no will-KOS script runs.</summary>
+    public Func<string, string, bool>? WillKos { get; init; }
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
@@ -1370,7 +1372,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-DEV-193: the dialog reply step's hostile check (0x413130 → 0x45D8D0, 0x4AE120; ledger HR1–HR3): the speaker is alive (a critter this
     /// host does not know counts as not alive, as the original's null object does) and the AI turns kill-on-sight toward the hero now
-    /// (<see cref="HostilityRules.KillOnSight"/>; the will-kos script is not hosted, <see cref="AllowsKillOnSight"/>).
+    /// (<see cref="HostilityRules.KillOnSight"/>; the will-kos script is asked through <see cref="AllowsKillOnSight"/>).
     /// </summary>
     public bool HostileToHero(string npc)
     {
@@ -4247,7 +4249,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return query.View?.Effective ?? 0;
     }
 
-    public bool AllowsKillOnSight(string npc, string candidate) => true;
+    /// <summary>ARC-AI-2821 (0x4AE120, ledger TQ14): the will-KOS script (point 22) of the NPC with the candidate as the triggerer; its "skip default" vetoes the kill-on-sight (<see cref="AreaAiScene.WillKos"/>). Every kill-on-sight evaluation asks it: target finding, the dialog start and the dialog reply step.</summary>
+    public bool AllowsKillOnSight(string npc, string candidate) => _scene.WillKos?.Invoke(npc, candidate) != false;
 
     public HostilityParameters Parameters(string npc) => Row(npc) is { } row
         ? new(row.FleeDistance, row.HostileReaction, row.HostileAlignmentGap, row.GoodFollowerStop) : default;

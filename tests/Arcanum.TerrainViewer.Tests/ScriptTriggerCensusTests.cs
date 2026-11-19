@@ -30,6 +30,8 @@ public sealed class ScriptTriggerCensusTests
         ScrPoint.Use or AreaUseScriptHost.CatchingThiefPoint => AreaUseScriptHost.Admission,
         ScrPoint.Dialog => AreaScriptHost.SkillTalkAdmission,
         ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat => AreaUseScriptHost.HeartbeatAdmission,
+        // ARC-AI-2821 (TQ14): the will-KOS point (22) runs under the will-KOS set.
+        ScrPoint.WillKos => AreaUseScriptHost.WillKosAdmission,
         // ARC-SCRIPT-1483: the hit step's points (hit, critter hits, critical hit) run under the placed set.
         ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit => AreaUseScriptHost.CombatPointAdmission,
         SessionScriptPoint.Get or SessionScriptPoint.Drop or SessionScriptPoint.InsertItem or SessionScriptPoint.WieldOn or SessionScriptPoint.WieldOff
@@ -130,6 +132,8 @@ public sealed class ScriptTriggerCensusTests
         // point), the only command of the script outside the set (ARC-SCRIPT-2432 admits it: 28 of 28 expected).
         // ARC-SCRIPT-2432 (ledger IV40-IV43): change script (99) is admitted too: the last row (script 2103) is admitted whole, 28 of the 28.
         Assert.AreEqual(28, admitted[SessionScriptPoint.InsertItem]);
+        // ARC-AI-2821 (ledger TQ14): the will-KOS point (22) holds 60 attachments of 7 scripts on these maps; the will-KOS set (the heartbeat set plus is wielding item, get stat and call script) admits all 60 (47 of them with the heartbeat set alone).
+        Assert.AreEqual((60, 7, 0, 60), (rows[ScrPoint.WillKos], scripts[ScrPoint.WillKos].Count, missing[ScrPoint.WillKos], admitted[ScrPoint.WillKos]));
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 

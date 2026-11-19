@@ -467,6 +467,7 @@ src/Arcanum.Simulation/Traps/TrapEffectRules.cs,Amount,pending,
 src/Arcanum.Simulation/Traps/TrapRules.cs,SpotCase,pending,
 src/Arcanum.Simulation/Traps/TrapRules.cs,SpotItemModifier,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,Active,pending,
+src/Arcanum.World/AreaAiHost.cs,AllowsKillOnSight,exempt,host
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
 src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
@@ -763,10 +764,12 @@ src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunWillKos,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,SocialClassOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
 src/Arcanum.World/AreaUseScripts.cs,TransformDamage,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,UseStops,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,WillKosVetoes,exempt,host
 src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
 src/Arcanum.World/DiagnosticGridSession.cs,Relocate,pending,
 src/Arcanum.World/GoalStepper.cs,Step,pending,
@@ -912,6 +915,7 @@ tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiCombatScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiItemUseScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiWillKos,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,CarryTransformVitals,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunArmourScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
