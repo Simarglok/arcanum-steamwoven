@@ -97,6 +97,7 @@ src/Arcanum.Session/GameSessionExperience.cs,AwardHeroExperience,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordDamageExperience,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordNpcDamage,pending,
 src/Arcanum.Session/GameSessionExperience.cs,RecordNpcKill,pending,
+src/Arcanum.Session/GameSessionExperience.cs,RunLeaderKilling,exempt,host
 src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
 src/Arcanum.Session/GameSessionFate.cs,UseHeroFate,pending,
@@ -763,6 +764,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunItemDrop,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunItemUse,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunLeaderKilling,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,

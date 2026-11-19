@@ -1060,6 +1060,9 @@ public sealed partial class GameSessionOwner
             stepFailure = RecordKillLog(defending);
         else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Attacker)
             stepFailure = RecordHeroInjuries(outcome.Events, SelfInflictedCause);
+        // ARC-SCRIPT-2859: the kill step's leader-killing loop (point 20) follows the award and the kill log; the hero is the killer's PC leader.
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
+            RunLeaderKilling(target.Entity);
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
         // ARC-MAGIC-023: the damage step's item events (IC2). The parent hit's melee bit (0x4CBAD0) reads an attack entry's context and
