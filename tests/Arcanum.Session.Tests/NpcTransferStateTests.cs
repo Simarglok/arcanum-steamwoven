@@ -195,9 +195,9 @@ public sealed class NpcTransferStateTests
     }
 
     [TestMethod]
-    public void A_transfer_script_refuses_a_new_pile_and_the_ammunition_budget_counts_both_records()
+    public void The_ammunition_budget_counts_both_records()
     {
-        // The merchant gets a transfer script (point 32); an archer holds an untracked seed stack of 30 arrows.
+        // An archer holds an untracked seed stack of 30 arrows.
         var seed = Seed();
         var arrows = new SessionSeedItem("arrows", Facts(SessionItemType.Ammo, 3300, quantity: 30) with { AmmoType = 0 }, null);
         var custom = seed with
@@ -208,7 +208,6 @@ public sealed class NpcTransferStateTests
         };
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), new GameSessionLimits(maxAmmoRecords: 1));
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, custom).Failure);
-        Assert.AreEqual(GameSessionFailure.HolderScriptUnsupported, owner.GiveGoldToNpc(owner.Version, "virgil", 1, GoldPile, Accept).Failure, "a new pile moves in through the transfer");
         // Part of the stack: its rest and the hero's new stack would be two records, one over the budget.
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 10, Bullets with { Prototype = 7058 }, Accept).Failure);
         Assert.AreEqual(0L, owner.Version.Revision);

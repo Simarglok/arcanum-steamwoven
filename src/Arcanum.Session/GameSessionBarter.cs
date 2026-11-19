@@ -157,7 +157,6 @@ public sealed partial class GameSessionOwner
             else
             {
                 if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
-                if (NpcHasScript(npc, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
                 if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
                     return RejectItem(GameSessionFailure.BudgetExceeded);
             }
