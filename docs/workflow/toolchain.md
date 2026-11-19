@@ -3,6 +3,7 @@
 Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `8.0.425` with roll-forward disabled; [Directory.Build.props](../../Directory.Build.props) targets `net8.0`; [Directory.Packages.props](../../Directory.Packages.props) centralizes package versions. Godot adapters/labs use `Godot.NET.Sdk/4.7.2`, Godot **4.7.2 .NET** and matching .NET export templates. Development currently targets macOS. Version changes require a separate scoped decision; do not replace retained shared installations implicitly.
 
 The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
+The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. It holds identifiers, sizes and verdicts only, never pixels.
 
 ## Process-local environment
 
