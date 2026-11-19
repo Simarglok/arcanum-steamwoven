@@ -1464,6 +1464,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var attachee = new ScrObjectRef(_shownMap, thief);
         if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.CaughtThief) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
         var previous = _clicked;
         _clicked = (thief, row);
         try

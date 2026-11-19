@@ -382,7 +382,7 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
-    public void A_noticed_failed_pick_pocket_runs_the_thiefs_point_33_before_the_victims_point_11_whatever_33_answers()
+    public void A_noticed_failed_pick_pocket_runs_the_thiefs_point_33_before_the_victims_point_11()
     {
         // ARC-SCRIPT-2858 (TQ16, 0x4C7160): the thief's caught-thief script (the thief attachee, the victim the triggerer) runs first and its answer is ignored; then the victim's catching-thief script (the thief the triggerer), and the attack event follows
         // when that one lets it. Invented scripts; the scene's callbacks record the calls.
