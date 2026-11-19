@@ -158,6 +158,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
     /// <summary>ARC-SKILLS-010: the catching-thief point (11) whose slot an NPC's run keeps as map changes too, under <c>scr11.*</c>.</summary>
     public const int CatchingThiefPoint = 11;
+    /// <summary>ARC-SCRIPT-2858: the thief's caught-thief point (33).</summary>
+    public const int CaughtThiefPoint = ScrPoint.CaughtThief;
     /// <summary>ARC-WORLD-114: the map-change key of an NPC a script's toggle state (56) switched off (value 1; absent while it is as its
     /// map data has it). The original flips object flag 0x2; an NPC switched off is neither drawn nor in the object lists, and its AI
     /// passes stop at the gate (<see cref="SwitchedOff"/>).</summary>
@@ -1129,7 +1131,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1450,6 +1452,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         }
         finally { _clicked = null; }
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2858 (TQ16, exe read 2026-11-19): the caught-thief script (point 33) of <paramref name="thief"/>, an NPC of the shown map, which a noticed failed steal or plant of an NPC thief runs through the script dispatcher (0x441980, 0x4C7160) just before the
+    /// victim's catching-thief script (point 11, <see cref="RunCatchingThief"/>): the thief is the attachee, the victim (<paramref name="victim"/>: the hero or an NPC) the triggerer, no extra object here (the original passes the attempt's object), line 0, under
+    /// <see cref="CaughtThiefAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The original ignores the answer (the next call is made whatever it is). A thief that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunCaughtThief(string thief, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(thief); ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, thief);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.CaughtThief) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var previous = _clicked;
+        _clicked = (thief, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.CaughtThief, attachee, victim, null), this, new() { Rules = Remember(rules), Admission = CaughtThiefAdmission });
+            return Finish(run, _ => "a teleport from a caught-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-SCRIPT-2858: the set a caught-thief script (point 33) runs under (<see cref="RunCaughtThief"/>): the set of the other NPC point scripts (<see cref="DyingAdmission"/>).</summary>
+    public static ScrAdmissionSet CaughtThiefAdmission => DyingAdmission;
 
     /// <summary>
     /// ARC-WORLD-114: an NPC's first-heartbeat (10) or heartbeat (19) script, which the AI tick runs with the NPC as the attachee and
