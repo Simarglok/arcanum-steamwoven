@@ -241,7 +241,7 @@ public partial class TerrainViewerApp
         }
         var result = WriteBugReportMoment(moment, text, check);
         _bugReport = null;
-        RecordTaggedBugReport(result, text, check);
+        RecordTaggedBugReport(result, check);
         _bugReportPanel.ShowOutcome(result.Folder is null ? "The report could not be written: " + string.Join("; ", result.Failed)
             : (result.Saved ? "The report is saved in\n" : "The report is INCOMPLETE in\n") + result.Folder
               + (result.Fallback ? $"\n\nThe folder beside the game could not be used ({result.FallbackReason}), so it is in your user folder." : "")
@@ -251,7 +251,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-2768: a Ctrl+B report tagged with an owner check is recorded in the QA folder's results (the folder of the
     /// active-check file), so the check counts as answered and leaves the active list. Best effort: nothing here fails a report.</summary>
-    private static void RecordTaggedBugReport(BugReportResult result, string text, string? check)
+    private static void RecordTaggedBugReport(BugReportResult result, string? check)
     {
         if (check is null || result.Folder is null) return;
         try
@@ -260,7 +260,7 @@ public partial class TerrainViewerApp
             var folder = file is null ? null : System.IO.Path.GetDirectoryName(file);
             if (folder is null || !System.IO.Directory.Exists(folder)) return;
             var build = ViewerBuild.Current;
-            var problem = OwnerQaFiles.RecordReportFor(folder, check, System.IO.Path.GetFileName(result.Folder.TrimEnd('/', '\\')), text.Trim(), build.Commit ?? build.Text, DateTime.UtcNow);
+            var problem = OwnerQaFiles.RecordReportFor(folder, check, System.IO.Path.GetFileName(result.Folder.TrimEnd('/', '\\')), "", build.Commit ?? build.Text, DateTime.UtcNow);
             if (problem is not null) GD.Print("ARC-DEV-2768 tagged report not recorded: " + problem);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException or System.IO.IOException)

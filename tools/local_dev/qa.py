@@ -317,10 +317,9 @@ def answered_info(entry: dict, result: dict | None, reports: list[dict]) -> dict
     cutoff = 0.0
     if recorded and entry["status"] == "open" and not entry["report"]:      # a reopen (or the page's own open)
         cutoff = _iso_epoch(result["ts"]) or 0.0
-    tagged = next((item for item in reports if item["check"] == entry["id"] and item["epoch"] > cutoff), None)   # newest first
+    tagged = next((item for item in reports if item["check"] == entry["id"] and item["epoch"] >= cutoff), None)   # newest first
     if entry["status"] != "open":
-        moment = _iso_epoch(result["ts"]) if recorded else None
-        day = datetime.datetime.fromtimestamp(moment).strftime("%Y-%m-%d") if moment else ""
+        day = str(result["ts"] or "")[:10] if recorded and _iso_epoch(result["ts"]) else ""      # the UTC day, as the game shows it
         return {"answered": True, "answeredBy": "mark", "answeredAt": day}
     if entry["report"]:
         named = next((item for item in reports if item["name"] == entry["report"]), None)

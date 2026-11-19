@@ -102,11 +102,12 @@ function find(id) { return allSteps().find(s => s.id === id); }
 function visible(step, sec) {
   if (section && sec.code !== section) return false;
   if (step.answered) return false;          // ARC-DEV-2768: an answered step (a mark or a sent report) is in the group at the end
+  if (filter === "open") return step.status === "open";
   if (filter === "new") return step.isNew;
   return true;
 }
-function answeredVisible(step, sec) {      // the group follows the section and the "new" filters, never "open" (it is all answered)
-  return step.answered && (!section || sec.code === section) && (filter !== "new" || step.isNew);
+function answeredVisible(step, sec) {      // the group follows the section and the "new" filters; the "open" filter hides it (it is all answered)
+  return step.answered && filter !== "open" && (!section || sec.code === section) && (filter !== "new" || step.isNew);
 }
 let answeredOpen = false;                  // the group is collapsed until the owner opens it
 function draftOf(step) {
@@ -215,10 +216,17 @@ async function save(step, status) {
     const result = await api("/api/result", { step: step.id, status, note: draft.note || "", report: draft.report || null });
     Object.assign(step, { status: result.status, note: result.note, report: result.report, issue: result.issue, issueUrl: result.issueUrl, issueError: result.issueError, recorded: true });
     drafts.set(step.id, { note: result.note, report: result.report });
+    data = await api("/api/state");          // ARC-DEV-2768: whether the step is answered (and when) is the server's reading of results and reports
     flash.set(step.id, status === "differs" ? (result.issue ? "saved, issue #" + result.issue : "saved, issue NOT created") : "saved");
   } catch (e) { flash.set(step.id, "not saved: " + e.message); }
   busy.delete(step.id);
+  const before = visibleNodes(), at = before.findIndex(n => n.dataset.id === step.id);
   render();
+  const now = find(step.id);
+  if (now && now.answered && selected === step.id && at >= 0) {      // the marked step went to the answered group: the next step of the list is selected
+    const nodes = visibleNodes();
+    if (nodes.length) { selected = null; choose(nodes[Math.min(at, nodes.length - 1)].dataset.id, true); }
+  }
   if (selected) { const n = document.querySelector('.step[data-id="' + CSS.escape(selected) + '"]'); if (n && document.activeElement === document.body) n.focus({ preventScroll: true }); }
 }
 async function reopen(step) {
@@ -238,8 +246,9 @@ async function load() {
   data = await api("/api/state");
   render();
 }
+function visibleNodes() { return [...document.querySelectorAll(".step")].filter(n => n.offsetParent !== null); }
 function move(delta) {
-  const nodes = [...document.querySelectorAll(".step")];
+  const nodes = visibleNodes();          // not the steps inside the collapsed answered group
   if (!nodes.length) return;
   let at = nodes.findIndex(n => n.dataset.id === selected);
   at = at < 0 ? (delta > 0 ? 0 : nodes.length - 1) : Math.min(nodes.length - 1, Math.max(0, at + delta));

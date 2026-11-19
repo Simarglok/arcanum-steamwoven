@@ -135,30 +135,14 @@ public static class OwnerQaFiles
     /// the format of ARC-DEV-2187 plus <c>build</c> (the build's commit) and <c>src</c> = game. Null when written, else the reason.</summary>
     public static string? AppendResult(string folder, string step, string status, string note, string? report, string build, DateTime utcNow)
     {
-        if (BugReportCheck.Normalize(step) is null) return "not a step id";
-        if (status is not ("open" or "same" or "differs" or "cannot-test")) return "unknown status";
-        if (note.Length > MaxNote) return $"the note is longer than {MaxNote} characters";
-        var line = JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            ["kind"] = "result", ["ts"] = utcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture), ["step"] = step, ["status"] = status,
-            ["note"] = note.Trim(), ["report"] = string.IsNullOrEmpty(report) ? null : report, ["build"] = build, ["src"] = "game",
-        }) + "\n";
+        var line = BuildLine(step, status, note, report, build, utcNow, out var problem);
+        if (line is null) return problem;
         try
         {
             Directory.CreateDirectory(folder);
             using var guard = TakeLock(folder);
             if (guard is null) return "results.jsonl is busy (the QA page holds its lock), try again";
-            var path = Path.Combine(folder, ResultsFile);
-            var prefix = "";
-            if (File.Exists(path))
-            {
-                using var existing = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                if (existing.Length > 0) { existing.Seek(-1, SeekOrigin.End); if (existing.ReadByte() != '\n') prefix = "\n"; }
-            }
-            using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-            var bytes = Encoding.UTF8.GetBytes(prefix + line);
-            stream.Write(bytes, 0, bytes.Length);
-            stream.Flush(flushToDisk: true);
+            WriteLine(folder, line);
             return null;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -167,19 +151,65 @@ public static class OwnerQaFiles
         }
     }
 
+    private static string? BuildLine(string step, string status, string note, string? report, string build, DateTime utcNow, out string? problem)
+    {
+        problem = null;
+        if (BugReportCheck.Normalize(step) is null) { problem = "not a step id"; return null; }
+        if (status is not ("open" or "same" or "differs" or "cannot-test")) { problem = "unknown status"; return null; }
+        if (note.Length > MaxNote) { problem = $"the note is longer than {MaxNote} characters"; return null; }
+        return JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["kind"] = "result", ["ts"] = utcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture), ["step"] = step, ["status"] = status,
+            ["note"] = note.Trim(), ["report"] = string.IsNullOrEmpty(report) ? null : report, ["build"] = build, ["src"] = "game",
+        }) + "\n";
+    }
+
+    /// <summary>One line at the end of <c>results.jsonl</c>, a cut last line closed first (the caller holds the lock).</summary>
+    private static void WriteLine(string folder, string line)
+    {
+        var path = Path.Combine(folder, ResultsFile);
+        var prefix = "";
+        if (File.Exists(path))
+        {
+            using var existing = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (existing.Length > 0) { existing.Seek(-1, SeekOrigin.End); if (existing.ReadByte() != '\n') prefix = "\n"; }
+        }
+        using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        var bytes = Encoding.UTF8.GetBytes(prefix + line);
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Flush(flushToDisk: true);
+    }
+
     /// <summary>ARC-DEV-2768: records the folder name of a report sent for <paramref name="step"/> (the overlay's Send and a Ctrl+B report
     /// tagged with the step), keeping the status the step shows (recorded, else the list's, else open) and its note, so the step counts as
     /// answered. Null when written, else the reason.</summary>
     public static string? RecordReportFor(string folder, string step, string reportFolder, string note, string build, DateTime utcNow)
     {
-        var result = ReadResults(folder).GetValueOrDefault(step);
-        var status = result?.Status;
-        if (status is null)
+        if (BugReportCheck.Normalize(step) is null) return "not a step id";
+        try
         {
-            var listed = ReadChecks(folder).Steps.FirstOrDefault(item => item.Id == step)?.ListStatus;
-            status = listed is "same" or "differs" or "cannot-test" ? listed : "open";
+            Directory.CreateDirectory(folder);
+            // The read of the status and the append are one step under the page's lock: a mark of the page in between is not overwritten.
+            using var guard = TakeLock(folder);
+            if (guard is null) return "results.jsonl is busy (the QA page holds its lock), try again";
+            var result = ReadResults(folder).GetValueOrDefault(step);
+            var status = result?.Status;
+            if (status is null)
+            {
+                var listed = ReadChecks(folder).Steps.FirstOrDefault(item => item.Id == step)?.ListStatus;
+                status = listed is "same" or "differs" or "cannot-test" ? listed : "open";
+            }
+            var kept = note.Trim().Length > 0 ? note.Trim() : result?.Note ?? "";
+            if (kept.Length > MaxNote) kept = kept[..MaxNote];          // a long report text must not keep the step from counting as answered
+            var line = BuildLine(step, status, kept, reportFolder, build, utcNow, out var problem);
+            if (line is null) return problem;
+            WriteLine(folder, line);
+            return null;
         }
-        return AppendResult(folder, step, status, note.Length > 0 ? note : result?.Note ?? "", reportFolder, build, utcNow);
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return error.Message;
+        }
     }
 
     /// <summary>The page's write lock (<c>.lock</c> in the QA folder, an flock of the Python page): a .NET open with FileShare.None takes

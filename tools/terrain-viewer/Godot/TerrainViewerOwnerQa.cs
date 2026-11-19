@@ -270,7 +270,11 @@ public partial class TerrainViewerApp
             await Shot("overlay");
             // A step picked in the list becomes current: Ctrl+B and the page follow active-check.txt.
             panel.PressForSelfTest("all");
-            Require(panel.RowCountForSelfTest == 3, "the All filter lists every step: " + panel.RowCountForSelfTest);
+            Require(panel.RowCountForSelfTest == 2, "the All filter lists the unanswered steps (the third is `same` in the list, so it sits in the collapsed group): " + panel.RowCountForSelfTest);
+            panel.PressForSelfTest("answered");
+            Require(panel.RowCountForSelfTest == 3, "the answered group lists the third step: " + panel.RowCountForSelfTest);
+            panel.PressForSelfTest("answered");
+            Require(panel.RowCountForSelfTest == 2, "the answered group collapses: " + panel.RowCountForSelfTest);
             AfterOwnerQaStepChange(_ownerQa.SetCurrent("ARC-DEV-9001#2"));
             Require(System.IO.File.ReadAllText(System.IO.Path.Combine(folder, BugReportCheck.FileName)).Trim() == "ARC-DEV-9001#2", "the current step is written to active-check.txt");
             Require(_ownerQaPlate.TextForSelfTest.Contains("ARC-DEV-9001#2", StringComparison.Ordinal), "the plate follows the current step");
