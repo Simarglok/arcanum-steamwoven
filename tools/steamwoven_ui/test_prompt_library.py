@@ -218,6 +218,8 @@ class RefsAndCliTests(unittest.TestCase):
         (outbox / "ctx-hud.png").write_bytes(fake_png(1920, 1080))
         with self.assertRaises(ValueError):
             lib.write_provenance(library, "style-anchors-contexts", tmp, "g", "1", "owner")
+        (outbox / "ctx-hud.png").write_bytes(fake_png(1448, 1086))  # smaller, same 4:3 aspect: accepted
+        self.assertEqual(7, len(lib.write_provenance(library, "style-anchors-contexts", tmp, "g", "1", "owner")))
 
     def test_inbox_failure_writes_nothing(self) -> None:
         tmp = Path(tempfile.mkdtemp())
