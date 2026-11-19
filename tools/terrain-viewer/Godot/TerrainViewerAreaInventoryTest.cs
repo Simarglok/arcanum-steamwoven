@@ -749,7 +749,7 @@ public partial class TerrainViewerApp
             InventoryMutationResult taken;
             if (held.Item is not null)
             {
-                taken = session.TakeAmmoFromNpc(session.Version, held.Entity, held.Item.Entity, 2, held.Item.Facts.Kind, _inventoryHost!.InsertCheck);
+                taken = session.TakeAmmoFromNpc(session.Version, held.Entity, held.Item.Entity, 2, held.Item.Facts.Kind, _inventoryHost!.InsertCheck, _inventoryHost!.ItemScripts(session));
                 lent = held.Item.Entity;
             }
             else if (ground is not null) { taken = _inventoryHost!.PickUp(session, ground.Entity); lent = ground.Entity; }
@@ -761,7 +761,7 @@ public partial class TerrainViewerApp
                 var arrows = PrototypeItems()!.Item(ArrowPrototype)!.Kind;
                 var added = session.AddItemToNpc(session.Version, npc!.Entity, arrows, _inventoryHost!.InsertCheck, (0, 5));
                 Require(added.Disposition == GameSessionDisposition.Changed, "an NPC's arrows: " + added.Failure);
-                taken = session.TakeAmmoFromNpc(session.Version, npc.Entity, added.Item!, 5, arrows, _inventoryHost.InsertCheck);
+                taken = session.TakeAmmoFromNpc(session.Version, npc.Entity, added.Item!, 5, arrows, _inventoryHost.InsertCheck, _inventoryHost!.ItemScripts(session));
                 lent = $"{ArrowPrototype}x5";
             }
             Require(taken.Disposition == GameSessionDisposition.Changed, "lending: " + taken.Failure);

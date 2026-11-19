@@ -108,7 +108,7 @@ public partial class TerrainViewerApp
             var given = session.AddItemToNpc(session.Version, TechSmokeAmmoNpc!, kind.Value, _inventoryHost!.InsertCheck, data.AmmoOf(prototype));
             TechSmokeRequire(given.Disposition == GameSessionDisposition.Changed && given.Item is not null, $"the NPC was given ammunition prototype {prototype}: {given.Disposition} {given.Failure}");
             var units = data.AmmoOf(prototype)!.Value.Units;
-            var taken = session.TakeAmmoFromNpc(session.Version, TechSmokeAmmoNpc!, given.Item!, units, kind.Value, _inventoryHost.InsertCheck);
+            var taken = session.TakeAmmoFromNpc(session.Version, TechSmokeAmmoNpc!, given.Item!, units, kind.Value, _inventoryHost.InsertCheck, _inventoryHost!.ItemScripts(session));
             TechSmokeRequire(AreaInventoryHost.Moved(taken) && taken.Item is not null, $"the hero took the ammunition prototype {prototype} from the NPC: {taken.Disposition} {taken.Failure}");
             return taken.Item!;
         }

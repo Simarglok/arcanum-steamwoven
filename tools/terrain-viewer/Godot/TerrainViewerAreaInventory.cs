@@ -726,8 +726,8 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's; ARC-UI-1328: or a junk pile's) gold pile whole without asking (the original's flag 0x20, QW1).
             var result = line.StackKind is { Type: SessionItemType.Gold }
-                ? SessionJunkPile.Number(holder) is not null ? _areaSession!.TakeGoldFromJunkPile(_areaSession.Version, holder, line.Entity, line.Units)
-                : _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
+                ? SessionJunkPile.Number(holder) is not null ? _areaSession!.TakeGoldFromJunkPile(_areaSession.Version, holder, line.Entity, line.Units, _inventoryHost!.ItemScripts(_areaSession))
+                : _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity, _inventoryHost!.ItemScripts(_areaSession))
                 : _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
