@@ -67,7 +67,11 @@ public partial class AreaFollowerPortraits : CanvasLayer
     private sealed record Entry(int Slot, Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, Label Initials, ColorRect Tint,
         AreaArtBar Health, AreaArtBar Fatigue);
 
-    private static readonly Color MenuWhite = new(1, 1, 1), MenuGrey = new(.5f, .5f, .5f), MenuBright = new(0, 0xD2 / 255f, 1);
+    // ARC-UI-2795 (exe 0x56B970, fonts built at 0x56A4BD): the rows are art 229 (Flare12Font) in white, mid grey when greyed and (255, 210, 0) under the pointer (the font 0x67BB5C).
+    private static readonly (byte R, byte G, byte B) MenuWhite = (255, 255, 255), MenuGrey = (128, 128, 128), MenuBright = (255, 210, 0);
+
+    /// <summary>ARC-UI-2795: the menu rows' font (art 229); null draws no row text.</summary>
+    public AreaArtFontFace? MenuFont { get; set; }
 
     private Control _root = null!;
     private Control _menu = null!;
@@ -138,7 +142,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _menuRows.Where(row => row.Item == item).Select(row => (FollowerMenuRowState?)(row.Greyed ? FollowerMenuRowState.Greyed : FollowerMenuRowState.Normal)).FirstOrDefault();
     /// <summary>ARC-UI-1786: the word an open menu's row draws, null when the row is not drawn (its message is missing).</summary>
     internal string? MenuRowTextForSelfTest(FollowerMenuItem item) =>
-        _menuRows.Where(row => row.Item == item).Select(row => row.Row.GetChildren().OfType<Label>().FirstOrDefault()?.Text).FirstOrDefault();
+        _menuRows.Where(row => row.Item == item).Select(row => row.Row.GetChildren().OfType<AreaArtLabel>().FirstOrDefault()?.Text).FirstOrDefault();
     /// <summary>ARC-UI-1736: a menu row's size in the menu's own pixels (FP8: 118 × 15).</summary>
     internal Vector2? MenuRowSizeForSelfTest(FollowerMenuItem item) => _menuRows.Where(row => row.Item == item).Select(row => (Vector2?)row.Row.Size).FirstOrDefault();
     /// <summary>ARC-UI-1736: the open menu's rectangle on the screen and its rows' count (FP7, FP8).</summary>
@@ -459,16 +463,15 @@ public partial class AreaFollowerPortraits : CanvasLayer
                 MouseFilter = Control.MouseFilterEnum.Stop, Position = new Vector2(x, y), Size = new Vector2(width, height), CustomMinimumSize = new Vector2(width, height), ClipContents = true,
             };
             // FP8: white, the bright colour under the pointer, mid grey when greyed (a greyed row has no pointer colour).
-            var word = new Label
+            var word = new AreaArtLabel
             {
-                Text = texts.Text(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
-                MouseFilter = Control.MouseFilterEnum.Ignore, LabelSettings = new LabelSettings { FontSize = 10, FontColor = greyed ? MenuGrey : MenuWhite },
+                Text = texts.Text(item) ?? "", Size = new Vector2(width, height), Middle = true, Face = MenuFont, Colour = greyed ? MenuGrey : MenuWhite,
             };
             row.AddChild(word);
             if (!greyed)
             {
-                row.MouseEntered += () => word.LabelSettings.FontColor = MenuBright;
-                row.MouseExited += () => word.LabelSettings.FontColor = MenuWhite;
+                row.MouseEntered += () => word.Colour = MenuBright;
+                row.MouseExited += () => word.Colour = MenuWhite;
             }
             // The release on a row runs it after the menu closes (FP9, code 1); a right release over a row, or a left one over a greyed row, is taken by no menu row: it closes the menu.
             row.GuiInput += input =>

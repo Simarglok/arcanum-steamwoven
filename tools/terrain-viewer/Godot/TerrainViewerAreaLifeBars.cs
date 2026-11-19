@@ -23,12 +23,13 @@ public partial class TerrainViewerApp
         var shown = _readyArea is not null && _areaSession is { } session && session.QueryHero() is not null && _readyMode == TerrainViewerMode.Area
             && (inBars || !WorldModal) && (!ViewerAutomatedStorage.Automated || _lifeBarsForSelfTest || _gameBarForSelfTest);
         var barFont = TextFonts()?.Bar;
-        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, shown, inBars, (object?)barFont);
+        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, shown, inBars, (object?)TextFonts());
         if (_heroGaugeStamp == stamp) return;
         _heroGaugeStamp = stamp;
         if (!shown) { _heroGauges?.Show(null, null); return; }
         if (_heroGauges is null) { _heroGauges = new AreaHeroGauges(); AddChild(_heroGauges); }
         _heroGauges.SetFont(barFont);
+        _heroGauges.SetCompactFont(TextFonts()?.Text);
         _heroGauges.Show(_areaSession!.QueryHeroLife() is { } life ? AreaLife.From(life) : null, inBars ? _gameBarPanel : null);
     }
 

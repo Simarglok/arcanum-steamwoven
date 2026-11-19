@@ -41,7 +41,7 @@ Read in the redraw 0x576520 and the open 0x572340; rows [IW20–IW25](../researc
 | Counts | font 0x68345C | (729, 70 + 23 × i), 58 × 20 | gold, arrows, bullets, charges, fuel |
 
 Done in the viewer: backgrounds, covers, item arts (inventory art everywhere, scaled down when larger than the
-item's place), boxes with their hover art, lines and counts in the project's font, the window at its place
+item's place), boxes with their hover art, lines, counts, names, quotes and ratings in the original's art fonts (ARC-UI-2795), the window at its place
 between the bars, the debug-only "Diagnostic view" switch below it (ARC-UI-2764: not drawn in play). Barter and the other modes keep the diagnostic window;
 the loot window is done by ARC-UI-052 and the steal window by ARC-UI-065 (below).
 
@@ -50,7 +50,7 @@ Left for the next inventory slices (each its own task):
 - ~~**Item sizes**~~: done by ARC-UI-055 (an item's grid size is its inventory art's frame in cells, 0x461780, ledger JP3;
   [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
-- **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
+- **Fonts** (exe 0x572060, draws in 0x576520; ARC-UI-2795): the merchant's or other party's name 0x682418 = art 27 `morph15font`; the weight, encumbrance and speed lines, the quote line, the item lines and the other party's rating 0x682C74 = art 229 `Flare12Font`; the gold and ammunition counts 0x68345C = **art 171** `Cloister18Font` with flag 0x10 (additive; the earlier reading "arts 226–230" was wrong); the PC's damage and armour ratings 0x681390 = art 486 `LatinXCN30Font`. All white. The viewer draws them through `AreaInventoryGridArea` (HD redraw with the HD interface on).
 - **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064, its merchant's doll view added by ARC-UI-1917; without the gamble, below), steal (done by ARC-UI-065, below); the hero's own doll toggle of modes 1 to 4 is done by ARC-UI-1918 (below, [IW45](../research/ledger/ui-audio.md#heros-own-doll-toggle-arc-ui-1918)).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
@@ -128,7 +128,7 @@ interface mode 1 (a `b:` reply, BT7); the frame is the inventory window's.
 | Gamble box | 345 off, 344 on, 346 refused | (703, 236), hit area = art | on / refused by the gamble check 0x579840 while an item is held over it (BW3) |
 | Round view | 231 | (16, 17) | IW33–IW34 |
 
-Done in the viewer: the backgrounds, the image, the name and quote line in the project's font, the shown grid with its items' art and the
+Done in the viewer: the backgrounds, the image, the name and quote line in the original's fonts (ARC-UI-2795), the shown grid with its items' art and the
 wheel as its scroll (PROJECT: the scroll bar at (330, 168) is not drawn), the hero's grid, counts and boxes, the gamble box in its off art,
 the round view; a merchant's item released on the hero's grid is bought and a hero's item released on the merchant's grid sold through the
 session (PROJECT: into the hero's first free cells, a stack whole), and a right release on an item moves it to the other side the same

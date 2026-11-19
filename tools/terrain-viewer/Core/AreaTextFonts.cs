@@ -23,7 +23,9 @@ public static class AreaTextFontLayout
     public const int RollerArt = QuantityPaneRules.FontArt;
     /// <summary>ARC-UI-2368: the bottom strip's bar font (art 171, 0x64C670) of the number slots (ledger BC9); optional like the roller font.</summary>
     public const int BarArt = BarNumberRules.FontArt;
-    public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt, NumberArt, RollerArt, BarArt];
+    /// <summary>ARC-UI-2795: the rating font (art 486 <c>LatinXCN30Font</c>, white, 0x681390) of the inventory windows' damage and armour ratings (exe 0x576520); optional like the number font.</summary>
+    public const int RatingArt = 486;
+    public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt, NumberArt, RollerArt, BarArt, RatingArt];
     /// <summary>The arts without which no original font is used (the number font is optional).</summary>
     public static IReadOnlyList<int> RequiredArtNumbers { get; } = [TitleArt, TextArt];
 
@@ -96,6 +98,9 @@ public sealed record AreaTextFontContent(IReadOnlyDictionary<int, AreaInterfaceA
 
     /// <summary>ARC-UI-2368: the bar font (art 171) read; without it the number slots draw in the viewer's stand-in font.</summary>
     public bool BarArtReady => Ready(AreaTextFontLayout.BarArt);
+
+    /// <summary>ARC-UI-2795: the ratings' font (art 486) read; without it the inventory windows draw no rating.</summary>
+    public bool RatingArtReady => Ready(AreaTextFontLayout.RatingArt);
 
     private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0;
 
