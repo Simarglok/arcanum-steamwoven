@@ -87,10 +87,10 @@ Source references are the function addresses listed under [Provenance](#provenan
 5. **Selection** consumes the token before the first effect, runs the reply action, then:
    positive response → next NPC node (new turn); `0` → `Ended(ReturnToScript, caller+1)`;
    negative `-n` → `Ended(ReturnToScript, n)`; an insult (below) first runs its rule; a trailing `JO 0 node` (or, with a party port,
-   `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`; an `FL` node absent from the DLG shows a blank line and ends the same way ([FLM1](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)).
+   `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`; an `FL` node absent from the DLG shows a blank line and ends the same way ([FLM1](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)); an `FL` node that is a Player record is used the same way (its text is the line, its action runs; [FLM2](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)).
    SCR continuation is reported, never executed.
 
-Text: NPC lines use the record text for a male PC and the alternate field for a female PC.
+Text: NPC lines use the record text for a male PC and the alternate field for a female PC (a Player record used as a final line has no female text, so its own text is shown for either PC, FLM2).
 `@pcname@`/`@npcname@` (ASCII case-insensitive) take host-supplied names; any other token is a
 frontier and an unterminated `@` is a failure. Code page is explicit
 (`DialogTextEncoding.Windows1252`, data-observed for the selected English installation:
@@ -129,7 +129,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | PC stats (stat port) | `CH n`, `PE n`, `LE n`, `AL n`, `MA n` (the signed rule on charisma, perception, level, alignment, aptitude), `TA n` (on the negated aptitude), `NA n` (alignment ≥ −n for n ≥ 0, ≤ n for n < 0) as Player conditions; n is signed, no `+` |
 | Item holdings (item-hold port) | `IN n`, `NI n` as Player conditions (n ≥ 0: the PC or a follower holds an item named n; n < 0: the NPC or its substitute container holds an item named −n; `NI` the negation); n is signed, no `+`, not −2³¹ |
 | Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
-| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). An `FL node` whose node is missing from the DLG is offered with no target: blank final line, the other operations and the `CO` event run, the talk ends (ARC-SCRIPT-2790, FLM1); a node that is a Player record stays `TargetInvalid` (#2804). |
+| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). An `FL node` whose node is missing from the DLG is offered with no target: blank final line, the other operations and the `CO` event run, the talk ends (ARC-SCRIPT-2790, FLM1); a node that is a Player record is used the same way (ARC-SCRIPT-2804, FLM2): its text is the line, its action runs after the reply's (the NPC action grammar, so a nested `fl`/`jo` inside it stays refused, #2981) and the talk ends; a join, an unwait and an expert teacher still need an NPC node. |
 
 Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN` as an action, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
