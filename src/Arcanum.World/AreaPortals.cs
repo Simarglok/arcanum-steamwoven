@@ -28,7 +28,21 @@ public sealed record AreaPortal(AreaObjectKey Key, string Entity, AreaStepCell C
 }
 
 /// <summary>What a use of a door or window did (ARC-WORLD-051).</summary>
-public enum AreaPortalUse { Opened, Closed, Locked, Jammed, MagicallyHeld, ScriptGuarded, CannotOpen }
+public enum AreaPortalUse
+{
+    Opened, Closed, Locked, Jammed, MagicallyHeld,
+    /// <summary>The portal has an unlock script (point 3) and no host ran it (<see cref="AreaPortals.UnlockScripts"/> unbound, or its run did not finish): the open is refused as before the point was run.</summary>
+    ScriptGuarded,
+    CannotOpen,
+    /// <summary>ARC-SCRIPT-2860: the portal's unlock script (point 3) ran and answered 0: the open attempt answers 4 and the portal stays shut.</summary>
+    ScriptRefused,
+}
+
+/// <summary>
+/// ARC-SCRIPT-2860 (TQ11): the host's run of an unlock script (point 3) of the portal or container <paramref name="entity"/> for <paramref name="opener"/> (the critter's session entity, <see cref="AreaHeroRunsHost.Hero"/> for the hero). True when the script answered 0
+/// (the open attempt refuses), false when there is none or it answered "run default", null when the run did not finish (see <see cref="AreaUseScriptHost.UnlockRefused"/>).
+/// </summary>
+public delegate bool? UnlockScriptRun(string entity, string opener);
 
 /// <summary>
 /// ARC-WORLD-051: doors and windows of the shown map at runtime. Their state lives in the session (ARC-WORLD-050): a step
@@ -60,6 +74,12 @@ public sealed class AreaPortals
 
     public SessionMapId Map { get; }
     public IReadOnlyCollection<AreaPortal> All => _portals.Values;
+
+    /// <summary>
+    /// ARC-SCRIPT-2860 (TQ11, UL1): the host that runs a portal's unlock script (point 3) at the open attempt (0x4AEB70: before the lock test, for a busted portal never) for the door goals' attempts, the hero's use and the planners' step tests (<see cref="Passages"/>). Unbound, a portal with an unlock script
+    /// keeps the refusal it had before the point was run (<see cref="AreaPortalUse.ScriptGuarded"/>, <see cref="AreaPortalPassage.Unresolved"/>).
+    /// </summary>
+    public UnlockScriptRun? UnlockScripts { get; set; }
 
     public bool TryGet(AreaObjectKey key, [MaybeNullWhen(false)] out AreaPortal portal) => _portals.TryGetValue(key, out portal);
 
@@ -117,7 +137,15 @@ public sealed class AreaPortals
     /// an unlock script leaves the T0 rule; otherwise the player's open attempt decides (ledger LK7): it opens, a lock
     /// passes only a step leaving a building (unless always locked), jammed and held block.
     /// </summary>
-    public IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage> Passages(GameSessionOwner session) => new LivePassages(this, session);
+    public IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage> Passages(GameSessionOwner session) => new LivePassages(this, session, AreaHeroRunsHost.Hero);
+
+    /// <summary>ARC-SCRIPT-2860 (TQ11, UL3): the passage as <paramref name="walker"/> (a critter's session entity, or <see cref="AreaHeroRunsHost.Hero"/>) asks it: a portal with an unlock script runs it for that walker, as the original's step test (0x43FE00 → 0x4AEB70) does,
+    /// at each lookup of a crossed portal (only a closed portal that is not busted).</summary>
+    public IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage> Passages(GameSessionOwner session, string walker)
+    {
+        ArgumentNullException.ThrowIfNull(walker);
+        return new LivePassages(this, session, walker);
+    }
 
     /// <summary>The closed portals a started step crosses and may pass, opened to their last frame in the session (one
     /// revision each); the caller animates them. A portal that cannot open (one frame) is not listed.</summary>
@@ -165,7 +193,7 @@ public sealed class AreaPortals
     }
 
     /// <summary>
-    /// ARC-DEV-138 (MIG13 S7): what a use of the portal by the player will do, decided and not written (FR-SCENE-014): an open portal is to close (<see cref="AreaPortalUse.Closed"/>;
+    /// ARC-DEV-138 (MIG13 S7): what a use of the portal by the player will do, decided and not written (FR-SCENE-014; since ARC-SCRIPT-2860 the open attempt inside it runs the portal's unlock script, with its effects, when <see cref="UnlockScripts"/> is bound): an open portal is to close (<see cref="AreaPortalUse.Closed"/>;
     /// only a magically held door refuses, GT41), a closed one is to open when the player's open attempt succeeds (<see cref="AreaPortalUse.Opened"/>), else the attempt's
     /// refusal. The portal's own run does the change (<see cref="AreaDoorHost"/>).
     /// </summary>
@@ -176,15 +204,21 @@ public sealed class AreaPortals
         var state = session.QueryOpenable(openable, portal.Baseline);
         if (state.Frame != 0)
             return (state.Flags & LockRules.MagicallyHeldBit) != 0 ? AreaPortalUse.MagicallyHeld : AreaPortalUse.Closed;
-        return OpenRefusal(session, portal) ?? (portal.OpenFrame == 0 ? AreaPortalUse.CannotOpen : AreaPortalUse.Opened);
+        return OpenRefusal(session, portal, AreaHeroRunsHost.Hero) ?? (portal.OpenFrame == 0 ? AreaPortalUse.CannotOpen : AreaPortalUse.Opened);
     }
 
-    /// <summary>The open attempt's refusal for the player (ledger LK7), null when the portal opens: a busted portal opens before the unlock script is asked.</summary>
-    public AreaPortalUse? OpenRefusal(GameSessionOwner session, AreaPortal portal)
+    /// <summary>The open attempt's refusal for <paramref name="opener"/> (ledger LK7), null when the portal opens: a busted portal opens before the unlock script is asked; otherwise the unlock script (point 3) runs before the lock test, so also for an unlocked portal
+    /// (ARC-SCRIPT-2860, TQ11: <see cref="UnlockScripts"/>; 0 refuses with <see cref="AreaPortalUse.ScriptRefused"/>, a run that did not finish or no host leaves <see cref="AreaPortalUse.ScriptGuarded"/>).</summary>
+    public AreaPortalUse? OpenRefusal(GameSessionOwner session, AreaPortal portal, string opener = AreaHeroRunsHost.Hero)
     {
-        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal);
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal); ArgumentNullException.ThrowIfNull(opener);
         var openable = Openable(portal);
-        if (portal.UnlockScript && (session.QueryOpenable(openable, portal.Baseline).Flags & LockRules.BustedBit) == 0) return AreaPortalUse.ScriptGuarded;
+        if (portal.UnlockScript && (session.QueryOpenable(openable, portal.Baseline).Flags & LockRules.BustedBit) == 0)
+            switch (UnlockScripts?.Invoke(portal.Entity, opener))
+            {
+                case true: return AreaPortalUse.ScriptRefused;
+                case null: return AreaPortalUse.ScriptGuarded;
+            }
         return session.AttemptOpen(openable, portal.Baseline, scriptRefused: false) switch
         {
             OpenAttempt.Opens => null,
@@ -207,14 +241,20 @@ public sealed class AreaPortals
 
     public SessionOpenable Openable(AreaPortal portal) => new(Map, portal.Entity);
 
-    private AreaPortalPassage Passage(GameSessionOwner session, AreaPortal portal)
+    private AreaPortalPassage Passage(GameSessionOwner session, AreaPortal portal, string walker)
     {
         var state = session.QueryOpenable(Openable(portal), portal.Baseline);
         // ARC-COMBAT-008: a door an attack destroyed is gone.
         if (state.Open || (state.Flags & LockRules.BustedBit) != 0 ||
             session.QueryObjectCondition(Map, portal.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Portal) == SessionObjectCondition.Destroyed)
             return AreaPortalPassage.Open;
-        if (portal.UnlockScript) return AreaPortalPassage.Unresolved;
+        // ARC-SCRIPT-2860 (UL3): the step test asks the unlock script for the walker before the lock test; 0 blocks the step, a run that did not finish (or no host) leaves the portal's T0 rule.
+        if (portal.UnlockScript)
+            switch (UnlockScripts?.Invoke(portal.Entity, walker))
+            {
+                case true: return AreaPortalPassage.Blocked;
+                case null: return AreaPortalPassage.Unresolved;
+            }
         return session.AttemptOpen(Openable(portal), portal.Baseline, scriptRefused: false) switch
         {
             OpenAttempt.Opens => AreaPortalPassage.Open,
@@ -224,7 +264,7 @@ public sealed class AreaPortals
         };
     }
 
-    private sealed class LivePassages(AreaPortals owner, GameSessionOwner session) : IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage>
+    private sealed class LivePassages(AreaPortals owner, GameSessionOwner session, string walker) : IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage>
     {
         public AreaPortalPassage this[AreaObjectKey key] => TryGetValue(key, out var value) ? value : throw new KeyNotFoundException();
         public IEnumerable<AreaObjectKey> Keys => owner._portals.Keys;
@@ -234,7 +274,7 @@ public sealed class AreaPortals
         public bool TryGetValue(AreaObjectKey key, out AreaPortalPassage value)
         {
             if (!owner._portals.TryGetValue(key, out var portal)) { value = default; return false; }
-            value = owner.Passage(session, portal); return true;
+            value = owner.Passage(session, portal, walker); return true;
         }
         public IEnumerator<KeyValuePair<AreaObjectKey, AreaPortalPassage>> GetEnumerator() =>
             Keys.Select(key => new KeyValuePair<AreaObjectKey, AreaPortalPassage>(key, this[key])).GetEnumerator();
