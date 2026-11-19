@@ -33,8 +33,6 @@ public enum ScrRefusalCode
     ScriptNumberOutOfRange,
     /// <summary>A literal goto below line 0 (a source reading takes −1..−4 as control codes, anomaly X6).</summary>
     NegativeGoto,
-    /// <summary>A literal goto past the line after the last one.</summary>
-    GotoBeyondEnd,
 }
 
 /// <summary>The first thing that keeps a script from being admitted: where it is and what it is.</summary>
@@ -655,10 +653,10 @@ public static class ScrAdmission
         ArgumentNullException.ThrowIfNull(set);
         foreach (var line in program.Lines)
         {
-            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set, program.Count)
-                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set, program.Count)
+            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set)
+                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set)
                 // The always-true condition never runs its false action, so its bytes are not read.
-                ?? (line.Condition.Type == ScrCatalogue.Condition.True ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, program.Count));
+                ?? (line.Condition.Type == ScrCatalogue.Condition.True ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set));
             if (refusal is not null) return ScrAdmissionResult.Of(refusal);
         }
         return ScrAdmissionResult.Of(new ScrAdmittedProgram(program, set));
@@ -686,9 +684,9 @@ public static class ScrAdmission
         {
             var line = program.Lines[at];
             var always = line.Condition.Type == ScrCatalogue.Condition.True;
-            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set, count)
-                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set, count)
-                ?? (always ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, count));
+            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set)
+                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set)
+                ?? (always ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set));
             if (refusal is not null) { refusals.Add(refusal); continue; }
             foreach (var action in always ? new[] { line.OnTrue } : [line.OnTrue, line.OnFalse])
                 foreach (var next in Successors(program, action, at))
@@ -741,7 +739,7 @@ public static class ScrAdmission
     private static readonly IReadOnlyList<ScrOperandRole> FloatHeadlineRoles = Array.AsReadOnly(new[]
         { ScrOperandRole.Unused, ScrOperandRole.Object, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused });
 
-    private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set, int count)
+    private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set)
     {
         var condition = side == ScrClauseSide.Condition;
         var type = clause.Type;
@@ -819,9 +817,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.Goto)
             {
                 if (!literal) return Refuse(ScrRefusalCode.ComputedGoto);
-                // A goto to exactly the line count is the end of the script: skip default, without auto-removal.
+                // A goto to the line count or beyond it is the end of the script, as the original's unsigned line read has it: skip default, without auto-removal (ledger E9; ARC-SCRIPT-3005 admits it, it was refused before).
                 if (value < 0) return Refuse(ScrRefusalCode.NegativeGoto, true);
-                if (value > count) return Refuse(ScrRefusalCode.GotoBeyondEnd, true);
             }
         }
         return null;
