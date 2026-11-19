@@ -116,19 +116,12 @@ public partial class AreaReadingArtView : Control
         _picture = document.Subtype == WrittenSubtype.Picture ? Picture?.Invoke(document.BackgroundArt)?.FirstOrDefault() : null;
         Watch(_picture);
         if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
-        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf, NoteFontNumbers); }
+        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf); }
         Visible = true;
         Place();
         QueueRedraw();
         return true;
     }
-
-    /// <summary>ARC-UI-2765: a local capture's choice of the note's face (null in play).</summary>
-    internal static int? NoteFontOverride { get; set; }
-
-    /// <summary>ARC-UI-2765: the faces a note's body tries: the capture's choice alone, else the readable faces that read with the generated interface, then the original's.</summary>
-    private IReadOnlyList<int> NoteFontNumbers => NoteFontOverride is { } chosen && _faces.ContainsKey(chosen) ? [chosen]
-        : [.. AreaReadingArtLayout.NoteFontsFor(InterfaceHd.Generated).Where(font => _faces.ContainsKey(font) || font == AreaReadingArtLayout.NoteFont)];
 
     /// <summary>A font's face; a font art that did not read (a markup font the installed game does not hold) draws in the note's font.</summary>
     private AreaArtFontFace Face(int number) =>

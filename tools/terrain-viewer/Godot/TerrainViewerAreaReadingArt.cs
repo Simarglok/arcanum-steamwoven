@@ -23,9 +23,6 @@ public partial class TerrainViewerApp
         _readingPanel?.ArtView.ClearArt();
         var module = arguments.ModulePath;
         _readingArtModule = module;
-        // ARC-UI-2765: a local capture asks for candidate faces of the note (ARC_AREA_READING_NOTE_FONTS=478,840,...); in play the list is empty.
-        AreaReadingArtLayout.ExtraFontArts = System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_FONTS") is { Length: > 0 } fonts
-            ? [.. fonts.Split(',').Select(part => int.TryParse(part, out var number) ? number : 0).Where(number => number > 0)] : [];
         _readingArtTask = SelfTestBootstrap || module is null ? Task.FromResult(AreaReadingArtContent.Empty("self-test: no game folder"))
             : Task.Run(() => AreaReadingArtContent.Load(module));
     }
