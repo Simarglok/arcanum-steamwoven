@@ -470,6 +470,42 @@ public sealed class DialogConversationTests
     }
 
     [TestMethod]
+    public void A_dialog_transfer_in_the_action_skips_the_response_record_of_the_reply()
+    {
+        // ARC-SCRIPT-2807 (ledger FLM3, 0x413130): the response transition after a JO/UW/FL/ET is skipped, so a response number that names no record (99) or a Player record (11)
+        // never fails the step for a reply whose action holds one. The plain reply with the same response still fails (MissingTarget above).
+        foreach (var response in new[] { "99", "11" })
+        {
+            // A final line to a node of the DLG, to a missing node, to a Player record.
+            foreach (var node in new[] { "40", "98", "31" })
+            {
+                var document = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: response, action: $"lf 3 1, fl {node}") + Record("20", "unused")
+                    + Record("30", "?") + Record("31", "Words.", iq: "2", response: "20") + Record("40", "Farewell, @pcname@."));
+                var ports = new Ports();
+                var conversation = Start(document, ports, Owner(), world: new World());
+                var label = $"response {response}, fl {node}";
+                Assert.IsNull(conversation.Failure, label);
+                Assert.IsNull(conversation.Options[0].Block, label);
+                Assert.AreEqual(DialogOptionTransition.FinalLine, conversation.Options[0].Transition, label);
+                Assert.AreEqual(node == "98" ? null : new DialogNodeId(int.Parse(node, System.Globalization.CultureInfo.InvariantCulture)), conversation.Options[0].Target, label);
+                Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options[0].Token).Status, label);
+                Assert.AreEqual(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null), conversation.End, label);
+                CollectionAssert.AreEqual(new[] { "LF:3:1:900" }, ports.Commands, label);
+            }
+        }
+
+        // A join (a node of the DLG) with a missing response is offered as a join; its own bad node is still the transfer's failure.
+        var join = Read(Record("10", "?") + Record("11", "Come.", iq: "1", response: "99", action: "jo 0 40") + Record("40", "Yes."));
+        Assert.AreEqual(DialogOptionTransition.Join, Start(join, new Ports(), Owner(), world: new World()).Options[0].Transition);
+        var badJoin = Read(Record("10", "?") + Record("11", "Come.", iq: "1", response: "99", action: "jo 0 98") + Record("40", "Yes."));
+        Assert.AreEqual(DialogOptionBlockKind.TargetInvalid, Start(badJoin, new Ports(), Owner(), world: new World()).Options[0].Block?.Kind);
+
+        // Without a transfer in the action the missing response still fails the step.
+        var plain = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: "99", action: "lf 3 1"));
+        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, Start(plain, new Ports(), Owner(), world: new World()).Failure!.Kind);
+    }
+
+    [TestMethod]
     public void Final_line_to_a_player_record_shows_its_text_runs_its_action_and_ends_the_talk()
     {
         // ARC-SCRIPT-2804 (ledger FLM2; 0x416AB0 tests existence only, 0x416840 reads the record in the NPC layout): record 31 is a Player record (IQ 2), used as the final line:
