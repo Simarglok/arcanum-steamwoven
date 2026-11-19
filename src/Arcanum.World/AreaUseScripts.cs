@@ -219,6 +219,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
 
+    /// <summary>
+    /// ARC-SCRIPT-2789: the set an item's use script runs under (<see cref="RunItemUse"/>): <see cref="Admission"/> with the focus kinds everyone (8) and anyone (9) in the vicinity, in actions (the loop over the critters around the item, as
+    /// <see cref="PlacedAdmission"/> has it), which <see cref="CrittersNearItem"/> answers around the item's own location field. Joachim's note to Virgil (use script 1567) loops over everyone near the note and calls Virgil's script 1687 on him; without the kinds the run was refused at its
+    /// line 4 and the whole use was lost. A use click on a door or scenery keeps <see cref="Admission"/>.
+    /// </summary>
+    public static ScrAdmissionSet ItemUseAdmission { get; } = new("S4-area-item-use-vicinity", Admission.Conditions, Admission.Actions, Admission.ValueKinds,
+        Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
+
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
     /// ratio, <see cref="PowerRatio"/>), play script eye candy (120; the use host shows none) and destroy (68; of the item being used only, <see cref="ObjectStateRefusal"/>).</summary>
     private static int[] ItemUseVitalActions => [ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
@@ -1989,6 +1997,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2789: whether the reading of a written item goes on after its use script's run (<see cref="RunItemUse"/>). The original has no refused run: its interpreter runs every script to an end (the dispatcher answers 0 "skip default" or 1 "run default", ledger IU rows) and the
+    /// reading (item use) goes on unless the answer is 0, so a script this host refuses (a command outside the set, a question it cannot answer, a script file it cannot read) is only a gap of the model, never the original's stop. A refused run applied nothing,
+    /// so the reading goes on without its effects (as a door's use and a bed's rest hook go on, <see cref="UseStops"/>, <see cref="AreaBedAnswer.NotModelled"/>); a run that applied goes on with run default and stops with skip default. Effects the host rejected
+    /// (<see cref="AreaScriptedUseOutcome.EffectsRejected"/>), a changed script file and a refused teleport leave the reading stopped as before: part of the run is known to have been wanted.
+    /// </summary>
+    public static bool ReadingGoesOn(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome == AreaScriptedUseOutcome.Refused || ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != ScrOutcome.SkipDefault;
+    }
+
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
     /// "skip default" (return 0 of 0x441980, 0x57CD9B), which includes a script that runs past its last line. A run that was not applied
     /// (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) or an object with no
@@ -2021,7 +2041,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             if (Row(item) is null && !IsPrototypeItem(item)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = ItemUseAdmission });
             return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item), item);
         }
         finally { _itemUse = null; _itemUser = null; }
