@@ -56,6 +56,8 @@ public partial class TerrainViewerApp
             // for a snapshot not shown would replace the shown one's traps.
             var snapshot = area.Snapshot;
             // ARC-DEV-179: a new gold pile of a speaker paid by $$ takes the stored name of the gold prototype once the barter data has loaded.
+            // ARC-SCRIPT-2787: @npcname@ is the speaker's shown name, @pcname@ the hero's player name (the host reads it from the session).
+            _conversationHost.NpcName = AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog);
             _conversationHost.GoldKindSource = () => { AdoptBarterData(); return _barterData?.Data?.GoldKind(); };
             // ARC-DEV-190: a co action is the hero's attack event on the speaker, run by the shown map's AI host (none without AI: the action stays unadmitted).
             _conversationHost.HeroAttackAvailable = () => AreaAiHostNow() is not null;

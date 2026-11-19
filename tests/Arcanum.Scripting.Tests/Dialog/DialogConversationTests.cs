@@ -452,6 +452,24 @@ public sealed class DialogConversationTests
     }
 
     [TestMethod]
+    public void Final_line_to_a_node_missing_from_the_dialog_stays_offered_and_ends_with_a_blank_line()
+    {
+        // ARC-SCRIPT-2790 (0x415BA0 case 3, 0x413A30, 0x416840, 0x416AB0): the lookup of the node fails, no error: the line is a single space with no voice and the talk ends;
+        // the string's other operations still run. A node that exists but is a Player record stays refused (FL 11 above).
+        var document = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: "20", action: "lf 3 1, fl 99") + Record("20", "unused"));
+        var ports = new Ports();
+        var conversation = Start(document, ports, Owner(), world: new World());
+        Assert.IsNull(conversation.Options[0].Block);
+        Assert.AreEqual(DialogOptionTransition.FinalLine, conversation.Options[0].Transition);
+        Assert.IsNull(conversation.Options[0].Target);
+
+        Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options[0].Token).Status);
+        Assert.AreEqual(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null), conversation.End);
+        Assert.AreEqual(new DialogNpcLine(new DialogNodeId(99), string.Empty), conversation.NpcLine);
+        CollectionAssert.AreEqual(new[] { "LF:3:1:900" }, ports.Commands);
+    }
+
+    [TestMethod]
     public void Unadmitted_world_forms_are_blocked_or_invalid()
     {
         foreach (var (action, kind) in new[]
@@ -464,7 +482,6 @@ public sealed class DialogConversationTests
             ("IN 0", DialogOptionBlockKind.UnsupportedOperation),
             ("JO 2 30", DialogOptionBlockKind.UnsupportedOperation),
             ("FL 11", DialogOptionBlockKind.TargetInvalid),
-            ("FL 99", DialogOptionBlockKind.TargetInvalid),
             ("MM -1", DialogOptionBlockKind.InvalidOperation),
             ("FL 0", DialogOptionBlockKind.InvalidOperation),
             ("JO 0,30", DialogOptionBlockKind.UnsupportedOperation),

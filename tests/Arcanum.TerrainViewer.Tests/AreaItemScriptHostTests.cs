@@ -112,6 +112,21 @@ public sealed class AreaItemScriptHostTests
     }
 
     [TestMethod]
+    public void A_printed_line_names_the_hero_by_its_player_name()
+    {
+        // ARC-SCRIPT-2787 (0x416B00): @pcname@ is the hero's player name; a line naming the NPC stays unsupported on an item run.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetHeroPlayerName(session.Version, System.Text.Encoding.Latin1.GetBytes("Zed")).Disposition);
+            var host = new AreaItemScriptHost(session, [Map()], content);
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, "It hums for Zed."), Pair(host.PrintedLine(500, 1)));
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLine(501, 1).Status);
+            return 0;
+        });
+    }
+
+    [TestMethod]
     public void The_host_reads_slots_from_rows_and_prints_only_plain_lines()
     {
         WithContent(content =>
