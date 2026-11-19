@@ -367,6 +367,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("report")) { await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); await RunAreaQuitSmokeAsync(); }
                                 // ARC-DEV-209 (MIG14 S3, GT49): only when named, an NPC the AI host walks across a closed door opens it first, and it runs last of the window stages because it leaves a door open (AI on, --hero, --sector 1409,1314).
                                 if (only?.Contains("npc-door") == true) await RunAreaNpcDoorSmokeAsync();
+                                // ARC-WORLD-2792: only when named, the roof covers an AI-walked NPC by the tile it stands on now (main map, --sector 1450,1323).
+                                if (only?.Contains("npc-roof") == true) await RunAreaNpcRoofSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);
