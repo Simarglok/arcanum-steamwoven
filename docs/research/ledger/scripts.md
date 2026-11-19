@@ -1251,7 +1251,7 @@ name the functions and the verdict. Corrections to TG2 and the audit are in that
 | TQ9 | use goal node 0x428A10 (0x428C21) | Any actor on a portal after 2 AP in turn-based; 0 fails the node. | F1; agrees |
 | TQ10 | 0x428A10 (0x428CAB) | The hero's click on other objects but containers, critters, beds; no NPC or companion reaches the branch (goals 38 and 81 have one creator, the hero's click; goal 12 ends unless the target is a portal, TT19). | F1; agrees (#2826 closed: the audit's "any actor" was wrong for this branch) |
 | TQ11 | open attempts 0x4AEB70, 0x4AED80 | Unlock before the lock test, also from path planning; 0 refuses. | F1; not modelled (#2825) |
-| TQ12 | AI gate 0x4A8570, subturn end 0x4B7630 | 16 then 15 on every AI pass in combat mode (16 real time only), 16 at each subturn end. | F1; not run (#2820) |
+| TQ12 | AI gate 0x4A8570, subturn end 0x4B7630 | 16 then 15 on every AI pass in combat mode (16 real time only), 16 at each subturn end. | F1; run by ARC-SCRIPT-2820 (`RunCombatPassPoint`, dying set, answer ignored) |
 | TQ13 | AI tick 0x4AD200/0x4AD420, fold 0x4F1CD0 → 0x4AD790, subturn hook 0x4B7010 | First heartbeat on each fold-flagged tick; heartbeat within 30 tiles, period 250 ms to 5 s; turn-based for the NPC turn actor. | F1; agrees (TG3 corrected) |
 | TQ14 | kill-on-sight 0x4AE120 | Will KOS after target validity from target finding, dialog start, reply step; 0 vetoes. | F1; not modelled (#2821) |
 | TQ15 | danger setter 0x4AABE0 | Enter on becoming combat, exit on leaving it for none, flee or surrender. | F1; agrees (ARC-AI-1530) |

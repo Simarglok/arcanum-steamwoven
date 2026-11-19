@@ -224,6 +224,7 @@ public partial class TerrainViewerApp
             Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            CombatScript = AiCombatScript,
             // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
             ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
@@ -399,6 +400,21 @@ public partial class TerrainViewerApp
                 + string.Join(",", states.Select(s => $"{s.Change}:{s.Object.Code}")));
         }
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
+    }
+
+    /// <summary>ARC-SCRIPT-2820 (TQ12, 0x4A8570, 0x4B7630): an NPC's start-combat (15) or end-combat (16) script through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCombatPassPoint"/>), with the NPC's danger source ("pc" for the hero, none without one) as the
+    /// triggerer; the callers ignore the answer. It runs on every AI pass of an NPC in combat mode, so a miss on the slot returns before anything else; a refused run is logged once per NPC, point and outcome, like the heartbeat's.</summary>
+    private void AiCombatScript(AiScriptPoint point, string npc, string? triggerer)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return;
+        var scrPoint = point == AiScriptPoint.StartCombat ? Arcanum.Scripting.Scr.ScrPoint.StartCombat : Arcanum.Scripting.Scr.ScrPoint.EndCombat;
+        if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return;
+        Arcanum.Scripting.Scr.ScrObjectRef? who = triggerer is null ? null : triggerer == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? host.Pc : new(CurrentAreaMap, triggerer);
+        var ran = Awarded(host, host.RunCombatPassPoint(scrPoint, npc, who, session.Rules.Scripts));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|{ran.Outcome}|{ran.Run?.Script}"))
+            GD.Print($"ARC-SCRIPT-2820 combat-script-refused npc={npc} point={scrPoint} outcome={ran.Outcome} detail={ran.Detail}");
+        else if (ran.Run is not null && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|ran|{ran.Run.Script}"))
+            GD.Print($"ARC-SCRIPT-2820 combat-script npc={npc} point={scrPoint} script={ran.Run.Script} outcome={ran.Run.Outcome} stop={ran.Run.Stop}");
     }
 
     /// <summary>ARC-SCRIPT-1590 (item use 0x462CC0 → 0x441980, ledger IU2, VT8): the use script of an item an NPC of the shown map holds, through the shown map's use-script host with the NPC as the user and triggerer and the target as the extra object ("pc" is the hero).

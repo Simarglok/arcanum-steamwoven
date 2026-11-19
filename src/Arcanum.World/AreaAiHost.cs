@@ -140,6 +140,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-114: runs an NPC's first-heartbeat or heartbeat script (the NPC as attachee and triggerer) and answers whether
     /// the tick goes on ("run default", or no script that runs); null: no script runs at these points.</summary>
     public Func<AiScriptPoint, string, bool>? Heartbeat { get; init; }
+    /// <summary>ARC-SCRIPT-2820 (TQ12, 0x4A8570 and 0x4B7630): runs an NPC's start-combat (15) or end-combat (16) script with the NPC as the attachee and the given entity ("pc" for the hero, null for none) as the triggerer; the callers ignore the answer; null: no script runs at these points.</summary>
+    public Action<AiScriptPoint, string, string?>? CombatScript { get; init; }
     /// <summary>ARC-SCRIPT-1590 (0x441980, item use 0x462CC0): runs the use script (point 1) of an item an NPC holds, the NPC as the user and triggerer and the target (the entity the use names, "pc" for the hero) as the extra object, and answers whether the use goes on (a script that
     /// ran default, or none that runs: refused, not applied); false when it skipped the default (the food script 30282 always does, after it destroyed the item); null: no NPC's item use runs a script, and the use goes on as the script let it.</summary>
     public Func<string, string, string?, bool>? ItemUseScript { get; init; }
@@ -888,8 +890,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-099: the subturn ends among <paramref name="events"/> (a round call's): an NPC's end runs its end-combat script (point 16,
-    /// 0x4B7630: the NPC as attachee and triggerer; the PC's end calls the interface's callback instead). This host runs no SCR at the AI
-    /// points (<see cref="RunScript"/> continues), so only the trace counts it. The host passes the events of its own round calls (the
+    /// 0x4B7630: the NPC as attachee and triggerer; the PC's end calls the interface's callback instead). The scene's combat script (<see cref="AreaAiScene.CombatScript"/>) runs it; the trace counts it too. The host passes the events of its own round calls (the
     /// executor's consumes and subturn ends, a turn set's completion check); the round host those of its calls.
     /// </summary>
     public void SubturnsEnded(IEnumerable<SessionCombatEvent> events)
@@ -1438,9 +1439,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool Knows(string npc) => Find(npc) is not null;
 
     /// <summary>ARC-WORLD-114: the first-heartbeat and heartbeat points run the NPC's script through the scene's
-    /// <see cref="AreaAiScene.Heartbeat"/> (true: continue); the other points run no script yet and continue.</summary>
-    public bool RunScript(AiScriptPoint point, string npc, string? triggerer) =>
-        point is not (AiScriptPoint.FirstHeartbeat or AiScriptPoint.Heartbeat) || _scene.Heartbeat?.Invoke(point, npc) != false;
+    /// <see cref="AreaAiScene.Heartbeat"/> (true: continue). ARC-SCRIPT-2820: the start-combat and end-combat points run through <see cref="AreaAiScene.CombatScript"/> and always continue (the original ignores their answer);
+    /// the other points run no script yet and continue.</summary>
+    public bool RunScript(AiScriptPoint point, string npc, string? triggerer)
+    {
+        if (point is AiScriptPoint.StartCombat or AiScriptPoint.EndCombat) { _scene.CombatScript?.Invoke(point, npc, triggerer); return true; }
+        return point is not (AiScriptPoint.FirstHeartbeat or AiScriptPoint.Heartbeat) || _scene.Heartbeat?.Invoke(point, npc) != false;
+    }
     // ARC-DEV-117 (MIG9 S4b): the fold's waypoint and standpoint steps (0x4ACBB0, 0x4ACDB0), in AreaAiHostRoutes.cs.
     public bool RunWaypoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedWaypoints, waypoints: true);
     public void RunStandpoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedStandpoint, waypoints: false);

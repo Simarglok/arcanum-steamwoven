@@ -1136,7 +1136,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.NewSector or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1693,6 +1693,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _dangerRunDepth--; _clicked = previous; }
+    }
+
+    private int _combatPassDepth;
+
+    /// <summary>
+    /// ARC-SCRIPT-2820 (TQ12, exe read 2026-11-19): the start-combat (15) or end-combat (16) script of <paramref name="npc"/>, an NPC of the shown map, through the script dispatcher (0x441980) at the two places the original calls it: the AI gate 0x4A8570 (16 in real
+    /// time only, then 15, on every AI pass of an NPC in combat mode; the NPC's danger source as the triggerer, none without one) and the turn-based subturn end 0x4B7630 (16 for the outgoing non-PC actor, the actor as the triggerer too). The NPC is the attachee, no extra object,
+    /// line 0, under <see cref="DyingAdmission"/> (the set of the other NPC combat scripts); its slot is kept as map changes (<see cref="SlotProperty"/>). Both callers ignore the answer. An NPC that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// The original has no guard; a script whose effects reach the same pass again runs nested, so the depth is bounded (<see cref="MaxDangerRunDepth"/>).
+    /// </summary>
+    public AreaScriptedUse RunCombatPassPoint(int point, string npc, ScrObjectRef? triggerer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(npc); ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.StartCombat or ScrPoint.EndCombat)) throw new ArgumentOutOfRangeException(nameof(point), "Not a start-combat or end-combat point.");
+        var attachee = new ScrObjectRef(_shownMap, npc);
+        if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_combatPassDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested combat pass scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (npc, row);
+        _combatPassDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a combat pass script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _combatPassDepth--; _clicked = previous; }
     }
 
     /// <summary>
