@@ -4,7 +4,7 @@
 
 Checks the manifest alone (unique ids, known kinds including the strip's end cap `cap`, master sizes that are multiples of 6, layers that
 name existing parts and make no cycle, known windows, kind rules of the 4:3 composition) and, unless `--no-census`, against the census of
-docs/ui: every census art is the source of exactly one part or is listed as excluded, and every window is known and used. The manifest holds
+docs/ui: every census art is the source of exactly one part or is listed as excluded, each part says what its census rows say (kind, batch, size, windows, frames), and every window is known and every window that draws art is used. The manifest holds
 no pixels: only the fields of the schema below, short text and numbers.
 """
 from __future__ import annotations
@@ -40,16 +40,25 @@ EXCLUDED_REASONS = ("font", "out-of-scope", "unused")
 GRID = 6  # SWI-LAY-7: every master length is a multiple of 6 px
 COMPOSITION = (2880, 2160)  # master px of the centred 4:3 composition
 ZONE = (2880, 1440)  # the window zone
+STRIP_HEIGHTS = (150, 570)  # top, bottom strip: 41 and 159 units on the 6 px grid (TRD open question "Strip master heights")
 
 PART_KEYS = ("id", "kind", "size", "size_basis", "anchor", "layers", "states", "used_by", "source_arts", "family", "batch", "provenance",
              "status", "frames", "note")
 OPTIONAL_PART_KEYS = ("note",)
 TOP_KEYS = ("schema", "windows", "parts", "excluded")
 WINDOW_KEYS = ("name", "anchor")
-ID_PATTERN = re.compile(r"^[a-z]+\.[a-z0-9_]+(-\d+)?$")
+ID_PATTERN = re.compile(r"^[a-z]+\.[a-z0-9_]+(-[a-z0-9_]+)?$")
 SOURCE_PATTERN = re.compile(r"^(\d+|file:[A-Za-z0-9_.-]+)$")
+NEW_PART_KINDS = ("cap", "material", "grid", "decor", "hardware")  # parts no original art feeds (TRD asset kit, SWI-LAY-12, SWI-LAY-16)
+CAP_ID = re.compile(r"^cap\.(top|bottom)_strip_(left|right)$")
 WINDOW_ID = re.compile(r"^[HGM]\d\d$")
+BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")  # 40 characters with no space: an encoded blob, not a note
 MAX_TEXT = 240  # a longer string is not an identifier or a note: it could carry pixels
+
+
+def snap(units: int) -> int:
+    """Original units -> master px on the 6 px grid (units x 3.6, halves up): 800 x 600 units are the 2880 x 2160 composition."""
+    return GRID * ((6 * units + 5) // 10)
 
 
 def _is_int(value: object) -> bool:
@@ -59,7 +68,7 @@ def _is_int(value: object) -> bool:
 def _text_errors(where: str, value: object, errors: list[str]) -> None:
     """AC4: no pixels, so no long strings and no data URIs anywhere in the manifest."""
     if isinstance(value, str):
-        if len(value) > MAX_TEXT or value.startswith("data:"):
+        if len(value) > MAX_TEXT or value.startswith("data:") or BASE64_RUN.search(value):
             errors.append(f"{where}: text of {len(value)} characters looks like data, not an identifier or a note")
     elif isinstance(value, dict):
         for key, item in value.items():
@@ -81,7 +90,7 @@ def check_manifest(manifest: object, arts: list[census_mod.CensusArt] | None = N
     for key in TOP_KEYS:
         if key not in manifest:
             errors.append(f"manifest: missing key {key!r}")
-    if manifest.get("schema") != SCHEMA:
+    if not _is_int(manifest.get("schema")) or manifest["schema"] != SCHEMA:
         errors.append(f"manifest: schema must be {SCHEMA}")
     _text_errors("manifest", manifest, errors)
 
@@ -115,7 +124,8 @@ def check_manifest(manifest: object, arts: list[census_mod.CensusArt] | None = N
         if isinstance(ident, str):
             if ident in by_id:
                 errors.append(f"{where}: duplicate id")
-            by_id[ident] = part
+            else:
+                by_id[ident] = part
     _check_layers(by_id, errors)
 
     sources: dict[str, str] = {}
@@ -145,6 +155,7 @@ def check_manifest(manifest: object, arts: list[census_mod.CensusArt] | None = N
                 excluded_ids[art] = reason
     if arts is not None:
         _check_census_arts(arts, sources, excluded_ids, errors)
+        _check_parts_against_census(arts, by_id, errors)
     if windows is not None:
         _check_census_windows(windows, window_table if isinstance(window_table, dict) else {}, by_id, errors)
     return errors
@@ -165,9 +176,17 @@ def _check_part(part: dict, where: str, known_windows: set[str], errors: list[st
     if kind not in KINDS:
         errors.append(f"{where}: unknown kind {kind!r}")
 
-    size, basis = part.get("size"), part.get("size_basis")
+    size, basis, anchor = part.get("size"), part.get("size_basis"), part.get("anchor")
     if basis not in SIZE_BASES:
         errors.append(f"{where}: size_basis must be one of {list(SIZE_BASES)}")
+    sources_list = part.get("source_arts")
+    fed = isinstance(sources_list, list) and bool(sources_list)
+    if basis == "open" and fed:
+        errors.append(f"{where}: a part made from original art has a size from the census, not an open one")
+    elif basis in ("units", "provisional") and isinstance(sources_list, list) and not fed:
+        errors.append(f"{where}: a new part (no source art) has an open size until its batch fixes it")
+    if basis == "provisional" and kind != "board":
+        errors.append(f"{where}: only the strips' heights are provisional (open question of the TRD)")
     if basis == "open":
         if size is not None:
             errors.append(f"{where}: an open size must be null (the batch issue fixes it)")
@@ -184,6 +203,10 @@ def _check_part(part: dict, where: str, known_windows: set[str], errors: list[st
                           f"{COMPOSITION[0]} x {COMPOSITION[1]}")
         if kind == "board" and size[0] != COMPOSITION[0]:
             errors.append(f"{where}: a strip's art is {COMPOSITION[0]} px wide (no full-width board)")
+        elif kind == "board" and size[1] not in (STRIP_HEIGHTS[0], STRIP_HEIGHTS[1]):
+            errors.append(f"{where}: a strip is {STRIP_HEIGHTS[0]} (top) or {STRIP_HEIGHTS[1]} (bottom) px high until #2927 fixes the grid choice")
+        elif kind == "board" and size[1] != STRIP_HEIGHTS[anchor == "bottom-strip"]:
+            errors.append(f"{where}: the {anchor} art is {STRIP_HEIGHTS[anchor == 'bottom-strip']} px high")
 
     anchor = part.get("anchor")
     if anchor not in ANCHORS:
@@ -210,7 +233,7 @@ def _check_part(part: dict, where: str, known_windows: set[str], errors: list[st
             if state not in STATES:
                 errors.append(f"{where}: unknown state {state!r}")
     used_by = part.get("used_by")
-    if isinstance(used_by, list):
+    if isinstance(used_by, list) and all(isinstance(w, str) for w in used_by):
         for window in used_by:
             if window not in known_windows:
                 errors.append(f"{where}: used by unknown window {window!r}")
@@ -221,6 +244,18 @@ def _check_part(part: dict, where: str, known_windows: set[str], errors: list[st
                 errors.append(f"{where}: source art {art!r} is not an art number or file:NAME identifier")
         if kind == "cap" and sources:
             errors.append(f"{where}: an end cap is new and has no source art")
+        if not sources and kind not in NEW_PART_KINDS:
+            errors.append(f"{where}: a part with no source art must be a new part ({list(NEW_PART_KINDS)}), not a {kind}")
+    if kind == "cap" and isinstance(ident, str):
+        match = CAP_ID.match(ident)
+        if not match:
+            errors.append(f"{where}: a cap id is cap.top_strip_left, cap.top_strip_right, cap.bottom_strip_left or cap.bottom_strip_right")
+        else:
+            strip, side = match.groups()
+            if anchor != f"{strip}-strip-{side}-end":
+                errors.append(f"{where}: anchor must be {strip}-strip-{side}-end to match its id")
+            if used_by != ["H01" if strip == "top" else "H02"]:
+                errors.append(f"{where}: a {strip} strip cap is used by the {'H01' if strip == 'top' else 'H02'} strip window alone")
 
     family, batch = part.get("family"), part.get("batch")
     if family is not None and family not in FAMILIES:
@@ -254,31 +289,32 @@ def _check_layers(by_id: dict[str, dict], errors: list[str]) -> None:
         if not isinstance(layers, list):
             continue
         for layer in layers:
+            if not isinstance(layer, str):
+                continue  # reported by the list-of-text check of the part
             if layer == ident:
                 errors.append(f"part {ident!r}: lists itself as a layer")
             elif layer not in by_id:
                 errors.append(f"part {ident!r}: layer {layer!r} names no part")
     # A layer chain must end: depth-first search over the layer graph.
-    state: dict[str, int] = {}
-
-    def visit(ident: str) -> bool:
-        if state.get(ident) == 2:
-            return False
-        if state.get(ident) == 1:
-            return True
-        state[ident] = 1
-        layers = by_id[ident].get("layers")
-        cyclic = False
-        if isinstance(layers, list):
-            for layer in layers:
-                if isinstance(layer, str) and layer in by_id and layer != ident and visit(layer):
-                    cyclic = True
-        state[ident] = 2
-        return cyclic
-
-    for ident in by_id:
-        if state.get(ident) is None and visit(ident):
-            errors.append(f"part {ident!r}: the layers make a cycle")
+    edges = {ident: [layer for layer in part.get("layers", []) if isinstance(layer, str) and layer in by_id and layer != ident]
+             if isinstance(part.get("layers"), list) else [] for ident, part in by_id.items()}
+    state: dict[str, int] = {}  # 1 on the current path, 2 finished; iterative, so a long chain cannot exhaust the stack
+    for root in edges:
+        if root in state:
+            continue
+        state[root] = 1
+        stack = [(root, iter(edges[root]))]
+        while stack:
+            ident, children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                state[ident] = 2
+                stack.pop()
+            elif state.get(child) == 1:
+                errors.append(f"part {ident!r}: the layers make a cycle (through {child!r})")
+            elif child not in state:
+                state[child] = 1
+                stack.append((child, iter(edges[child])))
 
 
 def _check_census_arts(arts: list[census_mod.CensusArt], sources: dict[str, str], excluded: dict[str, str], errors: list[str]) -> None:
@@ -294,6 +330,32 @@ def _check_census_arts(arts: list[census_mod.CensusArt], sources: dict[str, str]
     for art in list(sources) + list(excluded):
         if art not in census_ids:
             errors.append(f"art {art}: not in the census")
+
+
+def _check_parts_against_census(arts: list[census_mod.CensusArt], by_id: dict[str, dict], errors: list[str]) -> None:
+    """A part made from original art says what its census rows say: kind, batch, size on the grid, windows and frames."""
+    rows = {art.ident: art for art in arts}
+    for ident, part in by_id.items():
+        sources = part.get("source_arts")
+        if not isinstance(sources, list) or not sources or not all(isinstance(s, str) and s in rows for s in sources):
+            continue  # a new part, or an unknown art (reported elsewhere)
+        group = [rows[s] for s in sources]
+        where = f"part {ident!r}"
+        if part.get("kind") not in {a.kind for a in group}:
+            errors.append(f"{where}: kind {part.get('kind')!r} is not the census kind of its arts {sorted({a.kind for a in group})}")
+        if part.get("batch") not in {a.batch for a in group}:
+            errors.append(f"{where}: batch {part.get('batch')!r} is not the census batch of its arts {sorted({a.batch for a in group})}")
+        if len({a.size for a in group}) != 1:
+            errors.append(f"{where}: its arts are not one size ({sorted({a.size for a in group})}), so they are not one file")
+        else:
+            width, height = group[0].size
+            expected = [snap(width), snap(height)]
+            if part.get("size") != expected:
+                errors.append(f"{where}: size {part.get('size')} is not the census size {width} x {height} units as {expected} px")
+        if part.get("used_by") != sorted({w for a in group for w in a.windows}):
+            errors.append(f"{where}: used_by {part.get('used_by')} is not the windows of its arts {sorted({w for a in group for w in a.windows})}")
+        if part.get("frames") != max(a.frames for a in group):
+            errors.append(f"{where}: frames {part.get('frames')} is not the census frame count {max(a.frames for a in group)}")
 
 
 def _check_census_windows(windows: list[census_mod.CensusWindow], table: dict, by_id: dict[str, dict], errors: list[str]) -> None:

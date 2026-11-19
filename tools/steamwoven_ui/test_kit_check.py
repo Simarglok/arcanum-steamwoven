@@ -41,10 +41,11 @@ def valid() -> dict:
 
 
 def census_arts() -> list[cn.CensusArt]:
-    def art(ident, name, kind, status="drawn", windows=("G01",)):
-        return cn.CensusArt(ident, name, (16, 16), 1, kind, "", tuple(windows), status)
-    return [art("10", "sword", "picture"), art("185", "IntTop", "board", windows=("H01",)), art("221", "Inventor", "backdrop"),
-            art("329", "MainMenuBack", "backdrop"), art("33", "done_big", "plate"), art("27", "font", "font", "font (not a kit part)", ())]
+    def art(ident, name, kind, batch, size, windows, status="drawn"):
+        return cn.CensusArt(ident, name, size, 1, kind, batch, tuple(windows), status)
+    return [art("10", "sword", "picture", "B-ICONS", (16, 16), ["G01"]), art("185", "IntTop", "board", "B-BOARD", (800, 41), ["H01"]),
+            art("221", "Inventor", "backdrop", "BD-A", (800, 400), ["G01"]), art("329", "MainMenuBack", "backdrop", "BD-H", (800, 600), ["G01"]),
+            art("33", "done_big", "plate", "B-BUTTONS", (37, 37), ["G01"]), art("27", "font", "font", "", (16, 16), [], "font (not a kit part)")]
 
 
 def census_windows() -> list[cn.CensusWindow]:
@@ -101,8 +102,8 @@ class SyntheticManifestTests(unittest.TestCase):
     def test_backdrop_is_window_background_or_plate(self) -> None:
         self.assertFails(self.edit(3, size=[2880, 1800]), "window background")
         self.assertFails(self.edit(3, size=[3840, 1440]), "larger than the composition")
-        self.assertFails(self.edit(3, anchor="composition"), "anchors to the composition")
-        self.assertFails(self.edit(4, anchor="zone"), "anchors to the composition")
+        self.assertFails(self.edit(4, anchor="zone"), "plate anchors to the composition")
+        self.assertFails(self.edit(3, anchor="composition"), "window background to the zone")
 
     def test_cap_rules(self) -> None:
         self.assertFails(self.edit(2, anchor="top-strip"), "cap stands at a strip's end")
@@ -157,6 +158,55 @@ class SyntheticManifestTests(unittest.TestCase):
         manifest = valid()
         manifest["parts"][5]["source_arts"] = ["10"]
         self.assertFails(manifest, "one art is one part")
+
+    def test_malformed_types_are_reported_not_raised(self) -> None:
+        self.assertFails(self.edit(0, used_by=[["H01"]]), "used_by must be a list of text")
+        self.assertFails(self.edit(1, layers=[["x"]]), "layers must be a list of text")
+        self.assertFails(self.edit(0, source_arts=[["10"]]), "source_arts must be a list of text")
+        self.assertFails(self.edit(0, states=[3]), "states must be a list of text")
+        manifest = valid()
+        manifest["schema"] = True
+        self.assertFails(manifest, "schema must be 1")
+        manifest["schema"] = 1.0
+        self.assertFails(manifest, "schema must be 1")
+
+    def test_long_layer_chain_is_checked_without_recursion(self) -> None:
+        manifest = valid()
+        count = 3000
+        for index in range(count):
+            manifest["parts"].append(part(f"decor.d{index}", "decor", size=None, size_basis="open", anchor="none", used_by=[], batch="B-HARDWARE",
+                                          layers=[f"decor.d{index + 1}"] if index + 1 < count else ["decor.d0"]))
+        self.assertFails(manifest, "make a cycle")
+
+    def test_open_size_only_without_source_art(self) -> None:
+        self.assertFails(self.edit(1, size=None, size_basis="open"), "from original art has a size")
+        self.assertFails(self.edit(0, size=None, size_basis="open"), "from original art has a size")
+        self.assertFails(self.edit(2, size=[600, 150], size_basis="units"), "new part (no source art)")
+        self.assertFails(self.edit(0, size_basis="provisional"), "only the strips' heights are provisional")
+
+    def test_part_without_source_art_must_be_a_new_part(self) -> None:
+        manifest = valid()
+        manifest["parts"].append(part("picture.ghost", size=None, size_basis="open"))
+        self.assertFails(manifest, "must be a new part")
+
+    def test_cap_agrees_with_its_id_strip_and_window(self) -> None:
+        self.assertFails(self.edit(2, anchor="bottom-strip-right-end"), "to match its id")
+        self.assertFails(self.edit(2, used_by=["G01"]), "used by the H01 strip window alone")
+        self.assertFails(self.edit(2, id="cap.middle_strip"), "a cap id is")
+
+    def test_strip_heights(self) -> None:
+        self.assertFails(self.edit(1, size=[2880, 6]), "150 (top) or 570 (bottom)")
+        self.assertFails(self.edit(1, size=[2880, 570]), "the top-strip art is 150")
+
+    def test_encoded_blob_in_a_note(self) -> None:
+        self.assertFails(self.edit(0, note="iVBORw0KGgo" * 5), "looks like data")
+
+    def test_part_must_agree_with_its_census_rows(self) -> None:
+        self.assertFails(self.edit(1, used_by=["G01"]), "is not the windows of its arts", census=True)
+        self.assertFails(self.edit(3, size=[1440, 1440]), "is not the census size", census=True)
+        self.assertFails(self.edit(3, batch="BD-B"), "is not the census batch", census=True)
+        self.assertFails(self.edit(0, frames=9), "is not the census frame count", census=True)
+        self.assertFails(self.edit(0, kind="gauge", id="gauge.sword"), "is not the census kind", census=True)
 
     def test_census_every_art_mapped(self) -> None:
         manifest = valid()

@@ -34,9 +34,11 @@ FAMILY_OF_BATCH = {"B-BOARD": "BOARD", **{f"BD-{c}": f"BD-{c}" for c in "ABCDEFG
 FOLLOWER_BACKING_NOTE = "small brass backing of the follower show/hide button (SWI-LAY-16); no original art; size fixed by #2927"
 
 
-def snap(units: int) -> int:
-    """Original units -> master px on the 6 px grid (units x 3.6, halves up)."""
-    return 6 * ((6 * units + 5) // 10)
+snap = kit_check.snap  # original units -> master px on the 6 px grid (units x 3.6, halves up)
+ART_NOTES = {
+    "2": "census: a solid black fill, no kit part needed; kept as the row of the not-built credits and View Intro screens (M13) until a batch drops it",
+    "330": "census: the network lobby backdrop is out of scope (M14, not built); kept as a row until a batch or the owner drops it",
+}
 
 
 def window_anchor(text: str) -> str:
@@ -119,7 +121,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         used_by = sorted({w for a in group for w in a.windows})
         ident = f"{lead.kind}.{slug(lead.name)}"
         if ident in taken:
-            ident += f"-{group[0].ident.removeprefix('file:')}"
+            ident += f"-{slug(group[0].ident.removeprefix('file:'))}"
         taken.add(ident)
         batch = lead.batch
         part = {"id": ident, "kind": lead.kind, "size": list(size), "size_basis": "units",
@@ -127,6 +129,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
                 "states": list(PLATE_STATES) if lead.kind == "plate" else [], "used_by": used_by,
                 "source_arts": [a.ident for a in group], "family": FAMILY_OF_BATCH.get(batch), "batch": batch, "provenance": None,
                 "status": "planned", "frames": max(a.frames for a in group)}
+        notes = [ART_NOTES[a.ident] for a in group if a.ident in ART_NOTES]
+        if notes:
+            part["note"] = notes[0]
         if lead.kind == "board":
             part["size_basis"] = "provisional"
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4): open question of the TRD, fixed by #2927"
