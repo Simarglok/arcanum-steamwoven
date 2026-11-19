@@ -293,7 +293,7 @@ public sealed class AreaMapTransfers
         return RunPlaced(placed);
     }
 
-    /// <summary>ARC-SCRIPT-2822: whether a step from <paramref name="from"/> to <paramref name="to"/> enters another sector (the hero's mode-2 location change, 0x4F2330).</summary>
+    /// <summary>ARC-SCRIPT-2822: whether a step from <paramref name="from"/> to <paramref name="to"/> enters another sector (the hero's mode-2 location change, the sector entry of the original).</summary>
     public static bool CrossesSector(AreaStepCell from, AreaStepCell to) =>
         WorldSectorCoordinate.Containing(new(to.X, to.Y)) != WorldSectorCoordinate.Containing(new(from.X, from.Y));
 
