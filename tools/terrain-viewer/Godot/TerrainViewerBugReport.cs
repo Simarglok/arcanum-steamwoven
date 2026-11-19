@@ -245,6 +245,7 @@ public partial class TerrainViewerApp
         _bugReportPanel.ShowOutcome(result.Folder is null ? "The report could not be written: " + string.Join("; ", result.Failed)
             : (result.Saved ? "The report is saved in\n" : "The report is INCOMPLETE in\n") + result.Folder
               + (result.Fallback ? $"\n\nThe folder beside the game could not be used ({result.FallbackReason}), so it is in your user folder." : "")
+              + (result.LoadMenuSlot is { } slot ? $"\n\nAlso in Load Game as {slot}." : "")
               + (result.Failed.Count == 0 ? "" : "\n\nNot written: " + string.Join("; ", result.Failed)));
         _hud?.SetNotice(result.Status);
     }
@@ -273,7 +274,9 @@ public partial class TerrainViewerApp
     private BugReportResult WriteBugReportMoment(BugReportMoment moment, string text, string? check)
     {
         var result = BugReportWriter.Write(new(text, moment.Facts, moment.Log, moment.Dropped, moment.TakenUtc, moment.TakenLocal, moment.Screenshot?.Png,
-            moment.ScreenshotMissing, moment.Save, moment.SaveMissing, check), BugReportPlacesNow());
+            moment.ScreenshotMissing, moment.Save, moment.SaveMissing, check), BugReportPlacesNow(),
+            // ARC-DEV-2947: the copy of the save goes into the list Load Game shows (an automated run's own folder, never the player's).
+            moment.Save is null ? null : SaveLibrary);
         _bugReportResult = result;
         GD.Print("ARC-DEV-051 bug report " + System.Text.Json.JsonSerializer.Serialize(new
         {
@@ -367,6 +370,14 @@ public partial class TerrainViewerApp
             Require(entry is { Details: GameSaveDetails.Present }, "the save is a listed save of the save list");
             using (var loaded = AreaQuickSave.Load(library.Slot(entry!.Name), _areaSession, _ => null).Owner)
                 Require(loaded is not null && loaded.QueryActor().Map.RuntimeMap == CurrentAreaMap, "the ordinary quick-load path loads the report's save");
+            // ARC-DEV-2947: the same save is also a new slot of the list Load Game shows, named with the report's first words.
+            var menuSlot = _bugReportResult.LoadMenuSlot;
+            var listed = menuSlot is null ? null : SaveLibrary.List().Entries.SingleOrDefault(row => row.Name == menuSlot);
+            Require(listed is { IsAuto: false, Details: GameSaveDetails.Present }, "the report's copy is a listed slot of the Load Game list: " + _bugReportResult.Status);
+            Require(listed!.DisplayDescription.StartsWith("Bug report ", StringComparison.Ordinal) && listed.DisplayDescription.EndsWith(" - Smoke: the report window works", StringComparison.Ordinal),
+                "the copy's row is named with the report text: " + listed.DisplayDescription);
+            using (var menuLoaded = AreaQuickSave.Load(SaveLibrary.Slot(menuSlot!), _areaSession, _ => null).Owner)
+                Require(menuLoaded is not null && menuLoaded.QueryActor().Map.RuntimeMap == CurrentAreaMap, "the ordinary load path loads the Load Game copy");
             // ARC_BUG_REPORT_CAPTURE: a folder to copy the written report into, for a look at it (the run's own folder is deleted at exit).
             if (System.Environment.GetEnvironmentVariable("ARC_BUG_REPORT_CAPTURE") is { Length: > 0 } capture)
                 foreach (var file in System.IO.Directory.GetFiles(folder, "*", System.IO.SearchOption.AllDirectories))

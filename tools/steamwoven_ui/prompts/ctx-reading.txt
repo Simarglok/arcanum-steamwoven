@@ -1,0 +1,8 @@
+CONTEXT IMAGE - READING WINDOW (BOOK)
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled as a layout guide).
+
+Redraw the whole composition with a reading window showing a book: top strip, the two-part reading window in the middle zone, bottom strip.
+- Left part (about 132 units wide): a narrow dark streaked wood side bar with a round portrait lens (empty glass, brass ring).
+- Right part (about 668 units wide): a desk of finer-grained, slightly lighter wood than the side bar, with an open book on it: two cream pages, a dark olive cloth cover edge, a soft cast shadow to the lower right. A small brass page-turn arrow glyph at the upper right of the right page.
+- The pages are blank: no text, no title.
+Goal: style anchor for BD-D (reading desk and written-object sheets: book, newspaper, note, telegram, plaque), the lighter desk wood and the book surface.

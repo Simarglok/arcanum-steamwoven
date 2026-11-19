@@ -1,0 +1,4 @@
+KIND: GRID (grid as its own layer)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original grid or the window it is painted into), SHEET.
+
+Draw only the grid layer: thin evenly spaced lines (a faint blue-grey line on black wells, a printed light line on parchment) with the exact cell pitch and number of cells of the ORIGINAL, so cells line up with the game's slots. Transparent background, no wood, no border, no fill between the lines, no text. Line width is constant across the whole picture.

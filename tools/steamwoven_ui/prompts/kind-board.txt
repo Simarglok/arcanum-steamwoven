@@ -1,0 +1,4 @@
+KIND: BOARD (strip art)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original strip art, stretched to the master size), SHEET, CONTEXT crop of the strip.
+
+Redraw one strip of the interface (the top strip or the bottom strip of the composition) as a wide dark wooden board with brass trim and rivets, exactly as long as the composition (the width in the size) and as high as the size says. Keep every socket, recess and rail position of the ORIGINAL strip: the empty sockets, rings and housings stay as empty recesses. Draw only the board and its fixed trim; do NOT draw the buttons, vials, counters, hot-key sockets contents, clock or message window glass: they are separate hardware layers and the strip art shows only their empty seats. No bare cut at the two ends is needed: the end caps are separate parts. Wood grain runs horizontally.
