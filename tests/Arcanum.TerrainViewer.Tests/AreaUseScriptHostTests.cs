@@ -1049,6 +1049,37 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
+    // ARC-SCRIPT-2789: an item's use script may loop over everyone in the vicinity (Joachim's note to Virgil, 1567): the item set admits the two vicinity kinds, the door's and scenery's use set does not. A script the item set refuses (772's neighbour 752 stops attacking, a placed-set
+    // command) is a refused run, which applied nothing: the reading goes on (ReadingGoesOn), as it does after run default, and stops only after skip default or rejected effects.
+    [TestMethod]
+    public void An_item_use_script_may_loop_over_the_vicinity_and_a_refused_one_lets_the_reading_go_on()
+    {
+        Assert.IsTrue(AreaUseScriptHost.ItemUseAdmission.FocusKinds.Contains(ScrFocusKind.EveryoneInVicinity));
+        Assert.IsTrue(AreaUseScriptHost.ItemUseAdmission.FocusKinds.Contains(ScrFocusKind.AnyoneInVicinity));
+        Assert.IsFalse(AreaUseScriptHost.Admission.FocusKinds.Contains(ScrFocusKind.EveryoneInVicinity), "a door's or scenery's use keeps its own set");
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var items = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20)), new SessionSeedItem(Entity(7), Facts(61), new CellCoord(17, 20)), new SessionSeedItem(Entity(8), Facts(62), new CellCoord(18, 20))]),
+                new[] { Row(6, 13, 772, 60), Row(7, 13, 752, 61), Row(8, 13, 721, 62) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+            var host = new AreaUseScriptHost(session, 1, [], [items], content);
+            var loop = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (loop.Outcome, loop.Run!.Outcome), loop.Detail);
+            Assert.IsTrue(host.GlobalFlag(45), "the loop ran to its end and the script went on");
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(loop), "skip default stops the reading, as in the original");
+
+            var refused = host.RunItemUse(1, Entity(7), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, refused.Outcome, refused.Detail);
+            Assert.IsTrue(AreaUseScriptHost.ReadingGoesOn(refused), "a refused run is a gap of the model, not the original's stop");
+
+            var go = host.RunItemUse(1, Entity(8), session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.ReadingGoesOn(go), go.Detail);
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(new(AreaScriptedUseOutcome.EffectsRejected, null, [], null, "x")));
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "x")));
+            Assert.IsFalse(AreaUseScriptHost.ReadingGoesOn(new(AreaScriptedUseOutcome.TeleportRefused, null, [], null, "x")));
+        });
+    }
+
     // ARC-SCRIPT-2752 (SX3): the use item with skill of an item's use script starts the NPC user's goal 40 through the AI host; the hero as the user, another skill and a target that is no portal leave the run unapplied.
     [TestMethod]
     public void An_item_s_use_item_with_skill_starts_the_npc_users_goal_40_for_pick_locks_on_a_portal_only()
