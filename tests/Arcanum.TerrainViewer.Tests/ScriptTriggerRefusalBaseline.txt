@@ -1,0 +1,50 @@
+# ARC-DEV-2816: installed scripts a host refuses, one row per trigger kind and script (kind, script, first refusal).
+point 1	1177	focus 8
+point 1	1990	ComputedGoto
+point 1	2056	focus 8
+point 1	2319	focus 8
+point 1	2501	action 60
+point 1	2644	focus 8
+point 1	2942	focus 8
+point 1	2948	focus 8
+point 1	2959	action 61
+point 1	3004	focus 8
+point 19	1179	action 120
+point 19	1570	action 7
+point 19	1904	action 7
+point 19	2027	action 68
+point 19	2033	action 68
+point 19	2034	action 37
+point 19	2459	action 7
+point 19	2547	action 120
+point 19	2632	condition 17
+point 19	2637	action 52
+point 19	2983	action 82
+point 19	30098	action 52
+point 19	30128	action 52
+point 19	30129	action 52
+point 25	30077	action 80
+point 32	1272	action 127
+point 32	2142	condition 8
+point 32	2149	condition 8
+point 9	1000	action 33
+point 9	1089	action 33
+point 9	1116	action 21
+point 9	1478	action 30
+point 9	1537	GotoBeyondEnd
+point 9	1539	GotoBeyondEnd
+point 9	1814	action 33
+point 9	1815	action 33
+point 9	1823	action 30
+point 9	1890	action 33
+point 9	1960	ComputedGoto
+point 9	1966	ComputedGoto
+point 9	1991	action 33
+point 9	2690	action 30
+point 9	2754	action 31
+tile	1628	action 47
+tile	1779	ComputedGoto
+tile	2023	action 139
+tile	2061	condition 27
+tile	2080	action 95
+tile	2151	action 58

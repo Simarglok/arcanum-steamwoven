@@ -16,7 +16,7 @@ issue that follows each gap. It extends the [script trigger audit](script-trigge
 the 72 call sites of the object script entry per point and the admission sets) and corrects it where the reading differs
 (section 4). The owner's manual checks built from it are the section
 [ARC-RES-2815](../project/owner-recheck-list.md#arc-res-2815--where-and-when-scripts-fire-2026-11-19) of the re-check
-list (Ctrl+Q overlay). The automatic guard is [#2816](https://github.com/Simarglok/arcanum-steamwoven/issues/2816).
+list (Ctrl+Q overlay). The automatic guard is [#2816](https://github.com/Simarglok/arcanum-steamwoven/issues/2816) (ARC-DEV-2816, done: the census baseline of refused scripts per trigger kind and the smoke stage `script-triggers`, [toolchain](../workflow/toolchain.md)).
 
 Evidence: the decompiled exports in `research-private` (index, per-function C, asm where the decompiler merged 64-bit
 arguments), read in five slices of at most about 20 functions each (core entry and deferred calls; tile, sector and

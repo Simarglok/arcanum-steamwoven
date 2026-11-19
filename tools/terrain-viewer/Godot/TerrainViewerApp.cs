@@ -267,6 +267,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("eye-light") == true) await RunAreaEyeLightSmokeAsync(result);
                                 // ARC-SCRIPT-1592 (FR-SCRIPT-002): only when named, the installed void exit tile script 2549 plays script eye candy (action 120) on the hero: the use host keeps the request, the viewer starts the entry of the script list as an overlay run and draws it (--hero, the main map).
                                 if (only?.Contains("script-eye-candy") == true) await RunAreaScriptEyeCandyStageAsync(result);
+                                // ARC-DEV-2816 (epic #2814): only when named, the trigger guard: the opening heartbeat and talk, the admitted tile scripts (hero and NPC) and the written items' use scripts must run, none refused (AI on, start map, --hero).
+                                if (only?.Contains("script-triggers") == true) await RunAreaScriptTriggersStageAsync(result);
                                 // ARC-RENDER-1990 (FR-COMBAT-006): only when named, the attack end of a hit on the hero asks the weapon's own hit effect first: the Tesla Rod's and Bronwyck's Gun's entry of the weapon list plays instead of the blood (--hero, a map window).
                                 if (only?.Contains("weapon-hit") == true) await RunAreaWeaponHitStageAsync(result);
                                 // ARC-DEV-353 (V7d second part): only when named, an NPC's light is carried with the NPC (AI on, a lit map with an NPC that carries a light).
