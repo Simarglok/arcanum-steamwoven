@@ -47,6 +47,8 @@ damage on armor (0x4B47F8, a register). Every point but 31 (dialog override, a D
 and admission counts are the installed attachments of the 79 maps map mode opens (census, section 5); "admitted" is the host's set
 from line 0, static.
 
+**Correction (ARC-SCRIPT-2825):** these rows count the shown windows of the 79 maps, so the main map's NPCs and doors outside its window are missing. The full slot census ([scr-census](scr-census.md)) finds 1 slot at unlock (3), 1 at leader killing (20) and 10 slots (3 scripts) at caught thief (33), and none at buy object (17); the "none" rows for 3, 20 and 33 below are wrong ([#2860](https://github.com/Simarglok/arcanum-steamwoven/issues/2860), [#2859](https://github.com/Simarglok/arcanum-steamwoven/issues/2859), [#2858](https://github.com/Simarglok/arcanum-steamwoven/issues/2858)).
+
 | Point | Name | Call sites (0x441980 callers) | Steamwoven host | Rows (scripts) | Admitted |
 | ---: | --- | --- | --- | ---: | ---: |
 | 0 | examine | 0x57CD93 | the description step of the world hover, hotkey bar and inventory pointer (`AreaUseScriptHost.RunExamine`, ARC-DEV-326); barter and dialog windows not | 54 (31) | under the use set |
