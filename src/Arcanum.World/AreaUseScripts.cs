@@ -53,6 +53,7 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
 /// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
 /// ARC-SCRIPT-2514 (BS3c, 0x43CCA0 → 0x423FF0, 0x459740): <see cref="ObjectDestroyed"/> is told each shown-map scenery or container a script's destroy applied, right after the session recorded it, so the viewer ends the object's goal runs (its loop, eye-candy overlays and hover) and the spell runs aimed at or cast from it; without it the runs stay as before.
+/// ARC-SCRIPT-2788: <see cref="CarriedRow"/> answers the body row of a companion the party carries (named by its home map and entity) when the shown map's window and the loaded maps' rows hold none (a follower recruited from another sector of the main map), so a tile script it steps onto runs for it; without it only those rows are read.
 /// ARC-SCRIPT-2519 (TI5c, F2, 0x502880, 0x502930): <see cref="NpcFacing"/> answers the facing an NPC of the shown map stands in now (its mover's, else its map art's rotation) so the made critter of a transform takes it; without it (or for an NPC it does not know) the made critter keeps its prototype's art facing.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -68,7 +69,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
     Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
     Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null,
-    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null);
+    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null, Func<ScrObjectRef, AreaObjectRecord?>? CarriedRow = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -1063,6 +1064,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
         // ARC-DEV-371: a critter created at run time is in none of the maps' rows.
         if (obj.Map == _shownMap && _world?.CreatedRow?.Invoke(obj.Code) is { } created) return created;
+        // ARC-SCRIPT-2788: a carried follower's body row (its home sector may lie outside the shown window).
+        if (_world?.CarriedRow?.Invoke(obj) is { } carried) return carried;
         return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
 
@@ -2056,8 +2059,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         // ARC-DEV-328: the original keeps one object wherever it stands (FM1), so a companion carried here runs the tile's script as any NPC does; it is named by
         // its home map, and the viewer's live cell for it (<see cref="AreaScriptWorld.CritterCell"/>) says it stands here.
-        if (triggerer is { } npc && (Row(npc) is not { Type: NpcType } || (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)))
-            return new(AreaScriptedUseOutcome.Refused, null, [], null, "the triggerer is not an NPC of the shown map");
+        if (triggerer is { } npc)
+        {
+            var row = Row(npc);
+            // ARC-SCRIPT-2788: the refusal names the clause that failed (the row, its type, or the map the NPC stands on).
+            if (row is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} has no object row the host reads");
+            if (row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} is not an NPC (object type {row.Type})");
+            if (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)
+                return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} does not stand on the shown map {_shownMap}");
+        }
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.
         var slot = PlacedSlot(placed);
