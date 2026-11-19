@@ -553,7 +553,8 @@ switched-off ones left out, at most 100 (`VicinityListCapped` past that; ledger
 [TG4](../research/ledger/scripts.md#script-triggers-arc-script-047)). An action names the whole list (loop for, or one request per
 object), an optional single object takes its first object. `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`);
 the list rule of SG6 (every object, or any) is the interpreter's since S18 for the dead and switched-off conditions, which a set may
-pair with the scenery list (15).
+pair with the scenery list (15). The lists are in snapshot order (for 8 and 9 the NPC rows, then the PC); the original's order is read in ledger
+[VL1–VL6](../research/ledger/scripts.md#vicinity-list-order-arc-script-2960) (ARC-SCRIPT-2960) and is not modelled yet (issues #2975, #2976).
 
 Call-ex (81) now runs the dialog point (9): it goes through the object entry as the original's 0x44B170 does, so the dialog gates of
 0x4449B0 apply (TG5): a dead attachee whose script lacks file flag 0x8 or a surrendered one without 0x10 runs nothing (the action
