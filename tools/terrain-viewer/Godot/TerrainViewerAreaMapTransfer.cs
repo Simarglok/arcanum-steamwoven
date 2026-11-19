@@ -488,7 +488,7 @@ public partial class TerrainViewerApp
     private readonly List<(string Follower, int Script, AreaScriptedUseOutcome Outcome, string? Detail)> _newSectorRuns = [];
 
     /// <summary>
-    /// ARC-SCRIPT-2822 (ledger TQ7, 0x4F2330 → 0x441980): the hero's sector entry runs the new-sector script (point 27) of every direct follower, the hero as the triggerer, with no map, distance, waiting or alive gate; a follower carried here is named by
+    /// ARC-SCRIPT-2822 (ledger TQ7): the hero's sector entry runs the new-sector script (point 27) of every direct follower, the hero as the triggerer, with no map, distance, waiting or alive gate; a follower carried here is named by
     /// its home map. The answer decides nothing; a printed line is posted, a conversation a run asked for opens (none while one is open).
     /// </summary>
     private void RunFollowersNewSector()
