@@ -485,12 +485,12 @@ public partial class TerrainViewerApp
         }
     }
 
+    private readonly List<(string Follower, int Script, AreaScriptedUseOutcome Outcome, string? Detail)> _newSectorRuns = [];
+
     /// <summary>
     /// ARC-SCRIPT-2822 (ledger TQ7, 0x4F2330 → 0x441980): the hero's sector entry runs the new-sector script (point 27) of every direct follower, the hero as the triggerer, with no map, distance, waiting or alive gate; a follower carried here is named by
     /// its home map. The answer decides nothing; a printed line is posted, a conversation a run asked for opens (none while one is open).
     /// </summary>
-    private readonly List<(string Follower, int Script, AreaScriptedUseOutcome Outcome, string? Detail)> _newSectorRuns = [];
-
     private void RunFollowersNewSector()
     {
         if (_mapTransfers is not { } transfers || _areaSession is not { } session || UseScriptHost(transfers.Map.Snapshot) is not { } host) return;
@@ -498,7 +498,7 @@ public partial class TerrainViewerApp
         {
             var obj = new Arcanum.Scripting.Scr.ScrObjectRef(CompanionHomeMap(follower.Entity) ?? CurrentAreaMap, follower.Entity);
             var ran = Awarded(host, host.RunNewSector(obj, session.Rules.Scripts));
-            if (ran.Run is null) continue;
+            if (ran.Run is null) { if (NpcTileLogAll) GD.Print("ARC-SCRIPT-2822 new-sector none " + follower.Entity + " map " + obj.Map + ": " + ran.Detail); continue; }
             _newSectorRuns.Add((follower.Entity, ran.Run.Script ?? 0, ran.Outcome, ran.Detail));
             if (_newSectorRuns.Count > 64) _newSectorRuns.RemoveAt(0);
             GD.Print("ARC-SCRIPT-2822 new-sector " + System.Text.Json.JsonSerializer.Serialize(new { Follower = follower.Entity, obj.Map, Outcome = ran.Outcome.ToString(), ran.Detail,

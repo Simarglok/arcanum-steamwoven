@@ -1585,6 +1585,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         // The carried body row answers for the one follower whose run is going (the one object CarriedRow may answer for).
+        var previousTriggerer = _placedTriggerer;
         _placedTriggerer = follower;
         try
         {
@@ -1598,7 +1599,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             finally { _clicked = previous; }
         }
-        finally { _placedTriggerer = null; }
+        finally { _placedTriggerer = previousTriggerer; }
     }
 
     /// <summary>
