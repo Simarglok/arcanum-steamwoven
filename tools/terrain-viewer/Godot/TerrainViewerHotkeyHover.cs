@@ -78,17 +78,25 @@ public partial class TerrainViewerApp
     /// is described as well as the hero's own, an open window's and the barter panel's.</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
-        var kind = InventoryItemKind(session, item) ?? PlacedItemKind(session, item) ?? RowlessItemKind(session, item);
+        // ARC-UI-2766: the hero's gold pile is named by the gold prototype's description (not the grid's empty kind) and holds the hero's coins.
+        var kind = item == SessionHeroGrid.GoldEntity ? GoldPileKind() : InventoryItemKind(session, item) ?? PlacedItemKind(session, item) ?? RowlessItemKind(session, item);
         if (kind is null && ItemMapRow(item) is null) return;
         if (!ItemExamineAllows(session, item, out var row)) return;
         var catalog = _hoverNames?.Catalog;
         var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind!.Value, catalog);
-        var described = _hotkeyItemIcons?.Describe(kind ?? default, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
+        var described = _hotkeyItemIcons?.Describe(kind ?? default, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item) is { } window ? window with { GoldCoins = GoldCoinsOf(session, item) } : null)
             ?? new AreaItemDescription(null, fallback, AreaMessageColour.White);
         var shown = _messageLog.PaneMode ? _messageLog.ShowPaneName(MessagePaneMode, described.Name, item: true)
             : _messageLog.ShowItem(AreaHoverDescriptions.ItemWindow(described));
         if (shown) _gameBarPanel?.MessageLog.Render();
     }
+
+    /// <summary>ARC-UI-2766: the coins of a gold pile the item window describes: the hero's counter for the hero's pile, else the quantity of the loot or barter
+    /// window's pile as its view shows it; null for any other item (the item's stored quantity then counts).</summary>
+    private int? GoldCoinsOf(GameSessionOwner session, string item) =>
+        item == SessionHeroGrid.GoldEntity ? session.QueryGold()
+        : (InventoryOpen ? _inventoryPanel?.CurrentView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Quantity : null)
+            ?? _barterPanel?.ArtView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Quantity;
 
     /// <summary>ARC-UI-1451: the kind of an item the hero dropped or threw that lies on the map, from the session's placed items (a made item
     /// has no map row; a kit item has none either). Null for any other item.</summary>

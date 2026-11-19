@@ -7,7 +7,11 @@ namespace Arcanum.World;
 
 /// <summary>ARC-UI-052: one item of the looted holder's grid as the loot window draws it: its entity, its inventory location (row × 10 +
 /// column of the holder's grid), its size in cells, its name and its kind (for its inventory art).</summary>
-public sealed record AreaLootGridItem(string Entity, int Location, int Width, int Height, string Name, SessionItemKind Kind);
+public sealed record AreaLootGridItem(string Entity, int Location, int Width, int Height, string Name, SessionItemKind Kind)
+{
+    /// <summary>ARC-UI-2766: the coins of a gold pile as the session holds them (the item window's Quantity line); null for any other item.</summary>
+    public int? Quantity { get; init; }
+}
 
 /// <summary>ARC-UI-052: a point of the loot window: a cell of the hero's grid (as <see cref="AreaInventoryDrag"/>), a box, a location of the
 /// looted holder's grid (scroll included), the Take all button, or none. ARC-UI-1918: or a slot of the hero's own doll, with its toggle set
