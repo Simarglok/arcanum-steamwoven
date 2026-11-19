@@ -22,8 +22,8 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 20	clrvial	34x90	1	gauge	B-GAUGES	H03	1	drawn	no		gauge or readout parts
 21	spellcur	25x27	7	cursor	B-CURSORS	G12,G14,H13	3	drawn	no		cursor
 22	char_maint	800x400	1	backdrop	BD-B	G05,G10,M09	3	drawn	yes	ST CN DX BE IN WP PE CH; E&G; ruler 75 50 25 0 25 50 75	window backdrop layer
-23	char_minus	19x19	4	plate	B-BUTTONS	G05,M09	2	drawn	no		button body (plate + ring + glyph + states)
-24	char_plus	19x19	4	plate	B-BUTTONS	G05,M09	2	drawn	no		button body (plate + ring + glyph + states)
+23	char_minus	19x19	4	plate	B-BUTTONS	G05,M09	2	drawn	no		button body (plate + ring + glyph + states); frame 3 never drawn (ledger OF9)
+24	char_plus	19x19	4	plate	B-BUTTONS	G05,M09	2	drawn	no		button body (plate + ring + glyph + states); frame 3 never drawn (ledger OF9)
 25	rollerfont	4x20	225	font		H05	1	drawn	n/a		bitmap font, drawn text; slice #2462
 26	arial10font	2x10	225	font				font (not a kit part)	n/a		bitmap font
 27	morph15font	2x19	225	font		G05,G06,G08,G10,G11,H04,H19,H21,M04,M07,M08,M09	12	drawn	n/a		bitmap font, drawn text; slice #2462
@@ -177,7 +177,7 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 192	SplSlt5	32x32	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
 193	TMap_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
 194	WMap_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
-195	WMap_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+195	WMap_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button; lit face of the Map button: replaces the idle art, frame 0 idle and hover, frame 1 pressed (ledger OF10)
 196	Cmps_Bse	81x81	1	picture	B-ICONS			no window row (kind proposed by name and size)	yes	N E S W	
 197	CompassN	75x73	16	picture	B-ICONS			no window row (kind proposed by name and size)	yes	N E S W	
 198	PCWinCvr	89x89	1	hardware	B-HARDWARE	G05,G10,G11,G12,G13,G14,H22	7	drawn	no		lens ring or cover frame
@@ -218,11 +218,11 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 233	Lns_Papr	89x89	1	hardware	B-HARDWARE	G01,G17,H22	3	drawn	no		lens ring or cover frame
 234	Loot	358x400	1	backdrop	BD-A	G02,G04	2	drawn	no		window backdrop layer
 235	Barter	358x400	1	backdrop	BD-A	G03,M10	2	drawn	no		window backdrop layer
-236	Scrll_UP	17x18	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
-237	Scrll_DWN	17x18	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
-238	ScrllSlideT	11x5	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts
+236	Scrll_UP	17x18	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		unused: no code or window names it (ledger OF7)
+237	Scrll_DWN	17x18	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		unused: no code or window names it (ledger OF7)
+238	ScrllSlideT	11x5	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts; scroll thumb top cap; the track has no art, the window background shows (ledger OF5)
 239	ScrllSlideM	11x5	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
-240	ScrllSlideB	11x7	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts
+240	ScrllSlideB	11x7	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts; scroll thumb bottom cap (ledger OF5)
 241	CVR_Helmet	62x64	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17,M10	6	drawn	no		silhouette cover of an empty worn slot
 242	CVR_Boot	64x63	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
 243	CVR_Gauntlet	63x64	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
@@ -298,10 +298,10 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 313	Therapeutics_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
 314	RollerTemplate	20x20	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
 315	AP_Red	11x12	1	picture	B-ICONS	H06	1	drawn	no		icon or item/critter picture
-316	ScrllSLD_OFF	13x600	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
-317	ScrllUP	11x15	3	plate	B-BUTTONS	G09,M09	2	drawn	no		button body (plate + ring + glyph + states)
-318	ScrllDWN	11x14	3	plate	B-BUTTONS	G09,M09	2	drawn	no		button body (plate + ring + glyph + states)
-319	ScrllSLD_ON	13x600	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+316	ScrllSLD_OFF	13x600	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		drawn by the main menu list thumb only (a sliding 13x600 strip, ledger OF7); window not yet identified
+317	ScrllUP	11x15	3	plate	B-BUTTONS	G09,M09	2	drawn	no		button body (plate + ring + glyph + states); scroll bar up arrow of every scroll bar: frames idle 0, pressed 1, hover 2 (ledger OF5)
+318	ScrllDWN	11x14	3	plate	B-BUTTONS	G09,M09	2	drawn	no		button body (plate + ring + glyph + states); scroll bar down arrow of every scroll bar: frames idle 0, pressed 1, hover 2 (ledger OF5)
+319	ScrllSLD_ON	13x600	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		unused: no code or window names it (ledger OF7)
 320	ChoosBack	129x59	1	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
 321	NextBut	61x61	3	plate	B-BUTTONS	M05,M06,M07,M08,M09,M10	6	drawn	no		button body (plate + ring + glyph + states)
 322	CharRace_Base	800x400	1	backdrop	BD-G			no window row (kind proposed by name and size)	no		
@@ -537,10 +537,10 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 555	hoverattack	44x34	14	picture	B-ICONS	H13	1	drawn	no		icon or item/critter picture
 556	OptionsMenuBack	800x600	1	backdrop	BD-H	M04	1	drawn	no		full-screen menu backdrop 800x600
 557	CreateYourOwn	267x361	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
-558	TMap_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
-559	Invn_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
-560	Log_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
-561	Char_ON	34x34	1	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+558	TMap_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button; lit face of the Map button: replaces the idle art, frame 0 idle and hover, frame 1 pressed (ledger OF10)
+559	Invn_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button; lit face of the Inventory button: replaces the idle art, frame 0 idle and hover, frame 1 pressed (ledger OF10)
+560	Log_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button; lit face of the Logbook button: replaces the idle art, frame 0 idle and hover, frame 1 pressed (ledger OF10)
+561	Char_ON	34x34	1	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button; lit face of the Character button: one frame, shown in every state (ledger OF10)
 562	Blank_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
 563	MagickWeapon_Butt	35x36	3	plate	B-BUTTONS	H02,H09	2	drawn	no		button body (plate + ring + glyph + states)
 564	MagickWeapon_Rot	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
@@ -568,7 +568,7 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 598	S_eye_gear	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
 599	S_spike_trap	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
 600	S_trap_springer	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
-601	loadindicator	40x50	30	gauge	B-GAUGES	H10	1	drawn	no		gauge or readout parts
+601	loadindicator	40x50	30	gauge	B-GAUGES	H10	1	drawn	no		gauge or readout parts; the load screen draws it (H10); the combat UI computes the place (window x + width - 42, window y + 54) but never draws it (ledger OF11)
 614	tb_iso	78x40	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
 615	tb_td	42x42	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
 616	FollowerFrame_PO	34x3	1	gauge	B-GAUGES	H07	1	drawn	no		gauge or readout parts
@@ -738,7 +738,7 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 781	XP_Pip9	39x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
 782	XP_Pip10	39x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
 786	IconWindow	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
-787	ScrllSlideM1	11x1	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts
+787	ScrllSlideM1	11x1	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts; scroll thumb middle, repeated row by row and stretched to the bar width (ledger OF5)
 788	TullaMural	668x400	1	sheet	BD-D	G16	1	drawn (family)	unclear	rune-like decoration	written-object picture given by a script (map, mural or plaque picture)
 789	S_charged_axe	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
 790	S_noise_maker_decoy	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
@@ -781,8 +781,8 @@ art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked
 827	FollowerCycleLeft	12x19	3	plate	B-BUTTONS	G10	1	drawn	no		button body (plate + ring + glyph + states)
 828	FollowerCycleRight	12x19	3	plate	B-BUTTONS	G10	1	drawn	no		button body (plate + ring + glyph + states)
 829	Vorman	668x400	1	sheet	BD-D	G16	1	drawn (family)	no		written-object picture given by a script (map, mural or plaque picture)
-830	Schem_NO_Item	99x67	1	hardware	B-HARDWARE	G15	1	drawn	no		component slot overlay
-831	Schem_Have_Item	99x67	1	hardware	B-HARDWARE	G15	1	drawn	no		component slot overlay
+830	Schem_NO_Item	99x67	1	hardware	B-HARDWARE	G15	1	drawn	no		component slot overlay; slot overlay drawn 1:1 over component slot 0 (579, 181) and slot 1 (579, 277) of the schematic window when the hero lacks the component (ledger OF8)
+831	Schem_Have_Item	99x67	1	hardware	B-HARDWARE	G15	1	drawn	no		component slot overlay; slot overlay drawn 1:1 over the component slots when the hero carries an acceptable component (ledger OF8)
 832	Cont_Junk	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
 833	Cont_Body	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
 834	Cont_Safe	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
