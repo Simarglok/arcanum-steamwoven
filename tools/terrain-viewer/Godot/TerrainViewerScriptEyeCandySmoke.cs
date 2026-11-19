@@ -139,6 +139,23 @@ public partial class TerrainViewerApp
                 await Shot("object");
             }
             GD.Print("ARC-SCRIPT-1829 script-eye-candy object-without-critter " + stillNote);
+            // ARC-SCRIPT-2020: a map item's script eye candy is anchored on the item: at its row cell while it lies there, none once the hero carries it, at the placed cell after a drop.
+            var itemNote = "NONE (the map has no ground item with a row, or no inventory host)";
+            var lying = _inventoryHost is null || _spellCastMap is null ? null
+                : session.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.FirstOrDefault(g => _spellCastMap.Row(g.Item.Entity) is { Type: >= 5 and <= 14 } && ObjectTargets()?.Gone(session).Contains(_spellCastMap.Row(g.Item.Entity)!.Key) != true);
+            if (lying is not null)
+            {
+                var item = lying.Item.Entity;
+                Require(EyeCandyCell(session, item) == lying.Cell, $"the eye candy of the lying item {item} stands at its cell {lying.Cell}: {EyeCandyCell(session, item)}");
+                Require(AreaInventoryHost.Moved(_inventoryHost!.PickUp(session, item)), $"the hero took the item {item}");
+                Require(EyeCandyCell(session, item) is null, $"the carried item {item} has no cell for a script eye candy: {EyeCandyCell(session, item)}");
+                _scriptEyeCandyPlayedForSelfTest.Clear();
+                QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaUseScriptHost.EntityId(_spellCastMap!.Row(item)!)))]);
+                await Frames(1);
+                Require(_scriptEyeCandyPlayedForSelfTest.Count == 0, $"the request on the carried item {item} played nothing: {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
+                itemNote = $"PASS item={item} cell={lying.Cell}";
+            }
+            GD.Print("ARC-SCRIPT-2020 script-eye-candy carried-item " + itemNote);
             GD.Print("ARC-SCRIPT-1592 native-smoke script-eye-candy PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Script = VoidExitScript, Number = number, Entry = entryRef, Rotation = turned.Rotation, Sound = entry.Sound, SoundsAsked = _scriptEyeCandySounds, Looping = (entry.Flags & SpellEyeCandyFlags.Forever) != 0, FirstFrame = first, MovedTo = moved?.Eye.Frame, Stopped = _scriptEyeCandyStopped }));
         }
         finally
