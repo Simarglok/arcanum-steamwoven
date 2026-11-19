@@ -471,11 +471,13 @@ material. The existing sheet smoke accepts `ARC_AREA_SHEET_HD_VERIFY=1` with an
 explicit `ARC_HD_PACK`: it temporarily enables interface HD, requires the
 character frames to resolve as HD and restores the in-memory setting. The full
 run is `./arcanum smoke crash-site --env ARC_HD_PACK=<pack> --env
-ARC_AREA_SHEET_HD_VERIFY=1 --env ARC_VISUAL_PROFILE=legacy`: `ARC_HD_PACK` alone
-makes the world profile HD, and the Crash Site smoke's later cave-lighting pixel
-observers compare Legacy source pixels, so they would stop with
-`AREA_SOURCE_PIXEL_MISMATCH`; the legacy profile keeps the world as it was and
-the check still turns the interface HD. Existing `ARC_AREA_SHEET_CAPTURE` writes
+ARC_AREA_SHEET_HD_VERIFY=1` (ARC-DEV-2923): `ARC_HD_PACK` alone makes the world
+profile HD (the relit look), and the Crash Site smoke's later cave-lighting
+pixel observers compare Legacy source pixels, so with the check requested the
+viewer starts with the Legacy world profile unless the run names one, and the
+check still turns the interface HD. An explicit `ARC_VISUAL_PROFILE=hd` is
+refused by the check at its start (the sheet smoke), not minutes later by
+`AREA_SOURCE_PIXEL_MISMATCH`. Existing `ARC_AREA_SHEET_CAPTURE` writes
 local-only readbacks; neither switch writes the player's settings.
 
 One known gap (ARC-UI-2915): art 787 `ScrllSlideM1` (the 11×1 middle of the
