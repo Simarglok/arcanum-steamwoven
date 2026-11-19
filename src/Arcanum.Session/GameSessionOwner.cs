@@ -1160,6 +1160,9 @@ public sealed partial class GameSessionOwner : IDisposable
             ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)) : null;
     }
 
+    /// <summary>ARC-SCRIPT-2020: how often the attached map seeds changed (an attach, a window move, a created holder); a seed change moves no revision, so a reader that caches a <see cref="QueryMapInventory"/> view keys it by this too.</summary>
+    public long QueryInventorySeedGeneration() { ThrowIfDisposed(); return _inventory.SeedGeneration; }
+
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
     /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }

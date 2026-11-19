@@ -344,7 +344,7 @@ public partial class TerrainViewerApp
         return owner.QueryPlacedItems().FirstOrDefault(i => i.Entity == obj && i.Map == new SessionMapId(CurrentAreaMap)) is { } item ? item.Cell : null;
     }
 
-    private (GameSessionOwner Session, long Revision, int Map, IReadOnlyDictionary<string, SessionGroundItem>? Ground)? _eyeCandyGround;
+    private (GameSessionOwner Session, long Revision, long Seeds, int Map, IReadOnlyDictionary<string, SessionGroundItem>? Ground)? _eyeCandyGround;
 
     /// <summary>
     /// ARC-SCRIPT-2020: where a map item row's script eye candy is anchored. The original anchors the effect on the object itself, so an item shows it only where it is drawn: the cell the ground inventory gives now (the map row's cell
@@ -353,9 +353,9 @@ public partial class TerrainViewerApp
     /// </summary>
     private CellCoord? GroundItemEyeCandyCell(GameSessionOwner owner, string obj, AreaObjectRecord row)
     {
-        var stamp = (owner, owner.Version.Revision, CurrentAreaMap);
-        if (_eyeCandyGround is not { } known || known.Session != stamp.owner || known.Revision != stamp.Revision || known.Map != stamp.CurrentAreaMap)
-            _eyeCandyGround = known = (owner, owner.Version.Revision, CurrentAreaMap, owner.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.GroupBy(g => g.Item.Entity).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal));
+        var stamp = (owner, owner.Version.Revision, owner.QueryInventorySeedGeneration(), CurrentAreaMap);
+        if (_eyeCandyGround is not { } known || known.Session != stamp.owner || known.Revision != stamp.Revision || known.Seeds != stamp.Item3 || known.Map != stamp.CurrentAreaMap)
+            _eyeCandyGround = known = (owner, stamp.Revision, stamp.Item3, CurrentAreaMap, owner.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.GroupBy(g => g.Item.Entity).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal));
         if (known.Ground is not { } ground) return LiveCell(owner, row);
         if (!ground.TryGetValue(obj, out var lying) || owner.QueryItemOff(new SessionMapId(CurrentAreaMap), obj, lying.Item.Facts.OffInData)) return null;
         return lying.Cell;
