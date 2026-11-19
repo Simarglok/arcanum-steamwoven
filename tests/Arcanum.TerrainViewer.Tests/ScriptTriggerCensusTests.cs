@@ -144,6 +144,8 @@ public sealed class ScriptTriggerCensusTests
     {
         ScrPoint.Use when objectType is >= 5 and <= 14 => AreaUseScriptHost.ItemUseAdmission,
         ScrPoint.Dying => AreaUseScriptHost.DyingAdmission,
+        // ARC-SCRIPT-2820 (TQ12): the start-combat and end-combat points run under the dying set (RunCombatPassPoint).
+        ScrPoint.StartCombat or ScrPoint.EndCombat => AreaUseScriptHost.DyingAdmission,
         ScrPoint.Destroy => AreaUseScriptHost.DestroyPointAdmission,
         ScrPoint.Bust => AreaUseScriptHost.BustAdmission,
         ScrPoint.TakingDamage => AreaUseScriptHost.TakingDamageAdmission,
