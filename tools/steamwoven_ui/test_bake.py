@@ -336,6 +336,78 @@ class BakeToolTests(unittest.TestCase):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             bake.main(["bake", "--steps", "x5"])
 
+    def test_a_version_bump_rebakes_parts_a_filtered_run_left_behind(self):
+        write_master(self.masters, "a", pattern(12, 12))
+        write_master(self.masters, "b", pattern(12, 12))
+        out = self.tmp / "out"
+        self.run_bake(out, steps=["x1-2"])
+        old = bake.BAKE_VERSION
+        try:
+            bake.BAKE_VERSION = old + 1
+            self.run_bake(out, steps=["x1-2"], only={"a"})
+            third = self.run_bake(out, steps=["x1-2"])
+        finally:
+            bake.BAKE_VERSION = old
+        self.assertTrue(any(line.endswith("12 x 12 -> 6 x 6") and " b:" in line for line in third.lines), third.lines)
+
+    def test_malformed_manifests_and_foreign_files_are_reported_not_raised(self):
+        write_master(self.masters, "a", pattern(12, 12))
+        out = self.tmp / "out"
+        directory = out / "x1-2"
+        directory.mkdir(parents=True)
+        (directory / "manifest.json").write_text('{"schema": 1}')
+        self.assertTrue(bake.verify(self.masters, out, ["x1-2"]).errors)
+        self.assertTrue(self.run_bake(out, steps=["x1-2"]).errors)  # holds a manifest that is not valid: not touched
+        (directory / "manifest.json").unlink()
+        (directory / "foreign.txt").write_text("x")
+        self.assertTrue(any("no valid manifest" in e for e in self.run_bake(out, steps=["x1-2"]).errors))
+        (directory / "foreign.txt").unlink()
+        self.assertEqual(self.run_bake(out, steps=["x1-2"]).errors, [])
+        (directory / "stray.png").write_bytes(b"x")
+        self.assertTrue(any("stray.png" in w for w in bake.verify(self.masters, out, ["x1-2"]).warnings))
+
+    def test_ids_with_dots_or_odd_characters_are_refused_everywhere(self):
+        for bad in ("../x", "a/../b", "/abs", ".hidden", "a\\b", "", "a b"):
+            self.assertFalse(bake.valid_id(bad), bad)
+        for good in ("board.top_strip", "sub/b.two", "a-b_c"):
+            self.assertTrue(bake.valid_id(good), good)
+        write_master(self.masters, "a", pattern(12, 12))
+        write_master(self.masters, "has space", pattern(12, 12))
+        report = self.run_bake(self.tmp / "out", steps=["x1-2"])
+        self.assertTrue(any("not a valid part id" in e for e in report.errors), report.errors)
+        out = self.tmp / "out"
+        manifest = json.loads((out / "x1-2" / "manifest.json").read_text())
+        manifest["parts"][0]["id"] = "../../victim"
+        (out / "x1-2" / "manifest.json").write_text(json.dumps(manifest))
+        self.assertIsNone(bake.read_manifest(out / "x1-2"))
+
+    def test_an_empty_or_negative_lock_is_stale(self):
+        out = self.tmp / "out"
+        out.mkdir()
+        for content in ("", "-1", "0", "junk"):
+            (out / bake.LOCK_NAME).write_text(content)
+            with bake.Lock(out):
+                pass
+        self.assertFalse((out / bake.LOCK_NAME).exists())
+
+    def test_dry_run_counts_sets_and_no_steps_is_an_error(self):
+        write_master(self.masters, "a", pattern(12, 12))
+        self.assertEqual(self.run_bake(self.tmp / "out", dry_run=True).ok, list(bake.STEPS))
+        self.assertTrue(self.run_bake(self.tmp / "out", steps=[]).errors)
+
+    def test_a_changed_kit_size_is_rechecked_for_reused_parts(self):
+        write_master(self.masters, "a.one", pattern(12, 12))
+        out = self.tmp / "out"
+        self.assertEqual(self.run_bake(out, steps=["x1-2"]).errors, [])
+        report = bake.Report()
+        bake.bake_set(bake.find_masters(self.masters), {"a.one"}, out, "x1-2", False, False, {"a.one": ([18, 12], "units")}, report)
+        self.assertTrue(any("differs from the manifest" in e for e in report.errors), report.errors)
+
+    def test_three_and_four_tap_combinations_match_the_plain_sum(self):
+        cols = [[1, 2], [3, 4], [5, 6], [7, 8]]
+        self.assertEqual(bake._combine(cols[:3], [1, 2, 3]), [1 + 6 + 15, 2 + 8 + 18])
+        self.assertEqual(bake._combine(cols, [1, 1, 1, 1]), [16, 20])
+
     def test_self_test_passes(self):
         self.assertEqual(bake.self_test(), [])
 

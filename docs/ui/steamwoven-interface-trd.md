@@ -321,7 +321,7 @@ Part kinds:
   installation), like the HD pack; it is not shipped with the game. Reopening this needs a new owner decision.
 - **SWI-PRV-3** Composites for the owner are posted in the thread and never committed (owner rule 2026-11-11).
 - **SWI-PRV-4** Storage of the baked sets (ARC-DEV-2460): `local/steamwoven-ui/baked/<step>/` of the main checkout, written only by `bake.py`; not committed, not packaged and
-  not backed up (reproducible from the masters, which are backed up per the [HD pack workflow](../workflow/hd-pack.md); see the [toolchain section](../workflow/toolchain.md#steamwoven-kit-bake-arc-dev-2460)).
+  not backed up (reproducible from the masters, whose backup convention is in the [toolchain section](../workflow/toolchain.md#steamwoven-kit-bake-arc-dev-2460)).
 
 ## Verification
 

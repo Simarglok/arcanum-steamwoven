@@ -13,7 +13,7 @@ The resample (standard library only, exact integer arithmetic):
     be a multiple of b, which the 6 px grid guarantees); x1 is the master copied pixel for pixel;
   * each output pixel is the exact area average of the master pixels it covers (weights are integers, no float in the sums);
   * sRGB 8 bit -> linear light (16 bit table) -> premultiplied by alpha, averaged, un-premultiplied, -> sRGB 8 bit: no dark fringe, no colour
-    bleeding out of transparent pixels; a pixel that ends fully transparent has colour 0 so its bytes do not depend on hidden colour.
+    bleeding out of transparent pixels; a pixel that ends fully transparent has colour 0 so its bytes do not depend on hidden colour (x1 is the exception: it is the master copied unchanged).
 Same masters give the same bytes (the PNG writer is canonical; the manifest also holds a hash of the raw pixels, which does not depend on zlib).
 """
 from __future__ import annotations
@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -198,12 +199,30 @@ def set_dir(out: Path, step: str) -> Path:
     return out / step
 
 
+ID_PATTERN = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$")  # no `..`, no leading dot or slash, no backslash
+
+
+def valid_id(part_id: object) -> bool:
+    return isinstance(part_id, str) and ID_PATTERN.match(part_id) is not None and ".." not in part_id
+
+
+def _valid_part(part: object) -> bool:
+    try:
+        return (valid_id(part["id"]) and len(part["master"]["size"]) == 2 and isinstance(part["master"]["sha256"], str) and len(part["size"]) == 2
+                and isinstance(part["bytes"], int) and isinstance(part["sha256"], str) and isinstance(part["pixels_sha256"], str))
+    except (KeyError, TypeError):
+        return False
+
+
 def read_manifest(directory: Path) -> dict | None:
+    """The set manifest, or None when it is missing or not a well-formed manifest of this tool (ids are checked: they become paths)."""
     try:
         data = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) and data.get("schema") == MANIFEST_SCHEMA else None
+    if not (isinstance(data, dict) and data.get("schema") == MANIFEST_SCHEMA and isinstance(data.get("parts"), list)):
+        return None
+    return data if all(_valid_part(part) for part in data["parts"]) else None
 
 
 def _write_atomic(path: Path, data: bytes) -> None:
@@ -229,19 +248,24 @@ def manifest_bytes(step: str, parts: list[dict]) -> bytes:
 
 
 def bake_set(masters: dict[str, Path], everything: set[str], out: Path, step: str, prune: bool, dry_run: bool, kit: dict | None, report: Report) -> None:
-    """Bake one step. A part whose master hash, ratio and bake version are unchanged and whose file is intact is reused, not rebaked."""
+    """Bake one step. A part whose master hash and bake version are unchanged and whose file is intact is reused, not rebaked."""
     directory = set_dir(out, step)
     previous = read_manifest(directory) if directory.is_dir() else None
-    old_parts = {p["id"]: p for p in previous["parts"]} if previous and previous.get("bake_version") == BAKE_VERSION else {}
+    if previous is None and directory.is_dir() and any(not p.name.endswith(".tmp") for p in directory.iterdir()):
+        report.errors.append(f"{step}: {directory} holds files but no valid manifest.json; not touching it (move or fix it)")
+        return
     all_old = {p["id"]: p for p in previous["parts"]} if previous else {}
     parts: list[dict] = []
     for part_id, path in sorted(masters.items()):
         try:
             master_bytes = path.read_bytes()
             master_hash = sha256(master_bytes)
-            old = old_parts.get(part_id)
+            old = all_old.get(part_id)
             target = directory / f"{part_id}.png"
-            if old and old["master"]["sha256"] == master_hash and target.is_file() and sha256(target.read_bytes()) == old["sha256"]:
+            if (old and old.get("bake_version") == BAKE_VERSION and old["master"]["sha256"] == master_hash and target.is_file()
+                    and sha256(target.read_bytes()) == old["sha256"]):
+                if not check_against_kit(part_id, tuple(old["master"]["size"]), kit, report):
+                    continue
                 parts.append(old)
                 report.lines.append(f"{step} {part_id}: unchanged")
                 continue
@@ -259,12 +283,13 @@ def bake_set(masters: dict[str, Path], everything: set[str], out: Path, step: st
             baked = resample(image, step)
             data = pngio.encode(baked)
             _write_atomic(target, data)
-            parts.append({"id": part_id, "master": {"size": [image.w, image.h], "sha256": master_hash}, "size": [baked.w, baked.h],
-                          "bytes": len(data), "sha256": sha256(data), "pixels_sha256": sha256(bytes(baked.data))})
+            parts.append({"id": part_id, "bake_version": BAKE_VERSION, "master": {"size": [image.w, image.h], "sha256": master_hash},
+                          "size": [baked.w, baked.h], "bytes": len(data), "sha256": sha256(data), "pixels_sha256": sha256(bytes(baked.data))})
             report.lines.append(f"{step} {part_id}: {image.w} x {image.h} -> {baked.w} x {baked.h}")
         except (pngio.PngError, ValueError, OSError) as exc:
             report.errors.append(f"{step} {part_id}: {exc}")
     if dry_run:
+        report.ok.append(step)
         return
     have = {p["id"] for p in parts}
     for part_id, old in all_old.items():  # a part not baked this time (filtered out or failed) keeps its record so the manifest stays true to the files
@@ -283,19 +308,22 @@ def bake_set(masters: dict[str, Path], everything: set[str], out: Path, step: st
 
 
 class Lock:
-    """`<out>/.bake.lock` holds the pid; a lock of a dead process is taken over, one of a live process means wait."""
+    """`<out>/.bake.lock` holds the pid; a lock of a dead process is taken over, one of a live process means wait. A single-owner tool: two
+    processes that both find the same dead lock at the same instant are not guarded against (as in the HD pack lock)."""
 
     def __init__(self, out: Path) -> None:
         self.path = out / LOCK_NAME
 
     def __enter__(self) -> "Lock":
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(2):
+        for _ in range(3):
             try:
                 handle = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
                 try:
                     pid = int(self.path.read_text().strip() or "0")
+                    if pid <= 0:  # empty (a crash between create and write) or nonsense: os.kill(0 or -1, 0) would signal a group
+                        raise ValueError(pid)
                     os.kill(pid, 0)
                 except (ValueError, ProcessLookupError):
                     self.path.unlink(missing_ok=True)
@@ -315,8 +343,14 @@ class Lock:
 def bake(masters_dir: Path, out: Path, steps: list[str], only: set[str] | None = None, prune: bool = False, dry_run: bool = False,
          use_kit: bool = True) -> Report:
     report = Report()
+    if not steps:
+        report.errors.append("no steps selected")
+        return report
     everything = set(find_masters(masters_dir))
     masters = find_masters(masters_dir, only)
+    for part_id in sorted(p for p in masters if not valid_id(p)):
+        report.errors.append(f"{part_id}: not a valid part id (letters, digits, `_`, `-`, `.`, `/` between folders; no `..`)")
+        del masters[part_id]
     if not masters:
         report.errors.append(f"no masters found under {masters_dir}")
         return report
@@ -344,7 +378,7 @@ def verify(masters_dir: Path, out: Path, steps: list[str]) -> Report:
         directory = set_dir(out, step)
         manifest = read_manifest(directory)
         if manifest is None:
-            report.errors.append(f"{step}: no manifest in {directory}")
+            report.errors.append(f"{step}: no valid manifest in {directory}")
             continue
         a, b = STEPS[step]
         if manifest.get("step") != step or manifest.get("ratio") != [a, b]:
@@ -352,6 +386,10 @@ def verify(masters_dir: Path, out: Path, steps: list[str]) -> Report:
         expected_set = sha256(json.dumps(manifest["parts"], sort_keys=True, separators=(",", ":")).encode())
         if manifest.get("set_sha256") != expected_set:
             report.errors.append(f"{step}: set_sha256 does not match the part list")
+        listed = {f"{part['id']}.png" for part in manifest["parts"]}
+        for orphan in sorted(p.relative_to(directory).as_posix() for p in directory.rglob("*.png")):
+            if orphan not in listed:
+                report.warnings.append(f"{step}: {orphan} is not in the manifest")
         for part in manifest["parts"]:
             name = f"{step} {part['id']}"
             path = directory / f"{part['id']}.png"

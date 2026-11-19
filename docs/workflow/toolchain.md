@@ -1210,14 +1210,14 @@ checkout, never git.
   `<step>/manifest.json` (per part: master size and SHA-256, baked size, bytes, file SHA-256 and a SHA-256 of the raw pixels; plus a hash of the part list).
   `baked/` is derived and fully reproducible from `masters/`, so it is **not backed up**: a changed master is rebaked, a part whose
   master hash is unchanged is reused (`unchanged` in the log), and `--prune` removes only baked files this tool wrote whose master is gone.
-- **Backup** follows the [HD pack workflow](hd-pack.md) (kit decision SWI-PRV-1): the masters (and the prompt library's provenance records beside them) are the work that nothing
+- **Backup** (a convention set by this page; no tool does it, the owner or an agent copies by hand; same spirit as the [HD pack](hd-pack.md) rules, kit decision SWI-PRV-1): the masters (and the prompt library's provenance records beside them) are the work that nothing
   reproduces, so they are copied, never moved, to a folder **outside** `hd-packs/`, next to the HD backups: `~/Library/Application Support/Arcanum Steamwoven Game/steamwoven-ui-backups/<date>/`.
   After a copy to another device, rebake there and compare the `pixels_sha256` values of the manifests (they do not depend on the zlib build; the file hashes do).
 - **Install:** the tool writes nothing outside `local/steamwoven-ui/baked/`. The runtime reads the sets in place (viewer of the owner's checkout); where a packaged game on a
   player's own device keeps them is for the runtime slice [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461), because the kit is never shipped or committed (SWI-PRV-2).
 - **Exactness:** a master side must be a multiple of 6 px (so of 2 and 3); every baked length is the master length times the step, exactly; x1 is the master copied pixel for pixel; each
   other pixel is the exact area average of the master pixels it covers in integer weights, taken in linear light (16-bit table) with premultiplied alpha, so no dark fringe and no
-  colour from transparent pixels; a fully transparent result has colour 0. Two runs give identical bytes. Speed: pure Python, under a minute for all four sets of one 2880 x 2160 master (a full-screen plate); a
+  colour from transparent pixels; a fully transparent result has colour 0 (not at x1, which is the master unchanged). Two runs give identical bytes. Speed: pure Python, under a minute for all four sets of one 2880 x 2160 master (a full-screen plate); a
   second bake reuses what is unchanged.
 - **Checks** against `kit.json`: the id must be a manifest part and a master of `units` size basis must have the manifest size (`provisional` only warns; `--no-kit` skips this for scratch masters).
 
