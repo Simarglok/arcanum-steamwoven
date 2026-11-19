@@ -204,7 +204,7 @@ public sealed class AreaShopSession : IDisposable
         }
         var state = new AreaConversationState(owner, shopMap, [map.Merchant], AreaConversationProfile.Diagnostic.InitialReaction, scopes: [AreaConversationHost.Scope(row, owner)]);
         // ARC-UI-1806: the bet in this window as in the dialog's: the merchant's Gambling skill from its stored sheet and its generated lines.
-        var lines = new AreaShopLines(owner, row, state, scriptContent);
+        var lines = new AreaShopLines(owner, row, state, scriptContent, merchantName);
         var barter = new AreaBarter(owner, inventory, data, merchant, () => state.Reaction(0),
             delta => owner.AdjustReaction(owner.Version, map.Merchant, state.NpcFacts(), state.PcFactsFor(0), delta).Disposition == GameSessionDisposition.Changed, name,
             merchantGambling: () => effects is not null && AreaAdvancement.Npc(map.Merchant, map.MerchantFields, effects) is { } sheet
@@ -286,7 +286,7 @@ public sealed class AreaShopSession : IDisposable
 /// speakers): a random line of a range of the plain NPC files for the merchant, its own override line first, read from the player's generated files at each pick
 /// and never stored. Null when nothing can be said (no content, texts that did not load, a range without an entry, a refused roll); the greeting texts are loaded once.
 /// </summary>
-internal sealed class AreaShopLines(GameSessionOwner owner, AreaObjectRecord row, AreaConversationState state, Func<ScriptContent?>? scriptContent)
+internal sealed class AreaShopLines(GameSessionOwner owner, AreaObjectRecord row, AreaConversationState state, Func<ScriptContent?>? scriptContent, string merchantName)
 {
     private AreaGreetingTexts? _texts;
 
@@ -301,7 +301,7 @@ internal sealed class AreaShopLines(GameSessionOwner owner, AreaObjectRecord row
             var overrides = AreaGreeting.OverrideScript(speaker) is { } script && content.Dialog(script, owner.Rules.Data) is { Status: ScriptContentStatus.Read } read ? read.Document : null;
             var pc = owner.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc;
             var said = DialogFollowerComment.Say(new AreaGreeting(owner, speaker, state, pc, _texts, overrides), new DialogReactionQuery(AreaConversationState.Npc(0), AreaConversationState.PcParticipant),
-                range.First, range.Last, AreaConversationProfile.Diagnostic.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes, null);
+                range.First, range.Last, AreaDialogNames.For(owner, AreaConversationProfile.Diagnostic.Names, merchantName), DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes, null);
             return said.Status == DialogGenericGreetingStatus.Said ? said.Text : null;
         }
         // As the host's line pick: a courtesy of the window, not its gate; a texts, facts or session failure says nothing (typed failure at the boundary).

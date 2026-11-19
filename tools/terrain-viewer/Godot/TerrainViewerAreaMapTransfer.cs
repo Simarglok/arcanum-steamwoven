@@ -329,7 +329,9 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
             ObjectDestroyed: EndDestroyedObjectRuns,
             // ARC-SCRIPT-2752 (SX3): a script's use item with skill (79) starts the NPC's goal 40 in the AI host.
-            ScriptUseItemWithSkill: (npc, item, target, skill, modifier) => AreaAiHostNow()?.ScriptUseItemWithSkill(npc, item, target, skill, modifier) ?? "no AI host");
+            ScriptUseItemWithSkill: (npc, item, target, skill, modifier) => AreaAiHostNow()?.ScriptUseItemWithSkill(npc, item, target, skill, modifier) ?? "no AI host",
+            // ARC-SCRIPT-2788: a carried follower's body row comes from its template (its home sector may lie outside the shown window).
+            CarriedRow: obj => _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map)?.Template.Speaker.Row);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
@@ -344,6 +346,8 @@ public partial class TerrainViewerApp
             InsertCheck = inventory?.InsertCheck,
             // ARC-MAGIC-1823: a script's transfer item from the hero runs the item's wield-off, remove-item and insert-item scripts (the hero's give does).
             ItemScripts = inventory?.ItemScripts(owner),
+            // ARC-SCRIPT-2787: a printed or floated line's @npcname@ is the shown name of the script's attachee (the description tables, as the hover reads them).
+            NpcName = AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog),
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);

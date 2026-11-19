@@ -53,6 +53,7 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
 /// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
 /// ARC-SCRIPT-2514 (BS3c, 0x43CCA0 → 0x423FF0, 0x459740): <see cref="ObjectDestroyed"/> is told each shown-map scenery or container a script's destroy applied, right after the session recorded it, so the viewer ends the object's goal runs (its loop, eye-candy overlays and hover) and the spell runs aimed at or cast from it; without it the runs stay as before.
+/// ARC-SCRIPT-2788: <see cref="CarriedRow"/> answers the body row of a companion the party carries (named by its home map and entity) when the shown map's window and the loaded maps' rows hold none (a follower recruited from another sector of the main map), so a tile script it steps onto runs for it; without it only those rows are read.
 /// ARC-SCRIPT-2519 (TI5c, F2, 0x502880, 0x502930): <see cref="NpcFacing"/> answers the facing an NPC of the shown map stands in now (its mover's, else its map art's rotation) so the made critter of a transform takes it; without it (or for an NPC it does not know) the made critter keeps its prototype's art facing.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -68,7 +69,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
     Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
     Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null,
-    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null);
+    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null, Func<ScrObjectRef, AreaObjectRecord?>? CarriedRow = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -217,6 +218,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-SCRIPT-2789: the set an item's use script runs under (<see cref="RunItemUse"/>): <see cref="Admission"/> with the focus kinds everyone (8) and anyone (9) in the vicinity, in actions (the loop over the critters around the item, as
+    /// <see cref="PlacedAdmission"/> has it), which <see cref="CrittersNearItem"/> answers around the item's own location field. Joachim's note to Virgil (use script 1567) loops over everyone near the note and calls Virgil's script 1687 on him; without the kinds the run was refused at its
+    /// line 4 and the whole use was lost. A use click on a door or scenery keeps <see cref="Admission"/>.
+    /// </summary>
+    public static ScrAdmissionSet ItemUseAdmission { get; } = new("S4-area-item-use-vicinity", Admission.Conditions, Admission.Actions, Admission.ValueKinds,
+        Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
     /// ratio, <see cref="PowerRatio"/>), play script eye candy (120; the use host shows none) and destroy (68; of the item being used only, <see cref="ObjectStateRefusal"/>).</summary>
@@ -437,6 +446,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
+    // ARC-SCRIPT-2788: the NPC triggerer of the tile script RunPlaced runs now (the one object CarriedRow may answer for).
+    private ScrObjectRef? _placedTriggerer;
 
     /// <summary>ARC-WORLD-081: the create objects of the runs applied since the last call, in order.</summary>
     public IReadOnlyList<AreaScriptCreation> TakeCreations()
@@ -477,6 +488,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// needs; the viewer sets it once the tables are read. Without it such an action is refused (<see cref="AreaScriptStory.Apply"/>).
     /// </summary>
     public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
+
+    /// <summary>ARC-SCRIPT-2787: where an object's shown name comes from for <c>@npcname@</c> in a printed or floated line (<see cref="AreaDialogNames.NpcNameSource"/>); null: the diagnostic placeholder.</summary>
+    public Func<AreaObjectRecord, string?>? NpcName { get; set; }
 
     // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
     public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
@@ -1063,6 +1077,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
         // ARC-DEV-371: a critter created at run time is in none of the maps' rows.
         if (obj.Map == _shownMap && _world?.CreatedRow?.Invoke(obj.Code) is { } created) return created;
+        // ARC-SCRIPT-2788: a carried follower's body row (its home sector may lie outside the shown window).
+        // Only for the NPC whose tile script runs now (RunPlaced): the other row readers keep their answers for a body outside the window.
+        if (_placedTriggerer is { } stepping && stepping == obj && _world?.CarriedRow?.Invoke(obj) is { } carried) return carried;
         return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
 
@@ -1407,7 +1424,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
@@ -1429,7 +1446,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
@@ -1454,7 +1471,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var npc = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc));
+            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc), npc);
         }
         finally { _clicked = null; }
     }
@@ -1481,7 +1498,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = TakingDamageAdmission });
-            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _inTakingDamage = false; _clicked = previous; }
     }
@@ -1520,7 +1537,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             try
             {
                 var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = CombatPointAdmission });
-                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
             }
             finally { _clicked = previous; }
         }
@@ -1544,7 +1561,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1582,7 +1599,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1611,7 +1628,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _dangerRunDepth--; _clicked = previous; }
     }
@@ -1637,7 +1654,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _raiseRunDepth--; _clicked = previous; }
     }
@@ -1690,7 +1707,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = Remember(rules), Admission = BustAdmission });
-            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1716,7 +1733,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Destroy, attachee, attachee, null), this, new() { Rules = Remember(rules), Admission = DestroyPointAdmission });
-            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1898,7 +1915,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1935,7 +1952,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
             if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
             var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1961,7 +1978,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1978,6 +1995,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
         // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
         return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2789: whether the reading of a written item goes on after its use script's run (<see cref="RunItemUse"/>). The original has no refused run: its interpreter runs every script to an end (the dispatcher answers 0 "skip default" or 1 "run default", ledger IU rows) and the
+    /// reading (item use) goes on unless the answer is 0, so a script this host refuses (a command outside the set, a question it cannot answer, a script file it cannot read) is only a gap of the model, never the original's stop. A refused run applied nothing,
+    /// so the reading goes on without its effects (as a door's use and a bed's rest hook go on, <see cref="UseStops"/>, <see cref="AreaBedAnswer.NotModelled"/>); a run that applied goes on with run default and stops with skip default. Effects the host rejected
+    /// (<see cref="AreaScriptedUseOutcome.EffectsRejected"/>), a changed script file and a refused teleport leave the reading stopped as before: part of the run is known to have been wanted.
+    /// </summary>
+    public static bool ReadingGoesOn(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome == AreaScriptedUseOutcome.Refused || ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != ScrOutcome.SkipDefault;
     }
 
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
@@ -2012,8 +2041,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             if (Row(item) is null && !IsPrototypeItem(item)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = Admission });
-            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = ItemUseAdmission });
+            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item), item);
         }
         finally { _itemUse = null; _itemUser = null; }
     }
@@ -2056,8 +2085,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         // ARC-DEV-328: the original keeps one object wherever it stands (FM1), so a companion carried here runs the tile's script as any NPC does; it is named by
         // its home map, and the viewer's live cell for it (<see cref="AreaScriptWorld.CritterCell"/>) says it stands here.
-        if (triggerer is { } npc && (Row(npc) is not { Type: NpcType } || (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)))
-            return new(AreaScriptedUseOutcome.Refused, null, [], null, "the triggerer is not an NPC of the shown map");
+        _placedTriggerer = triggerer;
+        try
+        {
+        if (triggerer is { } npc)
+        {
+            var row = Row(npc);
+            // ARC-SCRIPT-2788: the refusal names the clause that failed (the row, its type, or the map the NPC stands on).
+            if (row is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} has no object row the host reads");
+            if (row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} is not an NPC (object type {row.Type})");
+            if (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)
+                return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} does not stand on the shown map {_shownMap}");
+        }
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.
         var slot = PlacedSlot(placed);
@@ -2067,6 +2106,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             : ScrDispatcher.RunSector(new(slot, Pc), this, options);
         var source = placed.Trigger == MapTransitionTrigger.TileEntry ? ScrSource.Tile : ScrSource.Sector;
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
+        }
+        finally { _placedTriggerer = null; }
     }
 
     /// <summary>
@@ -2084,7 +2125,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-WORLD-2038 (TT20): records a script's teleport of an NPC in the session's one change-of-place slot (the object moves at the next ping), after <see cref="NpcTeleportRefusedBecause"/> answered null and the run applied.</summary>
     public void RequestNpcTeleport(ScrTeleport teleport) => _world!.RequestNpcTeleport!(teleport);
 
-    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write)
+    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write, ScrObjectRef? attachee = null)
     {
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
@@ -2116,7 +2157,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Lines)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            // ARC-SCRIPT-2787 (0x44B390 → 0x416B00): @pcname@ is the triggerer (the hero) and @npcname@ the attachee of the running script.
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, attachee is { } at ? Row(at) : null)));
             if (printed.Status != ScrPrintedLineStatus.Shown) continue;
             lines.Add(printed.Text);
             printedLines.Add(new(line.Kind, printed.Text));
@@ -2127,7 +2169,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Floats)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, Row(line.Speaker) ?? (attachee is { } at2 ? Row(at2) : null))));
             if (printed.Status != ScrPrintedLineStatus.Shown) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: float line {line.Line} of script {line.Script} is not a plain line");
             floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }

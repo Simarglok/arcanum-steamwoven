@@ -171,6 +171,27 @@ public sealed class AreaUseScriptsOriginalTests
         Assert.AreEqual(SessionQuestState.Accepted, session.QueryQuest(1103)!.Value.State, "the PC does not hold item 2021");
     }
 
+    // ARC-SCRIPT-2789: Joachim's note to Virgil (use script 1567) loops over everyone near the note and calls Virgil's script on him; the run was refused at its line 4 (the vicinity focus kind) and the whole reading was lost.
+    // With nobody near, the loop is empty and the script runs to its run-default end, with its flag and rumor in the session. The item row is synthetic.
+    [TestMethod, TestCategory("RealData")]
+    public void The_use_script_of_joachims_note_with_its_loop_over_the_vicinity_lets_the_reading_go_on()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        using var session = ConversationSessionFixture.Create();
+        var key = new AreaObjectKey(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 1, 100L, new string('b', 64), 100);
+        var row = new AreaObjectRecord(key, 0, 13, 0, "p", "p", "r", "s", AreaScope.Core, null, 11, 20,
+            Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null,
+                [new AreaSparseElement(1, [0, 0, 1567])], null)], true, true, true);
+        var note = "oid:" + key.ObjectIdSha256;
+        var items = new AreaInventoryMap(1, new([], [new(note, new(new(SessionItemType.Written, 14086, 0, 0), 1, 0, 0, null, [1]), new CellCoord(11, 20))]),
+            new Dictionary<string, AreaObjectRecord> { [note] = row });
+        var host = new AreaUseScriptHost(session, 1, [], [items], content);
+        var read = host.RunItemUse(1, note, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (read.Outcome, read.Run!.Outcome), read.Detail);
+        Assert.IsTrue(host.GlobalFlag(1100), "line 0 sets global flag 1100");
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void Every_guarded_use_site_and_every_tile_and_sector_script_runs_or_is_refused_by_its_set()
     {
