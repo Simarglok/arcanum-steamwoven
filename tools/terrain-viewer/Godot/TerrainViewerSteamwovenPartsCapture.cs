@@ -13,8 +13,10 @@ public partial class TerrainViewerApp
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE") is not { Length: > 0 }) return;
         var size = GetViewport().GetVisibleRect().Size;
         var (freeTop, free) = AreaGameBarPanel.FreeArea(size);
-        var layer = new AreaFloaterLayer();
-        var portraits = new AreaFollowerPortraits();
+        // ARC-UI-2940: both draw in the original's text font only, so the capture gives them the game's font (a synthetic one without a game folder).
+        var font = TextFonts()?.Text ?? AreaArtFontFace.SyntheticForSelfTest();
+        var layer = new AreaFloaterLayer(font);
+        var portraits = new AreaFollowerPortraits { MenuFont = font };
         var overlay = new CanvasLayer { Layer = 20 };
         var outline = new ReferenceRect { BorderColor = new Color(0.1f, 1f, 0.1f), BorderWidth = 3, EditorOnly = false, Position = new Vector2((size.X - free.X) / 2, freeTop), Size = free };
         var marker = new ColorRect { Color = Colors.Red, Size = new Vector2(8, 8), Position = new Vector2(size.X / 2 - 4, size.Y / 2 - 4) };

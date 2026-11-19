@@ -80,10 +80,13 @@ public partial class AreaFollowerPortraits : CanvasLayer
             _menuFont = value;
             // ARC-UI-2940: the initials are drawn in this font too.
             foreach (var entry in _entries.Values) entry.Initials.Face = value;
+            _chromeWords.RemoveAll(word => !IsInstanceValid(word));
+            foreach (var word in _chromeWords) word.Face = value;
         }
     }
 
     private AreaArtFontFace? _menuFont;
+    private readonly List<AreaArtLabel> _chromeWords = [];
 
     private Control _root = null!;
     private Control _menu = null!;
@@ -424,6 +427,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
             // Without the art (no game folder): a dark plate with a word.
             button.AddChild(new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
             var word = new AreaArtLabel { Text = fallback, Size = size, Align = AreaArtLabel.Alignment.Centre, Middle = true, Face = MenuFont, Colour = MenuWhite };
+            _chromeWords.Add(word);
             button.AddChild(word);
         }
         // A release with a menu open is the menu's (FP9): it closes the menu and nothing else happens.
