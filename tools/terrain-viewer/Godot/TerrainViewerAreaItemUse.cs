@@ -216,8 +216,10 @@ public partial class TerrainViewerApp
             // The magic branch's cast host already spent a used food or scroll; a use that could not run spends nothing.
             var session = app._areaSession!;
             if (Aborted || session.IsItemDestroyed(item)) return;
-            var spent = session.DestroyUsedItem(session.Version, item);
+            // ARC-SCRIPT-2881: the spend's removal runs the item's remove-item script (28) through the shown map's item script host, and the lines it printed are posted as any script's.
+            var spent = session.DestroyUsedItemWithLines(session.Version, item, app._inventoryHost?.ItemScripts(session));
             if (spent.Disposition == GameSessionDisposition.Rejected) Message = $"not spent: {spent.Failure}";
+            else app.PostScriptLines(spent.Messages);
         }
 
         public bool InRound => app.InTurnBasedRound;

@@ -363,6 +363,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
+    // ARC-SCRIPT-2881: the lines the remove-item script (28) of the item a use script destroyed printed during the apply in flight, read by the use after it.
+    private readonly List<SessionScriptMessage> _removalMessages = [];
     private readonly List<AreaScriptFade> _fades = [];
     private int _fadeClears;
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
@@ -2436,7 +2438,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
             || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
-        if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
+        _removalMessages.Clear();
+        if (!Apply(effects, write)) { _removalMessages.Clear(); return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects"); }
+        // ARC-SCRIPT-2881: the lines the used-up item's remove-item script (28) printed with the deletion follow the run's own.
+        foreach (var message in _removalMessages) { lines.Add(message.Text); printedLines.Add(new(message.Kind, message.Text)); }
+        _removalMessages.Clear();
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
@@ -2548,8 +2554,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
                     // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
-                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts).Disposition : _session.DestroyUsedItem(_session.Version, used.Code, ItemScripts).Disposition;
-                    if (removed == GameSessionDisposition.Rejected) return false;
+                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts) : _session.DestroyUsedItemWithLines(_session.Version, used.Code, ItemScripts);
+                    if (removed.Disposition == GameSessionDisposition.Rejected) return false;
+                    _removalMessages.AddRange(removed.Messages);
                     continue;
                 }
                 // ARC-SCRIPT-2501 (BS3): a scenery of the shown map; ARC-WORLD-2502: a container of it (its destroy point first, then the destroy with the drop of its invulnerable items).
