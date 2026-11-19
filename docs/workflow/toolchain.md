@@ -698,6 +698,12 @@ library only). It lists the steps of [the owner re-check list](owner-checks.md) 
   player's, is unchanged. The game appends its results to the same `results.jsonl` in the same format plus `build` (the build's
   commit) and `src: game`; the running page creates the issue of a new `differs` every 20 s (a failed attempt waits for `qa sync`),
   and `qa sync` does it on demand, once per step either way. See the [viewer](../rendering/terrain-viewer.md#owner-checks-overlay-arc-dev-2190).
+- **Answered checks (ARC-DEV-2768).** A step is answered when its status is not `open` (a mark, or the list's own), or a report folder is
+  recorded in its result (the overlay's Send, or a Ctrl+B report tagged with the step, which the game records in `results.jsonl` with the
+  status the step shows), or a report whose `Check:` line names it is in the reports folder (a report sent while no QA folder was found).
+  The page lists the answered steps in a collapsed "Answered (n)" group at the end, each with the day of the mark or report; the
+  progress bars and the open count count them as checked. **Reopen** (button or `o`) appends an `open` result with `"reopen":true`,
+  no report and the note kept: the step is listed again, and reports older than that event no longer answer it. `POST /api/reopen`.
 - **Later.** The write-back of statuses to the list works from the same results file.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_qa` (synthetic list, fake `gh`, a real localhost socket); the page itself is
