@@ -162,4 +162,36 @@ public sealed class NpcDropWieldScriptTests
         Assert.AreEqual(SessionCriticalStepOutcome.Refused, Drop(owner));
         Assert.IsTrue(InList(owner));
     }
+
+    [TestMethod]
+    public void AHostSinkThatThrowsLeavesTheDropWhole()
+    {
+        using var owner = Owner(SessionScriptPoint.WieldOff);
+        var host = Context(owner, out var context);
+        host.Programs[WieldOffScript] = PrintAndRun;
+        owner.NpcWearerScripts = _ => context;
+        owner.ItemRunOutput = (_, _) => throw new InvalidOperationException("a host refusal");
+        Assert.AreEqual(SessionCriticalStepOutcome.Dropped, Drop(owner));
+        Assert.IsFalse(InList(owner));
+        Assert.AreEqual(DangerFlags.LookForWeapon, owner.QueryDanger(Golem).Flags & DangerFlags.LookForWeapon);
+    }
+
+    [TestMethod]
+    public void ARunThatChangesNothingTakesNoRevisionOfItsOwn()
+    {
+        using var printing = Owner(SessionScriptPoint.WieldOff);
+        var host = Context(printing, out var context);
+        host.Programs[WieldOffScript] = PrintAndRun;
+        printing.NpcWearerScripts = _ => context;
+        var before = printing.Version.Revision;
+        Assert.AreEqual(SessionCriticalStepOutcome.Dropped, Drop(printing));
+        var printed = printing.Version.Revision - before;
+        using var writing = Owner(SessionScriptPoint.WieldOff);
+        var other = Context(writing, out var writeContext);
+        other.Programs[WieldOffScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        writing.NpcWearerScripts = _ => writeContext;
+        before = writing.Version.Revision;
+        Assert.AreEqual(SessionCriticalStepOutcome.Dropped, Drop(writing));
+        Assert.AreEqual(printed + 1, writing.Version.Revision - before, "a run that writes takes one more revision");
+    }
 }

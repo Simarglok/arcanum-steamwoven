@@ -270,7 +270,6 @@ public sealed partial class GameSessionOwner
                 var changes = runs.Changes;
                 runs.Commit();
                 if (changes) Revise();
-                ItemRunOutput?.Invoke(runs.Messages, runs.EyeCandies);
             }
             // ARC-WORLD-103: a dropped item a dressed NPC wore is worn no more.
             _inventory.Unwear(item.Entity);
@@ -281,6 +280,12 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-063: the placement may put it into a junk pile; ARC-WORLD-062: the dropped item decays (ledger ID4).
             SettleDrop(item.Entity, _actor.Map, landed);
             ScheduleDecay(item.Entity, _actor.Map);
+            // The runs' lines and eye candy go to the host last, so a host that throws leaves the drop whole.
+            if (runs is not null)
+            {
+                try { ItemRunOutput?.Invoke(runs.Messages, runs.EyeCandies); }
+                catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { }
+            }
         }
         steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, landed));
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
@@ -317,6 +322,8 @@ public sealed partial class GameSessionOwner
         try { scripts = NpcWearerScripts?.Invoke(npc); }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { scripts = null; }
         if (scripts is null) return (null, GameSessionFailure.None, true);
+        // The drop's own write and the runs' commit take a revision each, after the one the drop checked.
+        if (_revision >= long.MaxValue - 2) return (null, GameSessionFailure.RevisionExhausted, false);
         var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
         var runs = new ItemScriptRuns(this, scripts.Host, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity },
             new NpcWearer(npc, scripts.Target, NpcStatsOverSheet(npc, scripts.Stored))) { NpcTriggerer = true };
