@@ -51,12 +51,12 @@ public sealed class DialogFinalLineCensusRealDataTests
         foreach (var shape in shapes) Console.WriteLine($"FL-CENSUS-PLAYER-SHAPE|{shape}");
         var missingRows = rows.Where(row => row.Contains("|missing|", StringComparison.Ordinal)).ToList();
         Assert.AreEqual(24, missingRows.Count, "replies whose final line node is absent from the DLG (offered now, blank line)");
-        Assert.AreEqual(14, rows.Count - missingRows.Count, "replies whose final line node is a Player record (offered since ARC-SCRIPT-2804 unless the record's own action holds a dialog transfer)");
+        Assert.AreEqual(14, rows.Count - missingRows.Count, "replies whose final line node is a Player record (planned as the final line since ARC-SCRIPT-2804 unless the record's own action holds a dialog transfer)");
         // The Player record's own action runs as an NPC line's does: a dialog transfer inside it (a nested fl or jo) is outside the subset (Stringy Pete's record 256 holds an fl, Vollinger's record 246 a jo).
         var nested = shapes.Where(shape => Regex.IsMatch(shape.Split("|codes [")[1], @"(^|[ \[])(fl|jo|uw|et)([ \]])")).Select(shape => shape.Split('|')[0]).Distinct().Order().ToArray();
         CollectionAssert.AreEqual(new[] { "01110stringy_pete.dlg", "01650vollinger.dlg" }, nested, "the Player records whose own action holds a dialog transfer");
         Assert.AreEqual(14, shapes.Count);
-        Assert.AreEqual(4, shapes.Count(shape => Regex.IsMatch(shape.Split("|codes [")[1], @"(^|[ \[])(fl|jo|uw|et)([ \]])")), "refused replies; the other 10 are offered");
+        Assert.AreEqual(4, shapes.Count(shape => Regex.IsMatch(shape.Split("|codes [")[1], @"(^|[ \[])(fl|jo|uw|et)([ \]])")), "refused replies; the other 10 hold no nested transfer");
         Assert.IsTrue(rows.Contains("02792fahrkus.dlg|reply 42|fl 179|missing|has co True"), "the owner's report 2026-11-19_08-20-50: Fahrkus' kill reply");
     }
 

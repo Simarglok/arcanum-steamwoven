@@ -517,7 +517,7 @@ public sealed class DialogConversationTests
             ("IN 801", DialogOptionBlockKind.UnsupportedOperation),
             ("IN 0", DialogOptionBlockKind.UnsupportedOperation),
             ("JO 2 30", DialogOptionBlockKind.UnsupportedOperation),
-            ("FL 11", DialogOptionBlockKind.TargetInvalid), // the Player record itself: its own action "FL 11" is a transfer, which an NPC line does not run (#2804)
+            ("FL 11", DialogOptionBlockKind.TargetUnsupported), // the Player record itself: its own action "FL 11" is a transfer, which an NPC line does not run (#2804)
             ("MM -1", DialogOptionBlockKind.InvalidOperation),
             ("FL 0", DialogOptionBlockKind.InvalidOperation),
             ("JO 0,30", DialogOptionBlockKind.UnsupportedOperation),

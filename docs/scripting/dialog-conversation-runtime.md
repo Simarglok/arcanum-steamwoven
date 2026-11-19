@@ -90,7 +90,7 @@ Source references are the function addresses listed under [Provenance](#provenan
    `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`; an `FL` node absent from the DLG shows a blank line and ends the same way ([FLM1](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)); an `FL` node that is a Player record is used the same way (its text is the line, its action runs; [FLM2](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)).
    SCR continuation is reported, never executed.
 
-Text: NPC lines use the record text for a male PC and the alternate field for a female PC.
+Text: NPC lines use the record text for a male PC and the alternate field for a female PC (a Player record used as a final line has no female text, so its own text is shown for either PC, FLM2).
 `@pcname@`/`@npcname@` (ASCII case-insensitive) take host-supplied names; any other token is a
 frontier and an unterminated `@` is a failure. Code page is explicit
 (`DialogTextEncoding.Windows1252`, data-observed for the selected English installation:
