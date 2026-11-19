@@ -117,6 +117,13 @@ public partial class TerrainViewerApp
                 if (!_ownerQa.AdvanceToNextOpen(out var problem)) _ownerQaPanel!.ShowNotice("No other step is open.");
                 else if (_ownerQa.CurrentId != before) AfterOwnerQaStepChange(problem);
             };
+            _ownerQaPanel.ReopenRequested += () =>
+            {
+                var id = _ownerQa!.CurrentId;
+                var problem = _ownerQa.Reopen(DateTime.UtcNow);
+                GD.Print($"ARC-DEV-2768 owner checks reopen step={id ?? "none"} problem={problem ?? "none"}");
+                _ownerQaPanel!.Refresh(problem is null ? $"{id}: reopened (answer and report mark cleared)" : "Not written: " + problem);
+            };
             _ownerQaPanel.StepChosen += id => { if (id != _ownerQa!.CurrentId) AfterOwnerQaStepChange(_ownerQa.SetCurrent(id)); };
             _ownerQaPanel.FilterChanged += () => _ownerQaPanel!.Refresh(null);
             _ownerQaPanel.SendRequested += SendOwnerQaReport;
@@ -263,7 +270,11 @@ public partial class TerrainViewerApp
             await Shot("overlay");
             // A step picked in the list becomes current: Ctrl+B and the page follow active-check.txt.
             panel.PressForSelfTest("all");
-            Require(panel.RowCountForSelfTest == 3, "the All filter lists every step: " + panel.RowCountForSelfTest);
+            Require(panel.RowCountForSelfTest == 2, "the All filter lists the unanswered steps (the third is `same` in the list, so it sits in the collapsed group): " + panel.RowCountForSelfTest);
+            panel.PressForSelfTest("answered");
+            Require(panel.RowCountForSelfTest == 3, "the answered group lists the third step: " + panel.RowCountForSelfTest);
+            panel.PressForSelfTest("answered");
+            Require(panel.RowCountForSelfTest == 2, "the answered group collapses: " + panel.RowCountForSelfTest);
             AfterOwnerQaStepChange(_ownerQa.SetCurrent("ARC-DEV-9001#2"));
             Require(System.IO.File.ReadAllText(System.IO.Path.Combine(folder, BugReportCheck.FileName)).Trim() == "ARC-DEV-9001#2", "the current step is written to active-check.txt");
             Require(_ownerQaPlate.TextForSelfTest.Contains("ARC-DEV-9001#2", StringComparison.Ordinal), "the plate follows the current step");
@@ -292,6 +303,14 @@ public partial class TerrainViewerApp
             Require(_ownerQa.ResultOf("ARC-DEV-9001#2")?.Status == "differs", "the latest event of a step wins");
             panel.PressForSelfTest("open");
             Require(panel.RowCountForSelfTest == 1, "the Open filter hides the marked steps (only the current one stays first): " + panel.RowCountForSelfTest);
+            // ARC-DEV-2768: the answered steps are a collapsed group at the end; the Answered button expands it and Reopen clears the answer.
+            panel.PressForSelfTest("answered");
+            Require(panel.RowCountForSelfTest == 3 && panel.RowTextForSelfTest(1).Contains("[differs 20", StringComparison.Ordinal), "the answered group lists the answered steps with their day: " + panel.RowCountForSelfTest + " " + panel.RowTextForSelfTest(1));
+            panel.PressForSelfTest("answered");
+            Require(panel.RowCountForSelfTest == 1, "the answered group collapses again: " + panel.RowCountForSelfTest);
+            panel.PressForSelfTest("reopen");
+            Require(!_ownerQa.IsAnswered(_ownerQa.Current!) && ResultLines().Last().Contains("\"status\":\"open\"", StringComparison.Ordinal) && ResultLines().Last().Contains("\"report\":null", StringComparison.Ordinal), "Reopen writes an open result without a report: " + ResultLines().Last());
+            panel.PressForSelfTest("same");
             // Escape closes; the plate stays, hides on Ctrl+Shift+Q and shows again.
             Press(Key.Escape);
             await Frames(1);

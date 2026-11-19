@@ -2150,6 +2150,11 @@ A PROJECT window (the original has no such window; no original art; all text Eng
   record are taken at Send, not at opening (ARC-DEV-2236: an overlay opened and closed leaves the session alone). Send writes the same
   report folder (the same writer and places) tagged with the step (`Check:` line, ARC-DEV-2189); the folder name is recorded in the
   step's result (status kept, `open` when none). One send per opening; the note is the player's text.
+- **Answered group (ARC-DEV-2768).** A step with a status other than open or with a report folder recorded is answered (a Ctrl+B report
+  tagged with the step is recorded in `results.jsonl` too, status kept). Answered steps leave the list and sit in a collapsed group at its
+  end (button `Answered (n)` expands it; rows show `[same 2026-11-18]`, `[answered ...]` for a report only). A new overlay starts on the
+  first unanswered step even when `active-check.txt` still names an answered one; Next open skips answered steps. **Reopen** appends an
+  `open` result with no report (the note stays). The smoke `report` stage checks the group and Reopen.
 - **Plate.** While a step is current a read-only plate at the top left (`Check ARC-TYPE-NNN#k: step`) stays on screen; it takes no click and
   no key and draws no original art.
 - **Smoke.** Stage `report` also runs the overlay (marker `ARC-DEV-2190 native-smoke owner-qa PASS`, required beside the report's own):
