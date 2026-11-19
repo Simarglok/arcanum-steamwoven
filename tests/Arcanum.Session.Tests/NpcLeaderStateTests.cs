@@ -173,7 +173,7 @@ public sealed class NpcLeaderStateTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var damaged = GameSessionSnapshotCodec.TryDecode(current.Replace("\"schemaVersion\":105,", "\"schemaVersion\":101,"));
+        var damaged = GameSessionSnapshotCodec.TryDecode(current.Replace("\"schemaVersion\":106,", "\"schemaVersion\":101,"));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.party.npcLed"), (damaged.Failure, damaged.Path));
     }
 
