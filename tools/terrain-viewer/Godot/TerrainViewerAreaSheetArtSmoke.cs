@@ -24,6 +24,9 @@ public partial class TerrainViewerApp
             if (verifyHd)
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                // ARC-DEV-2923: the later pixel observers of the Crash Site smoke compare Legacy source pixels; an HD world profile (the relit look)
+                // would stop them with AREA_SOURCE_PIXEL_MISMATCH after minutes, so it is refused here at the start.
+                Require(_canvas!.VisualProfile == VisualProfile.Legacy, "HD verification runs with the Legacy world profile (drop ARC_VISUAL_PROFILE=hd): the Crash Site smoke's pixel observers compare Legacy pixels");
                 _gameSettings = _gameSettings with { HdInterface = true };
                 SyncInterfaceHd();
                 Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
