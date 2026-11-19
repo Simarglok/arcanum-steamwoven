@@ -354,7 +354,7 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 **Not ready (the original's behaviour, PI1–PI6).**
 
 - Junk piles (PI3): since ARC-WORLD-063 a placed item goes through the drop's placement ([junk piles](#junk-piles-arc-world-063)).
-- The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off and remove-item scripts (a critter's critical drop runs the drop script, below, and an NPC's worn item's wield-off (25) and remove-item (28) scripts, ARC-SCRIPT-2856),
+- The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off and remove-item scripts (a critter's critical drop runs the drop script, below, and an NPC's or the hero's worn item's wield-off (25) and remove-item (28) scripts, ARC-SCRIPT-2856 and ARC-SCRIPT-2886),
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
   is not dropped by a critter's critical drop unless the host's drop script runs it (`DropScript`, ARC-SCRIPT-2853: skip default refuses the drop, `Refused`; a script the host cannot apply or no host, `ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); with its
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
