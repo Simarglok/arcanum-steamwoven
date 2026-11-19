@@ -750,7 +750,8 @@ map's own snapshot, and the consequences stay in the session the map carries
 
 `AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
 human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
-`[PC]`/`[NPC]`, follow requests accepted. No item, party, map or AI simulation runs. The
+`[PC]`/`[NPC]` (kept for tests only: a host with a session hero prints the hero's player name, and a host with an NPC-name source the speaker's shown name, see
+[names in lines](#names-in-lines-arc-script-2787)), follow requests accepted. No item, party, map or AI simulation runs. The
 panel shows typed identifiers in its effect ledger, never raw operations.
 
 Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot right before each conversation starts and
@@ -973,3 +974,11 @@ diagnostic profile are project policy. Unknown: original parser edge cases, the
 prefix markers' phrases, all other operations, reaction/alignment modifiers, item transfer outcomes,
 follower rules and the SCR continuation after the dialog.
 
+## Names in lines (ARC-SCRIPT-2787)
+
+`@pcname@` is the session hero's player name (the original's string field 0x10E, the bytes up to the first zero decoded as the game's texts are; an unset name prints
+empty) and `@npcname@` the speaker's shown name taken as a recognized NPC (the speaker is its own observer in 0x416B00, ledger
+[NM1–NM5](../research/ledger/social.md#names-in-dialog-lines-arc-script-2787)), through `AreaDialogNames`. `AreaConversationHost.NamesFor(speaker)` builds the pair for the
+conversation, the generic greeting and the follower, class and race lines; `AreaConversationHost.NpcName` (the viewer wires `AreaDialogNames.NpcNameSource` over the loaded description tables) and the
+host's script host give the same names to a floated line. A session without a hero keeps the profile's placeholder names, and a host without an NPC-name source keeps `[NPC]` (tests). The shop merchant's bet lines use the
+shop's merchant name. The use host's printed and floated lines take the attachee of the run for `@npcname@`; an NPC triggerer's name and an item attachee's name are not read yet.

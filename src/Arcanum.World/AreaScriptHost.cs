@@ -451,6 +451,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <summary>ARC-SCRIPT-1165 (E5-c): the effect rule of a blessing or curse number, which a dialog script's add blessing (25) or add curse (27) needs; see <see cref="AreaUseScriptHost.BlessingEffects"/>.</summary>
     public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
 
+    /// <summary>ARC-SCRIPT-2787: where a speaker's shown name comes from for <c>@npcname@</c> in a floated line (<see cref="AreaDialogNames.NpcNameSource"/>); null: the profile's placeholder.</summary>
+    public Func<AreaObjectRecord, string?>? NpcName { get; set; }
+
     // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
     public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
     public int GlobalQuestState(int quest) => AreaScriptStoryQueries.GlobalQuestState(_session, quest);
@@ -546,7 +549,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var line in effects.Floats)
         {
             if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male, _profile.Names);
+            var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male,
+                AreaDialogNames.For(_session, _profile.Names, Speaker(line.Speaker) is { } floating ? AreaDialogNames.NpcName(NpcName, floating.Row) : null));
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
             floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
