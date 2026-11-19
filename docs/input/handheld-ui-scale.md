@@ -23,7 +23,7 @@ glyph, the viewer's own "text height"; capital height = ink rows of "H", shown f
 | Font (art) | Windows | Size | Line | Capital |
 | --- | --- | ---: | ---: | ---: |
 | Flare12 (229) | options, save and load list, character sheet, message window, hover names, floaters, dialog box, schematic | 12 | 15 | 9 |
-| Garmond9 (483) | character sheet skills and tech pages | **9** | 10 | 7 |
+| Garmond9 (483) | character sheet skills and tech pages (loaded there, but a read of the viewer on 2026-11-19 finds no draw site: [Steamwoven fonts](../ui/steamwoven-interface-fonts.md)) | **9** | 10 | 7 |
 | every other font a window draws | all the rest | 12 to 32 | 16 to 38 | 11 to 23 |
 
 The only original-font text under the 12 px recommendation is Garmond9 on the character sheet's skills and tech pages, which sits exactly on the 9 px minimum.

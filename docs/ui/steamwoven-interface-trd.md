@@ -90,7 +90,8 @@ Why every aspect: in the Steam Hardware Survey of October 2026 (primary display,
   of 2026-11-07 ([decisions](../architecture/decisions.md), "Out-of-sight rules and the view": Steamwoven tests the
   drawn view); how wide the drawn world may be on an ultrawide window is an [open question](#open-questions).
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
-  ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)).
+  ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)): the original's fonts (HD frames in HD), sizes per step in the
+  [font note](steamwoven-interface-fonts.md).
 - **SWI-LAY-16** The follower group moves as one: the portraits, the scroll arrows and the show/hide button (FP1: the button 67 × 13 units at (0, 428), the arrows at (0, 415) and (33, 415), the portraits at x 11, y 50 + 62 per slot) keep their original heights at the composition's scale `s`
   and stand at the **window's** left edge, over the world, instead of the composition's. The button stands on a small brass backing of its own (a kit part of the strips batch). At 4:3 the group is identical to the original ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925)).
 
