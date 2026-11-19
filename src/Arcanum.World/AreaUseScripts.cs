@@ -1564,7 +1564,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public AreaScriptedUse RunCombatPoint(int point, ScrObjectRef attachee, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
-        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
+        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss or ScrPoint.Drop)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
         var previousItem = _itemUse;
         // An item the host was not given a map of is read by identity, as an item's use is; every other object is a row of a loaded map.
         _itemUse = attachee;
@@ -1583,6 +1583,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         }
         finally { _itemUse = previousItem; }
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2853 (exe read, ledger PI1, VP6; 0x461AB0 → 0x441980, TQ19): the drop script (point 5) of the item <paramref name="item"/> that the holder <paramref name="holder"/> (the triggerer; the PC's handle for the hero) is about to drop,
+    /// run before the no-drop check; no extra object. It uses the same executor and set as <see cref="RunCombatPoint"/> (an item row of the shown map, or a carried item read by identity). Read the answer with <see cref="ItemDropRefuses"/>.
+    /// </summary>
+    public AreaScriptedUse RunItemDrop(ScrObjectRef item, ScrObjectRef holder, ScrRuleProfile rules) => RunCombatPoint(ScrPoint.Drop, item, holder, null, rules);
+
+    /// <summary>ARC-SCRIPT-2853: whether an item drop run (<see cref="RunItemDrop"/>) refuses the drop: the dispatcher's "skip default" (0 of 0x441980, which a script that runs past its last line ends in too), as for <see cref="TakingDamageVetoes"/>. An item with no script at the point answers run default.</summary>
+    public static bool ItemDropRefuses(AreaScriptedUse ran) => TakingDamageVetoes(ran);
+
+    /// <summary>ARC-SCRIPT-2853: whether the host applied an item drop run, or found no script to run (<see cref="AreaScriptedUseOutcome.NoTeleport"/>); a refused or unapplicable run is not modelled and the drop stays unapplied.</summary>
+    public static bool ItemDropModelled(AreaScriptedUse ran) => ran.Outcome is AreaScriptedUseOutcome.NoTeleport;
 
     /// <summary>The object type of an armour piece (armour, shields, helmets, gauntlets, boots, rings and medallions), which the damage apply's armour loop asks (0x4B47F8: type 7).</summary>
     private const int ArmourType = 7;

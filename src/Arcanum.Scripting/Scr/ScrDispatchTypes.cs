@@ -35,7 +35,9 @@ public static class ScrPoint
         // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
         CritterHits = 26, CriticalHit = 34,
         // ARC-COMBAT-1719: the weapon's critical-miss point (35), run after the miss point (8) at the range end of a critical shot (0x4B2870).
-        CriticalMiss = 35;
+        CriticalMiss = 35,
+        // ARC-SCRIPT-2853: the item's drop point (5), run by the drop 0x461AB0 with the holder as the triggerer.
+        Drop = 5;
 }
 
 /// <summary>

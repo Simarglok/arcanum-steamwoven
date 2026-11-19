@@ -34,14 +34,14 @@ public enum SessionCriticalStepOutcome
     Kept,
     /// <summary>The slot is empty, or an earlier step of this attack deleted or dropped the item.</summary>
     NoItem,
-    /// <summary>The item has the no-drop flag: the original's drop refuses it (0x466DA0).</summary>
+    /// <summary>The item has the no-drop flag: the original's drop refuses it (0x466DA0); or its drop script skipped the default (ARC-SCRIPT-2853, point 5).</summary>
     Refused,
     /// <summary>Not applied: the hero's item cannot lie on its cell (outside the drop's 24-bit packing).</summary>
     HeroCellUnfit,
     /// <summary>Not applied, NOT READY: an item the session added to an NPC (ARC-WORLD-055) lies in no map seed, so it cannot go to
     /// the ground before that store exists.</summary>
     NotSeedItem,
-    /// <summary>Not applied: the item has a drop script, which the session does not run (the original runs it and may veto).</summary>
+    /// <summary>Not applied: the item has a drop script that no host ran (<see cref="GameSessionOwner.DropScript"/> unset, or a script it cannot apply); the original runs it and it may veto. A script that skips the default is <see cref="Refused"/>.</summary>
     ScriptUnsupported,
     /// <summary>Not applied: the host passed no item data for the critter (<see cref="SessionWearSide.Worn"/> null) or no cell.</summary>
     Unknown,
@@ -230,9 +230,16 @@ public sealed partial class GameSessionOwner
         try { distance = dropMap is null ? 0 : DropPlacementRules.Distance(rolls); }
         catch (SessionDropRolls.ExhaustedException) { failure = GameSessionFailure.RandomExhausted; Skip(SessionCriticalStepOutcome.Unknown); return side; }
 
-        // The drop's refusals (PI1): the item's drop script, which the session does not run, then the no-drop flag.
+        // The drop's refusals (PI1): the item's drop script (point 5, the holder as triggerer; ARC-SCRIPT-2853: through the host's drop script, skip default refuses), then the no-drop flag.
         var script = hero ? HeroItemDropScript(item.Entity) : NpcItemSeed(side.Life.Entity!, item.Entity) is { } listed && listed.Facts.HasScript(SessionScriptPoint.Drop);
-        if (script) { Skip(SessionCriticalStepOutcome.ScriptUnsupported); return side; }
+        if (script)
+        {
+            var answer = AskDropScript(item.Entity, hero ? _inventory.Hero.PcItem(item.Entity)!.Value.Origin.RuntimeMap : _actor.Map.RuntimeMap, hero ? SessionSpellCaster.Hero : side.Life.Entity!);
+            if (answer == SessionDropScriptAnswer.NotModelled) { Skip(SessionCriticalStepOutcome.ScriptUnsupported); return side; }
+            // The host's run may have written the session: its version is the drop's own from here on.
+            revision = _revision;
+            if (answer == SessionDropScriptAnswer.SkipDefault) { Skip(SessionCriticalStepOutcome.Refused); return side; }
+        }
         if (hero && _equipment.Worn[slot].ItemSpells) { Skip(SessionCriticalStepOutcome.ItemSpellsUnsupported); return side; }
         if (item.NoDrop) { Skip(SessionCriticalStepOutcome.Refused); return side; }
 
@@ -283,6 +290,14 @@ public sealed partial class GameSessionOwner
     // The hero, or an NPC whose chain of leaders reaches the PC (0x4BBFE0 reads 0x45DDA0, ARC-WORLD-2119), avoids only a spotted trap on the drop's path; another NPC avoids
     // every trap (0x4BBFE0).
     private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || PcLeads(who.Entity!) ? DropOwner.PcSide : DropOwner.Npc;
+
+    // ARC-SCRIPT-2853: asks the host's drop script of the item; no host, or a host that throws, is not modelled.
+    private SessionDropScriptAnswer AskDropScript(string item, int itemMap, string holder)
+    {
+        if (DropScript is not { } ask) return SessionDropScriptAnswer.NotModelled;
+        try { return ask(new(item, itemMap, holder, _actor.Map.RuntimeMap)); }
+        catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { return SessionDropScriptAnswer.NotModelled; }
+    }
 
     // The seed listing of an NPC's item still in its list on the actor's map, or null (an added made item, another map's).
     private SessionSeedItem? NpcItemSeed(string npc, string item) =>

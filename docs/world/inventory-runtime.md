@@ -356,7 +356,7 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 - Junk piles (PI3): since ARC-WORLD-063 a placed item goes through the drop's placement ([junk piles](#junk-piles-arc-world-063)).
 - The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
-  is not dropped (`ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); with its
+  is not dropped by a critter's critical drop unless the host's drop script runs it (`DropScript`, ARC-SCRIPT-2853: skip default refuses the drop, `Refused`; a script the host cannot apply or no host, `ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); with its
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon. Since
   ARC-COMBAT-1720 the session has the step (`WieldBestWeapon`, [best items](equipment-runtime.md#best-items-arc-world-034)) and the
@@ -512,7 +512,7 @@ up to ten tries of 0x4F4E40, each with a direction draw 0..8 (8 stays), over an 
 its own; the trap rule tells them apart) and its PC-or-NPC test on a tile (0x4407C0, the dead included).
 
 **Session.** A critical drop (`SessionAttack.DropMap`, `SessionObjectAttack.DropMap`) with a map draws the distance from the
-session generator before the drop's refusals (the drop script, the no-drop flag), then the tries after them; the generator's
+session generator before the drop's refusals (the drop script, the no-drop flag), then the tries after them; the drop script (point 5, ARC-SCRIPT-2853, ledger PI1, VP6) is asked through the session's `DropScript` host with the holder (the hero's handle, or the NPC) as the triggerer and the item as the attachee, and skip default refuses the drop (`Refused`, no look-for bit); the generator's
 exhaustion is `RandomExhausted`. The hero, and an NPC following it, are the PC side; any other NPC is an NPC on its own. The hero's
 item joins its placed items on that tile; an NPC's seed item is the `item.dropped` map change at that tile. Without a map the item
 lands on its holder's cell and nothing is drawn (a host without one).

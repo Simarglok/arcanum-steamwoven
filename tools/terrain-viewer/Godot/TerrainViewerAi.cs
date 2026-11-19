@@ -602,6 +602,22 @@ public partial class TerrainViewerApp
         return !vetoed;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2853 (exe read, ledger PI1, VP6, TQ19; 0x461AB0 → 0x441980): the drop script (point 5) of an item a critter drops, asked by the session after the drop's distance is drawn and before the no-drop check, through the shown map's use-script host
+    /// (<see cref="AreaUseScriptHost.RunItemDrop"/>): the holder (the hero's handle, or an NPC of the shown map) is the triggerer and the item the attachee, read by identity from the map a carried item was taken on. Skip default refuses the drop; a run the host cannot apply
+    /// (refused by the admission, effects it cannot apply, a holder that is not on the shown map) leaves the drop unapplied. The run's awards, float lines and created objects are taken as for any other script run.
+    /// </summary>
+    private SessionDropScriptAnswer RunItemDropScript(SessionDropScriptRequest request)
+    {
+        if (request.Map != CurrentAreaMap || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return SessionDropScriptAnswer.NotModelled;
+        var holder = request.Holder == SessionSpellCaster.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(request.Holder));
+        var ran = Awarded(host, host.RunItemDrop(new(request.ItemMap, request.Item), holder, owner.Rules.Scripts));
+        var refuses = AreaUseScriptHost.ItemDropRefuses(ran);
+        if (ran.Run is not null)
+            GD.Print($"ARC-SCRIPT-2853 item-drop-script item={request.Item} holder={request.Holder} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} refuses={refuses} detail={ran.Detail}");
+        return !AreaUseScriptHost.ItemDropModelled(ran) ? SessionDropScriptAnswer.NotModelled : refuses ? SessionDropScriptAnswer.SkipDefault : SessionDropScriptAnswer.RunDefault;
+    }
+
     /// <summary>ARC-SCRIPT-2828: the armour scripts of a hero's critical damage step on <paramref name="victim"/> (the hero itself on a critical self-hit), the event the session raised before its damage was written.</summary>
     private Action<SessionArmourCriticalEvent> HeroArmourScripts(string victim) => armour => RunArmourScripts(SessionSpellCaster.Hero, victim, armour);
 
@@ -714,6 +730,8 @@ public partial class TerrainViewerApp
         session.DyingScript = DyingGoesOn;
         // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
         session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
+        // ARC-SCRIPT-2853: the drop script (point 5) of an item a critical, an arm hit or a spell's weapon block drops.
+        session.DropScript = RunItemDropScript;
         // ARC-AI-1530: the danger setter's enter-combat and exit-combat scripts (slots 13 and 14) of an NPC of the shown map.
         session.DangerHookScript = RunDangerHook;
         // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).
