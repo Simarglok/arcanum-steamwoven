@@ -483,12 +483,14 @@ refused by the check at its start (the sheet smoke), not minutes later by
 `AREA_SOURCE_PIXEL_MISMATCH`. Existing `ARC_AREA_SHEET_CAPTURE` writes
 local-only readbacks; neither switch writes the player's settings.
 
-One known gap (ARC-UI-2915): art 787 `ScrllSlideM1` (the 11×1 middle of the
-schemes page's scroll thumb, used since ARC-UI-1742) is not in the installed
-pack, which has only the 11×5 `ScrllSlideM` (art 239). The check prints it as a
-known pack gap (the frame draws Legacy in HD mode) and fails on any other
-refused frame. A pack frame for it is an owner decision (issue #2917); once the
-pack carries it, the frame resolves as HD and the message stops.
+Art 787 `ScrllSlideM1` (the 11×1 middle of the schemes page's scroll thumb,
+used since ARC-UI-1742) first had no pack frame, and the check tolerated that one
+refusal (ARC-UI-2915). ARC-UI-2917 added it (owner decision of #2917, option B): a
+44×4 frame cropped from the installed HD `scrllslidem` frame (art 239, rows 8 to
+11 of 20, the middle of its five Legacy rows), after the check that all five
+Legacy rows of art 239 equal the one Legacy row of art 787 pixel for pixel. The
+frame went in with `apply --add-new` (backup `ARC-UI-2917-6f97ea89d4d3`), so the
+check no longer has a known gap and fails on any refused frame.
 
 Local redraw variants, removal masks and compositions are
 kept outside git. They are candidates, not owner acceptance.
