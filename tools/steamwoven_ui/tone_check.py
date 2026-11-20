@@ -292,7 +292,8 @@ def fit_material(original: "pngio.Image", result: "pngio.Image", screen: dict, c
     ORIGINAL's (texture, shapes and hue stay). The weight is the material mask of the ORIGINAL, softened. One pass lands near the target (the
     layout of the result differs a little from the ORIGINAL), so it repeats up to `passes` times until both means are within 0.3 L* and 2 %."""
     lab_o = to_lab(reduce_to_800x600(original))
-    mask = material_masks(screen, common_exclude, lab_o)[material]
+    masks_all = material_masks(screen, common_exclude, lab_o)
+    mask = masks_all[material]
     mask_half = _half(mask)
     coverage = box_blur(mask_half, HALF_RADIUS, HALF_W, HALF_H)
     cells = [i for i in range(HALF_W * HALF_H) if mask_half[i] >= MIN_COVER and coverage[i] >= MIN_COVER]
@@ -304,10 +305,12 @@ def fit_material(original: "pngio.Image", result: "pngio.Image", screen: dict, c
     # all fitted, with a soft edge; a hard colour-class mask would leave them untouched and print the text shapes as ghosts; without a zone the colour
     # class mask blurred wide and stretched
     zone = screen["materials"][material].get("zone")
-    others = [m.get("zone") for name, m in screen["materials"].items() if name != material]
-    if zone and not any(o is None or _rects_overlap(zone, o) for o in others):  # a zone shared with another material would pull that material along
+    others = [m["zone"] for name, m in screen["materials"].items() if name != material and m.get("zone")]
+    if zone and not any(_rects_overlap(zone, o) for o in others):  # a zone shared with another material's zone would pull that material along
         exclude = list(screen.get("exclude", [])) + (list(common_exclude) if screen.get("strips") else [])
-        weight = [1.0 if _in_rects(x, y, zone) and not _in_rects(x, y, exclude) else 0.0 for y in range(TARGET_H) for x in range(TARGET_W)]
+        other_masks = [m for name, m in masks_all.items() if name != material]  # pixels of another material inside the zone keep their tone
+        weight = [1.0 if _in_rects(x, y, zone) and not _in_rects(x, y, exclude) and not any(m[y * TARGET_W + x] for m in other_masks) else 0.0
+                  for y in range(TARGET_H) for x in range(TARGET_W)]
         soft = box_blur(weight, 3)
     else:
         soft = [min(1.0, max(0.0, (v - FIT_LOW) / (FIT_HIGH - FIT_LOW))) for v in box_blur(mask, FIT_RADIUS)]

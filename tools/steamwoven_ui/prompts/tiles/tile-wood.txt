@@ -1,0 +1,6 @@
+MATERIAL TILE - WOOD
+Size: 1:1 square, as large as you can. References: CUTOUT (a clean cut-out of this wood from the approved context image; it is the IMAGE TO EDIT).
+
+Make ONE seamless tile of this wood: it must repeat on all four edges without a visible seam (the grain and the tone at the left edge continue at the right edge, the top continues at the bottom), flat, evenly lit, top-down, edge to edge.
+Keep exactly the tone, colour, grain scale and surface texture of the CUTOUT: refine it, do not repaint it. The spread of brightness stays the same as in the CUTOUT (dark streaks and lighter grain, small knots and uneven ageing as it has them). Add no new detail: no objects, no edges, no holes, no text, no border, no vignette, no gradient across the tile, no gloss.
+Keep the colour saturation exactly as in the CUTOUT (do not make it greyer or flatter) and keep the contrast between the dark streaks and the lighter grain as strong as in the CUTOUT; the average lightness stays the same. Plan the seamless repeat carefully: the streaks leave the left edge at the same heights where they enter the right edge, and the same at top and bottom.

@@ -1,0 +1,22 @@
+{
+  "note": "Cut-outs of the material sheet (SWI-GEN-2, cutouts.py): rectangles [x0, y0, x1, y1] of the 800 x 600 layout on the tone-fitted context image named by 'source' (any pixel size: the rectangle is scaled by width / 800). 'tiles' are the seamless tiles Codex makes from a cut-out of a large surface; each is compared with the ORIGINAL material of 'reference' (tone_check masks).",
+  "items": [
+    {"id": "wood-panel", "source": "ctx-inventory", "rect": [730, 265, 790, 322], "material": "wood", "note": "panel wood, canonical source (inventory)"},
+    {"id": "dark-well", "source": "ctx-inventory", "rect": [215, 512, 585, 580], "material": "black", "note": "matte black of the message window"},
+    {"id": "desk-wood", "source": "ctx-reading", "rect": [5, 175, 125, 440], "material": "wood", "note": "finer desk wood of the reading window"},
+    {"id": "page-paper", "source": "ctx-logbook", "rect": [230, 110, 420, 370], "material": "paper", "note": "page paper of the logbook"},
+    {"id": "parchment", "source": "ctx-schematic", "rect": [250, 190, 560, 400], "material": "parchment", "note": "parchment with the printed grid"},
+    {"id": "black-grid", "source": "ctx-inventory", "rect": [385, 90, 675, 420], "material": "black", "note": "black field with the faint blue grid"},
+    {"id": "cloth-cover", "source": "ctx-logbook", "rect": [171, 140, 181, 360], "material": "cloth", "note": "red cloth cover edge of the logbook"},
+    {"id": "brass-ring-lens", "source": "ctx-logbook", "rect": [12, 55, 125, 168], "material": "brass", "note": "brass ring of the portrait lens with its glass"},
+    {"id": "brass-edge", "source": "ctx-hud", "rect": [225, 492, 575, 499], "material": "brass", "note": "brass trim edge of the message window"},
+    {"id": "rivet", "source": "ctx-character", "rect": [503, 103, 518, 118], "material": "iron", "note": "rivet at the corner of the iron panel"},
+    {"id": "vial", "source": "ctx-hud", "rect": [14, 462, 42, 555], "material": "glass", "note": "vial with its liquid (red)"},
+    {"id": "iron", "source": "ctx-character", "rect": [510, 103, 730, 119], "material": "iron", "note": "iron plate of the character sheet panel"}
+  ],
+  "tiles": [
+    {"id": "tile-wood", "from": "wood-panel", "reference": {"screen": "ctx-inventory", "material": "wood"}},
+    {"id": "tile-paper", "from": "page-paper", "reference": {"screen": "ctx-logbook", "material": "paper"}},
+    {"id": "tile-parchment", "from": "parchment", "reference": {"screen": "ctx-schematic", "material": "parchment"}}
+  ]
+}
