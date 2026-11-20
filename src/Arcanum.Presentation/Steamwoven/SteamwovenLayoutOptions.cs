@@ -29,9 +29,6 @@ public sealed record SteamwovenLayoutOptions
     /// <summary>ARC-UI-2890: the column mode that fills the frame's height with the 4:3 composition of the strips and the window (<see cref="SteamwovenColumnMode.FitHeight"/>): no gaps, no wood fill.</summary>
     public static SteamwovenLayoutOptions ColumnFitted { get; } = ColumnOriginal with { Column = ColumnOriginal.Column! with { FitHeight = true } };
 
-    /// <summary>The column mode with the thinner strips (k = 0.8: 120 and 456 master px).</summary>
-    public static SteamwovenLayoutOptions ColumnThin { get; } = ForColumn(SteamwovenColumnMode.KThin);
-
     /// <summary>Options in column mode for <paramref name="k"/> (1 or 4/5), the panel heights set to the strips'.</summary>
     public static SteamwovenLayoutOptions ForColumn(Ratio k, bool worldToEdges = false)
     {

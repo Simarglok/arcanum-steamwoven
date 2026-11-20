@@ -283,7 +283,7 @@ public partial class TerrainViewerApp
 
     private SteamwovenLayoutChoice? _appliedInterfaceLayout;
 
-    /// <summary>ARC-UI-2890 (AC1): the layout the game option chooses (the <c>interface layout</c> line; this run's ARC_STEAMWOVEN_LAYOUT overrides it with column, column-thin or full-width), given to the layout model once a change.</summary>
+    /// <summary>ARC-UI-2890 (AC1): the layout the game option chooses (the <c>interface layout</c> line; this run's ARC_STEAMWOVEN_LAYOUT overrides it with column or full-width), given to the layout model once a change.</summary>
     internal SteamwovenLayoutChoice EffectiveInterfaceLayout =>
         SteamwovenLayoutChoices.TryParse(System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LAYOUT")) ?? _gameSettings.InterfaceLayout;
 

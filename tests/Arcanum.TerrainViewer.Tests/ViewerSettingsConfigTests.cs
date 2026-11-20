@@ -27,7 +27,7 @@ public sealed class ViewerSettingsConfigTests
     private static readonly AreaGameSettings Chosen = new(2, true, false)
     {
         Floats = 0, FloatSpeed = 9, CombatTaunts = false, AutoSwitchWeapons = true, FollowerSkills = false, ViolenceFilter = true, Brightness = 5, TextDuration = 3, HdInterface = true, GeneratedInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
-        Pad = PadScheme.Pointer, Touch = TouchScheme.Off, Prompts = PromptStyle.SteamDeck, InterfaceLayout = SteamwovenLayoutChoice.ColumnThin,
+        Pad = PadScheme.Pointer, Touch = TouchScheme.Off, Prompts = PromptStyle.SteamDeck, InterfaceLayout = SteamwovenLayoutChoice.FullWidth,
     };
 
     [TestMethod]
@@ -50,12 +50,12 @@ public sealed class ViewerSettingsConfigTests
     }
 
     [TestMethod]
-    public void The_interface_layout_line_reads_its_three_names_and_anything_else_as_the_default()
+    public void The_interface_layout_line_reads_its_two_names_and_anything_else_as_the_default()
     {
-        // ARC-UI-2890: column (the default while the owner tests it), column-thin, full-width; an unknown word reads as the default, a missing line too.
+        // ARC-UI-2890: column (the default while the owner tests it), full-width; an unknown word (the removed column-thin too, ARC-UI-2925) reads as the default, a missing line too.
         Assert.AreEqual(SteamwovenLayoutChoice.Column, AreaGameSettings.Defaults.InterfaceLayout);
         Assert.AreEqual(SteamwovenLayoutChoice.FullWidth, ViewerSettingsConfig.ReadGame(Lines("interface layout=full-width\n")).InterfaceLayout);
-        Assert.AreEqual(SteamwovenLayoutChoice.ColumnThin, ViewerSettingsConfig.ReadGame(Lines("interface layout=Column-Thin\n")).InterfaceLayout);
+        Assert.AreEqual(SteamwovenLayoutChoice.Column, ViewerSettingsConfig.ReadGame(Lines("interface layout=Column-Thin\n")).InterfaceLayout, "an old thin setting reads as the default");
         Assert.AreEqual(SteamwovenLayoutChoice.Column, ViewerSettingsConfig.ReadGame(Lines("interface layout=wide\n")).InterfaceLayout);
         Assert.AreEqual(SteamwovenLayoutChoice.Column, ViewerSettingsConfig.ReadGame(Lines("difficulty=1\n")).InterfaceLayout);
         Assert.IsTrue(ViewerSettingsConfig.HasGame(Lines("interface layout=column\n")));
@@ -65,7 +65,7 @@ public sealed class ViewerSettingsConfigTests
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\ninterface layout=column-thin\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\ninterface layout=full-width\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));

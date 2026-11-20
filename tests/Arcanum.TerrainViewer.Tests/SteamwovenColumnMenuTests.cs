@@ -9,8 +9,9 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class SteamwovenColumnMenuTests
 {
+    private static readonly SteamwovenLayoutOptions ThinColumn = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KThin); // ARC-UI-2925: the model keeps k = 0.8, the viewer no longer offers it
     private static SteamwovenFullScreenPlan Original(int width, int height) => SteamwovenColumnMenu.Plan(width, height, SteamwovenLayoutOptions.ColumnOriginal)!;
-    private static SteamwovenFullScreenPlan Thin(int width, int height) => SteamwovenColumnMenu.Plan(width, height, SteamwovenLayoutOptions.ColumnThin)!;
+    private static SteamwovenFullScreenPlan Thin(int width, int height) => SteamwovenColumnMenu.Plan(width, height, ThinColumn)!;
 
     [TestMethod]
     [DataRow(3840, 2160, 3.6, 480, 2880)] [DataRow(2560, 1440, 2.4, 320, 1920)] [DataRow(1920, 1080, 1.8, 240, 1440)] [DataRow(3440, 1440, 2.4, 760, 1920)]

@@ -40,7 +40,7 @@ directions (no 2× entry is installed). "Opaque" is the plain alpha of the frame
 | tabs | 46 | 23 | opaque | directly, trilinear | needs [#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002) |
 | indicators | 60 | 9 | opaque | directly, trilinear | needs [#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002) |
 | schematics (record pictures) | 63 | 63 | opaque | directly, trilinear, inside the schematic window | needs [#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002) |
-| portraits (heroes 96, NPCs 30) | 126 | 126 | opaque | directly, trilinear; the follower group at the window's left edge is placed by [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) | works; sharper with [#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002) |
+| portraits (heroes 96, NPCs 30) | 126 | 126 | opaque | directly, trilinear; the follower group stays in the column on its original places ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925) | works; sharper with [#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002) |
 | fonts (glyph frames) | 5,807 | 28 | `masked` | per glyph, bilinear without mipmaps, at the window's scale | works at `s` ≥ 2.4; needs the area filter below 2 ([#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939)) |
 | cursors | 60 | 4 | opaque | Legacy by design (gap census) | works (not drawn from the pack) |
 | network-play arts (part of the kinds above) | 41 | 23 | opaque | not drawn (network play is out of scope) | obsolete; dropped at the next pack build ([#2362](https://github.com/Simarglok/arcanum-steamwoven/issues/2362)) |

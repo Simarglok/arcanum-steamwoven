@@ -47,7 +47,7 @@ public static class ViewerSettingsConfig
     /// <summary>The line the HD setting had before ARC-UI-2174; read only when <see cref="Hd"/> is absent, never written.</summary>
     public const string HdInterface = "hd interface";
     public const string GeneratedInterface = "generated interface";
-    /// <summary>ARC-UI-2890: the layout of the generated interface: <c>column</c>, <c>column-thin</c> or <c>full-width</c> (an unknown word reads as the default).</summary>
+    /// <summary>ARC-UI-2890: the layout of the generated interface: <c>column</c> or <c>full-width</c> (an unknown word, the removed <c>column-thin</c> included, reads as the default).</summary>
     public const string InterfaceLayout = "interface layout";
     public const string HdPack = "hd pack";
     public const string HdPackPath = "hd pack path";

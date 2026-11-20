@@ -31,7 +31,8 @@ public sealed class SteamwovenColumnTests
         (1024, 768, true, 0, 64, 1024, 640, 205, 819, 32, 122, 185, 493, 154, 614),
     ];
 
-    private static SteamwovenLayoutOptions Preset(bool thin) => thin ? SteamwovenLayoutOptions.ColumnThin : SteamwovenLayoutOptions.ColumnOriginal;
+    private static readonly SteamwovenLayoutOptions ThinColumn = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KThin); // ARC-UI-2925: the model keeps k = 0.8, the viewer no longer offers it
+    private static SteamwovenLayoutOptions Preset(bool thin) => thin ? ThinColumn : SteamwovenLayoutOptions.ColumnOriginal;
 
     private static SteamwovenLayout Layout(int w, int h, SteamwovenLayoutOptions options)
     {
@@ -160,7 +161,7 @@ public sealed class SteamwovenColumnTests
         Assert.AreEqual(new PixelRect(0, 0, 760, 1440), edges.Column!.WorldLeft);
         Assert.AreEqual(new PixelRect(2680, 0, 760, 1440), edges.Column.WorldRight);
         Assert.AreEqual(bars.Column.Column, edges.Column.Column, "the column does not move");
-        var thinEdges = Layout(3440, 1440, SteamwovenLayoutOptions.ColumnThin.WithWorldToEdges());
+        var thinEdges = Layout(3440, 1440, ThinColumn.WithWorldToEdges());
         Assert.AreEqual(new PixelRect(0, 0, 952, 1440), thinEdges.Column!.WorldLeft);
         Assert.AreEqual(new PixelRect(2488, 0, 952, 1440), thinEdges.Column.WorldRight);
         // At 16:9 the frame is the window: the option changes nothing.
@@ -192,14 +193,14 @@ public sealed class SteamwovenColumnTests
     public void ColumnOptionsAreConsistentAndTheFullWidthLayoutIsUnchangedByThem()
     {
         Assert.IsTrue(SteamwovenLayoutOptions.ColumnOriginal.IsValid);
-        Assert.IsTrue(SteamwovenLayoutOptions.ColumnThin.IsValid);
+        Assert.IsTrue(ThinColumn.IsValid);
         Assert.AreEqual((150, 570), (SteamwovenLayoutOptions.ColumnOriginal.TopPanelMaster, SteamwovenLayoutOptions.ColumnOriginal.BottomPanelMaster));
-        Assert.AreEqual((120, 456), (SteamwovenLayoutOptions.ColumnThin.TopPanelMaster, SteamwovenLayoutOptions.ColumnThin.BottomPanelMaster));
+        Assert.AreEqual((120, 456), (ThinColumn.TopPanelMaster, ThinColumn.BottomPanelMaster));
         Assert.IsNull(SteamwovenLayoutOptions.Default.Column);
-        Assert.AreEqual(SteamwovenLayoutOptions.Default, SteamwovenLayoutOptions.ColumnThin with { Column = null }, "the thin strips are today's default panel heights");
+        Assert.AreEqual(SteamwovenLayoutOptions.Default, ThinColumn with { Column = null }, "the thin strips are today's default panel heights");
         // A column mode whose panels are not the strips', or with another k, is invalid and a typed failure.
         Assert.IsFalse((SteamwovenLayoutOptions.ColumnOriginal with { TopPanelMaster = 120, BottomPanelMaster = 456 }).IsValid);
-        Assert.IsFalse((SteamwovenLayoutOptions.ColumnThin with { Column = new SteamwovenColumnMode(new Ratio(1, 2)) }).IsValid);
+        Assert.IsFalse((ThinColumn with { Column = new SteamwovenColumnMode(new Ratio(1, 2)) }).IsValid);
         Assert.AreEqual(SteamwovenLayoutFailure.InvalidOptions,
             SteamwovenLayoutBuilder.Compute(1920, 1080, SteamwovenLayoutOptions.ColumnOriginal with { TopPanelMaster = 120, BottomPanelMaster = 456 }).Failure);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SteamwovenLayoutOptions.ForColumn(new Ratio(1, 2)));
@@ -208,7 +209,7 @@ public sealed class SteamwovenColumnTests
         foreach (var (w, h) in new[] { (1920, 1080), (2560, 1600), (3440, 1440), (1024, 768) })
         {
             Assert.IsNull(Layout(w, h, SteamwovenLayoutOptions.Default).Column, $"{w}x{h}");
-            var column = Layout(w, h, SteamwovenLayoutOptions.ColumnThin);
+            var column = Layout(w, h, ThinColumn);
             Assert.IsNotNull(column.Column);
             Assert.AreEqual(Layout(w, h, SteamwovenLayoutOptions.Default), column with { Column = null }, $"{w}x{h}");
         }
@@ -231,6 +232,8 @@ public sealed class SteamwovenColumnTests
         (800, 600, 0, 800, 600, 0, 800, 41, 441),
         (1000, 2000, 0, 1000, 750, 0, 1000, 51, 551),
         (1366, 768, 0, 1366, 768, 171, 1195, 52, 564),
+        // ARC-UI-2925: 3024 x 1964 (the 14" MacBook Pro's native size, 1.54:1): u = 1964 / 600 = 3.2733, column 2618.67 wide: left 202.67 -> 203, right 2821.33 -> 2821; top strip round(41 u) = 134; the bottom strip's top round(441 u) = 1444.
+        (3024, 1964, 0, 3024, 1964, 203, 2821, 134, 1444),
     ];
 
     [TestMethod]
@@ -292,7 +295,31 @@ public sealed class SteamwovenColumnTests
     public void The_fit_height_flag_needs_the_original_strips_k()
     {
         Assert.IsTrue(SteamwovenLayoutOptions.ColumnFitted.IsValid);
-        var thinFitted = SteamwovenLayoutOptions.ColumnThin with { Column = SteamwovenLayoutOptions.ColumnThin.Column! with { FitHeight = true } };
+        var thinFitted = ThinColumn with { Column = ThinColumn.Column! with { FitHeight = true } };
         Assert.IsFalse(thinFitted.IsValid);
+    }
+
+    // ARC-UI-2925 (AC1): the baked step and the run-time scale come from the fitted f = frame height / 2160: the smallest step (1/3, 1/2, 2/3, 1) whose scale is at least f, and the run-time scale f over the step.
+    // The independent calculation is on the frame height h: step 1/3 up to 720, 1/2 up to 1080, 2/3 up to 1440, else 1; the run-time scale is h / 720, h / 1080, h / 1440 or h / 2160.
+    [TestMethod]
+    public void The_fitted_column_takes_the_baked_step_and_the_run_time_scale_from_its_f()
+    {
+        foreach (var row in FitTable)
+        {
+            var label = $"{row.W}x{row.H}";
+            var layout = Layout(row.W, row.H, SteamwovenLayoutOptions.ColumnFitted);
+            var (step, runtime) = row.FrameH switch
+            {
+                <= 720 => (SteamwovenStep.Third, new Ratio(row.FrameH, 720)),
+                <= 1080 => (SteamwovenStep.Half, new Ratio(row.FrameH, 1080)),
+                <= 1440 => (SteamwovenStep.TwoThirds, new Ratio(row.FrameH, 1440)),
+                _ => (SteamwovenStep.One, new Ratio(row.FrameH, 2160)),
+            };
+            Assert.AreEqual(step, layout.Step, label);
+            Assert.AreEqual(runtime, layout.RuntimeScale, label);
+            Assert.AreEqual(runtime == Ratio.One, layout.ExactStep, label);
+        }
+        Assert.AreEqual(SteamwovenStep.One, Layout(3024, 1964, SteamwovenLayoutOptions.ColumnFitted).Step);
+        Assert.AreEqual(new Ratio(491, 540), Layout(3024, 1964, SteamwovenLayoutOptions.ColumnFitted).RuntimeScale, "1964 / 2160");
     }
 }

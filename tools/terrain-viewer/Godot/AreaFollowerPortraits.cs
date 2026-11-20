@@ -405,7 +405,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (_root is null) return;
         // ARC-UI-2284: the strip's bottom is the window's bottom, so the buttons stand a table's distance above it, not at the table's y from the top.
         // ARC-UI-2510: in the Steamwoven layout the screen hangs from the top strip and ends at the bottom strip's bottom edge, not at the window's bottom.
-        var bottom = AreaGameBarPanel.EdgeScreen?.BottomEdge ?? GetViewport().GetVisibleRect().Size.Y;
+        var bottom = AreaGameBarPanel.TopScreen?.BottomEdge ?? GetViewport().GetVisibleRect().Size.Y;
         var heightUnits = (bottom - _root.Position.Y) / _root.Scale.Y;
         foreach (var (button, rect) in new[] { (_toggle, AreaFollowerPanelRules.ToggleRectFor(barsDrawn)), (_up, AreaFollowerPanelRules.UpRectFor(barsDrawn)), (_down, AreaFollowerPanelRules.DownRectFor(barsDrawn)) })
             if (button is not null) button.Position = new Vector2(rect.X, AreaFollowerPanelRules.AnchoredY(rect.Y, heightUnits));
@@ -523,8 +523,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (_root is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         // ARC-UI-2510: where the strips put the 800 × 600 screen (the Steamwoven layout: its top left under the top band's strip, at the strips' scale), else the whole factor centred at the window's top.
-        // ARC-UI-2890: in the column mode the screen of the portraits hangs from the frame's left edge, over the world (AreaGameBarPanel.EdgeScreen); else it is the strips' screen.
-        if (AreaGameBarPanel.EdgeScreen is { } screen)
+        // ARC-UI-2925 (owner decision 2026-11-20): the whole follower group (portraits, scroll arrows, show/hide button) stays in the column on the original's places, counted from the composition's left edge at its scale, so the button
+        // stands at the top left corner of the bottom strip as in the original at every window size; nothing is carried to the window's edge.
+        if (AreaGameBarPanel.TopScreen is { } screen)
         {
             _root.Position = screen.Origin;
             _root.Scale = new(screen.Scale, screen.Scale);
