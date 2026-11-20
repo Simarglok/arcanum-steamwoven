@@ -335,6 +335,14 @@ Part kinds:
 - **SWI-GEN-8** The result of an item is accepted only as a PNG at the asked aspect (within 1 %); the generator keeps a budget of about 1.57 MP per
   image, so a master size above it is reached by the fit tool, never by an upscale inside the generation session. A refusal or a failure is
   logged with Codex's own text; the prompt is never reworded automatically.
+- **SWI-GEN-9** A context image is a refinement of its ORIGINAL (owner decision 2026-11-20, [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)): the upscaled ORIGINAL is
+  given to Codex as the one image to edit ("refine this image, raise its detail, do not change its colour or its shape"), and the redraw adds only resolution and surface texture: the same
+  palette, brightness, contrast and shapes, no new ornament, shine or detail; brass is dull, dark and matte, glass slightly cloudy, the whole look dusty and muted. A tone check follows every
+  generation (`tools/steamwoven_ui/tone_check.py`): both images are reduced to 800 × 600, converted to CIE L\*a\*b\* and blurred (box, 6 px), and compared per material (wood, brass, paper or
+  parchment, iron) and for the whole over the pixels of the ORIGINAL that belong to a material; the layout masks of the content that the redraw leaves empty (text fields, portrait, schematic
+  picture, items in slots, counters, the HUD world rows) are in `prompts/tone_masks.json`. Limits: |ΔL\*| ≤ 3, mean chroma within 12 %, contrast (std of L\*) within 12 % unless the std
+  differs by less than 2 L\*, mean ΔE76 ≤ 6, 95th percentile ΔE76 ≤ 15. A region over a limit is redrawn (at most two redraws, then the owner decides); the region tone fit (`tone_check.py fit`:
+  shift of L\* and scale of chroma inside one material to the ORIGINAL's blurred means, texture and shape kept) is the fallback for a material whose texture is right and tone is not.
 
 ### Codex batch runner (ARC-DEV-3001)
 

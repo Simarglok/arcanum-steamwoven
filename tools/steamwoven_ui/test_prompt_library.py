@@ -129,6 +129,15 @@ class InboxProvenanceTests(unittest.TestCase):
         self.assertTrue((self.local / "inbox" / "style-anchors-contexts" / item["references"][0]["file"]).is_file())
         self.assertIn("outbox/style-anchors-contexts/ctx-hud.png", (self.local / "inbox" / "style-anchors-contexts" / "README.txt").read_text(encoding="utf-8"))
 
+    def test_context_screen_gets_the_upscaled_original_as_the_one_image_to_edit(self) -> None:
+        (self.local / "refs" / "ctx-hud-guide-2880x2160.png").write_bytes(fake_png(2880, 2160))
+        lib.build_inbox(self.library, "style-anchors-contexts", self.local)
+        batch = json.loads((self.local / "inbox" / "style-anchors-contexts" / "batch.json").read_text(encoding="utf-8"))
+        hud = next(i for i in batch["items"] if i["id"] == "ctx-hud")
+        self.assertEqual(["refs/ctx-hud/ctx-hud-guide-2880x2160.png"], [r["file"] for r in hud["references"]])
+        inventory = next(i for i in batch["items"] if i["id"] == "ctx-inventory")  # no guide yet: falls back to what the prefix holds
+        self.assertEqual(["refs/ctx-inventory/ctx-inventory-800x600.png"], [r["file"] for r in inventory["references"]])
+
     def test_inbox_fails_when_a_reference_is_missing(self) -> None:
         (self.local / "refs" / "ctx-hud-800x600.png").unlink()
         with self.assertRaises(FileNotFoundError):
