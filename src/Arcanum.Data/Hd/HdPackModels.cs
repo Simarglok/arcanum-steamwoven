@@ -7,9 +7,6 @@ public enum HdEntryKind { Sprite, TerrainChunk, Portrait }
 /// new identity. HD texture caches are keyed by it (ARC-RENDER-013, Budgets).</summary>
 public sealed record HdPackIdentity(string Id, int Scale, string ManifestSha256);
 
-/// <summary>ARC-DEV-343: the outcome of reading <c>main-menu-16x9.png</c> (<paramref name="Status"/>: Used, NoFile, PackRejected, BadHeader, WrongSize, BadImage, NotOpaque) with the first 12 hex digits of the file's SHA-256.</summary>
-public sealed record HdMainMenuBackdropRead(HdPngImage? Image, string Status, string? Sha12, int Width, int Height);
-
 /// <param name="Builder">The program that wrote the pack and its version.</param>
 /// <param name="Gpu">The device the method ran on (ARC-RES-033: output depends on it).</param>
 public sealed record HdBuildRecord(string Builder, string BuilderVersion, DateTimeOffset CreatedUtc, string Gpu, string Os);

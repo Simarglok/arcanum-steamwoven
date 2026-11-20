@@ -816,6 +816,15 @@ public static class InterfaceChromeRenderer
     /// covers (alpha-weighted colour, so a transparent texel adds no colour; every target pixel is opaque), the exact box filter for a whole ratio
     /// (4 to 2 and 4 to 1) and the area-weighted one for 4 to 3. A source of the target's size is copied with alpha 255.</summary>
     public static byte[] ResamplePicture(ReadOnlySpan<byte> source, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)
+        => Resample(source, sourceWidth, sourceHeight, targetWidth, targetHeight, keepAlpha: false);
+
+    /// <summary>ARC-RENDER-3002: the same area (box) filter as <see cref="ResamplePicture"/> for a frame that keeps its transparency: the alpha of a target pixel is
+    /// the area average of the source alphas (straight alpha, rounded) and its colour is weighted by alpha, so a transparent texel adds no colour and an edge does
+    /// not grow a dark or light halo. A source of the target's size is copied as it is.</summary>
+    public static byte[] ResampleStraight(ReadOnlySpan<byte> source, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)
+        => Resample(source, sourceWidth, sourceHeight, targetWidth, targetHeight, keepAlpha: true);
+
+    private static byte[] Resample(ReadOnlySpan<byte> source, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight, bool keepAlpha)
     {
         if (sourceWidth < 1 || sourceHeight < 1 || targetWidth < 1 || targetHeight < 1) throw new ArgumentOutOfRangeException(nameof(sourceWidth));
         if (source.Length != sourceWidth * sourceHeight * 4) throw new ArgumentException("source RGBA size", nameof(source));
@@ -823,7 +832,7 @@ public static class InterfaceChromeRenderer
         {
             // The same size: the pixels as they are, opaque like every other ratio's.
             var copy = source.ToArray();
-            for (var i = 3; i < copy.Length; i += 4) copy[i] = 255;
+            if (!keepAlpha) for (var i = 3; i < copy.Length; i += 4) copy[i] = 255;
             return copy;
         }
         var output = new byte[targetWidth * targetHeight * 4];
@@ -853,7 +862,7 @@ public static class InterfaceChromeRenderer
                 // A fully transparent area keeps its own colour (the texel under a hole is never shown, but stays defined).
                 if (weight > 0) { output[o] = (byte)Math.Round(r / weight); output[o + 1] = (byte)Math.Round(g / weight); output[o + 2] = (byte)Math.Round(b / weight); }
                 else { output[o] = (byte)Math.Round(rawR / area); output[o + 1] = (byte)Math.Round(rawG / area); output[o + 2] = (byte)Math.Round(rawB / area); }
-                output[o + 3] = 255;
+                output[o + 3] = keepAlpha ? (byte)Math.Round(weight / area) : (byte)255;
             }
         }
         return output;

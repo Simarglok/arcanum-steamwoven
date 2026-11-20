@@ -1235,7 +1235,7 @@ python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (al
 Codex CLI on the Mac (`codex exec` for the first item, `codex exec resume <thread_id>` for the rest, one session per batch) and writes
 `local/steamwoven-ui/outbox/<batch>/` with a provenance record per image; design, `batch.json` format and rules:
 [TRD](../ui/steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001). Standard-library Python; it runs no Godot and no `dotnet`, so it does not use the launch
-queue; it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
+queue; it pins the model `gpt-6.1-sol` at reasoning effort `medium` on every call (owner decision 2026-11-20, [#3043](https://github.com/Simarglok/arcanum-steamwoven/issues/3043); `--model` overrides only with the owner's approval); it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
 [`steamwoven-codex-images`](../../.claude/skills/steamwoven-codex-images/SKILL.md) says how). Its tests use a fake `codex` and run in the batched `tools/local_dev/run_tests.py`.
 
 ```sh

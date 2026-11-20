@@ -74,7 +74,7 @@ Every one goes through the HD frame path, so a delivered frame is used without a
 | 787 | `ScrllSlideM1` | 1 / 1 | 11x1 | Character sheet, schemes page: middle of the scroll thumb ([#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)) | P3 |
 | 627 | `Saltys_Map` | 1 / 1 | 668x400 | Reading window: picture of the written object that names it | P3 |
 | 803 | `MazzerinsMystery` | 1 / 1 | 668x400 | Reading window: same | P3 |
-| 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD only when the pack's `main-menu-16x9.png` is not read or a Steamwoven full-screen plan is active (the plate is then the layout zone's backdrop) | P3 |
+| 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD when the generated interface is off (the whole-factor plate; the pack's `main-menu-16x9.png` is no longer read, ARC-UI-3003); with a Steamwoven full-screen plan the plate is the layout zone's backdrop | P3 |
 | 61 arts | schematic record pictures, [appendix](#appendix-schematic-record-pictures-without-a-pack-frame) | 61 / 61 | 295x225 | Schematic window: the picture of the selected record; 72 of 133 pictures are in the pack | P2 |
 
 ## Legacy by design
