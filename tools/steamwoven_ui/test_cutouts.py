@@ -46,13 +46,32 @@ class CutoutsTest(unittest.TestCase):
         x0, y0, x1, y1 = cutouts.pixel_rect([10, 10, 10.2, 10.2], 800, 600)  # never empty
         self.assertTrue(x1 > x0 and y1 > y0)
 
+    def test_small_cutouts_get_a_context_crop_inside_the_screen(self) -> None:
+        for rect in ([15, 20, 30, 35], [780, 580, 798, 598], [100, 300, 450, 307]):
+            around = cutouts.context_rect(rect)
+            self.assertTrue(0 <= around[0] < around[2] <= 800 and 0 <= around[1] < around[3] <= 600, around)
+            self.assertTrue(around[0] <= rect[0] and around[1] <= rect[1] and around[2] >= rect[2] and around[3] >= rect[3], (rect, around))
+            self.assertGreaterEqual(around[2] - around[0], 240)
+            self.assertGreaterEqual(around[3] - around[1], 180)
+
     def test_cut_writes_pixels_and_provenance(self) -> None:
         local = self.tmp / "local"
         (local / "outbox" / cutouts.SOURCE_BATCH).mkdir(parents=True)
         source = gradient(1448, 1086)
         pngio.write(local / "outbox" / cutouts.SOURCE_BATCH / "ctx-hud.png", source)
         spec = {"items": [{"id": "piece", "source": "ctx-hud", "rect": [100, 50, 200, 150], "material": "wood"}], "tiles": []}
-        record = cutouts.cut(spec, local)["piece"]
+        spec["items"].append({"id": "big", "source": "ctx-hud", "rect": [0, 0, 400, 300], "material": "wood", "note": "n"})
+        records = cutouts.cut(spec, local)
+        record = records["piece"]
+        self.assertIn("context_file", record)  # 100 x 100 layout units is small
+        self.assertNotIn("context_file", records["big"])
+        around = pngio.read(local / "material-sheet" / "cutouts" / "piece.context.png")
+        self.assertEqual(tuple(record["context_size"]), (around.w, around.h))
+        self.assertFalse((local / "material-sheet" / "cutouts" / "big.context.png").exists())
+        stale = local / "material-sheet" / "cutouts" / "old-name.png"
+        stale.write_bytes(b"x")
+        cutouts.cut(spec, local)
+        self.assertFalse(stale.exists())
         self.assertEqual([181, 90, 362, 272], record["pixel_rect"])
         piece = pngio.read(local / "material-sheet" / "cutouts" / "piece.png")
         self.assertEqual((181, 182), (piece.w, piece.h))
