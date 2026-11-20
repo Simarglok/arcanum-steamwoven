@@ -76,8 +76,18 @@ internal sealed partial class SteamwovenBoardView : TextureRect
     /// <summary>The size and place of the texture last put in, for the self-test.</summary>
     internal Vector2I PixelSizeForSelfTest => Texture is { } texture ? new Vector2I(texture.GetWidth(), texture.GetHeight()) : Vector2I.Zero;
 
+    /// <summary>ARC-UI-2461: shows a kit part instead of a generated paint: the baked texture over <paramref name="rect"/>, nearest when exact (the baked pixels are the device pixels), else linear. A paint under way is dropped.</summary>
+    public void ShowKit(Texture2D texture, Rect2I rect, bool exact)
+    {
+        _generation++; _key = null;
+        Position = rect.Position; Size = rect.Size;
+        Texture = texture;
+        TextureFilter = exact ? TextureFilterEnum.Nearest : TextureFilterEnum.Linear;
+    }
+
     public void Request(SteamwovenBoardSpec spec)
     {
+        TextureFilter = TextureFilterEnum.Nearest;
         Position = spec.Rect.Position; Size = spec.Rect.Size;
         if (_key == spec.Key) return;
         _key = spec.Key;

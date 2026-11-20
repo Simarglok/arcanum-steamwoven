@@ -139,9 +139,10 @@ public static class SteamwovenKitRoot
 
     /// <summary>
     /// The folder holding the baked sets: <paramref name="env"/> when set (an existing folder, or <c>off</c>/<c>0</c>/<c>none</c> for null), else the first <c>local/steamwoven-ui/baked</c> found on the way up from a start folder
-    /// (at most twelve levels). A worktree lives under <c>&lt;checkout&gt;/.claude/worktrees/</c>, so the climb reaches the owner's checkout, where the ignored <c>local/</c> is. Null: no kit (the generated chrome is drawn).
+    /// (at most twelve levels; a worktree lives under <c>&lt;checkout&gt;/.claude/worktrees/</c>, so the climb reaches the owner's checkout, where the ignored <c>local/</c> is), else the first existing
+    /// <paramref name="installFolders"/> entry: where a packaged game on a player's own device keeps the sets they baked (<c>user://steamwoven-ui/baked</c>, beside the HD packs of <c>user://hd-packs</c>). Null: no kit (the generated chrome is drawn).
     /// </summary>
-    public static string? Resolve(string? env, IEnumerable<string> startFolders)
+    public static string? Resolve(string? env, IEnumerable<string> startFolders, IEnumerable<string>? installFolders = null)
     {
         if (!string.IsNullOrWhiteSpace(env))
         {
@@ -163,6 +164,8 @@ public static class SteamwovenKitRoot
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
         }
+        foreach (var install in installFolders ?? [])
+            if (!string.IsNullOrWhiteSpace(install) && System.IO.Directory.Exists(install)) return install;
         return null;
     }
 }

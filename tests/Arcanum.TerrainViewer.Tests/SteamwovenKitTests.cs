@@ -166,6 +166,8 @@ public sealed class SteamwovenKitTests
     {
         Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory]));
         Assert.AreEqual(SteamwovenKitWindow.Logbook, SteamwovenKitComposer.WindowOf([InterfaceMode.Logbook]));
+        Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.InventoryKind5]));
+        Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.InventoryKind6]));
         // The loot window is another window of the inventory family: it keeps the generated backdrop, even over an inventory.
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Loot]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Dialog]));
@@ -301,6 +303,11 @@ public sealed class SteamwovenKitTests
             Assert.IsNull(SteamwovenKitRoot.Resolve(System.IO.Path.Combine(root, "missing"), [worktree]));
             Assert.IsNull(SteamwovenKitRoot.Resolve("off", [worktree]));
             Assert.IsNull(SteamwovenKitRoot.Resolve(null, ["/nonexistent-arc"]));
+            // A packaged game's own folder is the last resort, after the environment and the checkout.
+            var installed = Directory.CreateDirectory(System.IO.Path.Combine(root, "user", "steamwoven-ui", "baked")).FullName;
+            Assert.AreEqual(installed, SteamwovenKitRoot.Resolve(null, ["/nonexistent-arc"], [System.IO.Path.Combine(root, "missing"), installed]));
+            Assert.AreEqual(baked, SteamwovenKitRoot.Resolve(null, [worktree], [installed]));
+            Assert.AreEqual(root, SteamwovenKitRoot.Resolve(root, [worktree], [installed]));
         }
         finally { Directory.Delete(root, true); }
     }

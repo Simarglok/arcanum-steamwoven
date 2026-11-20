@@ -211,7 +211,8 @@ public partial class AreaMenuArtView : Control
         Position = position;
         // A fractional layout scale is sampled linear (as the strips of the prototype are); the original's whole factors stay Nearest.
         var layoutOn = FullScreenPlan is not null;
-        TextureFilter = layoutOn ? TextureFilterEnum.Linear : TextureFilterEnum.Nearest;
+        // ARC-UI-2461 (SWI-LAY-5): a kit plate whose baked pixels are the device pixels is sampled nearest, otherwise the fractional plate is linear.
+        TextureFilter = layoutOn && !(KitPlatePart() is { } kit && FullScreenPlan is { } plan && kit.Part.Width == plan.Zone.Width && kit.Part.Height == plan.Zone.Height) ? TextureFilterEnum.Linear : TextureFilterEnum.Nearest;
         // The plate (the pack's 16:9 one or the original's) follows the layout: a switch of it with no new Render still redraws.
         if (layoutOn != _hadPlan) { _hadPlan = layoutOn; QueueRedraw(); }
     }
@@ -224,7 +225,14 @@ public partial class AreaMenuArtView : Control
         var wide = WidescreenBackground();
         // Keep the wider plate on the same transform as the labels, outside the control's hit rectangle.
         var drawnWidth = wide is null ? width : height * 16 / 9;
-        DrawTextureRect(wide ?? _background, new Rect2((width - drawnWidth) / 2, 0, drawnWidth, height), false);
+        // ARC-UI-2461 (SWI-BDR-6): the kit's plate for this menu's background, when the set has it at the composition's size; the plate is the 800 × 600 composition itself.
+        if (KitPlatePart() is { } kit && SteamwovenKitStore.Texture(kit.Set, kit.Part.Id) is { } kitPlate)
+        {
+            SteamwovenKitStore.Retain(kit.Set, [kit.Part.Id]);
+            DrawTextureRect(kitPlate, new Rect2(0, 0, width, height), false);
+        }
+        else
+            DrawTextureRect(wide ?? _background, new Rect2((width - drawnWidth) / 2, 0, drawnWidth, height), false);
         DrawControls();
         for (var i = 0; i < _labels.Count; i++)
         {
@@ -238,6 +246,17 @@ public partial class AreaMenuArtView : Control
                 AreaArtTextDraw.Glyphs(this, _font, glyphs, x + dx, y + dy, colour, blend);
             }
         }
+    }
+
+    /// <summary>ARC-UI-2461: the id of the kit plate this menu draws now, for the self-test (null: the pack's or the original's plate).</summary>
+    internal string? KitPlateForSelfTest => KitPlatePart()?.Part.Id;
+
+    /// <summary>ARC-UI-2461: the kit set and the plate part this menu draws instead of its pack or original background (the Steamwoven layout on, the set holding that menu's plate at the composition's size); null for the pack's or the original's.</summary>
+    private (SteamwovenKitSet Set, SteamwovenKitPart Part)? KitPlatePart()
+    {
+        if (FullScreenPlan is not { } plan || _window is not { } window || AreaMenuArtLayout.Background(window) is not { } art) return null;
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set || SteamwovenKitComposer.Plate(set, art) is not { } part) return null;
+        return (set, part);
     }
 
     /// <summary>ARC-UI-061: the frame an arrow shows (GB4): down while held with the pointer over it, lit under the pointer when none is

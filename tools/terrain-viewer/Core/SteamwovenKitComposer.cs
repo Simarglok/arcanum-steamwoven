@@ -48,7 +48,7 @@ public static class SteamwovenKitTable
         [AreaBarStrip.Bottom] = new("board.intbotom", "cap.bottom_strip_left", "cap.bottom_strip_right", []),
     };
 
-    /// <summary>The covered windows (census G01, G05, G11, G12, G15): inventory 1290 + 1590 (the paper doll 223 and the inventory 221), the character sheet, the logbook 594 + 2286 (264 and 260), the map frame and the schematic base.</summary>
+    /// <summary>The covered windows (census G01 and G17, G05, G11, G12, G15): inventory 1290 + 1590 (the paper doll 223 and the inventory 221), the character sheet, the logbook 594 + 2286 (264 and 260), the map frame and the schematic base.</summary>
     public static IReadOnlyDictionary<SteamwovenKitWindow, SteamwovenKitWindowSpec> Windows { get; } = new Dictionary<SteamwovenKitWindow, SteamwovenKitWindowSpec>
     {
         [SteamwovenKitWindow.Inventory] = new([("backdrop.pdoll", 1290), ("backdrop.inventor", 1590)]),
@@ -184,7 +184,8 @@ public static class SteamwovenKitComposer
 
     public static SteamwovenKitWindow? WindowOf(InterfaceMode mode) => mode switch
     {
-        InterfaceMode.Inventory => SteamwovenKitWindow.Inventory,
+        // The identify and repair windows (modes 5 and 6, census G17) stand on the inventory's two arts (221 and 223).
+        InterfaceMode.Inventory or InterfaceMode.InventoryKind5 or InterfaceMode.InventoryKind6 => SteamwovenKitWindow.Inventory,
         InterfaceMode.Character => SteamwovenKitWindow.Character,
         InterfaceMode.Logbook => SteamwovenKitWindow.Logbook,
         InterfaceMode.WorldMap => SteamwovenKitWindow.WorldMap,
