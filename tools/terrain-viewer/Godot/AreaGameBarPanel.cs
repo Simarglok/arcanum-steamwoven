@@ -820,7 +820,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             loaded = LoadKit(set, draws);
             if (loaded is not null) _kitBackground = draws;
         }
-        SteamwovenKitStore.Retain(set, [.. _kitBackground.Select(draw => draw.PartId)]);
+        SteamwovenKitStore.Retain("window", set, [.. _kitBackground.Select(draw => draw.PartId)]);
         return loaded;
     }
 

@@ -211,8 +211,7 @@ public partial class AreaMenuArtView : Control
         Position = position;
         // A fractional layout scale is sampled linear (as the strips of the prototype are); the original's whole factors stay Nearest.
         var layoutOn = FullScreenPlan is not null;
-        // ARC-UI-2461 (SWI-LAY-5): a kit plate whose baked pixels are the device pixels is sampled nearest, otherwise the fractional plate is linear.
-        TextureFilter = layoutOn && !(KitPlatePart() is { } kit && FullScreenPlan is { } plan && kit.Part.Width == plan.Zone.Width && kit.Part.Height == plan.Zone.Height) ? TextureFilterEnum.Linear : TextureFilterEnum.Nearest;
+        TextureFilter = layoutOn ? TextureFilterEnum.Linear : TextureFilterEnum.Nearest;
         // The plate (the pack's 16:9 one or the original's) follows the layout: a switch of it with no new Render still redraws.
         if (layoutOn != _hadPlan) { _hadPlan = layoutOn; QueueRedraw(); }
     }
@@ -226,13 +225,17 @@ public partial class AreaMenuArtView : Control
         // Keep the wider plate on the same transform as the labels, outside the control's hit rectangle.
         var drawnWidth = wide is null ? width : height * 16 / 9;
         // ARC-UI-2461 (SWI-BDR-6): the kit's plate for this menu's background, when the set has it at the composition's size; the plate is the 800 × 600 composition itself.
+        // SWI-LAY-5: the plate is sampled nearest where its baked pixels are the device pixels (a canvas texture of its own, so the labels and controls keep the view's linear sampling), else linear.
         if (KitPlatePart() is { } kit && SteamwovenKitStore.Texture(kit.Set, kit.Part.Id) is { } kitPlate)
         {
-            SteamwovenKitStore.Retain(kit.Set, [kit.Part.Id]);
-            DrawTextureRect(kitPlate, new Rect2(0, 0, width, height), false);
+            SteamwovenKitStore.Retain("plate", kit.Set, [kit.Part.Id]);
+            DrawTextureRect(KitPlateTexture(kitPlate, kit.Part), new Rect2(0, 0, width, height), false);
         }
         else
+        {
+            if (FullScreenPlan is { } plan && SteamwovenKitStore.SetFor(plan.Layout.Step) is { } held) SteamwovenKitStore.Retain("plate", held, []);
             DrawTextureRect(wide ?? _background, new Rect2((width - drawnWidth) / 2, 0, drawnWidth, height), false);
+        }
         DrawControls();
         for (var i = 0; i < _labels.Count; i++)
         {
@@ -247,6 +250,20 @@ public partial class AreaMenuArtView : Control
             }
         }
     }
+
+    private CanvasTexture? _plateTexture;
+
+    /// <summary>The texture the plate is drawn with: the kit's own when it is drawn scaled, a nearest-sampled canvas texture of it when its pixels are the device pixels.</summary>
+    private Texture2D KitPlateTexture(Texture2D texture, SteamwovenKitPart part)
+    {
+        var exact = FullScreenPlan is { } plan && part.Width == plan.Zone.Width && part.Height == plan.Zone.Height;
+        if (!exact) return texture;
+        if (_plateTexture is null || _plateTexture.DiffuseTexture != texture) _plateTexture = new CanvasTexture { DiffuseTexture = texture, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
+        return _plateTexture;
+    }
+
+    /// <summary>ARC-UI-2461: true when the kit plate drawn now is sampled nearest (its baked pixels are the device pixels), for the self-test.</summary>
+    internal bool KitPlateExactForSelfTest => KitPlatePart() is { } kit && FullScreenPlan is { } plan && kit.Part.Width == plan.Zone.Width && kit.Part.Height == plan.Zone.Height;
 
     /// <summary>ARC-UI-2461: the id of the kit plate this menu draws now, for the self-test (null: the pack's or the original's plate).</summary>
     internal string? KitPlateForSelfTest => KitPlatePart()?.Part.Id;

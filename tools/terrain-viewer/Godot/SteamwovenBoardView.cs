@@ -22,6 +22,7 @@ internal sealed partial class SteamwovenBoardView : TextureRect
     private (ChromeMaterial, ChromeSides, Rect2I, double, double, double, object?)? _key;
     private int _generation;
     private int _pending;
+    private bool _kit;
 
     // ARC-UI-2576: a backdrop leaves the squares of the round views out (up to two), so the lens shows the game view under it.
     private const string HoleShader = """
@@ -79,7 +80,7 @@ internal sealed partial class SteamwovenBoardView : TextureRect
     /// <summary>ARC-UI-2461: shows a kit part instead of a generated paint: the baked texture over <paramref name="rect"/>, nearest when exact (the baked pixels are the device pixels), else linear. A paint under way is dropped.</summary>
     public void ShowKit(Texture2D texture, Rect2I rect, bool exact)
     {
-        _generation++; _key = null;
+        _generation++; _key = null; _kit = true;
         Position = rect.Position; Size = rect.Size;
         Texture = texture;
         TextureFilter = exact ? TextureFilterEnum.Nearest : TextureFilterEnum.Linear;
@@ -88,6 +89,8 @@ internal sealed partial class SteamwovenBoardView : TextureRect
     public void Request(SteamwovenBoardSpec spec)
     {
         TextureFilter = TextureFilterEnum.Nearest;
+        // Back from a kit part: its texture goes at once, so it cannot stand in for the generated paint that is still under way.
+        if (_kit) { _kit = false; Texture = null; }
         Position = spec.Rect.Position; Size = spec.Rect.Size;
         if (_key == spec.Key) return;
         _key = spec.Key;

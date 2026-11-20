@@ -58,7 +58,7 @@ public partial class TerrainViewerApp
         await frames(3);
         require(art.KitPlateForSelfTest == expectedId, $"[{tag}] the {screen} window draws the kit plate {expectedId}, got {art.KitPlateForSelfTest}");
         var exact = SteamwovenKitStore.SetFor(layout.Layout.Step) is { } set && set.TryGet(expectedId, out var part) && part.Width == layout.Zone.Width && part.Height == layout.Zone.Height;
-        require(art.TextureFilter == (exact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear), $"[{tag}] the plate is sampled {(exact ? "nearest" : "linear")} as its draw is {(exact ? "exact" : "scaled")}");
+        require(art.KitPlateExactForSelfTest == exact && art.TextureFilter == CanvasItem.TextureFilterEnum.Linear, $"[{tag}] the plate's own sampling is {(exact ? "nearest" : "linear")} as its draw is {(exact ? "exact" : "scaled")} and the labels keep the view's linear filter");
         using var image = GetViewport().GetTexture().GetImage();
         var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
         Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
@@ -151,7 +151,8 @@ public partial class TerrainViewerApp
                     require(Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the zone's right is the inventory piece (got {Pixel(zone.Right - 16, y0)})");
                     require(Near(Pixel(background[1].Rect.X - 1, y0), KitDoll) && Near(Pixel(background[1].Rect.X, y0), KitInventory), $"[{tag}] the pieces meet at the split with no gap");
                 }
-                // SWI-RUN-5: only the open window's background is in memory.
+                // SWI-RUN-5: only the open window's background and only the step in use are in memory.
+                require(SteamwovenKitStore.ResidentForSelfTest.All(path => path.StartsWith(System.IO.Path.Combine(root, SteamwovenKitSet.FolderName(step)) + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal)), $"[{tag}] only the {SteamwovenKitSet.FolderName(step)} set is resident");
                 require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 2, $"[{tag}] only the two pieces of the open window are resident");
                 _smokeKitBackdrop = null;
                 await frames(3);

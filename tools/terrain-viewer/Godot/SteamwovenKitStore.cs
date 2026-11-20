@@ -18,6 +18,11 @@ internal static class SteamwovenKitStore
     private static bool _overridden;
     private static string? _root;
     private static bool _resolved;
+    private static SteamwovenStep? _current;
+    private static readonly Dictionary<string, HashSet<string>> Retained = [];
+
+    /// <summary>True in an automated run (a smoke or the self-test): the kit is then read only from <c>ARC_STEAMWOVEN_KIT</c> or a smoke's own override, so a kit baked in the owner's checkout cannot change what the other smokes see.</summary>
+    public static bool AutomatedRun { get; set; }
 
     /// <summary>The folder of the baked sets for this run, or null when there is none or the kit is turned off (<c>ARC_STEAMWOVEN_KIT=off</c>).</summary>
     public static string? Root
@@ -28,6 +33,7 @@ internal static class SteamwovenKitStore
             if (_resolved) return _root;
             _resolved = true;
             var env = System.Environment.GetEnvironmentVariable(SteamwovenKitRoot.EnvName);
+            if (AutomatedRun && string.IsNullOrWhiteSpace(env)) { _root = null; return null; }
             string?[] starts = [System.IO.Directory.GetCurrentDirectory(), System.AppContext.BaseDirectory, ProjectSettings.GlobalizePath("res://"), System.IO.Path.GetDirectoryName(OS.GetExecutablePath())];
             _root = SteamwovenKitRoot.Resolve(env, starts.Where(start => start is not null)!, [ProjectSettings.GlobalizePath("user://steamwoven-ui/baked")]);
             return _root;
@@ -51,14 +57,15 @@ internal static class SteamwovenKitStore
     /// <summary>Forgets every set and texture (a rebaked kit is read again).</summary>
     public static void Reset()
     {
-        Sets.Clear(); Reported.Clear();
-        foreach (var texture in Textures.Values) texture?.Dispose();
-        Textures.Clear();
+        // The textures are not disposed: a node may still draw one, and the engine frees it with its last reference.
+        Sets.Clear(); Reported.Clear(); Textures.Clear(); Retained.Clear(); _current = null;
     }
 
     /// <summary>The baked set of a step, read once; null with no folder, no manifest or a manifest of another step.</summary>
     public static SteamwovenKitSet? SetFor(SteamwovenStep step)
     {
+        // A step is the only one in memory (SWI-RUN-5): when the step in use changes, every other step's textures go.
+        if (_current != step) { _current = step; DropOtherSteps(step); }
         if (Sets.TryGetValue(step, out var known)) return known;
         var root = Root;
         SteamwovenKitSet? set = null;
@@ -66,8 +73,6 @@ internal static class SteamwovenKitStore
         {
             set = SteamwovenKitSet.Read(root, step, out var problem);
             if (problem is not null && Reported.Add("set:" + step)) GD.Print("ARC-UI-2461 kit: " + problem);
-            // A step is the only one in memory: the others' textures go (SWI-RUN-5).
-            DropOtherSteps(step);
         }
         Sets[step] = set;
         return set;
@@ -75,8 +80,9 @@ internal static class SteamwovenKitStore
 
     private static void DropOtherSteps(SteamwovenStep step)
     {
-        var keep = System.IO.Path.DirectorySeparatorChar + SteamwovenKitSet.FolderName(step) + System.IO.Path.DirectorySeparatorChar;
-        foreach (var key in Textures.Keys.Where(key => !key.Contains(keep, StringComparison.Ordinal)).ToList())
+        // The keys are file paths; the set of a step is a folder of its own beside the others.
+        var folder = Root is { } root ? System.IO.Path.Combine(root, SteamwovenKitSet.FolderName(step)) + System.IO.Path.DirectorySeparatorChar : null;
+        foreach (var key in Textures.Keys.Where(key => folder is null || !key.StartsWith(folder, StringComparison.Ordinal)).ToList())
             Drop(key);
     }
 
@@ -84,7 +90,7 @@ internal static class SteamwovenKitStore
 
     private static void Drop(string key)
     {
-        if (Textures.Remove(key, out var texture)) texture?.Dispose();
+        Textures.Remove(key);
     }
 
     /// <summary>The texture of a part of the set, loaded on first use and checked against the manifest's size; null (reported once) when the file does not read or is another size.</summary>
@@ -115,12 +121,13 @@ internal static class SteamwovenKitStore
         return texture;
     }
 
-    /// <summary>SWI-RUN-5: keeps the resident backgrounds and plates of <paramref name="set"/> to <paramref name="ids"/>; every other <c>backdrop.</c> texture is released.</summary>
-    public static void Retain(SteamwovenKitSet set, IReadOnlyCollection<string> ids)
+    /// <summary>SWI-RUN-5: <paramref name="owner"/> (the open window's background, the open menu's plate) says which <c>backdrop.</c> parts of <paramref name="set"/> it holds now; every <c>backdrop.</c> texture no owner holds is released.</summary>
+    public static void Retain(string owner, SteamwovenKitSet set, IReadOnlyCollection<string> ids)
     {
+        Retained[owner] = [.. ids];
         foreach (var id in set.Ids)
         {
-            if (!id.StartsWith("backdrop.", StringComparison.Ordinal) || ids.Contains(id)) continue;
+            if (!id.StartsWith("backdrop.", StringComparison.Ordinal) || Retained.Values.Any(held => held.Contains(id))) continue;
             Drop(Key(set, id));
         }
     }
