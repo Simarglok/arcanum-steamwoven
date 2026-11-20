@@ -142,8 +142,8 @@ public sealed partial class GameSessionOwner
 
         // The items leave their holder in the walk's order (last first); each placement sees the items still to come as not yet dropped (as a container's spill does).
         var later = held2.Where(item => !item.Destroy).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
-        // ARC-SCRIPT-2879 (0x463860 → 0x467860, BD3): every item of the walk, destroyed or dropped, runs its remove-item script (28) with the corpse as the triggerer after its unlink and before it is destroyed or laid down. Limit: the runs come after the commit of the corpse's destroy and the seed items' drop changes above (the original runs point 28 before its destroy), so a script that reads the corpse or an item's drop state through the host sees them already changed.
-        var removals = new PassRemovals(this, _passWorld?.ItemScriptHost, map);
+        // ARC-SCRIPT-2879 (0x463860 → 0x467860, BD3): every item of the walk, destroyed or dropped, runs its remove-item script (28; ARC-SCRIPT-2885: the wield-off script 25 first when the corpse wore the item) with the corpse as the triggerer after its unlink and before it is destroyed or laid down. Limit: the runs come after the commit of the corpse's destroy and the seed items' drop changes above (the original runs point 28 before its destroy), so a script that reads the corpse or an item's drop state through the host sees them already changed.
+        var removals = new PassRemovals(this, _passWorld?.ItemScriptHost, map, npc => PassWorldAs<ISessionRestockWorld>()?.NpcWieldScripts(map, npc));
         foreach (var (entity, placed, isSeed, destroy) in held2)
         {
             removals.Run(at.Code, entity, PassItemPoints(map, entity));
