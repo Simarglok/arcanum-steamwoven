@@ -480,7 +480,7 @@ public partial class TerrainViewerApp
                 if (_mapTransfers.LastScripted?.Dialog is { } sectorTalk) BeginScriptedConversation(sectorTalk);
             }
             // ARC-SCRIPT-2822 (ledger TQ7, 0x4F2330): inside the same sector entry, after the sector's script (which may be none), every direct follower's new-sector script (point 27) runs; the arrival, teleport and placement are entries too.
-            if (!step.TileScriptOnly && (step.From == step.To || AreaMapTransfers.CrossesSector(step.From, step.To))) RunFollowersNewSector();
+            if (AreaMapTransfers.RunsFollowerNewSector(step.From, step.To, step.TileScriptOnly)) RunFollowersNewSector();
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
     }
