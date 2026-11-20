@@ -158,6 +158,9 @@ class SuccessAndOrder(RunnerCase):
         self.assertEqual(["exec", "resume"], second["argv"][:2])
         self.assertEqual("thread-0001", second["argv"][-2])  # the thread id of the first item's thread.started event
         self.assertEqual(first["cwd"], second["cwd"])
+        for call in (first, second):  # the pinned model and effort reach the real argv of the first and of the resumed call
+            self.assertEqual("gpt-6.1-sol", call["argv"][call["argv"].index("-m") + 1])
+            self.assertIn('model_reasoning_effort="medium"', call["argv"])
         self.assertFalse(first["has_key"] or second["has_key"])  # no API key reaches the session
         self.assertIn("SESSION RULES", first["prompt"])
         self.assertNotIn("SESSION RULES", second["prompt"])
