@@ -42,7 +42,7 @@ public partial class AreaWorldMapArtView : Control
     private AreaWorldMap? _map;
     private Func<int, bool>? _known;
     private string _message = "";
-    private (int X, int Y) _offset, _max = AreaWorldMapArtLayout.MaxOffset();
+    private (int X, int Y) _offset;
     // ARC-UI-084: the town map (kind 2) with its own scroll offset (each kind keeps its own, WM62), the tile textures read so far and which tile files exist.
     private AreaTownMapShow? _town;
     private (int X, int Y) _townOffset, _townMax;
@@ -103,7 +103,30 @@ public partial class AreaWorldMapArtView : Control
     public Func<bool>? PollGate { get; set; }
 
     public (int X, int Y) Offset => _offset;
-    public (int X, int Y) MaxOffset => _max;
+    public (int X, int Y) MaxOffset => MapMax;
+
+    /// <summary>ARC-UI-2993 (stopgap of #2992): picture pixels per window unit of the map view. 1 in the original look; under the HD option (the Steamwoven layout) the window lies at the
+    /// composition's scale s and the picture is drawn at 1:1 device pixels, so it is the window's device scale: the view shows more of the continent, sharp, and the markers, labels,
+    /// route lines and the frame stay at s. The town map, the continent view and every rule read picture pixels as before.</summary>
+    public double PixelsPerUnit => _pixelsPerUnitForSelfTest ?? (AreaGameBarPanel.SteamwovenOn && IsInsideTree() ? Math.Max(.25, DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit);
+    private double? _pixelsPerUnitForSelfTest;
+    private double _fittedPixelsPerUnit = AreaWorldMapArtLayout.OriginalPixelsPerUnit;
+    private (int X, int Y) MapMax => _map is { } map ? AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width, PixelsPerUnit) : AreaWorldMapArtLayout.MaxOffset();
+
+    /// <summary>A check forces the picture scale (null gives the window's own); the view keeps its centre and redraws.</summary>
+    internal void SetPixelsPerUnitForSelfTest(double? value) { _pixelsPerUnitForSelfTest = value; FitPicture(); Redraw(); }
+
+    /// <summary>The picture scale changed (the window was placed at another scale, the option was switched): keep the picture point at the view's centre and the offset inside its limits.</summary>
+    private void FitPicture()
+    {
+        var now = PixelsPerUnit;
+        if (Math.Abs(now - _fittedPixelsPerUnit) < 1e-9) return;
+        var before = AreaWorldMapArtLayout.ViewPictureSize(_fittedPixelsPerUnit);
+        var centre = (X: _offset.X + before.Width / 2, Y: _offset.Y + before.Height / 2);
+        _fittedPixelsPerUnit = now;
+        if (_map is null) return;
+        _offset = AreaWorldMapArtLayout.CentreOn(centre.X, centre.Y, MapMax, now);
+    }
     public AreaWorldMapKind Kind => _kind;
     public (int X, int Y) TownOffset => _townOffset;
     public (int X, int Y) TownMaxOffset => _townMax;
@@ -157,7 +180,7 @@ public partial class AreaWorldMapArtView : Control
     internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     /// <summary>A mouse move inside the view during a drag (the edge scroll of WM99).</summary>
     internal void DragForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; if (_dragging) DragEdgeScroll(windowPoint); }
-    internal void SetOffsetForSelfTest((int X, int Y) offset) { _offset = AreaWorldMapArtLayout.Clamp(offset, _max); Redraw(); }
+    internal void SetOffsetForSelfTest((int X, int Y) offset) { FitPicture(); _offset = AreaWorldMapArtLayout.Clamp(offset, MapMax); Redraw(); }
 
     public override void _Ready()
     {
@@ -205,7 +228,7 @@ public partial class AreaWorldMapArtView : Control
     {
         if (_look is null) throw new InvalidOperationException("ARC-UI-073: the world-map art is not set");
         _map = map; _known = known; _message = ""; _teleportMode = teleportMode;
-        _max = AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width);
+        Place();
         (_hovered, _pressed, _compassDragged, _pressedInView) = (null, null, false, false);
         (_armed, _dragging) = (map.OnStartMap, false);
         _kind = AreaWorldMapKind.Map; _readoutPixel = null; _hoverArea = _hoverNote = -1;
@@ -276,7 +299,8 @@ public partial class AreaWorldMapArtView : Control
 
     private bool InView(WorldMapPixel pixel)
     {
-        var (x, y) = AreaWorldMapArtLayout.ToWindow(pixel.X, pixel.Y, _offset);
+        FitPicture();
+        var (x, y) = AreaWorldMapArtLayout.ToWindow(pixel.X, pixel.Y, _offset, PixelsPerUnit);
         var view = AreaWorldMapArtLayout.View;
         return x >= view.X && y >= view.Y && x < view.X + view.Width && y < view.Y + view.Height;
     }
@@ -292,7 +316,8 @@ public partial class AreaWorldMapArtView : Control
             return;
         }
         var at = map.OnStartMap ? map.Position : new WorldMapPixel(map.Data.Width / 2, map.Data.Width / 2);
-        _offset = AreaWorldMapArtLayout.CentreOn(at.X, at.Y, _max);
+        FitPicture();
+        _offset = AreaWorldMapArtLayout.CentreOn(at.X, at.Y, MapMax, PixelsPerUnit);
         Redraw();
     }
 
@@ -331,7 +356,8 @@ public partial class AreaWorldMapArtView : Control
             return true;
         }
         if (_kind != AreaWorldMapKind.Map) return false;
-        var next = AreaWorldMapArtLayout.Scroll(_offset, direction, step, _max);
+        FitPicture();
+        var next = AreaWorldMapArtLayout.Scroll(_offset, direction, AreaWorldMapArtLayout.StepPixels(step, PixelsPerUnit), MapMax);
         if (next == _offset) return false;
         _offset = next;
         Redraw();
@@ -377,6 +403,7 @@ public partial class AreaWorldMapArtView : Control
             Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
             Position = new Vector2((float)zone.X, (float)zone.Y);
             RedrawOnScaleChange();
+            FitPicture();
             return;
         }
         var (top, free) = AreaGameBarPanel.FreeArea(GetViewportRect().Size);
@@ -386,6 +413,7 @@ public partial class AreaWorldMapArtView : Control
         Position = new Vector2(AreaGameBarPanel.FreeLeft + MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
             top + MathF.Round((free.Y - AreaWorldMapArtLayout.WindowHeight * factor) / 2));
         RedrawOnScaleChange();
+        FitPicture();
     }
 
     // ARC-UI-1197: a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the frame is drawn again at the new device scale.
@@ -488,8 +516,16 @@ public partial class AreaWorldMapArtView : Control
 
     // The picture pixel under a window point in the current kind (WM25, WM41).
     private (long X, long Y)? PixelAt(Vector2 at) => _map is null ? null
-        : _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset)
+        : _kind == AreaWorldMapKind.Map ? MapPixelAt(at)
         : _kind == AreaWorldMapKind.Town ? AreaTownMapLayout.ToPicture(at.X, at.Y, _townOffset) : AreaWorldMapArtLayout.ZoomedToPicture(at.X, at.Y, _map.Data.Width);
+
+    // A point on the black margin beside a picture smaller than the view (an HD window beyond 2000 picture pixels) is no picture pixel: no waypoint, note or readout.
+    private (long X, long Y)? MapPixelAt(Vector2 at)
+    {
+        FitPicture();
+        var width = _map?.Data.Width ?? AreaWorldMapArtLayout.PictureSize;
+        return AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset, PixelsPerUnit) is { } pixel && pixel.X >= 0 && pixel.Y >= 0 && pixel.X < width && pixel.Y < width ? pixel : null;
+    }
 
     private IReadOnlyList<(long X, long Y)> MarkerPixels()
     {
@@ -546,7 +582,7 @@ public partial class AreaWorldMapArtView : Control
         // ARC-UI-110: as in the town map (WM59) the hover works in tool state 0 only, not with the quill.
         if (!_quill && pixel is { } p && _map is not null && (_kind == AreaWorldMapKind.Continent || !Travelling))
         {
-            var half = _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.HoverHalf : AreaWorldMapArtLayout.ZoomedHoverHalf;
+            var half = _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf, PixelsPerUnit) : AreaWorldMapArtLayout.ZoomedHoverHalf;
             var index = AreaWorldMapArtLayout.HitMarker(MarkerPixels(), p.X, p.Y, half);
             hit = index < 0 ? -1 : _markers[index];
             // A note shows its text where no area marker is under the pointer (the newest note wins an overlap, WM58).
@@ -647,7 +683,8 @@ public partial class AreaWorldMapArtView : Control
             {
                 // WM34: a click in the continent view zooms in on the clicked point (not in a town-map sector).
                 _kind = AreaWorldMapKind.Map;
-                _offset = AreaWorldMapArtLayout.CentreOn(zoomTo.X, zoomTo.Y, _max);
+                FitPicture();
+                _offset = AreaWorldMapArtLayout.CentreOn(zoomTo.X, zoomTo.Y, MapMax, PixelsPerUnit);
                 ClearDescription();
             }
             _pressedInView = false;
@@ -760,7 +797,7 @@ public partial class AreaWorldMapArtView : Control
     {
         get
         {
-            if (_kind != AreaWorldMapKind.Continent) return AreaWorldMapArtLayout.HoverHalf;
+            if (_kind != AreaWorldMapKind.Continent) return _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf, PixelsPerUnit) : AreaWorldMapArtLayout.HoverHalf;
             // The largest of the four note arts, not the drawn note's own (a safe bound; the arts are about the same size).
             var artHalf = 0;
             foreach (var art in AreaWorldMapArtLayout.NoteTypeArts)
@@ -833,7 +870,7 @@ public partial class AreaWorldMapArtView : Control
         var map = _map!;
         var hit = -1;
         if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.AreaArt, out var frames) == true && frames.Length > 0)
-            hit = AreaWorldMapArtLayout.HitWaypoint([.. map.Waypoints.Select(w => (w.Pixel.X, w.Pixel.Y))], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight());
+            hit = AreaWorldMapArtLayout.HitWaypoint([.. map.Waypoints.Select(w => (w.Pixel.X, w.Pixel.Y))], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight(), PixelsPerUnit);
         if (hit >= 0) map.Select(hit);
         else
         {
@@ -873,7 +910,7 @@ public partial class AreaWorldMapArtView : Control
         var view = AreaWorldMapArtLayout.View;
         canvas.DrawRect(new Rect2(0, 0, view.Width, view.Height), Colors.Black);
         if (_look is null) return;
-        if (_kind == AreaWorldMapKind.Map) DrawMapView(canvas);
+        if (_kind == AreaWorldMapKind.Map) { FitPicture(); DrawMapView(canvas); }
         else if (_kind == AreaWorldMapKind.Town) DrawTownView(canvas);
         else DrawContinentView(canvas);
         // WM42: the cover over the view's bottom edge, drawn last in both views.
@@ -959,13 +996,17 @@ public partial class AreaWorldMapArtView : Control
 
     private void DrawMapView(CanvasItem canvas)
     {
-        var (first, last, firstRow, lastRow) = AreaWorldMapArtLayout.VisibleTiles(_offset);
+        var unit = PixelsPerUnit;
+        var (first, last, firstRow, lastRow) = AreaWorldMapArtLayout.VisibleTiles(_offset, unit);
         for (var row = firstRow; row <= lastRow; row++)
             for (var column = first; column <= last; column++)
             {
                 var index = AreaWorldMapArtLayout.TileColumns * row + column;
                 if (index >= _look!.Tiles.Count) continue;
-                canvas.DrawTexture(_look.Tiles[index], new Vector2(AreaWorldMapArtLayout.TileSize * column - _offset.X, AreaWorldMapArtLayout.TileSize * row - _offset.Y));
+                var at = new Vector2(AreaWorldMapArtLayout.TileSize * column - _offset.X, AreaWorldMapArtLayout.TileSize * row - _offset.Y);
+                // ARC-UI-2993: under the HD option a tile covers 250 device pixels (250 / unit window units), so the picture stays 1:1 and sharp.
+                if (unit == AreaWorldMapArtLayout.OriginalPixelsPerUnit) canvas.DrawTexture(_look.Tiles[index], at);
+                else canvas.DrawTextureRect(_look.Tiles[index], new Rect2(at / (float)unit, new Vector2(AreaWorldMapArtLayout.TileSize, AreaWorldMapArtLayout.TileSize) / (float)unit), false);
             }
         if (_map is not { } map) return;
         var data = map.Data;
@@ -976,7 +1017,7 @@ public partial class AreaWorldMapArtView : Control
             var pixel = WorldTravelGeometry.Pixel(data.TravelAreas[area].Location, data.Width);
             Marker(canvas, AreaWorldMapArtLayout.AreaArt, pixel);
             var worldArea = data.Areas.Areas[area];
-            var (x, y) = AreaWorldMapArtLayout.LabelAt(pixel.X, pixel.Y, _offset, (int)worldArea.NameOffsetX, (int)worldArea.NameOffsetY);
+            var (x, y) = AreaWorldMapArtLayout.LabelAt(pixel.X, pixel.Y, _offset, (int)worldArea.NameOffsetX, (int)worldArea.NameOffsetY, unit);
             Label(canvas, worldArea.Name, x, y, colour);
         }
         // ARC-UI-110, ARC-UI-2330, ARC-UI-2445 (WM142, WM49): the map view's notes, each with the art of its type centred on its pixel, then its text beside it as an area
@@ -985,9 +1026,9 @@ public partial class AreaWorldMapArtView : Control
         if (_mapNotes is { } mapNotes)
             foreach (var note in mapNotes.Items)
             {
-                MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _offset.X, note.PixelY - _offset.Y));
+                MarkerAt(canvas, NoteArtFor(note), ViewPoint(new WorldMapPixel(note.PixelX, note.PixelY)));
                 if (NoteLabelsOffForSelfTest) continue;
-                var (x, y) = AreaWorldMapArtLayout.LabelAt(note.PixelX, note.PixelY, _offset, 0, 0);
+                var (x, y) = AreaWorldMapArtLayout.LabelAt(note.PixelX, note.PixelY, _offset, 0, 0, unit);
                 Label(canvas, note.Text, x, y, AreaWorldMapArtLayout.NoteLabelColourOf(note.Type));
             }
         if (!map.OnStartMap) return;
@@ -1039,7 +1080,12 @@ public partial class AreaWorldMapArtView : Control
     private static int? LastDiscovered(AreaWorldMap map) =>
         map.Session.QueryLastDiscoveredArea() is > 0 and var area && area < map.Data.TravelAreas.Count ? area : null;
 
-    private Vector2 ViewPoint(WorldMapPixel pixel) => new(pixel.X - _offset.X, pixel.Y - _offset.Y);
+    // A picture pixel's place in the view, in window units (ARC-UI-2993: the markers, labels and route lines are anchored there at the composition's scale).
+    private Vector2 ViewPoint(WorldMapPixel pixel)
+    {
+        var unit = (float)PixelsPerUnit;
+        return new((pixel.X - _offset.X) / unit, (pixel.Y - _offset.Y) / unit);
+    }
 
     private void Marker(CanvasItem canvas, int art, WorldMapPixel pixel) => MarkerAt(canvas, art, ViewPoint(pixel));
 

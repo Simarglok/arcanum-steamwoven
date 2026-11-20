@@ -1,8 +1,8 @@
 """ARC-RES-2455: the text prompt library of the Steamwoven kit and its inbox/outbox handoff.
 
 Prompts are text only (TRD SWI-GEN-3, docs/ui/steamwoven-interface-trd.md); images, references and results stay under the ignored
-`local/steamwoven-ui/` (SWI-PRV-1). The owner runs Codex image generation (SWI-GEN-7): this tool prepares the batch inbox, then writes the
-provenance records (SWI-GEN-6) for what the owner put into the outbox. Standard library only; the layout references use ImageMagick `magick`.
+`local/steamwoven-ui/` (SWI-PRV-1). Codex image generation runs through the owner's subscription Codex CLI (SWI-GEN-7): this tool prepares the batch inbox,
+`codex_batch.py` runs it and writes the outbox with its provenance records (SWI-GEN-6); `provenance` below records an outbox the owner filled by hand. Standard library only; the layout references use ImageMagick `magick`.
 
     python3 -B tools/steamwoven_ui/prompt_library.py check
     python3 -B tools/steamwoven_ui/prompt_library.py show ID [--part-id P --part-note N --width W --height H]
@@ -221,9 +221,9 @@ def build_inbox(library: dict, batch: str, local_root: Path, prompts_dir: Path =
         items.append({"id": pid, "title": entry["title"], "prompt_file": f"prompts/{pid}.txt", "prompt_sha256": sha256_text(text),
                       "size": entry.get("size"), "references": refs, "outbox_file": f"outbox/{batch}/{pid}.png"})
     (inbox / "batch.json").write_text(json.dumps({"batch": batch, "after": spec.get("after"), "items": items}, indent=2) + "\n", encoding="utf-8")
-    lines = [f"Batch {batch}: {len(items)} image(s). The owner runs Codex image generation (SWI-GEN-7).", "",
-             "For each item: give Codex the prompt text and the listed reference images, then save the result as the outbox file name.",
-             f"Put the results into {local_root / 'outbox' / batch}/ and tell the agent in the thread.", ""]
+    lines = [f"Batch {batch}: {len(items)} image(s). Run it with: python3 -B tools/steamwoven_ui/codex_batch.py run {batch} (the owner's Codex subscription, SWI-GEN-7).", "",
+             "By hand instead: for each item give Codex the prompt text and the listed reference images, then save the result as the outbox file name.",
+             f"The results go into {local_root / 'outbox' / batch}/.", ""]
     for item in items:
         size = item["size"] or [None, None]
         shown = " x ".join(str(side) if side else "(see part note)" for side in size)

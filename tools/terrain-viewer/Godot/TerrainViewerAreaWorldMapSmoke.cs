@@ -36,6 +36,7 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         var savedInterfaceHd = _gameSettings.HdInterface;
+        var savedGeneratedInterface = _gameSettings.GeneratedInterface;
         // ARC-UI-2306: the bars stay up under the window (the note entry runs on the bottom strip), so the stage runs with them, as the game does.
         var savedBars = _gameBarForSelfTest;
         _gameBarForSelfTest = true;
@@ -44,10 +45,11 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 1200 && !(_gameBarPanel is { Visible: true } && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(_gameBarPanel is { Visible: true } && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }, "the bars and art 200 read");
             // ARC-UI-126: ARC_AREA_WORLDMAP_HD_VERIFY=1 runs the stage with the HD interface art of ARC_HD_PACK (the bar and sheet smokes' switch), for a native look.
-            if (System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") == "1")
+            // ARC-UI-2993: ARC_AREA_WORLDMAP_HD_VERIFY=generated also turns the generated interface on, which is the Steamwoven layout (the composition's scale) the HD option plays with.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") is "1" or "generated")
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
-                _gameSettings = _gameSettings with { HdInterface = true };
+                _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = _gameSettings.GeneratedInterface || System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") == "generated" };
                 SyncInterfaceHd();
                 Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
             }
@@ -84,6 +86,9 @@ public partial class TerrainViewerApp
             {
                 var artView = _worldMapPanel.ArtView;
                 Require(_worldMapPanel.ArtMode && artView.Visible, "the window shows the original look");
+                // ARC-UI-2993: the checks below are the 1:1 window units' ones (the original look, HD off); the HD option's picture scale has its own step after them.
+                artView.SetPixelsPerUnitForSelfTest(1);
+                _worldMapPanel.CentreOnParty();
                 var max = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width);
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), $"opened centred on the party: offset {artView.Offset}");
                 var scrollFrom = artView.Offset;
@@ -95,6 +100,25 @@ public partial class TerrainViewerApp
                 Require(artView.Offset == max, "scrolling clamps at the south-east corner");
                 _worldMapPanel.CentreOnParty();
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
+                // ARC-UI-2993 (AC1, AC2): at the composition's scales the picture is drawn 1:1 in device pixels, so the view covers more picture pixels: Home centres on the party, the scroll
+                // clamps at the larger visible area's corners, and the pointer over the party's picture pixel reads that pixel's sector (the same map pixel as before).
+                foreach (var scale in new[] { 1.33, 1.8, 2.4, 3.6 })
+                {
+                    artView.SetPixelsPerUnitForSelfTest(scale);
+                    var scaledMax = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width, scale);
+                    _worldMapPanel.CentreOnParty();
+                    Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, scaledMax, scale), $"HD scale {scale}: Home centres on the party: {artView.Offset}");
+                    var partyAt = AreaWorldMapArtLayout.ToWindow(map.Position.X, map.Position.Y, artView.Offset, scale);
+                    artView.PointerForSelfTest(new Vector2((float)(partyAt.X + .5 / scale), (float)(partyAt.Y + .5 / scale)));
+                    Require(artView.ReadoutForSelfTest == AreaWorldMapArtLayout.Readouts(map.Position.X, map.Position.Y, data.Width, artLook!.Content.Offsets.Longitude, artLook.Content.Offsets.Latitude),
+                        $"HD scale {scale}: the pointer over the party's pixel reads its sector");
+                    for (var i = 0; i < 200; i++) artView.ScrollBy(7, AreaWorldMapArtLayout.CompassStep);
+                    Require(artView.Offset == (0, 0), $"HD scale {scale}: scrolling clamps at the north-west corner");
+                    for (var i = 0; i < 200; i++) artView.ScrollBy(3, AreaWorldMapArtLayout.CompassStep);
+                    Require(artView.Offset == scaledMax, $"HD scale {scale}: scrolling clamps at the south-east corner of the larger visible area: {artView.Offset} vs {scaledMax}");
+                }
+                artView.SetPixelsPerUnitForSelfTest(1);
+                _worldMapPanel.CentreOnParty();
                 // ARC-UI-134 (WM140): the lens shows the game view around the hero under the window, drawn over by art 198 when it read.
                 for (var f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var (holeCorner, holeEdge) = artView.LensOnScreen;
@@ -208,7 +232,23 @@ public partial class TerrainViewerApp
                     image.SavePng(path);
                 }
                 var shot = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } path ? path : null;
-                await Shot(shot);
+                // ARC-UI-2993: a local capture of the map view for the owner. ARC_WORLDMAP_SMOKE_SIZE=WIDTHxHEIGHT sets the display; ARC_WORLDMAP_SMOKE_PICTURE=before draws the picture in window units
+                // (scaled with the window, the earlier look), anything else draws the window's own picture scale (1:1 device pixels under the HD option); the view is centred on the marked area.
+                if (shot is not null)
+                {
+                    var captureSizeText = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SIZE")?.Split('x');
+                    var picked = captureSizeText is [var cw, var ch] && int.TryParse(cw, out var captureWidth) && int.TryParse(ch, out var captureHeight) && captureWidth >= 800 && captureHeight >= 600 ? new Vector2I(captureWidth, captureHeight) : (Vector2I?)null;
+                    var displayBefore = DisplayServer.WindowGetSize();
+                    if (picked is { } pickedSize) { await SetSmokeWindowSizeAsync(pickedSize); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+                    artView.SetPixelsPerUnitForSelfTest(System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_PICTURE") == "before" ? 1 : null);
+                    artView.SetOffsetForSelfTest(AreaWorldMapArtLayout.CentreOn(markedPixel.X, markedPixel.Y, artView.MaxOffset, artView.PixelsPerUnit));
+                    GD.Print($"ARC-UI-2993 world-map capture display {GetViewport().GetVisibleRect().Size} window scale {artView.Scale.X:0.###} pixels per unit {artView.PixelsPerUnit:0.###}");
+                    await Shot(shot);
+                    artView.SetPixelsPerUnitForSelfTest(1);
+                    artView.SetOffsetForSelfTest(mapOffset);
+                    if (picked is not null) await SetSmokeWindowSizeAsync(displayBefore);
+                }
+                else await Shot(shot);
                 _worldMapPanel.ToggleKind();
                 Require(artView.Kind == AreaWorldMapKind.Continent && !artView.ScrollBy(2, AreaWorldMapArtLayout.KeyStep), "Z shows the continent view, which does not scroll");
                 await Shot(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".continent.png"));
@@ -485,9 +525,10 @@ public partial class TerrainViewerApp
         finally
         {
             if (WorldMapOpen) EndWorldMap();
+            _worldMapPanel?.ArtView.SetPixelsPerUnitForSelfTest(null);
             _gameBarForSelfTest = savedBars;
             _worldMapTownGateOffForSmoke = false;
-            if (_gameSettings.HdInterface != savedInterfaceHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
+            if (_gameSettings.HdInterface != savedInterfaceHd || _gameSettings.GeneratedInterface != savedGeneratedInterface) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGeneratedInterface }; SyncInterfaceHd(); }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }
