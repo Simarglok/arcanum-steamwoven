@@ -55,6 +55,7 @@ Pages are grouped below by kind: project (status, plans, decisions), development
 - [HD presentation contract: scaled crop, Legacy anchors, per-frame fallback, toggle (ARC-RENDER-013) — no HD runtime yet](rendering/hd-presentation-contract.md)
 - [HD interface art: U1/U2 methods and rules](rendering/hd-interface-art.md)
 - [HD pack gap census: interface arts, fonts, portraits and bitmaps the installed pack still lacks (ARC-RES-2946)](rendering/hd-pack-gap-census.md)
+- [HD world map and town maps: town-map tiles are a pure render, world-map x4 upscale compared (ARC-RES-2992)](rendering/hd-world-town-map.md)
 - [HD pack audit against the 4:3 composition: verdicts per kind, sampling at fractional scale, the main-menu plate, kit master scale (ARC-RES-2949)](rendering/hd-pack-4x3-audit.md)
 - [HD upscale methods at 2×: AI vs pixel-art scalers, alpha, palette slots, terrain seams, licences (ARC-RES-033) — research only](rendering/hd-upscale-research.md)
 - [Original look of the inventory, loot, character, logbook and world-map windows (ARC-UI-051: plan; inventory done; ARC-UI-052: loot done; ARC-UI-065: steal done)](ui/original-windows.md)
