@@ -162,6 +162,8 @@ the **town-map tiles were not** (they were "not listed" here), and they are by f
 They are map pictures, like the world map, so the answer of #2952 for the world-map tiles decides them as well; a redraw of 57.5 thousand tiles is not a realistic job, so
 if the owner picks B for the world map, the town maps are a separate, much bigger decision.
 
+**Research result (ARC-RES-2992, [HD world map and town maps](hd-world-town-map.md)):** the town-map tiles are a pure render of the area at 1/4, so a sharp town map is a render by our engine at a larger scale (no redraw); the world map can be upscaled x4 with a non-generative model (`realesr-animevideov3` was the best of three). The entry kinds are the question of #2952.
+
 **Stopgap (ARC-UI-2993, [#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993)):** until the sharp world map of [#2992](https://github.com/Simarglok/arcanum-steamwoven/issues/2992) exists, the HD option (the Steamwoven layout) draws the map view's 64 tiles at 1:1 device pixels instead of scaling them by the composition's scale, while the frame, buttons and the code-drawn overlays stay at the composition's scale. The town map and the continent view are not part of it.
 
 ## Bitmaps outside `art/interface`
