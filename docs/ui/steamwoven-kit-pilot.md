@@ -34,6 +34,8 @@ through `prompt library -> codex_batch -> fit -> assemble -> stage/plan/apply ->
 - **Plate shape.** The generated plate is slightly oval (796 x 815 px in a cell of 887): the masters take the 815 px square; `masked` alpha keeps the plate's own outline (the original's silhouette is the full 39-unit circle, so `legacySmooth` refused 1716 uncovered pixels).
 - **Pack.** The art key is the content hash of the ART file: Schematics_Button (471) has the same content as Char_Tech_Skills, so its frames are the entries of `char_tech_skills`, and the update replaced those three; Skills_Button (472) and Spells_Button (473) replaced their own. Art 471 therefore was never missing at run time (the "pack before" capture draws its HD gear), see F6.
 
+- **Manifest sizes.** The eight new parts are rows with an open size (a part with no source art has one until its batch fixes it, `kit_check`); the masters are 138 x 138 and 108 x 108 px as the fit records say, and the rows' notes name them.
+
 ## Chain findings (each an issue)
 
 | # | Finding | Issue |

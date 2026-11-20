@@ -318,7 +318,7 @@ public partial class TerrainViewerApp
         }, true);
         foreach (var button in new[] { AreaBarButton.Combat, AreaBarButton.Skills, AreaBarButton.Spells, AreaBarButton.Schematics })
         {
-            // The frames are printed, not required, for rest and hover: the events are pushed in viewport coordinates (PushInput in local coordinates): the window of a size wider than the screen is scaled down by the content scale, and window coordinates then miss the button; the held frame is required.
+            // The frames are printed, not required, for rest and hover: the events are pushed in viewport coordinates (PushInput in local coordinates): the window of a size wider than the screen is scaled down by the content scale, and window coordinates then miss the button; the held frame is required (it assumes the play screen is up, so that a toggle press is accepted).
             var push = AreaGameBarLayout.Spec(button).Kind == AreaBarButtonKind.Push;
             var at = panel.BallCentreForSelfTest(button);
             var outside = new Vector2(at.X, stripRect.Position.Y - 40);
@@ -334,6 +334,8 @@ public partial class TerrainViewerApp
             await CaptureHudAsync($"steamwoven-{tag}-btn-{button}-down", frames);
             Motion(outside); await frames(2);
             Press(outside, false); await frames(3);
+            // A toggle is on after its press: click it off at once, so the next button is captured with the bar at rest (the Skills pane open would show in the Spells and Schematics captures).
+            if (!push && _gameBar.IsOn(button)) { Motion(at); await frames(2); Press(at, true); await frames(2); Press(at, false); await frames(4); Motion(outside); await frames(3); }
             GD.Print($"ARC-UI-3058 steamwoven {tag} {button} kind={(push ? "Push" : "Toggle")} frames idle={idle} hover={hover} down={down}");
         }
         // Pressing a toggle turns it on at the press (the cancelled press leaves it on, and the Spells pane open): a click on each toggle that stayed on turns it off again, so the bar is as it was.
