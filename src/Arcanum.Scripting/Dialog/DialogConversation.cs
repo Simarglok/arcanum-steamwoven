@@ -1834,17 +1834,19 @@ public sealed partial class DialogConversation
                     exception.OperationSource);
             }
         }
+        // The dialog transfer of the action, if any: the grammar lets only a co follow it, after an FL (ARC-DEV-190).
+        var transfer = action?.LastOrDefault(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher);
         if (targetFailure is not null)
         {
-            if (block is not null || action?.Any(OpensWindow) != true)
+            // ARC-SCRIPT-2807 (ledger FLM3, 0x413130): a dialog transfer in the action (JO/UW/FL/ET) makes the source skip the response transition, so the reply's own
+            // response record is never looked up for it; a missing or non-NPC response record is no failure then (the transfer's own node check follows below).
+            if (block is not null || action?.Any(OpensWindow) != true && transfer is null)
             {
                 failure = targetFailure;
                 return null;
             }
             target = null;
         }
-        // The dialog transfer of the action, if any: the grammar lets only a co follow it, after an FL (ARC-DEV-190).
-        var transfer = action?.LastOrDefault(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher);
         if (block is null && insult is not null)
         {
             if (_ports.World is null)

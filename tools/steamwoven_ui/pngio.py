@@ -2,6 +2,7 @@
 imaging package. It holds no art: it moves pixels between files and the `Image` below."""
 from __future__ import annotations
 
+from itertools import accumulate
 import struct
 import zlib
 from dataclasses import dataclass
@@ -96,20 +97,22 @@ def decode(blob: bytes) -> Image:
     for y in range(h):
         kind = raw[y * (stride + 1)]
         line = bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
-        for i in range(stride):
-            left = line[i - channels] if i >= channels else 0
-            up = previous[i]
-            corner = previous[i - channels] if i >= channels else 0
-            if kind == 1:
-                line[i] = (line[i] + left) & 255
-            elif kind == 2:
-                line[i] = (line[i] + up) & 255
-            elif kind == 3:
-                line[i] = (line[i] + ((left + up) >> 1)) & 255
-            elif kind == 4:
-                line[i] = (line[i] + _paeth(left, up, corner)) & 255
-            elif kind != 0:
-                raise PngError(f"unknown filter {kind}")
+        if kind == 1:  # Sub and Up are the common filters: whole-row operations, not a byte loop
+            for c in range(channels):
+                line[c::channels] = bytes(v & 255 for v in accumulate(line[c::channels]))
+        elif kind == 2:
+            line = bytearray((a + b) & 255 for a, b in zip(line, previous))
+        elif kind in (3, 4):
+            for i in range(stride):
+                left = line[i - channels] if i >= channels else 0
+                up = previous[i]
+                if kind == 3:
+                    line[i] = (line[i] + ((left + up) >> 1)) & 255
+                else:
+                    corner = previous[i - channels] if i >= channels else 0
+                    line[i] = (line[i] + _paeth(left, up, corner)) & 255
+        elif kind != 0:
+            raise PngError(f"unknown filter {kind}")
         rows.append(line)
         previous = line
     key = None  # a colour key of tRNS for grey (one value) and RGB (three values): that colour is transparent
@@ -117,6 +120,8 @@ def decode(blob: bytes) -> Image:
         key = (int.from_bytes(trns[:2], "big"),)
     elif color == 2 and len(trns) >= 6:
         key = tuple(int.from_bytes(trns[i:i + 2], "big") for i in (0, 2, 4))
+    if color == 6:
+        return Image(w, h, bytearray(b"".join(rows)), source_alpha=True)
     out = bytearray(w * h * 4)
     for y, line in enumerate(rows):
         for x in range(w):
