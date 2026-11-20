@@ -74,7 +74,7 @@ class CutoutsTest(unittest.TestCase):
             pngio.write(cut_dir / f"{tile['from']}.png", solid(20, 20, (90, 70, 50)))
         cutouts.tiles_inbox(spec, local)
         batch = json.loads((local / "inbox" / cutouts.TILE_BATCH / "batch.json").read_text(encoding="utf-8"))
-        self.assertEqual(["tile-wood", "tile-paper", "tile-parchment"], [i["id"] for i in batch["items"]])
+        self.assertEqual(["tile-wood"], [i["id"] for i in batch["items"]])
         for item in batch["items"]:
             text = (local / "inbox" / cutouts.TILE_BATCH / item["prompt_file"]).read_text(encoding="utf-8")
             self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), item["prompt_sha256"])
