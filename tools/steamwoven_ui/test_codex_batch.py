@@ -158,6 +158,9 @@ class SuccessAndOrder(RunnerCase):
         self.assertEqual(["exec", "resume"], second["argv"][:2])
         self.assertEqual("thread-0001", second["argv"][-2])  # the thread id of the first item's thread.started event
         self.assertEqual(first["cwd"], second["cwd"])
+        for call in (first, second):  # the pinned model and effort reach the real argv of the first and of the resumed call
+            self.assertEqual("gpt-6.1-sol", call["argv"][call["argv"].index("-m") + 1])
+            self.assertIn('model_reasoning_effort="medium"', call["argv"])
         self.assertFalse(first["has_key"] or second["has_key"])  # no API key reaches the session
         self.assertIn("SESSION RULES", first["prompt"])
         self.assertNotIn("SESSION RULES", second["prompt"])
@@ -408,6 +411,18 @@ class Helpers(unittest.TestCase):
         self.assertNotIn("-C", command)
         self.assertNotIn("--sandbox", command)
         self.assertEqual(["tid", "-"], command[-2:])
+
+    def test_every_command_pins_the_model_and_the_effort(self) -> None:
+        for thread_id in (None, "tid"):
+            command = cb.exec_command("codex", Path("/w"), Path("/w/r.json"), [], None, thread_id)
+            self.assertEqual("gpt-6.1-sol", command[command.index("-m") + 1])
+            self.assertIn('model_reasoning_effort="medium"', command)
+
+    def test_model_override_replaces_the_model_only(self) -> None:
+        command = cb.exec_command("codex", Path("/w"), Path("/w/r.json"), [], "other-model", None)
+        self.assertEqual("other-model", command[command.index("-m") + 1])
+        self.assertEqual(1, command.count("-m"))
+        self.assertIn('model_reasoning_effort="medium"', command)
 
 
 if __name__ == "__main__":

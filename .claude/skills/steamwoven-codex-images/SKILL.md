@@ -17,6 +17,12 @@ the documents below; this skill only says how to drive the runner.
 Original art goes to Codex as input (owner decision 2026-11-16); every image stays under the ignored `local/steamwoven-ui/` of the main checkout and is never
 committed. Work on the owner's Mac (the batch lives in the main checkout's `local/`, which a worktree does not have; the tool finds it).
 
+## Model (mandatory)
+
+The runner is pinned to **`gpt-6.1-sol` at reasoning effort `medium`** (owner decision 2026-11-20: the model of the good #2455 trial; newer models are problematic). Every `exec` and `exec resume`
+carries it, whatever `~/.codex/config.toml` says. Never pass `--model` with another model, never change the effort and never edit the shared `~/.codex/config.toml`; a newer model needs the
+owner's explicit approval first. The `--dry-run` commands show `-m gpt-6.1-sol` and `model_reasoning_effort="medium"`.
+
 ## Steps
 
 1. The batch inbox exists: `python3 -B tools/steamwoven_ui/prompt_library.py inbox BATCH` builds it from the prompt library (needs its references), or write `batch.json` yourself (below).
