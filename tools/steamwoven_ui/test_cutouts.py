@@ -70,8 +70,12 @@ class CutoutsTest(unittest.TestCase):
         self.assertFalse((local / "material-sheet" / "cutouts" / "big.context.png").exists())
         stale = local / "material-sheet" / "cutouts" / "old-name.png"
         stale.write_bytes(b"x")
-        cutouts.cut(spec, local)
+        keep = local / "material-sheet" / "cutouts" / "readme.txt"
+        keep.write_text("x")
+        records = cutouts.cut(spec, local)
         self.assertFalse(stale.exists())
+        self.assertTrue(keep.exists())  # only PNGs of the cut-outs are managed
+        self.assertEqual(records["big"]["note"], "n")
         self.assertEqual([181, 90, 362, 272], record["pixel_rect"])
         piece = pngio.read(local / "material-sheet" / "cutouts" / "piece.png")
         self.assertEqual((181, 182), (piece.w, piece.h))
