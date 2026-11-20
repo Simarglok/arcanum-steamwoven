@@ -282,7 +282,10 @@ Part kinds:
   [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448)). Its prompt
   comes from the prompt library `tools/steamwoven_ui/prompts/` (text only).
 - **SWI-GEN-4** A generation becomes a master only through the fit tool (size, grid, alpha clean-up, low-frequency
-  colour lock, provenance record).
+  colour lock, provenance record). **As built (ARC-DEV-2459):** `tools/steamwoven_ui/fit.py` ([toolchain section](../workflow/toolchain.md#steamwoven-kit-fit-arc-dev-2459)):
+  crop and scale to the manifest size (area average down, Catmull-Rom up, premultiplied, linear light), real alpha or a keyed flat background, edge decontamination against the nearest opaque colour,
+  alpha clean-up (levels and specks), the colour lock to the approved sheet (SWI-GEN-11) by material, and the record `provenance/fit/<part id>.json`; a master is written only when the gates of SWI-VER-3 hold.
+  Needs of the pilot production ([#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950)): per part the batch names the sheet materials (`--material`) and, if the generator returns no alpha, the key; the batch PR then sets the part's `status` to `master` and its `provenance` to `fit:<part id>`.
 - **SWI-GEN-5** The strips and the window backgrounds are made by the method the owner picks
   ([#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458)) from the comparison
   ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)).
@@ -385,7 +388,9 @@ Agent-checkable (acceptance criteria of the slices):
 - **SWI-VER-2** The manifest validator passes on the real manifest and fails each synthetic bad manifest.
 - **SWI-VER-3** Fit tool tests on synthetic fixtures: exact output size; no halo (in the semi-transparent edge band the
   mean colour difference to the nearest opaque interior is within the bound the tool documents); the colour lock
-  leaves the high-frequency energy within 10 % of the input.
+  leaves the high-frequency energy within 10 % of the input. **As built:** the edge band's mean CIE76 colour difference to the mean of the nearest opaque pixels is at most 3 and its 95th percentile at most 6 (`edge_halo`;
+  the gate reads the pipeline's output before the final safety net, and the tests prove it sees the halo of a plain key, over 9, and of a contaminated source when the decontamination is removed; a share of orphan edge pixels above 10 % and an empty master also fail); the high-frequency energy is the standard deviation of L\*, a\* and b\* minus their 7 x 7 box blur over the opaque interior (`hf_energy`), kept within 10 % (`hf_check`, a floor of 0.25 for flat parts);
+  `test_fit.py` also holds the exact size for each scale and crop, the colour lock moving the mean of a material to the sheet's within 1 L\*a\*b\* unit, a two-material part locked by region, the refusal of an off-tone generation and of a changed sheet, and the same bytes on a second run.
 - **SWI-VER-4** Bake: exact sizes and identical bytes on a second run.
 - **SWI-VER-5** Surfaces: seam ratio R ≤ 1.5 at every join inside the composition (a window zone's edge against the strips, the parts of one strip; the measure of
   [ARC-RES-094 U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4); the designed split of a two-part window is exempt, SWI-BDR-5); there are no sides to match, so the former side-versus-centre statistics are dropped. [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) may add
