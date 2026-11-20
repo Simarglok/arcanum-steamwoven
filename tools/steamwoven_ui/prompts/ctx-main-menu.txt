@@ -2,7 +2,7 @@ CONTEXT IMAGE - MAIN MENU (FULL-SCREEN PLATE)
 Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 menu screen, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
 
 Redraw the whole 800 x 600 menu screen as one painted still life, dark and dramatic, lit by lamps. This is a full-screen plate: no strips, no HUD.
-- Centre: a tall upright carved-wood tablet in a dark carved frame with gilded brass moulding and a reddish-brown wood panel inside, standing on a round stepped wooden plinth. The inner panel is empty (the game draws the menu entries).
+- Centre: a tall upright carved-wood tablet in a dark carved frame with dull brass moulding and a reddish-brown wood panel inside, standing on a round stepped wooden plinth. The inner panel is empty (the game draws the menu entries).
 - Left: a stained-glass table lamp (a rose-patterned glass shade), a rusty clockwork casket with gears, a flintlock pistol and a brass pocket watch with a chain on the table.
 - Right: a blue glass orb on a twisted brass stand with a small dragon, a skull with a spider on it, a dagger with a braided hilt at the lower right.
 - Background: near black, with soft warm light pools. Keep every object where the ORIGINAL has it.

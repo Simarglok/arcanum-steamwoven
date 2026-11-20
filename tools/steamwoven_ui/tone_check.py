@@ -1,7 +1,7 @@
 """ARC-RES-2455: the tone check of a refined context image against its ORIGINAL (SWI-GEN-9).
 
 A refinement may raise only resolution and surface texture, never the palette, brightness or contrast of the original. The check reduces both images
-to 800 x 600 (area average), converts them to CIE L*a*b* (sRGB, D65), blurs them (box blur, radius 6 px at 800 x 600, so the texture drops out) and compares
+to 800 x 600 (area average), converts them to CIE L*a*b* (sRGB, D65), blurs them (box blur, radius 6 px at 800 x 600, a window of about 13 px, so the texture drops out) and compares
 the mean L* (brightness), the mean chroma C* (saturation), the L* standard deviation (contrast) and the colour difference CIE76 delta E per pixel (mean and
 95th percentile). The comparison is made per material and for the whole, over the pixels of the ORIGINAL that belong to a material (SWI-GEN-9):
 
@@ -45,7 +45,7 @@ LIMITS = {
 
 CONTRAST_FLOOR = 2.0  # L* points: the blurred std of one material is small (2-8), so a ratio alone would fail a 0.5 L* difference
 MASKS_FILE = Path(__file__).resolve().parent / "prompts" / "tone_masks.json"
-HALF_W, HALF_H, HALF_RADIUS = TARGET_W // 2, TARGET_H // 2, BLUR_RADIUS // 2  # masked comparison works at 400 x 300 (radius 3 = 6 px at 800 x 600)
+HALF_W, HALF_H, HALF_RADIUS = TARGET_W // 2, TARGET_H // 2, BLUR_RADIUS // 2  # masked comparison works at 400 x 300 (radius 3 cells = 6 px at 800 x 600)
 MIN_CELLS = 80  # a material needs this many measured 400 x 300 cells (about 0.07 % of the screen), else it is reported as absent
 FIT_RADIUS, FIT_LOW, FIT_HIGH = 8, 0.2, 0.5  # region tone fit weight: blur radius (px at 800 x 600) and the stretch of the blurred mask
 MIN_COVER = 0.25  # a cell is measured when this share of it, and of its blur window, is material (thin brass rings are never half a cell)
@@ -189,6 +189,10 @@ def compare_files(original: Path, result: Path, limits: dict = LIMITS) -> dict:
 
 
 
+def _rects_overlap(a: list, b: list) -> bool:
+    return any(p[0] < q[2] and q[0] < p[2] and p[1] < q[3] and q[1] < p[3] for p in a for q in b)
+
+
 def _in_rects(x: int, y: int, rects: list) -> bool:
     return any(r[0] <= x < r[2] and r[1] <= y < r[3] for r in rects)
 
@@ -226,21 +230,11 @@ def _half(plane: list[float]) -> list[float]:
     return out
 
 
-def masked_blur(lab: list, mask_half: list[float], coverage: list[float]) -> list[tuple[float, float, float]]:
-    """Normalised blur of the Lab planes at 400 x 300 over the mask only (a masked average, radius 6 px at 800 x 600)."""
-    planes = []
-    for c in range(3):
-        weighted = _half([p[c] * m for p, m in zip(lab, _upsample(mask_half))])
-        planes.append(box_blur(weighted, HALF_RADIUS, HALF_W, HALF_H))
+def masked_blur(lab: list, mask: list[float], coverage: list[float]) -> list[tuple[float, float, float]]:
+    """Normalised blur of the Lab planes at 400 x 300 over the 0/1 mask of the 800 x 600 pixels only (a masked average, 6 px radius at 800 x 600);
+    `coverage` is the blurred 2 x 2 mean of the same mask (`box_blur(_half(mask))`)."""
+    planes = [box_blur(_half([p[c] * m for p, m in zip(lab, mask)]), HALF_RADIUS, HALF_W, HALF_H) for c in range(3)]
     return [(planes[0][i] / coverage[i], planes[1][i] / coverage[i], planes[2][i] / coverage[i]) if coverage[i] > 0 else (0.0, 0.0, 0.0) for i in range(HALF_W * HALF_H)]
-
-
-def _upsample(half: list[float]) -> list[float]:
-    out = []
-    for y in range(TARGET_H):
-        row = half[(y // 2) * HALF_W:(y // 2 + 1) * HALF_W]
-        out.extend(v for v in row for _ in (0, 1))
-    return out
 
 
 def compare_material(lab_original: list, lab_result: list, mask: list[float], limits: dict = LIMITS) -> dict:
@@ -250,8 +244,8 @@ def compare_material(lab_original: list, lab_result: list, mask: list[float], li
     cells = [i for i in range(HALF_W * HALF_H) if mask_half[i] >= MIN_COVER and coverage[i] >= MIN_COVER]
     if len(cells) < MIN_CELLS:
         return {"absent": len(cells), "pass": True, "failed": []}
-    original = masked_blur(lab_original, mask_half, coverage)
-    result = masked_blur(lab_result, mask_half, coverage)
+    original = masked_blur(lab_original, mask, coverage)
+    result = masked_blur(lab_result, mask, coverage)
     report = compare_labs([original[i] for i in cells], [result[i] for i in cells], limits)
     report["cells"] = len(cells)
     return report
@@ -269,11 +263,11 @@ def compare_screen(original: "pngio.Image", result: "pngio.Image", screen: dict,
 
 
 
-_LIN_CACHE: dict[int, float] = {}
+_LIN_BYTE = [_lin(v) for v in range(256)]
 
 
 def _pixel_lab(r: int, g: int, b: int) -> tuple[float, float, float]:
-    rl, gl, bl = (_LIN_CACHE.setdefault(v, _lin(v)) for v in (r, g, b))
+    rl, gl, bl = _LIN_BYTE[r], _LIN_BYTE[g], _LIN_BYTE[b]
     x = (0.4124564 * rl + 0.3575761 * gl + 0.1804375 * bl) / 0.95047
     y = 0.2126729 * rl + 0.7151522 * gl + 0.0721750 * bl
     z = (0.0193339 * rl + 0.1191920 * gl + 0.9503041 * bl) / 1.08883
@@ -304,24 +298,29 @@ def fit_material(original: "pngio.Image", result: "pngio.Image", screen: dict, c
     cells = [i for i in range(HALF_W * HALF_H) if mask_half[i] >= MIN_COVER and coverage[i] >= MIN_COVER]
     if len(cells) < MIN_CELLS:
         raise ToneError(f"material {material} is absent in this screen")
-    a = tone_stats([v for i, v in enumerate(masked_blur(lab_o, mask_half, coverage)) if mask_half[i] >= MIN_COVER and coverage[i] >= MIN_COVER])
+    cell_set = set(cells)
+    a = tone_stats([v for i, v in enumerate(masked_blur(lab_o, mask, coverage)) if i in cell_set])
     # weight: where the material has a zone, the zone itself (minus the excluded content), so that the fold, the text lines and the glyphs of a page are
     # all fitted, with a soft edge; a hard colour-class mask would leave them untouched and print the text shapes as ghosts; without a zone the colour
     # class mask blurred wide and stretched
     zone = screen["materials"][material].get("zone")
-    if zone:
+    others = [m.get("zone") for name, m in screen["materials"].items() if name != material]
+    if zone and not any(o is None or _rects_overlap(zone, o) for o in others):  # a zone shared with another material would pull that material along
         exclude = list(screen.get("exclude", [])) + (list(common_exclude) if screen.get("strips") else [])
         weight = [1.0 if _in_rects(x, y, zone) and not _in_rects(x, y, exclude) else 0.0 for y in range(TARGET_H) for x in range(TARGET_W)]
         soft = box_blur(weight, 3)
     else:
         soft = [min(1.0, max(0.0, (v - FIT_LOW) / (FIT_HIGH - FIT_LOW))) for v in box_blur(mask, FIT_RADIUS)]
-    current, steps = result, []
+    current, steps, converged = result, [], False
     for _ in range(passes):
-        blur_r = masked_blur(to_lab(reduce_to_800x600(current)), mask_half, coverage)
+        blur_r = masked_blur(to_lab(reduce_to_800x600(current)), mask, coverage)
         b = tone_stats([blur_r[i] for i in cells])
-        shift, scale = a["mean_l"] - b["mean_l"], a["mean_chroma"] / b["mean_chroma"]
+        if b["mean_chroma"] < 0.5:  # C* below 0.5 is grey
+            raise ToneError(f"the result has no colour in the material {material}")
+        shift, scale = a["mean_l"] - b["mean_l"], min(4.0, max(0.25, a["mean_chroma"] / b["mean_chroma"]))
         steps.append({"shift_l": shift, "chroma_scale": scale, "before": b})
         if abs(shift) <= 0.3 and abs(scale - 1) <= 0.02:
+            converged = True
             break
         out = bytearray(current.data)
         for y in range(current.h):
@@ -335,7 +334,11 @@ def fit_material(original: "pngio.Image", result: "pngio.Image", screen: dict, c
                 k = 1 + w * (scale - 1)
                 out[i:i + 3] = bytes(_from_lab(max(0.0, min(100.0, l + w * shift)), aa * k, bb * k))
         current = pngio.Image(current.w, current.h, out)
-    return current, {"material": material, "original": a, "passes": steps}
+    if not converged:  # measure what the last pass left
+        after = tone_stats([v for i, v in enumerate(masked_blur(to_lab(reduce_to_800x600(current)), mask, coverage)) if i in cell_set])
+        converged = abs(a["mean_l"] - after["mean_l"]) <= 0.3 and abs(after["mean_chroma"] / a["mean_chroma"] - 1) <= 0.02
+        steps.append({"after": after})
+    return current, {"material": material, "original": a, "converged": converged, "passes": steps}
 
 
 def load_masks(path: Path = MASKS_FILE) -> dict:
@@ -393,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             masks = load_masks()
             fitted, info = fit_material(pngio.read(args.original), pngio.read(args.result), masks["screens"][args.screen], masks["strip_counters"], args.material)
-        except (ToneError, KeyError, OSError, pngio.PngError) as error:
+        except (ToneError, KeyError, ValueError, OSError, pngio.PngError) as error:
             print(f"TONE ERROR: {error}", file=sys.stderr)
             return 2
         pngio.write(args.output, fitted)
@@ -404,10 +407,12 @@ def main(argv: list[str] | None = None) -> int:
             reports = {args.result.stem: {"regions": {"all": compare_files(args.original, args.result)}}}
         else:
             masks = load_masks()
-            ids = args.ids.split(",") if args.ids else sorted(p.stem for p in args.results.glob("ctx-*.png"))
+            ids = args.ids.split(",") if args.ids else sorted(masks["screens"])
+            if not ids:
+                raise ToneError("no screens to check")
             reports = {i: compare_screen_files(i, args.originals / f"{i}-800x600.png", args.results / f"{i}.png", masks) for i in ids}
-    except ToneError as error:
-        print(f"TONE ERROR: {error}", file=sys.stderr)
+    except (ToneError, KeyError, ValueError, OSError) as error:  # ValueError: a malformed masks file; KeyError: an unknown screen or colour class
+        print(f"TONE ERROR: {error!r}", file=sys.stderr)
         return 2
     for report in reports.values():
         report["failed"] = [n for n, r in report["regions"].items() if not r["pass"]]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -100,6 +101,50 @@ class ToneCheckTest(unittest.TestCase):
         report = tone_check.compare_screen(original, original, brass_only, [])
         self.assertIn("absent", report["regions"]["brass"])
         self.assertTrue(report["pass"])
+
+    def test_masked_blur_ignores_pixels_outside_the_mask(self) -> None:
+        mask = [1.0 if x % 2 == 0 else 0.0 for _ in range(600) for x in range(800)]  # every other column is material
+        lab = [(50.0, 0.0, 0.0) if m else (100.0, 30.0, 30.0) for m in mask]  # the rest is bright and coloured
+        coverage = tone_check.box_blur(tone_check._half(mask), tone_check.HALF_RADIUS, tone_check.HALF_W, tone_check.HALF_H)
+        blurred = tone_check.masked_blur(lab, mask, coverage)
+        for cell in (0, 5000, 100000):
+            self.assertAlmostEqual(blurred[cell][0], 50.0, places=3)
+            self.assertAlmostEqual(blurred[cell][1], 0.0, places=3)
+
+    def test_fit_matches_the_means_and_reports_convergence(self) -> None:
+        screen = {"strips": False, "materials": {"paper": {"class": "paper", "zone": [[0, 0, 800, 600]]}}}
+        original = banded(800, 600, [(200, 190, 160)])
+        result = banded(800, 600, [(240, 215, 150)])  # brighter and more yellow
+        fitted, info = tone_check.fit_material(original, result, screen, [], "paper")
+        self.assertTrue(info["converged"], info)
+        self.assertTrue(tone_check.compare_screen(original, fitted, screen, [])["pass"])
+        self.assertEqual((fitted.w, fitted.h), (800, 600))
+        with self.assertRaises(tone_check.ToneError):  # a grey result has no chroma to scale
+            tone_check.fit_material(original, banded(800, 600, [(200, 200, 200)]), screen, [], "paper")
+        with self.assertRaises(tone_check.ToneError):
+            tone_check.fit_material(original, result, {"strips": False, "materials": {"brass": {"class": "brass"}}}, [], "brass")
+
+    def test_batch_needs_every_screen_and_reports_exit_2(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            empty = Path(tmp)
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                self.assertEqual(tone_check.main(["batch", "--originals", str(empty), "--results", str(empty)]), 2)
+                self.assertEqual(tone_check.main(["batch", "--originals", str(empty), "--results", str(empty), "--ids", "ctx-nope"]), 2)
+            self.assertIn("TONE ERROR", err.getvalue())
+
+    def test_masks_file_matches_the_library_and_the_classes(self) -> None:
+        masks = tone_check.load_masks()
+        library = json.loads((Path(tone_check.__file__).resolve().parent / "prompts" / "library.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(masks["screens"]), sorted(library["context_screens"]))
+        rects = list(masks["strip_counters"])
+        for spec in masks["screens"].values():
+            rects += spec.get("exclude", [])
+            for material in spec["materials"].values():
+                self.assertIn(material["class"], tone_check.CLASSES)
+                rects += material.get("zone", []) + material.get("not_zone", [])
+        for x0, y0, x1, y1 in rects:
+            self.assertTrue(0 <= x0 < x1 <= 800 and 0 <= y0 < y1 <= 600, (x0, y0, x1, y1))
 
     def test_wrong_aspect_and_cli_exit_codes(self) -> None:
         with self.assertRaises(tone_check.ToneError):
