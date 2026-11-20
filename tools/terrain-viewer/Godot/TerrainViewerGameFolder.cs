@@ -146,9 +146,8 @@ public partial class TerrainViewerApp
             // ARC-UI-143: the HD lines, saved at once in the settings files.
             _launcherPanel.HdRequested += LauncherHd;
             _launcherPanel.HdGeneratedRequested += LauncherHdGenerated;
-            _launcherPanel.HdPackRequested += LauncherHdPack;
-            _launcherPanel.HdLayoutRequested += LauncherHdLayout;
             _launcherPanel.HdWorldZoomRequested += LauncherHdWorldZoom;
+            _launcherPanel.HdPackRequested += LauncherHdPack;
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
             _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074/069 cancel requested (installer unpack or game data)"); _installCancel?.Cancel(); };

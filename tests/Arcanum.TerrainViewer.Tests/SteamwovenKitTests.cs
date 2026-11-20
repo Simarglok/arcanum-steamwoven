@@ -51,7 +51,7 @@ public sealed class SteamwovenKitTests
         var plan = Plan(3840, 2160);
         var set = Full(SteamwovenStep.One);
         var top = SteamwovenKitComposer.Strip(plan, set, AreaBarStrip.Top).Value!;
-        Assert.AreEqual(plan.Column!.TopStrip, top.Board.Rect);
+        Assert.AreEqual(plan.Column.TopStrip, top.Board.Rect);
         Assert.AreEqual(2, top.Caps.Count);
         // The caps stand outside the strip, as high as it: the left one ends at the strip's left edge, the right one starts at its right edge.
         Assert.AreEqual(plan.Column.TopStrip.X, top.Caps[0].Rect.Right);
@@ -90,14 +90,12 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
-    public void A_strip_art_of_the_wrong_width_is_missing_and_the_full_width_layout_has_no_kit_strip()
+    public void A_strip_art_of_the_wrong_width_is_missing()
     {
         var narrow = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("board.inttop", 1000, 75), new("cap.top_strip_left", 60, 75), new("cap.top_strip_right", 60, 75)]);
         var result = SteamwovenKitComposer.Strip(Plan(1920, 1080), narrow, AreaBarStrip.Top);
         Assert.IsFalse(result.Complete);
         Assert.IsTrue(result.Missing.Any(text => text.Contains("not 2880")));
-        var fullWidth = SteamwovenHud.Plan(1920, 1080, SteamwovenLayoutOptions.Default)!;
-        Assert.IsFalse(SteamwovenKitComposer.Strip(fullWidth, Full(SteamwovenStep.Half), AreaBarStrip.Top).Complete);
     }
 
     [TestMethod]
@@ -114,7 +112,7 @@ public sealed class SteamwovenKitTests
         var parts = Full(SteamwovenStep.Half).Ids.Select(id => Full(SteamwovenStep.Half).TryGet(id, out var p) ? p : default).Append(new SteamwovenKitPart("hardware.socket", 63, 63));
         var set = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", parts);
         var layer = SteamwovenKitComposer.Strip(plan, set, AreaBarStrip.Top, table).Value!.Layers.Single();
-        var strip = plan.Column!.TopStrip;
+        var strip = plan.Column.TopStrip;
         // f = 0.5: 300 master px is 150 device px from the strip's left, 12 is 6 from its top; the part is 126 master px = 63 device px: exact.
         Assert.AreEqual(new PixelRect(strip.X + 150, strip.Y + 6, 63, 63), layer.Rect);
         Assert.IsTrue(layer.Exact);

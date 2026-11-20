@@ -25,9 +25,9 @@ public static class SteamwovenColumnMenu
         return (factor, PixelRect.FromEdges(left, top, right, bottom));
     }
 
-    /// <summary>The column-mode plan of the menus for a window, or null when <paramref name="options"/> are not in column mode or the layout is not supported (below f = 0.25).</summary>
+    /// <summary>The plan of the menus for a window, or null when the layout is not supported (below f = 0.25).</summary>
     public static SteamwovenFullScreenPlan? Plan(int width, int height, SteamwovenLayoutOptions options) =>
-        options.Column is null ? null : SteamwovenFullScreen.Plan(width, height, options) is { IsColumn: true } plan ? plan : null;
+        SteamwovenFullScreen.Plan(width, height, options);
 
     /// <summary>The place of an 800 × 600 two-strip screen: its top left and the unit scale (the same hook shape as <see cref="SteamwovenWindowZone.Screen(int, int, int, SteamwovenLayoutOptions?)"/>).</summary>
     public static SteamwovenWindowPlace Place(SteamwovenFullScreenPlan plan) => new(plan.Factor, plan.Zone.X, plan.Zone.Y);

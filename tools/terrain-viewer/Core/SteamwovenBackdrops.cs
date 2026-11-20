@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>
 /// ARC-UI-2576 (SWI-BDR-4): the backdrop families of the census that an open menu window of the middle band can have. The letters are the census's ids
 /// (<c>docs/ui/steamwoven-interface-census.md</c>, "Backdrop families"); the two-strip menus (BD-G, the save, load, pre-made and new character screens) and the full-screen menus (BD-H) hide the
-/// bars and are laid out over the whole frame by ARC-UI-2577 (SWI-BDR-6), not here.
+/// bars and are laid out as the fitted plate by ARC-UI-2891 (<see cref="SteamwovenColumnMenu"/>), not here.
 /// </summary>
 public enum SteamwovenBackdropFamily
 {
@@ -29,10 +29,9 @@ public enum SteamwovenBackdropFamily
 public readonly record struct SteamwovenBackdropPiece(PixelRect Rect, ChromeMaterial Material, double OriginX, double OriginY, int Part = 0);
 
 /// <summary>
-/// ARC-UI-2576 (SWI-BDR-1, -4, -5, -7): the generated backdrop of each census family over the middle band, from the layout model; Godot-free. Every piece is made after its window's own background
-/// (SWI-BDR-7): the census finds one dark streaked wood under all of BD-A to BD-E (the families differ in what is laid on it), so the pieces are <see cref="ChromeMaterial.Wood"/> sampled at the window's unit
-/// scale `f · 3.6` from the origin of the art they continue. A two-part window (SWI-BDR-5) has two pieces that meet at the split exactly: the left one runs from the frame's left edge to it, the right one from it to the
-/// frame's right edge; each half is a window art of its own, so its grain starts at its own left edge (at the split for the right half) and the halves are not one grain.
+/// ARC-UI-2576, ARC-UI-2890: the generated wood of each census family in the gaps of the (unfitted) column around its window zone, from the layout model; Godot-free (the fitted column has no gap: the window zone is the middle band).
+/// Every piece is made after its window's own background: the census finds one dark streaked wood under all of BD-A to BD-E (the families differ in what is laid on it), so the pieces are <see cref="ChromeMaterial.Wood"/> sampled at the window's unit
+/// scale from the origin of the art they continue. A two-part window has two pieces that meet at the split exactly; each half is a window art of its own, so its grain starts at its own left edge (at the split for the right half) and the halves are not one grain.
 /// </summary>
 public static class SteamwovenBackdrops
 {
@@ -86,40 +85,20 @@ public static class SteamwovenBackdrops
         _ => null,
     };
 
-    /// <summary>The x of the split of a two-part family: the layout model's own (<see cref="SteamwovenLayout.Split"/>, SWI-BDR-5) for the inventory family, the same rule for the logbook and the reading window
-    /// (the zone's left edge and the left part's units at the unit scale, halves up); null for a family of one piece.</summary>
+    /// <summary>The x of the split of a two-part family: the zone's left edge and the left part's units at the unit scale, halves up; null for a family of one piece.</summary>
     public static int? SplitX(SteamwovenBackdropFamily family, SteamwovenHudPlan plan)
     {
         if (LeftUnits(family) is not { } units) return null;
-        // ARC-UI-2890: in the column the inventory family's split is the zone's left edge and the left part's units at the unit scale, like the others (the full-width split is the layout's, snapped to the grid of the centre block).
-        if (family == SteamwovenBackdropFamily.Inventory && plan.Column is null) return plan.Layout.Split.SplitX;
         return SteamwovenWindowZone.ZoneOf(plan).X + (int)Math.Round(units * SteamwovenWindowZone.UnitScale(plan), MidpointRounding.AwayFromZero);
-    }
-
-    /// <summary>The pieces of the family's backdrop over the middle band of the plan: one for a family of one piece, the left and the right part of the split for a two-part family. Together they cover the band exactly (the
-    /// frame's width, the band's height) and share the split as one edge.</summary>
-    public static IReadOnlyList<SteamwovenBackdropPiece> Pieces(SteamwovenBackdropFamily family, SteamwovenHudPlan plan)
-    {
-        if (plan.Column is { } column) return ColumnPieces(family, plan, column);
-        var layout = plan.Layout;
-        var band = layout.Middle.Band;
-        var zone = layout.WindowZone;
-        var unit = SteamwovenWindowZone.UnitScale(plan);
-        // The grain of an art that starts at (artX, artY) device pixels: where the piece's top left lies from it, in units.
-        SteamwovenBackdropPiece Piece(int left, int right, double artX) =>
-            new(PixelRect.FromEdges(left, band.Y, right, band.Bottom), ChromeMaterial.Wood, (left - artX) / unit, (band.Y - (double)zone.Y) / unit, left == band.X ? 0 : 1);
-        if (SplitX(family, plan) is not { } split)
-            return [Piece(band.X, band.Right, zone.X)];
-        // ARC-UI-2763: the inventory family is one wood and its pack art continues the doll's grain from the split, so the right piece's grain is the left one's continued; the logbook and the reading window keep a grain of their own per half.
-        return [Piece(band.X, split, zone.X), Piece(split, band.Right, family == SteamwovenBackdropFamily.Inventory ? zone.X : split)];
     }
 
     /// <summary>
     /// ARC-UI-2890 (AC3): the pieces of the family's wood in the column: the window's gaps, the column's rectangles above and below the window zone (empty ones left out), each in one piece or, for a two-part family, split
     /// at the split of the zone. The grain starts at the window art's own top left (the zone's), so the wood at the zone's top and bottom edges is the window's wood continued; a gap is as wide as the column and the window.
     /// </summary>
-    private static IReadOnlyList<SteamwovenBackdropPiece> ColumnPieces(SteamwovenBackdropFamily family, SteamwovenHudPlan plan, SteamwovenColumnPlan column)
+    public static IReadOnlyList<SteamwovenBackdropPiece> Pieces(SteamwovenBackdropFamily family, SteamwovenHudPlan plan)
     {
+        var column = plan.Column;
         var zone = column.Window.Zone;
         var unit = SteamwovenWindowZone.UnitScale(plan);
         var split = SplitX(family, plan);
@@ -131,7 +110,7 @@ public static class SteamwovenBackdrops
             if (gap.Height <= 0 || gap.Width <= 0) continue;
             if (split is not { } at) { pieces.Add(Piece(gap, gap.X, gap.Right, zone.X)); continue; }
             at = Math.Clamp(at, gap.X, gap.Right);
-            // As in the full-width layout: the inventory family is one wood, its right piece continues the left one's grain; the logbook and the reading window start the right half's grain at the split.
+            // The inventory family is one wood, its right piece continues the left one's grain; the logbook and the reading window start the right half's grain at the split.
             if (at > gap.X) pieces.Add(Piece(gap, gap.X, at, zone.X));
             if (at < gap.Right) pieces.Add(Piece(gap, at, gap.Right, family == SteamwovenBackdropFamily.Inventory ? zone.X : at));
         }

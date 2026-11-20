@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-2576 (SWI-BDR-1, -4, -5, -7, SWI-VER-5): the generated backdrop of each census family over the middle band, and the seam ratio that measures its joins.</summary>
+/// <summary>ARC-UI-2576, ARC-UI-2890, SWI-VER-5: the generated wood of each census family in the gaps of the unfitted column, and the seam ratio that measures its joins.</summary>
 [TestClass]
 public sealed class SteamwovenBackdropsTests
 {
@@ -50,37 +50,25 @@ public sealed class SteamwovenBackdropsTests
     }
 
     [TestMethod]
-    public void The_pieces_cover_the_middle_band_exactly_and_a_two_part_window_splits_at_the_layout_model_split()
+    public void The_fitted_column_has_no_wood_and_the_unfitted_one_splits_a_two_part_family_in_each_gap()
     {
         foreach (var (width, height) in Sizes)
         {
-            var plan = SteamwovenHud.Plan(width, height)!;
-            var layout = plan.Layout;
-            var band = layout.Middle.Band;
+            Assert.AreEqual(0, SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.Inventory, SteamwovenHud.Plan(width, height)!).Count, $"[{width}x{height}] the fitted column leaves no gap");
+            var plan = SteamwovenHud.Plan(width, height, SteamwovenLayoutOptions.ColumnOriginal)!;
+            var column = plan.Column;
+            var gaps = new[] { column.Window.GapAbove, column.Window.GapBelow }.Count(gap => gap.Height > 0 && gap.Width > 0);
             foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
             {
-                var tag = $"[{width}x{height}] {family}";
                 var pieces = SteamwovenBackdrops.Pieces(family, plan);
-                Assert.AreEqual(SteamwovenBackdrops.LeftUnits(family) is null ? 1 : 2, pieces.Count, tag);
-                // The pieces tile the band: the first starts at its left edge, each starts where the one before ends, the last ends at its right edge, all of the band's height.
-                Assert.AreEqual(band.X, pieces[0].Rect.X, tag);
-                Assert.AreEqual(band.Right, pieces[^1].Rect.Right, tag);
-                for (var i = 0; i < pieces.Count; i++)
+                Assert.AreEqual(gaps * (SteamwovenBackdrops.LeftUnits(family) is null ? 1 : 2), pieces.Count, $"[{width}x{height}] {family}");
+                // Every piece lies inside the column and outside the window zone, and no two overlap.
+                foreach (var piece in pieces)
                 {
-                    Assert.AreEqual(band.Y, pieces[i].Rect.Y, tag);
-                    Assert.AreEqual(band.Height, pieces[i].Rect.Height, tag);
-                    Assert.IsTrue(pieces[i].Rect.Width > 0, tag + " no empty piece");
-                    if (i > 0) Assert.AreEqual(pieces[i - 1].Rect.Right, pieces[i].Rect.X, tag + " the parts meet");
+                    Assert.IsTrue(piece.Rect.X >= column.Column.X && piece.Rect.Right <= column.Column.Right && piece.Rect.Width > 0, $"[{width}x{height}] {family}");
+                    Assert.IsTrue(piece.Rect.Bottom <= column.Window.Zone.Y || piece.Rect.Y >= column.Window.Zone.Bottom, $"[{width}x{height}] {family} lies outside the zone");
                 }
-                // The band is the frame's width (the sides carry the same material to the frame's edges, SWI-BDR-1).
-                Assert.AreEqual(layout.Frame.X, band.X, tag);
-                Assert.AreEqual(layout.Frame.Right, band.Right, tag);
             }
-            // SWI-BDR-5: the inventory family splits at the layout model's split, its parts are the model's rectangles.
-            var inventory = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.Inventory, plan);
-            Assert.AreEqual(layout.Split.SplitX, inventory[0].Rect.Right, $"[{width}x{height}] the split of the layout model");
-            Assert.AreEqual(layout.Split.Left, inventory[0].Rect);
-            Assert.AreEqual(layout.Split.Right, inventory[1].Rect);
         }
     }
 
@@ -90,7 +78,7 @@ public sealed class SteamwovenBackdropsTests
         foreach (var (width, height) in Sizes)
         {
             var plan = SteamwovenHud.Plan(width, height)!;
-            var zone = plan.Layout.WindowZone;
+            var zone = plan.WindowZone;
             var unit = SteamwovenWindowZone.UnitScale(plan);
             foreach (var family in new[] { SteamwovenBackdropFamily.Inventory, SteamwovenBackdropFamily.Logbook, SteamwovenBackdropFamily.Reading })
             {
@@ -98,8 +86,6 @@ public sealed class SteamwovenBackdropsTests
                 var wanted = zone.X + SteamwovenBackdrops.LeftUnits(family)!.Value * unit;
                 Assert.IsTrue(Math.Abs(split - wanted) <= 1.5, $"[{width}x{height}] {family} splits {split}, the window's left part ends at {wanted:F1}");
             }
-            // 1290 px from the centre block's left edge at 3840 x 2160 (SWI-BDR-5; 358 x 3.6 = 1288.8, snapped).
-            if (width == 3840 && height == 2160) Assert.AreEqual(plan.Layout.Top.Centre.X + 1290, plan.Layout.Split.SplitX, 2);
         }
     }
 
@@ -120,21 +106,22 @@ public sealed class SteamwovenBackdropsTests
     [TestMethod]
     public void The_grain_of_each_piece_starts_at_the_art_it_continues()
     {
-        var plan = SteamwovenHud.Plan(1920, 1080)!;
-        var zone = plan.Layout.WindowZone;
+        // The unfitted column at 16:10 has a gap above and below the window zone: the wood in them continues the window's own.
+        var plan = SteamwovenHud.Plan(1920, 1200, SteamwovenLayoutOptions.ColumnOriginal)!;
+        var zone = plan.WindowZone;
         var unit = SteamwovenWindowZone.UnitScale(plan);
-        // A one-piece family continues the window's own wood: the grain starts at the window's top left, so at the zone's left edge it is at 0 and the pieces to its left have negative units.
+        // A one-piece family continues the window's own wood: the grain starts at the window's top left, so at the zone's left edge it is at 0 and the piece above the zone has negative units.
         var map = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.WorldMap, plan)[0];
-        Assert.AreEqual((plan.Layout.Middle.Band.X - zone.X) / unit, map.OriginX, 1e-9);
-        Assert.AreEqual((plan.Layout.Middle.Band.Y - zone.Y) / unit, map.OriginY, 1e-9);
+        Assert.AreEqual((map.Rect.X - zone.X) / unit, map.OriginX, 1e-9);
+        Assert.AreEqual((map.Rect.Y - zone.Y) / unit, map.OriginY, 1e-9);
         Assert.IsTrue(map.OriginX <= 0 && map.OriginY <= 0);
         // Each half of a two-part window is an art of its own: the right half's grain starts at the split.
-        var parts = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.Inventory, plan);
+        var parts = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.Inventory, plan).Take(2).ToList();
         Assert.AreEqual((parts[0].Rect.X - zone.X) / unit, parts[0].OriginX, 1e-9);
         // ARC-UI-2763: the inventory family is one wood, so its right piece continues the left one's grain from the zone's left edge (the pack art starts at the split's 358 units).
         Assert.AreEqual((parts[1].Rect.X - zone.X) / unit, parts[1].OriginX, 1e-9);
         Assert.AreEqual(parts[0].OriginY, parts[1].OriginY, 1e-9);
-        Assert.IsTrue(parts.All(part => part.Material == ChromeMaterial.Wood), "the census's wood under every family of the middle band");
+        Assert.IsTrue(parts.All(part => part.Material == ChromeMaterial.Wood), "the census's wood under every family");
         // The logbook's and the reading window's halves are arts of their own: the right half's grain starts at the split.
         foreach (var family in new[] { SteamwovenBackdropFamily.Logbook, SteamwovenBackdropFamily.Reading })
             Assert.AreEqual(0.0, SteamwovenBackdrops.Pieces(family, plan)[1].OriginX, 1e-9, family.ToString());

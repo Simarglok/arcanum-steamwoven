@@ -24,8 +24,6 @@ public partial class TerrainViewerApp
         _launcherHdPackNote = HdPackSourceText();
         if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")) && !AutomatedVisualRun)
             _launcherHdPackNote += " (this run's ARC_VISUAL_PROFILE overrides HD)";
-        if (SteamwovenLayoutChoices.TryParse(System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LAYOUT")) is { } forced)
-            _launcherHdPackNote += $" (this run's ARC_STEAMWOVEN_LAYOUT={SteamwovenLayoutChoices.Name(forced)} overrides the interface layout)";
         _launcherHdProblem = "";
         LauncherHdShow();
     }
@@ -34,17 +32,8 @@ public partial class TerrainViewerApp
     {
         if (_launcherPanel is null) return;
         _launcherPanel.Hd = new LauncherHdLines(_gameSettings.HdInterface, _gameSettings.GeneratedInterface && _gameSettings.HdInterface, _gameSettings.HdPackSource,
-            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem, _gameSettings.InterfaceLayout,
+            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem,
             _gameSettings.WorldZoomStep, SteamwovenWorldZoom.Cap(SteamwovenWorldScale()));
-    }
-
-    /// <summary>ARC-UI-2890: the layout of the generated interface (column, full width), saved at once; this run's ARC_STEAMWOVEN_LAYOUT still overrides it.</summary>
-    private void LauncherHdLayout(SteamwovenLayoutChoice choice)
-    {
-        if (!Enum.IsDefined(choice)) return;
-        SaveGameSettings(_gameSettings with { InterfaceLayout = choice });
-        GD.Print($"ARC-UI-2890 launcher interface layout={SteamwovenLayoutChoices.Name(choice)}");
-        LauncherHdProblem(GameSettingsProblem());
     }
 
     /// <summary>ARC-UI-3059: the world zoom of the Steamwoven look (0 = automatic, else a step the window offers), saved at once.</summary>

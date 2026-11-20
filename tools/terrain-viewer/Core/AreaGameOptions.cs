@@ -192,11 +192,7 @@ public sealed record AreaGameSettings
     /// saved with <see cref="HdInterface"/> on so the pictures keep the HD redraws).</summary>
     public bool GeneratedInterface { get; init; }
 
-    /// <summary>ARC-UI-2890: the layout of the generated interface (the Steamwoven layout): <see cref="SteamwovenLayoutChoice.Column"/> (the original's strip width, the world at the sides; the default while the owner tests it), the column with the thinner
-    /// strips, or the full-width panels. Read only while <see cref="GeneratedInterface"/> is on; the settings line is <c>interface layout</c>.</summary>
-    public SteamwovenLayoutChoice InterfaceLayout { get; init; } = SteamwovenLayoutChoices.Default;
-
-    /// <summary>ARC-UI-3059: the world's zoom in the Steamwoven look, in whole steps: 0 = automatic (the highest step not above the composition's scale), else 1 to 4 (a step above the window's cap reads as the cap, see <see cref="SteamwovenWorldZoom"/>).
+    /// <summary>ARC-UI-3059: the world's zoom in the Steamwoven look, in whole steps: 0 = automatic (the highest step the window offers), else 1 to 4 (a step above the window's cap reads as the cap, see <see cref="SteamwovenWorldZoom"/>).
     /// Read only while the Steamwoven look is on; the settings line is <c>world zoom</c>.</summary>
     public int WorldZoomStep { get; init; }
 
