@@ -1,7 +1,9 @@
 # HD pack gap census: what the installed pack still lacks (ARC-RES-2946)
 
 Status: **census, 2026-11-19** (work item ARC-RES-2946, [#2946](https://github.com/Simarglok/arcanum-steamwoven/issues/2946)). Docs only; the
-installed pack and the installation were read, nothing was written to them. Requirements touched (status unchanged):
+installed pack and the installation were read, nothing was written to them.
+**Update 2026-11-20 (ARC-UI-2917, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)): art 787 `ScrllSlideM1` now has its pack frame** (a 44x4
+crop of the HD `scrllslidem` frame, owner option B), so the counts below are the census's and art 787 is no longer a gap (one frame fewer missing, one drawn gap fewer). Requirements touched (status unchanged):
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007), [FR-PRODUCT-001](../requirements/content-product.md#fr-product-001).
 
 Scope is the one **HD** option of the [owner decision of 2026-11-15](../architecture/decisions.md): the HD interface (art and fonts) plus the relit
@@ -71,7 +73,6 @@ Every one goes through the HD frame path, so a delivered frame is used without a
 | 231 | `Lns_Bart` | 1 / 1 | 89x89 | Lens ring of the barter window, the schematic round view and the reading window | P2 |
 | 247 | `CVR_Ring2` | 1 / 1 | 32x32 | Inventory, loot and barter windows: cover of the empty Ring2 slot | P2 |
 | 204 | `MM_Cross` | 2 / 2 (only frame 0, 11x11, is drawn) | 11x11, 13x13 | World map and town map: the party marker | P2 |
-| 787 | `ScrllSlideM1` | 1 / 1 | 11x1 | Character sheet, schemes page: middle of the scroll thumb ([#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)) | P3 |
 | 627 | `Saltys_Map` | 1 / 1 | 668x400 | Reading window: picture of the written object that names it | P3 |
 | 803 | `MazzerinsMystery` | 1 / 1 | 668x400 | Reading window: same | P3 |
 | 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD when the generated interface is off (the whole-factor plate; the pack's `main-menu-16x9.png` is no longer read, ARC-UI-3003); with a Steamwoven full-screen plan the plate is the layout zone's backdrop | P3 |
@@ -190,7 +191,7 @@ lighting, not HD art. **Missing lighting images: 0.**
 | --- | --- | --- |
 | [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) | The 13 single arts of the table above | Decide A (redraw and add) or B (accept Legacy) per priority |
 | [#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) | 61 schematic record pictures | Same |
-| [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) | Art 787 | Existing |
+| [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) | Art 787 | Done (ARC-UI-2917): added as a crop of art 239's HD frame |
 | [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952) | Slides, world-map tiles and `Map_Zoomed`, town-map tiles, splash | Decide whether HD covers them |
 | [#2983](https://github.com/Simarglok/arcanum-steamwoven/issues/2983) | This section (census correction) | None |
 
