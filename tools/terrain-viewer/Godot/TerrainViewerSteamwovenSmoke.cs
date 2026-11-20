@@ -267,7 +267,7 @@ public partial class TerrainViewerApp
     }
 
     // ARC-UI-2890 (AC2, AC3, AC4): the play screen of the column mode. The strips stand in the column (the original's width at the strips' scale), no wood sides are drawn (the only board is the sliver above the top strip),
-    // the generated end caps stand on the strips' outer ends, the world is drawn over the whole frame; the edge elements (follower portraits, spell pane, combat list, bubbles) are placed against the frame's edges; an open menu
+    // the generated end caps stand on the strips' outer ends, the world is drawn over the whole frame; the edge elements (spell pane, combat list, bubbles) are placed against the frame's edges and the follower group stays in the column (ARC-UI-2925); an open menu
     // takes the column's window zone, the wood of the gaps and the dimmed, desaturated world at the sides (read back: its mean brightness falls).
     private async Task CheckSteamwovenColumnPlayAsync(string tag, SteamwovenHudPlan plan, Vector2I size, AreaGameBarPanel panel, Func<Task> waitPainted, Func<int, Task> frames, Action<bool, string> require)
     {
@@ -357,8 +357,8 @@ public partial class TerrainViewerApp
         require(AreaGameBarPanel.EdgeRect(winSize) == new Rect2(frame.X, frame.Y, frame.Width, frame.Height) && AreaGameBarPanel.EdgeTop == frame.Y && AreaGameBarPanel.EdgeBottom(winSize) == frame.Bottom,
             $"[{tag}] the edge elements' rectangle is the whole frame {frame} (got {AreaGameBarPanel.EdgeRect(winSize)})");
         require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.TopStripY) && Math.Abs(screen.Scale - scale) < 1e-4f
-            && AreaGameBarPanel.EdgeScreen is { } edge && edge.Origin == new Vector2(frame.X, plan.TopStripY) && Math.Abs(edge.Scale - scale) < 1e-4f && Math.Abs(edge.BottomEdge - screen.BottomEdge) < 1e-3f,
-            $"[{tag}] the strips' screen is the column's and the followers' screen hangs from the frame's left edge (got {AreaGameBarPanel.TopScreen} and {AreaGameBarPanel.EdgeScreen})");
+            && Math.Abs(screen.BottomEdge - (plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale)) < 1e-3f,
+            $"[{tag}] the strips' screen is the column's: the follower group hangs from it (got {AreaGameBarPanel.TopScreen})");
         var floaters = new AreaFloaterLayer(); var portraits = new AreaFollowerPortraits(); var sleep = new AreaSleepView(); var fate = new AreaFateView();
         var spellPane = new AreaSpellPane(); var combatHud = new AreaCombatHud();
         try
@@ -373,14 +373,13 @@ public partial class TerrainViewerApp
                 $"[{tag}] the spell pane stands at the frame's left edge {frame.X} + 12 and 12 above its bottom {frame.Bottom} (got {paneRect})");
             require(Math.Abs(listRect.End.X - (frame.Right - 8)) <= 1e-2f && Math.Abs(listRect.Position.Y - (frame.Y + 8)) <= 1e-2f, $"[{tag}] the combat list stands at the frame's right edge {frame.Right} - 8, 8 under its top (got {listRect})");
             require(Math.Abs(floaters.DrawScale - scale) < 1e-4f, $"[{tag}] the floaters are laid out at the strips' scale {scale} (got {floaters.DrawScale})");
-            // ARC-UI-2925 (AC3): seven followers show the whole group (portraits, both scroll arrows, the show/hide button on its brass plate); it moves as one: every part stands at its original height (units from the top of the composition) at the
+            // ARC-UI-2925 (AC3): seven followers show the whole group (portraits, both scroll arrows, the show/hide button); owner decision 2026-11-20: it stays in the column and moves as one: every part stands at its original place (units from the composition's top left, so the button is the bottom strip's top left corner) at the
             // composition's scale and the group's left edge is the window's left edge.
             if (_portraitContent is { } content) portraits.Bind(InterfaceTextures(content.Art));
             portraits.Show(Enumerable.Range(0, 7).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
             await frames(2);
-            var origin = new Vector2(frame.X, plan.TopStripY);
-            require(portraits.OriginForSelfTest == origin && Math.Abs(portraits.ScaleForSelfTest - scale) < 1e-4f, $"[{tag}] the follower portraits hang from the frame's left edge at {origin} (got {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
-            require(frame.X == 0, $"[{tag}] the frame's left edge is the window's left edge (got {frame.X})");
+            var origin = new Vector2(plan.StripLeft, plan.TopStripY);
+            require(portraits.OriginForSelfTest == origin && Math.Abs(portraits.ScaleForSelfTest - scale) < 1e-4f, $"[{tag}] the follower group hangs from the composition's left edge at {origin} (got {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
             bool Near(Rect2 got, float x, float y, float w, float h) => Math.Abs(got.Position.X - (origin.X + x * scale)) <= 1.01f && Math.Abs(got.Position.Y - (origin.Y + y * scale)) <= 1.01f
                 && Math.Abs(got.Size.X - w * scale) <= 1.01f && Math.Abs(got.Size.Y - h * scale) <= 1.01f;
             require(portraits.ButtonScreenRectForSelfTest("toggle") is { } toggleRect && Near(toggleRect, 0, 428, 67, 13), $"[{tag}] the show/hide button is 67 x 13 units at (0, 428) of the composition (got {portraits.ButtonScreenRectForSelfTest("toggle")})");
@@ -388,12 +387,12 @@ public partial class TerrainViewerApp
                 $"[{tag}] the scroll arrows stand at (0, 415) and (33, 415) of the composition (got {portraits.ButtonScreenRectForSelfTest("up")} and {portraits.ButtonScreenRectForSelfTest("down")})");
             for (var slot = 0; slot < 6; slot++)
                 require(portraits.FrameForSelfTest("smoke:" + slot) is { } slotFrame && Near(slotFrame.Rect, 11, 50 + 62 * slot, 40, 49), $"[{tag}] follower slot {slot} stands at (11, {50 + 62 * slot}) of the composition (got {portraits.FrameForSelfTest("smoke:" + slot)?.Rect})");
-            var plate = SteamwovenFollowerBacking.Plate(AreaFollowerPanelRules.ToggleRect);
-            require(portraits.BackingScreenRectForSelfTest is { } backing && Near(backing, plate.X, plate.Y, plate.Width, plate.Height) && backing.Encloses(portraits.ButtonScreenRectForSelfTest("toggle")!.Value),
-                $"[{tag}] the show/hide button stands on its brass plate {plate} (got {portraits.BackingScreenRectForSelfTest})");
+            // The button stands on the bottom strip's top left corner: its left edge is the column's, its bottom edge the strip's top (unit 441, AreaGameBarLayout.BottomTop), at every window size.
+            require(portraits.ButtonScreenRectForSelfTest("toggle") is { } corner && Math.Abs(corner.Position.X - column.Column.X) <= 1.01f && Math.Abs(corner.End.Y - (origin.Y + AreaGameBarLayout.BottomTop * scale)) <= 1.01f,
+                $"[{tag}] the show/hide button stands on the bottom strip's top left corner (x {column.Column.X}, bottom {origin.Y + AreaGameBarLayout.BottomTop * scale}); got {portraits.ButtonScreenRectForSelfTest("toggle")}");
             for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
             await CaptureHudAsync("steamwoven-" + tag + "-followers", frames);
-            require(portraits.OriginForSelfTest.X + 2 * scale <= column.Column.X || column.Column.X - frame.X < 2 * scale, $"[{tag}] the portraits' left edge lies left of the column at {column.Column.X}");
+            require(Math.Abs(portraits.OriginForSelfTest.X - column.Column.X) <= 1e-3f, $"[{tag}] the follower group's left edge is the column's at {column.Column.X} (got {portraits.OriginForSelfTest.X})");
             sleep.Place(); fate.Place();
             // The sleep and fate views are screens of the original: they stay on the strips' screen, centred in the column.
             var whole = AreaGameBarPanel.ScreenFactor(winSize);

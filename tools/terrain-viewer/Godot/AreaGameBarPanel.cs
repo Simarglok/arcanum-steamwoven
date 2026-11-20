@@ -108,10 +108,6 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// window's top stands. <see cref="ScreenFrame"/> is the same screen with its origin counted from the bottom strip (for what sits on that strip).</summary>
     public static (Vector2 Origin, float Scale, float BottomEdge)? TopScreen { get; private set; }
 
-    /// <summary>ARC-UI-2890 (AC4): where the original's screen lies for what is placed against the frame's edge over the world (the follower portraits): in the column mode the screen's top left is the frame's left edge (the strips' scale, the
-    /// strips' bottom edge); otherwise the same as <see cref="TopScreen"/>.</summary>
-    public static (Vector2 Origin, float Scale, float BottomEdge)? EdgeScreen { get; private set; }
-
     /// <summary>ARC-UI-2890 (AC4): the frame in the column mode (the world is drawn over all of it; the strips cover only the column), else null.</summary>
     private static Rect2? _edgeFrame;
 
@@ -127,11 +123,10 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2510: raised after <see cref="TopScreen"/> changed (the layout turned on or off, a new window size): parts placed by it place themselves again.</summary>
     public static event Action? TopScreenChanged;
 
-    private static void SetTopScreen((Vector2, float, float)? next, (Vector2, float, float)? edge = null, Rect2? edgeFrame = null)
+    private static void SetTopScreen((Vector2, float, float)? next, Rect2? edgeFrame = null)
     {
-        var edgeNext = edge ?? next;
-        if (TopScreen == next && EdgeScreen == edgeNext && _edgeFrame == edgeFrame) return;
-        TopScreen = next; EdgeScreen = edgeNext;
+        if (TopScreen == next && _edgeFrame == edgeFrame) return;
+        TopScreen = next;
         var frameChanged = _edgeFrame != edgeFrame;
         _edgeFrame = edgeFrame;
         TopScreenChanged?.Invoke();
@@ -627,7 +622,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         var (freeLeft, freeWidth) = column is { } c ? (c.Column.X, c.Column.Width) : (frame.X, frame.Width);
         // The insets first, then the screens and the edge frame: a subscriber of InsetsChanged that the edge frame's change wakes reads the new insets.
         SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? freeLeft : 0, Visible ? freeWidth : 0);
-        SetTopScreen(topScreen, column is null ? null : (new Vector2(frame.X, plan.TopStripY), scale, bottomEdge), column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
+        SetTopScreen(topScreen, column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
         UpdateSteamwovenParts(plan);
     }
 

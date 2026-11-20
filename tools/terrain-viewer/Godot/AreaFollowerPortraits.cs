@@ -99,8 +99,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
     private bool _panelShown = true;
     private int _offset;
     private Button? _toggle, _up, _down;
-    // ARC-UI-2925: the brass plate behind the show/hide button in the column mode (rebuilt with the chrome, shown only there).
-    private Control? _backing;
     private TextureRect? _toggleArt, _upArt, _downArt;
     private Vector2 _menuOrigin;
     private int _menuSlot;
@@ -183,10 +181,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
     internal bool? ButtonArtForSelfTest(string which) =>
         which switch { "toggle" => _toggle is null ? null : _toggleArt?.Texture is not null, "up" => _up is null ? null : _upArt?.Texture is not null,
             "down" => _down is null ? null : _downArt?.Texture is not null, _ => null };
-
-    /// <summary>ARC-UI-2925: the window rectangle (device pixels) of the brass plate behind the show/hide button, null while it is not drawn (not the column mode, or no button).</summary>
-    internal Rect2? BackingScreenRectForSelfTest =>
-        _backing is { Visible: true } holder && holder.GetChildCount() > 0 && holder.GetChild(0) is ColorRect outer ? RectOf(outer) : null;
 
     /// <summary>The whole factor the panel is drawn at (the interface bars').</summary>
     internal float ScaleForSelfTest => _root.Scale.X;
@@ -313,7 +307,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
             if (_hovered is not null) { _hovered = null; PortraitHoverLeft?.Invoke(); }
             foreach (var child in _root.GetChildren()) { _root.RemoveChild(child); child.QueueFree(); }
             _entries.Clear();
-            _toggle = _up = _down = null; _toggleArt = _upArt = _downArt = null; _backing = null;
+            _toggle = _up = _down = null; _toggleArt = _upArt = _downArt = null;
             EntitiesForSelfTest = shown.Select(f => f.Entity).ToArray();
             for (var slot = 0; slot < shown.Length; slot++) BuildFrame(slot, shown[slot]);
             // The menu stands at its follower's slot: a rebuild that moved or removed him closes it.
@@ -393,10 +387,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     {
         var count = _followers.Count;
         if (AreaFollowerPanelRules.ToggleShown(count))
-        {
-            _backing = BuildBacking(AreaFollowerPanelRules.ToggleRectFor(BarsDrawn));
             (_toggle, _toggleArt) = ChromeButton(AreaFollowerPanelRules.ToggleRectFor(BarsDrawn), AreaFollowerPanelRules.ToggleArt(_panelShown), _panelShown ? "hide" : "show", Toggle);
-        }
         if (!AreaFollowerPanelRules.ArrowsShown(_panelShown, count)) return;
         (_up, _upArt) = ChromeButton(AreaFollowerPanelRules.UpRectFor(BarsDrawn), AreaFollowerPanelRules.UpArtAt(_offset), "up",
             () => Scroll(AreaFollowerPanelRules.ScrollUp(_offset, count)));
@@ -414,29 +405,11 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (_root is null) return;
         // ARC-UI-2284: the strip's bottom is the window's bottom, so the buttons stand a table's distance above it, not at the table's y from the top.
         // ARC-UI-2510: in the Steamwoven layout the screen hangs from the top strip and ends at the bottom strip's bottom edge, not at the window's bottom.
-        var bottom = AreaGameBarPanel.EdgeScreen?.BottomEdge ?? GetViewport().GetVisibleRect().Size.Y;
+        var bottom = AreaGameBarPanel.TopScreen?.BottomEdge ?? GetViewport().GetVisibleRect().Size.Y;
         var heightUnits = (bottom - _root.Position.Y) / _root.Scale.Y;
         foreach (var (button, rect) in new[] { (_toggle, AreaFollowerPanelRules.ToggleRectFor(barsDrawn)), (_up, AreaFollowerPanelRules.UpRectFor(barsDrawn)), (_down, AreaFollowerPanelRules.DownRectFor(barsDrawn)) })
             if (button is not null) button.Position = new Vector2(rect.X, AreaFollowerPanelRules.AnchoredY(rect.Y, heightUnits));
-        // ARC-UI-2925: the plate moves with the button (its own y offset inside the screen) and shows in the column mode only.
-        if (_backing is not null)
-        {
-            _backing.Visible = SteamwovenFollowerBacking.Shown(AreaGameBarPanel.EdgeScreen is not null, barsDrawn);
-            _backing.Position = new Vector2(0, AreaFollowerPanelRules.AnchoredY(AreaFollowerPanelRules.ToggleRectFor(barsDrawn).Y, heightUnits));
-        }
     }
-
-    /// <summary>ARC-UI-2925: the brass plate behind the show/hide button, three nested rectangles in the screen's units at the button's place (the node sits at the offset of the button's y; the layers carry the rest).</summary>
-    private Control BuildBacking((int X, int Y, int Width, int Height) button)
-    {
-        var holder = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Name = "Backing" };
-        foreach (var (x, y, width, height, tone) in SteamwovenFollowerBacking.Layers((button.X, 0, button.Width, button.Height)))
-            holder.AddChild(new ColorRect { Color = BackingTones[tone], Position = new Vector2(x, y), Size = new Vector2(width, height), MouseFilter = Control.MouseFilterEnum.Ignore });
-        _root.AddChild(holder);
-        return holder;
-    }
-
-    private static readonly Color[] BackingTones = [new(0.26f, 0.18f, 0.07f), new(0.86f, 0.69f, 0.31f), new(0.58f, 0.42f, 0.17f)];
 
     private (Button, TextureRect) ChromeButton((int X, int Y, int Width, int Height) rect, int art, string fallback, Action pressed)
     {
@@ -550,8 +523,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (_root is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         // ARC-UI-2510: where the strips put the 800 × 600 screen (the Steamwoven layout: its top left under the top band's strip, at the strips' scale), else the whole factor centred at the window's top.
-        // ARC-UI-2890: in the column mode the screen of the portraits hangs from the frame's left edge, over the world (AreaGameBarPanel.EdgeScreen); else it is the strips' screen.
-        if (AreaGameBarPanel.EdgeScreen is { } screen)
+        // ARC-UI-2925 (owner decision 2026-11-20): the whole follower group (portraits, scroll arrows, show/hide button) stays in the column on the original's places, counted from the composition's left edge at its scale, so the button
+        // stands at the top left corner of the bottom strip as in the original at every window size; nothing is carried to the window's edge.
+        if (AreaGameBarPanel.TopScreen is { } screen)
         {
             _root.Position = screen.Origin;
             _root.Scale = new(screen.Scale, screen.Scale);
