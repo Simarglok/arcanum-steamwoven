@@ -2,7 +2,7 @@
 
 The material sheet is cut from the approved, tone-fitted context images, not drawn: `cut` crops each rectangle of `prompts/cutouts.json` (coordinates of the
 800 x 600 layout, scaled by the source width / 800) out of `local/steamwoven-ui/outbox/style-anchors-contexts/<source>.png` into
-`local/steamwoven-ui/material-sheet/cutouts/<id>.png` and records where each came from (source file and hash, layout rectangle, pixel rectangle).
+`local/steamwoven-ui/material-sheet/cutouts/<id>.png` and records where each came from (source file and hash, layout rectangle, pixel rectangle, note); a cut-out with a side under 120 layout units also gets `<id>.context.png`, the surroundings (at least 240 x 180 layout units), to be given to Codex beside it.
 Codex only makes the wood tile, as input of the strip method study #2457 (`tiles-inbox` builds the batch inbox for `codex_batch.py`; paper and parchment are never tiled);
 `tile-check` compares a returned tile with the ORIGINAL material (mean L*, chroma and the spread of brightness as in `tone_check`) and measures the seam ratio.
 Standard library only, on `pngio` and `tone_check`. Images stay under the ignored `local/` (SWI-PRV-1); only the list of rectangles and the prompts are in git.
@@ -95,6 +95,19 @@ def check(spec: dict, masks: dict | None = None) -> list[str]:
     return problems
 
 
+CONTEXT_SMALL = 120  # a cut-out with a side under this many layout units also gets a context crop
+CONTEXT_MIN = (240, 180)  # layout units; the crop is the cut-out plus 60 units each way, at least this big, shifted to stay inside the screen
+
+
+def context_rect(rect: list) -> list:
+    """The layout rectangle around a small cut-out that is given to Codex beside it (the cut-out's surroundings), clamped to the screen."""
+    w, h = max(CONTEXT_MIN[0], rect[2] - rect[0] + 120), max(CONTEXT_MIN[1], rect[3] - rect[1] + 120)
+    w, h = min(w, LAYOUT_W), min(h, LAYOUT_H)
+    cx, cy = (rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2
+    x0, y0 = min(max(0, cx - w / 2), LAYOUT_W - w), min(max(0, cy - h / 2), LAYOUT_H - h)
+    return [round(x0, 1), round(y0, 1), round(x0 + w, 1), round(y0 + h, 1)]
+
+
 def pixel_rect(rect: list, width: int, height: int) -> tuple[int, int, int, int]:
     """The layout rectangle on an image of any size (rounded outwards by the scale; at least 1 px)."""
     sx, sy = width / LAYOUT_W, height / LAYOUT_H
@@ -126,7 +139,20 @@ def cut(spec: dict, local_root: Path) -> dict:
         pngio.write(target, piece)
         record[item["id"]] = {"source": item["source"], "source_file": f"outbox/{SOURCE_BATCH}/{item['source']}.png", "source_sha256": sha256_file(path),
                               "source_size": [image.w, image.h], "layout_rect": item["rect"], "pixel_rect": [x0, y0, x1, y1], "size": [piece.w, piece.h],
-                              "material": item["material"], "sha256": sha256_file(target)}
+                              "material": item["material"], "note": item.get("note", ""), "sha256": sha256_file(target)}
+        width, height = item["rect"][2] - item["rect"][0], item["rect"][3] - item["rect"][1]
+        if min(width, height) < CONTEXT_SMALL:
+            around = context_rect(item["rect"])
+            cx0, cy0, cx1, cy1 = pixel_rect(around, image.w, image.h)
+            around_piece = image.crop(cx0, cy0, cx1 - cx0, cy1 - cy0)
+            around_target = out / f"{item['id']}.context.png"
+            pngio.write(around_target, around_piece)
+            record[item["id"]].update({"context_file": around_target.name, "context_layout_rect": around, "context_pixel_rect": [cx0, cy0, cx1, cy1],
+                                       "context_size": [around_piece.w, around_piece.h], "context_sha256": sha256_file(around_target)})
+    keep = {f"{i}.png" for i in record} | {r["context_file"] for r in record.values() if "context_file" in r}
+    for stale in out.glob("*.png"):  # a renamed or removed item leaves no cut-out behind
+        if stale.name not in keep:
+            stale.unlink()
     (out / "cutouts.provenance.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     return record
 
