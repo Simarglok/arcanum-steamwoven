@@ -7,6 +7,7 @@ The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made 
 The Steamwoven context tone check (ARC-RES-2455, `tools/steamwoven_ui/tone_check.py`, [SWI-GEN-9](../ui/steamwoven-interface-trd.md); masks `tools/steamwoven_ui/prompts/tone_masks.json`) is standard library only: `python3 -B tools/steamwoven_ui/tone_check.py batch --originals local/steamwoven-ui/refs --results local/steamwoven-ui/outbox/style-anchors-contexts` (about 5 s per screen; exit 1 = a region over a limit) and `... fit SCREEN ORIGINAL RESULT OUTPUT --material paper`; tests `python3 -B -m unittest tools.steamwoven_ui.test_tone_check` (about 55 s, a task check, not in `run_tests.py`).
 The Steamwoven material cut-outs and tiles (ARC-RES-2455, `tools/steamwoven_ui/cutouts.py`, [SWI-GEN-10](../ui/steamwoven-interface-trd.md); list `tools/steamwoven_ui/prompts/cutouts.json`) are standard library only: `check`, `cut` (the cut-outs, the context crop of each small one, the provenance record), `tiles-inbox` (then `codex_batch.py run style-anchors-tiles`) and `tile-check`; tests `python3 -B -m unittest tools.steamwoven_ui.test_cutouts` (task check, under a second).
 The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`.
+The Steamwoven kit fit tool (ARC-DEV-2459, `tools/steamwoven_ui/fit.py`, [section](#steamwoven-kit-fit-arc-dev-2459)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_fit` (about 5 s) also run in the batched `tools/local_dev/run_tests.py`.
 
 ## Process-local environment
 
@@ -1230,6 +1231,31 @@ python3 -B tools/steamwoven_ui/bake.py verify                   # files, hashes 
 python3 -B tools/steamwoven_ui/bake.py self-test                # task check: synthetic master, no file
 python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (also in the batched run_tests.py set)
 ```
+
+## Steamwoven kit fit (ARC-DEV-2459)
+
+[`tools/steamwoven_ui/fit.py`](../../tools/steamwoven_ui/fit.py) makes the kit master of a manifest part from a generated image ([TRD SWI-GEN-4](../ui/steamwoven-interface-trd.md), SWI-KIT-2, SWI-KIT-4, SWI-VER-3):
+the crop and scale to the part's master size, the alpha (real alpha, or a keyed flat background), the edge decontamination, the alpha clean-up, the low-frequency colour lock to the approved material sheet and the
+provenance record. Standard library only (`pngio.py`), so no launch queue; it reads and writes `local/steamwoven-ui/` of the main checkout, never git. Same inputs, same bytes. The steps, limits and the two metrics
+(edge halo, high-frequency energy) are in the module text of `fit.py`; the numbers are `HALO_MEAN_DE` 3, `HALO_P95_DE` 6 (CIE76 against the nearest opaque interior), `HF_TOLERANCE` 10 % (in L\*a\*b\*), `LOCK_MAX_DE` 15.
+
+```sh
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass --dry-run   # plan and gates; writes nothing (always first)
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass [--key border|#RRGGBB] [--crop X,Y,W,H] [--size WxH] [--replace]
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --source FILE --provenance FILE      # a file from outside the outbox (or --no-provenance for a hand-made source)
+python3 -B tools/steamwoven_ui/fit.py self-test                                         # task check: synthetic disc, no file
+python3 -B -m unittest tools.steamwoven_ui.test_fit                                     # task check (also in the batched run_tests.py set)
+```
+
+- **Inputs:** `--batch/--prompt` read `outbox/<batch>/<prompt>.png` and its generator record `provenance/<batch>/<prompt>.json` (the record's `image_sha256` must match the file, SWI-GEN-6); `--source` takes any PNG with `--provenance FILE`.
+  The part must be a manifest row; its `size` is the master size (a part with an open size takes `--size`, a different `--size` for a sized part is refused); sides are multiples of 6 px. The source has the master's aspect within 1 % (SWI-GEN-8) or `--crop X,Y,W,H` (source pixels) says what to take.
+- **Alpha:** a source with real alpha keeps it (the requested form, TRD common rule 7). `--key border` keys a flat background (colour = median of the border, refused when the border is not flat) and `--key #RRGGBB` a given colour; without either an alpha-less source stays opaque.
+  Edge pixels take the colour of the nearest opaque pixels when they are farther than 3 dE from it, so no colour of the generator's matte stays; fully transparent pixels are stored as 0 0 0 0, as the bake does.
+- **Colour lock:** `--material` names materials of the approved sheet (`wood`, `black`, `paper`, `parchment`, `cloth`, `brass`, `iron`, `glass`: the `material` of the cut-outs in `cutouts.provenance.json`). The sheet's sha256 must be the approved one (TRD SWI-GEN-11, constant `APPROVED_SHEET_SHA256` in `fit.py`;
+  a new approval changes both). A part of two or more materials is locked region by region. A shift above 15 dE is a wrong generation (regenerate; `--force-lock` overrides); `--lock-strength 0..1` scales the shift.
+- **Outputs and gates:** `masters/<part id>.png` (default `local/steamwoven-ui/masters`, what `bake.py` reads; an existing master needs `--replace`) and `provenance/fit/<part id>.json` (SWI-GEN-6: the generator record, source hash and crop, keying, lock with the sheet hash, metrics, master hash).
+  A master is written only when the size, the halo gate and the high-frequency gate hold (exit 1, nothing written, the report says which). Exit 2 = an input could not be used. The manifest's `status` and `provenance` fields of the part (`fit:<part id>`) are set by the part's batch PR, not by the tool.
+- **Speed:** pure Python; a part at 1000 x 1000 takes seconds, a full 2880 x 2160 screen from a 1448 x 1086 generation with a two-material lock about 70 s; the dry run costs the same as the real run.
 
 ## Steamwoven Codex batch runner (ARC-DEV-3001)
 
