@@ -9,16 +9,13 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class SteamwovenColumnMenuTests
 {
-    private static readonly SteamwovenLayoutOptions ThinColumn = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KThin); // ARC-UI-2925: the model keeps k = 0.8, the viewer no longer offers it
     private static SteamwovenFullScreenPlan Original(int width, int height) => SteamwovenColumnMenu.Plan(width, height, SteamwovenLayoutOptions.ColumnOriginal)!;
-    private static SteamwovenFullScreenPlan Thin(int width, int height) => SteamwovenColumnMenu.Plan(width, height, ThinColumn)!;
 
     [TestMethod]
     [DataRow(3840, 2160, 3.6, 480, 2880)] [DataRow(2560, 1440, 2.4, 320, 1920)] [DataRow(1920, 1080, 1.8, 240, 1440)] [DataRow(3440, 1440, 2.4, 760, 1920)]
     public void At_16_9_and_wider_the_plate_fills_the_window_height_and_the_sides_are_black(int width, int height, double factor, int left, int plateWidth)
     {
         var plan = Original(width, height);
-        Assert.IsTrue(plan.IsColumn);
         Assert.AreEqual(factor, plan.Factor, 1e-9);
         Assert.AreEqual(new PixelRect(left, 0, plateWidth, height), plan.Zone);
         CollectionAssert.AreEqual(new[] { new PixelRect(0, 0, left, height), new PixelRect(left + plateWidth, 0, width - left - plateWidth, height) }, SteamwovenColumnMenu.BlackRects(plan).ToArray());
@@ -33,16 +30,6 @@ public sealed class SteamwovenColumnMenuTests
         Assert.AreEqual(8.0 / 3, plan.Factor, 1e-9);
         Assert.AreEqual(new PixelRect(213, 0, 2134, 1600), plan.Zone);
         Assert.AreEqual(new PixelRect(107, 0, 1067, 800), Original(1280, 800).Zone);
-    }
-
-    [TestMethod]
-    public void The_thin_preset_gives_the_same_menu_plan_as_the_original_strips()
-    {
-        foreach (var (w, h) in new[] { (1920, 1080), (2560, 1600), (3440, 1440), (1280, 800) })
-        {
-            Assert.AreEqual(Original(w, h).Zone, Thin(w, h).Zone, $"{w}x{h}");
-            Assert.AreEqual(Original(w, h).Factor, Thin(w, h).Factor, $"{w}x{h}");
-        }
     }
 
     [TestMethod]
@@ -79,14 +66,14 @@ public sealed class SteamwovenColumnMenuTests
     public void The_two_strip_place_is_the_plates_top_left_and_the_unit_scale()
     {
         Assert.AreEqual(new SteamwovenWindowPlace(1.8, 240, 0), SteamwovenColumnMenu.Place(Original(1920, 1080)));
-        Assert.AreEqual(new SteamwovenWindowPlace(2.4, 320, 0), SteamwovenColumnMenu.Place(Thin(2560, 1440)));
+        Assert.AreEqual(new SteamwovenWindowPlace(2.4, 320, 0), SteamwovenColumnMenu.Place(Original(2560, 1440)));
     }
 
     [TestMethod]
     public void Hit_testing_follows_the_drawn_plate_and_misses_the_black_sides()
     {
         var buttons = new List<(int X, int Y, int Width, int Height)> { (300, 100, 200, 40), (300, 160, 200, 40) };
-        foreach (var plan in new[] { Original(2560, 1600), Thin(2560, 1440), Original(3440, 1440), Thin(1920, 1200), Original(1000, 1000) })
+        foreach (var plan in new[] { Original(2560, 1600), Original(2560, 1440), Original(3440, 1440), Original(1920, 1200), Original(1000, 1000) })
         {
             for (var slot = 0; slot < buttons.Count; slot++)
             {
@@ -96,19 +83,6 @@ public sealed class SteamwovenColumnMenuTests
             // Left of the plate (a black side) hits nothing.
             Assert.AreEqual(-1, plan.HitTest(buttons, plan.Zone.X - 10, plan.Zone.Y + 120 * plan.Factor));
         }
-    }
-
-    [TestMethod]
-    public void Without_the_column_option_the_full_width_plan_is_unchanged()
-    {
-        Assert.IsNull(SteamwovenColumnMenu.Plan(1920, 1080, SteamwovenLayoutOptions.Default));
-        var plan = SteamwovenFullScreen.Plan(1920, 1080, SteamwovenLayoutOptions.Default)!;
-        Assert.IsFalse(plan.IsColumn);
-        Assert.AreEqual(SteamwovenFullScreen.Plan(1920, 1080), plan);
-        Assert.AreEqual(new PixelRect(240, 0, 1440, 1080), plan.Zone);
-        Assert.AreEqual(plan.Frame, plan.Layout.FullScreenBackdrop.Target);
-        // 2560 x 1600 full-width keeps the plate at f · 3.6 with the backdrop above and below, not the fitted height.
-        Assert.AreEqual(new PixelRect(320, 80, 1920, 1440), SteamwovenFullScreen.Plan(2560, 1600, SteamwovenLayoutOptions.Default)!.Zone);
     }
 
     [TestMethod]

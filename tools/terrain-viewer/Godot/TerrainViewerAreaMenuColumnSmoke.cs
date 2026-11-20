@@ -8,10 +8,11 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-UI-2891: opt-in part of the menu smoke (ARC_AREA_MENU_COLUMN=1): the full-screen menus (main, options) and the two-strip screens (pre-made, new character; the save list has its own pass inside
-    // the save window's smoke, ARC_AREA_MENU_COLUMN with `--stages scene` or `menu`) in column mode of the Steamwoven layout (TRD "Column mode", owner decision 2026-11-19: the plate fills the window's height from edge
-    // to edge, black beside it), at each size of ARC_STEAMWOVEN_SIZES (default: the AC5 sizes, 2560x1440, 1920x1080, 2560x1600, 1920x1200, 3440x1440, 1280x800): the plate's scale and place, the black rectangles, no
-    // full-width backdrop, the pointer hitting the labels where they are drawn (the full-screen windows) and not on the black, the pixels of the black side. ARC_AREA_MENU_CAPTURE=PATH.png also saves
-    // PATH-column-WINDOW-WxH.png (local, never in git). The window is not resized: the root viewport takes the size as its logical render target.
+    // the save window's smoke, ARC_AREA_MENU_COLUMN with `--stages scene` or `menu`) in the Steamwoven layout (TRD "Column mode", owner decision 2026-11-19: the plate fills the window's height from edge
+    // to edge, black beside it), at each size of ARC_STEAMWOVEN_SIZES (default: the AC5 sizes, 2560x1440, 1920x1080, 2560x1600, 1920x1200, 3440x1440, 1280x800): the plate's scale and place, the black rectangles,
+    // the pointer hitting the labels where they are drawn (the full-screen windows) and not on the black, the pixels of the black side. ARC_AREA_MENU_CAPTURE=PATH.png also saves
+    // PATH-column-WINDOW-WxH.png and, ARC-DEV-2672, the main and options windows in the Original look (the HD option off, no plan) as PATH-legacy-WINDOW-WxH.png, with no layout checks (local, never in git).
+    // The window is not resized: the root viewport takes the size as its logical render target.
     private static bool ColumnMenuSmokeOn() => System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_COLUMN") is { Length: > 0 } value && value != "0";
 
     private static IReadOnlyList<Vector2I> ColumnMenuSizes()
@@ -91,7 +92,7 @@ public partial class TerrainViewerApp
                         var layout = plan!;
                         await frames(2);
                         await CheckColumnCaseAsync(tag, layout, screen.Sides(), screen.Plate() ?? throw new InvalidOperationException($"[{tag}] the {screen.Name} view is not drawn"),
-                            panel.FrameBackdropForSelfTest.Shown, screen.Name is "main" or "options" ? art : null, frames, require);
+                            screen.Name is "main" or "options" ? art : null, frames, require);
                         // ARC-UI-2461: with the synthetic kit the full-screen menus draw its plates.
                         if (syntheticKit is not null && screen.Name is "main" or "options") await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
                         await SaveAsync($"column-{tag}");
@@ -101,18 +102,40 @@ public partial class TerrainViewerApp
                     await frames(3);
                 }
             }
-            // The column option off again: the full-width plan (HD on) or none (HD off) stands as before, and the surroundings are gone.
-            SteamwovenHud.Options = SteamwovenLayoutOptions.Default;
-            await frames(3);
-            require(art.FullScreenPlan is { IsColumn: false } && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) is null, "with the column option off the full-width plan stands");
-            require(panel.ColumnSidesForSelfTest is { Shown: false } && panel.ColumnSidesForSelfTest.Sides.BlackForSelfTest.Count == 0, "with the column option off the column's surroundings are gone");
-            // The column option set with the HD option off: no column plan, the whole-factor plate stands (AC2).
-            SteamwovenHud.Options = SteamwovenLayoutOptions.ColumnOriginal;
+            // ARC-DEV-2672: the Original look at each size (the HD option off: the whole-factor plate, no plan), saved as PATH-legacy-WINDOW-WxH.png; no layout checks.
+            if (capture is not null)
+            {
+                _gameSettings = _gameSettings with { HdInterface = false, GeneratedInterface = false };
+                SyncInterfaceHd();
+                await frames(3);
+                foreach (var screen in screens.Take(2))
+                {
+                    screen.Open();
+                    await frames(3);
+                    require(screen.IsOpen(), $"[legacy] the {screen.Name} window opened (window {_mainMenu?.Window})");
+                    foreach (var size in ColumnMenuSizes())
+                    {
+                        window.ContentScaleSize = size;
+                        for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
+                        require((Vector2I)window.GetVisibleRect().Size == size, $"[legacy-{screen.Name}] the viewport is {size}, got {window.GetVisibleRect().Size}");
+                        await frames(3);
+                        require(!InterfaceHd.Enabled && art.FullScreenPlan is null, $"[legacy-{screen.Name}-{size.X}x{size.Y}] the HD option is off: no full-screen plan");
+                        await SaveAsync($"legacy-{screen.Name}-{size.X}x{size.Y}");
+                    }
+                    screen.Close();
+                    await frames(3);
+                }
+                _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+                SyncInterfaceHd();
+                await frames(3);
+                require(AreaGameBarPanel.SteamwovenOn && art.FullScreenPlan is not null, "[legacy] the HD option is back on after the Original-look pass");
+            }
+            // The HD option off: no plan, the whole-factor plate stands (AC2).
             _gameSettings = _gameSettings with { HdInterface = false };
             SyncInterfaceHd();
             await frames(3);
             require(!InterfaceHd.Enabled && art.FullScreenPlan is null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) is null && !panel.ColumnSidesForSelfTest.Shown,
-                "with the HD option off the column option draws nothing: no plan, no surroundings");
+                "with the HD option off the Steamwoven layout draws nothing: no plan, no surroundings");
             GD.Print($"ARC-UI-2891 native-smoke menu column PASS cases={checkedCases}");
         }
         finally
@@ -162,7 +185,7 @@ public partial class TerrainViewerApp
                 var plan = SteamwovenColumnMenu.Plan(size.X, size.Y, SteamwovenLayoutOptions.ColumnOriginal);
                 require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the save list is laid out by the column plan");
                 var art = panel.ArtForSelfTest;
-                await CheckColumnCaseAsync(tag, plan!, panel.ColumnSidesForSelfTest, (art.Position, art.Scale.X), false, null, frames, require);
+                await CheckColumnCaseAsync(tag, plan!, panel.ColumnSidesForSelfTest, (art.Position, art.Scale.X), null, frames, require);
                 if (capture is not null)
                 {
                     using var image = GetViewport().GetTexture().GetImage();
@@ -186,7 +209,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The checks of one column case (the plate, the black around it, the hit tests of a full-screen window, the pixels); shared by the main menu's pass and the save list's.</summary>
     private async Task CheckColumnCaseAsync(string tag, SteamwovenFullScreenPlan layout, SteamwovenColumnSidesView surround, (Vector2 Position, float Scale) plate,
-        bool frameBackdropShown, AreaMenuArtView? art, Func<int, Task> frames, Action<bool, string> require)
+        AreaMenuArtView? art, Func<int, Task> frames, Action<bool, string> require)
     {
         var (position, scale) = plate;
         // The plate fills the window's height from edge to edge (the width limits a window narrower than 4:3), drawn at the fitted scale.
@@ -195,8 +218,7 @@ public partial class TerrainViewerApp
         require(layout.Layout.WindowWidth * 3 < layout.Layout.WindowHeight * 4 || (layout.Zone.Y == 0 && layout.Zone.Bottom == layout.Layout.WindowHeight), $"[{tag}] the plate spans the window's height: {layout.Zone}");
         require(Math.Abs(scale - (float)layout.Factor) < 1e-4f, $"[{tag}] the plate is drawn at {layout.Factor:F4}, got {scale}");
         require(Math.Abs(position.X - layout.Zone.X) <= 1.01f && Math.Abs(position.Y - layout.Zone.Y) <= 1.01f, $"[{tag}] the plate stands at {layout.Zone}, got {position}");
-        // No full-width backdrop; the black is the plan's.
-        require(!frameBackdropShown, $"[{tag}] no full-width backdrop shows");
+        // The black is the plan's.
         require(surround.Visible && surround.BlackForSelfTest.SequenceEqual(SteamwovenColumnMenu.BlackRects(layout)), $"[{tag}] the black is the plan's rectangles");
         // Hit testing (the full-screen windows): the pointer over each drawn label lights it, over the black beside the plate it lights none.
         if (art is not null)

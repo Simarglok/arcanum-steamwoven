@@ -147,7 +147,6 @@ public partial class TerrainViewerApp
             _launcherPanel.HdRequested += LauncherHd;
             _launcherPanel.HdGeneratedRequested += LauncherHdGenerated;
             _launcherPanel.HdPackRequested += LauncherHdPack;
-            _launcherPanel.HdLayoutRequested += LauncherHdLayout;
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
             _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074/069 cancel requested (installer unpack or game data)"); _installCancel?.Cancel(); };

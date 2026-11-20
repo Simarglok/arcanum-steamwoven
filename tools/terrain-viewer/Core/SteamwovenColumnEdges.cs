@@ -4,7 +4,7 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// ARC-UI-2890 (AC2, AC3): where the column's generated end caps stand: the parts of the column that border the world (the two strips; the middle band as well while a menu window is open) and the widths of the brass edge
-/// and the soft shadow it throws on the world. Godot-free; the viewer draws the rectangles. In the full-width layout there are none.
+/// and the soft shadow it throws on the world. Godot-free; the viewer draws the rectangles.
 /// </summary>
 public static class SteamwovenColumnEdges
 {
@@ -16,11 +16,11 @@ public static class SteamwovenColumnEdges
 
     /// <summary>
     /// The parts of the column that carry an end cap: the top strip and the bottom strip, and between them the middle band while <paramref name="menuOpen"/>, so the menu window's sides are capped like the strips'.
-    /// Empty without the column mode. The rectangles tile the column's height (the strips and the middle band share their edges).
+    /// The rectangles tile the column's height (the strips and the middle band share their edges).
     /// </summary>
     public static IReadOnlyList<PixelRect> Parts(SteamwovenHudPlan plan, bool menuOpen)
     {
-        if (plan.Column is not { } column) return [];
+        var column = plan.Column;
         var parts = new List<PixelRect>(3) { column.TopStrip };
         var middle = PixelRect.FromEdges(column.Column.X, column.TopStrip.Bottom, column.Column.Right, column.BottomStrip.Y);
         if (menuOpen && middle.Height > 0) parts.Add(middle);
@@ -28,7 +28,7 @@ public static class SteamwovenColumnEdges
         return parts;
     }
 
-    /// <summary>The rectangles of the world the viewer dims while a menu window is open: the frame left and right of the column (empty ones left out). Empty without the column mode.</summary>
+    /// <summary>The rectangles of the world the viewer dims while a menu window is open: the frame left and right of the column (empty ones left out).</summary>
     public static IReadOnlyList<PixelRect> DimmedWorld(SteamwovenHudPlan plan) =>
-        plan.Column is { } column ? [.. new[] { column.WorldLeft, column.WorldRight }.Where(rect => rect.Width > 0 && rect.Height > 0)] : [];
+        [.. new[] { plan.Column.WorldLeft, plan.Column.WorldRight }.Where(rect => rect.Width > 0 && rect.Height > 0)];
 }

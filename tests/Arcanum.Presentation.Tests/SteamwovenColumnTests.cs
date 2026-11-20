@@ -9,30 +9,18 @@ public sealed class SteamwovenColumnTests
 {
     // Window, preset, frame (x, y, width, height), column edges, strip heights, window zone top and bottom and full-screen zone top and bottom (both absolute window y).
     // The numbers come from an independent exact-fraction calculation of the rules in the issue (`f = min(W / 3840, H / 2160)`, strips `round(150 or 570 · k · f)`, column `2880 · k · f` centred, zones `1440` and `2160 · k · f` centred), not from the builder.
-    private static readonly (int W, int H, bool Thin, int FrameX, int FrameY, int FrameW, int FrameH, int ColL, int ColR, int TopH, int BotH, int WinTop, int WinBottom, int FullTop, int FullBottom)[] Table =
+    private static readonly (int W, int H, int FrameX, int FrameY, int FrameW, int FrameH, int ColL, int ColR, int TopH, int BotH, int WinTop, int WinBottom, int FullTop, int FullBottom)[] Table =
     [
-        (3840, 2160, false, 0, 0, 3840, 2160, 480, 3360, 150, 570, 150, 1590, 0, 2160),
-        (2560, 1440, false, 0, 0, 2560, 1440, 320, 2240, 100, 380, 100, 1060, 0, 1440),
-        (1920, 1080, false, 0, 0, 1920, 1080, 240, 1680, 75, 285, 75, 795, 0, 1080),
-        (2560, 1600, false, 0, 0, 2560, 1600, 320, 2240, 100, 380, 180, 1140, 80, 1520),
-        (1920, 1200, false, 0, 0, 1920, 1200, 240, 1680, 75, 285, 135, 855, 60, 1140),
-        (1280, 800, false, 0, 0, 1280, 800, 160, 1120, 50, 190, 90, 570, 40, 760),
-        (1366, 768, false, 0, 0, 1366, 768, 171, 1195, 53, 203, 53, 565, 0, 768),
-        (3440, 1440, false, 440, 0, 2560, 1440, 760, 2680, 100, 380, 100, 1060, 0, 1440),
-        (1024, 768, false, 0, 64, 1024, 640, 128, 896, 40, 152, 136, 520, 96, 672),
-        (3840, 2160, true, 0, 0, 3840, 2160, 768, 3072, 120, 456, 336, 1488, 216, 1944),
-        (2560, 1440, true, 0, 0, 2560, 1440, 512, 2048, 80, 304, 224, 992, 144, 1296),
-        (1920, 1080, true, 0, 0, 1920, 1080, 384, 1536, 60, 228, 168, 744, 108, 972),
-        (2560, 1600, true, 0, 0, 2560, 1600, 512, 2048, 80, 304, 304, 1072, 224, 1376),
-        (1920, 1200, true, 0, 0, 1920, 1200, 384, 1536, 60, 228, 228, 804, 168, 1032),
-        (1280, 800, true, 0, 0, 1280, 800, 256, 1024, 40, 152, 152, 536, 112, 688),
-        (1366, 768, true, 0, 0, 1366, 768, 273, 1093, 43, 162, 120, 529, 77, 691),
-        (3440, 1440, true, 440, 0, 2560, 1440, 952, 2488, 80, 304, 224, 992, 144, 1296),
-        (1024, 768, true, 0, 64, 1024, 640, 205, 819, 32, 122, 185, 493, 154, 614),
+        (3840, 2160, 0, 0, 3840, 2160, 480, 3360, 150, 570, 150, 1590, 0, 2160),
+        (2560, 1440, 0, 0, 2560, 1440, 320, 2240, 100, 380, 100, 1060, 0, 1440),
+        (1920, 1080, 0, 0, 1920, 1080, 240, 1680, 75, 285, 75, 795, 0, 1080),
+        (2560, 1600, 0, 0, 2560, 1600, 320, 2240, 100, 380, 180, 1140, 80, 1520),
+        (1920, 1200, 0, 0, 1920, 1200, 240, 1680, 75, 285, 135, 855, 60, 1140),
+        (1280, 800, 0, 0, 1280, 800, 160, 1120, 50, 190, 90, 570, 40, 760),
+        (1366, 768, 0, 0, 1366, 768, 171, 1195, 53, 203, 53, 565, 0, 768),
+        (3440, 1440, 440, 0, 2560, 1440, 760, 2680, 100, 380, 100, 1060, 0, 1440),
+        (1024, 768, 0, 64, 1024, 640, 128, 896, 40, 152, 136, 520, 96, 672),
     ];
-
-    private static readonly SteamwovenLayoutOptions ThinColumn = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KThin); // ARC-UI-2925: the model keeps k = 0.8, the viewer no longer offers it
-    private static SteamwovenLayoutOptions Preset(bool thin) => thin ? ThinColumn : SteamwovenLayoutOptions.ColumnOriginal;
 
     private static SteamwovenLayout Layout(int w, int h, SteamwovenLayoutOptions options)
     {
@@ -41,16 +29,16 @@ public sealed class SteamwovenColumnTests
         return result.Layout!;
     }
 
-    private static SteamwovenColumnPlan Plan(int w, int h, bool thin) => Layout(w, h, Preset(thin)).Column!;
+    private static SteamwovenColumnPlan Plan(int w, int h) => Layout(w, h, SteamwovenLayoutOptions.ColumnOriginal).Column;
 
     [TestMethod]
-    public void TheColumnPlanForEverySizeAndPresetHasTheExactEdges()
+    public void TheColumnPlanForEverySizeHasTheExactEdges()
     {
         foreach (var row in Table)
         {
-            var label = $"{row.W}x{row.H} {(row.Thin ? "k=0.8" : "k=1")}";
-            var layout = Layout(row.W, row.H, Preset(row.Thin));
-            var plan = layout.Column!;
+            var label = $"{row.W}x{row.H}";
+            var layout = Layout(row.W, row.H, SteamwovenLayoutOptions.ColumnOriginal);
+            var plan = layout.Column;
             Assert.AreEqual(new PixelRect(row.FrameX, row.FrameY, row.FrameW, row.FrameH), layout.Frame, label);
             Assert.AreEqual(PixelRect.FromEdges(row.ColL, row.FrameY, row.ColR, row.FrameY + row.FrameH), plan.Column, label);
             Assert.AreEqual(PixelRect.FromEdges(row.ColL, row.FrameY, row.ColR, row.FrameY + row.TopH), plan.TopStrip, label);
@@ -72,7 +60,7 @@ public sealed class SteamwovenColumnTests
     public void At16To9WithTheOriginalStripsTheWindowZoneFillsTheMiddleBandAndTheGapsAreEmpty()
     {
         // 150 + 1440 + 570 = 2160 master px: the window zone is exactly the middle band.
-        var master = Plan(3840, 2160, thin: false);
+        var master = Plan(3840, 2160);
         Assert.AreEqual(150 + 1440 + 570, master.Column.Height);
         Assert.AreEqual(new PixelRect(480, 150, 2880, 1440), master.Window.Zone);
         Assert.AreEqual(new PixelRect(480, 150, 2880, 0), master.Window.GapAbove);
@@ -81,7 +69,7 @@ public sealed class SteamwovenColumnTests
         Assert.AreEqual(new PixelRect(480, 1590, 2880, 570), master.BottomStrip);
         foreach (var (w, h) in new[] { (2560, 1440), (1920, 1080), (1366, 768), (3440, 1440), (1280, 720), (1600, 900), (1680, 945) })
         {
-            var plan = Plan(w, h, thin: false);
+            var plan = Plan(w, h);
             Assert.AreEqual(0, plan.Window.GapAbove.Height, $"{w}x{h} above");
             Assert.AreEqual(0, plan.Window.GapBelow.Height, $"{w}x{h} below");
             Assert.AreEqual(plan.TopStrip.Bottom, plan.Window.Zone.Y, $"{w}x{h}");
@@ -91,13 +79,9 @@ public sealed class SteamwovenColumnTests
     }
 
     [TestMethod]
-    public void TheThinPresetAndSixteenToTenLeaveGapsInsideTheColumn()
+    public void SixteenToTenLeavesGapsInsideTheColumn()
     {
-        var thin = Plan(3840, 2160, thin: true);
-        Assert.AreEqual(216, thin.Window.GapAbove.Height);
-        Assert.AreEqual(216, thin.Window.GapBelow.Height);
-        Assert.AreEqual(216, thin.FullScreen.GapAbove.Height);
-        var tall = Plan(2560, 1600, thin: false);
+        var tall = Plan(2560, 1600);
         Assert.AreEqual(80, tall.Window.GapAbove.Height);
         Assert.AreEqual(80, tall.Window.GapBelow.Height);
         Assert.AreEqual(80, tall.FullScreen.GapAbove.Height);
@@ -112,12 +96,12 @@ public sealed class SteamwovenColumnTests
             (1600, 900), (1680, 945), (1280, 720), (1000, 700), (2000, 1250), (5120, 2880),
         };
         foreach (var edges in new[] { false, true })
-        foreach (var k in new[] { SteamwovenColumnMode.KOriginal, SteamwovenColumnMode.KThin })
+        foreach (var k in new[] { SteamwovenColumnMode.KOriginal })
         foreach (var (w, h) in sizes)
         {
             var label = $"{w}x{h} k={k} edges={edges}";
             var layout = Layout(w, h, SteamwovenLayoutOptions.ForColumn(k, edges));
-            var plan = layout.Column!;
+            var plan = layout.Column;
             // The column, top to bottom: top strip, gap, window zone, gap, bottom strip.
             Assert.AreEqual(layout.Frame.Y, plan.TopStrip.Y, label);
             Assert.AreEqual(plan.TopStrip.Bottom, plan.Window.GapAbove.Y, label);
@@ -155,64 +139,47 @@ public sealed class SteamwovenColumnTests
     {
         var bars = Layout(3440, 1440, SteamwovenLayoutOptions.ColumnOriginal);
         Assert.AreEqual(new PixelRect(440, 0, 2560, 1440), bars.Frame);
-        Assert.AreEqual(new PixelRect(440, 0, 320, 1440), bars.Column!.WorldLeft);
+        Assert.AreEqual(new PixelRect(440, 0, 320, 1440), bars.Column.WorldLeft);
         Assert.AreEqual(new PixelRect(2680, 0, 320, 1440), bars.Column.WorldRight);
         var edges = Layout(3440, 1440, SteamwovenLayoutOptions.ColumnOriginal.WithWorldToEdges());
-        Assert.AreEqual(new PixelRect(0, 0, 760, 1440), edges.Column!.WorldLeft);
+        Assert.AreEqual(new PixelRect(0, 0, 760, 1440), edges.Column.WorldLeft);
         Assert.AreEqual(new PixelRect(2680, 0, 760, 1440), edges.Column.WorldRight);
         Assert.AreEqual(bars.Column.Column, edges.Column.Column, "the column does not move");
-        var thinEdges = Layout(3440, 1440, ThinColumn.WithWorldToEdges());
-        Assert.AreEqual(new PixelRect(0, 0, 952, 1440), thinEdges.Column!.WorldLeft);
-        Assert.AreEqual(new PixelRect(2488, 0, 952, 1440), thinEdges.Column.WorldRight);
         // At 16:9 the frame is the window: the option changes nothing.
-        Assert.AreEqual(Plan(1920, 1080, thin: false), Layout(1920, 1080, SteamwovenLayoutOptions.ColumnOriginal.WithWorldToEdges()).Column! with { Mode = Plan(1920, 1080, thin: false).Mode });
+        Assert.AreEqual(Plan(1920, 1080), Layout(1920, 1080, SteamwovenLayoutOptions.ColumnOriginal.WithWorldToEdges()).Column with { Mode = Plan(1920, 1080).Mode });
         // A letterboxed 4:3 frame keeps its vertical extent: the world fills the frame's height beside the column.
         var tall = Layout(1024, 768, SteamwovenLayoutOptions.ColumnOriginal.WithWorldToEdges());
-        Assert.AreEqual(new PixelRect(0, 64, 128, 640), tall.Column!.WorldLeft);
+        Assert.AreEqual(new PixelRect(0, 64, 128, 640), tall.Column.WorldLeft);
         Assert.AreEqual(new PixelRect(896, 64, 128, 640), tall.Column.WorldRight);
     }
 
     [TestMethod]
-    public void TheStripScaleIsThreePointSixTimesKTimesFAndTheZonesAreTheOriginalsUnitsAtThatScale()
+    public void TheStripScaleIsThreePointSixTimesFAndTheZonesAreTheOriginalsUnitsAtThatScale()
     {
-        var master = Plan(3840, 2160, thin: false);
+        var master = Plan(3840, 2160);
         Assert.AreEqual(new Ratio(18, 5), master.StripScale);
         Assert.AreEqual(3.6, master.UnitScale, 1e-12);
-        Assert.AreEqual(new Ratio(72, 25), Plan(3840, 2160, thin: true).StripScale);
-        var half = Plan(1920, 1080, thin: true);
-        Assert.AreEqual(new Ratio(18, 5) * new Ratio(4, 5) * new Ratio(1, 2), half.StripScale);
-        // 800 x 400 units at the strip scale: 1152 x 576 at 1920x1080 k = 0.8 (the zone is not clamped there).
-        Assert.AreEqual(1152, half.Window.Zone.Width);
-        Assert.AreEqual(576, half.Window.Zone.Height);
-        Assert.AreEqual(1152, half.FullScreen.Zone.Width);
-        Assert.AreEqual(864, half.FullScreen.Zone.Height, "800 x 600 units");
-        Assert.AreEqual(1152, half.Column.Width);
+        var half = Plan(1920, 1080);
+        Assert.AreEqual(new Ratio(18, 5) * new Ratio(1, 2), half.StripScale);
+        // 800 x 400 units at the strip scale: 1440 x 720 at 1920x1080 (the zone is not clamped there).
+        Assert.AreEqual(1440, half.Window.Zone.Width);
+        Assert.AreEqual(720, half.Window.Zone.Height);
+        Assert.AreEqual(1440, half.FullScreen.Zone.Width);
+        Assert.AreEqual(1080, half.FullScreen.Zone.Height, "800 x 600 units");
+        Assert.AreEqual(1440, half.Column.Width);
     }
 
     [TestMethod]
-    public void ColumnOptionsAreConsistentAndTheFullWidthLayoutIsUnchangedByThem()
+    public void ColumnOptionsAreConsistent()
     {
         Assert.IsTrue(SteamwovenLayoutOptions.ColumnOriginal.IsValid);
-        Assert.IsTrue(ThinColumn.IsValid);
         Assert.AreEqual((150, 570), (SteamwovenLayoutOptions.ColumnOriginal.TopPanelMaster, SteamwovenLayoutOptions.ColumnOriginal.BottomPanelMaster));
-        Assert.AreEqual((120, 456), (ThinColumn.TopPanelMaster, ThinColumn.BottomPanelMaster));
-        Assert.IsNull(SteamwovenLayoutOptions.Default.Column);
-        Assert.AreEqual(SteamwovenLayoutOptions.Default, ThinColumn with { Column = null }, "the thin strips are today's default panel heights");
-        // A column mode whose panels are not the strips', or with another k, is invalid and a typed failure.
-        Assert.IsFalse((SteamwovenLayoutOptions.ColumnOriginal with { TopPanelMaster = 120, BottomPanelMaster = 456 }).IsValid);
-        Assert.IsFalse((ThinColumn with { Column = new SteamwovenColumnMode(new Ratio(1, 2)) }).IsValid);
-        Assert.AreEqual(SteamwovenLayoutFailure.InvalidOptions,
-            SteamwovenLayoutBuilder.Compute(1920, 1080, SteamwovenLayoutOptions.ColumnOriginal with { TopPanelMaster = 120, BottomPanelMaster = 456 }).Failure);
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SteamwovenLayoutOptions.ForColumn(new Ratio(1, 2)));
-        Assert.AreSame(SteamwovenLayoutOptions.Default.WithWorldToEdges(), SteamwovenLayoutOptions.Default, "no column mode, nothing to change");
-        // Without the column mode there is no plan; with it every member but the plan is the full-width layout of the same panel heights.
-        foreach (var (w, h) in new[] { (1920, 1080), (2560, 1600), (3440, 1440), (1024, 768) })
-        {
-            Assert.IsNull(Layout(w, h, SteamwovenLayoutOptions.Default).Column, $"{w}x{h}");
-            var column = Layout(w, h, ThinColumn);
-            Assert.IsNotNull(column.Column);
-            Assert.AreEqual(Layout(w, h, SteamwovenLayoutOptions.Default), column with { Column = null }, $"{w}x{h}");
-        }
+        // Only k = 1 exists (TRD SWI-LAY-10): another k is invalid and a typed failure, and there are no panel heights of their own and no full-width layout any more (ARC-UI-2926).
+        var other = SteamwovenLayoutOptions.ColumnOriginal with { Column = new SteamwovenColumnMode(new Ratio(4, 5)) };
+        Assert.IsFalse(other.IsValid);
+        Assert.AreEqual(SteamwovenLayoutFailure.InvalidOptions, SteamwovenLayoutBuilder.Compute(1920, 1080, other).Failure);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SteamwovenLayoutOptions.ForColumn(new Ratio(4, 5)));
+        Assert.AreEqual(SteamwovenLayoutOptions.ColumnFitted, SteamwovenLayoutOptions.Default);
     }
 
     // ARC-UI-2890 (owner decision 2026-11-19): the fitted column: the strips and the window are one 4:3 composition scaled to the frame's height (u = height / 600), no gaps.
@@ -243,7 +210,7 @@ public sealed class SteamwovenColumnTests
         {
             var label = $"{row.W}x{row.H}";
             var layout = Layout(row.W, row.H, SteamwovenLayoutOptions.ColumnFitted);
-            var plan = layout.Column!;
+            var plan = layout.Column;
             Assert.IsTrue(plan.Mode.FitHeight, label);
             Assert.AreEqual(row.FrameW, layout.Frame.Width, label);
             Assert.AreEqual(row.FrameH, layout.Frame.Height, label);
@@ -262,8 +229,8 @@ public sealed class SteamwovenColumnTests
             Assert.AreEqual(PixelRect.FromEdges(row.ColL, topBottom, row.ColR, layout.Frame.Y + row.MiddleBottom), plan.Window.Zone, label);
             Assert.AreEqual(0, plan.Window.GapAbove.Height, label);
             Assert.AreEqual(0, plan.Window.GapBelow.Height, label);
-            Assert.AreEqual(layout.Middle.Band.Y, topBottom, label);
-            Assert.AreEqual(layout.Middle.Band.Bottom, layout.Frame.Y + row.MiddleBottom, label);
+            Assert.AreEqual(layout.Middle.Y, topBottom, label);
+            Assert.AreEqual(layout.Middle.Bottom, layout.Frame.Y + row.MiddleBottom, label);
             Assert.AreEqual(layout.Frame.Height, plan.FullScreen.Zone.Height, label);
             // The unit scale is frame height / 600, and the column is 800 units wide (within a pixel).
             Assert.AreEqual(row.FrameH / 600.0, plan.UnitScale, 1e-9, label);
@@ -276,17 +243,17 @@ public sealed class SteamwovenColumnTests
     [TestMethod]
     public void At_16_9_the_fitted_column_is_the_original_strips_column_and_never_overflows_the_frame()
     {
-        var fitted = Layout(3840, 2160, SteamwovenLayoutOptions.ColumnFitted).Column!;
-        var original = Layout(3840, 2160, SteamwovenLayoutOptions.ColumnOriginal).Column!;
+        var fitted = Layout(3840, 2160, SteamwovenLayoutOptions.ColumnFitted).Column;
+        var original = Layout(3840, 2160, SteamwovenLayoutOptions.ColumnOriginal).Column;
         Assert.AreEqual(original.Column, fitted.Column);
         Assert.AreEqual(original.UnitScale, fitted.UnitScale, 1e-9);
         // At 16:10 the composition is scaled up (4 f against 3.6 f); the column is 4:3, narrower than the frame.
         var tall = Layout(2560, 1600, SteamwovenLayoutOptions.ColumnFitted);
-        Assert.IsTrue(tall.Column!.UnitScale > Layout(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal).Column!.UnitScale);
+        Assert.IsTrue(tall.Column.UnitScale > Layout(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal).Column.UnitScale);
         foreach (var (w, h) in new[] { (3840, 2160), (2560, 1600), (1920, 1200), (1280, 800), (1024, 768), (3440, 1440) })
         {
             var layout = Layout(w, h, SteamwovenLayoutOptions.ColumnFitted);
-            Assert.IsTrue(layout.Column!.Column.X >= layout.Frame.X && layout.Column.Column.Right <= layout.Frame.Right, $"{w}x{h}");
+            Assert.IsTrue(layout.Column.Column.X >= layout.Frame.X && layout.Column.Column.Right <= layout.Frame.Right, $"{w}x{h}");
             Assert.IsTrue(layout.Column.TopStrip.Bottom <= layout.Column.BottomStrip.Y, $"{w}x{h}");
         }
     }
@@ -295,8 +262,7 @@ public sealed class SteamwovenColumnTests
     public void The_fit_height_flag_needs_the_original_strips_k()
     {
         Assert.IsTrue(SteamwovenLayoutOptions.ColumnFitted.IsValid);
-        var thinFitted = ThinColumn with { Column = ThinColumn.Column! with { FitHeight = true } };
-        Assert.IsFalse(thinFitted.IsValid);
+        Assert.IsFalse((SteamwovenLayoutOptions.ColumnFitted with { Column = new SteamwovenColumnMode(new Ratio(4, 5)) { FitHeight = true } }).IsValid);
     }
 
     // ARC-UI-2925 (AC1): the baked step and the run-time scale come from the fitted f = frame height / 2160: the smallest step (1/3, 1/2, 2/3, 1) whose scale is at least f, and the run-time scale f over the step.

@@ -103,10 +103,10 @@ public static class SteamwovenKitComposer
         return right <= left || bottom <= top ? new PixelRect(left, top, 0, 0) : PixelRect.FromEdges(left, top, right, bottom);
     }
 
-    /// <summary>The strip's art and caps and layers from the kit, or the missing parts. Only the column plan has the composition; the full-width layout gets no kit strip. The art must be the composition's 2880 px wide at the set's step.</summary>
+    /// <summary>The strip's art and caps and layers from the kit, or the missing parts. The art must be the composition's 2880 px wide at the set's step.</summary>
     public static SteamwovenKitResult<SteamwovenKitStripPlan> Strip(SteamwovenHudPlan plan, SteamwovenKitSet set, AreaBarStrip strip, IReadOnlyDictionary<AreaBarStrip, SteamwovenKitStripSpec>? table = null)
     {
-        if (plan.Column is not { } column) return new(null, ["(no column plan)"]);
+        var column = plan.Column;
         var spec = (table ?? SteamwovenKitTable.Strips)[strip];
         var missing = new List<string>();
         var board = Need(set, spec.Board, missing);

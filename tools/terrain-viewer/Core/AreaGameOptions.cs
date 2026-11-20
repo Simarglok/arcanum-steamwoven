@@ -192,10 +192,6 @@ public sealed record AreaGameSettings
     /// saved with <see cref="HdInterface"/> on so the pictures keep the HD redraws).</summary>
     public bool GeneratedInterface { get; init; }
 
-    /// <summary>ARC-UI-2890: the layout of the generated interface (the Steamwoven layout): <see cref="SteamwovenLayoutChoice.Column"/> (the original's strip width, the world at the sides; the default while the owner tests it), the column with the thinner
-    /// strips, or the full-width panels. Read only while <see cref="GeneratedInterface"/> is on; the settings line is <c>interface layout</c>.</summary>
-    public SteamwovenLayoutChoice InterfaceLayout { get; init; } = SteamwovenLayoutChoices.Default;
-
     /// <summary>ARC-DEV-350: where the active HD pack is read from (default Auto); it takes effect at the next start.</summary>
     public HdPackSourceMode HdPackSource { get; init; }
 

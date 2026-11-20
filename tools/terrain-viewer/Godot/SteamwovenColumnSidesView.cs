@@ -23,7 +23,6 @@ internal sealed partial class SteamwovenColumnSidesView : Control
     /// <summary>Shows the black around the plate of <paramref name="plan"/> (the window's size is its layout's). Idempotent for the same plan.</summary>
     public void Present(SteamwovenFullScreenPlan plan)
     {
-        if (!plan.IsColumn) { Clear(); return; }
         Position = Vector2.Zero;
         Size = new Vector2(plan.Layout.WindowWidth, plan.Layout.WindowHeight);
         Visible = true;
@@ -33,7 +32,7 @@ internal sealed partial class SteamwovenColumnSidesView : Control
         QueueRedraw();
     }
 
-    /// <summary>Hides the surroundings (the menu is not in column mode).</summary>
+    /// <summary>Hides the surroundings (no Steamwoven menu plate is shown).</summary>
     public void Clear()
     {
         if (_shown is null && !Visible) return;

@@ -99,7 +99,7 @@ public partial class TerrainViewerApp
                 var tag = $"kit-{size.X}x{size.Y}";
                 var plan = panel.PlanForSelfTest;
                 require(plan is not null && plan.Layout == plan0.Layout, $"[{tag}] the panel is laid out by the column plan");
-                var column = plan!.Column!;
+                var column = plan!.Column;
                 // AC1 (SWI-LAY-4): the set of the step the layout chose is the one read; the plan's step is the smallest set at least f.
                 require(SteamwovenKitStore.SetFor(step) is { Step: var readStep } && readStep == step, $"[{tag}] the kit's {SteamwovenKitSet.FolderName(step)} set is read");
                 var (top, bottom, _, boards, caps) = panel.KitForSelfTest;
