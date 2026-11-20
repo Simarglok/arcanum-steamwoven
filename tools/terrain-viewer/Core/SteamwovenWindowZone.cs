@@ -6,9 +6,9 @@ namespace Arcanum.TerrainViewer.Core;
 public readonly record struct SteamwovenWindowPlace(double Scale, double X, double Y);
 
 /// <summary>
-/// ARC-UI-2575 (SWI-BDR-2): the one hook every menu window takes its place from while the Steamwoven layout is on. A window of the original's 800-unit width is drawn at the
-/// layout's unit scale `f · 3.6` (the same for every window, no per-window constant) and sits in the window zone of the layout model (<see cref="SteamwovenLayout.WindowZone"/>, the original's
-/// 800 × 400 units, centred in the middle band), which lies inside the frame, so a window is never under a pillarbox bar. The layout is read for the window size alone: a window that
+/// ARC-UI-2575: the one hook every menu window takes its place from while the Steamwoven layout is on. A window of the original's 800-unit width is drawn at the
+/// column's unit scale (the same for every window, no per-window constant) and sits in the window zone of the column plan (<see cref="SteamwovenColumnPlan.Window"/>, the original's
+/// 800 × 400 units, in the middle band), which lies inside the frame, so a window is never under a bar. The layout is read for the window size alone: a window that
 /// hides the bars (loot, barter, reading, the save and load lists) follows the same zone as one that keeps them. Godot-free; the viewer reads the numbers.
 /// </summary>
 public static class SteamwovenWindowZone
@@ -16,11 +16,10 @@ public static class SteamwovenWindowZone
     /// <summary>The original screen's width in units, the width of every menu window.</summary>
     public const int ScreenWidthUnits = AreaGameBarLayout.ScreenWidth;
 
-    /// <summary>The scale of one original unit in device pixels: `f · 3.6` (the exact fraction of the layout, as a double).</summary>
-    public static double UnitScale(SteamwovenHudPlan plan) =>
-        plan.Column?.UnitScale ?? (plan.Layout.Scale * new Ratio(SteamwovenGrid.UnitNumerator, SteamwovenGrid.UnitDenominator)).ToDouble();
+    /// <summary>The scale of one original unit in device pixels: the column's (`3.6 · k · f`, or frame height / 600 in the fitted column), as a double.</summary>
+    public static double UnitScale(SteamwovenHudPlan plan) => plan.Column.UnitScale;
 
-    /// <summary>ARC-UI-2890: the window zone of the plan: the column's (as wide as the column, at its unit scale `3.6 · k · f`) in column mode, else the full-width layout's.</summary>
+    /// <summary>ARC-UI-2890: the window zone of the plan: the column's (as wide as the column, at its unit scale).</summary>
     public static PixelRect ZoneOf(SteamwovenHudPlan plan) => plan.WindowZone;
 
     /// <summary>

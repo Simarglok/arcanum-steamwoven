@@ -26,7 +26,6 @@ public partial class AreaMainMenuPanel : CanvasLayer
 {
     private ColorRect _backdrop = null!;
     private SteamwovenColumnSidesView _sides = null!;
-    private SteamwovenBoardView _frameBackdrop = null!;
     private PanelContainer _panel = null!;
     private Label _header = null!;
     private VBoxContainer _buttons = null!;
@@ -123,10 +122,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         Layer = 4;
         _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = DiagnosticBackdrop, MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
-        // ARC-UI-2577: the generated backdrop of the Steamwoven full-screen menus (over the frame, under the art; the window outside the frame is the black of _backdrop).
-        _frameBackdrop = new SteamwovenBoardView { Name = "MainMenuFrameBackdrop", Visible = false };
-        AddChild(_frameBackdrop);
-        // ARC-UI-2891: with the column option the menus fill the window's height with black beside the plate, instead of the full-width backdrop.
+        // ARC-UI-2891: the Steamwoven menus fill the window's height with black beside the plate.
         _sides = new SteamwovenColumnSidesView();
         AddChild(_sides);
         _art = new AreaMenuArtView();
@@ -480,7 +476,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
-        UpdateFrameBackdrop();
+        UpdateSides();
         _modal.Position = Vector2.Zero; _modal.Size = size;
         if (_dialogScreen.Visible)
         {
@@ -504,32 +500,18 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
     }
 
-    /// <summary>ARC-UI-2577: the generated backdrop over the frame while a full-screen menu is drawn by the Steamwoven layout; shown once its first paint is in (until then the black of the window shows).
-    /// ARC-UI-2891: with the column option every art window of this panel (the full-screen menus and the pre-made, new-character and shop screens) instead gets black around the plate: no full-width backdrop.</summary>
-    private void UpdateFrameBackdrop()
+    /// <summary>ARC-UI-2891: while a Steamwoven menu is drawn by this panel (the full-screen menus and the pre-made, new-character and shop screens) the plate fills the window's height and the window around it is black (<see cref="SteamwovenColumnSidesView"/>); no backdrop of its own.</summary>
+    private void UpdateSides()
     {
         var anyArt = _art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible;
-        if (anyArt && AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column)
-        {
-            _frameBackdrop.Visible = false;
-            _sides.Present(column);
-            return;
-        }
-        _sides.Clear();
-        var plan = _art.Visible ? _art.FullScreenPlan : null;
-        if (plan is null) { _frameBackdrop.Visible = false; return; }
-        var frame = plan.Frame;
-        // The grain is laid out in original units from the zone's top left, as the layout's scale says.
-        _frameBackdrop.Request(new(ChromeMaterial.WoodDark, ChromeSides.None, new Rect2I(frame.X, frame.Y, frame.Width, frame.Height), plan.Factor,
-            (frame.X - plan.Zone.X) / plan.Factor, (frame.Y - plan.Zone.Y) / plan.Factor, null, null, 0, 0));
-        _frameBackdrop.Visible = _frameBackdrop.Texture is not null;
+        if (anyArt && AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column) _sides.Present(column);
+        else _sides.Clear();
     }
 
-    /// <summary>ARC-UI-2891: for the self-test: the black around the plate in column mode and whether it shows.</summary>
+    /// <summary>ARC-UI-2891: for the self-test: the black around the plate and whether it shows.</summary>
     internal (SteamwovenColumnSidesView Sides, bool Shown) ColumnSidesForSelfTest => (_sides, _sides.Visible);
 
     /// <summary>ARC-UI-2577: for the self-test: the generated backdrop and whether it shows.</summary>
-    internal (SteamwovenBoardView Backdrop, bool Shown) FrameBackdropForSelfTest => (_frameBackdrop, _frameBackdrop.Visible);
 
     private bool _dockedBelow, _optionsArt;
 

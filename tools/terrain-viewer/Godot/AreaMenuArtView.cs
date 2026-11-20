@@ -137,17 +137,16 @@ public partial class AreaMenuArtView : Control
         (_controls, _arrows, _controlFocus, _arrowHovered, _arrowHeld) = ([], [], -1, -1, -1);
     }
 
-    /// <summary>ARC-UI-2577 (SWI-BDR-6): the full-screen layout of the Steamwoven interface for the window now (full width: the 800 × 600 zone centred in the frame at `f · 3.6`, the generated
-    /// backdrop over the frame, black outside it; ARC-UI-2891 column mode: the plate fitted to the window's height, black beside it), or null while the layout is off (the HD option or the generated interface off, the older smokes' suspension, or a window below f = 0.25).</summary>
+    /// <summary>ARC-UI-2577, ARC-UI-2891: the full-screen layout of the Steamwoven interface for the window now (the plate fitted to the window's height, black beside it), or null while the layout is off (the HD option or the generated interface off, the older smokes' suspension, or a window below f = 0.25).</summary>
     internal SteamwovenFullScreenPlan? FullScreenPlan
     {
         get
         {
             if (!AreaGameBarPanel.SteamwovenOn) return null;
             var size = GetViewportRect().Size;
-            // ARC-UI-2891: with the column option (SteamwovenHud.Options) the plate is fitted to the window's height (SteamwovenColumnMenu.Fit).
-            var options = SteamwovenHud.Options.Column is null ? null : SteamwovenHud.Options;
-            // The window's size and the column option decide the plan: it is looked up once per size (the panel asks several times a frame).
+            // ARC-UI-2891: the plate is fitted to the window's height (SteamwovenColumnMenu.Fit).
+            var options = SteamwovenHud.Options;
+            // The window's size and the layout options decide the plan: it is looked up once per size (the panel asks several times a frame).
             if (_planSize != size || !Equals(_planOptions, options)) (_plan, _planSize, _planOptions) = (SteamwovenFullScreen.Plan((int)size.X, (int)size.Y, options), size, options);
             return _plan;
         }
@@ -162,7 +161,7 @@ public partial class AreaMenuArtView : Control
     /// original's dialog box the in-play menu's quit question puts on the same plate.</summary>
     public (float Factor, Vector2 Position) PlateFit()
     {
-        // ARC-UI-2577: the Steamwoven layout puts the plate in the frame's 800 × 600 zone at the layout scale.
+        // ARC-UI-2577: the Steamwoven layout puts the plate in the window at the fitted scale.
         if (FullScreenPlan is { } layout) return ((float)layout.Factor, new Vector2(layout.Zone.X, layout.Zone.Y));
         var size = GetViewportRect().Size;
         var plate = new Vector2(AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight);
@@ -189,7 +188,7 @@ public partial class AreaMenuArtView : Control
         if (_background is null || _font is null) return;
         var width = (float)AreaMenuArtLayout.ScreenWidth;
         var height = (float)AreaMenuArtLayout.ScreenHeight;
-        // ARC-UI-2461 (SWI-BDR-6): the kit's plate for this menu's background, when the set has it at the composition's size; the plate is the 800 × 600 composition itself.
+        // ARC-UI-2461: the kit's plate for this menu's background, when the set has it at the composition's size; the plate is the 800 × 600 composition itself.
         // SWI-LAY-5: the plate is sampled nearest where its baked pixels are the device pixels (a canvas texture of its own, so the labels and controls keep the view's linear sampling), else linear.
         if (KitPlatePart() is { } kit && SteamwovenKitStore.Texture(kit.Set, kit.Part.Id) is { } kitPlate)
         {

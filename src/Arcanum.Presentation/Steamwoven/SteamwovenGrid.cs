@@ -14,7 +14,7 @@ public enum SteamwovenStep
 }
 
 /// <summary>
-/// ARC-UI-2450 (SWI-LAY-1, -4, -7, -11; TRD "Terms"): the master grid of the Steamwoven interface. A master is a part as authored for the 3840 × 2160
+/// ARC-UI-2450 (TRD "Terms"): the master grid of the Steamwoven interface. A master is a part as authored for the 3840 × 2160
 /// reference screen; one UI unit of the original 800 × 600 layout is 3.6 master pixels, and every master length and offset is a multiple of 6 so
 /// that it is a whole number of pixels in every baked step. Pure numbers, no Godot.
 /// </summary>
@@ -26,19 +26,15 @@ public static class SteamwovenGrid
     /// <summary>Master pixels per original UI unit is 18/5 = 3.6.</summary>
     public const int UnitNumerator = 18, UnitDenominator = 5;
     public const int GridPx = 6;
-    /// <summary>The centre block that keeps the original layout: 800 units.</summary>
+    /// <summary>The column's width at k = 1: 800 units.</summary>
     public const int CentreWidth = 2880;
-    /// <summary>The original window zone 800 × 400 units (SWI-BDR-2).</summary>
+    /// <summary>The original window zone 800 × 400 units.</summary>
     public const int WindowZoneHeight = 1440;
-    /// <summary>The full-screen menu master, 3840 × 2400, and its 800 × 600 unit zone, 2880 × 2160 (SWI-BDR-6).</summary>
-    public const int FullScreenHeight = 2400, FullScreenZoneHeight = 2160;
-    /// <summary>The split of a two-part window (358 units, snapped to the grid) from the centre block's left edge (SWI-BDR-5).</summary>
-    public const int SplitFromCentreLeft = 1290;
-    /// <summary>The panel heights the owner chose (decision 2026-11-17, #2453, SWI-LAY-10): the thinner pair, 120 and 456 master px.</summary>
-    public const int DefaultTopPanel = 120, DefaultBottomPanel = 456;
+    /// <summary>The full-screen menu zone, 800 × 600 units: 2160 master px high.</summary>
+    public const int FullScreenZoneHeight = 2160;
     /// <summary>The heights of the original's two strips at 3.6 master px per unit, snapped to the grid (41 and 159 units: 147.6 and 572.4): the panels the prototype (#2452) offered first, and the reference the strips' scale is measured against.</summary>
     public const int StripTopPanel = 150, StripBottomPanel = 570;
-    /// <summary>A black bar under this many pixels per side is dropped (SWI-LAY-3).</summary>
+    /// <summary>A black bar under this many pixels per side is dropped (the unfitted column's letterbox and pillarbox).</summary>
     public const int MinBarPx = 4;
     /// <summary>The largest window side the model takes; a bound for the exact arithmetic.</summary>
     public const int MaxWindowSide = 32768;
@@ -71,10 +67,4 @@ public static class SteamwovenGrid
         var scale = StepScale(step);
         return checked((int)(masterLength * scale.Numerator / scale.Denominator));
     }
-
-    /// <summary>
-    /// A control's offset or length in original UI units as master pixels, snapped to the 6 px grid (SWI-LAY-11): units × 3.6, halves up; the shift is
-    /// at most 3 px, under one unit. Negative units mirror (a half goes towards the larger number).
-    /// </summary>
-    public static int UnitsToMaster(int units) => new Ratio(units * 3L, 5).RoundHalfUp() * GridPx;
 }
