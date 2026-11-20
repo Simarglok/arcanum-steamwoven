@@ -93,6 +93,8 @@ public partial class TerrainViewerApp : Node
         try
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
+            // ARC-UI-2461: an automated run reads the Steamwoven kit only where it is told to (ARC_STEAMWOVEN_KIT or a smoke's own folder), never from the checkout's baked sets.
+            SteamwovenKitStore.AutomatedRun = AutomatedVisualRun;
             // ARC-UI-014: --launcher opens the launcher screen of a start without inputs.
             var launcher = args.Remove("--launcher");
             // ARC-DEV-050: --debug-mode turns the debug mode on for either kind of start.

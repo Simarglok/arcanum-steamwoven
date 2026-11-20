@@ -10,7 +10,7 @@ Rules (TRD SWI-KIT-1..3, SWI-BDR-8, SWI-LAY-7):
   800 x 400 is 2880 x 1440, 358 x 400 is 1290 x 1440 (SWI-BDR-5) and the strips 41 and 159 units are 150 and 570 px: the strips' heights are the
   open question of the TRD (`size_basis` "provisional", fixed by #2927).
 - Parts no original art feeds are rows of their own with an open size (`size_basis` "open", fixed by their batch issue): the four end caps, the
-  follower button's backing, the materials of the material sheet, the grid layers painted into arts 221 and 365 today, and the corner and rivet decor.
+  materials of the material sheet, the grid layers painted into arts 221 and 365 today, and the corner and rivet decor.
 - No pixels, no full-width board, no outward backdrop and no gap wood (SWI-BDR-8): none of them is a part.
 """
 from __future__ import annotations
@@ -31,7 +31,6 @@ from tools.steamwoven_ui import kit_check  # noqa: E402
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
 PLATE_STATES = ["idle", "hover", "pressed", "disabled"]  # SWI-KIT-5: one button size's states are generated together
 FAMILY_OF_BATCH = {"B-BOARD": "BOARD", **{f"BD-{c}": f"BD-{c}" for c in "ABCDEFGH"}}
-FOLLOWER_BACKING_NOTE = "small brass backing of the follower show/hide button (SWI-LAY-16); no original art; size fixed by #2927"
 
 
 snap = kit_check.snap  # original units -> master px on the 6 px grid (units x 3.6, halves up)
@@ -89,7 +88,6 @@ def new_parts() -> list[dict]:
                  f"end cap of the {strip} HUD strip's {side} end: a brass edge and a soft shadow on the world (SWI-LAY-12); no original art; "
                  "size fixed by #2927")
         for strip, window in (("top", "H01"), ("bottom", "H02")) for side in ("left", "right")]
-    parts.append(new_part("hardware.follower_button_backing", "hardware", "window-edge", ["H07"], "BOARD", "B-BOARD", FOLLOWER_BACKING_NOTE))
     for material in ("wood", "dark_wood", "brass", "iron", "paper", "parchment"):
         parts.append(new_part(f"material.{material}", "material", "none", [], None, None,
                               "surface of the material sheet (#2455, #2456); no original art; size fixed with the sheet"))

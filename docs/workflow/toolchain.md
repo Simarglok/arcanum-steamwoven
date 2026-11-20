@@ -1215,7 +1215,7 @@ checkout, never git.
   reproduces, so they are copied, never moved, to a folder **outside** `hd-packs/`, next to the HD backups: `~/Library/Application Support/Arcanum Steamwoven Game/steamwoven-ui-backups/<date>/`.
   After a copy to another device, rebake there and compare the `pixels_sha256` values of the manifests (they do not depend on the zlib build; the file hashes do).
 - **Install:** the tool writes nothing outside `local/steamwoven-ui/baked/`. The runtime reads the sets in place (viewer of the owner's checkout); where a packaged game on a
-  player's own device keeps them is for the runtime slice [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461), because the kit is never shipped or committed (SWI-PRV-2).
+  player's own device keeps them is `user://steamwoven-ui/baked` (beside `user://hd-packs`; the player bakes or copies their own, the kit is never shipped or committed, SWI-PRV-2); the viewer's lookup order and the smoke that checks it are in the [TRD](../ui/steamwoven-interface-trd.md#the-kit-runtime-arc-ui-2461) (ARC-UI-2461).
 - **Exactness:** a master side must be a multiple of 6 px (so of 2 and 3); every baked length is the master length times the step, exactly; x1 is the master copied pixel for pixel; each
   other pixel is the exact area average of the master pixels it covers in integer weights, taken in linear light (16-bit table) with premultiplied alpha, so no dark fringe and no
   colour from transparent pixels; a fully transparent result has colour 0 (not at x1, which is the master unchanged). Two runs give identical bytes. Speed: pure Python, under a minute for all four sets of one 2880 x 2160 master (a full-screen plate); a
@@ -1236,7 +1236,7 @@ python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (al
 Codex CLI on the Mac (`codex exec` for the first item, `codex exec resume <thread_id>` for the rest, one session per batch) and writes
 `local/steamwoven-ui/outbox/<batch>/` with a provenance record per image; design, `batch.json` format and rules:
 [TRD](../ui/steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001). Standard-library Python; it runs no Godot and no `dotnet`, so it does not use the launch
-queue; it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
+queue; it pins the model `gpt-6.1-sol` at reasoning effort `medium` on every call (owner decision 2026-11-20, [#3043](https://github.com/Simarglok/arcanum-steamwoven/issues/3043); `--model` overrides only with the owner's approval); it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
 [`steamwoven-codex-images`](../../.claude/skills/steamwoven-codex-images/SKILL.md) says how). Its tests use a fake `codex` and run in the batched `tools/local_dev/run_tests.py`.
 
 ```sh

@@ -22,7 +22,7 @@ sizes and measured numbers. The captures and composites stay on the owner's devi
 - **Two sampling changes are needed:** direct frames should be area-resampled once per scale instead of trilinear
   ([#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002)); glyphs need the area filter below `s` = 2, where bilinear without mipmaps
   aliases (equal to nearest at 1280 × 800) ([#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939), widened).
-- **The widescreen main-menu plate** is an owner decision ([#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003)).
+- **The widescreen main-menu plate** was dropped by the owner (option C, [#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003), 2026-11-20): the game ignores the file.
 - **Kit master scale: keep 3.6 px per unit** (the TRD's). See [Kit master scale](#kit-master-scale-36-or-4-px-per-unit).
 
 ## Entry kinds and verdicts (AC1)
@@ -44,7 +44,7 @@ directions (no 2× entry is installed). "Opaque" is the plain alpha of the frame
 | fonts (glyph frames) | 5,807 | 28 | `masked` | per glyph, bilinear without mipmaps, at the window's scale | works at `s` ≥ 2.4; needs the area filter below 2 ([#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939)) |
 | cursors | 60 | 4 | opaque | Legacy by design (gap census) | works (not drawn from the pack) |
 | network-play arts (part of the kinds above) | 41 | 23 | opaque | not drawn (network play is out of scope) | obsolete; dropped at the next pack build ([#2362](https://github.com/Simarglok/arcanum-steamwoven/issues/2362)) |
-| `main-menu-16x9.png` (pack root) | 1 | | opaque, 1664 × 936 | not drawn under any Steamwoven plan (the column included); only with the HD option on and the generated interface off | owner decision ([#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003)) |
+| `main-menu-16x9.png` (pack root) | 1 | | opaque, 1664 × 936 | not drawn under any Steamwoven plan (the column included); only with the HD option on and the generated interface off | dropped (owner, [#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003)): no longer read |
 
 The recipe arts are the 45 names of `InterfaceChromeRecipes` (`tools/terrain-viewer/Core/InterfaceChrome.cs`); 44 have pack frames (63 frames).
 
@@ -127,7 +127,7 @@ Obsolete entries: the 41 frames of 23 network-play arts (not drawn, out of scope
 pack's own 4× table scene (`singleplayerback`, 3200 × 2400). It backs the table-scene menus only with the HD option on and the generated interface
 off; under any Steamwoven plan, the column included, the viewer does not draw it and the 4× art stands at `s` with black sides. Drawn in the column,
 its middle would be magnified at every size from 1920 × 1080 up (× 1.15 at 1920 × 1080 up to × 2.31 at 3840 × 2160). Keep the painted sides as an exception, crop to
-4:3, or drop: the owner decides ([#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003), with the consequences of each).
+4:3, or drop: **the owner chose to drop it (option C, 2026-11-20, [#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003))**; the support code is removed (ARC-UI-3003) and the whole-factor layout (generated interface off) draws the original's plate.
 
 ## Fonts, portraits, illustrations
 
@@ -181,5 +181,5 @@ alternative, with the rework listed above.
 
 - [#3002](https://github.com/Simarglok/arcanum-steamwoven/issues/3002) direct pack frames: area resample once per scale.
 - [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939) glyphs: area filter below `s` = 2 (measurements of this note added there).
-- [#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003) owner decision: the widescreen main-menu plate.
+- [#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003) the widescreen main-menu plate: dropped (owner decision, ARC-UI-3003).
 - [#2362](https://github.com/Simarglok/arcanum-steamwoven/issues/2362) next pack build: leave out the network-play arts.

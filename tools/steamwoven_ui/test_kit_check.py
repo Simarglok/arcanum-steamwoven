@@ -277,8 +277,7 @@ class RealManifestTests(unittest.TestCase):
 
     def test_new_parts_have_rows_of_their_own(self) -> None:
         parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
-        for ident in ("cap.top_strip_left", "cap.top_strip_right", "cap.bottom_strip_left", "cap.bottom_strip_right",
-                      "hardware.follower_button_backing"):
+        for ident in ("cap.top_strip_left", "cap.top_strip_right", "cap.bottom_strip_left", "cap.bottom_strip_right"):
             self.assertEqual((parts[ident]["source_arts"], parts[ident]["batch"]), ([], "B-BOARD"), ident)
         self.assertEqual(parts["board.inttop"]["layers"], ["cap.top_strip_left", "cap.top_strip_right"])
         self.assertEqual(parts["board.intbotom"]["size"], [2880, 570])
