@@ -29,8 +29,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
     private AreaExperienceStripView _experience = null!;
     private int? _experienceProgress;
-    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the boards that continue the two strips to the frame's
-    // sides, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
+    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the board of the top strip's sliver, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
     private SteamwovenHudPlan? _plan;
     private Control _boards = null!, _bars = null!;
     private SteamwovenBoardView _topBoard = null!;
@@ -289,7 +288,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// </summary>
     private void ApplyKitButtons()
     {
-        var set = _plan is { Column: not null } plan && Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
+        var set = _plan is { } plan && Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
         foreach (var rect in _buttons.Values)
         {
             var overlay = rect.GetNodeOrNull<TextureRect>("KitOverlay");
@@ -682,10 +681,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         // ARC-UI-2890: in the column mode the windows are centred in the column (the free width is the column's), the follower group stays on the strips' screen (ARC-UI-2925), the edge frame is the whole frame.
         var column = plan.Column;
         var topScreen = (new Vector2(plan.StripLeft, plan.TopStripY), scale, bottomEdge);
-        var (freeLeft, freeWidth) = column is { } c ? (c.Column.X, c.Column.Width) : (frame.X, frame.Width);
+        var (freeLeft, freeWidth) = (column.Column.X, column.Column.Width);
         // The insets first, then the screens and the edge frame: a subscriber of InsetsChanged that the edge frame's change wakes reads the new insets.
         SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? freeLeft : 0, Visible ? freeWidth : 0);
-        SetTopScreen(topScreen, column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
+        SetTopScreen(topScreen, new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
         UpdateSteamwovenParts(plan);
     }
 

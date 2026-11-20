@@ -215,7 +215,7 @@ The Godot-free parts are `SteamwovenHudPlan.Column` / `WindowZone`, `SteamwovenW
   A pane wider than the side (1280 × 800: 160 px each side) lies partly under the strip, which draws over it: a recorded limit.
 - **Smoke (AC5).** `ARC_STEAMWOVEN_VARIANTS` takes `column` (the default), `column-wood` (the unfitted column), `kit` and `legacy` (the Original look of the owner's comparison, no layout checks; the variants `thin`, `original` and `before` of the full-width layout were removed by #2926, `column-thin` by #2925). For each size it checks the strips' places and width, the free area, the boards, the caps,
   the edge elements, the brass edge read back, the dimming read back (the world's mean brightness falls under an open menu), then opens the inventory and every window of the hook (the zone place, the pieces of the wood, the seam ratio at the zone's top and bottom edges) and saves
-  `PREFIX-hud-steamwoven-column[-thin]-WxH[-menu|-WINDOW].png` (local, never in git).
+  `PREFIX-hud-steamwoven-column-WxH[-menu|-WINDOW].png` (local, never in git).
 
 ## Asset kit
 

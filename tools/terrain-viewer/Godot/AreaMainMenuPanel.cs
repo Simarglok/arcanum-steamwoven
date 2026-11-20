@@ -511,8 +511,6 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-2891: for the self-test: the black around the plate and whether it shows.</summary>
     internal (SteamwovenColumnSidesView Sides, bool Shown) ColumnSidesForSelfTest => (_sides, _sides.Visible);
 
-    /// <summary>ARC-UI-2577: for the self-test: the generated backdrop and whether it shows.</summary>
-
     private bool _dockedBelow, _optionsArt;
 
     /// <summary>ARC-UI-038: the opening shop's window at the bottom, below the docked barter window, with its text compact.</summary>

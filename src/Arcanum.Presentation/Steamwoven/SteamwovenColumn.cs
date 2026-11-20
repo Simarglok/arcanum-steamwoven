@@ -5,7 +5,7 @@ namespace Arcanum.Presentation.Steamwoven;
 /// `s = 3.6 · k · f` (device pixels per original UI unit); the menu windows take the same width; vertical gaps inside the column take the window's wood; the game world shows left and right of
 /// the column. <see cref="K"/> is 1 (the original strips, 150 and 570 master px; the thinner pair of k = 0.8 is retired).
 /// </summary>
-/// <param name="K">The strip scale factor against the original's: 1 or 4/5.</param>
+/// <param name="K">The strip scale factor against the original's: 1 (the only valid value).</param>
 /// <param name="WorldToEdges">Above 16:9 the world side rectangles run to the window's edges instead of ending at the frame's (the pillarbox bars of the unfitted column stay black otherwise).</param>
 public sealed record SteamwovenColumnMode(Ratio K, bool WorldToEdges = false)
 {
