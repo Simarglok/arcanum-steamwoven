@@ -337,7 +337,9 @@ public partial class TerrainViewerApp
             // ARC-UI-143, ARC-UI-2174: the HD lines are on the screen (their saved values are not touched in an automated run).
             var hdLines = panel.LinesForSelfTest.Skip(8).Take(3).ToArray();
             Require(hdLines.Length == 3 && hdLines[0].StartsWith("HD: ", StringComparison.Ordinal) && hdLines[1].StartsWith("HD pack: ", StringComparison.Ordinal)
-                    && hdLines[2].StartsWith("Generated interface: ", StringComparison.Ordinal) && panel.LinesForSelfTest.Count == 12, "the HD lines: " + string.Join(" | ", hdLines));
+                    && hdLines[2].StartsWith("Generated interface: ", StringComparison.Ordinal)
+                    && !panel.LinesForSelfTest.Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+                "the HD lines (one HD row, ARC-UI-2174; the row count is the layout check's, ARC-DEV-3054): " + string.Join(" | ", hdLines));
             // The screenshot of the launcher itself, when the run asks for one (the end of the smoke has its own).
             if (_nativeSmokeScreenshot is { } shot)
             {
