@@ -26,7 +26,7 @@ beyond S33 is not counted.
   object, a tile or a sector holding the script). 1,346 of them (5,118 sites, 65.9 %) are admitted
   by the production admission, whole with every script they call. 447 (2,529 sites, 32.6 %) are refused because a
   reachable clause has a type outside S33. 60 scripts have a *non-type* refusal (a computed
-  goto in 13, a goto beyond the end in 2, an object operand kind S33 does not admit in 45): 16 of
+  goto in 13, a goto beyond the end in 2 (admitted since ARC-SCRIPT-3005), an object operand kind S33 does not admit in 45): 16 of
   them have no refused type, 44 have both and are never freed by types alone (section "Refusals that are not types").
 - **Which types (D).** 79 types occur on a reachable line and are refused: 26 conditions and 53
   actions (table below). Nine more types occur only on lines no run reaches (second table).
@@ -275,7 +275,7 @@ Scripts the production admission still refuses once every condition and action t
 | Refusal | Roots | Sites |
 | --- | ---: | ---: |
 | computed goto | 13 | 80 |
-| goto beyond the end | 2 | 2 |
+| goto beyond the end (admitted since ARC-SCRIPT-3005) | 2 | 2 |
 | object operand kind 13 (every one in group) | 12 | 62 |
 | object operand kind 14 (anyone in group) | 4 | 10 |
 | object operand kind 2 (every follower) | 9 | 22 |
