@@ -11,6 +11,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools.steamwoven_ui import fit, pngio, tone_check
 
@@ -151,6 +152,38 @@ class AlphaTest(unittest.TestCase):
         self.assertEqual(fit.gates(report, (192, 192)), [])
         self.assertGreater(report["master_decontaminated"] + report["source_decontaminated"], 0)
 
+    def test_the_halo_gate_is_not_a_tautology(self) -> None:
+        """Without the decontamination a contaminated source fails the gate on what the pipeline made (not on the safety net's own result)."""
+        source = fit.synthetic_disc(96, None)
+        for i in range(96 * 96):
+            o = i * 4
+            if 0 < source.data[o + 3] < 255:
+                source.data[o:o + 3] = bytes((255, 0, 255))
+        with mock.patch.object(fit, "decontaminate", return_value=0):
+            _, report = fit.fit_image(source, (96, 96))
+        self.assertTrue(any("edge halo" in f for f in fit.gates(report, (96, 96))), report["halo"])
+        _, clean = fit.fit_image(source, (96, 96))
+        self.assertEqual(fit.gates(clean, (96, 96)), [])
+
+    def test_explicit_key_needs_a_border_of_that_colour(self) -> None:
+        full = textured(60, 60, (100, 80, 60))  # fills the frame: nothing of it is background
+        with self.assertRaises(fit.FitError):
+            fit.fit_image(full, (60, 60), key="#00FF00")
+
+    def test_empty_masters_fail_the_gates(self) -> None:
+        _, report = fit.fit_image(solid(60, 60, (0, 0, 0, 0)), (60, 60))
+        self.assertTrue(any("empty" in f for f in fit.gates(report, (60, 60))))
+        _, flat = fit.fit_image(solid(60, 60, (255, 0, 255, 255), False), (60, 60), key="border")
+        self.assertTrue(any("empty" in f for f in fit.gates(flat, (60, 60))))
+
+    def test_orphans_are_gated(self) -> None:
+        source = solid(60, 60, (0, 0, 0, 0))  # a faint glow: no opaque pixel anywhere
+        for y in range(20, 40):
+            for x in range(20, 40):
+                source.data[(y * 60 + x) * 4:(y * 60 + x) * 4 + 4] = bytes((200, 150, 60, 120))
+        _, report = fit.fit_image(source, (60, 60))
+        self.assertTrue(any("no opaque pixel" in f for f in fit.gates(report, (60, 60))))
+
     def test_opaque_source_stays_opaque(self) -> None:
         master, report = fit.fit_image(textured(60, 45, (100, 80, 60)), (120, 90))
         self.assertEqual(report["alpha"], "opaque")
@@ -266,6 +299,12 @@ class LockTest(unittest.TestCase):
         with self.assertRaises(fit.FitError):
             fit.sheet_reference(self.local, ["wood"])
 
+    def test_strength_is_bounded(self) -> None:
+        ref = fit.sheet_reference(self.local, ["wood"])
+        for bad in (-0.1, 1.5, 3.0):
+            with self.assertRaises(fit.FitError):
+                fit.fit_image(textured(30, 30, (112, 74, 50)), (30, 30), reference=ref, strength=bad)
+
     def test_strength_scales_the_shift(self) -> None:
         source = textured(60, 60, (112, 74, 50))
         ref = fit.sheet_reference(self.local, ["wood"])
@@ -298,7 +337,9 @@ class SizeTest(unittest.TestCase):
         self.assertEqual(fit.source_rect(1004, 500, (120, 60), None), (0, 0, 1004, 500))  # within 1 %
         self.assertEqual(fit.source_rect(100, 100, (120, 60), (0, 20, 100, 50)), (0, 20, 100, 50))
         with self.assertRaises(fit.FitError):
-            fit.source_rect(100, 100, (120, 60), (50, 50, 80, 40))
+            fit.source_rect(100, 100, (120, 60), (50, 50, 80, 40))  # outside the source
+        with self.assertRaises(fit.FitError):
+            fit.source_rect(100, 100, (60, 60), (0, 0, 60, 10))  # a crop of the wrong aspect would be stretched 6 times
 
     def test_crop_pipeline_gives_the_exact_size(self) -> None:
         source = textured(100, 100, (100, 80, 60))
@@ -387,6 +428,22 @@ class CliTest(unittest.TestCase):
         self.assertIn("hash mismatch", err)
         code, _, err = self.run_cli("plate.round", "--source", str(self.source), "--no-provenance", "--key", "border")
         self.assertEqual(code, 0, err)
+
+    def test_dry_run_sees_an_existing_master_and_writes_no_temp_files(self) -> None:
+        args = ("plate.round", "--source", str(self.source), "--provenance", str(self.record), "--key", "border")
+        self.assertEqual(self.run_cli(*args)[0], 0)
+        self.assertEqual(self.run_cli(*args, "--dry-run")[0], 2)  # the real run would refuse too
+        self.assertEqual(self.run_cli(*args, "--dry-run", "--replace")[0], 0)
+        self.assertEqual([p.name for p in self.local.rglob("*.tmp")], [])
+        self.assertEqual(self.run_cli("plate.round", *args[1:], "--crop", "1,2,a,4")[0], 2)  # bad crop text: exit 2, no traceback
+
+    def test_real_alpha_source_records_no_key(self) -> None:
+        alpha_source = self.root / "alpha.png"
+        alpha_source.write_bytes(pngio.encode(fit.synthetic_disc(96, None)))
+        self.assertEqual(self.run_cli("plate.round", "--source", str(alpha_source), "--no-provenance", "--key", "border")[0], 0)
+        record = json.loads((self.local / "provenance" / "fit" / "plate.round.json").read_text())
+        self.assertEqual(record["source"]["alpha"], "source")
+        self.assertEqual(record["source"]["key"], "none")
 
     def test_open_size_unknown_part_and_bad_id(self) -> None:
         base = ("--source", str(self.source), "--provenance", str(self.record), "--key", "border")

@@ -10,17 +10,21 @@
 The steps (each is a function below):
   1. size: the part's master size is the manifest's (`kit.json`; a part with an open size takes `--size`), sides multiples of 6 px (SWI-KIT-2). The source is cropped
      (`--crop`, source pixels) or, without it, must have the master's aspect within 1 % (SWI-GEN-8); a master size above the generator's budget is reached here.
-  2. alpha: a source with real alpha keeps it. `--key border` keys a flat background (its colour is the median of the border, its spread must be small),
-     `--key #RRGGBB` keys that colour; the keyed edge band takes the colour of the nearest opaque pixels and its alpha is the share of the way to them.
+  2. alpha: a source with real alpha keeps it (alpha at most 3 or at least 252 is first made 0 or 255: a nearly opaque pixel is art, not an edge). `--key border` keys a flat
+     background (its colour is the median of the border, its spread must be small), `--key #RRGGBB` keys that colour (the border must be that colour: a part that touches the
+     border cannot be keyed); the keyed edge zone (2 source px around the background, and what is still close to its colour) takes the colour of the nearest interior pixels
+     and its alpha is the share of the way from the background to them.
   3. edge decontamination: a pixel with partial alpha whose colour is more than `KEEP_DE` (CIE76) away from the mean of the nearest opaque pixels takes that mean,
      so no colour of the generator's background stays in the edge; a fully transparent pixel is stored as 0 0 0 0 (as the bake does).
   4. resample: premultiplied alpha, linear light; area average down, Catmull-Rom up (per axis); the alpha is clamped (no ringing outside 0..1).
   5. alpha clean-up: alpha at most `ALPHA_LOW` becomes 0, at least `ALPHA_HIGH` 255; a connected group of non-transparent pixels smaller than `--min-speck` is removed.
   6. colour lock (`--material`): the low frequencies of the colour are moved to the approved material sheet (SWI-GEN-2, SWI-GEN-11): the pixels are assigned, in blocks,
      to the nearest named material (L*a*b* distance to the mean of its cut-outs in the sheet), the weights are smoothed over a few blocks, and each material's mean L*a*b* is
-     moved to the sheet's by a smooth field of additive shifts, so texture and shape (the high frequencies) stay. A shift larger than `LOCK_MAX_DE` means a wrong
+     moved to the sheet's by a smooth field of additive shifts (`--lock-strength` 0 to 1 scales it), so texture and shape (the high frequencies) stay. A shift larger than `LOCK_MAX_DE` means a wrong
      generation, not a colour error: the fit stops (`--force-lock` overrides). The sheet must be the approved one (`APPROVED_SHEET_SHA256`).
-  7. checks (the gates; a master is written only when every one holds): the size; the halo metric (below); the high-frequency energy of the lock within `HF_TOLERANCE`.
+  7. checks (the gates; a master is written only when every one holds): the size; the halo metric (below), measured on what the steps above made, before the safety net of step 3
+     is run again on the master (the final value after it is reported as `halo_final`, it cannot fail by construction); the orphans (at most `ORPHAN_MAX_SHARE` of the edge
+     pixels without an opaque pixel in reach: art too faint or thin for a clean edge); a master with at least `MIN_OPAQUE_SHARE` opaque pixels; the high-frequency energy of the lock within `HF_TOLERANCE`.
 
 The halo metric (`edge_halo`): in the semi-transparent edge band (alpha 1..254) the mean CIE76 colour difference to the mean of the nearest opaque pixels (the first
 ring, up to `EDGE_RADIUS`, that holds any) must be at most `HALO_MEAN_DE` and its 95th percentile at most `HALO_P95_DE`; a band pixel with no opaque pixel in reach is an
@@ -39,6 +43,7 @@ import datetime
 import hashlib
 import json
 import math
+import os
 import re
 import sys
 from array import array
@@ -70,13 +75,16 @@ HF_TOLERANCE = 0.10              # gate: high-frequency energy kept within 10 %
 HF_FLOOR = 0.25                  # grey levels: a change below this is no change (a flat part has no energy to compare by ratio)
 HF_RADIUS = 3                    # 7 x 7 box
 LOCK_MAX_DE = 15.0               # the largest shift of a material mean the lock accepts
+ORPHAN_MAX_SHARE = 0.10          # gate: the share of edge pixels with no opaque pixel in reach
+MIN_OPAQUE_SHARE = 0.001         # gate: the master has at least this share of opaque pixels
 LOCK_BLOCKS = 160                # blocks along the longer side of the lock's field
 KEY_SPREAD_MAX = 40.0            # the 99th percentile of the border's distance from its median colour
 KEY_LOW_MIN, KEY_SOFT = 6.0, 36.0
+KEY_EDGE_ZONE = 2                # px at the source: the width of the mixed edge of a keyed part
 WHOLE_IMAGE_PIXELS = 1_500_000   # up to this many pixels the hf check reads the whole image
 
 LIMITS = {"halo_mean_de": HALO_MEAN_DE, "halo_p95_de": HALO_P95_DE, "hf_tolerance": HF_TOLERANCE, "keep_de": KEEP_DE, "lock_max_de": LOCK_MAX_DE,
-          "edge_radius": EDGE_RADIUS, "alpha_low": ALPHA_LOW, "alpha_high": ALPHA_HIGH, "min_speck": MIN_SPECK, "aspect_tolerance": ASPECT_TOLERANCE}
+          "edge_radius": EDGE_RADIUS, "orphan_max_share": ORPHAN_MAX_SHARE, "min_opaque_share": MIN_OPAQUE_SHARE, "alpha_low": ALPHA_LOW, "alpha_high": ALPHA_HIGH, "min_speck": MIN_SPECK, "aspect_tolerance": ASPECT_TOLERANCE}
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$")
 
@@ -178,10 +186,14 @@ def source_rect(src_w: int, src_h: int, want: tuple[int, int], crop: tuple[int, 
         x, y, w, h = crop
         if w < 1 or h < 1 or x < 0 or y < 0 or x + w > src_w or y + h > src_h:
             raise FitError(f"crop {x},{y},{w},{h} is outside the {src_w}x{src_h} source")
-        return crop
-    if abs((src_w / src_h) / (want[0] / want[1]) - 1) > ASPECT_TOLERANCE:
-        raise FitError(f"source {src_w}x{src_h} is not the aspect of {want[0]}x{want[1]} within {ASPECT_TOLERANCE:.0%} (SWI-GEN-8); give --crop X,Y,W,H")
-    return 0, 0, src_w, src_h
+        rect = crop
+    else:
+        rect = (0, 0, src_w, src_h)
+    if abs((rect[2] / rect[3]) / (want[0] / want[1]) - 1) > ASPECT_TOLERANCE:
+        what = f"crop {rect[2]}x{rect[3]}" if crop is not None else f"source {src_w}x{src_h}"
+        raise FitError(f"{what} is not the aspect of {want[0]}x{want[1]} within {ASPECT_TOLERANCE:.0%} (SWI-GEN-8); "
+                       + ("give another --crop X,Y,W,H" if crop is not None else "give --crop X,Y,W,H"))
+    return rect
 
 
 # --- alpha: keying ---------------------------------------------------------------------------------------------------------------------
@@ -237,34 +249,64 @@ def parse_key(text: str, image: pngio.Image) -> tuple[tuple[int, int, int], floa
         raise FitError(f"--key {text!r} must be none, border or #RRGGBB")
     colour = tuple(int(match.group(1)[i:i + 2], 16) for i in (0, 2, 4))
     ring = border_ring(image)
-    return colour, percentile([math.dist(p, colour) for p in ring], 0.99)  # type: ignore[return-value]
+    spread = percentile([math.dist(p, colour) for p in ring], 0.99)
+    if spread > KEY_SPREAD_MAX:
+        raise FitError(f"the border is not the key colour {text} (99th percentile {spread:.0f} from it, limit {KEY_SPREAD_MAX:.0f}); a part that touches the border cannot be keyed")
+    return colour, spread  # type: ignore[return-value]
+
+
+def _edge_zone(w: int, h: int, background: bytearray, radius: int) -> set[int]:
+    """The pixels that are not background but lie within `radius` (Chebyshev) of a background pixel that touches a non-background one (4-neighbours)."""
+    edge: set[int] = set()
+    rows = [bytes(background[y * w:(y + 1) * w]) for y in range(h)]
+    flip = re.compile(b"\x01")
+    for y in range(h):
+        row = rows[y]
+        sideways = (int.from_bytes(row[:-1], "big") ^ int.from_bytes(row[1:], "big")).to_bytes(w - 1, "big") if w > 1 else b""
+        for m in flip.finditer(sideways):
+            x = m.start()
+            edge.add(y * w + (x if row[x] else x + 1))
+        if y + 1 < h:
+            nxt = rows[y + 1]
+            down = (int.from_bytes(row, "big") ^ int.from_bytes(nxt, "big")).to_bytes(w, "big")
+            for m in flip.finditer(down):
+                x = m.start()
+                edge.add((y if row[x] else y + 1) * w + x)
+    zone: set[int] = set()
+    for i in edge:
+        y, x = divmod(i, w)
+        for yy in range(max(0, y - radius), min(h - 1, y + radius) + 1):
+            for xx in range(max(0, x - radius), min(w - 1, x + radius) + 1):
+                if not background[yy * w + xx]:
+                    zone.add(yy * w + xx)
+    return zone
 
 
 def key_background(image: pngio.Image, colour: tuple[int, int, int], spread: float) -> dict:
-    """Make the alpha of a flat background (in place): distance up to `low` is transparent, from `high` opaque; between them the colour is the nearest opaque colour
-    and the alpha the share of the way from the background to it."""
+    """Make the alpha of a flat background (in place). Distance up to `low` from the key colour is background (alpha 0). The edge zone, the pixels within `KEY_EDGE_ZONE`
+    of the background and those still close to it (distance below `high`), is a mix of the art and the background: its colour becomes the nearest interior colour (the
+    mean of the nearest pixels outside the zone) and its alpha the share of the way from the background to that colour. The rest is opaque art."""
     low = max(KEY_LOW_MIN, spread + 2.0)
     high = low + KEY_SOFT
     data, w, h = image.data, image.w, image.h
     low2, high2 = low * low, high * high
     br, bg, bb = colour
-    band: list[int] = []
-    alpha = bytearray(w * h)
     dist2 = [(r - br) ** 2 + (g - bg) ** 2 + (b - bb) ** 2 for r, g, b in zip(data[0::4], data[1::4], data[2::4])]
-    for i, d in enumerate(dist2):
-        if d >= high2:
-            alpha[i] = 255
-        elif d > low2:
-            alpha[i] = 1  # band, decided below
-            band.append(i)
+    background = bytearray(1 if d <= low2 else 0 for d in dist2)
+    zone = _edge_zone(w, h, background, KEY_EDGE_ZONE)
+    zone.update(i for i, d in enumerate(dist2) if low2 < d < high2)
+    alpha = bytearray(0 if background[i] else 255 for i in range(w * h))
+    for i in zone:
+        alpha[i] = 1
     data[3::4] = alpha
     refined = 0
-    for i in band:
+    for i in sorted(zone):
         y, x = divmod(i, w)
-        inner = nearest_opaque(data, w, h, x, y, 255, SOURCE_EDGE_RADIUS)
         o = i * 4
-        if inner is None:
-            data[o + 3] = max(1, min(254, round(255 * (math.sqrt(dist2[i]) - low) / (high - low))))
+        d = math.sqrt(dist2[i])
+        inner = nearest_opaque(data, w, h, x, y, 255, SOURCE_EDGE_RADIUS)
+        if inner is None:  # a feature thinner than the zone: opaque unless it is still close to the background colour
+            data[o + 3] = 255 if d >= high else max(1, min(254, round(255 * (d - low) / (high - low))))
             continue
         axis = (inner[0] - br, inner[1] - bg, inner[2] - bb)
         norm2 = sum(v * v for v in axis)
@@ -272,7 +314,7 @@ def key_background(image: pngio.Image, colour: tuple[int, int, int], spread: flo
         data[o + 3] = max(0, min(254, round(255 * share)))
         data[o], data[o + 1], data[o + 2] = (round(v) for v in inner)
         refined += 1
-    return {"colour": list(colour), "low": round(low, 2), "high": round(high, 2), "band_pixels": len(band), "refined_pixels": refined}
+    return {"colour": list(colour), "low": round(low, 2), "high": round(high, 2), "zone_pixels": len(zone), "refined_pixels": refined}
 
 
 def has_alpha(image: pngio.Image) -> bool:
@@ -528,6 +570,8 @@ def sheet_reference(local_root: Path, materials: list[str]) -> dict:
 
 def colour_lock(image: pngio.Image, reference: dict, strength: float = 1.0, force: bool = False) -> dict:
     """Move the low frequencies of the colour of `image` (in place) to the sheet's material means (module text, step 6); returns the report."""
+    if not 0.0 <= strength <= 1.0:
+        raise FitError(f"--lock-strength {strength} must be between 0 and 1")
     w, h, data = image.w, image.h, image.data
     names = list(reference["materials"])
     refs = [reference["materials"][n]["lab"] for n in names]
@@ -656,7 +700,8 @@ def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, 
     else:
         report["alpha"] = "opaque"
     if report["alpha"] != "opaque":
-        report["source_decontaminated"] = decontaminate(work, 250, SOURCE_EDGE_RADIUS)
+        crush_alpha(work)  # alpha 252..254 is opaque to every later step, so it is cleaned as opaque, not left as a contaminated "interior"
+        report["source_decontaminated"] = decontaminate(work, 255, SOURCE_EDGE_RADIUS)
     master = resample_image(work, rect, want[0], want[1])
     report["alpha_crushed"] = crush_alpha(master)
     report["specks_removed_px"] = remove_specks(master, min_speck)
@@ -664,8 +709,10 @@ def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, 
         before = hf_energy(master)
         report["lock"] = colour_lock(master, reference, strength, force_lock)
         report["hf"] = hf_check(before, hf_energy(master))
+    report["halo"] = edge_halo(master)  # what the pipeline made: the gate (the safety net below can only make the final edge better)
     report["master_decontaminated"] = decontaminate(master, 255, EDGE_RADIUS)
-    report["halo"] = edge_halo(master)
+    report["halo_final"] = edge_halo(master)
+    report["opaque_share"] = round(sum(1 for a in master.data[3::4] if a == 255) / (master.w * master.h), 5)
     report["size"] = [master.w, master.h]
     return master, report
 
@@ -677,6 +724,11 @@ def gates(report: dict, want: tuple[int, int]) -> list[str]:
     halo = report["halo"]
     if halo["mean_de"] > HALO_MEAN_DE or halo["p95_de"] > HALO_P95_DE:
         failures.append(f"edge halo: mean dE {halo['mean_de']} (limit {HALO_MEAN_DE}), 95th percentile {halo['p95_de']} (limit {HALO_P95_DE})")
+    if halo["band_pixels"] and halo["orphans"] / halo["band_pixels"] > ORPHAN_MAX_SHARE:
+        failures.append(f"{halo['orphans']} of {halo['band_pixels']} edge pixels have no opaque pixel within {EDGE_RADIUS} px (limit {ORPHAN_MAX_SHARE:.0%}): "
+                        "the art is too faint or too thin for a clean edge")
+    if report["opaque_share"] < MIN_OPAQUE_SHARE:
+        failures.append(f"the master is empty (opaque share {report['opaque_share']}, at least {MIN_OPAQUE_SHARE} needed): check the alpha or the key")
     if "hf" in report and not report["hf"]["within_tolerance"]:
         failures.append(f"the colour lock changed the high-frequency energy by more than {HF_TOLERANCE:.0%}: {report['hf']['ratio']}")
     return failures
@@ -719,9 +771,9 @@ def provenance_record(part: dict, source_path: Path, source: pngio.Image, genera
                     "part": part["id"], "kind": part.get("kind"),
                     "master": {"file": rel_master, "size": [master.w, master.h], "sha256": sha256_bytes(master_bytes), "pixel_sha256": sha256_bytes(bytes(master.data))},
                     "source": {"file": shown, "sha256": sha256_bytes(source_path.read_bytes()), "size": [source.w, source.h], "crop": report["crop"],
-                              "alpha": report["alpha"], "key": key},
+                              "alpha": report["alpha"], "key": key if report["alpha"] == "key" else "none"},
                     "generator": generator, "limits": LIMITS}
-    for k in ("key", "lock", "hf", "halo", "alpha_crushed", "specks_removed_px", "source_decontaminated", "master_decontaminated"):
+    for k in ("key", "lock", "hf", "halo", "halo_final", "opaque_share", "alpha_crushed", "specks_removed_px", "source_decontaminated", "master_decontaminated"):
         if k in report:
             record["keying" if k == "key" else k] = report[k]
     return record
@@ -732,7 +784,10 @@ def run_fit(args: argparse.Namespace) -> dict:
     part = find_part(args.part, Path(args.manifest) if args.manifest else MANIFEST)
     want = master_size(part, parse_size(args.size) if args.size else None)
     source_path, source, generator = load_source(args, local_root)
-    crop = tuple(int(v) for v in args.crop.split(",")) if args.crop else None
+    try:
+        crop = tuple(int(v) for v in args.crop.split(",")) if args.crop else None
+    except ValueError:
+        raise FitError(f"--crop {args.crop!r} must be four integers X,Y,W,H") from None
     if crop is not None and len(crop) != 4:
         raise FitError("--crop needs X,Y,W,H")
     materials = [m for m in args.material.split(",") if m] if args.material else []
@@ -749,15 +804,17 @@ def run_fit(args: argparse.Namespace) -> dict:
     date = args.date or datetime.date.today().isoformat()
     record = provenance_record(part, source_path, source, generator, report, blob, master, date, str(target), local_root, args.key)
     report["record"] = record
-    if args.dry_run:
-        return report
     if target.exists() and not args.replace:
         raise FitError(f"master {target} exists; pass --replace to overwrite it")
+    if args.dry_run:
+        return report
     target.parent.mkdir(parents=True, exist_ok=True)
     record_path = local_root / "provenance" / "fit" / f"{part['id']}.json"
     record_path.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(blob)
-    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    for path, data in ((record_path, (json.dumps(record, indent=2) + "\n").encode("utf-8")), (target, blob)):  # the record first: a master never lacks its record
+        temp = path.with_name(path.name + ".tmp")
+        temp.write_bytes(data)
+        os.replace(temp, path)
     report["record_file"] = str(record_path)
     return report
 
@@ -766,7 +823,7 @@ def describe(report: dict) -> str:
     halo = report["halo"]
     lines = [f"{'DRY-RUN ' if report.get('dry_run') else ''}fit {report['part']} -> {report['size'][0]}x{report['size'][1]}  {report['gates']}",
              f"  alpha: {report['alpha']}  crop {report['crop']}  specks removed {report['specks_removed_px']} px  alpha crushed {report['alpha_crushed']}",
-             f"  halo: {halo['measured']} edge pixels, mean dE {halo['mean_de']} (limit {HALO_MEAN_DE}), p95 {halo['p95_de']} (limit {HALO_P95_DE}), orphans {halo['orphans']}"]
+             f"  halo: {halo['measured']} edge pixels, mean dE {halo['mean_de']} (limit {HALO_MEAN_DE}), p95 {halo['p95_de']} (limit {HALO_P95_DE}), orphans {halo['orphans']}; after the safety net p95 {report['halo_final']['p95_de']}"]
     if "lock" in report:
         for m in report["lock"]["materials"]:
             lines.append(f"  lock {m['material']}: shift L*a*b* {m['shift']} (dE {m['shift_de']}), {m['blocks']} blocks")
