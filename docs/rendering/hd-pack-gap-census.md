@@ -28,7 +28,7 @@ that they draw Legacy in HD mode. No image, hash or pixel of the game is in this
 | Bitmaps outside `art/interface` that the pack cannot hold (no entry kind) | 57,635 (45 slides, 65 world-map bitmaps, 3 splash, 57,522 town-map tiles; the 6,677 tiles of the Vormantown module come on top, see [below](#bitmaps-outside-artinterface)) |
 | Lighting arts needed | 0 (the relit look is computed; it reads no pack art) |
 
-The gap that matters for the owner is small: **13 single arts and 61 schematic pictures** (plus art 787, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
+The gap that matters for the owner is small: **13 single arts (four of them, the thin bars, are drawn by code under the HD option since ARC-UI-3060, [below](#drawn-by-code-under-the-hd-option); nine remain in the table) and 61 schematic pictures** (plus art 787, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
 Fonts, portraits and 668 of the 782 interface arts are complete.
 
 ## Method
@@ -61,10 +61,6 @@ Every one goes through the HD frame path, so a delivered frame is used without a
 | Art | Name | Frames missing / total | Size (Legacy) | Where it is drawn | Priority |
 | ---: | --- | ---: | --- | --- | :-: |
 | 471 | `Schematics_Button` | 3 / 3 | 39x39 | Bottom strip: the Schematics button (idle, pressed, hover) | P1 |
-| 772 | `XP_GaugeMag` | 1 / 1 | 372x3 | Bottom strip: experience strip, cropped to the remainder percent | P1 |
-| 504 | `FollowerFrame_FT` | 1 / 1 | 34x3 | Follower panel: fatigue bar (while a follower is in the party) | P1 |
-| 505 | `FollowerFrame_HP` | 1 / 1 | 34x3 | Follower panel: health bar | P1 |
-| 616 | `FollowerFrame_PO` | 1 / 1 | 34x3 | Follower panel: poisoned health bar | P1 |
 | 826 | `FollwerComandMenu` | 1 / 1 | 136x148 | Follower order menu (right click on a follower) | P2 |
 | 36 | `Char_Spells_Skills` | 3 / 3 | 39x39 | Character sheet: the Spells tab button | P2 |
 | 845 | `BlockedShot` | 1 / 1 | 37x20 | Message window: to-hit penalty icon of the combat panel, when its flag is set | P2 |
@@ -76,6 +72,25 @@ Every one goes through the HD frame path, so a delivered frame is used without a
 | 803 | `MazzerinsMystery` | 1 / 1 | 668x400 | Reading window: same | P3 |
 | 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD when the generated interface is off (the whole-factor plate; the pack's `main-menu-16x9.png` is no longer read, ARC-UI-3003); with a Steamwoven full-screen plan the plate is the layout zone's backdrop | P3 |
 | 61 arts | schematic record pictures, [appendix](#appendix-schematic-record-pictures-without-a-pack-frame) | 61 / 61 | 295x225 | Schematic window: the picture of the selected record; 72 of 133 pictures are in the pack | P2 |
+
+## Drawn by code under the HD option
+
+Owner decision of 2026-11-20 on [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) (work item ARC-UI-3060, [#3060](https://github.com/Simarglok/arcanum-steamwoven/issues/3060)):
+no art is generated for the four bars of 3 Legacy units in height that the pack has no frame for. Under the HD option (with a pack open) the viewer draws them by code as fills by
+value (kit rule SWI-KIT-6: a gauge's fill comes from the value) instead of Legacy pixels next to HD neighbours: `AreaThinBarCode` (rows and colours, Godot-free) and `AreaThinBarDraw`
+(the draw). They keep the Legacy rectangles and fill lengths (the strip's remainder crop `CutWidth`, the portraits' `PortraitFill`); every edge is snapped to a whole device pixel at the
+composition's scale (`AreaThinBarCode.SnapSpan`, so a fractional strip scale never blurs a row). HD off: the Legacy art, pixel for pixel as before.
+
+| Art | Name | Size (Legacy) | Where it is drawn | Row colours, top to bottom (RGB) |
+| ---: | --- | --- | --- | --- |
+| 772 | `XP_GaugeMag` | 372x3 | Bottom strip: experience strip, remainder piece cropped to the remainder percent at (216, 47) | `FF6A06`, `FFC87A`, `DB4E06` |
+| 504 | `FollowerFrame_FT` | 34x3 | Follower panel: fatigue bar at (3, 44) | `7070FF`, none, `0000B5` |
+| 505 | `FollowerFrame_HP` | 34x3 | Follower panel: health bar at (3, 39) | `FF7070`, `FF0000`, `B50000` |
+| 616 | `FollowerFrame_PO` | 34x3 | Follower panel: poisoned health bar at (3, 39) | `E6FF70`, `D3FF00`, `96B500` |
+
+The colours are the dominant colour of each row of the installed Legacy frame (read 2026-11-20); a frame's few-pixel rounded cap at each end of 772 is not kept. The middle row of 504
+is pure blue, the art's colour key, so the Legacy art leaves it transparent and the frame's black channel shows through; the code keeps that row structure (an owner question if a
+solid middle row is wanted instead). Without a pack, or with the HD option off, nothing changes.
 
 ## Legacy by design
 
@@ -188,7 +203,7 @@ lighting, not HD art. **Missing lighting images: 0.**
 
 | Issue | Group | Owner action |
 | --- | --- | --- |
-| [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) | The 13 single arts of the table above | Decide A (redraw and add) or B (accept Legacy) per priority |
+| [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) | The 13 single arts of the table above | Decide A (redraw and add) or B (accept Legacy) per priority; owner decision of 2026-11-20: the four thin bars are drawn by code ([#3060](https://github.com/Simarglok/arcanum-steamwoven/issues/3060)), the others stay open |
 | [#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) | 61 schematic record pictures | Same |
 | [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) | Art 787 | Existing |
 | [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952) | Slides, world-map tiles and `Map_Zoomed`, town-map tiles, splash | Decide whether HD covers them |

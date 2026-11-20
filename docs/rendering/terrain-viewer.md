@@ -982,7 +982,7 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   original's frames: up to six 40 × 49 frames (art 503) at 11, 50 + 62 × slot of the 800 × 600 screen, scaled by the
   bars' whole factor with the screen centred and its top at the window's top (with or without the bars), each with the
   follower's portrait at 4, 4 scaled to 32 × 32, the health bar (505, 616 while poisoned) at 3, 39 and the fatigue bar
-  (504) at 3, 44, cropped to the percent, and pure red added over the portrait below 20 % health. A follower's portrait
+  (504) at 3, 44, cropped to the percent (under the HD option, with a pack, the three bars are fills by value in the Legacy frames' row colours, every edge on a whole device pixel, ARC-UI-3060), and pure red added over the portrait below 20 % health. A follower's portrait
   is its stored field 0xE7 (critter slot 49 of its map record), its image the portrait catalogue's small `.bmp`
   (ARC-DATA-045), read when a follower first needs it. A press on a frame opens the order menu as before; the name is
   the frame's tooltip. The diagnostic HUD starts right of the frames while any is shown. Without the art (no game
@@ -2870,7 +2870,7 @@ Godot-free: `AreaExperienceStripLayout`) and `AreaExperienceStripView` on the ba
 - **The pieces.** The hero's progress toward the next level in thousandths (the session's `QueryHeroExperience().Progress`, the rule of
   0x4A6900) is scaled by 11/10; each full hundred draws one whole piece of the original's table in order (interface art 773–782 at their
   places in the strip, from (211, 37) to (555, 37), at the art's own size), and a remainder above 0 draws the table's last row (art 772 at
-  (216, 47)) cut to the remainder's percent of its width. Nothing draws at the start of a level or without experience data. The art under
+  (216, 47)) cut to the remainder's percent of its width (under the HD option, with a pack, that piece is a three-row fill by value in the art's row colours at the same rectangle, every edge on a whole device pixel, ARC-UI-3060). Nothing draws at the start of a level or without experience data. The art under
   it is the strip's own (art 184), so nothing is repainted first (the original repaints the rectangle (211, 37) 384 × 14 from it).
 - **When it moves.** The view follows the session every frame. The original repaints at its bar refresh events and after an experience write
   only when the character sheet is open (GB14); the viewer redraws at once. The arts are read from the player's game with the bars' other art;

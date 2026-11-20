@@ -486,6 +486,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     }
 
     internal IReadOnlyList<(AreaExperiencePiece Piece, int Width)> ExperienceForSelfTest => _experience.DrawnForSelfTest;
+    /// <summary>ARC-UI-3060: the rectangles the last experience draw made by code for the remainder piece (under the HD option).</summary>
+    internal int ExperienceCodeRectsForSelfTest => _experience.CodeRectsForSelfTest;
     internal bool ExperienceShownForSelfTest { get => _experience.Visible; set => _experience.Visible = value; }
 
     private void RenderClock() =>

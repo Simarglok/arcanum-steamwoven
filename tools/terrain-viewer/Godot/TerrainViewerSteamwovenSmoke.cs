@@ -524,6 +524,23 @@ public partial class TerrainViewerApp
             var toggle = AreaFollowerPanelRules.ToggleRectFor(true);
             var expectedY = AreaGameBarPanel.TopScreen!.Value.BottomEdge - (AreaGameBarLayout.ScreenHeight - (toggle.Y + toggle.Height / 2f)) * scale;
             require(portraits.Visible && Math.Abs(portraits.ButtonCentreForSelfTest("toggle")!.Value.Y - expectedY) <= 1f, $"[{tag}] the toggle button hangs from the bottom strip's edge: y {portraits.ButtonCentreForSelfTest("toggle")!.Value.Y} expected {expectedY:F1}");
+            // ARC-UI-3060: with the bar arts bound (synthetic 34 x 3 frames, no game art) the two bars of a follower frame are fills by value under the HD option with a pack
+            // (three rows or two, whole device pixels at the strips' scale), and the art's pixels otherwise.
+            {
+                var barArt = new Dictionary<int, Texture2D>();
+                foreach (var number in AreaThinBarCode.ArtNumbers.Where(n => n != AreaThinBarCode.ExperienceArt))
+                {
+                    var barImage = Image.CreateEmpty(AreaFollowerFrameLayout.BarWidth, AreaFollowerFrameLayout.BarHeight, false, Image.Format.Rgba8);
+                    barImage.Fill(Colors.Magenta);
+                    barArt[number] = ImageTexture.CreateFromImage(barImage);
+                }
+                portraits.Bind(barArt);
+                portraits.Show(Enumerable.Range(0, 2).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
+                await frames(3);
+                var codeRects = portraits.BarCodeRectsForSelfTest("smoke:0");
+                require(codeRects is { } rects && AreaThinBarDraw.Active == (rects.Health > 0 && rects.Fatigue > 0) && rects.Health <= AreaThinBarCode.Height && rects.Fatigue <= 2,
+                    $"[{tag}] the follower bars draw by code exactly while the HD option has a pack ({AreaThinBarDraw.Active}): {codeRects}");
+            }
             sleep.Place(); fate.Place();
             var whole = AreaGameBarPanel.ScreenFactor(new Vector2(size.X, size.Y));
             foreach (var (name, view, x, y) in new[] { ("sleep", (Control)sleep, AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY), ("fate", fate, AreaFateLayout.ScreenX, AreaFateLayout.ScreenY) })
