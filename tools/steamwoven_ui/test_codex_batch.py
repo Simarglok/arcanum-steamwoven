@@ -409,6 +409,18 @@ class Helpers(unittest.TestCase):
         self.assertNotIn("--sandbox", command)
         self.assertEqual(["tid", "-"], command[-2:])
 
+    def test_every_command_pins_the_model_and_the_effort(self) -> None:
+        for thread_id in (None, "tid"):
+            command = cb.exec_command("codex", Path("/w"), Path("/w/r.json"), [], None, thread_id)
+            self.assertEqual("gpt-6.1-sol", command[command.index("-m") + 1])
+            self.assertIn('model_reasoning_effort="medium"', command)
+
+    def test_model_override_replaces_the_model_only(self) -> None:
+        command = cb.exec_command("codex", Path("/w"), Path("/w/r.json"), [], "other-model", None)
+        self.assertEqual("other-model", command[command.index("-m") + 1])
+        self.assertEqual(1, command.count("-m"))
+        self.assertIn('model_reasoning_effort="medium"', command)
+
 
 if __name__ == "__main__":
     unittest.main()

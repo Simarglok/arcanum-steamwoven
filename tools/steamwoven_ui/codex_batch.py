@@ -9,6 +9,9 @@ key, no API fallback). Standard library only. Never writes into the inbox, never
     python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]
     python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout SECONDS] [--overwrite] [--local-root DIR] [--codex PATH] [--model M]
 
+The model is pinned (owner decision 2026-11-20): `gpt-6.1-sol` at reasoning effort `medium`, passed on every `exec` and `exec resume`. `--model` is an explicit override and
+needs the owner's approval for any other model; the effort is never changed. `~/.codex/config.toml` is not read or written here.
+
 Exit codes: 0 every item ok, 1 at least one item did not produce a good image, 2 the pre-check or the batch file failed (nothing was sent).
 """
 from __future__ import annotations
@@ -35,6 +38,9 @@ except ImportError:  # run as a script from its own folder
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ASPECT_TOLERANCE = 0.01  # TRD SWI-GEN-8: the result's aspect is within 1 % of the asked one
+# Owner decision 2026-11-20 (#3043): the model of the good #2455 trial; newer models are not used without the owner's approval.
+DEFAULT_MODEL = "gpt-6.1-sol"
+DEFAULT_EFFORT = "medium"
 DEFAULT_TIMEOUT = 900  # seconds per item; one generation can take minutes
 BUDGET_PIXELS = 1_570_000  # the tool keeps a budget of about 1.57 MP per image
 OUTCOMES = ("ok", "refused", "failed", "timeout", "bad-result", "missing-file", "not-png", "wrong-aspect", "skipped")
@@ -238,8 +244,7 @@ def version_number(shown: str) -> str:
 
 def exec_command(codex: str, workdir: Path, result_file: Path, images: list[Path], model: str | None, thread_id: str | None) -> list[str]:
     common = ["--skip-git-repo-check", "--enable", "image_generation", "--json", "-o", str(result_file)]
-    if model:
-        common += ["-m", model]
+    common += ["-m", model or DEFAULT_MODEL, "-c", f'model_reasoning_effort="{DEFAULT_EFFORT}"']
     common += [f"--image={path}" for path in images]
     if thread_id is None:
         return [codex, "exec", "--sandbox", "workspace-write", "-C", str(workdir), *common, "-"]
@@ -463,7 +468,7 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--only", help="comma separated item ids (a small sample)")
             p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="seconds per item")
             p.add_argument("--overwrite", action="store_true", help="replace an outbox file that already exists")
-            p.add_argument("--model")
+            p.add_argument("--model", help=f"override the pinned model {DEFAULT_MODEL} (only with the owner's approval)")
             p.add_argument("--dry-run", action="store_true", help="print the commands, send nothing")
     args = parser.parse_args(argv)
     try:
