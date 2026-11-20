@@ -127,11 +127,17 @@ public sealed class ScrAdmissionTests
     }
 
     [TestMethod]
-    public void Gotos_stay_inside_the_script_or_go_to_its_end()
+    public void Gotos_to_the_end_or_beyond_are_admitted_and_negative_and_computed_gotos_refused()
     {
         Assert.IsTrue(ScrAdmission.Admit(Program(L(C(0), A(3, (Number, 0)), A(0)), L(C(0), A(3, (Number, 2)), A(0))), S1).IsAdmitted);
-        var r = AssertRefusal(Program(L(C(0), A(3, (Number, 2)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.GotoBeyondEnd, 3);
-        Assert.AreEqual(2, r.Value);
+        // ARC-SCRIPT-3005: a literal goto to the line count or beyond it is admitted; the run ends there as a line outside the script (ledger E9).
+        foreach (var target in new[] { 1, 2, 7, int.MaxValue })
+        {
+            Assert.IsTrue(ScrAdmission.Admit(Program(L(C(0), A(3, (Number, target)), A(0))), S1).IsAdmitted, $"goto {target}");
+            Assert.IsTrue(ScrAdmission.AdmitFrom(Program(L(C(0), A(3, (Number, target)), A(0))), S1, 0).IsAdmitted, $"goto {target} from line 0");
+        }
+        var beyond = ScrAdmission.AdmitFrom(Program(L(C(0), A(3, (Number, 9)), A(0))), S1, 0).Admitted!;
+        CollectionAssert.AreEqual(new[] { 0 }, beyond.Region.ToArray());
         foreach (var code in new[] { -1, -2, -3, -4, int.MinValue })
             Assert.AreEqual(code, AssertRefusal(Program(L(C(3, (Number, 0)), A(1), A(3, (Number, code)))), 0, ScrClauseSide.OnFalse, ScrRefusalCode.NegativeGoto, 3).Value);
         var computed = AssertRefusal(Program(L(C(0), A(3, (Local, 0)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.ComputedGoto, 3);

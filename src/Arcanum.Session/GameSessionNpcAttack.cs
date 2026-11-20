@@ -532,7 +532,7 @@ public sealed partial class GameSessionOwner
         // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step; a shot that flies asks at its strike.
         // ARC-SCRIPT-2841 (TQ31): a critical miss's self-hit asks them too, but only where the attack is resolved at once (a flying shot or a throw runs no hit step on the self-hit).
         if (attack.HitScripts is { } hitScripts && HitScriptEventOf(resolution, !flies, !flies && throwing is null,
-                new(arrow?.WeaponItem ?? throwing?.Item ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, false, arrow is not null || throwing is not null, throwing is not null || strike is { } landedShot && _npcShots.ContainsKey(landedShot))) is { } hitEvent)
+                new(arrow?.WeaponItem ?? throwing?.Item ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, false, arrow is not null || throwing is not null, throwing is not null || strike is { } landedShot && _npcShots.ContainsKey(landedShot), Generic: arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)) is { } hitEvent)
             hitScripts(hitEvent);
         // ARC-DEV-261 (GT198): a prevented damage asks the victim's script too (it comes before the invulnerable gate); its answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);

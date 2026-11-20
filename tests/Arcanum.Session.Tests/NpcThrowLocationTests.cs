@@ -186,6 +186,38 @@ public sealed class NpcThrowLocationTests
         Assert.Fail("no missed lob within the bounded run");
     }
 
+    // ARC-SCRIPT-2724 (0x4B2F60, CP2): the hit event of a grenade's stray strike says the parent item is a generic item, so the host runs no critical-hit point (34) for it; a weapon's stray strike does not say so.
+    [TestMethod]
+    public void AGrenadesStrayStrikeTellsTheHostItsParentIsAGenericItem()
+    {
+        for (ulong seed = 1; seed <= 400; seed++)
+        {
+            using var owner = Owner(seed);
+            var result = owner.ThrowByNpc(owner.Version, Lob(Tile));
+            if (result.Attack is not { Resolution: { } roll } || Hit(result.Attack) || roll.Outcome == AttackOutcome.CriticalMiss) continue;
+            var heard = new List<SessionHitScriptEvent>();
+            var strike = owner.LandNpcShot(owner.Version, result.Shots.Single(), new(Combat()) { AttackerWorn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>(), AttackerCell = ThrowerCell, Distance = 1, HitScripts = heard.Add });
+            Assert.AreEqual(GameSessionFailure.None, strike.Failure);
+            var hit = heard.Single();
+            Assert.AreEqual((Grenade, true, true), (hit.Weapon, hit.Projectile, hit.Generic), "the event names the grenade as a projectile's generic parent item");
+            Assert.IsFalse((hit with { Critical = true }).RunsCriticalHitPoint(parentIsWeapon: true), "a critical stray hit of a grenade runs no point 34");
+            return;
+        }
+        Assert.Fail("no missed lob within the bounded run");
+    }
+
+    [TestMethod]
+    public void TheCriticalHitPointRunsForACriticalHitOfAWeaponItemOnly()
+    {
+        var swing = new SessionHitScriptEvent("w", true, false);
+        Assert.IsTrue(swing.RunsCriticalHitPoint(parentIsWeapon: false), "a swing has no projectile parent: it runs");
+        Assert.IsFalse((swing with { Critical = false }).RunsCriticalHitPoint(true), "no critical, no point");
+        var shot = new SessionHitScriptEvent("w", true, true);
+        Assert.IsTrue(shot.RunsCriticalHitPoint(true));
+        Assert.IsFalse(shot.RunsCriticalHitPoint(false), "a projectile of a non-weapon item (CP2)");
+        Assert.IsFalse((shot with { Generic = true }).RunsCriticalHitPoint(true), "a generic projectile parent (a grenade)");
+    }
+
     [TestMethod]
     public void ALocationThrowOnAnExhaustedStreamThrowsUnrolledInsteadOfRefusingTheItem()
     {
