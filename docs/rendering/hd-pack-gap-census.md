@@ -20,7 +20,7 @@ that they draw Legacy in HD mode. No image, hash or pixel of the game is in this
 | Frames the pack holds for them | 6,949 (5,807 font, 1,142 other); every one matches the installed file (0 stale) |
 | Non-font files complete in the pack | 668 of 782 |
 | Non-font files with at least one missing frame | 114 (167 frames) |
-| of which **drawn by the viewer through the HD path with a frame that is missing** | 76 files, 80 drawn frames (13 single arts, 61 schematic record pictures, art 787, art 329) |
+| of which **drawn by the viewer through the HD path with a frame that is missing** | 76 files, 80 drawn frames (13 single arts, 61 schematic record pictures, art 787 (since added, #2917), art 329) |
 | of which Legacy by design (cursors, the hover ring) | 8 files |
 | of which not drawn by the viewer at all (dead art, frames never read) | 22 files |
 | of which network play | 4 files |
@@ -30,7 +30,7 @@ that they draw Legacy in HD mode. No image, hash or pixel of the game is in this
 | Bitmaps outside `art/interface` that the pack cannot hold (no entry kind) | 57,635 (45 slides, 65 world-map bitmaps, 3 splash, 57,522 town-map tiles; the 6,677 tiles of the Vormantown module come on top, see [below](#bitmaps-outside-artinterface)) |
 | Lighting arts needed | 0 (the relit look is computed; it reads no pack art) |
 
-The gap that matters for the owner is small: **13 single arts and 61 schematic pictures** (plus art 787, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
+The gap that matters for the owner is small: **13 single arts and 61 schematic pictures** (plus art 787 at the census, added since by [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
 Fonts, portraits and 668 of the 782 interface arts are complete.
 
 ## Method
@@ -58,7 +58,7 @@ make, not a gap of the redraw pack.
 ## Drawn arts with no pack frame (the real gaps)
 
 Every one goes through the HD frame path, so a delivered frame is used without a code change. Follow-up: [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) (this table),
-[#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) (schematic pictures), [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) (art 787).
+[#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) (schematic pictures), [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) (art 787, done).
 
 | Art | Name | Frames missing / total | Size (Legacy) | Where it is drawn | Priority |
 | ---: | --- | ---: | --- | --- | :-: |
