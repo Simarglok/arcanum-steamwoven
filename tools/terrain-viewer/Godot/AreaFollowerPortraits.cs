@@ -14,15 +14,37 @@ public partial class AreaArtBar : Control
 {
     private Texture2D? _art;
     private Color _fallback;
+    private Transform2D _drawnDevice;
     public int Filled { get; private set; }
     /// <summary>The art number drawn (null for the plain fallback).</summary>
     public int? Art { get; private set; }
     public Color FillColor => _fallback;
+    /// <summary>ARC-UI-3060: the rectangles the last draw made by code (<see cref="AreaThinBarCode"/>, under the HD option) instead of the art's pixels; 0 when it drew the art or nothing.</summary>
+    public int CodeRectsForSelfTest { get; private set; }
 
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
         Size = CustomMinimumSize = new Vector2(AreaFollowerFrameLayout.BarWidth, AreaFollowerFrameLayout.BarHeight);
+        // ARC-UI-3060: the code-drawn bar follows the HD option and the device scale (a parent's scale change draws nothing by itself).
+        SetNotifyTransform(true);
+    }
+
+    public override void _EnterTree()
+    {
+        InterfaceHd.Changed += QueueRedraw;
+        GetViewport().SizeChanged += QueueRedraw; // the stretch (a window resize) moves the device pixel grid without moving the bar's own transform
+    }
+
+    public override void _ExitTree()
+    {
+        InterfaceHd.Changed -= QueueRedraw;
+        if (GetViewport() is { } viewport) viewport.SizeChanged -= QueueRedraw;
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationTransformChanged && AreaThinBarDraw.Active && IsInsideTree() && AreaThinBarDraw.Device(this) != _drawnDevice) QueueRedraw();
     }
 
     public void Set(int filled, int art, Texture2D? texture, Color fallback)
@@ -36,9 +58,17 @@ public partial class AreaArtBar : Control
 
     public override void _Draw()
     {
+        CodeRectsForSelfTest = 0;
         if (Filled <= 0) return;
         var height = AreaFollowerFrameLayout.BarHeight;
         if (_art is null) { DrawRect(new Rect2(0, 0, Filled, height), _fallback); return; }
+        // ARC-UI-3060: the pack has no frame for the bars, so under the HD option they are fills by value, not Legacy pixels.
+        if (Art is { } art && AreaThinBarCode.Covers(art) && AreaThinBarDraw.Active)
+        {
+            _drawnDevice = AreaThinBarDraw.Device(this);
+            CodeRectsForSelfTest = AreaThinBarDraw.Draw(this, art, 0, 0, Filled);
+            return;
+        }
         var width = Math.Min(Filled, _art.GetWidth());
         DrawTextureRectRegion(_art, new Rect2(0, 0, width, Math.Min(height, _art.GetHeight())), new Rect2(0, 0, width, Math.Min(height, _art.GetHeight())));
     }
@@ -141,6 +171,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _entries.TryGetValue(entity, out var entry)
             ? (entry.Health.Filled, entry.Fatigue.Filled, entry.Health.FillColor == AreaLifeBar.PoisonedHealthColor, entry.Tint.Visible)
             : null;
+    /// <summary>ARC-UI-3060: how many rectangles each of a follower frame's two bars made by code in its last draw (<see cref="AreaThinBarCode"/>, under the HD option); 0 when it drew its art or nothing.</summary>
+    internal (int Health, int Fatigue)? BarCodeRectsForSelfTest(string entity) =>
+        _entries.TryGetValue(entity, out var entry) ? (entry.Health.CodeRectsForSelfTest, entry.Fatigue.CodeRectsForSelfTest) : null;
     /// <summary>A follower frame's art: the frame art drawn, the portrait texture (null none), the bars' art numbers, and its and
     /// the portrait's window rectangles.</summary>
     internal (bool Frame, Texture2D? Portrait, int? HealthArt, int? FatigueArt, Rect2 Rect, Rect2 PortraitRect)? FrameForSelfTest(string entity) =>

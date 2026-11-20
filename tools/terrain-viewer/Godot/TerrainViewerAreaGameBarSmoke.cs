@@ -233,6 +233,9 @@ public partial class TerrainViewerApp
                         var art = panel.ArtFrame(piece.Art);
                         Require(art is not null && width == (piece.WidthPercent >= 100 ? art.GetWidth() : AreaExperienceStripLayout.CutWidth(art.GetWidth(), piece.WidthPercent)), $"piece art {piece.Art} drew {width} px ({when})");
                     }
+                    // ARC-UI-3060: the remainder piece (art 772, no pack frame) is drawn by code under the HD option (three rows, whole device pixels), by its art otherwise.
+                    var remainderDrawn = drawn.Any(d => d.Piece.Art == AreaThinBarCode.ExperienceArt);
+                    Require((panel.ExperienceCodeRectsForSelfTest > 0) == (remainderDrawn && AreaThinBarDraw.Active) && panel.ExperienceCodeRectsForSelfTest <= AreaThinBarCode.Height, $"the remainder piece is {(AreaThinBarDraw.Active ? "drawn by code" : "the art")} ({when}): {panel.ExperienceCodeRectsForSelfTest} rectangles, remainder {remainderDrawn}, HD {verifyHd}");
                 }
                 var xpStart = xpSession.QueryHeroExperience();
                 Require(xpStart is { Progress: not null, ToNextLevel: > 20 }, $"the hero's progress is known with a next level ahead: {xpStart}");

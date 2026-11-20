@@ -438,6 +438,23 @@ public partial class TerrainViewerApp
                 var expected = new Vector2(plan.StripLeft, plan.TopStripY) + new Vector2(x, y) * scale;
                 require(view.Scale.X == whole && (view.Position - expected).Length() <= 1e-2f, $"[{tag}] the {name} view keeps its own whole scale {whole} on the column's screen at {expected} (got {view.Scale.X} at {view.Position})");
             }
+            // ARC-UI-3060: with the bar arts bound (synthetic 34 x 3 frames, no game art; last, so nothing above reads the replaced binding) the two bars of a follower frame are fills by value
+            // under the HD option with a pack (three rows or two, whole device pixels at the strips' scale), and the art's pixels otherwise.
+            {
+                var barArt = new Dictionary<int, Texture2D>();
+                foreach (var number in AreaThinBarCode.ArtNumbers.Where(n => n != AreaThinBarCode.ExperienceArt))
+                {
+                    var barImage = Image.CreateEmpty(AreaFollowerFrameLayout.BarWidth, AreaFollowerFrameLayout.BarHeight, false, Image.Format.Rgba8);
+                    barImage.Fill(Colors.Magenta);
+                    barArt[number] = ImageTexture.CreateFromImage(barImage);
+                }
+                portraits.Bind(barArt);
+                portraits.Show(Enumerable.Range(0, 2).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
+                await frames(3);
+                var codeRects = portraits.BarCodeRectsForSelfTest("smoke:0");
+                require(codeRects is { } rects && AreaThinBarDraw.Active == (rects.Health > 0 && rects.Fatigue > 0) && rects.Health <= AreaThinBarCode.Height && rects.Fatigue <= 2,
+                    $"[{tag}] the follower bars draw by code exactly while the HD option has a pack ({AreaThinBarDraw.Active}): {codeRects}");
+            }
         }
         finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate, spellPane, combatHud }) { RemoveChild(node); node.QueueFree(); } }
     }
