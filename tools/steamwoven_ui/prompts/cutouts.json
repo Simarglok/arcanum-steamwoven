@@ -1,5 +1,5 @@
 {
-  "note": "Cut-outs of the material sheet (SWI-GEN-2, cutouts.py): rectangles [x0, y0, x1, y1] of the 800 x 600 layout on the tone-fitted context image named by 'source' (any pixel size: the rectangle is scaled by width / 800). 'tiles' are the seamless tiles Codex makes from a cut-out of a large surface; each is compared with the ORIGINAL material of 'reference' (tone_check masks).",
+  "note": "Cut-outs of the material sheet (SWI-GEN-2, cutouts.py): rectangles [x0, y0, x1, y1] of the 800 x 600 layout on the tone-fitted context image named by 'source' (any pixel size: the rectangle is scaled by width / 800). 'tiles': the wood tile is made only as input for the strip method study (#2457); paper and parchment are parts of the window backgrounds and are made whole by the window geometry, not tiled (owner decision 2026-11-20); a parchment tile, if ever needed, has no grid (the grid is a separate layer).",
   "items": [
     {"id": "wood-panel", "source": "ctx-inventory", "rect": [730, 265, 790, 322], "material": "wood", "note": "panel wood, canonical source (inventory)"},
     {"id": "dark-well", "source": "ctx-inventory", "rect": [215, 512, 585, 580], "material": "black", "note": "matte black of the message window"},
@@ -15,8 +15,6 @@
     {"id": "iron", "source": "ctx-character", "rect": [510, 103, 730, 119], "material": "iron", "note": "iron plate of the character sheet panel"}
   ],
   "tiles": [
-    {"id": "tile-wood", "from": "wood-panel", "reference": {"screen": "ctx-inventory", "material": "wood"}},
-    {"id": "tile-paper", "from": "page-paper", "reference": {"screen": "ctx-logbook", "material": "paper"}},
-    {"id": "tile-parchment", "from": "parchment", "reference": {"screen": "ctx-schematic", "material": "parchment"}}
+    {"id": "tile-wood", "from": "wood-panel", "reference": {"screen": "ctx-inventory", "material": "wood"}}
   ]
 }
