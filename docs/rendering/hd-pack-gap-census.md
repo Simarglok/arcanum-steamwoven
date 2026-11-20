@@ -1,7 +1,9 @@
 # HD pack gap census: what the installed pack still lacks (ARC-RES-2946)
 
 Status: **census, 2026-11-19** (work item ARC-RES-2946, [#2946](https://github.com/Simarglok/arcanum-steamwoven/issues/2946)). Docs only; the
-installed pack and the installation were read, nothing was written to them. Requirements touched (status unchanged):
+installed pack and the installation were read, nothing was written to them.
+**Update 2026-11-20 (ARC-UI-2917, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)): art 787 `ScrllSlideM1` now has its pack frame** (a 44x4
+crop of the HD `scrllslidem` frame, owner option B), so the counts below are the census's and art 787 is no longer a gap (one frame fewer missing, one drawn gap fewer). Requirements touched (status unchanged):
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007), [FR-PRODUCT-001](../requirements/content-product.md#fr-product-001).
 
 Scope is the one **HD** option of the [owner decision of 2026-11-15](../architecture/decisions.md): the HD interface (art and fonts) plus the relit
@@ -18,7 +20,7 @@ that they draw Legacy in HD mode. No image, hash or pixel of the game is in this
 | Frames the pack holds for them | 6,949 (5,807 font, 1,142 other); every one matches the installed file (0 stale) |
 | Non-font files complete in the pack | 668 of 782 |
 | Non-font files with at least one missing frame | 114 (167 frames) |
-| of which **drawn by the viewer through the HD path with a frame that is missing** | 76 files, 80 drawn frames (13 single arts, 61 schematic record pictures, art 787, art 329) |
+| of which **drawn by the viewer through the HD path with a frame that is missing** | 76 files, 80 drawn frames (13 single arts, 61 schematic record pictures, art 787 (since added, #2917), art 329) |
 | of which Legacy by design (cursors, the hover ring) | 8 files |
 | of which not drawn by the viewer at all (dead art, frames never read) | 22 files |
 | of which network play | 4 files |
@@ -28,7 +30,7 @@ that they draw Legacy in HD mode. No image, hash or pixel of the game is in this
 | Bitmaps outside `art/interface` that the pack cannot hold (no entry kind) | 57,635 (45 slides, 65 world-map bitmaps, 3 splash, 57,522 town-map tiles; the 6,677 tiles of the Vormantown module come on top, see [below](#bitmaps-outside-artinterface)) |
 | Lighting arts needed | 0 (the relit look is computed; it reads no pack art) |
 
-The gap that matters for the owner is small: **13 single arts (four of them, the thin bars, are drawn by code under the HD option since ARC-UI-3060, [below](#drawn-by-code-under-the-hd-option); nine remain in the table) and 61 schematic pictures** (plus art 787, [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
+The gap that matters for the owner is small: **13 single arts (four of them, the thin bars, are drawn by code under the HD option since ARC-UI-3060, [below](#drawn-by-code-under-the-hd-option); nine remain in the table) and 61 schematic pictures** (plus art 787 at the census, added since by [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)).
 Fonts, portraits and 668 of the 782 interface arts are complete.
 
 ## Method
@@ -56,7 +58,7 @@ make, not a gap of the redraw pack.
 ## Drawn arts with no pack frame (the real gaps)
 
 Every one goes through the HD frame path, so a delivered frame is used without a code change. Follow-up: [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) (this table),
-[#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) (schematic pictures), [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) (art 787).
+[#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) (schematic pictures), [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) (art 787, done).
 
 | Art | Name | Frames missing / total | Size (Legacy) | Where it is drawn | Priority |
 | ---: | --- | ---: | --- | --- | :-: |
@@ -67,7 +69,6 @@ Every one goes through the HD frame path, so a delivered frame is used without a
 | 231 | `Lns_Bart` | 1 / 1 | 89x89 | Lens ring of the barter window, the schematic round view and the reading window | P2 |
 | 247 | `CVR_Ring2` | 1 / 1 | 32x32 | Inventory, loot and barter windows: cover of the empty Ring2 slot | P2 |
 | 204 | `MM_Cross` | 2 / 2 (only frame 0, 11x11, is drawn) | 11x11, 13x13 | World map and town map: the party marker | P2 |
-| 787 | `ScrllSlideM1` | 1 / 1 | 11x1 | Character sheet, schemes page: middle of the scroll thumb ([#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917)) | P3 |
 | 627 | `Saltys_Map` | 1 / 1 | 668x400 | Reading window: picture of the written object that names it | P3 |
 | 803 | `MazzerinsMystery` | 1 / 1 | 668x400 | Reading window: same | P3 |
 | 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD when the generated interface is off (the whole-factor plate; the pack's `main-menu-16x9.png` is no longer read, ARC-UI-3003); with a Steamwoven full-screen plan the plate is the layout zone's backdrop | P3 |
@@ -177,6 +178,8 @@ the **town-map tiles were not** (they were "not listed" here), and they are by f
 They are map pictures, like the world map, so the answer of #2952 for the world-map tiles decides them as well; a redraw of 57.5 thousand tiles is not a realistic job, so
 if the owner picks B for the world map, the town maps are a separate, much bigger decision.
 
+**Research result (ARC-RES-2992, [HD world map and town maps](hd-world-town-map.md)):** the town-map tiles are a pure render of the area at 1/4, so a sharp town map is a render by our engine at a larger scale (no redraw); the world map can be upscaled x4 with a non-generative model (`realesr-animevideov3` was the best of three). The entry kinds are the question of #2952.
+
 **Stopgap (ARC-UI-2993, [#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993)):** until the sharp world map of [#2992](https://github.com/Simarglok/arcanum-steamwoven/issues/2992) exists, the HD option (the Steamwoven layout) draws the map view's 64 tiles at 1:1 device pixels instead of scaling them by the composition's scale, while the frame, buttons and the code-drawn overlays stay at the composition's scale. The town map and the continent view are not part of it.
 
 ## Bitmaps outside `art/interface`
@@ -205,7 +208,7 @@ lighting, not HD art. **Missing lighting images: 0.**
 | --- | --- | --- |
 | [#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950) | The 13 single arts of the table above | Decide A (redraw and add) or B (accept Legacy) per priority; owner decision of 2026-11-20: the four thin bars are drawn by code ([#3060](https://github.com/Simarglok/arcanum-steamwoven/issues/3060)), the others stay open |
 | [#2951](https://github.com/Simarglok/arcanum-steamwoven/issues/2951) | 61 schematic record pictures | Same |
-| [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) | Art 787 | Existing |
+| [#2917](https://github.com/Simarglok/arcanum-steamwoven/issues/2917) | Art 787 | Done (ARC-UI-2917): added as a crop of art 239's HD frame |
 | [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952) | Slides, world-map tiles and `Map_Zoomed`, town-map tiles, splash | Decide whether HD covers them |
 | [#2983](https://github.com/Simarglok/arcanum-steamwoven/issues/2983) | This section (census correction) | None |
 

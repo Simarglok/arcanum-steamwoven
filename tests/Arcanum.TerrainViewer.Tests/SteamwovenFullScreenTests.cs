@@ -5,58 +5,26 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-2577: the full-screen menus' plan in the Steamwoven layout (SWI-BDR-6): the 800 × 600 zone centred in the frame at `f · 3.6`, and hit tests that follow the drawn menu.</summary>
+/// <summary>ARC-UI-2577, ARC-UI-2891: the full-screen menus' plan in the Steamwoven layout: the 800 × 600 plate fitted to the window's height (the column menus), and hit tests that follow the drawn menu.</summary>
 [TestClass]
 public sealed class SteamwovenFullScreenTests
 {
     [TestMethod]
-    public void A_16_9_window_at_the_reference_size_draws_the_zone_at_three_point_six_over_the_whole_frame()
+    public void The_plan_is_the_plate_fitted_to_the_windows_height()
     {
         var plan = SteamwovenFullScreen.Plan(3840, 2160)!;
         Assert.AreEqual(3.6, plan.Factor, 1e-9);
         Assert.AreEqual(new PixelRect(480, 0, 2880, 2160), plan.Zone);
         Assert.AreEqual(new PixelRect(0, 0, 3840, 2160), plan.Frame);
         Assert.AreEqual(new PixelInsets(0, 0, 0, 0), plan.Bars);
-        Assert.AreEqual(plan.Frame, plan.Layout.FullScreenBackdrop.Target);
-    }
-
-    [TestMethod]
-    public void The_zone_follows_f_at_1920_x_1080()
-    {
-        var plan = SteamwovenFullScreen.Plan(1920, 1080)!;
-        Assert.AreEqual(1.8, plan.Factor, 1e-9);
-        Assert.AreEqual(new PixelRect(240, 0, 1440, 1080), plan.Zone);
-    }
-
-    [TestMethod]
-    public void A_16_10_window_centres_the_zone_with_the_backdrop_above_and_below()
-    {
-        // 2560 x 1600: f = 2/3, the frame is the window (16:10), the zone 1920 x 1440 leaves 80 px above and below for the backdrop.
-        var plan = SteamwovenFullScreen.Plan(2560, 1600)!;
-        Assert.AreEqual(2.4, plan.Factor, 1e-9);
-        Assert.AreEqual(new PixelRect(320, 80, 1920, 1440), plan.Zone);
-        Assert.AreEqual(new PixelRect(0, 0, 2560, 1600), plan.Frame);
-    }
-
-    [TestMethod]
-    public void A_wide_window_is_pillarboxed_and_the_bars_are_outside_the_backdrop()
-    {
-        // 3440 x 1440: f = 2/3, the frame is 2560 wide at x = 440, black bars on both sides.
-        var plan = SteamwovenFullScreen.Plan(3440, 1440)!;
-        Assert.AreEqual(new PixelRect(440, 0, 2560, 1440), plan.Frame);
-        Assert.AreEqual(new PixelInsets(440, 0, 440, 0), plan.Bars);
-        Assert.AreEqual(new PixelRect(760, 0, 1920, 1440), plan.Zone);
-        Assert.AreEqual(plan.Frame, plan.Layout.FullScreenBackdrop.Target);
-    }
-
-    [TestMethod]
-    public void A_tall_window_is_letterboxed()
-    {
-        // 1024 x 768: f = 4/15, the frame is 2400 f = 640 high with 64 px bars; the zone is 576 high, centred in it.
-        var plan = SteamwovenFullScreen.Plan(1024, 768)!;
-        Assert.AreEqual(new PixelRect(0, 64, 1024, 640), plan.Frame);
-        Assert.AreEqual(new PixelInsets(0, 64, 0, 64), plan.Bars);
-        Assert.AreEqual(new PixelRect(128, 96, 768, 576), plan.Zone);
+        foreach (var (width, height) in new[] { (1920, 1080), (2560, 1600), (3440, 1440), (1024, 768), (1280, 1024) })
+        {
+            var (factor, zone) = SteamwovenColumnMenu.Fit(width, height);
+            var fitted = SteamwovenFullScreen.Plan(width, height)!;
+            Assert.AreEqual(factor, fitted.Factor, 1e-12, $"{width}x{height}");
+            Assert.AreEqual(zone, fitted.Zone, $"{width}x{height}");
+            Assert.AreSame(fitted.Layout.Column, fitted.Column);
+        }
     }
 
     [TestMethod]
@@ -64,22 +32,6 @@ public sealed class SteamwovenFullScreenTests
     {
         // f = 800 / 3840 is under 0.25: the original look stays.
         Assert.IsNull(SteamwovenFullScreen.Plan(800, 450));
-    }
-
-    [TestMethod]
-    [DataRow(3840, 2160)] [DataRow(2560, 1440)] [DataRow(1920, 1080)] [DataRow(2560, 1600)] [DataRow(1920, 1200)]
-    [DataRow(1280, 800)] [DataRow(1366, 768)] [DataRow(3440, 1440)] [DataRow(1024, 768)]
-    public void The_zone_is_centred_in_the_frame_at_the_layout_scale_at_every_verification_size(int width, int height)
-    {
-        var plan = SteamwovenFullScreen.Plan(width, height)!;
-        var frame = plan.Frame; var zone = plan.Zone;
-        Assert.IsTrue(zone.X >= frame.X && zone.Right <= frame.Right && zone.Y >= frame.Y && zone.Bottom <= frame.Bottom, $"{width}x{height}: the zone {zone} lies in the frame {frame}");
-        Assert.IsTrue(Math.Abs(zone.Width - 800 * plan.Factor) <= 1.01 && Math.Abs(zone.Height - 600 * plan.Factor) <= 1.01, $"{width}x{height}: the zone {zone} is 800 x 600 units at {plan.Factor}");
-        Assert.IsTrue(Math.Abs((zone.X + zone.Right) - (frame.X + frame.Right)) <= 1 && Math.Abs((zone.Y + zone.Bottom) - (frame.Y + frame.Bottom)) <= 1, $"{width}x{height}: the zone {zone} is centred in the frame {frame}");
-        // The frame and the bars cover the window exactly once.
-        var bars = plan.Bars;
-        Assert.AreEqual((long)width * height, (long)frame.Width * frame.Height + (long)bars.Left * height + (long)bars.Right * height + (long)(width - bars.Left - bars.Right) * (bars.Top + bars.Bottom));
-        Assert.AreEqual(frame, plan.Layout.FullScreenBackdrop.Target);
     }
 
     [TestMethod]

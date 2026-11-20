@@ -218,8 +218,35 @@ public partial class TerrainViewerApp
         // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
         HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
-        SyncInterfaceLayout();
         SyncOriginalComposition();
+        SyncSteamwovenWorldZoom();
+    }
+
+    /// <summary>ARC-UI-3059: the composition's scale <c>s</c> the world zoom steps are capped by: device pixels per original unit, <c>min(width / 800, height / 600)</c> of the window (the column's unit scale; the same for the full-width layout, which has no composition of its
+    /// own), whatever the layout options in force (the launcher asks before any layout has run).</summary>
+    internal double SteamwovenWorldScale()
+    {
+        var size = GetViewport().GetVisibleRect().Size;
+        return size.X > 0 && size.Y > 0 ? SteamwovenColumnMenu.Fit((int)size.X, (int)size.Y).Factor : 1;
+    }
+
+    /// <summary>ARC-UI-3059: whether the world is drawn at the player's whole zoom step: the Steamwoven look (the HD option with the generated interface) in the game window.</summary>
+    internal bool SteamwovenWorldZoomActive => AreaGameBarPanel.SteamwovenOn && OriginalCompositionFactor == 0;
+
+    /// <summary>ARC-UI-3059: the whole step the game setting resolves to at the window's scale now.</summary>
+    internal int SteamwovenWorldZoomStep => SteamwovenWorldZoom.Resolve(_gameSettings.WorldZoomStep, SteamwovenWorldScale());
+
+    /// <summary>ARC-UI-3059: per frame, the camera shows the step (a resize or a change of look moves the cap) and goes back to the diagnostic preference when the look ends. The Fit view of the palette is a session view and is left alone.</summary>
+    private void SyncSteamwovenWorldZoom()
+    {
+        if (_camera is null || !IsWorld || _readyActorPlan is null) return;
+        var active = SteamwovenWorldZoomActive;
+        if (!active && !_steamwovenZoomWasActive) return;
+        _steamwovenZoomWasActive = active;
+        if (_worldFitView) return;
+        var viewport = WorldViewport;
+        var wanted = active ? SteamwovenWorldZoomStep : _worldStoredZoom;
+        if (Math.Abs(_camera.State.Zoom - Math.Max(wanted, _camera.ZoomFloor(viewport) / _camera.ZoomScale)) > 1e-9) _camera.SetWorldZoom(wanted, WorldAnchor, viewport);
     }
 
     /// <summary>ARC-UI-2936: whether the window draws the Original look as the centred 4:3 composition: the HD interface option is off, no launcher screen is open and the run is not an automated one (those read the plain
@@ -279,21 +306,6 @@ public partial class TerrainViewerApp
             if (IsWorld && _readyActorPlan is not null) _camera.ResizeWorld(WorldAnchor, viewport);
             else _camera.ReapplyZoom();
         }
-    }
-
-    private SteamwovenLayoutChoice? _appliedInterfaceLayout;
-
-    /// <summary>ARC-UI-2890 (AC1): the layout the game option chooses (the <c>interface layout</c> line; this run's ARC_STEAMWOVEN_LAYOUT overrides it with column or full-width), given to the layout model once a change.</summary>
-    internal SteamwovenLayoutChoice EffectiveInterfaceLayout =>
-        SteamwovenLayoutChoices.TryParse(System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LAYOUT")) ?? _gameSettings.InterfaceLayout;
-
-    private void SyncInterfaceLayout()
-    {
-        var choice = EffectiveInterfaceLayout;
-        if (_appliedInterfaceLayout == choice) return;
-        _appliedInterfaceLayout = choice;
-        SteamwovenHud.Options = SteamwovenLayoutChoices.Options(choice);
-        _gameBarPanel?.Relayout();
     }
 
     /// <summary>ARC-RENDER-2060, ARC-RENDER-2076, ARC-UI-2174: the relit look is a component of HD, not a setting of its own: it is on exactly while the active

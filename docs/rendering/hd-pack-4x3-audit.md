@@ -14,7 +14,7 @@ sizes and measured numbers. The captures and composites stay on the owner's devi
 
 - **Geometry works.** Every pack entry is a 4× frame of one original art, registered to the Legacy geometry; the column draws the original layout
   at `s`, so nothing in the pack depended on the full-width layout. The full-width pieces (side tiles, side boards, per-family full-middle backdrops)
-  are generated at run time, not pack entries; their removal is [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926).
+  are generated at run time, not pack entries; they were removed by [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926).
 - **The column does not sample the pack with nearest anywhere.** The issue's premise is out of date: since ARC-UI-112 a direct pack frame is drawn
   trilinear with mipmaps, the strips and window frames are generated chrome whose pack pictures are area-averaged to the paint scale by
   `InterfaceChromeRenderer.ResamplePicture` (ARC-UI-141 in the code; the fractional own scale is ARC-UI-148),
@@ -116,7 +116,7 @@ The column draws the original layout at `s` with the window zone and the strips 
 registered to their Legacy frames (U3 fit, [`hd-interface-art.md`](hd-interface-art.md)), so they fit the column exactly as they fitted the
 whole-factor layout; the captures confirm the bottom strip's place at three sizes. **No pack entry is obsolete because of the layout:** the parts
 that belonged to the full-width layout (the strip side tiles, the 9-slice side pieces, the side boards, the per-family full-middle backdrops)
-were generated or painted at run time and are removed with the layout by [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926).
+were generated or painted at run time and were removed with the layout by [#2926](https://github.com/Simarglok/arcanum-steamwoven/issues/2926).
 
 Obsolete entries: the 41 frames of 23 network-play arts (not drawn, out of scope); noted for the next pack build
 ([#2362](https://github.com/Simarglok/arcanum-steamwoven/issues/2362)). The widescreen plate below.

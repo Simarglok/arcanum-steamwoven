@@ -8,7 +8,6 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class SteamwovenColumnViewerTests
 {
-    private static readonly SteamwovenLayoutOptions ThinColumn = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KThin); // ARC-UI-2925: the model keeps k = 0.8, the viewer no longer offers it
     private static readonly (int W, int H)[] Sizes = [(3840, 2160), (2560, 1440), (1920, 1080), (2560, 1600), (1920, 1200), (3440, 1440), (1280, 800), (1366, 768)];
 
     private static SteamwovenHudPlan Plan(int w, int h, SteamwovenLayoutOptions options) => SteamwovenHud.Plan(w, h, options)!;
@@ -16,28 +15,28 @@ public sealed class SteamwovenColumnViewerTests
     [TestMethod]
     public void The_hud_plan_of_a_column_has_the_strips_scale_and_the_column_s_zone()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, ThinColumn, SteamwovenLayoutOptions.ColumnFitted })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, options);
-            var column = plan.Column!;
+            var column = plan.Column;
             Assert.AreEqual(column.UnitScale, plan.StripScale, 1e-9, $"{w}x{h}: the strips' scale is the column's unit scale");
             Assert.AreEqual(column.Column.X, plan.StripLeft, $"{w}x{h}: the strip stands in the column");
             Assert.AreEqual(column.Window.Zone, plan.WindowZone);
-            Assert.AreEqual(plan.Layout.Middle.Band.Y, column.TopStrip.Bottom, "the middle band starts under the top strip");
+            Assert.AreEqual(plan.Layout.Middle.Y, column.TopStrip.Bottom, "the middle band starts under the top strip");
         }
     }
 
     [TestMethod]
     public void A_window_stands_in_the_column_zone_at_the_column_s_unit_scale()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, ThinColumn, SteamwovenLayoutOptions.ColumnFitted })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, options);
-            var zone = plan.Column!.Window.Zone;
+            var zone = plan.Column.Window.Zone;
             var body = SteamwovenWindowZone.Body(plan, 800, 400);
-            var label = $"{w}x{h} k={options.Column!.K} fit={options.Column.FitHeight}";
+            var label = $"{w}x{h} k={options.Column.K} fit={options.Column.FitHeight}";
             Assert.AreEqual(plan.Column.UnitScale, body.Scale, 1e-9, label);
             // An 800 x 400 window fills the zone (within a pixel: the zone's edges are rounded from their own exact position).
             Assert.AreEqual(zone.X, body.X, 1.0, label);
@@ -51,27 +50,16 @@ public sealed class SteamwovenColumnViewerTests
     }
 
     [TestMethod]
-    public void Without_the_column_the_hook_is_the_full_width_zone_as_before()
-    {
-        var plan = Plan(2560, 1440, SteamwovenLayoutOptions.Default);
-        Assert.IsNull(plan.Column);
-        Assert.AreEqual(plan.Layout.WindowZone, plan.WindowZone);
-        Assert.AreEqual(2560 / 3840.0 * 3.6, SteamwovenWindowZone.UnitScale(plan), 1e-9);
-        Assert.AreEqual(0, SteamwovenColumnEdges.Parts(plan, true).Count);
-        Assert.AreEqual(0, SteamwovenColumnEdges.DimmedWorld(plan).Count);
-    }
-
-    [TestMethod]
     public void The_gaps_take_the_family_s_wood_and_tile_with_the_window_zone_to_the_column()
     {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, ThinColumn, SteamwovenLayoutOptions.ColumnFitted })
+        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnFitted })
         foreach (var (w, h) in Sizes)
         foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
         {
             var plan = Plan(w, h, options);
-            var column = plan.Column!;
+            var column = plan.Column;
             var pieces = SteamwovenBackdrops.Pieces(family, plan);
-            var label = $"{w}x{h} k={options.Column!.K} {family}";
+            var label = $"{w}x{h} k={options.Column.K} {family}";
             // The pieces cover the two gaps exactly: area equals, no overlap with the zone, all inside the column.
             long area = pieces.Sum(piece => (long)piece.Rect.Width * piece.Rect.Height);
             Assert.AreEqual((long)column.Window.GapAbove.Width * column.Window.GapAbove.Height + (long)column.Window.GapBelow.Width * column.Window.GapBelow.Height, area, label);
@@ -92,7 +80,7 @@ public sealed class SteamwovenColumnViewerTests
     {
         // 2560 x 1600 at k = 1: 80 px above and below the 960 px zone; the grain of the upper gap starts 80 px (2.5 / 0.5... units) above the zone's top left.
         var plan = Plan(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal);
-        var unit = plan.Column!.UnitScale;
+        var unit = plan.Column.UnitScale;
         var zone = plan.Column.Window.Zone;
         var pieces = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.CharacterSheet, plan);
         Assert.AreEqual(2, pieces.Count);
@@ -107,7 +95,7 @@ public sealed class SteamwovenColumnViewerTests
     public void A_two_part_family_splits_each_gap_at_the_zone_s_split()
     {
         var plan = Plan(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal);
-        var zone = plan.Column!.Window.Zone;
+        var zone = plan.Column.Window.Zone;
         foreach (var (family, units) in new[] { (SteamwovenBackdropFamily.Inventory, 358), (SteamwovenBackdropFamily.Logbook, 165), (SteamwovenBackdropFamily.Reading, 132) })
         {
             var split = zone.X + (int)Math.Round(units * plan.Column.UnitScale, MidpointRounding.AwayFromZero);
@@ -130,8 +118,8 @@ public sealed class SteamwovenColumnViewerTests
     {
         foreach (var (w, h) in Sizes)
         {
-            var plan = Plan(w, h, ThinColumn);
-            var column = plan.Column!;
+            var plan = Plan(w, h, SteamwovenLayoutOptions.ColumnOriginal);
+            var column = plan.Column;
             var play = SteamwovenColumnEdges.Parts(plan, false);
             Assert.AreEqual(2, play.Count, $"{w}x{h}");
             Assert.AreEqual(column.TopStrip, play[0]);
@@ -150,7 +138,7 @@ public sealed class SteamwovenColumnViewerTests
         foreach (var (w, h) in Sizes)
         {
             var plan = Plan(w, h, SteamwovenLayoutOptions.ColumnOriginal);
-            var column = plan.Column!;
+            var column = plan.Column;
             var world = SteamwovenColumnEdges.DimmedWorld(plan);
             Assert.AreEqual(2, world.Count, $"{w}x{h}");
             Assert.AreEqual(column.WorldLeft, world[0]);
@@ -168,23 +156,9 @@ public sealed class SteamwovenColumnViewerTests
         Assert.IsFalse(new SteamwovenWorldDim(0, -0.1).IsValid);
         var options = SteamwovenLayoutOptions.ForColumn(SteamwovenColumnMode.KOriginal);
         Assert.IsTrue(options.IsValid);
-        var changed = options with { Column = options.Column! with { WorldDim = new SteamwovenWorldDim(0.6, 0.2) } };
+        var changed = options with { Column = options.Column with { WorldDim = new SteamwovenWorldDim(0.6, 0.2) } };
         Assert.IsTrue(changed.IsValid);
-        Assert.AreEqual(0.6, SteamwovenHud.Plan(1920, 1080, changed)!.Column!.Mode.WorldDim.Darken);
-        Assert.IsFalse((options with { Column = options.Column! with { WorldDim = new SteamwovenWorldDim(2, 0) } }).IsValid);
-    }
-
-    [TestMethod]
-    public void The_layout_choices_have_names_and_options()
-    {
-        Assert.AreEqual("column", SteamwovenLayoutChoices.Name(SteamwovenLayoutChoices.Default));
-        foreach (var choice in Enum.GetValues<SteamwovenLayoutChoice>())
-            Assert.AreEqual(choice, SteamwovenLayoutChoices.TryParse(SteamwovenLayoutChoices.Name(choice)));
-        Assert.IsNull(SteamwovenLayoutChoices.TryParse("wide"));
-        Assert.IsNull(SteamwovenLayoutChoices.TryParse(null));
-        Assert.AreEqual(SteamwovenLayoutOptions.ColumnFitted, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.Column));
-        Assert.IsNull(SteamwovenLayoutChoices.TryParse("column-thin"), "ARC-UI-2925: the thin preset is gone");
-        Assert.IsNull(SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.FullWidth).Column);
-        Assert.AreEqual(SteamwovenLayoutOptions.Default, SteamwovenLayoutChoices.Options(SteamwovenLayoutChoice.FullWidth));
+        Assert.AreEqual(0.6, SteamwovenHud.Plan(1920, 1080, changed)!.Column.Mode.WorldDim.Darken);
+        Assert.IsFalse((options with { Column = options.Column with { WorldDim = new SteamwovenWorldDim(2, 0) } }).IsValid);
     }
 }

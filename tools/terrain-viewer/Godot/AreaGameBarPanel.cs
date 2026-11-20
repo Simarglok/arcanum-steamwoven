@@ -29,11 +29,10 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
     private AreaExperienceStripView _experience = null!;
     private int? _experienceProgress;
-    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the boards that continue the two strips to the frame's
-    // sides, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
+    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the board of the top strip's sliver, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
     private SteamwovenHudPlan? _plan;
     private Control _boards = null!, _bars = null!;
-    private SteamwovenBoardView _topBoard = null!, _bottomBoard = null!;
+    private SteamwovenBoardView _topBoard = null!;
     // ARC-UI-2576: the backdrop of the open menu window's family: one view per piece (two for a two-part window, SWI-BDR-5).
     // ARC-UI-2890: in the column mode a two-part window's wood has up to four pieces (the gap above and the gap below the window, each split in two).
     private readonly SteamwovenBoardView[] _backdrops = new SteamwovenBoardView[4];
@@ -205,13 +204,13 @@ public partial class AreaGameBarPanel : CanvasLayer
     private static (int Width, int Height, SteamwovenLayoutOptions Options, SteamwovenFullScreenPlan? Plan)? _columnMenuPlan;
 
     /// <summary>
-    /// ARC-UI-2891: the column-mode plan of the full-screen and two-strip menus for a window of <paramref name="size"/> (the 800 × 600 plate fitted to the window's height, black beside it), or null while the layout is
-    /// off (the HD option or the generated interface off), the column option is not set (<see cref="SteamwovenHud.Options"/>) or the window is below f = 0.25. Looked up once per size and options (the views ask several times a frame).
+    /// ARC-UI-2891: the plan of the full-screen and two-strip menus for a window of <paramref name="size"/> (the 800 × 600 plate fitted to the window's height, black beside it), or null while the layout is
+    /// off (the HD option or the generated interface off) or the window is below f = 0.25. Looked up once per size and options (the views ask several times a frame).
     /// </summary>
     public static SteamwovenFullScreenPlan? ColumnMenuPlan(Vector2 size)
     {
         var options = SteamwovenHud.Options;
-        if (!SteamwovenOn || options.Column is null) return null;
+        if (!SteamwovenOn) return null;
         var (width, height) = ((int)size.X, (int)size.Y);
         if (_columnMenuPlan is { } last && last.Width == width && last.Height == height && Equals(last.Options, options)) return last.Plan;
         var plan = SteamwovenColumnMenu.Plan(width, height, options);
@@ -221,11 +220,10 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2891: the place of a two-strip screen (the save and load lists, the pre-made, new-character and shop windows: an 800 × 600 screen whose 800 × 400 body lies between its own two strips,
-    /// <paramref name="bodyTopUnits"/> from its top). With the column option it is the fitted plate (the window's height from edge to edge, centred); otherwise the window zone's place (<see cref="ZoneScreen"/>);
-    /// null while the layout is off.
+    /// <paramref name="bodyTopUnits"/> from its top): the fitted plate (the window's height from edge to edge, centred); null while the layout is off.
     /// </summary>
     public static SteamwovenWindowPlace? TwoStripScreen(Vector2 size, int bodyTopUnits) =>
-        ColumnMenuPlan(size) is { } plan ? SteamwovenColumnMenu.Place(plan) : ZoneScreen(size, bodyTopUnits);
+        ColumnMenuPlan(size) is { } plan ? SteamwovenColumnMenu.Place(plan) : null;
 
     /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
     public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
@@ -290,7 +288,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// </summary>
     private void ApplyKitButtons()
     {
-        var set = _plan is { Column: not null } plan && Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
+        var set = _plan is { } plan && Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
         foreach (var rect in _buttons.Values)
         {
             var overlay = rect.GetNodeOrNull<TextureRect>("KitOverlay");
@@ -368,8 +366,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
         // ARC-UI-2452: under the strips, the boards of the Steamwoven layout (shown only while that layout is in use).
         _boards = new Control { Name = "Boards", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
-        _topBoard = new SteamwovenBoardView { Name = "TopBoard" }; _bottomBoard = new SteamwovenBoardView { Name = "BottomBoard" };
-        _boards.AddChild(_topBoard); _boards.AddChild(_bottomBoard);
+        _topBoard = new SteamwovenBoardView { Name = "TopBoard" };
+        _boards.AddChild(_topBoard);
         AddChild(_boards); MoveChild(_boards, 0);
         // ARC-UI-2461: the kit's strip art, under the strip roots (so the buttons and gauges stay over it) and over the generated boards; the kit's caps are placed over the strips below.
         _kitBoards = new SteamwovenKitView { Name = "KitBoards" };
@@ -613,8 +611,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>The scale the strips are drawn at, the same in both strips (the whole <see cref="Factor"/> unless the Steamwoven layout is on).</summary>
     public float StripScale => _strips[AreaBarStrip.Top].Scale.X;
     /// <summary>True while a board of the Steamwoven layout is painted on a worker.</summary>
-    internal bool BoardsPendingForSelfTest => _topBoard.Pending || _bottomBoard.Pending || _backdrops.Any(backdrop => backdrop.Pending);
-    internal (SteamwovenBoardView Top, SteamwovenBoardView Bottom, bool BackdropShown) BoardsForSelfTest => (_topBoard, _bottomBoard, _backdropLayer.Visible);
+    internal bool BoardsPendingForSelfTest => _topBoard.Pending || _backdrops.Any(backdrop => backdrop.Pending);
+    internal (SteamwovenBoardView Top, bool BackdropShown) BoardsForSelfTest => (_topBoard, _backdropLayer.Visible);
     /// <summary>ARC-UI-2576: the family the backdrop is for (null: none asked) and the views of its pieces that show now, with the pixel size of each one's painted texture.</summary>
     internal (SteamwovenBackdropFamily? Family, IReadOnlyList<(Vector2 Position, Vector2I Pixels)> Shown) BackdropForSelfTest =>
         (_backdropFamily, [.. _backdrops.Where(backdrop => backdrop.Visible).Select(backdrop => (backdrop.Position, backdrop.PixelSizeForSelfTest))]);
@@ -685,10 +683,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         // ARC-UI-2890: in the column mode the windows are centred in the column (the free width is the column's), the follower group stays on the strips' screen (ARC-UI-2925), the edge frame is the whole frame.
         var column = plan.Column;
         var topScreen = (new Vector2(plan.StripLeft, plan.TopStripY), scale, bottomEdge);
-        var (freeLeft, freeWidth) = column is { } c ? (c.Column.X, c.Column.Width) : (frame.X, frame.Width);
+        var (freeLeft, freeWidth) = (column.Column.X, column.Column.Width);
         // The insets first, then the screens and the edge frame: a subscriber of InsetsChanged that the edge frame's change wakes reads the new insets.
         SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? freeLeft : 0, Visible ? freeWidth : 0);
-        SetTopScreen(topScreen, column is null ? null : new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
+        SetTopScreen(topScreen, new Rect2(frame.X, frame.Y, frame.Width, frame.Height));
         UpdateSteamwovenParts(plan);
     }
 
@@ -709,32 +707,19 @@ public partial class AreaGameBarPanel : CanvasLayer
         _bars.Visible = Visible;
         var layout = plan.Layout;
         var scale = plan.StripScale;
-        // The grain continues the strips': a board's top left is where the strip's own top left lies, in units, from the strip (negative to its left and above).
-        var originX = (layout.Frame.X - plan.StripLeft) / scale;
         var (topRecipe, topLegacy, topW, topH) = ToneOf(AreaBarStrip.Top);
         var (bottomRecipe, bottomLegacy, bottomW, bottomH) = ToneOf(AreaBarStrip.Bottom);
-        var top = layout.Top.Band; var bottom = layout.Bottom.Band; var middle = layout.Middle.Band;
+        var middle = layout.Middle;
         // ARC-UI-2461: the strips from the kit where the set has all of a strip's parts; the generated wood sliver above the top strip is for the strip art of the pack only.
         var kitStrip = ApplyKitStrips(plan);
-        if (plan.Column is { } column)
-        {
-            // ARC-UI-2890: no wood sides. The strips stand in the column, and the only board is the sliver of the strip's wood above the top strip where its art is a little lower than the band (the original's 41 units are 147.6 px of the
-            // 150 px band): from the frame's top to a pixel under the strip's top, as wide as the column.
-            var sliver = Math.Min(plan.TopStripY - column.TopStrip.Y + 1, column.TopStrip.Height);
-            _bottomBoard.Visible = false;
-            _topBoard.Visible = !kitStrip.Top && plan.TopStripY > column.TopStrip.Y && sliver > 0;
-            if (_topBoard.Visible)
-                _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.None, Device(new PixelRect(column.TopStrip.X, column.TopStrip.Y, column.TopStrip.Width, sliver)), scale, 0, (column.TopStrip.Y - plan.TopStripY) / scale,
-                    topRecipe, topLegacy, topW, topH));
-        }
-        else
-        {
-            _topBoard.Visible = true; _bottomBoard.Visible = true;
-            if (top.Height > 0)
-                _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Bottom, Device(top), scale, originX, (top.Y - plan.TopStripY) / scale, topRecipe, topLegacy, topW, topH));
-            if (bottom.Height > 0)
-                _bottomBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Top, Device(bottom), scale, originX, (bottom.Y - plan.BottomStripY) / scale, bottomRecipe, bottomLegacy, bottomW, bottomH));
-        }
+        // ARC-UI-2890: no wood sides. The strips stand in the column, and the only board is the sliver of the strip's wood above the top strip where its art is a little lower than the band (the original's 41 units are 147.6 px of the
+        // 150 px band): from the frame's top to a pixel under the strip's top, as wide as the column.
+        var column = plan.Column;
+        var sliver = Math.Min(plan.TopStripY - column.TopStrip.Y + 1, column.TopStrip.Height);
+        _topBoard.Visible = !kitStrip.Top && plan.TopStripY > column.TopStrip.Y && sliver > 0;
+        if (_topBoard.Visible)
+            _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.None, Device(new PixelRect(column.TopStrip.X, column.TopStrip.Y, column.TopStrip.Width, sliver)), scale, 0, (column.TopStrip.Y - plan.TopStripY) / scale,
+                topRecipe, topLegacy, topW, topH));
         var bars = layout.Bars; var (width, height) = ((int)GetViewport().GetVisibleRect().Size.X, (int)GetViewport().GetVisibleRect().Size.Y);
         SetBar(_barRects[0], 0, 0, bars.Left, height);
         SetBar(_barRects[1], width - bars.Right, 0, bars.Right, height);
@@ -763,10 +748,9 @@ public partial class AreaGameBarPanel : CanvasLayer
             _backdrops[i].Request(new(piece.Material, ChromeSides.None, Device(piece.Rect), unit, piece.OriginX, piece.OriginY, tone.Recipe, tone.Legacy, tone.Width, tone.Height));
             _backdrops[i].Visible = _backdrops[i].Texture is not null && _backdrops[i].PixelSizeForSelfTest == new Vector2I(piece.Rect.Width, piece.Rect.Height);
         }
-        // ARC-UI-2890: in the column mode the layer also holds the dimmed world, so it shows with an open menu even where the window leaves no gap (16:9 at k = 1: no wood piece).
+        // ARC-UI-2890: the layer also holds the dimmed world, so it shows with an open menu even where the window leaves no gap (the fitted column: no wood piece).
         var count = kitTextures?.Count ?? pieces.Count;
-        var shown = count > 0 && _backdrops.Take(count).All(backdrop => backdrop.Visible);
-        _backdropLayer.Visible = plan.Column is not null ? _backdropFamily is not null && Visible && middle.Height > 0 && _backdrops.Take(count).All(backdrop => backdrop.Visible) : shown;
+        _backdropLayer.Visible = _backdropFamily is not null && Visible && middle.Height > 0 && _backdrops.Take(count).All(backdrop => backdrop.Visible);
         UpdateColumnParts(plan);
         // Holes follow the lens squares now showing; a hidden layer clears them (no stale holes for the next menu).
         if (_backdropLayer.Visible) ApplyBackdropHoles(); else foreach (var backdrop in _backdrops) backdrop.SetHoles([]);
@@ -789,7 +773,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// </summary>
     private (bool Top, bool Bottom) ApplyKitStrips(SteamwovenHudPlan plan)
     {
-        var set = plan.Column is not null && Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
+        var set = Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
         var boards = new List<(Texture2D, SteamwovenKitDraw)>();
         var caps = new List<(Texture2D, SteamwovenKitDraw)>();
         foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
@@ -815,7 +799,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? ApplyKitBackground(SteamwovenHudPlan plan, int middleHeight)
     {
         _kitBackground = [];
-        if (plan.Column is null || SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) return null;
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) return null;
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
         {
@@ -847,17 +831,17 @@ public partial class AreaGameBarPanel : CanvasLayer
     internal (SteamwovenKitStripPlan? Top, SteamwovenKitStripPlan? Bottom, IReadOnlyList<SteamwovenKitDraw> Background, SteamwovenKitView Boards, SteamwovenKitView Caps) KitForSelfTest =>
         (_kitStrips[AreaBarStrip.Top], _kitStrips[AreaBarStrip.Bottom], _kitBackground, _kitBoards, _kitCaps);
 
-    /// <summary>ARC-UI-2890: the caps of the column's strips (and of the middle band while a menu is open) and the dimmed world at the sides; nothing of it outside the column mode.</summary>
+    /// <summary>ARC-UI-2890: the caps of the column's strips (and of the middle band while a menu is open) and the dimmed world at the sides.</summary>
     private void UpdateColumnParts(SteamwovenHudPlan plan)
     {
         var frame = plan.Layout.Frame;
         var menuOpen = _backdropLayer.Visible;
-        _caps.Visible = plan.Column is not null && Visible;
+        _caps.Visible = Visible;
         // ARC-UI-2461: a strip drawn from the kit has its own caps; the generated ones stay for the other strip and for the open menu's middle band.
-        var generated = Visible ? [.. SteamwovenColumnEdges.Parts(plan, menuOpen).Where(part => !(plan.Column is { } c && ((_kitStrips[AreaBarStrip.Top] is not null && part == c.TopStrip) || (_kitStrips[AreaBarStrip.Bottom] is not null && part == c.BottomStrip))))] : new List<PixelRect>();
+        var generated = Visible ? [.. SteamwovenColumnEdges.Parts(plan, menuOpen).Where(part => !((_kitStrips[AreaBarStrip.Top] is not null && part == plan.Column.TopStrip) || (_kitStrips[AreaBarStrip.Bottom] is not null && part == plan.Column.BottomStrip)))] : new List<PixelRect>();
         _caps.Set(generated, SteamwovenColumnEdges.BrassWidth(plan), SteamwovenColumnEdges.ShadowWidth(plan), frame);
-        var worlds = plan.Column is { } column ? new[] { column.WorldLeft, column.WorldRight } : [];
-        var dim = plan.Column?.Mode.WorldDim ?? SteamwovenWorldDim.Default;
+        var worlds = new[] { plan.Column.WorldLeft, plan.Column.WorldRight };
+        var dim = plan.Column.Mode.WorldDim;
         _dimMaterial!.SetShaderParameter("darken", (float)dim.Darken);
         _dimMaterial.SetShaderParameter("desaturate", (float)dim.Desaturate);
         for (var i = 0; i < _dim.Length; i++)
@@ -870,7 +854,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
     }
 
-    /// <summary>ARC-UI-2890: the rectangles of the world dimmed now (empty with no menu open or outside the column mode), for the self-test.</summary>
+    /// <summary>ARC-UI-2890: the rectangles of the world dimmed now (empty with no menu open), for the self-test.</summary>
     internal IReadOnlyList<Rect2> DimmedWorldForSelfTest => [.. _dim.Where(dim => dim.Visible).Select(dim => new Rect2(dim.Position, dim.Size))];
     internal IReadOnlyList<PixelRect> CapsForSelfTest => _caps.Visible ? _caps.PartsForSelfTest : [];
 
