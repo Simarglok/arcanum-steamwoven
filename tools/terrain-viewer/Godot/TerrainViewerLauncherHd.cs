@@ -32,7 +32,17 @@ public partial class TerrainViewerApp
     {
         if (_launcherPanel is null) return;
         _launcherPanel.Hd = new LauncherHdLines(_gameSettings.HdInterface, _gameSettings.GeneratedInterface && _gameSettings.HdInterface, _gameSettings.HdPackSource,
-            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem);
+            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem,
+            _gameSettings.WorldZoomStep, SteamwovenWorldZoom.Cap(SteamwovenWorldScale()));
+    }
+
+    /// <summary>ARC-UI-3059: the world zoom of the Steamwoven look (0 = automatic, else a step the window offers), saved at once.</summary>
+    private void LauncherHdWorldZoom(int step)
+    {
+        if (step is < 0 or > SteamwovenWorldZoom.MaxStep || !SteamwovenWorldZoom.Offered(step, SteamwovenWorldScale())) return;
+        SaveGameSettings(_gameSettings with { WorldZoomStep = step });
+        GD.Print($"ARC-UI-3059 launcher world zoom={(step == 0 ? "auto" : step + "x")}");
+        LauncherHdProblem(GameSettingsProblem());
     }
 
     private void LauncherHd(bool on)
