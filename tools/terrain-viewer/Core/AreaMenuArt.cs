@@ -50,11 +50,6 @@ public static class AreaMenuArtLayout
         _ => null,
     };
 
-    /// <summary>ARC-DEV-344: true for the button windows whose background is the table scene (MainMenuBack 329 or SinglePlayerBack 331),
-    /// which the local 16:9 HD plate can replace: the main menu, single player, new game and the in-play menus. The options window (its
-    /// own wooden board 556) and every other window keep their own art.</summary>
-    public static bool UsesWidescreenPlate(AreaMenuWindow window) => Background(window) is MainArt or SinglePlayerArt;
-
     /// <summary>The place of the i-th label of <paramref name="size"/> on the 800 × 600 screen: its top-left is the button's point moved
     /// left by half the label's width (0x5469B3, the half rounded toward zero) and its size is the label's.</summary>
     public static (int X, int Y, int Width, int Height) Button(int slot, (int Width, int Height) size) => Button(AreaMenuWindow.Main, slot, size);

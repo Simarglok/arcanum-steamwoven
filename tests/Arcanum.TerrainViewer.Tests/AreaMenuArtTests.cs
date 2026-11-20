@@ -23,10 +23,6 @@ public sealed class AreaMenuArtTests
         Assert.AreEqual(329, AreaMenuArtLayout.Background(AreaMenuWindow.InPlay));
         Assert.AreEqual(329, AreaMenuArtLayout.Background(AreaMenuWindow.InPlayLimited));
         Assert.AreEqual(556, AreaMenuArtLayout.Background(AreaMenuWindow.Options), "MW1/MW7: window 6 OptionsMenuBack");
-        foreach (var window in new[] { AreaMenuWindow.Main, AreaMenuWindow.SinglePlayer, AreaMenuWindow.NewGame, AreaMenuWindow.InPlay, AreaMenuWindow.InPlayLimited })
-            Assert.IsTrue(AreaMenuArtLayout.UsesWidescreenPlate(window), "ARC-DEV-344: " + window + " takes the 16:9 plate");
-        foreach (var window in new[] { AreaMenuWindow.Options, AreaMenuWindow.PickCharacter, AreaMenuWindow.NewCharacter, AreaMenuWindow.CharacterEditor, AreaMenuWindow.Shop })
-            Assert.IsFalse(AreaMenuArtLayout.UsesWidescreenPlate(window), "ARC-DEV-344: " + window + " keeps its own art");
         Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.PickCharacter));
         Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.NewCharacter));
         CollectionAssert.AreEqual(new[] { 329, 331, 327, 556, 688, 671, 623, 667, 668, 27, 229 }, AreaMenuArtLayout.ArtNumbers.ToArray());

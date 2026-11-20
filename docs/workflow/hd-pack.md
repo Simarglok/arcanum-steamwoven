@@ -20,7 +20,7 @@ reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](
    synthetic tests. A task that needs to show a result links a local path or describes it in words.
 2. **Never replace the installed pack folder as a whole**, and never delete, move or re-create it. The installed
    pack holds work that no rebuild reproduces (the Codex repairs in the slices `character-hd114` and `interface-refinement02-soft`,
-   `recipe-refinement02.json`, the unlisted `main-menu-16x9.png`). Change it only with `hd_pack.py apply`, `menu-art`, `relayout`, `refresh` or `rollback`.
+   `recipe-refinement02.json`, the unlisted `main-menu-16x9.png`, which the game no longer reads, ARC-UI-3003). Change it only with `hd_pack.py apply`, `menu-art`, `relayout`, `refresh` or `rollback`.
 3. **Every command that writes is run with `--dry-run` first**, the output is read, and only then the real run.
    A command given to the owner was run with `--dry-run` or `--help` first (launch-check rule).
 4. **Build into staging, never into an installed pack or the iCloud copy.** Staging is
@@ -41,7 +41,7 @@ reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](
 | Code, format, this page, synthetic tests | repository | yes | `tools/hd-interface-import`, `tools/hd_pack`, `docs/` |
 | Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the pipeline scripts are in git: [`tools/hd_pack/res095/`](../../tools/hd_pack/res095/README.md) (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; ARC-DEV-341) and read and write only the main checkout's `local/res094`, `local/res095` |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
-| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `layout-map.tsv`, `INDEX.md`, `index.tsv`, `interface/<screen>/<kind>/` (the [layout](#pack-layout-arc-dev-376); before ARC-DEV-376 the folders `interface/`, `character-hd114/`, `refinement02/`), `main-menu-16x9.png` (outside the manifest) |
+| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `layout-map.tsv`, `INDEX.md`, `index.tsv`, `interface/<screen>/<kind>/` (the [layout](#pack-layout-arc-dev-376); before ARC-DEV-376 the folders `interface/`, `character-hd114/`, `refinement02/`), `main-menu-16x9.png` (outside the manifest; ignored by the game since ARC-UI-3003) |
 | Traced interface fonts (ARC-DEV-355) | `local/hd-font/out/<art>-<name>/` (frames, `font.json`, `receipt.json`) | **no** | local 4× coverage glyph frames from the player's own fonts, written by [`tools/hd_font`](hd-font.md); built into a **separate staging pack** `local/res095/pack-out/interface-fonts/` and added to the installed pack only by `apply --add-new` ([below](#traced-fonts-in-the-pack-arc-dev-361)), never by a rebuild of the pack |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
 | iCloud copy (ARC-DEV-349) | `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the folder keeps its own name `hd_pack`, the pack is `hd_pack/interface-redraw-4x`) | no | cross-device store inside the owner's Obsidian vault; a **mirror of the installed pack**, never a build target ([below](#icloud-copy-arc-dev-349)). It replaced the Google Drive copy (`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/`), which stays untouched, is no longer updated and is deleted only with the owner's say-so |
@@ -62,7 +62,7 @@ ARC-DEV-376 a pack that holds a `layout-map.tsv` at its root is laid out by it:
 
 ```text
 <pack>/
-  manifest.json  recipe-*.json  main-menu-16x9.png      as before (the menu PNG and recipes stay unlisted at the root)
+  manifest.json  recipe-*.json  main-menu-16x9.png      as before (the menu PNG, which the game ignores, and the recipes stay unlisted at the root)
   layout-map.tsv       art, screen, kind, folder: where every ART of the pack lives (the file the owner edits)
   INDEX.md             screens > kinds > ARTs with frame counts and sizes (generated, for reading)
   index.tsv            one line per frame: screen, kind, art, frame, path, Legacy and HD size, slice, alpha, review, sha12 (generated)
@@ -243,18 +243,10 @@ python3 -B tools/hd_pack/hd_pack.py verify --deep && python3 -B tools/hd_pack/hd
 - The device cache (`hd-cache`) converts the portraits too (about 80 MB more), which it does by itself a few seconds after the pack attaches.
 - A portrait whose bitmap changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; nothing else of the pack depends on portraits.
 
-### Replace the main-menu art
+### The main-menu art (retired)
 
-`main-menu-16x9.png` sits at the pack root outside the manifest, so `apply` never touches it and the importer never
-copies it ([contract](../formats/hd-pack.md#local-widescreen-main-menu-art)). Install it separately:
-
-```sh
-python3 -B tools/hd_pack/hd_pack.py menu-art --image PATH/main-menu-16x9.png --task ARC-UI-NNN --dry-run
-python3 -B tools/hd_pack/hd_pack.py menu-art --image PATH/main-menu-16x9.png --task ARC-UI-NNN
-```
-
-The header must be 8-bit RGB/RGBA, not interlaced, at most 3840 x 2160 and 40 MiB (opacity and registration stay the
-viewer's check). Keep the chosen source next to its prompt under `local/`, not in git.
+The game no longer reads `main-menu-16x9.png` (ARC-UI-3003, owner decision of [#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003), option C; [format note](../formats/hd-pack.md#widescreen-main-menu-art-retired)).
+Do not install a new one. `hd_pack.py menu-art` and its rollback still exist and are removed by [#3030](https://github.com/Simarglok/arcanum-steamwoven/issues/3030); an old `menu-art` backup can still be rolled back until then.
 
 ### Back up and roll back
 
@@ -293,43 +285,9 @@ listed and kept. After it, `status --installed <the iCloud copy> --allow-symlink
 shows the same manifest sha as the installed pack. Whether a second device has synced is a separate check on that
 device. Importing the copy on another device is `HdPackImport` (the format page), never a copy over a pack.
 
-### Which main-menu PNG the game loads (ARC-DEV-343)
+### Which main-menu PNG the game loads (ARC-DEV-343, retired)
 
-The menu picture is the file `main-menu-16x9.png` at the **root of the one active HD pack**; nothing else in the pack or
-elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`,
-`TerrainViewerApp.ConfigureVisualProfile`), checked on the owner's Mac on 2026-11-10:
-
-1. **It is used only when all of these hold:** the window is the main menu, the *HD* game setting is on
-   (the `hd` line of `arcanum.cfg`, ARC-UI-2174: the one HD setting, launcher row HD Off/On; an older file without it reads `hd interface`), an HD pack is active and not
-   `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
-   the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
-2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the launcher screen chooses
-   ([below](#hd-pack-source-arc-dev-350), ARC-DEV-350): by default (Auto) the iCloud pack folder when it is on this device and the pack in it
-   is whole, else the first pack that opens and is not `rejected` in the collection `user://hd-packs/` (the installed copy), then, **only for a
-   run of the Godot editor binary** (`Godot --path`, feature `editor`), the checkout's `local/hd-packs/` (the same iCloud folder by its symlink).
-   Before ARC-DEV-350 the game's own folder won over the iCloud copy and the packaged game never read the iCloud folder.
-3. **`user://` is not the same folder for the packaged game and for the source viewer.** The packaged game (feature
-   `steamwoven_package`) uses `~/Library/Application Support/Arcanum Steamwoven Game/`: there `hd-packs/interface-redraw-4x/`
-   (the pack this page maintains) holds the menu PNG, and `arcanum.cfg` says `hd=1` (older: `hd interface=1`; `game_settings_v1.json` says `hdInterface: true` before ARC-UI-1130). The viewer that
-   `./arcanum area` and `map` start (an export that is "not a packaged build") uses
-   `~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/`: on 2026-11-10 its `hd-packs/` held only the old
-   sprite pack `crash-site-full-4x` (no menu file) and `hd-packs-alt/` two older packs, and it has no `game_settings_v1.json`,
-   so *HD* is off there and the original menu art shows even though the installed pack has a new PNG. To see the
-   installed PNG in that viewer, start it with `ARC_HD_PACK` set to the installed pack and turn the *HD* option on.
-   Do not delete or edit those old folders to "fix" it; the owner decides. The two real runs of the packaged game on
-   2026-11-09/10 (`logs/godot*.log` in the game folder) logged `pack=interface-redraw-4x ... pack-source=1 of 1 found` and
-   `interface HD enabled=True`, so that is where the menu PNG came from, but the log of those builds did not name the file.
-4. **The log names the file** (added by ARC-DEV-343; the log has no path, only the outcome): when the main menu first draws
-   with the HD interface on, the viewer prints once per pack
-
-   ```
-   ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status=Used sha12=<12 hex> size=1664x936 pack=<id> manifest-sha12=<12 hex> pack-from=game-folder
-   ```
-
-   `status` is `Used`, or why it was refused (`NoFile` also covers an unreadable, symbolic-link, empty or oversized file, `PackRejected`, `BadHeader`, `WrongSize`, `BadImage`, `NotOpaque`);
-   `pack-from` is `game-folder` when the pack lies inside `user://hd-packs/` (also when `ARC_HD_PACK` points there) and `other-folder` otherwise. Compare `sha12` with the first
-   12 digits of `shasum -a 256 <pack>/main-menu-16x9.png`; the `menu-art` backup receipt names the same hashes. The older
-   startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
+None. Until ARC-UI-3003 the viewer read `main-menu-16x9.png` at the root of the active pack and logged an `ARC-DEV-343 main menu backdrop ...` line; the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`) and the log line are gone, and the table-scene menus draw the pack's 4× art (Steamwoven layout) or the original's whole-factor plate (generated interface off). Which *pack* is active is still chosen as described under [HD pack source](#hd-pack-source-arc-dev-350); the startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
 
 ### HD pack source (ARC-DEV-350)
 
@@ -342,7 +300,7 @@ applies at the **next start**, and the launcher screen's note says at once what 
 | **Game** | the game folder `user://hd-packs/` alone: the installed copy |
 | **Custom** | the folder chosen in the system folder dialog (a folder that holds `manifest.json` is the pack itself, any other is a folder of packs), then the game folder; entering Custom always opens the dialog, cancelling keeps the saved folder |
 
-*Whole* is a stat of every manifest file, the recipe and `main-menu-16x9.png` (when the folder has it): the file is there, has the manifest's byte
+*Whole* is a stat of every manifest file and the recipe (since ARC-UI-3003 the unlisted `main-menu-16x9.png` no longer counts): the file is there, has the manifest's byte
 size, and is **not online-only**. The manifest and every `*.json` of the pack folder are checked the same way **before** the pack is opened (opening
 reads and hashes them), so an evicted manifest is skipped without a download; every pack of a folder is tried, not only the first. A file the cloud provider keeps only in the cloud (macOS *Optimize Mac Storage*: `dataless` in `ls -lO`, read once
 per folder, or an old `.name.icloud` placeholder) counts as online-only, because reading it would make the game wait for a download in the middle of a
@@ -368,8 +326,8 @@ run opens no box.
 
 ### The second device and the iCloud copy (ARC-DEV-343, ARC-DEV-349)
 
-What `mirror` does for the menu PNG (code and `test_hd_pack.py`, not a live cloud run): the file is not in the manifest, but
-`mirror` copies **every** file of the source pack except `.DS_Store`, so `main-menu-16x9.png` and `recipe-refinement02.json`
+What `mirror` does for unlisted files such as `main-menu-16x9.png` (ignored by the game since ARC-UI-3003) and `recipe-refinement02.json` (code and `test_hd_pack.py`, not a live cloud run): they are not in the manifest, but
+`mirror` copies **every** file of the source pack except `.DS_Store`, so they
 travel with it; an unlisted file is compared by SHA-256 on every run (a listed one by the manifest's hash and size), so a
 `menu-art` change is noticed and copied. Run `mirror` after every `apply` and every `menu-art`, or the iCloud copy keeps the old picture.
 
@@ -467,10 +425,6 @@ merged PRs #872-#887; they are the working method, not a format.
 | Install | thread, **after the owner allows it and with the game closed** | `plan`, `apply --dry-run`, `apply` with a base, `verify --deep` |
 | Show the result in the game | thread | native check below; the owner judges the look |
 
-A new main-menu picture is made as a full-scene outpaint of a 1920 x 1080 guide with side bands masked, then cropped to
-1664 x 936 without touching the remaining pixels; a soft composite with the original pasted in the middle was rejected by
-the owner (2026-11-10). Keep guide, mask, prompt and result under `local/`.
-
 ## Diagnosing a graphics defect
 
 Reproduce on a clean `origin/main` build, then separate the layers before changing anything:
@@ -512,7 +466,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
   unless `--allow-symlink`, and refuses any symlink inside a pack.
 - **Superseded local scripts.** `local/res095/tools/rebuild_hd.sh` (now stubbed to refuse), `apply_update.sh`, `merge_update.py` and `full_hd.sh`
   are replaced by `stage`, `plan` and `apply`; they stay in `local/` as history only.
-- **Unlisted files.** `main-menu-16x9.png` and recipe files outside the entries are not copied by the importer or by
+- **Unlisted files.** Recipe files outside the entries (and the ignored `main-menu-16x9.png`) are not copied by the importer or by
   `HdPackImport`; a whole-folder replace silently loses them.
 - **Same file name, new content.** A local repair may keep a file's name while its content changes (the installed
   `combat_button-f0-…` differs from the same-named staged file by hash), so the name suffix is not the content hash.
