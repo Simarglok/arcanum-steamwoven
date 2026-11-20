@@ -31,6 +31,7 @@ except ImportError:  # run as a script
 HERE = Path(__file__).resolve().parent
 PROMPTS = HERE / "prompts"
 CUTOUTS_FILE = PROMPTS / "cutouts.json"
+TILE_PROMPTS = PROMPTS / "tiles"  # not in prompts/ itself: prompt_library.py check lists every *.txt there as a library prompt
 LAYOUT_W, LAYOUT_H = 800, 600
 SOURCE_BATCH = "style-anchors-contexts"
 TILE_BATCH = "style-anchors-tiles"
@@ -86,7 +87,7 @@ def check(spec: dict, masks: dict | None = None) -> list[str]:
         screen = masks["screens"].get(reference["screen"])
         if screen is None or reference["material"] not in screen["materials"]:
             problems.append(f"{tile['id']}: reference {reference} has no tone mask")
-        prompt = PROMPTS / f"{tile['id']}.txt"
+        prompt = TILE_PROMPTS / f"{tile['id']}.txt"
         if not prompt.is_file():
             problems.append(f"{tile['id']}: prompt file is missing")
         elif not prompt.read_text(encoding="utf-8").isascii():
@@ -140,7 +141,7 @@ def tiles_inbox(spec: dict, local_root: Path) -> dict:
         cutout = local_root / "material-sheet" / "cutouts" / f"{tile['from']}.png"
         if not cutout.is_file():
             raise CutoutError(f"missing cut-out {cutout}: run `cut` first")
-        text = common + "\n\n" + (PROMPTS / f"{tile['id']}.txt").read_text(encoding="utf-8")
+        text = common + "\n\n" + (TILE_PROMPTS / f"{tile['id']}.txt").read_text(encoding="utf-8")
         text.encode("ascii")
         (inbox / "prompts" / f"{tile['id']}.txt").write_text(text, encoding="utf-8")
         ref_dir = inbox / "refs" / tile["id"]
