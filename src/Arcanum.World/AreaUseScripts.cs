@@ -1258,7 +1258,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // ARC-DEV-265: the session holds the hero's arrays alone; another PC reads 0 (SessionScriptLimits.IsHero).
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
-    public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+    /// <summary>ARC-SCRIPT-2957 (ledger TQ32, addresses there): the interpreter's entry gate, which every object point of this host runs through (the other hosts answer false, #2988): an NPC (type 16) whose NPC flags (slot 69) carry the monster-generator bit 0x80000 runs no script and answers run default.</summary>
+    public bool IsMonsterGenerator(ScrObjectRef attachee) => Row(attachee) is { Type: 16 } row && Number(row, NpcFlagsSlot) is { } flags && (flags & MonsterGeneratorNpcFlag) != 0;
+    private const int NpcFlagsSlot = 69;
+    private const long MonsterGeneratorNpcFlag = 0x80000;
     // ARC-SCRIPT-047 / ARC-SCRIPT-2464: the dialog gates of a call-ex or call script callee on an NPC's dialog point (E6, TG5), all three read on the NPC's row of the shown map: dead as the session holds it (map data or killed),
     // surrendered as the session's danger record says (0x4AF210, <see cref="IsSurrendered"/>) and mind-controlled by bit 0x8000000 of the spell flags, field 0x14 (<see cref="IsMindControlled(AreaObjectRecord)"/>).
     // The gates are independent, as the dispatcher tests them one after the other. The PC, another map's object and anything that is not an NPC meet none.
