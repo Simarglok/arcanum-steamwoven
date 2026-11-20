@@ -1196,6 +1196,9 @@ public partial class TerrainViewerApp : Node
         ObserveControllerInput(@event);
         // ARC-DEV-2270: while the quit question asks, the game behind it takes no event (its panel answers keys and clicks).
         if (QuitAsking) return;
+        // ARC-UI-2936 (SWI-ORG-5): in the Original look the black sides are not part of the picture; a press there (the window delivers it with a position outside the virtual screen) is dropped, so it never
+        // reaches the world as a click on an unseen cell.
+        if (OriginalCompositionFactor > 0 && @event is InputEventMouseButton { Pressed: true } sidePress && !GetViewport().GetVisibleRect().HasPoint(sidePress.Position)) { GetViewport().SetInputAsHandled(); return; }
         if (IsWorld) { InputWorld(@event); return; }
         var before = _camera?.State;
         if (@event is InputEventMouseButton button)

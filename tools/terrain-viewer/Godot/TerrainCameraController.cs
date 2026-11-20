@@ -60,14 +60,22 @@ public sealed class TerrainCameraController
     public double ZoomFloor(Vector2 viewport) => viewport.X <= 0 || viewport.Y <= 0 ? CameraPolicy.MinimumZoom
         : WindowFloored && _bounds is { } b ? WorldZoomPolicy.WindowFloor(viewport.X, viewport.Y, b.Width, b.Height)
         : _overview is { } overview ? overview.Floor(viewport.X, viewport.Y) : CameraPolicy.MinimumZoom;
-    private double Floored(double zoom, Vector2 viewport) => Math.Max(zoom, ZoomFloor(viewport));
+    /// <summary>ARC-UI-2936: the factor between the player's zoom setting (<see cref="State"/>) and the camera's zoom on screen. 1 normally; in the Original look it is the virtual screen's whole factor over the setting's default,
+    /// so the default setting shows the original's 800 × 400 view and the zoom option keeps working from there.</summary>
+    public double ZoomScale { get; set; } = 1;
+    /// <summary>ARC-UI-2936: screen pixels the camera's focus (the actor) stands above the viewport's centre: in the Original look the play view is the 400-unit band between the strips, whose middle is above the screen's.</summary>
+    public double ViewShift { get; set; }
+    /// <summary>ARC-UI-2936: the screen height of the play view the world is seen through (the 400-unit band between the strips in the Original look); 0 = the whole viewport. The map edge clamp uses it, so the hero can reach the
+    /// map's edge inside the play view instead of stopping 100 world pixels short under a strip.</summary>
+    public double PlayHeight { get; set; }
+    private double Floored(double zoom, Vector2 viewport) => Math.Max(zoom, ZoomFloor(viewport) / ZoomScale);
 
     public void Fit(Vector2 viewport)
     {
         if (_bounds is null || viewport.X <= 64 || viewport.Y <= 64) return;
         var bounds = _bounds.Value;
         _state = CameraPolicy.Fit(bounds.X, bounds.Y, bounds.Width, bounds.Height, viewport.X, viewport.Y);
-        _state = _state with { Zoom = Floored(_state.Zoom, viewport) };
+        _state = _state with { Zoom = Floored(_state.Zoom / ZoomScale, viewport) };
         _center = new(_state.X, _state.Y);
         WantedCenter = _center;
         Held = false;
@@ -84,7 +92,7 @@ public sealed class TerrainCameraController
     private CameraBounds Bounds(Vector2 viewport)
     {
         var b = _bounds!.Value;
-        return new(new(b.X, b.Y), new((double)b.X + b.Width, (double)b.Y + b.Height), new(viewport.X, viewport.Y), _state.Zoom);
+        return new(new(b.X, b.Y), new((double)b.X + b.Width, (double)b.Y + b.Height), new(viewport.X, PlayHeight > 0 ? PlayHeight : viewport.Y), _state.Zoom * ZoomScale);
     }
     public void ResetWorld(Vec2 actor, Vector2 viewport, double zoom = 2)
     {
@@ -137,5 +145,12 @@ public sealed class TerrainCameraController
         _state = _state with { X = _center.X, Y = _center.Y, FitMode = false };
         Apply();
     }
-    private void Apply() { _camera.Position = new Vector2((float)_state.X, (float)_state.Y); _camera.Zoom = Vector2.One * (float)_state.Zoom; }
+    private void Apply()
+    {
+        var zoom = _state.Zoom * ZoomScale;
+        _camera.Position = new Vector2((float)_state.X, (float)_state.Y); _camera.Zoom = Vector2.One * (float)zoom;
+        _camera.Offset = new Vector2(0, (float)(ViewShift / zoom));
+    }
+    /// <summary>Applies a changed <see cref="ZoomScale"/> to the camera at once.</summary>
+    public void ReapplyZoom() => Apply();
 }

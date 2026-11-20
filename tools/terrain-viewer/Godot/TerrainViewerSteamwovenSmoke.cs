@@ -212,11 +212,23 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-2452 native steamwoven layout PASS sizes={checkedSizes}");
     }
 
-    // ARC-DEV-2672: the Original look for comparison: the HD option off (Legacy textures, no plan, the whole factor), every size of ARC_STEAMWOVEN_SIZES through the same logical render target, the inventory open and
-    // every window probe of VerifySteamwovenWindowsAsync, saved as steamwoven-legacy-WxH[-menu|-WINDOW]. No layout checks; the pass asserts the HD option is off and puts the settings back after it.
+    // ARC-DEV-2672, ARC-UI-2936: the Original look (the HD option off: Legacy textures, no plan) as the centred 4:3 composition: for each size of ARC_STEAMWOVEN_LEGACY_SIZES (default: the sizes of issue #2936 AC5 and the whole
+    // scales 1600x1200 and 3200x1800 for the pixel check) the window is a virtual screen of 800 n x 600 n pixels (n = ceil(s)), the strips stand at the whole factor n, the world is drawn at the composition's scale (the default zoom shows
+    // the original's 800 x 400 view), and the out-of-sight window is the fixed 800 x 400. The captures are the virtual screen reduced to s and placed on black at the size (what the window shows, composed in software), saved as
+    // steamwoven-legacy-WxH[-menu|-WINDOW]; ARC_STEAMWOVEN_LEGACY_BEFORE=1 also saves the old layout (a whole factor, windows fitted to the window) as steamwoven-legacy-before-WxH for the owner's comparison.
+    private static IReadOnlyList<Vector2I> LegacySizes()
+    {
+        var text = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LEGACY_SIZES");
+        if (string.IsNullOrWhiteSpace(text)) text = "3840x2160,2560x1440,1920x1080,2560x1600,1280x800,3440x1440,1024x768,1280x1024,1600x1200,3200x1800";
+        return text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => part.Split('x')).Where(parts => parts.Length == 2 && int.TryParse(parts[0], out _) && int.TryParse(parts[1], out _))
+            .Select(parts => new Vector2I(int.Parse(parts[0]), int.Parse(parts[1]))).ToList();
+    }
+
     private async Task CaptureSteamwovenLegacyAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
         var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        var (savedMode, savedAspect, savedContentSize, savedContentFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
         try
         {
             // As the settings stand with the HD option off: the generated interface goes with it (GeneratedInterface && HdInterface).
@@ -230,31 +242,70 @@ public partial class TerrainViewerApp
                 for (var wait = 0; wait < 1800 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
                 await frames(2);
             }
-            foreach (var size in SteamwovenSizes())
+            async Task EnterCompositionAsync(Vector2I size, bool composition)
             {
-                window.ContentScaleSize = size;
-                await FitWindowToRenderTargetAsync(panel, window, size, frames, require);
-                for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
-                require((Vector2I)window.GetVisibleRect().Size == size, $"[legacy] the viewport is {size}, got {window.GetVisibleRect().Size}");
+                _originalCompositionForced = composition; _originalCompositionTarget = composition ? size : null;
+                var (width, height) = composition ? OriginalComposition.VirtualSize(size.X, size.Y) : (size.X, size.Y);
+                if (!composition) { window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport; window.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore; window.ContentScaleFactor = 1; window.ContentScaleSize = size; }
+                else SyncOriginalComposition();
+                for (var wait = 0; wait < 240 && (Vector2I)window.GetVisibleRect().Size != new Vector2I(width, height); wait++) { SyncOriginalComposition(); await frames(1); }
+                require((Vector2I)window.GetVisibleRect().Size == new Vector2I(width, height), $"[legacy {size.X}x{size.Y}] the viewport is {width}x{height}, got {window.GetVisibleRect().Size}");
+                panel.Relayout();
                 await WaitSettledAsync();
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_LEGACY_BEFORE") == "1")
+                foreach (var size in LegacySizes())
+                {
+                    await EnterCompositionAsync(size, false);
+                    await CaptureHudAsync($"steamwoven-legacy-before-{size.X}x{size.Y}", frames);
+                    OpenInventory(); await frames(3); await WaitSettledAsync();
+                    await CaptureHudAsync($"steamwoven-legacy-before-{size.X}x{size.Y}-menu", frames);
+                    EndInventory(); await frames(3);
+                    await VerifySteamwovenWindowsAsync($"legacy-before-{size.X}x{size.Y}", null, panel, frames, WaitSettledAsync, require);
+                }
+            foreach (var size in LegacySizes())
+            {
+                await EnterCompositionAsync(size, true);
                 var tag = $"legacy-{size.X}x{size.Y}";
-                // The HD option is off: Legacy textures on the strips, no plan, no boards, the strips at the whole factor, the old insets.
+                var whole = OriginalComposition.WholeFactor(size.X, size.Y);
+                var (virtualWidth, virtualHeight) = OriginalComposition.VirtualSize(size.X, size.Y);
+                // AC1: the HD option is off (Legacy textures, no plan, no boards); one scale: the virtual screen is 800 n x 600 n and the strips stand at the whole factor n with the original's insets.
                 require(!InterfaceHd.Enabled && !AreaGameBarPanel.SteamwovenOn && panel.PlanForSelfTest is null && !panel.BoardsShownForSelfTest && InterfaceHd.FractionalScale is null,
                     $"[{tag}] the HD option is off: no Steamwoven layout, no plan");
-                require(Math.Abs(panel.StripScale - panel.Factor) < 1e-4f && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * panel.Factor && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * panel.Factor,
-                    $"[{tag}] the strips are at the whole factor {panel.Factor}, got {panel.StripScale}");
+                require(OriginalCompositionFactor == whole && panel.Factor == whole, $"[{tag}] the composition's whole factor is {whole}, got {OriginalCompositionFactor} (strips {panel.Factor})");
+                require(Math.Abs(panel.StripScale - whole) < 1e-4f && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * whole && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * whole,
+                    $"[{tag}] the strips are at the whole factor {whole}, got {panel.StripScale}, insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset}");
+                require(AreaGameBarPanel.TopInset + AreaGameBarPanel.BottomInset + 400 * whole == virtualHeight, $"[{tag}] the strips and the 400-unit play view fill the virtual screen's height {virtualHeight}");
                 foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
                     require(panel.GetNode<TextureRect>($"{strip}Strip/Art").Texture is { } art && art is not HdInterfaceTexture { IsHd: true }, $"[{tag}] the {strip} strip is drawn with Legacy art");
+                // AC3: the world is drawn at the composition's scale (the default zoom 2 shows the original's 800 x 400 view) and the out-of-sight window is the fixed 800 x 400.
+                if (_camera is not null)
+                {
+                    var expectedZoom = _camera.State.Zoom * whole / WorldZoomPolicy.DefaultZoom;
+                    require(Math.Abs(_camera.Camera.Zoom.X - expectedZoom) < 1e-4, $"[{tag}] the camera's zoom {_camera.Camera.Zoom.X} follows the player's setting {_camera.State.Zoom} at the factor {whole}");
+                    require(Math.Abs(_camera.PlayHeight - OriginalComposition.ViewHeight * whole) < 1e-6, $"[{tag}] the camera's map-edge clamp uses the play view's height {OriginalComposition.ViewHeight * whole}, got {_camera.PlayHeight}");
+                    if (_camera.State.Zoom == 2) require(Math.Abs(virtualWidth / _camera.Camera.Zoom.X - OriginalComposition.ViewWidth) < 1e-3, $"[{tag}] the view is {OriginalComposition.ViewWidth} world pixels wide at the default zoom");
+                }
+                if (AreaGameWindow() is { } outOfSight)
+                    require(outOfSight.Width == OriginalComposition.ViewWidth && outOfSight.Height == OriginalComposition.ViewHeight, $"[{tag}] the out-of-sight window is the fixed 800 x 400, got {outOfSight.Width}x{outOfSight.Height}");
+                // AC2: the strips are sampled with nearest pixels (the virtual screen is reduced to s by the window afterwards); their art nodes inherit it.
+                foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+                    require(panel.GetNode<Control>($"{strip}Strip").TextureFilter is CanvasItem.TextureFilterEnum.Nearest, $"[{tag}] the {strip} strip is sampled with nearest pixels");
+                // AC2: at a whole scale the picture is exactly the nearest-pixel one (every whole x whole block of the virtual screen's strips is uniform apart from the art's smooth parts).
+                if (Math.Abs(OriginalComposition.Scale(size.X, size.Y) - whole) < 1e-9) await CheckNearestBlocksAsync(tag, whole, panel, frames, require);
                 await CaptureHudAsync("steamwoven-" + tag, frames);
                 OpenInventory(); await frames(3); await WaitSettledAsync();
                 await CaptureHudAsync("steamwoven-" + tag + "-menu", frames);
                 EndInventory(); await frames(3);
                 await VerifySteamwovenWindowsAsync(tag, null, panel, frames, WaitSettledAsync, require);
-                GD.Print($"ARC-DEV-2672 steamwoven legacy {tag} factor={panel.Factor}");
+                GD.Print($"ARC-UI-2936 steamwoven legacy {tag} s={OriginalComposition.Scale(size.X, size.Y):F4} factor={whole} virtual={virtualWidth}x{virtualHeight}");
             }
         }
         finally
         {
+            _originalCompositionForced = null; _originalCompositionTarget = null;
+            SyncOriginalComposition();
+            window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleFactor = savedContentFactor; window.ContentScaleSize = savedContentSize;
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
@@ -264,6 +315,28 @@ public partial class TerrainViewerApp
             await frames(2);
         }
         require(InterfaceHd.Enabled && InterfaceHd.Generated, "[legacy] the HD option is back on after the Original-look pass");
+    }
+
+    /// <summary>AC2 (ARC-UI-2936): at a whole composition scale the virtual screen is shown as it is, so the Legacy strips are drawn with nearest pixels: each whole x whole block of the two strips is one colour. The art's smooth
+    /// overlays (text, gauges, portraits) blend at a block's edge only, so the share of uniform blocks is high; a bilinear or fractional draw would leave almost none.</summary>
+    private async Task CheckNearestBlocksAsync(string tag, int whole, AreaGameBarPanel panel, Func<int, Task> frames, Action<bool, string> require)
+    {
+        await frames(2);
+        using var image = GetViewport().GetTexture().GetImage();
+        require(image.GetWidth() == OriginalComposition.ScreenWidth * whole && image.GetHeight() == OriginalComposition.ScreenHeight * whole, $"[{tag}] the readback is the virtual screen");
+        var (uniform, total) = (0, 0);
+        foreach (var (top, bottom) in new[] { (0, AreaGameBarLayout.TopHeight), (AreaGameBarLayout.ScreenHeight - AreaGameBarLayout.BottomHeight, AreaGameBarLayout.ScreenHeight) })
+            for (var unitY = top; unitY < bottom; unitY++)
+                for (var unitX = 0; unitX < AreaGameBarLayout.ScreenWidth; unitX += 3)
+                {
+                    var first = image.GetPixel(unitX * whole, unitY * whole);
+                    var same = true;
+                    for (var dy = 0; dy < whole && same; dy++) for (var dx = 0; dx < whole && same; dx++) same = image.GetPixel(unitX * whole + dx, unitY * whole + dy).IsEqualApprox(first);
+                    total++; if (same) uniform++;
+                }
+        var share = total == 0 ? 0 : uniform / (double)total;
+        GD.Print($"ARC-UI-2936 legacy {tag} nearest blocks uniform={uniform}/{total} share={share:F3}");
+        require(share >= 0.85, $"[{tag}] the Legacy strips are drawn with nearest pixels at the whole scale {whole} ({share:P1} of the blocks are uniform)");
     }
 
     // ARC-UI-2890 (AC2, AC3, AC4): the play screen of the column mode. The strips stand in the column (the original's width at the strips' scale), no wood sides are drawn (the only board is the sliver above the top strip),

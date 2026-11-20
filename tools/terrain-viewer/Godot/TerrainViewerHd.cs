@@ -219,6 +219,66 @@ public partial class TerrainViewerApp
         HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
         SyncInterfaceLayout();
+        SyncOriginalComposition();
+    }
+
+    /// <summary>ARC-UI-2936: whether the window draws the Original look as the centred 4:3 composition: the HD interface option is off, no launcher screen is open and the run is not an automated one (those read the plain
+    /// window pixels) unless <see cref="_originalCompositionForced"/> (the composition smoke).</summary>
+    internal bool OriginalCompositionWanted => _originalCompositionForced is { } forced ? forced
+        : !InterfaceHd.Enabled && _launcher is null && !_nativeSmoke && !SelfTestBootstrap && GetViewport() == GetWindow();
+
+    /// <summary>Null: the viewer decides (<see cref="OriginalCompositionWanted"/>); the composition smoke sets it.</summary>
+    internal bool? _originalCompositionForced;
+
+    /// <summary>The composition smoke's render target: the composition is laid out for this size instead of the real window's (a window cannot have the size of a 4K target on every screen); the picture on screen is the same virtual screen.</summary>
+    internal Vector2I? _originalCompositionTarget;
+
+    /// <summary>The virtual screen's whole factor now in force (0: none, the window draws at its own size).</summary>
+    internal int OriginalCompositionFactor { get; private set; }
+
+    /// <summary>ARC-UI-2936: per frame, the window's content scale follows the look. In the composition the window is a virtual screen of 800 n × 600 n pixels (n = ceil(s), viewport mode, aspect keep): every interface part keeps
+    /// its whole-factor layout at n, the world is drawn at the composition's scale, Godot centres the picture, reduces it smoothly to s and leaves the rest black, and the pointer is mapped back by the window. The
+    /// camera's zoom follows the same factor (<see cref="OriginalComposition.ZoomScale"/>).</summary>
+    private void SyncOriginalComposition()
+    {
+        var window = GetWindow();
+        var wanted = OriginalCompositionWanted;
+        var size = _originalCompositionTarget ?? window.Size;
+        var factor = wanted && size.X > 0 && size.Y > 0 ? OriginalComposition.WholeFactor(size.X, size.Y) : 0;
+        var virtualSize = factor == 0 ? Vector2I.Zero : new Vector2I(OriginalComposition.ScreenWidth * factor, OriginalComposition.ScreenHeight * factor);
+        var contentSet = window.ContentScaleMode == Window.ContentScaleModeEnum.Viewport && window.ContentScaleAspect == Window.ContentScaleAspectEnum.Keep && window.ContentScaleSize == virtualSize;
+        var changed = factor != OriginalCompositionFactor;
+        if (changed || (factor != 0 && !contentSet))
+        {
+            if (factor == 0)
+            {
+                window.ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
+                window.ContentScaleSize = Vector2I.Zero;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.ContentScaleFactor = 1;
+            }
+            else
+            {
+                window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.ContentScaleFactor = 1;
+                window.ContentScaleSize = virtualSize;
+            }
+            // The picture beside the virtual screen is the window's clear colour: black while the composition stands, the project's colour again after it.
+            if (changed) RenderingServer.SetDefaultClearColor(factor == 0 ? (Color)ProjectSettings.GetSetting("rendering/environment/defaults/default_clear_color", new Color(0.3f, 0.3f, 0.3f)) : Colors.Black);
+            OriginalCompositionFactor = factor;
+            if (changed) { _gameBarPanel?.Relayout(); GD.Print($"ARC-UI-2936 original composition factor={factor} window={size.X}x{size.Y}"); }
+        }
+        // The camera after the window: the viewport the new content scale gives is not read until the next frame, so the camera is told it.
+        var (zoomScale, viewShift) = factor == 0 ? (1.0, 0.0) : (OriginalComposition.ZoomScale(factor), OriginalComposition.ViewShift(factor));
+        var playHeight = factor == 0 ? 0.0 : (double)OriginalComposition.ViewHeight * factor;
+        if (_camera is not null && (_camera.ZoomScale != zoomScale || _camera.ViewShift != viewShift || _camera.PlayHeight != playHeight))
+        {
+            _camera.ZoomScale = zoomScale; _camera.ViewShift = viewShift; _camera.PlayHeight = playHeight;
+            var viewport = factor != 0 ? new Vector2(virtualSize.X, virtualSize.Y) : GetViewport() == window ? new Vector2(window.Size.X, window.Size.Y) : WorldViewport;
+            if (IsWorld && _readyActorPlan is not null) _camera.ResizeWorld(WorldAnchor, viewport);
+            else _camera.ReapplyZoom();
+        }
     }
 
     private SteamwovenLayoutChoice? _appliedInterfaceLayout;
