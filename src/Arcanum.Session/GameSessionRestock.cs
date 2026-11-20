@@ -348,7 +348,7 @@ public sealed partial class GameSessionOwner
     {
         if (plan.Outcome == SessionRestockOutcome.Unsupported) return new(plan.Holder, plan.Outcome, 0, 0, null, [], 0, 0);
         // ARC-SCRIPT-2879 (0x463B30 → 0x467860, RK5): each deleted item leaves the list with its remove-item script (28) run, the holder as the triggerer, then it is destroyed.
-        var removals = new PassRemovals(this, world.ItemScriptHost, map);
+        var removals = new PassRemovals(this, world.ItemScriptHost, map, npc => world.NpcWieldScripts(map, npc));
         foreach (var item in plan.Deleted)
         {
             removals.Run(plan.Holder, item, PassItemPoints(map, item));
