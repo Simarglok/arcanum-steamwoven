@@ -616,7 +616,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         // ARC-UI-2510: the screen the portraits hang in (the top strip's top left, its bottom edge) and the frame the windows are centred in.
         var bottomEdge = plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale;
         var frame = plan.Layout.Frame;
-        // ARC-UI-2890: in the column mode the windows are centred in the column (the free width is the column's), the screen of the followers hangs from the frame's left edge, the edge frame is the whole frame.
+        // ARC-UI-2890: in the column mode the windows are centred in the column (the free width is the column's), the follower group stays on the strips' screen (ARC-UI-2925), the edge frame is the whole frame.
         var column = plan.Column;
         var topScreen = (new Vector2(plan.StripLeft, plan.TopStripY), scale, bottomEdge);
         var (freeLeft, freeWidth) = column is { } c ? (c.Column.X, c.Column.Width) : (frame.X, frame.Width);

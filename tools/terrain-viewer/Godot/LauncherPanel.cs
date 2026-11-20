@@ -30,7 +30,7 @@ public partial class LauncherPanel : CanvasLayer
     private CheckBox _holdToQuit = null!;
     private HBoxContainer _hd1 = null!;
     private HBoxContainer _hdGenerated = null!;
-    // ARC-UI-2890: the layout of the generated interface (column, column thin, full width).
+    // ARC-UI-2890: the layout of the generated interface (column, full width).
     private HBoxContainer _hdLayout = null!;
     private HBoxContainer _hdPack = null!;
     private Label _hdNote = null!;

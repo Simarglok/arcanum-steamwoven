@@ -388,8 +388,8 @@ public partial class TerrainViewerApp
             for (var slot = 0; slot < 6; slot++)
                 require(portraits.FrameForSelfTest("smoke:" + slot) is { } slotFrame && Near(slotFrame.Rect, 11, 50 + 62 * slot, 40, 49), $"[{tag}] follower slot {slot} stands at (11, {50 + 62 * slot}) of the composition (got {portraits.FrameForSelfTest("smoke:" + slot)?.Rect})");
             // The button stands on the bottom strip's top left corner: its left edge is the column's, its bottom edge the strip's top (unit 441, AreaGameBarLayout.BottomTop), at every window size.
-            require(portraits.ButtonScreenRectForSelfTest("toggle") is { } corner && Math.Abs(corner.Position.X - column.Column.X) <= 1.01f && Math.Abs(corner.End.Y - (origin.Y + AreaGameBarLayout.BottomTop * scale)) <= 1.01f,
-                $"[{tag}] the show/hide button stands on the bottom strip's top left corner (x {column.Column.X}, bottom {origin.Y + AreaGameBarLayout.BottomTop * scale}); got {portraits.ButtonScreenRectForSelfTest("toggle")}");
+            require(portraits.ButtonScreenRectForSelfTest("toggle") is { } corner && Math.Abs(corner.Position.X - column.Column.X) <= 1.01f && Math.Abs(corner.End.Y - plan.BottomStripY) <= 1.01f,
+                $"[{tag}] the show/hide button stands on the bottom strip's top left corner (x {column.Column.X}, bottom {plan.BottomStripY}); got {portraits.ButtonScreenRectForSelfTest("toggle")}");
             for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
             await CaptureHudAsync("steamwoven-" + tag + "-followers", frames);
             require(Math.Abs(portraits.OriginForSelfTest.X - column.Column.X) <= 1e-3f, $"[{tag}] the follower group's left edge is the column's at {column.Column.X} (got {portraits.OriginForSelfTest.X})");
