@@ -62,10 +62,24 @@ public sealed class ViewerSettingsConfigTests
     }
 
     [TestMethod]
+    public void The_world_zoom_line_reads_auto_or_a_step_and_anything_else_as_auto()
+    {
+        // ARC-UI-3059: auto (the default), or a whole step 1 to 4.
+        Assert.AreEqual(0, AreaGameSettings.Defaults.WorldZoomStep);
+        foreach (var step in new[] { 1, 2, 3, 4 }) Assert.AreEqual(step, ViewerSettingsConfig.ReadGame(Lines($"world zoom={step}\n")).WorldZoomStep);
+        foreach (var text in new[] { "auto", "0", "5", "-1", "2.5", "x", "" }) Assert.AreEqual(0, ViewerSettingsConfig.ReadGame(Lines($"world zoom={text}\n")).WorldZoomStep, text);
+        Assert.AreEqual(0, ViewerSettingsConfig.ReadGame(Lines("difficulty=1\n")).WorldZoomStep);
+        var changes = ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults with { WorldZoomStep = 3 });
+        Assert.AreEqual("3", changes.Single(c => c.Name == ViewerSettingsConfig.WorldZoom).Value);
+        Assert.AreEqual("auto", ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults).Single(c => c.Name == ViewerSettingsConfig.WorldZoom).Value);
+        Assert.AreEqual(2, ViewerSettingsConfig.ReadGame(Lines(string.Join("\n", changes.Select(c => $"{c.Name}={c.Value}")) .Replace("world zoom=3", "world zoom=2") + "\n")).WorldZoomStep);
+    }
+
+    [TestMethod]
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\ninterface layout=full-width\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\ninterface layout=full-width\nworld zoom=auto\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));

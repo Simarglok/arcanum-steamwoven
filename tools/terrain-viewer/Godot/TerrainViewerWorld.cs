@@ -138,7 +138,11 @@ public partial class TerrainViewerApp
     }
     private readonly DiagnosticInputSettingsStore _worldStore = new();
     private readonly DiagnosticZoomSettingsStore _worldZoomStore = new();
-    private double _worldPreferredZoom = 2;
+    private double _worldStoredZoom = 2;
+    /// <summary>The zoom new maps open at: in the Steamwoven look the whole step the game setting resolves to at the window's scale (ARC-UI-3059), else the diagnostic preference.</summary>
+    private double _worldPreferredZoom { get => SteamwovenWorldZoomActive ? SteamwovenWorldZoomStep : _worldStoredZoom; set => _worldStoredZoom = value; }
+    private double? _worldDriveZoom;
+    private bool _steamwovenZoomWasActive;
     private bool _worldFitView;
     private bool _worldZoomPending;
     private bool _worldZoomSaveFailed;
@@ -199,7 +203,7 @@ public partial class TerrainViewerApp
         // Do not change the host window for the isolated SubViewport harness.
         if (GetViewport() == GetWindow()) GetWindow().ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
         _worldSettings = _worldStore.Load();
-        _worldPreferredZoom = _worldZoomStore.Load();
+        _worldStoredZoom = _worldZoomStore.Load();
         // ARC-WORLD-016: the PC's AREA steps are admitted against the shown map's companions.
         _worldActor.AreaOccupancy = AreaPcOccupancy;
         // ARC-WORLD-074: outside combat mode the PC steps through living NPCs and companions (the owner's decision 2026-10-21).
@@ -290,7 +294,9 @@ public partial class TerrainViewerApp
     // Preferences only: the scene, actor and Follow are not reset (Reset scene is separate).
     private void ResetWorldSettings()
     {
-        SaveWorldSettings(DiagnosticWorldPolicy.DefaultInputSettings); SetPreferredWorldZoom(2);
+        SaveWorldSettings(DiagnosticWorldPolicy.DefaultInputSettings);
+        // ARC-UI-3059: in the Steamwoven look the reset leaves the player's world zoom setting alone (it resets the diagnostic preference only).
+        if (SteamwovenWorldZoomActive) { _worldStoredZoom = WorldZoomPolicy.DefaultZoom; _worldZoomPending = true; FlushWorldZoom(); } else SetPreferredWorldZoom(2);
         _worldPanel?.Bind(_worldSettings);
         _worldPanel?.SetActionStatus("Preferences reset to defaults (input false/false, zoom 2.00); scene unchanged.");
     }
@@ -343,6 +349,7 @@ public partial class TerrainViewerApp
     private void ApplyPreferredWorldZoom(double value, bool continuous)
     {
         if (!double.IsFinite(value) || _camera is null) return;
+        if (SteamwovenWorldZoomActive) { ApplySteamwovenWorldZoom(value); return; }
         var shown = _camera.State.Zoom;
         _camera.SetWorldZoom(value, WorldAnchor, WorldViewport); _worldFitView = false;
         // ARC-RENDER-032: a window's floor limits the shown zoom, not the preference other maps open at; a held trigger at the
@@ -351,6 +358,16 @@ public partial class TerrainViewerApp
         _worldPreferredZoom = _camera.WindowFloored ? WorldZoomPolicy.Absolute(_worldPreferredZoom, value) : _camera.State.Zoom;
         _worldZoomPending = true; _worldZoomSaveFailed = false; _worldZoomSettled = 0;
         if (!continuous) FlushWorldZoom();
+        BindWorldZoom(); RefreshReadyStatus();
+    }
+    /// <summary>ARC-UI-3059: in the Steamwoven look a zoom request (the palette, the held zoom trigger) picks the nearest whole step the window offers and keeps it as the game setting.</summary>
+    private void ApplySteamwovenWorldZoom(double value)
+    {
+        var step = SteamwovenWorldZoom.Snap(value, SteamwovenWorldScale());
+        // A request for the step already shown leaves the setting as it is (automatic stays automatic).
+        if (step != SteamwovenWorldZoomStep) SaveGameSettings(_gameSettings with { WorldZoomStep = step });
+        _worldFitView = false;
+        SyncSteamwovenWorldZoom();
         BindWorldZoom(); RefreshReadyStatus();
     }
     private void StepPreferredWorldZoom(double factor) => SetPreferredWorldZoom(WorldZoomPolicy.Step(_camera!.State.Zoom, factor));
@@ -362,7 +379,7 @@ public partial class TerrainViewerApp
     private void FlushWorldZoom()
     {
         if (!_worldZoomPending) return;
-        try { _worldZoomStore.Save(_worldPreferredZoom); _worldZoomPending = false; _worldZoomSaveFailed = false; }
+        try { _worldZoomStore.Save(_worldStoredZoom); _worldZoomPending = false; _worldZoomSaveFailed = false; }
         catch (InvalidOperationException) { _worldZoomSaveFailed = true; }
         BindWorldZoom();
     }
@@ -550,8 +567,17 @@ public partial class TerrainViewerApp
             if (actorActive || cameraActive || !triggerHeld)
                 _camera!.UpdateWorld(WorldAnchor, actor, pan, actorActive, cameraActive, WorldViewport);
             var drive = intents.Sum(intent => intent.ZoomDrive);
-            var zoom = WorldZoomPolicy.Advance(_camera!.State.Zoom, drive, delta);
-            if (zoom != _camera.State.Zoom) ApplyPreferredWorldZoom(zoom, true);
+            if (SteamwovenWorldZoomActive)
+            {
+                // ARC-UI-3059: the held trigger runs a free zoom that only the nearest whole step shows; it starts again from the step shown.
+                if (drive == 0) _worldDriveZoom = null;
+                else ApplyPreferredWorldZoom((_worldDriveZoom = WorldZoomPolicy.Advance(_worldDriveZoom ?? _camera!.State.Zoom, drive, delta)).Value, true);
+            }
+            else
+            {
+                var zoom = WorldZoomPolicy.Advance(_camera!.State.Zoom, drive, delta);
+                if (zoom != _camera.State.Zoom) ApplyPreferredWorldZoom(zoom, true);
+            }
             SettleWorldZoom(delta, drive != 0);
             RefreshReadyStatusPerFrame(delta);
         }

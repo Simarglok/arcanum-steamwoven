@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 /// <summary>ARC-UI-143, ARC-UI-2174: the HD lines of the launcher screen: HD (Off or On: the HD interface art and fonts and the relit lighting together),
 /// the HD pack source (where the interface pack is read from) and the experimental generated interface (honoured only while HD is On), with the note
 /// saying what the next start reads. The host keeps the settings, the screen only shows and asks.</summary>
-public readonly record struct LauncherHdLines(bool Hd, bool Generated, HdPackSourceMode Pack, string Note, SteamwovenLayoutChoice Layout = SteamwovenLayoutChoices.Default);
+public readonly record struct LauncherHdLines(bool Hd, bool Generated, HdPackSourceMode Pack, string Note, SteamwovenLayoutChoice Layout = SteamwovenLayoutChoices.Default, int WorldZoom = 0, int WorldZoomCap = SteamwovenWorldZoom.MaxStep);
 
 /// <summary>
 /// ARC-UI-014: the launcher screen before the original main menu (research ARC-RES-074 task 2): why it shows, the settings file's
@@ -32,6 +32,7 @@ public partial class LauncherPanel : CanvasLayer
     private HBoxContainer _hdGenerated = null!;
     // ARC-UI-2890: the layout of the generated interface (column, full width).
     private HBoxContainer _hdLayout = null!;
+    private HBoxContainer _hdZoom = null!;
     private HBoxContainer _hdPack = null!;
     private Label _hdNote = null!;
     private LauncherHdLines _hd = new(false, false, HdPackSourceMode.Auto, "");
@@ -57,6 +58,8 @@ public partial class LauncherPanel : CanvasLayer
     public event Action<bool>? HdRequested;
     public event Action<bool>? HdGeneratedRequested;
     public event Action<SteamwovenLayoutChoice>? HdLayoutRequested;
+    /// <summary>ARC-UI-3059: the Steamwoven world zoom row asked for 0 (auto) or a whole step.</summary>
+    public event Action<int>? HdWorldZoomRequested;
     public event Action<HdPackSourceMode>? HdPackRequested;
     /// <summary>ARC-DEV-074: "Install from GOG installer…" pressed; the host checks the tool, then calls <see cref="PickInstaller"/>.</summary>
     public event Action? InstallRequested;
@@ -78,6 +81,8 @@ public partial class LauncherPanel : CanvasLayer
         "HD: " + Chosen(_hd1), "HD pack: " + Chosen(_hdPack), "Generated interface: " + Chosen(_hdGenerated), _hdNote.Text,
         // ARC-UI-2890: appended, so the numbers above stay.
         "Interface layout: " + Chosen(_hdLayout),
+        // ARC-UI-3059: appended, so the numbers above stay.
+        "World zoom: " + Chosen(_hdZoom),
     ];
     private static string Chosen(HBoxContainer row) => row.GetChildren().OfType<Button>().FirstOrDefault(button => button.ButtonPressed)?.Text ?? "none";
     internal bool HdEnabledForSelfTest => !_hd1.GetChildren().OfType<Button>().First().Disabled;
@@ -85,6 +90,9 @@ public partial class LauncherPanel : CanvasLayer
     internal void HdForSelfTest(bool on) => HdRequested?.Invoke(on);
     internal void HdGeneratedForSelfTest(bool on) => HdGeneratedRequested?.Invoke(on);
     internal void HdLayoutForSelfTest(SteamwovenLayoutChoice choice) => HdLayoutRequested?.Invoke(choice);
+    internal void HdWorldZoomForSelfTest(int step) => HdWorldZoomRequested?.Invoke(step);
+    /// <summary>The labels of the zoom row's buttons that are enabled (the steps the window offers, after Auto).</summary>
+    internal IReadOnlyList<string> HdWorldZoomEnabledForSelfTest => _hdZoom.GetChildren().OfType<Button>().Where(button => !button.Disabled).Select(button => button.Text).ToArray();
     internal bool HdLayoutEnabledForSelfTest => !_hdLayout.GetChildren().OfType<Button>().First().Disabled;
     internal void HdPackForSelfTest(HdPackSourceMode mode) => HdPackRequested?.Invoke(mode);
     internal bool PlayEnabledForSelfTest => !_play.Disabled;
@@ -151,6 +159,7 @@ public partial class LauncherPanel : CanvasLayer
         _hdPack = MakeChoiceRow("HdPack", "HD pack:", dark, ["Auto", "Game", "Custom"], index => HdPackRequested?.Invoke((HdPackSourceMode)index));
         _hdGenerated = MakeChoiceRow("HdGenerated", "Generated interface (experimental):", dark, ["Off", "On"], index => HdGeneratedRequested?.Invoke(index == 1));
         _hdLayout = MakeChoiceRow("HdLayout", "Interface layout (generated):", dark, ["Column", "Full width"], index => HdLayoutRequested?.Invoke((SteamwovenLayoutChoice)index));
+        _hdZoom = MakeChoiceRow("HdWorldZoom", "World zoom (generated):", dark, ["Auto", "1x", "2x", "3x", "4x"], index => HdWorldZoomRequested?.Invoke(index));
         _hdNote = Line(new Color(.3f, .3f, .3f));
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
@@ -165,7 +174,7 @@ public partial class LauncherPanel : CanvasLayer
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdGenerated, _hdLayout, _hdNote, _showAtStart, _holdToQuit, _debugMode, actions, _notice, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdGenerated, _hdLayout, _hdZoom, _hdNote, _showAtStart, _holdToQuit, _debugMode, actions, _notice, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -236,6 +245,10 @@ public partial class LauncherPanel : CanvasLayer
             // ARC-UI-2890: the layout is read only while the generated interface is on.
             Mark(_hdLayout, (int)_hd.Layout);
             foreach (var button in _hdLayout.GetChildren().OfType<Button>()) button.Disabled |= !_hd.Hd || !_hd.Generated;
+            // ARC-UI-3059: the world zoom is read only with the generated interface; the steps above the window's cap are not offered (Auto is index 0, step n is index n).
+            Mark(_hdZoom, Math.Clamp(_hd.WorldZoom, 0, SteamwovenWorldZoom.MaxStep));
+            var zoomIndex = 0;
+            foreach (var button in _hdZoom.GetChildren().OfType<Button>()) { button.Disabled |= !_hd.Hd || !_hd.Generated || zoomIndex > _hd.WorldZoomCap; zoomIndex++; }
             _hdNote.Text = _hd.Note;
             _hdNote.Visible = _hd.Note.Length > 0;
         }

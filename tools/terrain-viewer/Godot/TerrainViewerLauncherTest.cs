@@ -273,6 +273,15 @@ public partial class TerrainViewerApp
             _launcherPanel.HdLayoutForSelfTest(SteamwovenLayoutChoice.FullWidth);
             Require(Lines()[12] == "Interface layout: Full width" && new GameSettingsStore(false).Load() is { InterfaceLayout: SteamwovenLayoutChoice.FullWidth }
                     && System.IO.File.ReadAllText(gameSettingsPath).Contains("interface layout=full-width", StringComparison.Ordinal), "Full width is saved at once: " + Lines()[12]);
+            // ARC-UI-3059: the world zoom row (Auto by default, read with the generated interface): 1x is always offered and is saved at once; a step the window does not offer is refused; Auto clears it.
+            Require(Lines()[13] == "World zoom: Auto" && _launcherPanel.HdWorldZoomEnabledForSelfTest.Contains("Auto") && _launcherPanel.HdWorldZoomEnabledForSelfTest.Contains("1x"), "the zoom row shows Auto and offers 1x: " + Lines()[13]);
+            _launcherPanel.HdWorldZoomForSelfTest(1);
+            Require(Lines()[13] == "World zoom: 1x" && new GameSettingsStore(false).Load() is { WorldZoomStep: 1 }
+                    && System.IO.File.ReadAllText(gameSettingsPath).Contains("world zoom=1", StringComparison.Ordinal), "1x is saved at once: " + Lines()[13]);
+            _launcherPanel.HdWorldZoomForSelfTest(9);
+            Require(new GameSettingsStore(false).Load() is { WorldZoomStep: 1 }, "a step that does not exist is refused");
+            _launcherPanel.HdWorldZoomForSelfTest(0);
+            Require(Lines()[13] == "World zoom: Auto" && System.IO.File.ReadAllText(gameSettingsPath).Contains("world zoom=auto", StringComparison.Ordinal), "Auto is saved at once: " + Lines()[13]);
             // The next launcher shows what was saved, and the start's own reading finds the same values.
             _gameSettings = AreaGameSettings.Defaults;
             await Start(true);

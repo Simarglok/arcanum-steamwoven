@@ -128,6 +128,7 @@ public partial class TerrainViewerApp
                     var plan = panel.PlanForSelfTest;
                     Require(expected is not null && plan is not null && plan.Layout == expected.Layout && plan.StripLeft == expected.StripLeft, $"[{tag}] the panel is laid out by the plan");
                     var layout = plan!.Layout;
+                    if (variant == "column") await VerifySteamwovenWorldZoomAsync(tag, size, plan.StripScale, frames, Require);
                     // The strips: one scale, placed by the plan; the insets are the middle band's, so every docked window lies in it.
                     Require(Math.Abs(panel.StripScale - (float)plan.StripScale) < 1e-4f, $"[{tag}] both strips are drawn at the plan's scale {plan.StripScale:F4} (got {panel.StripScale})");
                     // ARC-UI-2696: the strips' generated wood is painted at the scale it is drawn at, as the boards' is (one texel per device pixel): else the strips' wood is softer than the boards' beside it.
