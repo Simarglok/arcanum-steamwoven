@@ -39,6 +39,7 @@ public partial class TerrainViewerApp
             require(image.SavePng($"{capture}-{name}.png") == Error.Ok, "the capture saved: " + name);
         }
         var checkedCases = 0;
+        string? syntheticKit = null;
         try
         {
             _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
@@ -66,6 +67,13 @@ public partial class TerrainViewerApp
             {
                 var options = SteamwovenLayoutOptions.ColumnOriginal;
                 SteamwovenHud.Options = options;
+                if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_SYNTHETIC") == "1")
+                {
+                    // ARC-UI-2461: every step the sizes need, written before the store reads any (a step is read once).
+                    syntheticKit = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-menu-").FullName;
+                    foreach (var step in ColumnMenuSizes().Select(size => SteamwovenColumnMenu.Plan(size.X, size.Y, options)!.Layout.Step).Distinct()) WriteSyntheticKitSet(syntheticKit, step);
+                    SteamwovenKitStore.UseRoot(syntheticKit);
+                }
                 foreach (var screen in screens)
                 {
                     screen.Open();
@@ -84,6 +92,8 @@ public partial class TerrainViewerApp
                         await frames(2);
                         await CheckColumnCaseAsync(tag, layout, screen.Sides(), screen.Plate() ?? throw new InvalidOperationException($"[{tag}] the {screen.Name} view is not drawn"),
                             panel.FrameBackdropForSelfTest.Shown, screen.Name is "main" or "options" ? art : null, frames, require);
+                        // ARC-UI-2461: with the synthetic kit the full-screen menus draw its plates.
+                        if (syntheticKit is not null && screen.Name is "main" or "options") await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
                         await SaveAsync($"column-{tag}");
                         checkedCases++;
                     }
@@ -107,6 +117,11 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            if (syntheticKit is not null)
+            {
+                SteamwovenKitStore.ClearOverride();
+                try { System.IO.Directory.Delete(syntheticKit, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + syntheticKit); }
+            }
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
             SteamwovenHud.Options = savedOptions;
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };

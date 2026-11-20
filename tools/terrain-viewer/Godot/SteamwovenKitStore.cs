@@ -1,0 +1,177 @@
+using Arcanum.Presentation.Steamwoven;
+using Arcanum.TerrainViewer.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+/// <summary>
+/// ARC-UI-2461 (SWI-RUN-2, SWI-RUN-3, SWI-RUN-5): the viewer's holder of the baked Steamwoven kit: it finds the folder of the baked sets (<see cref="SteamwovenKitRoot"/>), reads the set of a step once, and loads a part's PNG into a texture
+/// the first time it is drawn. A set, a part or a file that does not read gives null, never an exception, and the caller draws the generated chrome (SWI-RUN-3). Only the open window's background and the plate of the open menu stay
+/// resident: <see cref="Retain"/> drops every other background and plate, and a change of step drops the old step's textures. The strips, their caps and the buttons' faces stay loaded.
+/// </summary>
+internal static class SteamwovenKitStore
+{
+    private static readonly Dictionary<SteamwovenStep, SteamwovenKitSet?> Sets = [];
+    private static readonly Dictionary<string, Texture2D?> Textures = [];
+    private static readonly HashSet<string> Reported = [];
+    private static string? _rootOverride;
+    private static bool _overridden;
+    private static string? _root;
+    private static bool _resolved;
+    private static SteamwovenStep? _current;
+    private static readonly Dictionary<string, HashSet<string>> Retained = [];
+
+    /// <summary>True in an automated run (a smoke or the self-test): the kit is then read only from <c>ARC_STEAMWOVEN_KIT</c> or a smoke's own override, so a kit baked in the owner's checkout cannot change what the other smokes see.</summary>
+    public static bool AutomatedRun { get; set; }
+
+    /// <summary>The folder of the baked sets for this run, or null when there is none or the kit is turned off (<c>ARC_STEAMWOVEN_KIT=off</c>).</summary>
+    public static string? Root
+    {
+        get
+        {
+            if (_overridden) return _rootOverride;
+            if (_resolved) return _root;
+            _resolved = true;
+            var env = System.Environment.GetEnvironmentVariable(SteamwovenKitRoot.EnvName);
+            if (AutomatedRun && string.IsNullOrWhiteSpace(env)) { _root = null; return null; }
+            string?[] starts = [System.IO.Directory.GetCurrentDirectory(), System.AppContext.BaseDirectory, ProjectSettings.GlobalizePath("res://"), System.IO.Path.GetDirectoryName(OS.GetExecutablePath())];
+            _root = SteamwovenKitRoot.Resolve(env, starts.Where(start => start is not null)!, [ProjectSettings.GlobalizePath("user://steamwoven-ui/baked")]);
+            return _root;
+        }
+    }
+
+    /// <summary>The smoke's own folder (a synthetic kit), or none; the sets and textures read so far are forgotten.</summary>
+    public static void UseRoot(string? root)
+    {
+        (_overridden, _rootOverride) = (true, root);
+        Reset();
+    }
+
+    /// <summary>Back to the folder the environment and the checkout say.</summary>
+    public static void ClearOverride()
+    {
+        (_overridden, _rootOverride) = (false, null);
+        Reset();
+    }
+
+    /// <summary>Forgets every set and texture (a rebaked kit is read again).</summary>
+    public static void Reset()
+    {
+        // The textures are not disposed: a node may still draw one, and the engine frees it with its last reference.
+        Sets.Clear(); Reported.Clear(); Textures.Clear(); Retained.Clear(); _current = null;
+    }
+
+    /// <summary>The baked set of a step, read once; null with no folder, no manifest or a manifest of another step.</summary>
+    public static SteamwovenKitSet? SetFor(SteamwovenStep step)
+    {
+        // A step is the only one in memory (SWI-RUN-5): when the step in use changes, every other step's textures go.
+        if (_current != step) { _current = step; DropOtherSteps(step); }
+        if (Sets.TryGetValue(step, out var known)) return known;
+        var root = Root;
+        SteamwovenKitSet? set = null;
+        if (root is not null)
+        {
+            set = SteamwovenKitSet.Read(root, step, out var problem);
+            if (problem is not null && Reported.Add("set:" + step)) GD.Print("ARC-UI-2461 kit: " + problem);
+        }
+        Sets[step] = set;
+        return set;
+    }
+
+    private static void DropOtherSteps(SteamwovenStep step)
+    {
+        // The keys are file paths; the set of a step is a folder of its own beside the others.
+        var folder = Root is { } root ? System.IO.Path.Combine(root, SteamwovenKitSet.FolderName(step)) + System.IO.Path.DirectorySeparatorChar : null;
+        foreach (var key in Textures.Keys.Where(key => folder is null || !key.StartsWith(folder, StringComparison.Ordinal)).ToList())
+            Drop(key);
+    }
+
+    private static string Key(SteamwovenKitSet set, string id) => set.PathOf(id);
+
+    private static void Drop(string key)
+    {
+        Textures.Remove(key);
+    }
+
+    /// <summary>The texture of a part of the set, loaded on first use and checked against the manifest's size; null (reported once) when the file does not read or is another size.</summary>
+    public static Texture2D? Texture(SteamwovenKitSet set, string id)
+    {
+        if (!set.TryGet(id, out var part)) return null;
+        var key = Key(set, id);
+        if (Textures.TryGetValue(key, out var cached)) return cached;
+        Texture2D? texture = null;
+        try
+        {
+            var image = Image.LoadFromFile(set.PathOf(id));
+            if (image is null || image.GetWidth() != part.Width || image.GetHeight() != part.Height)
+            {
+                if (Reported.Add(key)) GD.Print($"ARC-UI-2461 kit: {id} is not {part.Width} x {part.Height}; the generated chrome is drawn for it");
+            }
+            else
+            {
+                if (image.GetFormat() != Image.Format.Rgba8) image.Convert(Image.Format.Rgba8);
+                texture = ImageTexture.CreateFromImage(image);
+            }
+        }
+        catch (Exception exception)
+        {
+            if (Reported.Add(key)) GD.Print($"ARC-UI-2461 kit: {id} did not load ({exception.Message})");
+        }
+        Textures[key] = texture;
+        return texture;
+    }
+
+    /// <summary>SWI-RUN-5: <paramref name="owner"/> (the open window's background, the open menu's plate) says which <c>backdrop.</c> parts of <paramref name="set"/> it holds now; every <c>backdrop.</c> texture no owner holds is released.</summary>
+    public static void Retain(string owner, SteamwovenKitSet set, IReadOnlyCollection<string> ids)
+    {
+        Retained[owner] = [.. ids];
+        foreach (var id in set.Ids)
+        {
+            if (!id.StartsWith("backdrop.", StringComparison.Ordinal) || Retained.Values.Any(held => held.Contains(id))) continue;
+            Drop(Key(set, id));
+        }
+    }
+
+    /// <summary>How many textures are resident now, for the self-test (SWI-RUN-5).</summary>
+    public static IReadOnlyList<string> ResidentForSelfTest => [.. Textures.Where(pair => pair.Value is not null).Select(pair => pair.Key)];
+}
+
+/// <summary>
+/// ARC-UI-2461: draws kit parts into their device rectangles: the strip art, the end caps, the hardware layers. The parts are exact when the baked pixels are the device pixels (sampled nearest, SWI-LAY-5) and scaled otherwise (linear);
+/// the whole view takes one sampling, nearest only while every part in it is exact. A part's clipped rectangle is the window's part of it: a cap beyond the window's edge is cut, not squeezed.
+/// </summary>
+internal sealed partial class SteamwovenKitView : Control
+{
+    private readonly List<(Texture2D Texture, SteamwovenKitDraw Draw)> _items = [];
+
+    public SteamwovenKitView()
+    {
+        MouseFilter = MouseFilterEnum.Ignore;
+        SetAnchorsPreset(LayoutPreset.TopLeft);
+    }
+
+    /// <summary>The parts drawn now, for the self-test.</summary>
+    internal IReadOnlyList<SteamwovenKitDraw> DrawsForSelfTest => [.. _items.Select(item => item.Draw)];
+
+    /// <summary>True when every part drawn is exact (the view is sampled nearest).</summary>
+    internal bool AllExact => _items.All(item => item.Draw.Exact);
+
+    public void Set(IReadOnlyList<(Texture2D Texture, SteamwovenKitDraw Draw)> items, Vector2 windowSize)
+    {
+        Position = Vector2.Zero; Size = windowSize;
+        _items.Clear(); _items.AddRange(items);
+        TextureFilter = _items.Count == 0 || AllExact ? TextureFilterEnum.Nearest : TextureFilterEnum.Linear;
+        QueueRedraw();
+    }
+
+    public override void _Draw()
+    {
+        foreach (var (texture, draw) in _items)
+        {
+            var (rect, clip) = (draw.Rect, draw.Clip);
+            if (clip.Width <= 0 || clip.Height <= 0 || rect.Width <= 0 || rect.Height <= 0) continue;
+            var (sx, sy) = ((float)texture.GetWidth() / rect.Width, (float)texture.GetHeight() / rect.Height);
+            DrawTextureRectRegion(texture, new Rect2(clip.X, clip.Y, clip.Width, clip.Height), new Rect2((clip.X - rect.X) * sx, (clip.Y - rect.Y) * sy, clip.Width * sx, clip.Height * sy));
+        }
+    }
+}

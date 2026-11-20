@@ -36,8 +36,8 @@ public partial class TerrainViewerApp
         {
             // "before" is the whole-factor layout of the generated interface as it was (captured for the owner's comparison; no layout checks).
             // ARC-UI-2890: "column" is the fitted column mode and "column-wood" the unfitted one (the original's strip width, k = 1, the world at the sides).
-            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, "column" => SteamwovenLayoutOptions.ColumnFitted, "column-wood" => SteamwovenLayoutOptions.ColumnOriginal, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
-            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, column, column-wood, before, legacy or TOP-BOTTOM master px");
+            var options = name switch { "thin" or "before" or "legacy" => SteamwovenLayoutOptions.Default, "original" => SteamwovenHud.Original, "column" or "kit" => SteamwovenLayoutOptions.ColumnFitted, "column-wood" => SteamwovenLayoutOptions.ColumnOriginal, _ => SteamwovenHud.ParseOptions(name.Replace('-', ',')) };
+            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not thin, original, column, column-wood, kit, before, legacy or TOP-BOTTOM master px");
             list.Add((name, options));
         }
         return list;
@@ -85,6 +85,13 @@ public partial class TerrainViewerApp
             {
                 SteamwovenHud.Options = options;
                 panel.Relayout();
+                if (variant == "kit")
+                {
+                    // ARC-UI-2461: the kit runtime on a synthetic kit, at the same sizes.
+                    await CaptureSteamwovenKitAsync(panel, window, frames, Require);
+                    SteamwovenHud.Options = options;
+                    continue;
+                }
                 if (variant == "legacy")
                 {
                     await CaptureSteamwovenLegacyAsync(panel, window, frames, Require);

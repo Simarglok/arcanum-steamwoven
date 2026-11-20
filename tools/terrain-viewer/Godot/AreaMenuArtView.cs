@@ -189,7 +189,18 @@ public partial class AreaMenuArtView : Control
         if (_background is null || _font is null) return;
         var width = (float)AreaMenuArtLayout.ScreenWidth;
         var height = (float)AreaMenuArtLayout.ScreenHeight;
-        DrawTextureRect(_background, new Rect2(0, 0, width, height), false);
+        // ARC-UI-2461 (SWI-BDR-6): the kit's plate for this menu's background, when the set has it at the composition's size; the plate is the 800 × 600 composition itself.
+        // SWI-LAY-5: the plate is sampled nearest where its baked pixels are the device pixels (a canvas texture of its own, so the labels and controls keep the view's linear sampling), else linear.
+        if (KitPlatePart() is { } kit && SteamwovenKitStore.Texture(kit.Set, kit.Part.Id) is { } kitPlate)
+        {
+            SteamwovenKitStore.Retain("plate", kit.Set, [kit.Part.Id]);
+            DrawTextureRect(KitPlateTexture(kitPlate, kit.Part), new Rect2(0, 0, width, height), false);
+        }
+        else
+        {
+            if (FullScreenPlan is { } plan && SteamwovenKitStore.SetFor(plan.Layout.Step) is { } held) SteamwovenKitStore.Retain("plate", held, []);
+            DrawTextureRect(_background, new Rect2(0, 0, width, height), false);
+        }
         DrawControls();
         for (var i = 0; i < _labels.Count; i++)
         {
@@ -203,6 +214,31 @@ public partial class AreaMenuArtView : Control
                 AreaArtTextDraw.Glyphs(this, _font, glyphs, x + dx, y + dy, colour, blend);
             }
         }
+    }
+
+    private CanvasTexture? _plateTexture;
+
+    /// <summary>The texture the plate is drawn with: the kit's own when it is drawn scaled, a nearest-sampled canvas texture of it when its pixels are the device pixels.</summary>
+    private Texture2D KitPlateTexture(Texture2D texture, SteamwovenKitPart part)
+    {
+        var exact = FullScreenPlan is { } plan && part.Width == plan.Zone.Width && part.Height == plan.Zone.Height;
+        if (!exact) return texture;
+        if (_plateTexture is null || _plateTexture.DiffuseTexture != texture) _plateTexture = new CanvasTexture { DiffuseTexture = texture, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
+        return _plateTexture;
+    }
+
+    /// <summary>ARC-UI-2461: true when the kit plate drawn now is sampled nearest (its baked pixels are the device pixels), for the self-test.</summary>
+    internal bool KitPlateExactForSelfTest => KitPlatePart() is { } kit && FullScreenPlan is { } plan && kit.Part.Width == plan.Zone.Width && kit.Part.Height == plan.Zone.Height;
+
+    /// <summary>ARC-UI-2461: the id of the kit plate this menu draws now, for the self-test (null: the pack's or the original's plate).</summary>
+    internal string? KitPlateForSelfTest => KitPlatePart()?.Part.Id;
+
+    /// <summary>ARC-UI-2461: the kit set and the plate part this menu draws instead of its pack or original background (the Steamwoven layout on, the set holding that menu's plate at the composition's size); null for the pack's or the original's.</summary>
+    private (SteamwovenKitSet Set, SteamwovenKitPart Part)? KitPlatePart()
+    {
+        if (FullScreenPlan is not { } plan || _window is not { } window || AreaMenuArtLayout.Background(window) is not { } art) return null;
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set || SteamwovenKitComposer.Plate(set, art) is not { } part) return null;
+        return (set, part);
     }
 
     /// <summary>ARC-UI-061: the frame an arrow shows (GB4): down while held with the pointer over it, lit under the pointer when none is
