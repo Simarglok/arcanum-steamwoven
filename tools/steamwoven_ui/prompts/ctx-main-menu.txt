@@ -1,5 +1,5 @@
 CONTEXT IMAGE - MAIN MENU (FULL-SCREEN PLATE)
-Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 menu screen, upscaled as a layout guide).
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 menu screen, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
 
 Redraw the whole 800 x 600 menu screen as one painted still life, dark and dramatic, lit by lamps. This is a full-screen plate: no strips, no HUD.
 - Centre: a tall upright carved-wood tablet in a dark carved frame with gilded brass moulding and a reddish-brown wood panel inside, standing on a round stepped wooden plinth. The inner panel is empty (the game draws the menu entries).

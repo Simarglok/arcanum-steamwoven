@@ -1,5 +1,5 @@
 CONTEXT IMAGE - SCHEMATIC WINDOW
-Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled as a layout guide).
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
 
 Redraw the whole composition with the schematic window open: top strip, the schematic window in the middle zone, bottom strip.
 - One single background in the middle zone: a dark streaked wood left side holding a round portrait lens (empty glass, brass ring), two round brass sockets with a gear-and-arrowhead mechanism and a rolled scroll mechanism, and a lower brass control with a round centre button and two small side arrows.

@@ -188,7 +188,9 @@ def png_size(path: Path) -> tuple[int, int]:
 def reference_files(local_root: Path, prompt_id: str, slot: str, batches: dict) -> list[Path]:
     """Where the reference of a slot lives for the prompts of the style anchors (their own screen or the approved contexts)."""
     if slot == "original":
-        return sorted((local_root / "refs").glob(f"{prompt_id}-*.png"))
+        # a context screen is refined from its upscaled original as the one IMAGE TO EDIT (ARC-RES-2455); other parts get what their prefix holds
+        guide = sorted((local_root / "refs").glob(f"{prompt_id}-guide-*.png"))
+        return guide or sorted((local_root / "refs").glob(f"{prompt_id}-*.png"))
     if slot == "context":
         return sorted((local_root / "outbox" / "style-anchors-contexts").glob("ctx-*.png"))
     return []

@@ -1,5 +1,5 @@
 CONTEXT IMAGE - PLAY SCREEN (HUD)
-Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen, upscaled as a layout guide).
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
 
 Redraw the whole play-screen composition: the top strip (41 of 600 units high), the world area in the middle (400 units) and the bottom strip (159 units).
 - The world area is not part of the interface: keep it a calm, dark, neutral ground (a flat, dark, dusk-lit earth tone with no detail. Ignore whatever the reference shows there: it is only a placeholder). Do not paint a scene into it and do not redraw it as art; it only shows where the strips end.

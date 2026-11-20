@@ -1,0 +1,63 @@
+{
+  "note": "Masks of the tone check (SWI-GEN-9, tone_check.py). Coordinates are rectangles [x0, y0, x1, y1] of the 800 x 600 layout. 'exclude' is content of the ORIGINAL that the redraw leaves empty (text fields, portrait lens, the schematic picture, items in slots, counters); 'skip_rows' are rows left out; a material is a colour class read on the unblurred ORIGINAL pixel inside 'zone' and outside 'not_zone' (no zone = the whole screen). Classes: wood, brass, paper (see tone_check.CLASSES).",
+  "strip_counters": [[58, 505, 158, 535], [8, 574, 52, 596], [743, 574, 790, 596]],
+  "screens": {
+    "ctx-hud": {
+      "strips": true,
+      "skip_rows": [41, 441],
+      "materials": {
+        "wood": {"class": "wood", "zone": [[0, 0, 800, 41], [0, 441, 800, 600]]},
+        "brass": {"class": "brass", "zone": [[0, 0, 800, 41], [0, 441, 800, 600]]}
+      }
+    },
+    "ctx-inventory": {
+      "strips": true,
+      "exclude": [[5, 45, 100, 145], [120, 65, 352, 122], [375, 48, 430, 85], [690, 105, 797, 268], [148, 255, 215, 332], [60, 208, 80, 342], [155, 368, 215, 435], [25, 358, 75, 430], [248, 370, 342, 425]],
+      "materials": {"wood": {"class": "wood"}, "brass": {"class": "brass"}}
+    },
+    "ctx-character": {
+      "strips": true,
+      "exclude": [[120, 50, 482, 134], [127, 155, 170, 302], [257, 155, 300, 302], [168, 148, 242, 312], [311, 148, 390, 312], [408, 165, 486, 299], [22, 312, 482, 438], [515, 168, 572, 190], [515, 232, 577, 255], [515, 297, 572, 320], [515, 363, 592, 386], [757, 108, 786, 128], [753, 405, 782, 425], [558, 322, 590, 352]],
+      "materials": {
+        "wood": {"class": "wood", "not_zone": [[503, 103, 737, 427]]},
+        "iron": {"class": "wood", "zone": [[503, 103, 737, 427]]},
+        "brass": {"class": "brass"}
+      }
+    },
+    "ctx-logbook": {
+      "strips": true,
+      "exclude": [[20, 62, 122, 162]],
+      "materials": {
+        "paper": {"class": "paper", "zone": [[203, 75, 700, 410]]},
+        "wood": {"class": "wood", "not_zone": [[203, 75, 700, 410]]},
+        "brass": {"class": "brass"}
+      }
+    },
+    "ctx-schematic": {
+      "strips": true,
+      "exclude": [[47, 62, 145, 162], [217, 73, 702, 158], [267, 193, 515, 408], [577, 218, 682, 390]],
+      "materials": {
+        "parchment": {"class": "paper", "zone": [[198, 50, 712, 425]]},
+        "wood": {"class": "wood", "not_zone": [[198, 50, 712, 425]]},
+        "brass": {"class": "brass"}
+      }
+    },
+    "ctx-reading": {
+      "strips": true,
+      "exclude": [[20, 62, 122, 162]],
+      "materials": {
+        "paper": {"class": "paper", "zone": [[203, 75, 700, 410]]},
+        "wood": {"class": "wood", "not_zone": [[203, 75, 700, 410]]},
+        "brass": {"class": "brass"}
+      }
+    },
+    "ctx-main-menu": {
+      "strips": false,
+      "exclude": [[300, 145, 505, 330]],
+      "materials": {
+        "wood": {"class": "wood", "zone": [[283, 67, 537, 447]]},
+        "brass": {"class": "brass", "zone": [[250, 40, 580, 480]]}
+      }
+    }
+  }
+}

@@ -9,7 +9,7 @@
     "height"
   ],
   "reference_slots": {
-    "original": "the original art of the screen or part, scaled to the master size as a layout guide (original art is a Codex input, owner decision 2026-11-16)",
+    "original": "the original art of the screen or part, scaled to the master size, given as the image to edit and as the layout truth (original art is a Codex input, owner decision 2026-11-16)",
     "context": "the approved context image (whole screen) or a crop of it that shows where the part is used",
     "sheet": "the approved material sheet or the swatch of this part's material",
     "plate": "the approved button plate that a state overlay belongs to"
