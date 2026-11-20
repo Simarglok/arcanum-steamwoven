@@ -1520,14 +1520,14 @@ Moved here from the owner test checklist of 2026-11-14 (item A4). The scope was 
 | --- | --- | --- | --- |
 | 1 | With the HD interface on, look at the glyphs **W, 3, 2, S** on the world map at 2560×1440. | The glyphs have no ragged edges. | open |
 
-## ARC-DEV-343 — Main menu backdrop and the HD mirror (PR #917, 2026-11-10)
+## ARC-DEV-343 — HD mirror (PR #917, 2026-11-10; the main-menu backdrop part retired by ARC-UI-3003)
 
 Moved here from the owner test checklist of 2026-11-14 (item A5). The docs now name the **iCloud** copy as the default destination of `mirror` (it replaced the Google Drive copy, which stays untouched); say which one your terminal reads. Question for the owner: do you want a separate `hd_pack.py` command that installs the pack on another device (today the iCloud copy is carried over by hand)?
 
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | In a terminal that can read the pack folders run `python3 -B tools/hd_pack/hd_pack.py mirror --dry-run`. | It shows what it would copy and nothing is changed. | open |
-| 2 | Start the game with "HD interface" on. | The game log has one line `ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status=Used ...`. | open |
+| 2 | Start the game with "HD interface" on. | Moot since ARC-UI-3003 (the game no longer reads `main-menu-16x9.png` and logs no such line). | cannot-test (moot) |
 
 ## ARC-UI-1574 — Reload after death (optional, PR #1645, 2026-11-13)
 
