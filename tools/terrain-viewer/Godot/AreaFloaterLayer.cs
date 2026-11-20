@@ -7,28 +7,27 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-021 (ledger CH10–CH11): the floating lines over the AREA view under every interface layer. ARC-DEV-156 (B28): drawn in the
 /// original's font art 229 (the text font, in the floater's colour, with the fade as the blit's opacity, CH10–CH11) when the layer
-/// has it (<see cref="AreaFloaterLayer(AreaArtFontFace?)"/>), else in the viewer's font. Each object's lines stand in a 200 px box over
+/// has it (<see cref="AreaFloaterLayer(AreaArtFontFace?)"/>); without it (no game folder) the lines are laid out at a nominal size and nothing is drawn: no Godot font stands in (ARC-UI-2940). Each object's lines stand in a 200 px box over
 /// the point its owner gives (<see cref="Anchor"/>: the screen point 90 px above the object's tile centre, at the view's zoom), centred, at their offset from the box's top and with their fade;
 /// the text and the box keep the original's pixels at any zoom, drawn at the screen's whole factor (ARC-UI-2289). Nothing is drawn at level 0 or for an object without a point (off the
 /// shown map); its lines keep rising.
 /// </summary>
 public partial class AreaFloaterLayer : CanvasLayer
 {
-    public const int FontSize = 14;
-    private static readonly Color Outline = new(0, 0, 0);
-    private readonly Font _font = ThemeDB.FallbackFont;
+    /// <summary>ARC-UI-2940: the line height and the advance of a glyph used to lay the lines out when there is no font (art 229's line height and an average advance).</summary>
+    private const int NominalLineHeight = 15, NominalAdvance = 6;
     private readonly AreaArtFontFace? _face;
     private Control _surface = null!;
     private Control _bubbleSurface = null!;
 
     public AreaFloaterLayer() : this(null) { }
 
-    /// <summary>A layer drawing with <paramref name="face"/> (font art 229); null: the viewer's font. The line height is the font's
+    /// <summary>A layer drawing with <paramref name="face"/> (font art 229); null: nothing is drawn. The line height is the font's
     /// height + 2 (CH11).</summary>
     public AreaFloaterLayer(AreaArtFontFace? face)
     {
         _face = face;
-        LineHeight = FloaterRules.LineHeight(face is null ? (int)Math.Ceiling(_font.GetHeight(FontSize)) : AreaTextFontLayout.LineHeight(face.Frames));
+        LineHeight = FloaterRules.LineHeight(face is null ? NominalLineHeight : AreaTextFontLayout.LineHeight(face.Frames));
         Field = new FloaterField<string>(LineHeight);
         // ARC-UI-1997 (TB1–TB22): a bubble's line height is the font's text height (the floater's without its 2 pixels).
         BubbleLineHeight = LineHeight - 2;
@@ -96,8 +95,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     public void Redraw() { if (IsInsideTree()) { _surface.QueueRedraw(); _bubbleSurface.QueueRedraw(); } }
 
     /// <summary>The width of a bubble's text in the layer's font.</summary>
-    public int MeasureText(string text) => _face is { } face ? face.Font.Measure(text).Width
-        : (int)Math.Ceiling(_font.GetStringSize(text, HorizontalAlignment.Left, -1, FontSize).X);
+    public int MeasureText(string text) => _face is { } face ? face.Font.Measure(text).Width : text.Length * NominalAdvance;
 
     /// <summary>Makes a bubble over <paramref name="owner"/>: the text wrapped and measured once, as the original renders it.</summary>
     public int AddBubble(string owner, string text, BubbleColor color, long nowMs)
@@ -131,7 +129,6 @@ public partial class AreaFloaterLayer : CanvasLayer
 
     private void DrawBubbles()
     {
-        var ascent = _font.GetAscent(FontSize);
         // ARC-UI-2278: drawn in the original's pixels at the screen's whole factor; the layout returned screen pixels, so each position goes back by the factor.
         var factor = DrawScale;
         FilterFor(_bubbleSurface, factor);
@@ -143,16 +140,10 @@ public partial class AreaFloaterLayer : CanvasLayer
             var (sr, sg, sb) = TextBubbleRules.ShadowRgb;
             foreach (var (text, position) in lines)
             {
-                if (_face is { } face)
-                {
-                    // The shadow first at +1,+1 (font flag 0x08), then the line.
-                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X) + TextBubbleRules.ShadowOffset, (int)MathF.Round(position.Y) + TextBubbleRules.ShadowOffset, (sr, sg, sb));
-                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b));
-                    continue;
-                }
-                var baseline = position + new Vector2(0, ascent);
-                _bubbleSurface.DrawStringOutline(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, 3, Outline);
-                _bubbleSurface.DrawString(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, Color.Color8(r, g, b));
+                if (_face is not { } face) continue;
+                // The shadow first at +1,+1 (font flag 0x08), then the line.
+                AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X) + TextBubbleRules.ShadowOffset, (int)MathF.Round(position.Y) + TextBubbleRules.ShadowOffset, (sr, sg, sb));
+                AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b));
             }
         }
     }
@@ -180,7 +171,6 @@ public partial class AreaFloaterLayer : CanvasLayer
 
     private void DrawLines()
     {
-        var ascent = _font.GetAscent(FontSize);
         // ARC-UI-2289: drawn in the original's pixels at the screen's whole factor; the layout returned screen pixels, so each position goes back by the factor.
         var factor = DrawScale;
         FilterFor(_surface, factor);
@@ -189,15 +179,8 @@ public partial class AreaFloaterLayer : CanvasLayer
         {
             var position = scaledPosition / factor;
             var (r, g, b) = FloaterRules.Rgb(color);
-            if (_face is { } face)
-            {
-                AreaArtTextDraw.Text(_surface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), alpha: (byte)alpha);
-                continue;
-            }
-            var tint = Color.Color8(r, g, b, (byte)alpha);
-            var baseline = position + new Vector2(0, ascent);
-            _surface.DrawStringOutline(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, 3, Outline with { A = alpha / 255f });
-            _surface.DrawString(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, tint);
+            if (_face is not { } face) continue;
+            AreaArtTextDraw.Text(_surface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), alpha: (byte)alpha);
         }
     }
 }

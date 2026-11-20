@@ -60,6 +60,43 @@ public sealed class DialogFinalLineCensusRealDataTests
         Assert.IsTrue(rows.Contains("02792fahrkus.dlg|reply 42|fl 179|missing|has co True"), "the owner's report 2026-11-19_08-20-50: Fahrkus' kill reply");
     }
 
+    [TestMethod, TestCategory("RealData"), TestCategory("DlgRealData")]
+    public void Transfer_replies_with_a_bad_response_target_are_counted_in_the_installed_dialogs()
+    {
+        // ARC-SCRIPT-2807 (ledger FLM3): the reply's own response number is skipped after a dialog transfer in its action (0x413130), so a missing or non-NPC response record is no failure for such a reply.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in response-target census; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        using var stack = ContentStack.Open(discovery.Plan!).Stack!;
+        var rows = new List<string>();
+        int withTransfer = 0;
+        int badResponseAll = 0;
+        foreach (var key in stack.Keys().Where(k => k.EndsWith(".dlg", StringComparison.Ordinal)))
+        {
+            var document = DlgReader.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!, new DlgReaderOptions { Mode = DlgReadMode.Original });
+            foreach (var reply in document.Records.Where(r => r.Role == DlgRecordRole.Player))
+            {
+                var value = reply.ResponseValue ?? 0;
+                var badResponse = value > 0 && (!document.TryGetRecord(value, out var response) || response is null || response.Role != DlgRecordRole.Npc);
+                if (badResponse) badResponseAll++;
+                var action = Encoding.Latin1.GetString(reply.Action.Bytes.ToArray());
+                var matches = Regex.Matches(action, @"(?<![a-z])(?<code>fl|jo|uw|et)\s*(?<first>-?\d+)", RegexOptions.IgnoreCase);
+                if (matches.Count > 0) withTransfer++;
+                if (matches.Count == 0 || !badResponse) continue;
+                var codes = string.Join('+', matches.Select(m => m.Groups["code"].Value.ToLowerInvariant()));
+                var missing = !document.TryGetRecord(value, out _);
+                rows.Add($"{Path.GetFileName(key)}|reply {reply.Id}|response {value} {(missing ? "missing" : "not an NPC record")}|{codes}");
+            }
+        }
+
+        Console.WriteLine($"RESPONSE-CENSUS|replies with a transfer {withTransfer}|bad response targets of all replies {badResponseAll}|transfer replies with a bad response target {rows.Count}");
+        foreach (var row in rows) Console.WriteLine($"RESPONSE-CENSUS-ROW|{row}");
+        Assert.AreEqual(3076, withTransfer, "replies whose action holds fl, jo, uw or et with a number");
+        Assert.AreEqual(2, badResponseAll, "replies of all kinds whose response number names no NPC record");
+        CollectionAssert.AreEqual(new[] { "01718theo_brightstart.dlg|reply 66|response 73 not an NPC record|et" }, rows, "the only installed transfer reply with a bad response record (an expert teacher reply; no fl reply has one)");
+    }
+
     // Only the structure of a Player record used as a final line: the text marker letter, whether the text, gender and action fields are empty, and the action's code words (never the original text).
     private static string Shape(DlgRecord record)
     {

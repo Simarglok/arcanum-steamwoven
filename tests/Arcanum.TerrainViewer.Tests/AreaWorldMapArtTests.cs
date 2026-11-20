@@ -301,4 +301,107 @@ public sealed class AreaWorldMapArtTests
         log.EnterPane();
         Assert.IsFalse(log.ShowTransient(description), "a pane owns the window");
     }
+
+    // ARC-UI-2993 (stopgap of #2992): under the HD option the map picture is drawn at 1:1 device pixels while the window lies at the composition's scale s, so a window unit is s picture
+    // pixels ("pixels per unit"). The default 1 is the original's numbers.
+    private static readonly double[] CompositionScales = [1.33, 1.8, 2.4, 3.6];
+
+    [TestMethod]
+    public void A_click_at_the_composition_scale_maps_to_the_picture_pixel_under_it_and_back()
+    {
+        foreach (var s in CompositionScales)
+        {
+            var offset = (X: 321, Y: 177);
+            var view = AreaWorldMapArtLayout.View;
+            foreach (var pixel in new[] { (321L, 177L), (322L, 178L), (321L + 450, 177L + 300), (321L + (long)(view.Width * s) - 1, 177L + (long)(view.Height * s) - 1) })
+            {
+                // The window point of a pixel's left and top edge, and of its centre: both are in the pixel (AC2).
+                var at = AreaWorldMapArtLayout.ToWindow(pixel.Item1, pixel.Item2, offset, s);
+                Assert.AreEqual(pixel, AreaWorldMapArtLayout.ToPicture(at.X, at.Y, offset, s), $"s {s}: the left top edge of {pixel}");
+                Assert.AreEqual(pixel, AreaWorldMapArtLayout.ToPicture(at.X + .5 / s, at.Y + .5 / s, offset, s), $"s {s}: the centre of {pixel}");
+            }
+            // The view's top-left is the offset; one window unit is s pixels; the edges are in or out as before.
+            Assert.AreEqual(((long)offset.X, (long)offset.Y), AreaWorldMapArtLayout.ToPicture(view.X, view.Y, offset, s));
+            Assert.AreEqual((offset.X + (long)Math.Floor(100 * s + 1e-6), offset.Y + (long)Math.Floor(50 * s + 1e-6)), AreaWorldMapArtLayout.ToPicture(view.X + 100, view.Y + 50, offset, s));
+            Assert.IsNull(AreaWorldMapArtLayout.ToPicture(view.X - 1, view.Y + 5, offset, s));
+            Assert.IsNull(AreaWorldMapArtLayout.ToPicture(view.X + view.Width, view.Y + 5, offset, s));
+            Assert.IsNull(AreaWorldMapArtLayout.ToPicture(view.X + 5, view.Y + view.Height, offset, s));
+            Assert.IsNotNull(AreaWorldMapArtLayout.ToPicture(view.X + view.Width - .001, view.Y + view.Height - .001, offset, s));
+        }
+    }
+
+    [TestMethod]
+    public void The_original_numbers_are_the_default_and_the_hd_scale_changes_only_the_view_geometry()
+    {
+        var offset = (X: 700, Y: 400);
+        Assert.AreEqual(AreaWorldMapArtLayout.ToPicture(333.7, 200.2, offset), AreaWorldMapArtLayout.ToPicture(333.7, 200.2, offset, 1));
+        Assert.AreEqual(AreaWorldMapArtLayout.MaxOffset(), AreaWorldMapArtLayout.MaxOffset(2000, 2000, 1));
+        Assert.AreEqual(AreaWorldMapArtLayout.VisibleTiles(offset), AreaWorldMapArtLayout.VisibleTiles(offset, 1));
+        Assert.AreEqual(AreaWorldMapArtLayout.CentreOn(1000, 1000, AreaWorldMapArtLayout.MaxOffset()), AreaWorldMapArtLayout.CentreOn(1000, 1000, AreaWorldMapArtLayout.MaxOffset(), 1));
+        Assert.AreEqual(((double)(150 + 100), (double)(11 + 50)), AreaWorldMapArtLayout.ToWindow(800, 450, offset, 1));
+        Assert.AreEqual(AreaWorldMapArtLayout.LabelAt(800, 450, offset, 3, -2), AreaWorldMapArtLayout.LabelAt(800, 450, offset, 3, -2, 1));
+        Assert.AreEqual(9, AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf));
+        Assert.AreEqual(20, AreaWorldMapArtLayout.StepPixels(AreaWorldMapArtLayout.KeyStep));
+        Assert.AreEqual(1, AreaWorldMapArtLayout.HitWaypoint([(100, 100), (500, 500)], 500 + 8, 500 - 8, 9, 9), "the original's box is half the art plus 5: (9 / 2 + 5) = 9");
+    }
+
+    [TestMethod]
+    public void The_larger_visible_area_has_its_own_scroll_limits_and_tiles_and_no_empty_margin_unless_the_map_ends()
+    {
+        foreach (var s in CompositionScales)
+        {
+            var size = AreaWorldMapArtLayout.ViewPictureSize(s);
+            Assert.AreEqual(((int)Math.Ceiling(501 * s), (int)Math.Ceiling(365 * s)), size);
+            var max = AreaWorldMapArtLayout.MaxOffset(2000, 2000, s);
+            Assert.AreEqual((2000 - size.Width, 2000 - size.Height), max, $"s {s}: the picture's size minus the view's");
+            Assert.IsTrue(max.X >= 0 && max.Y >= 0 && max.X < AreaWorldMapArtLayout.MaxOffset().X, $"s {s}: a larger view scrolls less");
+            // At the far corner the view ends exactly at the picture's last pixel, in the last tile; at the near corner it starts in the first.
+            Assert.AreEqual((max.X / 250, 7, max.Y / 250, 7), AreaWorldMapArtLayout.VisibleTiles(max, s));
+            var (first, last, firstRow, lastRow) = AreaWorldMapArtLayout.VisibleTiles((0, 0), s);
+            Assert.AreEqual((0, (size.Width - 1) / 250, 0, (size.Height - 1) / 250), (first, last, firstRow, lastRow));
+            Assert.AreEqual((0, 0), AreaWorldMapArtLayout.Scroll((10, 10), 7, AreaWorldMapArtLayout.StepPixels(AreaWorldMapArtLayout.CompassStep, s), max));
+            Assert.AreEqual(max, AreaWorldMapArtLayout.Scroll((max.X - 3, max.Y - 3), 3, AreaWorldMapArtLayout.StepPixels(AreaWorldMapArtLayout.CompassStep, s), max));
+            Assert.AreEqual(max, AreaWorldMapArtLayout.CentreOn(1999, 1999, max, s));
+            Assert.AreEqual((0, 0), AreaWorldMapArtLayout.CentreOn(10, 10, max, s));
+            var centred = AreaWorldMapArtLayout.CentreOn(1000, 1000, max, s);
+            Assert.AreEqual((1000 - size.Width / 2, 1000 - size.Height / 2), centred, $"s {s}: the point is the view's centre");
+        }
+        // A step moves the picture as far on the screen as before: 20 window units are 20 s pixels.
+        Assert.AreEqual(36, AreaWorldMapArtLayout.StepPixels(AreaWorldMapArtLayout.KeyStep, 1.8));
+        // A view larger than the picture (an HD window beyond 2000 px) centres it: the offset is negative and every clamp holds it there.
+        var wide = AreaWorldMapArtLayout.MaxOffset(2000, 2000, 6);
+        Assert.IsTrue(wide.X < 0 && wide.Y < 0);
+        Assert.AreEqual(((int)Math.Floor(wide.X / 2.0), (int)Math.Floor(wide.Y / 2.0)), AreaWorldMapArtLayout.Clamp((500, 500), wide));
+        Assert.AreEqual(AreaWorldMapArtLayout.Clamp((0, 0), wide), AreaWorldMapArtLayout.Scroll((0, 0), 3, 50, wide));
+    }
+
+    [TestMethod]
+    public void Overlays_are_anchored_at_the_composition_scale_to_their_picture_pixels()
+    {
+        foreach (var s in CompositionScales)
+        {
+            var offset = (X: 400, Y: 300);
+            // A marker 100 picture pixels right of the offset lies 100 / s window units into the view (a window unit is s device pixels), so 100 device pixels.
+            var (x, y) = AreaWorldMapArtLayout.ToWindow(500, 360, offset, s);
+            Assert.AreEqual(150 + 100 / s, x, 1e-9);
+            Assert.AreEqual(11 + 60 / s, y, 1e-9);
+            Assert.AreEqual(100.0, (x - 150) * s, 1e-9, "the same device distance from the view's corner whatever the scale");
+            // Its label: the marker's window place plus the name offsets plus (12, -10) window units, so the text stays the readable size.
+            var (lx, ly) = AreaWorldMapArtLayout.LabelAt(500, 360, offset, 5, -4, s);
+            Assert.AreEqual((int)Math.Round(100 / s) + 5 + 12, lx);
+            Assert.AreEqual((int)Math.Round(60 / s) - 4 - 10, ly);
+        }
+    }
+
+    [TestMethod]
+    public void A_marker_box_covers_the_picture_pixels_its_drawn_art_covers_at_the_composition_scale()
+    {
+        // The hover box (WM58, +-9) and the waypoint box (WM102, half the art plus 5) are window units: at s they are s times as many picture pixels, so the box stays as wide on the screen.
+        Assert.AreEqual(16, AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf, 1.8));
+        Assert.AreEqual(32, AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf, 3.6));
+        // A 9 x 9 area marker at s 1.8: the box is (9 / 2 + 5) = 9 units = 16 pixels (WM102's margin kept); a press 15 pixels off hits, 17 does not.
+        Assert.AreEqual(0, AreaWorldMapArtLayout.HitWaypoint([(1000, 1000)], 1015, 1000, 9, 9, 1.8));
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitWaypoint([(1000, 1000)], 1017, 1000, 9, 9, 1.8));
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitWaypoint([(1000, 1000)], 1017, 1000, 9, 9), "at the original's scale the same press misses");
+    }
 }

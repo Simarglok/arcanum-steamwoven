@@ -103,9 +103,11 @@ public static class AreaWorldMapArtLayout
     /// <summary>The waypoint that a press at a picture pixel hits (WM102, ARC-UI-085): the last of <paramref name="waypoints"/> (their stored picture
     /// pixels) whose box of half the 205 art's size plus 5 px on each axis, half-open (px − hx ≤ x &lt; px + hx), holds the pixel; -1 for none.
     /// The halves are signed halvings toward 0.</summary>
-    public static int HitWaypoint(IReadOnlyList<(long X, long Y)> waypoints, long pictureX, long pictureY, int areaArtWidth, int areaArtHeight)
+    public static int HitWaypoint(IReadOnlyList<(long X, long Y)> waypoints, long pictureX, long pictureY, int areaArtWidth, int areaArtHeight, double pixelsPerUnit = 1)
     {
-        long halfX = areaArtWidth / 2 + WaypointHitMargin, halfY = areaArtHeight / 2 + WaypointHitMargin;
+        // ARC-UI-2993: under the HD option the marker is drawn at the composition's scale over a picture at 1:1 device pixels, so its box (half the art plus the margin, in window units)
+        // is that many picture pixels more; the stored waypoint pixels are the rules' and stay as they are.
+        long halfX = PickHalf(areaArtWidth / 2 + WaypointHitMargin, pixelsPerUnit), halfY = PickHalf(areaArtHeight / 2 + WaypointHitMargin, pixelsPerUnit);
         for (var i = waypoints.Count - 1; i >= 0; i--)
             if (pictureX >= waypoints[i].X - halfX && pictureX < waypoints[i].X + halfX && pictureY >= waypoints[i].Y - halfY && pictureY < waypoints[i].Y + halfY) return i;
         return -1;
@@ -187,20 +189,49 @@ public static class AreaWorldMapArtLayout
     /// <summary>The compass repeats a held press this often (the executable's 250 ms button repeat, WM31).</summary>
     public const long CompassRepeatMilliseconds = 250;
 
-    /// <summary>The largest offset: the picture's size minus the view (WM7; the keyed map's width / 64 and height / 64 are 2000).</summary>
-    public static (int X, int Y) MaxOffset(long pictureWidth = PictureSize, long pictureHeight = PictureSize) =>
-        ((int)Math.Max(0, pictureWidth - View.Width), (int)Math.Max(0, pictureHeight - View.Height));
+    /// <summary>
+    /// ARC-UI-2993 (stopgap of #2992): picture pixels per window unit of the map view. 1 is the original's drawing (one picture pixel is one window unit); under the HD option the
+    /// window is scaled by the composition's scale s and the picture is drawn at 1:1 device pixels, so one window unit is s picture pixels (the view shows 501 s × 365 s of them),
+    /// while the overlays stay at s. Every view geometry function below takes it as its last argument, default 1, so the original's numbers and the town map are unchanged.
+    /// </summary>
+    public const double OriginalPixelsPerUnit = 1;
 
-    public static (int X, int Y) Clamp((int X, int Y) offset, (int X, int Y) max) =>
-        (Math.Clamp(offset.X, 0, max.X), Math.Clamp(offset.Y, 0, max.Y));
+    /// <summary>The view's size in picture pixels at <paramref name="pixelsPerUnit"/> (rounded up, so no column of the view is left uncovered).</summary>
+    public static (int Width, int Height) ViewPictureSize(double pixelsPerUnit = OriginalPixelsPerUnit) =>
+        ((int)Math.Ceiling(View.Width * pixelsPerUnit - 1e-9), (int)Math.Ceiling(View.Height * pixelsPerUnit - 1e-9));
+
+    /// <summary>A half box of <paramref name="half"/> window units (the hover and hit boxes of the markers, WM58, WM102) in picture pixels.</summary>
+    public static int PickHalf(int half, double pixelsPerUnit = OriginalPixelsPerUnit) => (int)Math.Round(half * pixelsPerUnit, MidpointRounding.AwayFromZero);
+
+    /// <summary>A scroll step of <paramref name="step"/> window units in picture pixels (so a key or compass step moves the picture as far on the screen as before).</summary>
+    public static int StepPixels(int step, double pixelsPerUnit = OriginalPixelsPerUnit) => Math.Max(1, (int)Math.Round(step * pixelsPerUnit, MidpointRounding.AwayFromZero));
+
+    /// <summary>The largest offset: the picture's size minus the view (WM7; the keyed map's width / 64 and height / 64 are 2000). It is negative on an axis where the view
+    /// shows more than the picture (an HD window beyond 2000 px of the picture): <see cref="Clamp"/> then centres the picture.</summary>
+    public static (int X, int Y) MaxOffset(long pictureWidth = PictureSize, long pictureHeight = PictureSize, double pixelsPerUnit = OriginalPixelsPerUnit)
+    {
+        var view = ViewPictureSize(pixelsPerUnit);
+        return pixelsPerUnit == OriginalPixelsPerUnit
+            ? ((int)Math.Max(0, pictureWidth - View.Width), (int)Math.Max(0, pictureHeight - View.Height))
+            : ((int)(pictureWidth - view.Width), (int)(pictureHeight - view.Height));
+    }
+
+    /// <summary>The offset clamped to [0, max] per axis; on an axis whose max is negative (the view larger than the picture) the offset that centres the picture.</summary>
+    public static (int X, int Y) Clamp((int X, int Y) offset, (int X, int Y) max) => (ClampAxis(offset.X, max.X), ClampAxis(offset.Y, max.Y));
+
+    private static int ClampAxis(int offset, int max) => max < 0 ? (int)Math.Floor(max / 2.0) : Math.Clamp(offset, 0, max);
 
     /// <summary>
     /// The offset that centres the view on a picture point (WM12, WM13). The original clamps the upper end against the picture's size, not the
     /// scroll maximum, so centring near the east or south edge shows blank fill until the next scroll step snaps it back: a technical,
     /// presentation-only flaw fixed in both rule modes (AGENTS.md original bugs, no switch).
     /// </summary>
-    public static (int X, int Y) CentreOn(long x, long y, (int X, int Y) max) =>
-        Clamp(((int)Math.Clamp(x - View.Width / 2, int.MinValue / 2, int.MaxValue / 2), (int)Math.Clamp(y - View.Height / 2, int.MinValue / 2, int.MaxValue / 2)), max);
+    public static (int X, int Y) CentreOn(long x, long y, (int X, int Y) max, double pixelsPerUnit = OriginalPixelsPerUnit)
+    {
+        var view = ViewPictureSize(pixelsPerUnit);
+        var (halfX, halfY) = pixelsPerUnit == OriginalPixelsPerUnit ? (View.Width / 2, View.Height / 2) : (view.Width / 2, view.Height / 2);
+        return Clamp(((int)Math.Clamp(x - halfX, int.MinValue / 2, int.MaxValue / 2), (int)Math.Clamp(y - halfY, int.MinValue / 2, int.MaxValue / 2)), max);
+    }
 
     /// <summary>The scroll direction code of the executable (0 up, clockwise to 7 up-left; -1 for none) of the held arrow keys: left beats
     /// right and up beats down (WM18).</summary>
@@ -225,22 +256,37 @@ public static class AreaWorldMapArtLayout
     }
 
     /// <summary>The inclusive tile columns and rows a view at <paramref name="offset"/> touches (WM14), clamped to the grid.</summary>
-    public static (int FirstColumn, int LastColumn, int FirstRow, int LastRow) VisibleTiles((int X, int Y) offset) => (
-        Math.Clamp(offset.X / TileSize, 0, TileColumns - 1), Math.Clamp((offset.X + View.Width - 1) / TileSize, 0, TileColumns - 1),
-        Math.Clamp(offset.Y / TileSize, 0, TileRows - 1), Math.Clamp((offset.Y + View.Height - 1) / TileSize, 0, TileRows - 1));
+    public static (int FirstColumn, int LastColumn, int FirstRow, int LastRow) VisibleTiles((int X, int Y) offset, double pixelsPerUnit = OriginalPixelsPerUnit)
+    {
+        var view = pixelsPerUnit == OriginalPixelsPerUnit ? (Width: View.Width, Height: View.Height) : ViewPictureSize(pixelsPerUnit);
+        return (Math.Clamp(offset.X / TileSize, 0, TileColumns - 1), Math.Clamp((offset.X + view.Width - 1) / TileSize, 0, TileColumns - 1),
+            Math.Clamp(offset.Y / TileSize, 0, TileRows - 1), Math.Clamp((offset.Y + view.Height - 1) / TileSize, 0, TileRows - 1));
+    }
 
     /// <summary>The window position of a picture point at <paramref name="offset"/> (the tiles' formula, WM14); it may lie outside the view.</summary>
     public static (int X, int Y) ToWindow(long pictureX, long pictureY, (int X, int Y) offset) =>
         ((int)(View.X + pictureX - offset.X), (int)(View.Y + pictureY - offset.Y));
 
+    /// <summary>ARC-UI-2993: the window position (in window units, fractional) of a picture point at <paramref name="offset"/> and <paramref name="pixelsPerUnit"/>; the markers and the labels are
+    /// anchored there at the composition's scale.</summary>
+    public static (double X, double Y) ToWindow(long pictureX, long pictureY, (int X, int Y) offset, double pixelsPerUnit) =>
+        (View.X + (pictureX - offset.X) / pixelsPerUnit, View.Y + (pictureY - offset.Y) / pixelsPerUnit);
+
     /// <summary>The picture pixel under a window point (WM25), or null outside the view. The executable compares the raw mouse record with the
     /// view's screen rectangle while its converter subtracts a further 41 rows (WM26, unresolved: the mouse record's frame is not read); the
-    /// viewer takes the drawn view for both, so a click lands on the pixel under the pointer.</summary>
-    public static (long X, long Y)? ToPicture(double windowX, double windowY, (int X, int Y) offset)
+    /// viewer takes the drawn view for both, so a click lands on the pixel under the pointer. ARC-UI-2993: at <paramref name="pixelsPerUnit"/> above 1 the pixel is the one
+    /// that the 1:1 picture covers under the point (a window unit is that many pixels).</summary>
+    public static (long X, long Y)? ToPicture(double windowX, double windowY, (int X, int Y) offset, double pixelsPerUnit = OriginalPixelsPerUnit)
     {
         if (windowX < View.X || windowY < View.Y || windowX >= View.X + View.Width || windowY >= View.Y + View.Height) return null;
-        return ((long)Math.Floor(windowX) - View.X + offset.X, (long)Math.Floor(windowY) - View.Y + offset.Y);
+        if (pixelsPerUnit == OriginalPixelsPerUnit) return ((long)Math.Floor(windowX) - View.X + offset.X, (long)Math.Floor(windowY) - View.Y + offset.Y);
+        // The small bias keeps a point at the exact left edge of a pixel in it despite the float product.
+        return ((long)Math.Floor((windowX - View.X) * pixelsPerUnit + 1e-6) + offset.X, (long)Math.Floor((windowY - View.Y) * pixelsPerUnit + 1e-6) + offset.Y);
     }
+
+    /// <summary>ARC-UI-2993: a label's text origin in view coordinates at <paramref name="pixelsPerUnit"/>: the marker's place in window units plus the name offsets plus (12, -10) window units.</summary>
+    public static (int X, int Y) LabelAt(long pictureX, long pictureY, (int X, int Y) offset, int nameOffsetX, int nameOffsetY, double pixelsPerUnit) =>
+        ((int)Math.Round((pictureX - offset.X) / pixelsPerUnit) + nameOffsetX + LabelTextX, (int)Math.Round((pictureY - offset.Y) / pixelsPerUnit) + nameOffsetY + LabelTextY);
 
     /// <summary>The tile file of column <paramref name="column"/> and row <paramref name="row"/>: number 8 × row + column + 1 (WM14).</summary>
     public static string TilePath(string baseName, int column, int row) =>
