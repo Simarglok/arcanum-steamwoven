@@ -240,7 +240,7 @@ One issue per batch, created by this census ([FR-UI-007](../requirements/ui-medi
 
 | Batch | Issue | Covers | Arts |
 | --- | --- | --- | ---: |
-| B-BOARD | [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) | strips, end caps and the follower-button backing | 4 |
+| B-BOARD | [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927) | strips and end caps | 4 |
 | BD-A | [#2928](https://github.com/Simarglok/arcanum-steamwoven/issues/2928) | inventory family window background | 8 |
 | BD-B | [#2929](https://github.com/Simarglok/arcanum-steamwoven/issues/2929) | character sheet window background and right panels | 7 |
 | BD-C | [#2930](https://github.com/Simarglok/arcanum-steamwoven/issues/2930) | logbook window background | 6 |
