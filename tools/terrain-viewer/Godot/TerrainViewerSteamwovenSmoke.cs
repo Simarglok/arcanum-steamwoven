@@ -289,7 +289,7 @@ public partial class TerrainViewerApp
                     require(outOfSight.Width == OriginalComposition.ViewWidth && outOfSight.Height == OriginalComposition.ViewHeight, $"[{tag}] the out-of-sight window is the fixed 800 x 400, got {outOfSight.Width}x{outOfSight.Height}");
                 // AC2: the strips are sampled with nearest pixels (the virtual screen is reduced to s by the window afterwards); their art nodes inherit it.
                 foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
-                    require(panel.GetNode<TextureRect>($"{strip}Strip").TextureFilter is CanvasItem.TextureFilterEnum.Nearest, $"[{tag}] the {strip} strip is sampled with nearest pixels");
+                    require(panel.GetNode<Control>($"{strip}Strip").TextureFilter is CanvasItem.TextureFilterEnum.Nearest, $"[{tag}] the {strip} strip is sampled with nearest pixels");
                 // AC2: at a whole scale the picture is exactly the nearest-pixel one (every whole x whole block of the virtual screen's strips is uniform apart from the art's smooth parts).
                 if (Math.Abs(OriginalComposition.Scale(size.X, size.Y) - whole) < 1e-9) await CheckNearestBlocksAsync(tag, whole, panel, frames, require);
                 await CaptureHudAsync("steamwoven-" + tag, frames);
