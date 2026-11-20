@@ -1,0 +1,101 @@
+"""ARC-RES-2455: tests of the cut-out and tile tools on synthetic images (no art)."""
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+
+from . import cutouts, pngio
+
+
+def solid(w: int, h: int, rgb: tuple[int, int, int]) -> pngio.Image:
+    return pngio.Image(w, h, bytearray(bytes((*rgb, 255)) * (w * h)))
+
+
+def gradient(w: int, h: int) -> pngio.Image:
+    data = bytearray()
+    for y in range(h):
+        for x in range(w):
+            data += bytes((x * 255 // max(1, w - 1), y * 255 // max(1, h - 1), 80, 255))
+    return pngio.Image(w, h, data)
+
+
+class CutoutsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_real_list_is_valid(self) -> None:
+        self.assertEqual([], cutouts.check(cutouts.load()))
+
+    def test_check_finds_bad_rectangles_sources_and_tiles(self) -> None:
+        spec = {"items": [{"id": "a", "source": "ctx-hud", "rect": [0, 0, 900, 10], "material": "x"}, {"id": "a", "source": "nope", "rect": [5, 5, 5, 9], "material": "x"}],
+                "tiles": [{"id": "tile-wood", "from": "missing", "reference": {"screen": "ctx-hud", "material": "paper"}}]}
+        text = "\n".join(cutouts.check(spec))
+        for needle in ("duplicate", "outside the 800 x 600", "not a context screen", "not in the list", "no tone mask"):
+            self.assertIn(needle, text)
+
+    def test_pixel_rect_scales_with_the_source_width(self) -> None:
+        self.assertEqual((100, 50, 200, 150), cutouts.pixel_rect([100, 50, 200, 150], 800, 600))
+        self.assertEqual((181, 90, 362, 272), cutouts.pixel_rect([100, 50, 200, 150], 1448, 1086))
+        x0, y0, x1, y1 = cutouts.pixel_rect([10, 10, 10.2, 10.2], 800, 600)  # never empty
+        self.assertTrue(x1 > x0 and y1 > y0)
+
+    def test_cut_writes_pixels_and_provenance(self) -> None:
+        local = self.tmp / "local"
+        (local / "outbox" / cutouts.SOURCE_BATCH).mkdir(parents=True)
+        source = gradient(1448, 1086)
+        pngio.write(local / "outbox" / cutouts.SOURCE_BATCH / "ctx-hud.png", source)
+        spec = {"items": [{"id": "piece", "source": "ctx-hud", "rect": [100, 50, 200, 150], "material": "wood"}], "tiles": []}
+        record = cutouts.cut(spec, local)["piece"]
+        self.assertEqual([181, 90, 362, 272], record["pixel_rect"])
+        piece = pngio.read(local / "material-sheet" / "cutouts" / "piece.png")
+        self.assertEqual((181, 182), (piece.w, piece.h))
+        self.assertEqual(source.pixel(181, 90), piece.pixel(0, 0))
+        stored = json.loads((local / "material-sheet" / "cutouts" / "cutouts.provenance.json").read_text(encoding="utf-8"))
+        self.assertEqual(hashlib.sha256((local / "outbox" / cutouts.SOURCE_BATCH / "ctx-hud.png").read_bytes()).hexdigest(), stored["piece"]["source_sha256"])
+        spec["items"][0]["source"] = "ctx-schematic"
+        with self.assertRaises(cutouts.CutoutError):
+            cutouts.cut(spec, local)
+
+    def test_tiles_inbox_builds_a_batch_with_hashes(self) -> None:
+        local = self.tmp / "local"
+        spec = cutouts.load()
+        with self.assertRaises(cutouts.CutoutError):
+            cutouts.tiles_inbox(spec, local)
+        cut_dir = local / "material-sheet" / "cutouts"
+        cut_dir.mkdir(parents=True)
+        for tile in spec["tiles"]:
+            pngio.write(cut_dir / f"{tile['from']}.png", solid(20, 20, (90, 70, 50)))
+        cutouts.tiles_inbox(spec, local)
+        batch = json.loads((local / "inbox" / cutouts.TILE_BATCH / "batch.json").read_text(encoding="utf-8"))
+        self.assertEqual(["tile-wood", "tile-paper", "tile-parchment"], [i["id"] for i in batch["items"]])
+        for item in batch["items"]:
+            text = (local / "inbox" / cutouts.TILE_BATCH / item["prompt_file"]).read_text(encoding="utf-8")
+            self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), item["prompt_sha256"])
+            self.assertIn("seamless tile", text)
+            self.assertEqual("cutout", item["references"][0]["slot"])
+
+    def test_seam_ratio_tells_a_tileable_tile_from_a_cut_one(self) -> None:
+        w = h = 64
+        wave = bytearray()  # periodic in both directions: seamless
+        for y in range(h):
+            for x in range(w):
+                v = 128 + int(60 * __import__("math").sin(2 * 3.14159265 * x / w) * __import__("math").sin(2 * 3.14159265 * y / h))
+                wave += bytes((v, v, v, 255))
+        self.assertLess(cutouts.seam_ratio(pngio.Image(w, h, wave)), 1.5)
+        self.assertGreater(cutouts.seam_ratio(gradient(w, h)), 5.0)  # a ramp jumps at the wrap-around
+
+    def test_tile_report_flags_tone_and_flat_spread(self) -> None:
+        reference = {"mean_l": 55.0, "mean_chroma": 8.0, "std_l": 6.0}
+        flat = cutouts.tile_report(solid(160, 160, (200, 190, 160)), reference, 1.81)  # too bright and no spread
+        self.assertIn("mean_l_delta", flat["failed"])
+        self.assertIn("std_l_ratio", flat["failed"])
+        self.assertFalse(flat["pass"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -343,6 +343,10 @@ Part kinds:
   picture, items in slots, counters, the HUD world rows) are in `prompts/tone_masks.json`. Limits: |ΔL\*| ≤ 3, mean chroma within 12 %, contrast (std of L\*) within 12 % unless the std
   differs by less than 2 L\*, mean ΔE76 ≤ 6, 95th percentile ΔE76 ≤ 15. A region over a limit is redrawn (at most two redraws, then the owner decides); the region tone fit (`tone_check.py fit`:
   shift of L\* and scale of chroma inside one material to the ORIGINAL's blurred means, texture and shape kept) is the fallback for a material whose texture is right and tone is not.
+- **SWI-GEN-10** The material sheet is cut from the approved, tone-fitted context images, not drawn (owner decision 2026-11-20, [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)): `tools/steamwoven_ui/cutouts.py cut` crops
+  the rectangles of `prompts/cutouts.json` (800 × 600 layout coordinates, scaled by the source width) out of the contexts into `local/steamwoven-ui/material-sheet/cutouts/` with a provenance record each (source file and hash, layout and pixel rectangle).
+  Codex makes only the seamless tiles of the large surfaces (wood, paper, parchment) from a cut-out as the image to edit (`tiles-inbox`, batch `style-anchors-tiles`); brass, glass, iron, cloth and the black fields stay cut-outs of the detail. `tile-check` compares a tile with the ORIGINAL
+  material (mean L\* within 3, chroma within 12 %, the spread of brightness, the std of the blurred L\*, within 25 % of the original's unless it differs by under 1 L\*) and measures the seam ratio of the wrap-around join (at most 1.5).
 
 ### Codex batch runner (ARC-DEV-3001)
 

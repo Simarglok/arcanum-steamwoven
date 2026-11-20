@@ -124,6 +124,17 @@ class ToneCheckTest(unittest.TestCase):
         with self.assertRaises(tone_check.ToneError):
             tone_check.fit_material(original, result, {"strips": False, "materials": {"brass": {"class": "brass"}}}, [], "brass")
 
+    def test_zone_fit_reaches_non_class_pixels_inside_the_zone(self) -> None:
+        screen = {"strips": False, "materials": {"paper": {"class": "paper", "zone": [[0, 0, 800, 600]]}, "brass": {"class": "brass"}}}
+        stripe = (20, 20, 20)  # text-like pixels: not paper by colour
+        original = self.screen_image((200, 190, 160), (200, 190, 160), (100, 0, 140, 600, stripe))
+        result = self.screen_image((240, 215, 150), (240, 215, 150), (100, 0, 140, 600, stripe))
+        fitted, info = tone_check.fit_material(original, result, screen, [], "paper")
+        before = bytes(result.data[(300 * 800 + 120) * 4:(300 * 800 + 120) * 4 + 3])
+        after = bytes(fitted.data[(300 * 800 + 120) * 4:(300 * 800 + 120) * 4 + 3])
+        self.assertNotEqual(before, after)  # the zone weight covers the stripe; a colour-class weight would leave it
+        self.assertTrue(info["converged"], info)
+
     def test_batch_needs_every_screen_and_reports_exit_2(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             empty = Path(tmp)

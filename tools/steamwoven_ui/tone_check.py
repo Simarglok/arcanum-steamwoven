@@ -304,8 +304,8 @@ def fit_material(original: "pngio.Image", result: "pngio.Image", screen: dict, c
     # all fitted, with a soft edge; a hard colour-class mask would leave them untouched and print the text shapes as ghosts; without a zone the colour
     # class mask blurred wide and stretched
     zone = screen["materials"][material].get("zone")
-    others = [m.get("zone") for name, m in screen["materials"].items() if name != material]
-    if zone and not any(o is None or _rects_overlap(zone, o) for o in others):  # a zone shared with another material would pull that material along
+    others = [m["zone"] for name, m in screen["materials"].items() if name != material and m.get("zone")]
+    if zone and not any(_rects_overlap(zone, o) for o in others):  # a zone shared with another material's zone would pull that material along
         exclude = list(screen.get("exclude", [])) + (list(common_exclude) if screen.get("strips") else [])
         weight = [1.0 if _in_rects(x, y, zone) and not _in_rects(x, y, exclude) else 0.0 for y in range(TARGET_H) for x in range(TARGET_W)]
         soft = box_blur(weight, 3)
