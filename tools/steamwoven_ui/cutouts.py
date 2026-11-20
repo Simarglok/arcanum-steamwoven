@@ -3,7 +3,7 @@
 The material sheet is cut from the approved, tone-fitted context images, not drawn: `cut` crops each rectangle of `prompts/cutouts.json` (coordinates of the
 800 x 600 layout, scaled by the source width / 800) out of `local/steamwoven-ui/outbox/style-anchors-contexts/<source>.png` into
 `local/steamwoven-ui/material-sheet/cutouts/<id>.png` and records where each came from (source file and hash, layout rectangle, pixel rectangle).
-Codex only makes the seamless tiles of the large surfaces (wood, paper, parchment) from a cut-out (`tiles-inbox` builds the batch inbox for `codex_batch.py`);
+Codex only makes the wood tile, as input of the strip method study #2457 (`tiles-inbox` builds the batch inbox for `codex_batch.py`; paper and parchment are never tiled);
 `tile-check` compares a returned tile with the ORIGINAL material (mean L*, chroma and the spread of brightness as in `tone_check`) and measures the seam ratio.
 Standard library only, on `pngio` and `tone_check`. Images stay under the ignored `local/` (SWI-PRV-1); only the list of rectangles and the prompts are in git.
 
