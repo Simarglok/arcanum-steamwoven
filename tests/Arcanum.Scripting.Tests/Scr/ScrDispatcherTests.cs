@@ -172,8 +172,9 @@ public sealed class ScrDispatcherTests
     public void An_unreadable_line_and_the_budget_stop_without_auto_removal()
     {
         var auto = ScrCatalogue.FileFlag.AutoRemoving;
-        // A goto to exactly the line count, a start line outside the script and an empty script.
-        foreach (var (program, line, stopLine) in new[] { (Program(auto, Do(C(3, N(1)))), 0, 1), (Program(auto, Do(C(1))), 3, 3), (Program(auto), 0, 0) })
+        // A goto to exactly the line count or beyond it (ARC-SCRIPT-3005: admitted, the line read fails as in the original, ledger E9), a start line outside the script and an empty script.
+        foreach (var (program, line, stopLine) in new[] { (Program(auto, Do(C(3, N(1)))), 0, 1), (Program(auto, Do(C(3, N(9)))), 0, 9), (Program(auto, Do(C(3, N(int.MaxValue)))), 0, int.MaxValue),
+            (Program(auto, Do(C(1))), 3, 3), (Program(auto), 0, 0) })
         {
             var r = RunNpc(With(program), line: line);
             Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.LineOutOfRange, stopLine), (r.Outcome, r.Stop, r.StopLine));

@@ -97,7 +97,7 @@ action. Read in the original at 0x444B8E–0x444C4D:
 | return and skip default (1) | `ReturnSkipDefault` | skip | yes |
 | return and run default (2) | `ReturnRunDefault` | run | yes |
 | the last line continues | `FellOffEnd` | skip | yes |
-| a line outside the script: a goto to exactly the line count, a start line outside it, an empty script | `LineOutOfRange` | skip | no |
+| a line outside the script: a goto to the line count or beyond it (admitted since ARC-SCRIPT-3005), a start line outside it, an empty script | `LineOutOfRange` | skip | no |
 | 1,000 executed lines (or the option's lower budget) | `Budget` | skip | no |
 | a computed global flag number outside 0..3199 | `IndexOutOfRange` | skip | no |
 
