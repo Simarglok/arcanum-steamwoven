@@ -30,6 +30,8 @@ public partial class TerrainViewerApp
     private bool _combatHudForSelfTest;
     // ARC-UI-1888: synthetic art for the smoke (an interface art number to its frames), in place of the bars' art that an automated run does not read.
     private Func<int, Texture2D[]?>? _combatHudArtForSelfTest;
+    // ARC-UI-2940: the turn-order list draws only in the original's text font, which an automated run does not read: a smoke gives a synthetic one.
+    private AreaArtFontFace? _combatHudFontForSelfTest;
 
     /// <summary>A subturn start clears the pending cost (the original's subturn start runs the action-point check with 0, CH4); called before any
     /// read or write of the pending cost of <paramref name="round"/>.</summary>
@@ -88,6 +90,7 @@ public partial class TerrainViewerApp
             _combatHud.EndTurnPressed += () => PlayBarSound(AreaGameBarLayout.PressSound, "end turn");
             _combatHud.EndTurnReleased += over => { if (!over) return; PlayBarSound(AreaGameBarLayout.ReleaseSound, "end turn"); EndTurnFromButton(); };
         }
+        _combatHud.SetFont(_combatHudFontForSelfTest ?? TextFonts()?.Text);
         _combatHud.SetArt(_combatHudArtForSelfTest ?? (number => _gameBarPanel?.ArtFrames(number)));
         // CH4: the hero's subturn shows its points (A) against the pending cost (P); another participant's shows the running lights.
         var lamps = heroTurn ? ActionPointRules.Lamps(round!.ActionPoints, _apPending) : ActionPointRules.CueLampStates(cue);
