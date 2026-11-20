@@ -437,6 +437,22 @@ class CliTest(unittest.TestCase):
         self.assertEqual([p.name for p in self.local.rglob("*.tmp")], [])
         self.assertEqual(self.run_cli("plate.round", *args[1:], "--crop", "1,2,a,4")[0], 2)  # bad crop text: exit 2, no traceback
 
+    def test_thin_feature_keying_does_not_depend_on_raster_order(self) -> None:
+        image = pngio.Image(8, 8, bytearray(bytes((0, 255, 0, 255)) * 64), False)
+        for y in range(3, 6):
+            for x in range(3, 6):
+                image.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 4] = bytes((200, 40, 40, 255))
+        flipped = pngio.Image(8, 8, bytearray(), False)
+        flipped.data = bytearray(b"".join(bytes(image.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 4]) for y in range(7, -1, -1) for x in range(7, -1, -1)))
+        for img in (image, flipped):
+            fit.key_background(img, (0, 255, 0), 0.0)
+        self.assertEqual(bytes(image.data[3::4]), bytes(flipped.data[3::4])[::-1])
+
+    def test_lock_strength_is_checked_without_a_material_too(self) -> None:
+        code, _, err = self.run_cli("plate.round", "--source", str(self.source), "--provenance", str(self.record), "--key", "border", "--lock-strength", "5")
+        self.assertEqual(code, 2)
+        self.assertIn("lock-strength", err)
+
     def test_real_alpha_source_records_no_key(self) -> None:
         alpha_source = self.root / "alpha.png"
         alpha_source.write_bytes(pngio.encode(fit.synthetic_disc(96, None)))

@@ -300,13 +300,14 @@ def key_background(image: pngio.Image, colour: tuple[int, int, int], spread: flo
         alpha[i] = 1
     data[3::4] = alpha
     refined = 0
+    thin: dict[int, int] = {}  # decided after the loop, so a thin pixel is never taken as interior by the pixels after it
     for i in sorted(zone):
         y, x = divmod(i, w)
         o = i * 4
         d = math.sqrt(dist2[i])
         inner = nearest_opaque(data, w, h, x, y, 255, SOURCE_EDGE_RADIUS)
         if inner is None:  # a feature thinner than the zone: opaque unless it is still close to the background colour
-            data[o + 3] = 255 if d >= high else max(1, min(254, round(255 * (d - low) / (high - low))))
+            thin[i] = 255 if d >= high else max(1, min(254, round(255 * (d - low) / (high - low))))
             continue
         axis = (inner[0] - br, inner[1] - bg, inner[2] - bb)
         norm2 = sum(v * v for v in axis)
@@ -314,6 +315,8 @@ def key_background(image: pngio.Image, colour: tuple[int, int, int], spread: flo
         data[o + 3] = max(0, min(254, round(255 * share)))
         data[o], data[o + 1], data[o + 2] = (round(v) for v in inner)
         refined += 1
+    for i, a in thin.items():
+        data[i * 4 + 3] = a
     return {"colour": list(colour), "low": round(low, 2), "high": round(high, 2), "zone_pixels": len(zone), "refined_pixels": refined}
 
 
@@ -790,6 +793,8 @@ def run_fit(args: argparse.Namespace) -> dict:
         raise FitError(f"--crop {args.crop!r} must be four integers X,Y,W,H") from None
     if crop is not None and len(crop) != 4:
         raise FitError("--crop needs X,Y,W,H")
+    if not 0.0 <= args.lock_strength <= 1.0:
+        raise FitError(f"--lock-strength {args.lock_strength} must be between 0 and 1")
     materials = [m for m in args.material.split(",") if m] if args.material else []
     reference = sheet_reference(local_root, materials) if materials else None
     master, report = fit_image(source, want, crop, args.key, reference, args.lock_strength, args.force_lock, args.min_speck)  # type: ignore[arg-type]
@@ -813,8 +818,11 @@ def run_fit(args: argparse.Namespace) -> dict:
     record_path.parent.mkdir(parents=True, exist_ok=True)
     for path, data in ((record_path, (json.dumps(record, indent=2) + "\n").encode("utf-8")), (target, blob)):  # the record first: a master never lacks its record
         temp = path.with_name(path.name + ".tmp")
-        temp.write_bytes(data)
-        os.replace(temp, path)
+        try:
+            temp.write_bytes(data)
+            os.replace(temp, path)
+        finally:
+            temp.unlink(missing_ok=True)
     report["record_file"] = str(record_path)
     return report
 
