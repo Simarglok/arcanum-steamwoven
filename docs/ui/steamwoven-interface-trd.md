@@ -346,7 +346,7 @@ Part kinds:
 - **SWI-GEN-10** The material sheet is cut from the approved, tone-fitted context images, not drawn (owner decision 2026-11-20, [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)): `tools/steamwoven_ui/cutouts.py cut` crops
   the rectangles of `prompts/cutouts.json` (800 × 600 layout coordinates, scaled by the source width) out of the contexts into `local/steamwoven-ui/material-sheet/cutouts/` with a provenance record each (source file and hash, layout and pixel rectangle).
   Codex makes only the seamless tiles of the large surfaces (wood, paper, parchment) from a cut-out as the image to edit (`tiles-inbox`, batch `style-anchors-tiles`); brass, glass, iron, cloth and the black fields stay cut-outs of the detail. `tile-check` compares a tile with the ORIGINAL
-  material (mean L\* within 3, chroma within 12 %, the spread of brightness, the std of the blurred L\*, within 25 % of the original's unless it differs by under 1 L\*) and measures the seam ratio of the wrap-around join (at most 1.5).
+  material (mean L\* within 3, chroma within 12 %, the spread of brightness, the std of the blurred L\*, within 25 % of the original's unless it differs by under 1 L\*) and measures the seam ratio of the wrap-around join (the worse axis, at most 1.5). The tile is read at the context's scale (reduced by the context width / 800), a cut-out being a crop of a context; a tile is accepted only from the current inbox (its provenance prompt hash must match) and only as a square of at least 256 px.
 
 ### Codex batch runner (ARC-DEV-3001)
 

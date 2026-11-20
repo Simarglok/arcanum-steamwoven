@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+from contextlib import redirect_stderr, redirect_stdout
 import shutil
 import tempfile
 import unittest
@@ -95,6 +97,48 @@ class CutoutsTest(unittest.TestCase):
         self.assertIn("mean_l_delta", flat["failed"])
         self.assertIn("std_l_ratio", flat["failed"])
         self.assertFalse(flat["pass"])
+
+    def test_seam_ratio_takes_the_worse_axis_and_rejects_a_sliver(self) -> None:
+        w = h = 64
+        rows = bytearray()  # periodic across the columns, a ramp down the rows: only the row join is bad
+        for y in range(h):
+            for x in range(w):
+                v = 128 + int(40 * __import__("math").sin(2 * 3.14159265 * x / w))
+                rows += bytes((v, v, y * 4, 255))
+        self.assertGreater(cutouts.seam_ratio(pngio.Image(w, h, rows)), 3.0)
+        with self.assertRaises(cutouts.CutoutError):
+            cutouts.seam_ratio(solid(1, 40, (1, 2, 3)))
+        self.assertEqual(1.0, cutouts.seam_ratio(solid(8, 8, (9, 9, 9))))
+
+    def test_tile_report_passes_a_tile_in_tone(self) -> None:
+        tile = solid(256, 256, (150, 140, 120))
+        stats = cutouts.tile_tone(tile, 1.81)
+        report = cutouts.tile_report(tile, {"mean_l": stats["mean_l"], "mean_chroma": stats["mean_chroma"], "std_l": stats["std_l"]}, 1.81)
+        self.assertTrue(report["pass"], report)
+
+    def test_tile_check_refuses_a_stale_or_non_square_tile_and_exits_2(self) -> None:
+        local = self.tmp / "local"
+        spec = cutouts.load()
+        cut_dir = local / "material-sheet" / "cutouts"
+        cut_dir.mkdir(parents=True)
+        for tile in spec["tiles"]:
+            pngio.write(cut_dir / f"{tile['from']}.png", solid(20, 20, (90, 70, 50)))
+        cutouts.tiles_inbox(spec, local)
+        results = local / "outbox" / cutouts.TILE_BATCH
+        results.mkdir(parents=True)
+        pngio.write(results / "tile-wood.png", solid(300, 200, (50, 40, 30)))
+        (results / "tile-wood.provenance.json").write_text(json.dumps({"prompt_sha256": "stale"}), encoding="utf-8")
+        with self.assertRaises(cutouts.CutoutError):
+            cutouts.check_provenance("tile-wood", local, results)
+        batch = json.loads((local / "inbox" / cutouts.TILE_BATCH / "batch.json").read_text(encoding="utf-8"))
+        wanted = next(i["prompt_sha256"] for i in batch["items"] if i["id"] == "tile-wood")
+        (results / "tile-wood.provenance.json").write_text(json.dumps({"prompt_sha256": wanted}), encoding="utf-8")
+        cutouts.check_provenance("tile-wood", local, results)  # now from the current inbox
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            self.assertEqual(2, cutouts.main(["tile-check", "--local-root", str(local)]))  # non-square 300 x 200
+        self.assertIn("CUTOUTS ERROR", err.getvalue())
+        self.assertEqual(0, cutouts.main(["check"]))
 
 
 if __name__ == "__main__":

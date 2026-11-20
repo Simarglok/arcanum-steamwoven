@@ -55,6 +55,14 @@ def default_local_root() -> Path:
     return root()
 
 
+def png_size(path: Path) -> tuple[int, int]:
+    """Width and height from the IHDR chunk (the image is not decoded)."""
+    head = path.read_bytes()[:24]
+    if head[:8] != pngio.SIGNATURE or head[12:16] != b"IHDR":
+        raise CutoutError(f"{path} is not a PNG")
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
 def check(spec: dict, masks: dict | None = None) -> list[str]:
     """Problems of the cut-out list; empty means valid."""
     problems: list[str] = []
@@ -68,6 +76,9 @@ def check(spec: dict, masks: dict | None = None) -> list[str]:
             problems.append(f"{item['id']}: rectangle {item['rect']} is outside the 800 x 600 layout")
         if item["source"] not in masks["screens"]:
             problems.append(f"{item['id']}: source {item['source']} is not a context screen")
+    tile_ids = [t["id"] for t in spec["tiles"]]
+    if len(set(tile_ids)) != len(tile_ids):
+        problems.append("duplicate tile ids")
     for tile in spec["tiles"]:
         if tile["from"] not in ids:
             problems.append(f"{tile['id']}: cut-out {tile['from']} is not in the list")
@@ -75,8 +86,11 @@ def check(spec: dict, masks: dict | None = None) -> list[str]:
         screen = masks["screens"].get(reference["screen"])
         if screen is None or reference["material"] not in screen["materials"]:
             problems.append(f"{tile['id']}: reference {reference} has no tone mask")
-        if not (PROMPTS / f"{tile['id']}.txt").is_file():
+        prompt = PROMPTS / f"{tile['id']}.txt"
+        if not prompt.is_file():
             problems.append(f"{tile['id']}: prompt file is missing")
+        elif not prompt.read_text(encoding="utf-8").isascii():
+            problems.append(f"{tile['id']}: prompt text is not plain ASCII")
     return problems
 
 
@@ -90,6 +104,9 @@ def pixel_rect(rect: list, width: int, height: int) -> tuple[int, int, int, int]
 
 def cut(spec: dict, local_root: Path) -> dict:
     """Write the cut-outs and their provenance record; returns the record."""
+    problems = check(spec)
+    if problems:
+        raise CutoutError("; ".join(problems))
     sources = local_root / "outbox" / SOURCE_BATCH
     out = local_root / "material-sheet" / "cutouts"
     out.mkdir(parents=True, exist_ok=True)
@@ -139,8 +156,11 @@ def tiles_inbox(spec: dict, local_root: Path) -> dict:
 
 
 def seam_ratio(image: "pngio.Image") -> float:
-    """Mean colour step across the tile's wrap-around join (last column to first, last row to first) over the mean step between neighbouring columns/rows inside the tile (1.0 = as smooth as inside)."""
+    """Worse of the two axes: the mean colour step across the wrap-around join (last column to first, last row to first) over the mean step between neighbouring
+    columns (rows) inside the tile; 1.0 = as smooth as inside. A flat interior with a jump at the join gives 1e9."""
     w, h, d = image.w, image.h, image.data
+    if w < 2 or h < 2:
+        raise CutoutError(f"a tile of {w} x {h} px has no inside to compare with")
 
     def column_step(x_a: int, x_b: int) -> float:
         return sum(abs(d[(y * w + x_a) * 4 + c] - d[(y * w + x_b) * 4 + c]) for y in range(h) for c in range(3)) / (h * 3)
@@ -148,11 +168,12 @@ def seam_ratio(image: "pngio.Image") -> float:
     def row_step(y_a: int, y_b: int) -> float:
         return sum(abs(d[(y_a * w + x) * 4 + c] - d[(y_b * w + x) * 4 + c]) for x in range(w) for c in range(3)) / (w * 3)
 
-    inner_cols = sum(column_step(x, x + 1) for x in range(0, w - 1, max(1, w // 64))) / len(range(0, w - 1, max(1, w // 64)))
-    inner_rows = sum(row_step(y, y + 1) for y in range(0, h - 1, max(1, h // 64))) / len(range(0, h - 1, max(1, h // 64)))
-    join = (column_step(w - 1, 0) + row_step(h - 1, 0)) / 2
-    inner = (inner_cols + inner_rows) / 2
-    return join / inner if inner else (1.0 if join == 0 else float("inf"))
+    cols, rows = range(0, w - 1, max(1, w // 64)), range(0, h - 1, max(1, h // 64))
+    inner_cols, inner_rows = sum(column_step(x, x + 1) for x in cols) / len(cols), sum(row_step(y, y + 1) for y in rows) / len(rows)
+    ratios = []
+    for join, inner in ((column_step(w - 1, 0), inner_cols), (row_step(h - 1, 0), inner_rows)):
+        ratios.append(join / inner if inner else (1.0 if join == 0 else 1e9))
+    return max(ratios)
 
 
 def tile_tone(image: "pngio.Image", scale: float) -> dict:
@@ -200,6 +221,17 @@ def tile_report(tile: "pngio.Image", reference: dict, scale: float) -> dict:
     return {"reference": reference, "tile": stats, "values": values, "limits": TILE_LIMITS, "failed": failed, "pass": not failed}
 
 
+def check_provenance(tile_id: str, local_root: Path, results: Path) -> None:
+    """The returned tile must come from the current inbox: its provenance prompt hash equals the batch item's (a stale file of an earlier run is refused)."""
+    record = results / f"{tile_id}.provenance.json"
+    batch = local_root / "inbox" / TILE_BATCH / "batch.json"
+    if not record.is_file() or not batch.is_file():
+        raise CutoutError(f"no provenance record or inbox batch for {tile_id}")
+    wanted = next((i["prompt_sha256"] for i in json.loads(batch.read_text(encoding="utf-8"))["items"] if i["id"] == tile_id), None)
+    if json.loads(record.read_text(encoding="utf-8")).get("prompt_sha256") != wanted:
+        raise CutoutError(f"tile {tile_id} was made from another prompt than the current inbox: generate it again")
+
+
 def describe(name: str, report: dict) -> str:
     v, r, t = report["values"], report["reference"], report["tile"]
     flags = " ".join(f"{k}!" for k in report["failed"])
@@ -218,8 +250,8 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--results", type=Path)
             p.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    spec = load()
     try:
+        spec = load()
         if args.command == "check":
             problems = check(spec)
             print("CUTOUTS check " + ("PASS: %d cut-outs, %d tiles" % (len(spec["items"]), len(spec["tiles"])) if not problems else "FAIL"))
@@ -243,8 +275,12 @@ def main(argv: list[str] | None = None) -> int:
             path = results / f"{tile['id']}.png"
             if not path.is_file():
                 raise CutoutError(f"missing tile {path}")
-            source = pngio.read(local / "outbox" / SOURCE_BATCH / f"{tile['reference']['screen']}.png")
-            reports[tile["id"]] = tile_report(pngio.read(path), reference_tone(tile, local, masks), source.w / LAYOUT_W)
+            check_provenance(tile["id"], local, results)
+            image = pngio.read(path)
+            if image.w != image.h or image.w < 256:
+                raise CutoutError(f"tile {path.name} is {image.w} x {image.h} px: a square of at least 256 px is needed")
+            source_width = png_size(local / "outbox" / SOURCE_BATCH / f"{tile['reference']['screen']}.png")[0]
+            reports[tile["id"]] = tile_report(image, reference_tone(tile, local, masks), source_width / LAYOUT_W)
     except (CutoutError, tone_check.ToneError, KeyError, ValueError, OSError, pngio.PngError) as error:
         print(f"CUTOUTS ERROR: {error!r}", file=sys.stderr)
         return 2
