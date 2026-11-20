@@ -35,8 +35,6 @@ point 9	1000	action 33
 point 9	1089	action 33
 point 9	1116	action 21
 point 9	1478	action 30
-point 9	1537	GotoBeyondEnd
-point 9	1539	GotoBeyondEnd
 point 9	1814	action 33
 point 9	1815	action 33
 point 9	1823	action 30
