@@ -1199,6 +1199,52 @@ python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
 python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
 ```
 
+## Steamwoven kit bake (ARC-DEV-2460)
+
+[`tools/steamwoven_ui/bake.py`](../../tools/steamwoven_ui/bake.py) makes the four step sets (x1, x2/3, x1/2, x1/3; folder names `x1`, `x2-3`, `x1-2`, `x1-3`) from the kit masters
+([TRD SWI-RUN-1](../ui/steamwoven-interface-trd.md#bake-and-runtime)); the standard-library PNG reader and writer is [`pngio.py`](../../tools/steamwoven_ui/pngio.py), shared with the assembly tool (8-bit RGBA masters only; canonical output).
+No numpy, Godot or `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main
+checkout, never git.
+
+- **Where things live:** masters `local/steamwoven-ui/masters/<part id>.png` (the fit tool's output, #2459); baked sets `local/steamwoven-ui/baked/<step>/<part id>.png` with
+  `<step>/manifest.json` (per part: master size and SHA-256, baked size, bytes, file SHA-256 and a SHA-256 of the raw pixels; plus a hash of the part list).
+  `baked/` is derived and fully reproducible from `masters/`, so it is **not backed up**: a changed master is rebaked, a part whose
+  master hash is unchanged is reused (`unchanged` in the log), and `--prune` removes only baked files this tool wrote whose master is gone.
+- **Backup** (a convention set by this page; no tool does it, the owner or an agent copies by hand; same spirit as the [HD pack](hd-pack.md) rules, kit decision SWI-PRV-1): the masters (and the prompt library's provenance records beside them) are the work that nothing
+  reproduces, so they are copied, never moved, to a folder **outside** `hd-packs/`, next to the HD backups: `~/Library/Application Support/Arcanum Steamwoven Game/steamwoven-ui-backups/<date>/`.
+  After a copy to another device, rebake there and compare the `pixels_sha256` values of the manifests (they do not depend on the zlib build; the file hashes do).
+- **Install:** the tool writes nothing outside `local/steamwoven-ui/baked/`. The runtime reads the sets in place (viewer of the owner's checkout); where a packaged game on a
+  player's own device keeps them is for the runtime slice [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461), because the kit is never shipped or committed (SWI-PRV-2).
+- **Exactness:** a master side must be a multiple of 6 px (so of 2 and 3); every baked length is the master length times the step, exactly; x1 is the master copied pixel for pixel; each
+  other pixel is the exact area average of the master pixels it covers in integer weights, taken in linear light (16-bit table) with premultiplied alpha, so no dark fringe and no
+  colour from transparent pixels; a fully transparent result has colour 0 (not at x1, which is the master unchanged). Two runs give identical bytes. Speed: pure Python, under a minute for all four sets of one 2880 x 2160 master (a full-screen plate); a
+  second bake reuses what is unchanged.
+- **Checks** against `kit.json`: the id must be a manifest part and a master of `units` size basis must have the manifest size (`provisional` only warns; `--no-kit` skips this for scratch masters).
+
+```sh
+python3 -B tools/steamwoven_ui/bake.py bake --dry-run          # plan: what would be baked, nothing written
+python3 -B tools/steamwoven_ui/bake.py bake [--steps x1-2,x1-3] [--only ID,...] [--prune]
+python3 -B tools/steamwoven_ui/bake.py verify                   # files, hashes and sizes of the sets against the manifests and masters
+python3 -B tools/steamwoven_ui/bake.py self-test                # task check: synthetic master, no file
+python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (also in the batched run_tests.py set)
+```
+
+## Steamwoven Codex batch runner (ARC-DEV-3001)
+
+[`tools/steamwoven_ui/codex_batch.py`](../../tools/steamwoven_ui/codex_batch.py) runs one inbox batch of the Steamwoven kit through the owner's subscription
+Codex CLI on the Mac (`codex exec` for the first item, `codex exec resume <thread_id>` for the rest, one session per batch) and writes
+`local/steamwoven-ui/outbox/<batch>/` with a provenance record per image; design, `batch.json` format and rules:
+[TRD](../ui/steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001). Standard-library Python; it runs no Godot and no `dotnet`, so it does not use the launch
+queue; it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
+[`steamwoven-codex-images`](../../.claude/skills/steamwoven-codex-images/SKILL.md) says how). Its tests use a fake `codex` and run in the batched `tools/local_dev/run_tests.py`.
+
+```sh
+python3 -B -m unittest tools.steamwoven_ui.test_codex_batch                          # task check: fake codex, no quota
+python3 -B tools/steamwoven_ui/codex_batch.py check                                  # codex version, image_generation on, subscription login
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]     # the commands, nothing is sent
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite]
+```
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
@@ -1377,6 +1423,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Toggle state census (ARC-SCRIPT-2324) | `DAT_ROOT` = the installed game folder; `ARC_TOGGLE_STATE_REPORT` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~ToggleStateCensusRealData&TestCategory=RealData` (about 4 min); every installed script that runs toggle state by the focus kind of its object operand, the placed attachments of the 79 maps' windows that run one, and the static rows the map data stores off; [ledger OT8–OT9](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221) |
 | Toggled scenery lights survey (ARC-SCRIPT-2585) | `DAT_ROOT` = the installed game folder; `ARC_SCENERY_LIGHT_REPORT` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~SceneryToggleLightCensusRealData&TestCategory=RealData` (about 2 min); the sceneries of the 79 maps that carry a light, and the ones the scripts 1179 and 2407 toggle (named 1609 and 1668); [ledger OT10](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221) |
 | Armour critical points census (ARC-SCRIPT-2828) | `DAT_ROOT` = the installed game folder | Terrain viewer tests, `FullyQualifiedName~The_installed_critical_points_are_counted&TestCategory=RealData` (about 2 min); the installed critical-hit (34) and critical-miss (35) attachments by object type over the placed rows of the 81 maps and over every item prototype (2 weapon and 2 armour rows at 34, 2 weapon rows at 35, no prototype), and the armour scripts read against the combat-point set; script numbers only; `ARC_ARMOUR_CRITICAL_CENSUS` = a text file the report is written to (optional); a failure means the counts changed: update [trigger conditions TQ23](../research/script-trigger-conditions.md) |
+| Self-hit scripts census (ARC-SCRIPT-2841) | `DAT_ROOT` = the installed game folder; `ARC_SELF_HIT_CENSUS` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~The_installed_weapons_with_hit_and_critical_hit_scripts&TestCategory=RealData` (about 4 min); the installed hit (7), critical-hit (34) and critter-hits (26) attachments by object type over the placed rows of the 81 maps and every item prototype (26 placed weapon rows at 7, 2 at 34, 4 weapon prototypes at 7, 18 placed critter rows and 9 critter prototypes at 26); [ledger TQ31](../research/ledger/scripts.md) |
 | Generator held items census (ARC-WORLD-1707) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~GeneratorItemCensusRealDataTests&TestCategory=RealData` (seconds); the 83 items of the 27 installed monster generators against their prototypes (instance overrides, the item and object flags the session reads); counts only; a failure means the counts changed: update [ledger GS5](../research/ledger/npc-ai.md) |
 | Art number census (ARC-SCRIPT-1780) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~ObjectArtCensusRealData&TestCategory=RealData` (about 1 min); the art classes of the NPC prototypes and placed rows (787 placed unique NPCs) and the object each use of change art number names (none an NPC); [ledger AN16–AN17](../research/ledger/scripts.md#change-art-number-arc-script-1735-e5-a-tail) |
 | Hero sight and dialog scripts (ARC-SCRIPT-1863) | `DAT_ROOT` = the installed game folder | Scripting project, `FullyQualifiedName~ScrHeroSightCensusRealData&TestCategory=RealData` (the installed clauses of conditions 26, 28, 29); terrain viewer tests, `FullyQualifiedName~AreaHeroSightScriptRealData&TestCategory=RealData` (scripts 2602 and 1130 run under the use host; under a second each); [ledger CS17](../research/ledger/scripts.md) |

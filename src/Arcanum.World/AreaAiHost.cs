@@ -2529,9 +2529,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private Func<DamageRecipient, bool>? TakingDamageOf(string attacker, string? target) =>
         _scene.TakingDamage is not { } asks ? null : recipient => recipient == DamageRecipient.Target ? target is null || target == Pc || asks(target, attacker) : asks(attacker, attacker);
 
-    // ARC-SCRIPT-1483: the combat-point scripts of an NPC's hit on <paramref name="victim"/> (null: no victim named, none run).
+    // ARC-SCRIPT-1483: the combat-point scripts of an NPC's hit on <paramref name="victim"/> (null: no victim named, none run, but for a critical miss's self-hit, ARC-SCRIPT-2841: the attacker is its own victim).
     private Action<SessionHitScriptEvent>? HitScriptsOf(string attacker, string? victim) =>
-        _scene.HitScripts is not { } run || victim is null ? null : hit => run(attacker, victim, hit);
+        _scene.HitScripts is not { } run ? null : hit => { if (hit.SelfHit) run(attacker, attacker, hit); else if (victim is not null) run(attacker, victim, hit); };
 
     // ARC-SCRIPT-2828: the armour scripts of a critical damage step of an NPC's attack on <paramref name="victim"/> (null: a throw at a location or a strike on an object; only the attacker's own critical self-hit can reach the scripts then, so the attacker stands for it).
     private Action<SessionArmourCriticalEvent>? ArmourScriptsOf(string attacker, string? victim) =>

@@ -426,6 +426,7 @@ public partial class TerrainViewerApp
         try
         {
             foreach (var node in new Node[] { floaters, portraits, sleep, fate, spellPane, combatHud }) AddChild(node);
+            combatHud.SetFont(AreaArtFontFace.SyntheticForSelfTest()); // ARC-UI-2940: the list draws in the original's font only
             await frames(2);
             // ARC-UI-2604: the spell pane starts at the frame's left edge and the combat list ends at its right edge, neither under a pillarbox bar.
             spellPane.Show(Array.Empty<AreaSpellChoice>());

@@ -549,4 +549,5 @@ Diagnosed on 2026-11-11 with the `worldmap` stage in Legacy and HD side by side 
   Check a native shot after any install: a rejected frame shows as Legacy art, not as an error.
 - **Native look:** `./arcanum smoke pr --stages worldmap --env ARC_HD_PACK=<pack> --env ARC_AREA_WORLDMAP_HD_VERIFY=1 --env ARC_WORLDMAP_SMOKE_SHOT=<png>`
   runs the stage with the HD interface switch on (`ARC_AREA_WORLDMAP_HD_VERIFY`, like the bar and sheet smokes) and saves the frame; the shot is
-  original-derived and stays under `local/`.
+  original-derived and stays under `local/`. ARC-UI-2993: `ARC_AREA_WORLDMAP_HD_VERIFY=generated` also turns the generated interface on, which is the Steamwoven layout (the composition's scale s; without it the window keeps its own whole factor and the picture its 1:1 window units);
+  `ARC_WORLDMAP_SMOKE_SIZE=WIDTHxHEIGHT` sets the display of the capture and `ARC_WORLDMAP_SMOKE_PICTURE=before` draws the earlier look (picture scaled by s) for a before/after composite.

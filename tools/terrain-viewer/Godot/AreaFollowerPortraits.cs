@@ -64,14 +64,29 @@ public partial class AreaArtBar : Control
 /// </summary>
 public partial class AreaFollowerPortraits : CanvasLayer
 {
-    private sealed record Entry(int Slot, Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, Label Initials, ColorRect Tint,
+    private sealed record Entry(int Slot, Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, AreaArtLabel Initials, ColorRect Tint,
         AreaArtBar Health, AreaArtBar Fatigue);
 
     // ARC-UI-2795 (exe 0x56B970, fonts built at 0x56A4BD): the rows are art 229 (Flare12Font) in white, mid grey when greyed and (255, 210, 0) under the pointer (the font 0x67BB5C).
     private static readonly (byte R, byte G, byte B) MenuWhite = (255, 255, 255), MenuGrey = (128, 128, 128), MenuBright = (255, 210, 0);
 
     /// <summary>ARC-UI-2795: the menu rows' font (art 229); null draws no row text.</summary>
-    public AreaArtFontFace? MenuFont { get; set; }
+    public AreaArtFontFace? MenuFont
+    {
+        get => _menuFont;
+        set
+        {
+            if (ReferenceEquals(_menuFont, value)) return;
+            _menuFont = value;
+            // ARC-UI-2940: the initials are drawn in this font too.
+            foreach (var entry in _entries.Values) entry.Initials.Face = value;
+            _chromeWords.RemoveAll(word => !IsInstanceValid(word));
+            foreach (var word in _chromeWords) word.Face = value;
+        }
+    }
+
+    private AreaArtFontFace? _menuFont;
+    private readonly List<AreaArtLabel> _chromeWords = [];
 
     private Control _root = null!;
     private Control _menu = null!;
@@ -195,7 +210,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2069 (ledger DB1, DB2): the panel stays drawn (frames, portraits, bars) but takes no input: the original's follower handler 0x56A9D0 returns at once while
-    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, forgets the hover without a hover-exit (the original fires none, and the dialog start's description in the description area must stay) and drops the tooltips;
+    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, forgets the hover without a hover-exit (the original fires none, and the dialog start's description in the description area must stay);
     /// the buttons still consume the pointer (the dialog's hook consumes every record, 0x5517A0).
     /// </summary>
     public bool Inert
@@ -206,11 +221,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
             if (_inert == value) return;
             _inert = value;
             if (value) { CloseMenu(); _hovered = null; }
-            foreach (var (entity, entry) in _entries) entry.Button.TooltipText = value ? "" : LabelOf(entity);
         }
     }
-
-    private string LabelOf(string entity) => _followers.FirstOrDefault(f => f.Entity == entity).Label ?? "";
 
     public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += ScreenMoved;
 
@@ -330,7 +342,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var (entity, label, _, portrait) = follower;
         var (x, y) = AreaFollowerFrameLayout.Slot(slot);
         var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
-        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = _inert ? "" : label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
+        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
         // ARC-DEV-280 (B33, 0x56A9D0): the order menu opens on the RIGHT button's release over the portrait (an open menu is closed by it
         // instead), and the left button's release is a click on the follower (a talk, 0x54EA80 -> 0x54ED30, or in a target mode the aim of the
         // spell, skill or item, FP6), which only closes an open menu (FP9).
@@ -355,12 +367,12 @@ public partial class AreaFollowerPortraits : CanvasLayer
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
             Texture = portrait, Visible = portrait is not null, Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        var initials = new Label
+        // ARC-UI-2940: the initials of a follower without a portrait in the original's text font (art 229; nothing without it), never Godot's default font.
+        var initials = new AreaArtLabel
         {
             Text = new string(label.Where(char.IsLetter).Take(3).ToArray()), Visible = portrait is null, Position = image.Position, Size = image.Size,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
+            Align = AreaArtLabel.Alignment.Centre, Middle = true, Face = MenuFont, Colour = MenuWhite,
         };
-        initials.AddThemeFontSizeOverride("font_size", 9);
         // The original adds pure red to the image's pixels (0x51E0A0).
         var tint = new ColorRect
         {
@@ -441,8 +453,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         {
             // Without the art (no game folder): a dark plate with a word.
             button.AddChild(new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
-            var word = new Label { Text = fallback, Size = size, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
-            word.AddThemeFontSizeOverride("font_size", 9);
+            var word = new AreaArtLabel { Text = fallback, Size = size, Align = AreaArtLabel.Alignment.Centre, Middle = true, Face = MenuFont, Colour = MenuWhite };
+            _chromeWords.Add(word);
             button.AddChild(word);
         }
         // A release with a menu open is the menu's (FP9): it closes the menu and nothing else happens.

@@ -162,6 +162,8 @@ the **town-map tiles were not** (they were "not listed" here), and they are by f
 They are map pictures, like the world map, so the answer of #2952 for the world-map tiles decides them as well; a redraw of 57.5 thousand tiles is not a realistic job, so
 if the owner picks B for the world map, the town maps are a separate, much bigger decision.
 
+**Stopgap (ARC-UI-2993, [#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993)):** until the sharp world map of [#2992](https://github.com/Simarglok/arcanum-steamwoven/issues/2992) exists, the HD option (the Steamwoven layout) draws the map view's 64 tiles at 1:1 device pixels instead of scaling them by the composition's scale, while the frame, buttons and the code-drawn overlays stay at the composition's scale. The town map and the continent view are not part of it.
+
 ## Bitmaps outside `art/interface`
 
 The pack format holds interface ARTs (`sprite` entries) and portraits (`portrait` entries) only. Other bitmaps that the interface draws cannot be in the pack today.
