@@ -283,6 +283,7 @@ public partial class TerrainViewerApp
                 {
                     var expectedZoom = _camera.State.Zoom * whole / WorldZoomPolicy.DefaultZoom;
                     require(Math.Abs(_camera.Camera.Zoom.X - expectedZoom) < 1e-4, $"[{tag}] the camera's zoom {_camera.Camera.Zoom.X} follows the player's setting {_camera.State.Zoom} at the factor {whole}");
+                    require(Math.Abs(_camera.PlayHeight - OriginalComposition.ViewHeight * whole) < 1e-6, $"[{tag}] the camera's map-edge clamp uses the play view's height {OriginalComposition.ViewHeight * whole}, got {_camera.PlayHeight}");
                     if (_camera.State.Zoom == 2) require(Math.Abs(virtualWidth / _camera.Camera.Zoom.X - OriginalComposition.ViewWidth) < 1e-3, $"[{tag}] the view is {OriginalComposition.ViewWidth} world pixels wide at the default zoom");
                 }
                 if (AreaGameWindow() is { } outOfSight)

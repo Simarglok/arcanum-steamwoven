@@ -65,6 +65,9 @@ public sealed class TerrainCameraController
     public double ZoomScale { get; set; } = 1;
     /// <summary>ARC-UI-2936: screen pixels the camera's focus (the actor) stands above the viewport's centre: in the Original look the play view is the 400-unit band between the strips, whose middle is above the screen's.</summary>
     public double ViewShift { get; set; }
+    /// <summary>ARC-UI-2936: the screen height of the play view the world is seen through (the 400-unit band between the strips in the Original look); 0 = the whole viewport. The map edge clamp uses it, so the hero can reach the
+    /// map's edge inside the play view instead of stopping 100 world pixels short under a strip.</summary>
+    public double PlayHeight { get; set; }
     private double Floored(double zoom, Vector2 viewport) => Math.Max(zoom, ZoomFloor(viewport) / ZoomScale);
 
     public void Fit(Vector2 viewport)
@@ -72,7 +75,7 @@ public sealed class TerrainCameraController
         if (_bounds is null || viewport.X <= 64 || viewport.Y <= 64) return;
         var bounds = _bounds.Value;
         _state = CameraPolicy.Fit(bounds.X, bounds.Y, bounds.Width, bounds.Height, viewport.X, viewport.Y);
-        _state = _state with { Zoom = Floored(_state.Zoom, viewport) };
+        _state = _state with { Zoom = Floored(_state.Zoom / ZoomScale, viewport) };
         _center = new(_state.X, _state.Y);
         WantedCenter = _center;
         Held = false;
@@ -89,7 +92,7 @@ public sealed class TerrainCameraController
     private CameraBounds Bounds(Vector2 viewport)
     {
         var b = _bounds!.Value;
-        return new(new(b.X, b.Y), new((double)b.X + b.Width, (double)b.Y + b.Height), new(viewport.X, viewport.Y), _state.Zoom * ZoomScale);
+        return new(new(b.X, b.Y), new((double)b.X + b.Width, (double)b.Y + b.Height), new(viewport.X, PlayHeight > 0 ? PlayHeight : viewport.Y), _state.Zoom * ZoomScale);
     }
     public void ResetWorld(Vec2 actor, Vector2 viewport, double zoom = 2)
     {

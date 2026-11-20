@@ -271,9 +271,10 @@ public partial class TerrainViewerApp
         }
         // The camera after the window: the viewport the new content scale gives is not read until the next frame, so the camera is told it.
         var (zoomScale, viewShift) = factor == 0 ? (1.0, 0.0) : (OriginalComposition.ZoomScale(factor), OriginalComposition.ViewShift(factor));
-        if (_camera is not null && (_camera.ZoomScale != zoomScale || _camera.ViewShift != viewShift))
+        var playHeight = factor == 0 ? 0.0 : (double)OriginalComposition.ViewHeight * factor;
+        if (_camera is not null && (_camera.ZoomScale != zoomScale || _camera.ViewShift != viewShift || _camera.PlayHeight != playHeight))
         {
-            _camera.ZoomScale = zoomScale; _camera.ViewShift = viewShift;
+            _camera.ZoomScale = zoomScale; _camera.ViewShift = viewShift; _camera.PlayHeight = playHeight;
             var viewport = factor != 0 ? new Vector2(virtualSize.X, virtualSize.Y) : GetViewport() == window ? new Vector2(window.Size.X, window.Size.Y) : WorldViewport;
             if (IsWorld && _readyActorPlan is not null) _camera.ResizeWorld(WorldAnchor, viewport);
             else _camera.ReapplyZoom();
