@@ -51,7 +51,7 @@ public static partial class TerrainViewerSelfTest
             Require(await Settled(texture), "at 4/3 the frame is resampled by a worker and drawn from the copy");
             var (width, height) = InterfaceChromeRenderer.PixelSize(W, H, 1.333);
             Require(texture.AreaPixelSize == new Vector2I(width, height) && texture.GetWidth() == W && texture.GetHeight() == H, $"the copy is {width}x{height} device pixels and the texture keeps the Legacy size");
-            Require(Math.Abs(texture.HdScale - 1) <= 1, "the region draw scales by the copy's ratio");
+            Require(texture.HdScale == 1 && texture.AreaPixelSize.X > 0, "the copy is not a whole multiple of the Legacy size (11 of 8 texels)");
             var expected = InterfaceChromeRenderer.ResampleStraight(hdRgba, W * 4, H * 4, width, height);
             Require(texture.AreaImageBytes() is { } drawn && drawn.AsSpan().SequenceEqual(expected), "the uploaded pixels are the area resample with straight alpha");
             Require(expected.Where((v, i) => i % 4 == 3 && v > 0 && v < 255).Any(), "the copy keeps partial alpha at the edge of the transparent corner texel");

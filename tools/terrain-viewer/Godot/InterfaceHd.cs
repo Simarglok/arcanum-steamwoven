@@ -46,8 +46,9 @@ public static class InterfaceHd
     public static bool Configure(HdPack? pack, bool enabled, bool generated = false)
     {
         if (ReferenceEquals(pack, Pack) && enabled == Enabled && generated == Generated) return false;
+        var sameCopies = ReferenceEquals(pack, Pack) && enabled == Enabled;
         Pack = pack; Enabled = enabled; Generated = generated;
-        DropDirectFrames();
+        if (!sameCopies) DropDirectFrames(); // the generated setting alone does not change a direct frame's copy
         AreaLensPlace.Unified = generated; // ARC-UI-2714: the generated window arts carry the lens at the common place
         HdOptimizedStore.Attach(pack, enabled);
         RefreshTextures();
@@ -120,6 +121,8 @@ public static class InterfaceHd
     }
 
     private static readonly ConditionalWeakTable<AreaInterfaceFrame, GeneratedFrameEntry> GeneratedFrames = new();
+    // ARC-RENDER-3002: direct frames wait on their own gate (two workers), so a grid of icons at a new scale never queues ahead of a window's generated chrome.
+    private static readonly SemaphoreSlim DirectGate = new(Math.Max(1, Math.Min(2, System.Environment.ProcessorCount / 4)));
     private static readonly SemaphoreSlim GeneratedGate = new(Math.Max(1, Math.Min(4, System.Environment.ProcessorCount / 2)));
     private static int _generatedPending;
 
@@ -209,14 +212,24 @@ public static class InterfaceHd
     private const int DirectKeep = 3;
     private static readonly ConditionalWeakTable<AreaInterfaceFrame, List<DirectFrameEntry>> DirectFrames = new();
     private static int _directPending;
-    private static long _directBytes, _directFrames, _directTicks;
+    private static long _directTicks;
 
     /// <summary>Direct frames still being resampled on a worker (a self-test waits for 0).</summary>
     public static int DirectPending => Volatile.Read(ref _directPending);
 
-    /// <summary>Totals of the resampled direct frames kept since the pack or the HD setting last changed: how many, their bytes (straight RGBA) and the worker time spent.</summary>
-    public static (long Frames, long Bytes, double Milliseconds) DirectTotals =>
-        (Interlocked.Read(ref _directFrames), Interlocked.Read(ref _directBytes), Interlocked.Read(ref _directTicks) * 1000.0 / Stopwatch.Frequency);
+    /// <summary>Totals of the resampled direct frames kept now (how many, their bytes as straight RGBA) and the worker time spent since the pack or the HD setting last changed.</summary>
+    public static (long Frames, long Bytes, double Milliseconds) DirectTotals
+    {
+        get
+        {
+            long frames = 0, bytes = 0;
+            lock (DirectFrames)
+                foreach (var pair in DirectFrames)
+                    foreach (var entry in pair.Value)
+                        if (entry.Pixels is { } pixels) { frames++; bytes += pixels.Length; }
+            return (frames, bytes, Interlocked.Read(ref _directTicks) * 1000.0 / Stopwatch.Frequency);
+        }
+    }
 
     /// <summary>The scale (rounded to 1/1000) a direct frame of a pack of <paramref name="packScale"/> is resampled to for the real device scale <paramref name="device"/>,
     /// or null when it draws as before: a whole device scale (1, 2, 3 and 4 and above: a mip level or a magnification is exact enough there) and a scale at or above the pack's.</summary>
@@ -250,7 +263,7 @@ public static class InterfaceHd
     private static async Task ResampleDirectAsync(List<DirectFrameEntry> entries, DirectFrameEntry entry, AreaInterfaceFrame frame, HdSpriteQuery query)
     {
         // Queued frames hold no pool thread; one whose entry went meanwhile (another scale, pack or setting) is not resampled at all.
-        await GeneratedGate.WaitAsync();
+        await DirectGate.WaitAsync();
         try
         {
             lock (DirectFrames) if (!entries.Contains(entry)) { entry.Failed = true; return; }
@@ -262,7 +275,7 @@ public static class InterfaceHd
             var pixels = InterfaceChromeRenderer.ResampleStraight(rgba, hd.Width, hd.Height, width, height);
             lock (DirectFrames) if (!entries.Contains(entry)) { entry.Failed = true; return; }
             entry.Width = width; entry.Height = height; entry.Pixels = pixels;
-            Interlocked.Increment(ref _directFrames); Interlocked.Add(ref _directBytes, pixels.Length); Interlocked.Add(ref _directTicks, clock.ElapsedTicks);
+            Interlocked.Add(ref _directTicks, clock.ElapsedTicks);
             if ((long)width * height > 200_000)
                 GD.Print($"ARC-RENDER-3002 direct frame {hd.Width}x{hd.Height} -> {width}x{height} resampled off the main thread in {clock.ElapsedMilliseconds} ms (scale {entry.Scale})");
         }
@@ -274,7 +287,7 @@ public static class InterfaceHd
         }
         finally
         {
-            GeneratedGate.Release();
+            DirectGate.Release();
             Interlocked.Decrement(ref _directPending);
             Callable.From(() => GeneratedPainted(frame)).CallDeferred();
         }
@@ -286,7 +299,7 @@ public static class InterfaceHd
         lock (DirectFrames)
         {
             foreach (var pair in DirectFrames) pair.Value.Clear();
-            Interlocked.Exchange(ref _directFrames, 0); Interlocked.Exchange(ref _directBytes, 0); Interlocked.Exchange(ref _directTicks, 0);
+            Interlocked.Exchange(ref _directTicks, 0);
         }
     }
 
@@ -455,7 +468,7 @@ public static class InterfaceHd
 /// at a zoom below 4× (200 % of 800 × 600 is 2×) is filtered down instead of sampled nearest, whatever the parent node's filter. The Legacy
 /// texture, the tile case and the bitmap fonts keep the parent's Nearest. The mip chain costs about a third more memory per decoded HD frame, and
 /// a magnification above 4× would now be soft rather than nearest.</para>
-/// <para>ARC-RENDER-3002: at a fractional device scale below the pack's (a view's scale source or the Steamwoven strips' scale) a plain frame is resampled once per
+/// <para>ARC-RENDER-3002: at a fractional device scale below the pack's (a view's claimed scale source) a plain frame is resampled once per
 /// scale with the area filter on a worker (<see cref="InterfaceHd.DirectFor"/>) and drawn 1:1 from that copy; the mip chain it replaces is freed. Whole scales, scales
 /// from the pack's up, art-font canvases and textures with no claimed scale keep the trilinear draw.</para>
 /// </summary>
@@ -593,12 +606,20 @@ public partial class HdInterfaceTexture : Texture2D
 
     private void DropArea() { _area = null; _areaCanvas = null; _areaFrom = null; }
 
-    // ARC-RENDER-3002: the area-resampled frame for the device scale this texture is drawn at (its scale source, or the Steamwoven strips'); null while the scale is whole
+    // ARC-RENDER-3002: the area-resampled frame for the device scale this texture is drawn at (its scale source); null while the scale is whole
     // or at least the pack's, the pack has no usable redraw, or nothing is ready yet and no earlier scale draws (the mip chain draws then, as before).
     private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query)
     {
-        var device = ScaleSource is { } source ? source() : InterfaceHd.FractionalScale;
-        if (device is not { } real || InterfaceHd.DirectScale(real, pack.Scale) is not { } scale) { DropArea(); return null; }
+        // Only a view that claims its device scale: a texture with no claim may be drawn at any scale, and a copy for the wrong one is blurrier than the mip chain.
+        if (ScaleSource is not { } source || InterfaceHd.DirectScale(source(), pack.Scale) is not { } scale) { DropArea(); return null; }
+        var real = (double)source();
+        // Settled: the copy of this pack and scale is uploaded, so the draw takes no lock and no lookup.
+        if (_areaCanvas is not null && _areaFrom is { } held && ReferenceEquals(held.Pack, pack) && held.Scale == scale && !held.Failed)
+        {
+            _activeRatio = (float)(_area?.GetWidth() ?? 1) / Math.Max(1, _frame.Width);
+            _activeScale = Math.Max(1, (int)MathF.Round(_activeRatio));
+            return _areaCanvas;
+        }
         var entry = InterfaceHd.DirectFor(_frame, query, pack, scale);
         if (entry.Failed) { DropArea(); return null; }
         if (entry.Pixels is not { } pixels)

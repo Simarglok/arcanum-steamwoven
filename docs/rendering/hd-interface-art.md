@@ -414,9 +414,9 @@ No model was trained; no weight is added to the repository. Generated frames are
 - The staircase of the Legacy edge at 200–300 % was not tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the
   silhouette. The filtered HD minification itself is in the viewer since ARC-UI-112 (an HD interface frame is drawn trilinear with
   mipmaps below 4×, whatever the parent node's filter; ARC-RENDER-3002 replaces that at a **fractional** device scale below 4: a directly drawn frame whose view
-  claims its device scale, or a Steamwoven strip, is area-resampled once per scale on a worker (`InterfaceChromeRenderer.ResampleStraight`, straight alpha kept,
+  claims its device scale (`ScaleSource`) is area-resampled once per scale on a worker (`InterfaceChromeRenderer.ResampleStraight`, straight alpha kept,
   colour weighted by alpha) and drawn 1:1 from that copy, the mip chain freed; whole scales, scales from 4 up, art-font canvases and textures that claim no
-  scale keep the trilinear draw, and the fonts' glyphs are [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939)); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
+  scale (the Steamwoven strips' direct frames included) keep the trilinear draw, and the fonts' glyphs are [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939)); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
   draw), not a judgement of real art at 200–300 %. Mip levels average straight alpha (not premultiplied), so a pack's transparent
   texels must carry sensible colour (the U1/U2 colour bleed does); the edge of a region draw may take up to about 7 % of the
   neighbouring texels in at an unaligned region edge (about 7 % in the synthetic probe: 237 of 255). The filter applies at every
