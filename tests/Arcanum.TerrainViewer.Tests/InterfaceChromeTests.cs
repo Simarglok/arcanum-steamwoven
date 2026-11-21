@@ -959,9 +959,9 @@ public sealed class InterfaceChromeTests
     }
 
     [TestMethod]
-    public void The_four_strip_buttons_keep_the_art_face_only_with_a_pack_picture()
+    public void The_four_strip_buttons_draw_the_pack_picture_whole_and_the_legacy_ones_as_before()
     {
-        // ARC-UI-3058: the glyph mask is a Legacy-grid lookup (stair-steps with HD art), so with a pack picture the art's own picture stays inside the generated rim; with the Legacy pixels alone the button is drawn as before.
+        // ARC-UI-3058: with a pack picture the kit plate is drawn whole (colour and alpha, so its rim and soft shadow stay), instead of a generated rim; with the Legacy pixels alone the button is drawn as before.
         const int size = 39;
         var legacy = new byte[size * size * 4];
         for (var y = 0; y < size; y++)
@@ -974,17 +974,34 @@ public sealed class InterfaceChromeTests
         foreach (var file in new[] { "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art" })
         {
             var recipe = Recipe(file);
-            Assert.IsTrue(recipe.KeepFace && recipe.KeepFaceWithPictureOnly, file);
+            Assert.IsTrue(recipe.WholePicture, file);
             var (pw, ph) = InterfaceChromeRenderer.PixelSize(size, size, 2.0);
             var picture = new byte[pw * ph * 4];
-            for (var i = 0; i < picture.Length; i += 4) (picture[i], picture[i + 1], picture[i + 2], picture[i + 3]) = (30, 90, 200, 255);
+            for (var y = 0; y < ph; y++)
+            for (var x = 0; x < pw; x++)
+            {
+                var i = (y * pw + x) * 4;
+                var rim = x < 6 || x >= pw - 6 || y < 6 || y >= ph - 6;  // a soft edge: half transparent
+                (picture[i], picture[i + 1], picture[i + 2], picture[i + 3]) = rim ? ((byte)200, (byte)150, (byte)40, (byte)128) : ((byte)30, (byte)90, (byte)200, (byte)255);
+            }
             foreach (var frame in new[] { 0, 1, 2 })
             {
-                Assert.AreEqual((30, 90, 200, 255), Pixel(InterfaceChromeRenderer.Render(recipe, size, size, legacy, picture, frame, 2.0), pw, pw / 2, ph / 2), $"{file} frame {frame} keeps the pack picture");
+                var whole = InterfaceChromeRenderer.Render(recipe, size, size, legacy, picture, frame, 2.0);
+                Assert.AreEqual((30, 90, 200, 255), Pixel(whole, pw, pw / 2, ph / 2), $"{file} frame {frame} draws the pack picture");
+                Assert.AreEqual((200, 150, 40, 128), Pixel(whole, pw, 2, ph / 2), $"{file} frame {frame} keeps the picture's own alpha (a soft edge), whatever the Legacy silhouette says");
                 var plain = Pixel(InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], frame, 2.0), pw, pw / 2, ph / 2);
                 Assert.AreNotEqual((120, 30, 20, 255), plain, $"{file} frame {frame}: the Legacy pixels alone get the generated face");
+                Assert.AreEqual(255, plain.A, $"{file} frame {frame}: the Legacy silhouette decides without a picture");
             }
         }
+    }
+
+    [TestMethod]
+    public void The_bottom_strip_draws_no_ring_in_the_sockets_of_the_four_round_buttons()
+    {
+        // ARC-UI-3058: the button art carries its own setting; a generated hole ring around it showed as a second, jagged rim.
+        var bare = Recipe("intbotom.art").Parts.OfType<ChromeBoardHole>().Select(b => (b.X, b.Y, b.Width, b.Height)).ToArray();
+        foreach (var socket in new[] { (86, 16, 39, 39), (693, 15, 39, 39), (649, 53, 39, 39), (693, 98, 39, 39) }) CollectionAssert.Contains(bare, socket);
     }
 
     [TestMethod]

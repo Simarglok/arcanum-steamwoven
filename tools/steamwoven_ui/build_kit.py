@@ -76,9 +76,9 @@ def part_anchor(kind: str, size: tuple[int, int], windows: tuple[str, ...], clas
 
 
 def new_part(ident: str, kind: str, anchor: str, used_by: list[str], family: str | None, batch: str | None, note: str,
-             layers: list[str] | None = None, states: list[str] | None = None, master: bool = False) -> dict:
+             layers: list[str] | None = None, states: list[str] | None = None, master: bool = False, provenance: str | None = None) -> dict:
     return {"id": ident, "kind": kind, "size": None, "size_basis": "open", "anchor": anchor, "layers": layers or [], "states": states or [],
-            "used_by": used_by, "source_arts": [], "family": family, "batch": batch, "provenance": f"fit:{ident}" if master else None,
+            "used_by": used_by, "source_arts": [], "family": family, "batch": batch, "provenance": provenance or (f"fit:{ident}" if master else None),
             "status": "master" if master else "planned", "frames": 1,
             "note": note}
 
@@ -105,11 +105,14 @@ def new_parts() -> list[dict]:
                                 ("plate.round_button_pressed", ["pressed"], "the same plate in its pressed look (the unlit rim of the original's pressed frame)")):
         parts.append(new_part(ident, "plate", "bottom-strip", ["H02"], None, "B-BUTTONS", f"{what}; no symbol on it (the glyph is its own part); size 138 x 138 fixed by the pilot #3058",
                               states=states, master=True))
+    # the glyphs are drawn by a rule from the original's own frame (no Codex, round 3 of the pilot): `glyph_cells.py cells`, a canvas of the whole 39-unit frame, so the glyph
+    # lies where the original's does (the checker is one original pixel wide, the silhouette smooth); `flat` and `bevel` are two looks of the same rule
     for glyph, art in (("key", "472"), ("gear", "471"), ("arrows", "473"), ("shield", "470")):
-        for ident, states, what in ((f"glyph.{glyph}", ["idle"], "dull look of the idle frame"), (f"glyph.{glyph}_lit", ["hover", "pressed"], "lit look of the hover and pressed frames")):
+        for ident, states, what in ((f"glyph.{glyph}", ["idle"], "the idle frame's tone"), (f"glyph.{glyph}_lit", ["hover", "pressed"], "the tone of the hover and pressed frames")):
             parts.append(new_part(ident, "glyph", "bottom-strip", ["H02"], None, "B-BUTTONS",
-                                  f"the {glyph} symbol of the bottom strip's round button (art {art}), {what}, drawn clean on a transparent background; size 108 x 108 fixed by the pilot #3058",
-                                  states=states, master=True))
+                                  f"the {glyph} symbol of round button art {art}, {what}: glyph_cells.py draws it from the original frame (no Codex), "
+                                  "a 156 x 156 canvas of the whole frame, so the size is open",
+                                  states=states, master=True, provenance=f"rule:glyph_cells:{ident}"))
     return parts
 
 

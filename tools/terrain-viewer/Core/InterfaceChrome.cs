@@ -71,7 +71,11 @@ public sealed record ChromeRuling(int X, int Y, int Width, int Height, int Step,
 
 /// <summary>ARC-UI-1199: a hole of the Legacy frame that takes no rim (the generated rim every hole gets): what is drawn over it (a tab, a lens) carries its own edge. The hole whose box holds
 /// the centre of this rectangle is the one.</summary>
-public sealed record ChromeBare(int X, int Y, int Width, int Height) : ChromePart;
+public record ChromeBare(int X, int Y, int Width, int Height) : ChromePart;
+
+/// <summary>ARC-UI-3058: a bare hole (no generated rim, see <see cref="ChromeBare"/>) that a picture with a soft edge of its own is laid over (the kit's round button plate with its soft shadow in its alpha): the hole's
+/// transparent texels of the frame keep the board's colour, not ink, so the mipmapped edge of the hole fades to the board and no dark, stair-stepped outline of the Legacy hole shows around the picture.</summary>
+public sealed record ChromeBoardHole(int X, int Y, int Width, int Height) : ChromeBare(X, Y, Width, Height);
 
 /// <summary>ARC-UI-1817: the coloured marks of a picture on the generated ground under it (the follower panel's arrow buttons: a red or green triangle on an iron plate). In the
 /// rectangle every Legacy pixel whose colour is far from grey (the spread of its three channels is at least 24) keeps its own colour, so the marks keep their shape and their dither, and the grey
@@ -137,9 +141,9 @@ public enum ChromeKind
 /// stack it lies on without a seam. ARC-UI-1784: <paramref name="KeepFace"/> (a button only) keeps the art's whole picture inside the generated rim (a ball whose colour tells the college
 /// apart), where a plain button keeps only the glyph on a generated brass face. ARC-UI-1199: <paramref name="TabPaper"/> is the material of a tab's paper bookmark. ARC-UI-2720: <paramref name="FoldX"/> is the x of the fold
 /// the Parchment material shades, in the same coordinates as the materials (the art's own plus <paramref name="OriginX"/>): the logbook's book has it at its 286, the reading window's book at the
-/// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window.</remarks>
+/// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window. ARC-UI-3058: <paramref name="WholePicture"/> (a button only) draws the pack's picture as it is, colour and alpha (the kit's plate with its brass rim and the soft shadow in its alpha), instead of a generated rim; with the Legacy pixels alone (no pack picture) the button is drawn as before.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false, bool KeepFaceWithPictureOnly = false)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false, bool WholePicture = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -414,6 +418,9 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(152, 0, 46, 52), new ChromeKeep(604, 0, 48, 48),
             new ChromeKeep(163, 55, 30, 92), new ChromeKeep(607, 55, 36, 95),
             new ChromeKeep(205, 37, 392, 11), new ChromeKeep(387, 0, 30, 40),
+            // ARC-UI-3058: the sockets of the four round buttons (Combat, Skills, Spells, Schematics: 39 x 39 holes) take no generated ring: the button art carries its own brass setting and soft shadow
+            // (the kit plate whole, WholePicture), and a ring drawn around it as well showed as a second, jagged rim.
+            new ChromeBoardHole(86, 16, 39, 39), new ChromeBoardHole(693, 15, 39, 39), new ChromeBoardHole(649, 53, 39, 39), new ChromeBoardHole(693, 98, 39, 39),
         ]);
         var bottom = new ChromeRecipe("intbotom.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.Top, bottomParts);
         // ARC-UI-148: the inventory window's two frames (Legacy pixels of each art).
@@ -494,8 +501,8 @@ public static class InterfaceChromeRecipes
         ChromeRecipe Family(ChromeRecipe recipe) => recipe with { FamilyWood = true };
         return [top, bottom, Family(inventory with { OriginX = InterfaceChromeRenderer.SteamwovenFamilySplitUnits }), Family(doll), Family(loot), Family(barter), Family(follower), Family(lootDoll), Family(barterDoll), Family(dollCover),
             .. lenses.Select(recipe => recipe.File is "lns_bart.art" or "lns_loot.art" or "lns_papr.art" ? Family(recipe) : recipe), .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), // ARC-UI-3058: the four round buttons of the bottom strip keep the art's own picture inside the generated rim: the glyph mask of PaintButton is a Legacy-grid lookup (the HD glyph
-            // came out as stair-steps of the original's 39 x 39 pixels) and its colour threshold misses a dull glyph (the idle key, 4 % of the dome's pixels over it), while the pack's picture is smooth and complete. Only with a pack picture (KeepFaceWithPictureOnly): the Legacy pixels alone are drawn as before.
-            .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: file is "combat_button.art" or "skills_button.art" or "spells_button.art" or "schematics_button.art", KeepFaceWithPictureOnly: true)),
+            // came out as stair-steps of the original's 39 x 39 pixels) and its colour threshold misses a dull glyph (the idle key, 4 % of the dome's pixels over it), while the pack's picture is smooth and complete.
+            .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], WholePicture: file is "combat_button.art" or "skills_button.art" or "spells_button.art" or "schematics_button.art")),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
@@ -720,21 +727,30 @@ public static class InterfaceChromeRenderer
         var picturePixels = picture.IsEmpty ? null : picture.ToArray();
         if (recipe.LensFrom is { } lensFrom) MoveLens(lensFrom, legacyPixels, width, height, picturePixels, pixelWidth, pixelHeight, scale);
         var canvas = new Canvas(width, height, legacyPixels, picturePixels, scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, FoldX = recipe.FoldX, Down = frameIndex == recipe.DownFrame };
-        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace && (picturePixels != null || !recipe.KeepFaceWithPictureOnly));
+        if (recipe.Kind == ChromeKind.Button && recipe.WholePicture && picturePixels is not null) PaintWholePicture(canvas);
+        else if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);
 
         var output = new byte[canvas.W * canvas.H * 4];
+        // ARC-UI-3058: a socket's hole (one unit wider each side) keeps the board's colour in its transparent texels.
+        var sockets = recipe.Parts.OfType<ChromeBoardHole>().Select(hole => (X0: canvas.Edge(hole.X - 1), Y0: canvas.Edge(hole.Y - 1), X1: canvas.Edge(hole.X + hole.Width + 1), Y1: canvas.Edge(hole.Y + hole.Height + 1))).ToArray();
         for (var i = 0; i < canvas.Color.Length; i++)
         {
             var c = canvas.Color[i];
             var alpha = ToByte(canvas.Alpha[i] * 255f);
             // A transparent texel carries ink, not the wood under it, so the mipmapped edge of a hole fades to dark, not to wood.
-            if (alpha == 0) c = Ink;
+            if (alpha == 0 && !InSocket(sockets, i % canvas.W, i / canvas.W)) c = Ink;
             output[i * 4] = ToByte(c.R); output[i * 4 + 1] = ToByte(c.G); output[i * 4 + 2] = ToByte(c.B);
             output[i * 4 + 3] = alpha;
         }
         return output;
+    }
+
+    private static bool InSocket((int X0, int Y0, int X1, int Y1)[] sockets, int x, int y)
+    {
+        foreach (var s in sockets) if (x >= s.X0 && x < s.X1 && y >= s.Y0 && y < s.Y1) return true;
+        return false;
     }
 
     /// <summary>ARC-UI-2714: moves the lens's box of a frame (<see cref="ChromeLensFrom.Side"/> units square plus <see cref="ChromeLensFrom.Margin"/> units around it) from where the Legacy frame has it to the
@@ -1559,6 +1575,17 @@ public static class InterfaceChromeRenderer
             Rgb colour = inset < c.S ? Ink : inset < 3 * c.S ? rim : inset < 3.6f * c.S ? Ink : face;
             if (inset >= 3.6f * c.S && d < keep + 0.5f) colour = Rgb.Lerp(colour, c.PictureAt(x, y), Math.Clamp(keep - d + 0.5f, 0, 1));
             c.Color[i] = colour;
+        }
+    }
+
+    /// <summary>ARC-UI-3058: the pack's picture as it is: its colour, and its alpha (a straight-alpha picture, <see cref="ResampleStraight"/>) as the frame's alpha, so the kit plate's brass rim and soft shadow are drawn whole.</summary>
+    private static void PaintWholePicture(Canvas c)
+    {
+        var p = c.Picture!;
+        for (var i = 0; i < c.Color.Length; i++)
+        {
+            c.Color[i] = new Rgb(p[i * 4], p[i * 4 + 1], p[i * 4 + 2]);
+            c.Alpha[i] = p[i * 4 + 3] / 255f;
         }
     }
 

@@ -1,6 +1,6 @@
 # Steamwoven kit pilot: bottom-strip round buttons through the whole chain (ARC-UI-3058)
 
-Status: **pilot run, 2026-11-20/21, second round 2026-11-21 (owner review: edge steps, tone per state, relief, Combat shield)** ([#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058), epic [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446)).
+Status: **pilot run, 2026-11-20/21, second round 2026-11-21 (v2, not installed), third round 2026-11-21 (v3: glyphs by rule, whole plate in the game)** ([#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058), epic [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446)).
 Requirements touched (status unchanged): [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002), [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007).
 Every image named here is local under `local/steamwoven-ui/` (never in git); this page holds only numbers, names and findings.
 
@@ -53,6 +53,26 @@ through `prompt library -> codex_batch -> fit -> assemble -> stage/plan/apply ->
 3. **Relief.** `kind-glyph` now asks for an engraved or inlaid motif in low relief, lit from the upper left like the rest of the kit: a thin highlight along the upper-left edge, a thin darker shadow along the lower-right edge, a thin bevel, soft shading, matte, no gloss, no glow. The relief glyphs measured halo mean / p95 dE 9.95 / 19.5 (key lit) and 9.2 / 17.8 (arrows lit) before the safety net, run with the limits relaxed to 11 / 24 (#3073).
 4. **Combat shield (470).** One more glyph pair (`glyph.shield`, `glyph.shield_lit`) on the same plate, the same batch, the same chain.
 
+## Third round (v3, owner decision 2026-11-21): glyphs by rule, whole plate in the game
+
+The owner rejected v2: the checker on the original's glyphs (one original pixel wide, weak when idle, strong on hover and pressed) is **part of the picture**, not a dither to smooth away; the glyph sat differently inside each button; the generated rim in the game was jagged where the original has a brass setting with a soft shadow. v3 draws the glyphs **without Codex**, by a rule from the original's own frame, and the viewer draws the kit plate whole.
+
+1. **Silhouette and position from the original's glyph mask** (`tools/steamwoven_ui/glyph_cells.py mask|cells`, tests `test_glyph_cells.py`). The glyph's cells are the checker's bright cells (lighter than their four neighbours by an Otsu-split threshold inside the dome), the cells whose colour is far from the dome's local colour (the shield's bar, a dim idle arrow), the dark cells of the checker between them, closed by one cell, specks dropped. The mask is read from the **lit frame** for all three states (the glyph is one shape; the idle frame's checker is too weak to give a clean mask). The 39 x 39 mask becomes a smooth outline at 4 x (a Gaussian of 0.6 cell, a soft threshold), so no edge is a stair of original pixels. The canvas is the whole 39-unit frame (156 x 156 px, 4 px per unit) placed by the layout at 0,0, so the glyph lies at the original's coordinates, not at the centre of a picture.
+2. **Cells by a deterministic rule.** The cell is the original pixel, aligned to its grid; its parity is the original's (the phase is read from the frame); a cell's tone is the mean L\*a\*b\* of the cells of that parity in a 3 x 3 window of the original (grown when it holds none), so the contrast of the cells in each state, and the shading (the shield's bar, the key's hole, the hover glow), are the original's. The tone is then shifted as a whole (`glyph_tone.py`, `--stat mean`, against the kit plate's dome, the idle frame's dome as the reference) so that the glyph's brightness over its plate equals the original's over its own. Two looks, same rule: `flat` (crisp square cells, a soft-edged silhouette) and `bevel` (the same with a thin bevel, light edge upper left, dark edge lower right).
+3. **Plate with a soft shadow in its alpha** (`glyph_cells.py plate`): the kit plate master is brought to 36.5 units across, centred on the 39-unit canvas, with a soft dark shadow (alpha 0.55, blur 0.45 unit, moved 0.2 / 0.3 unit down and right: its tail is gone before the original silhouette's edge, whose 1-unit steps would otherwise cut it into a jagged dark outline) under it; `assemble.py` (alpha `masked`, master scale 4, exact position) lays glyph over plate and the pack gate passes (the shadow stays within one original texel of the silhouette).
+4. **In the game, the plate whole.** A recipe with `WholePicture` (the four bottom-strip buttons) draws the pack's picture as it is, colour and alpha, instead of a generated rim (`InterfaceChromeRenderer.PaintWholePicture`; the generated path resamples such a picture with `ResampleStraight`, which keeps the alpha), so the kit plate's brass rim and its soft shadow are drawn whole at every size. Without a pack picture (HD option off, no art in the pack) the button is drawn as before. The generated rim's 1-px jaggies remain for every other button: [#3087](https://github.com/Simarglok/arcanum-steamwoven/issues/3087). This replaces v2's `KeepFace` on these four recipes.
+
+Glyph brightness over the dome (L\*), original / kit result (mean of the glyph's cells), flat look (bevel within 0.3):
+
+| Glyph | idle | pressed | hover |
+| --- | --- | --- | --- |
+| shield (470) | 4.1 / 3.7 | 20.3 / 18.8 | 20.3 / 18.5 |
+| gear (471) | 7.3 / 6.7 | 23.8 / 22.8 | 23.9 / 22.6 |
+| key (472) | 15.7 / 15.0 | 41.6 / 40.1 | 41.6 / 40.1 |
+| arrows (473) | 8.1 / 8.1 | 26.2 / 26.0 | 26.2 / 26.1 |
+
+Pack: two candidate packs on clones of the v2 candidate (12 entries replaced each: `flat` manifest `592ba4963e73`, `bevel` `e85daefafe4c`, `verify --deep` PASS 7076 entries); the installed pack (manifest `386d49c59b83`) is untouched. The kit manifest rows of the glyphs now say they are drawn by rule (`rule:glyph_cells:<id>`, no fit record); the Codex glyph batches of rounds 1 and 2 are no longer used.
+
 ## Chain findings (each an issue)
 
 | # | Finding | Issue |
@@ -69,4 +89,4 @@ Further observations (no issue, judged by the owner): the plate's rim is the cop
 
 ## Not done
 
-The frames are **not** in the installed pack and the PR is not opened: the owner's go is needed (workflow: install after the owner allows it, game closed). The candidate pack (`local/steamwoven-ui/pilot/3058/candidate/`) and its backup of the 12 replaced files are what the captures show; installing is `plan`, `apply --dry-run`, `apply`, `verify --deep` on the installed pack with the staging folder `local/res095/pack-out/kit-pilot-3058`, base `--base` the installed pack itself.
+The frames are **not** in the installed pack and the PR is not opened: the owner's pick between the flat and the bevel look and the go are needed (workflow: install after the owner allows it, game closed). The candidate pack (`local/steamwoven-ui/pilot/3058/candidate/`) and its backup of the 12 replaced files are what the captures show; installing is `plan`, `apply --dry-run`, `apply`, `verify --deep` on the installed pack with the staging folder `local/res095/pack-out/kit-pilot-3058`, base `--base` the installed pack itself.

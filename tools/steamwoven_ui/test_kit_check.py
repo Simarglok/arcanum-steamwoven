@@ -197,10 +197,13 @@ class SyntheticManifestTests(unittest.TestCase):
         self.assertEqual(self.check(manifest, census=False), [])
         self.assertFails(self.edit(5, source_arts=["33"], size=None, size_basis="open"), "from original art has a size")
 
-    def test_pilot_parts_are_masters_with_a_fit_record(self) -> None:
+    def test_pilot_parts_are_masters_with_a_record(self) -> None:
         parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
-        for ident in ("plate.round_button", "plate.round_button_pressed", "glyph.key", "glyph.key_lit", "glyph.gear", "glyph.gear_lit", "glyph.arrows", "glyph.arrows_lit", "glyph.shield", "glyph.shield_lit"):
+        for ident in ("plate.round_button", "plate.round_button_pressed"):
             self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"fit:{ident}", []), ident)
+        for glyph in ("key", "gear", "arrows", "shield"):
+            for ident in (f"glyph.{glyph}", f"glyph.{glyph}_lit"):  # drawn by rule from the original's frame (round 3), no fit record
+                self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"rule:glyph_cells:{ident}", []), ident)
 
     def test_cap_agrees_with_its_id_strip_and_window(self) -> None:
         self.assertFails(self.edit(2, anchor="bottom-strip-right-end"), "to match its id")
