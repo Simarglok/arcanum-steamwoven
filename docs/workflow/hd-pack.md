@@ -338,8 +338,7 @@ What the iCloud copy does on another device:
 - A **packaged game** there reads, since ARC-DEV-350, the iCloud copy when the HD pack setting is Auto, the folder exists on that device and the pack in
   it is whole (see [HD pack source](#hd-pack-source-arc-dev-350)); otherwise its own `Arcanum Steamwoven Game/hd-packs/`. On Windows or without the
   iCloud folder it reads only its own folder, or the folder a Custom setting names.
-- An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the iCloud symlink) in place, menu PNG
-  included, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD* is on.
+- An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the iCloud symlink) in place, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD* is on.
 - **There is no command that installs the iCloud copy as a pack.** `HdPackImport` (the format page) is a library function used by
   tests only; it copies the manifest, one recipe and the listed entries and **drops every unlisted file, so it never brings
   an old `main-menu-16x9.png`**. `hd_pack.py mirror` refuses a destination inside the game's folder. The way left is a hand copy of the
@@ -479,7 +478,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
 ## Checklist for a thread that changes the pack
 
 1. `status` and `verify --deep`: record the manifest sha before.
-2. Build or repair into staging (or prepare the menu PNG); never into the installed pack.
+2. Build or repair into staging; never into the installed pack.
 3. `plan` and `apply --dry-run` with `--base`: the replaced entries are exactly the task's and there is no unexpected CONFLICT (a dry run that finds conflicts prints the plan and exits 2).
 4. `apply`; `verify --deep`; the new manifest sha and the backup folder name go into the report.
 5. Start the game/viewer, check the changed frames once, and (for a rendering task) the task's smoke stage.
