@@ -199,7 +199,7 @@ class SyntheticManifestTests(unittest.TestCase):
 
     def test_pilot_parts_are_masters_with_a_fit_record(self) -> None:
         parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
-        for ident in ("plate.round_button", "plate.round_button_pressed", "glyph.key", "glyph.key_lit", "glyph.gear", "glyph.gear_lit", "glyph.arrows", "glyph.arrows_lit"):
+        for ident in ("plate.round_button", "plate.round_button_pressed", "glyph.key", "glyph.key_lit", "glyph.gear", "glyph.gear_lit", "glyph.arrows", "glyph.arrows_lit", "glyph.shield", "glyph.shield_lit"):
             self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"fit:{ident}", []), ident)
 
     def test_cap_agrees_with_its_id_strip_and_window(self) -> None:

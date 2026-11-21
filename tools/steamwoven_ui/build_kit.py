@@ -105,7 +105,7 @@ def new_parts() -> list[dict]:
                                 ("plate.round_button_pressed", ["pressed"], "the same plate in its pressed look (the unlit rim of the original's pressed frame)")):
         parts.append(new_part(ident, "plate", "bottom-strip", ["H02"], None, "B-BUTTONS", f"{what}; no symbol on it (the glyph is its own part); size 138 x 138 fixed by the pilot #3058",
                               states=states, master=True))
-    for glyph, art in (("key", "472"), ("gear", "471"), ("arrows", "473")):
+    for glyph, art in (("key", "472"), ("gear", "471"), ("arrows", "473"), ("shield", "470")):
         for ident, states, what in ((f"glyph.{glyph}", ["idle"], "dull look of the idle frame"), (f"glyph.{glyph}_lit", ["hover", "pressed"], "lit look of the hover and pressed frames")):
             parts.append(new_part(ident, "glyph", "bottom-strip", ["H02"], None, "B-BUTTONS",
                                   f"the {glyph} symbol of the bottom strip's round button (art {art}), {what}, drawn clean on a transparent background; size 108 x 108 fixed by the pilot #3058",
