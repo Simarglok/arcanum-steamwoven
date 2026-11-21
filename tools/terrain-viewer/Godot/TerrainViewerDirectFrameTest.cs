@@ -15,9 +15,11 @@ public static partial class TerrainViewerSelfTest
         const int W = 8, H = 4;
         Require(InterfaceHd.DirectScale(4.0 / 3, 4) == 1.333 && InterfaceHd.DirectScale(1.8, 4) == 1.8 && InterfaceHd.DirectScale(2.4, 4) == 2.4 && InterfaceHd.DirectScale(0.96, 4) == 0.96,
             "the fractional scales below the pack's are resampled (1280x800, 1920x1080, 2560x1440, a scale under 1)");
-        Require(InterfaceHd.DirectScale(1, 4) is null && InterfaceHd.DirectScale(2, 4) is null && InterfaceHd.DirectScale(3.004, 4) is null && InterfaceHd.DirectScale(4, 4) is null
+        Require(InterfaceHd.DirectScale(1, 4) is null && InterfaceHd.DirectScale(2, 4) is null && InterfaceHd.DirectScale(2.004, 4) is null && InterfaceHd.DirectScale(4, 4) is null
             && InterfaceHd.DirectScale(4.8, 4) is null && InterfaceHd.DirectScale(double.NaN, 4) is null && InterfaceHd.DirectScale(0, 4) is null && InterfaceHd.DirectScale(2.5, 1) is null,
-            "a whole scale, the pack's scale and above, a bad number and a pack of scale 1 draw as before");
+            "a whole scale that divides the pack's (1, 2), the pack's scale and above, a bad number and a pack of scale 1 draw as before");
+        Require(InterfaceHd.DirectScale(3, 4) == 3 && InterfaceHd.DirectScale(3.004, 4) == 3 && InterfaceHd.DirectScale(2.996, 4) == 3 && InterfaceHd.DirectScale(3, 6) is null && InterfaceHd.DirectScale(4, 6) == 4 && InterfaceHd.DirectScale(5, 6) == 5,
+            "ARC-RENDER-3045: a whole scale that does not divide the pack's is resampled to exactly that scale (3 of a 4x pack, 4 and 5 of a 6x pack), 3 of a 6x pack is a mip level");
         var root = System.IO.Directory.CreateTempSubdirectory("arc-render-3002-selftest-").FullName;
         try
         {
@@ -46,9 +48,14 @@ public static partial class TerrainViewerSelfTest
                 return false;
             }
             Require(texture.IsHd && !texture.IsAreaResampled, "no scale claimed: the mip chain draws as before (" + pack.ResolveSprite(frame.Hd!, legacy).Status + ")");
+            // ARC-RENDER-3045: a texture that claims the scale before anything is built draws the mip chain while its first copy pends (never the Legacy pixels), then the copy.
+            var fresh = (HdInterfaceTexture)InterfaceHd.Texture(frame);
+            fresh.ScaleSource = () => device;
+            Require(fresh.IsHd, "the first copy pending or not, the HD frame draws, never the Legacy pixels");
+            Require(await Settled(fresh) && fresh.IsHd, "the first copy lands and replaces the mip chain");
             texture.ScaleSource = () => device;
             plain.ScaleSource = () => device;
-            Require(await Settled(texture), "at 4/3 the frame is resampled by a worker and drawn from the copy");
+            Require(await Settled(texture) && texture.IsHd, "at 4/3 the frame is resampled by a worker and drawn from the copy");
             var (width, height) = InterfaceChromeRenderer.PixelSize(W, H, 1.333);
             Require(texture.AreaPixelSize == new Vector2I(width, height) && texture.GetWidth() == W && texture.GetHeight() == H, $"the copy is {width}x{height} device pixels and the texture keeps the Legacy size");
             Require(texture.HdScale == 1 && texture.AreaPixelSize.X > 0, "the copy is not a whole multiple of the Legacy size (11 of 8 texels)");
@@ -68,6 +75,33 @@ public static partial class TerrainViewerSelfTest
             device = 4f / 3f;
             var again = InterfaceHd.DirectTotals.Frames;
             Require(await Settled(texture) && InterfaceHd.DirectTotals.Frames == again, "a scale already resampled is kept, not resampled again");
+
+            // ARC-RENDER-3045: a whole scale the pack's does not divide (3 of 4) is resampled to exactly that scale (24x12: one texel per device pixel).
+            device = 3f;
+            Require(await Settled(texture) && texture.AreaPixelSize == new Vector2I(W * 3, H * 3) && texture.HdScale == 3, "a whole scale 3 of a 4x pack is resampled to 24x12");
+            // Least recently used: five scales of one frame, the oldest asked for goes (1.333 was asked for after 1.8, so 1.8 goes, not the first one inserted).
+            device = 2.4f;
+            Require(await Settled(texture), "2.4 is resampled");
+            device = 0.96f;
+            Require(await Settled(texture) && InterfaceHd.DirectTotals.Frames == 4, "a fifth scale evicts one: four kept");
+            device = 4f / 3f;
+            Require(texture.IsAreaResampled && InterfaceHd.DirectPending == 0 && texture.AreaPixelSize == new Vector2I(width, height), "1.333 was asked for last among the old ones: it is kept (LRU), not resampled again");
+            device = 1.8f;
+            Require(await Settled(texture) && texture.AreaPixelSize == new Vector2I(14, 7), "1.8 went (the least recently used) and is resampled again");
+
+            // ARC-RENDER-3045: a frame the pack has no redraw for fails once; another scale does not start another worker.
+            var strayIdentity = HdInterfaceKey.Identity("synthetic3045.art", new byte[160].Select((_, i) => (byte)(i + 1)).ToArray());
+            var stray = new AreaInterfaceFrame(W, H, legacy, Hd: HdInterfaceKey.Query(strayIdentity, 0, W, H, legacy));
+            var strayTexture = (HdInterfaceTexture)InterfaceHd.Texture(stray);
+            device = 4f / 3f;
+            strayTexture.ScaleSource = () => device;
+            Require(!strayTexture.IsHd, "a frame the pack has no redraw for draws Legacy");
+            for (var wait = 0; wait < 900 && InterfaceHd.DirectPending > 0; wait++) await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(InterfaceHd.DirectPending == 0 && !strayTexture.IsHd, "the failed resample settles");
+            device = 1.8f;
+            Require(!strayTexture.IsHd && InterfaceHd.DirectPending == 0, "another scale of the same frame starts no worker (negative cache)");
+            device = 2.4f;
+            Require(!strayTexture.IsHd && InterfaceHd.DirectPending == 0, "and neither does a third");
 
             var grey = texture.Greyed();
             Require(grey.IsHd, "a greyed copy shares the resampled frame");

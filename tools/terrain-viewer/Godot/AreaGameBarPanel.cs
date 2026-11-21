@@ -820,9 +820,9 @@ public partial class AreaGameBarPanel : CanvasLayer
     private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? ApplyKitBackground(SteamwovenHudPlan plan, int middleHeight)
     {
         _kitBackground = [];
-        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); return null; }
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
-        Dictionary<int, Texture2D>? covers = null;
+        Dictionary<int, Texture2D>? covers = null, sheets = null;
         var held = new List<string>();
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
         {
@@ -835,10 +835,15 @@ public partial class AreaGameBarPanel : CanvasLayer
                 if (window == SteamwovenKitWindow.Loot)
                     foreach (var art in SteamwovenKitTable.Covers.Keys)
                         if (SteamwovenKitComposer.Cover(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (covers ??= [])[art] = texture; held.Add(part.Id); }
+                // ARC-UI-3035: the character sheet's pages lay the kit's sheets over this background where the set has them at the table's size; a sheet missing or not loading leaves the page's own art, the background stays.
+                if (window == SteamwovenKitWindow.Character)
+                    foreach (var art in SteamwovenKitTable.Sheets.Keys)
+                        if (SteamwovenKitComposer.Sheet(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (sheets ??= [])[art] = texture; held.Add(part.Id); }
             }
         }
         SteamwovenKitStore.Retain("window", set, held);
         PublishKitBackground(loaded is not null ? _kitWindow : null, covers);
+        AreaKitSheets.Publish(loaded is not null ? sheets : null);
         return loaded;
     }
 
@@ -853,6 +858,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
         _kitBoards.Visible = false; _kitCaps.Visible = false; _kitBackground = [];
         PublishKitBackground(null, null);
+        AreaKitSheets.Publish(null);
         ApplyKitButtons();
     }
 
@@ -915,6 +921,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     public override void _ExitTree()
     {
         PublishKitBackground(null, null); // ARC-UI-3032: no stale kit background for a window over a later panel
+        AreaKitSheets.Publish(null); // ARC-UI-3035: no stale kit sheet for a sheet over a later panel
         AreaRoundView.RectsChanged -= ApplyBackdropHoles;
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;

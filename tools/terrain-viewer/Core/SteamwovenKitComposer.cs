@@ -25,6 +25,9 @@ public sealed record SteamwovenKitWindowSpec(IReadOnlyList<(string Part, int Mas
 /// <summary>A doll cover of the loot window from the kit: its part and master size (the zone's master pixels).</summary>
 public sealed record SteamwovenKitCover(string Part, int MasterWidth, int MasterHeight);
 
+/// <summary>A document the kit lays over a window's background in place of an original panel art: its part and master size (the zone's master pixels, 3.6 per original unit).</summary>
+public sealed record SteamwovenKitSheetSpec(string Part, int MasterWidth, int MasterHeight);
+
 /// <summary>The windows whose kit background the viewer composes (ARC-UI-2461). Every other window keeps its generated backdrop until its own integration issue lands (AC4).</summary>
 public enum SteamwovenKitWindow
 {
@@ -75,6 +78,16 @@ public static class SteamwovenKitTable
 
     /// <summary>The master pixels of one original unit in the window zone (2880 over the 800-unit frame, SWI-BDR-2).</summary>
     public const double MasterPerUnit = CompositionMasterWidth / 800.0;
+
+    /// <summary>The pages of the character sheet (census G06 to G09, also the NPC sheet G10 and the editor's pages): the art number of the page's own panel (29 skills, 30 tech, 31 spells, 567 auto-level schemes, each 235 x 325 units at the
+    /// sheet's (503, 63)) and the kit sheet that replaces it over the kit's <c>backdrop.char_maint</c> (846 x 1170 master px). A sheet the set lacks or holds at another size leaves the page's own art in its place.</summary>
+    public static IReadOnlyDictionary<int, SteamwovenKitSheetSpec> Sheets { get; } = new Dictionary<int, SteamwovenKitSheetSpec>
+    {
+        [29] = new("sheet.skills_window", 846, 1170),
+        [30] = new("sheet.disciplines_window", 846, 1170),
+        [31] = new("sheet.char_spells", 846, 1170),
+        [567] = new("sheet.scheme_rot", 846, 1170),
+    };
 
     /// <summary>The full-screen plates (census BD-H, M01 to M04): the art number of the menu's background and the plate's part id.</summary>
     public static IReadOnlyDictionary<int, string> Plates { get; } = new Dictionary<int, string>
@@ -229,6 +242,13 @@ public static class SteamwovenKitComposer
     /// the window (the window is then drawn over it; the view-window art over the round view and every item layer stay as before).
     /// </summary>
     public static IReadOnlyList<int> LootBackgroundArts(bool kitBackground) => kitBackground ? [] : [AreaLootArtLayout.LootArt, AreaInventoryArtLayout.PackArt];
+
+    /// ARC-UI-3035 (AC2): the kit sheet that replaces the character sheet page's own panel art <paramref name="art"/> (29, 30, 31, 567): the part of the set when it is the table's size at the step, else null (the page keeps its art).
+    /// It is asked for only while the kit background of the character window shows under the sheet (<see cref="WindowOf(InterfaceMode)"/>, the same for the hero's sheet and the NPC sheet of a dialog).
+    /// </summary>
+    public static SteamwovenKitPart? Sheet(SteamwovenKitSet set, int art) =>
+        SteamwovenKitTable.Sheets.TryGetValue(art, out var sheet) && set.TryGet(sheet.Part, out var part)
+        && part.Width == SteamwovenGrid.BakedLength(sheet.MasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(sheet.MasterHeight, set.Step) ? part : null;
 
     /// <summary>The kit plate of a full-screen menu's background art: the part of the set when it is the composition's size (2880 × 2160 at the step), else null (the pack's or the original's plate stays).</summary>
     public static SteamwovenKitPart? Plate(SteamwovenKitSet set, int art) =>

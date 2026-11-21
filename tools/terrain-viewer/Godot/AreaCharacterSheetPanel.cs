@@ -112,6 +112,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         return true;
     }
     internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
+    /// <summary>ARC-UI-3035: the smoke shows the page of a tab as a click on the tab does.</summary>
+    internal void SelectTabForSelfTest(AreaSheetTab tab) { _artView?.SelectTab(tab); ApplyTab(tab); }
     /// <summary>ARC-UI-147: the diagnostic panel is drawn (the editor's art look hides it).</summary>
     internal bool PanelVisibleForSelfTest => _panel.Visible;
     internal AreaCharacterSheetView? ViewForSelfTest => _view;
