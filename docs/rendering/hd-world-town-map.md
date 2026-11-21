@@ -130,10 +130,35 @@ picture itself. A low-strength re-detail pass was **not** tested (the owner rule
 filter, 5.2 with Lanczos). The same downscale of the upscaled picture gives 7.1 (box), so deriving it from the big picture keeps the two views
 consistent as well as the original does. The original scales a `Map_Zoomed` of another size to its 365 rectangle (ledger row WM53), but our viewer draws the texture at its
 own size and keeps 365 constants for the dots and the hover box (`AreaWorldMapArt.cs`, `AreaWorldMapArtView.cs`), so a larger `Map_Zoomed` (x4 = 1460 × 1460) needs a
-draw-to-rectangle change ([#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065)); the black margins of 68 pixels are added by the window.
+draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079)); the black margins of 68 pixels are added by the window.
 
 **Cut back.** The 8000 × 8000 picture was cut into 64 tiles of 1000 × 1000 (about 112 MB as PNG for the whole set; the single 8000 × 8000 picture is 164 MB as PNG); the cut took
 6 s. A single large picture is equally possible; the tile split only follows the original's file layout.
+
+**Recipe chosen by the owner (2026-11-21, ARC-RENDER-3065): "Blend A", an edge-masked blend of `realesr-animevideov3` and Lanczos.** The plain network
+turns the canvas weave of the parchment into a grid and the plain Lanczos picture is soft, so the picture takes the network only on strong ink lines and
+lettering and Lanczos everywhere else (still non-generative: a super-resolution network and a resampler, no text prompt). Plain `animevideov3` and the wider
+mask ("Blend B") are dropped; plain Lanczos is the fallback. The recipe is the script [`tools/hd_pack/world_map_upscale.py`](../../tools/hd_pack/world_map_upscale.py)
+(`blend` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
+
+1. The 2000 x 2000 map is upscaled x4 with `realesrgan-ncnn-vulkan -n realesr-animevideov3 -s 4 -t 250` (the network picture) and with Pillow's Lanczos (the baseline).
+2. The mask is made on the original: Gaussian blur sigma 1.0, Canny 100/200, edge components under 30 pixels dropped (paper grain), dilation by an ellipse of radius 2
+   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map).
+3. Result = mask x network + (1 - mask) x Lanczos, per channel, rounded.
+4. Outline check (rebuilt, the script of ARC-RES-2992 was lost, [#3080](https://github.com/Simarglok/arcanum-steamwoven/issues/3080)): the candidate is box-downscaled back to
+   2000 x 2000 and compared with the original; Canny 40/100 (chosen so that Lanczos gives F1 0.965, close to 0.964 above), tolerance as an elliptical dilation of radius 1 and 2
+   (a plus-shaped 3 x 3 and a 5 x 5 disc, so a diagonal step of one pixel is outside tolerance 1).
+
+| Picture (x4) | MAE | Edge precision / recall (1 px) | Edge F1 (1 px / 2 px) |
+| --- | ---: | --- | --- |
+| Lanczos | 4.16 | 0.984 / 0.946 | 0.965 / 0.991 |
+| `animevideov3` plain | 7.17 | 0.971 / 0.921 | 0.945 / 0.982 |
+| **Blend A (chosen)** | 5.07 | 0.982 / 0.940 | **0.960 / 0.989** |
+| Blend B (wider mask, dropped) | 5.37 | 0.982 / 0.933 | 0.957 / 0.987 |
+
+The thresholds differ from the lost script, so the absolute numbers differ a little from the table above; the comparison inside this table is consistent. Seams: the
+fine canvas weave has the same strength in the blend's transition band as in plain Lanczos (ratio of the weave to the far field 0.93 against 0.92 for Lanczos), so no
+step in the texture was measured at the mask border; Blend A and Lanczos were also compared at the display scales 0.9 (4K) and 0.6 (1440p) of the x4 texture.
 
 Not tested: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
 super-resolution tool installed), x2 or x3 variants, test-time augmentation, a comparison on the owner's 4K screen against the stopgap of
@@ -144,9 +169,9 @@ super-resolution tool installed), x2 or x3 variants, test-time augmentation, a c
 1. **Town maps: render with our engine.** The tiles are a pure render, so a larger one is a render at a larger scale, not a redraw; no generator is
    involved. Start with 0.5 and decide 1.0 after the owner's look at one town; keep the `.tmi` layout and the fog and marker logic unchanged and carry
    the scale in the pack entry. Ship it as a follow-up task after the owner decides #2952.
-2. **World map: take the `animevideov3` x4 picture, the tile split and the derived `Map_Zoomed` as the proposal**, judged by the owner on the crops;
-   the alternative is to keep the original pixels (the stopgap of #2993). Do not use the `x4plus` models. A re-detail pass stays an option only if
-   the outline check still passes.
+2. **World map: Blend A (the edge-masked blend above), the tile split and the derived `Map_Zoomed`**, picked by the owner on the crops (2026-11-21); plain Lanczos is the
+   fallback, the original pixels stay the stopgap of #2993. Do not use the `x4plus` models. A re-detail pass stays an option only if
+   the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079).
 3. **Both** are local derived bitmaps of the player's own installation: never in git or distributed ([hard rules](../../CLAUDE.md)); the pack holds
    them.
 
