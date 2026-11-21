@@ -8,8 +8,7 @@ unlisted extras). Nothing here contains or produces original art; it moves local
   verify     every manifest file present with the declared size (--deep: SHA-256), no symlinks
   plan       what a diff-only update of INSTALLED from STAGED would change (writes nothing)
   apply      that update, with a backup outside hd-packs and a receipt (--dry-run first)
-  rollback   undo one apply or menu-art from its backup folder (--dry-run first)
-  menu-art   replace the unlisted main-menu-16x9.png (checked header, backup, receipt)
+  rollback   undo one apply or relayout from its backup folder (--dry-run first)
   mirror     copy missing/different files from one pack to another (the iCloud copy, ARC-DEV-349); never deletes
   stage      run the importer into a staging folder that is never an installed pack
   fonts-plan write the importer plan for the traced font frames of tools/hd_font (ARC-DEV-361); files only, no pack touched
@@ -46,8 +45,6 @@ DEFAULT_COPY = Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidia
 DEFAULT_MODULE = Path("/Applications/Arcanum/modules/Arcanum.dat")
 REPO = Path(__file__).resolve().parents[2]
 REPLACEABLE = "interface/"  # only entries whose file lives here are replaced; other folders are extras of other tasks (unless --folders names them)
-MENU_FILE = "main-menu-16x9.png"
-MENU_MAX_BYTES, MENU_MAX_W, MENU_MAX_H = 40 * 1024 * 1024, 3840, 2160
 IGNORED = {".DS_Store"}
 
 
@@ -223,8 +220,6 @@ def cmd_status(a) -> int:
     print("  entries per folder:", ", ".join(f"{k} {v}" for k, v in sorted(info["perFolder"].items())))
     unlisted = info["unlisted"]
     print(f"  files not in the manifest ({len(unlisted)}):", ", ".join(unlisted[:8]) + (" ..." if len(unlisted) > 8 else ""))
-    menu = a.installed / MENU_FILE
-    print(f"  {MENU_FILE}: " + (f"{menu.stat().st_size} bytes sha256 {sha256(menu)}" if menu.is_file() else "absent"))
     print(f"  integrity ({'deep' if a.deep else 'size'}): " + ("OK" if not problems else f"{len(problems)} problems, first: {problems[0]}"))
     return 1 if problems else 0
 
@@ -568,28 +563,12 @@ def cmd_rollback(a) -> int:
     inst = a.installed
     if receipt.get("kind") == "refresh":
         raise PackError("a refresh cannot be rolled back: the edited PNGs are the only copy of your edits. Put an older PNG back from your own copy and run refresh again")
-    if receipt.get("status") not in ("applied", "failed", "started", "rolling-back", "rolled-back") or receipt.get("kind") not in ("update", "menu", "relayout"):
+    if receipt.get("kind") == "menu":
+        raise PackError("a menu-art receipt cannot be rolled back: the game no longer reads main-menu-16x9.png (ARC-UI-3003) and hd_pack.py no longer installs it. Delete or restore that file by hand if you want it back")
+    if receipt.get("status") not in ("applied", "failed", "started", "rolling-back", "rolled-back") or receipt.get("kind") not in ("update", "relayout"):
         raise PackError("receipt has an unknown kind or status")
     if receipt["kind"] == "relayout":
         return rollback_relayout(a, receipt)
-    if receipt["kind"] == "menu":
-        current = sha256(inst / MENU_FILE) if (inst / MENU_FILE).is_file() else None
-        if current not in (receipt["newSha256"], receipt["oldSha256"]) or (current == receipt["oldSha256"] and receipt["status"] == "applied"):
-            raise PackError("the installed main-menu art changed after that install; refusing to roll back over it")
-        if receipt["oldSha256"] and (not (a.backup / MENU_FILE).is_file() or sha256(a.backup / MENU_FILE) != receipt["oldSha256"]):
-            raise PackError("the backup of the main-menu art does not match its receipt")
-        steps = [f"restore {MENU_FILE}" if receipt["oldSha256"] else f"remove {MENU_FILE}"]
-        print("rollback menu-art:", steps[0])
-        if a.dry_run:
-            print("DRY-RUN: nothing changed")
-            return 0
-        with Lock(inst.parent):
-            if receipt["oldSha256"]:
-                atomic_copy(a.backup / MENU_FILE, inst / MENU_FILE)
-            elif (inst / MENU_FILE).is_file():
-                (inst / MENU_FILE).unlink()
-        print("PASS rollback")
-        return 0
     current = sha256(inst / "manifest.json")
     interrupted = receipt["status"] in ("started", "failed") and current == receipt["oldManifestSha256"]  # files copied, manifest not yet
     if current != receipt["newManifestSha256"] and not interrupted:
@@ -877,7 +856,7 @@ def cmd_refresh(a) -> int:
     return 1 if problems else 0
 
 
-# ---- menu art / mirror / stage ---------------------------------------------------------------
+# ---- PNG header / mirror / stage ---------------------------------------------------------------
 
 def png_header(path: Path) -> tuple[int, int, int, int, int]:
     with open(path, "rb") as f:
@@ -886,42 +865,6 @@ def png_header(path: Path) -> tuple[int, int, int, int, int]:
         raise PackError(f"{path} is not a PNG")
     w, h, depth, ctype, _comp, _filt, interlace = struct.unpack(">IIBBBBB", head[16:29])
     return w, h, depth, ctype, interlace
-
-
-def cmd_menu_art(a) -> int:
-    guard_installed(a.installed, a.allow_symlink)
-    guard_backup(a.backup_root, a.installed)
-    w, h, depth, ctype, interlace = png_header(a.image)
-    size = a.image.stat().st_size
-    if w == 0 or h == 0 or depth != 8 or ctype not in (2, 6) or interlace != 0 or w > MENU_MAX_W or h > MENU_MAX_H or size > MENU_MAX_BYTES:
-        raise PackError(f"{a.image}: needs 8-bit RGB/RGBA, not interlaced, at most {MENU_MAX_W}x{MENU_MAX_H} and 40 MiB (has {w}x{h}, depth {depth}, type {ctype}, interlace {interlace}, {size} bytes)")
-    if abs(w / h - 16 / 9) > 0.02:
-        print(f"WARNING: {w}x{h} is not 16:9; the viewer crops the side art for narrower screens only")
-    target = a.installed / MENU_FILE
-    new_sha = sha256(a.image)
-    old_sha = sha256(target) if target.is_file() else None
-    backup = a.backup_root / f"{a.task}-menu-{(old_sha or 'none')[:12]}"
-    print(f"{MENU_FILE}: {old_sha and old_sha[:12]} -> {new_sha[:12]} ({w}x{h}); backup {backup}")
-    if old_sha == new_sha:
-        print("nothing to do (identical)")
-        return 0
-    if backup.exists():
-        raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
-    if a.dry_run:
-        print("DRY-RUN: nothing changed")
-        return 0
-    with Lock(a.installed.parent):
-        backup.mkdir(parents=True)
-        if old_sha:
-            atomic_copy(target, backup / MENU_FILE)
-        receipt = {"kind": "menu", "task": a.task, "status": "started", "oldSha256": old_sha, "newSha256": new_sha}
-        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
-        atomic_copy(a.image, target, preserve=False)
-        ok = sha256(target) == new_sha
-        receipt["status"] = "applied" if ok else "failed"
-        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
-    print(f"{'PASS' if ok else 'FAIL'} menu-art installed; roll back with: rollback {backup}")
-    return 0 if ok else 1
 
 
 def cmd_mirror(a) -> int:
@@ -1212,10 +1155,8 @@ def parser() -> argparse.ArgumentParser:
     s = add("plan", cmd_plan, "show the diff-only update, write nothing"); installed(s); update_args(s)
     s = add("apply", cmd_apply, "diff-only update with backup"); installed(s); write(s); update_args(s)
     s.add_argument("--no-base-check", action="store_true", help="apply without --base (only when the installed entries are known untouched)")
-    s = add("rollback", cmd_rollback, "undo one apply or menu-art"); installed(s)
+    s = add("rollback", cmd_rollback, "undo one apply or relayout"); installed(s)
     s.add_argument("backup", type=Path); s.add_argument("--dry-run", action="store_true")
-    s = add("menu-art", cmd_menu_art, "replace main-menu-16x9.png"); installed(s); write(s)
-    s.add_argument("--image", type=Path, required=True)
     s = add("mirror", cmd_mirror, "copy a pack's missing files to another folder (the iCloud copy)")
     s.add_argument("--src", type=Path, default=DEFAULT_INSTALLED); s.add_argument("--dst", type=Path, default=DEFAULT_COPY, help=f"the copy folder (default: the iCloud/Obsidian hd_pack/{PACK_ID})")
     s.add_argument("--dry-run", action="store_true"); s.add_argument("--deep", action="store_true", help="hash content-named files too (reads the destination fully)")
