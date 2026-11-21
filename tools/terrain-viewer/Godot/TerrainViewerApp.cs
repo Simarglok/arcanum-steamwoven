@@ -364,7 +364,9 @@ public partial class TerrainViewerApp : Node
                                 // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).
                                 if (only?.Contains("altar") == true) await RunAreaAltarTileSmokeAsync();
                                 // ARC-DEV-138: a used door closes by itself after the original's interval and the Esc menu stops it (SM10; the map battery runs it after the portal stage).
-                                if (Stage("door-close")) RunAreaDoorCloseSmoke();
+                                // ARC-RENDER-3063: the town-map render's capture (ARC_TOWNCAP names its job; the door-close stage selects the run).
+                                if (TownCaptureJob(only!) is { } towncap) await RunTownCaptureAsync(towncap);
+                                if (Stage("door-close") && !_townCaptured) RunAreaDoorCloseSmoke();
                                 // ARC-UI-057: the hovered object's highlight and message-window description alone (the map battery runs it too).
                                 if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
