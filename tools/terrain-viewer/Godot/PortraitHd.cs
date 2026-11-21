@@ -33,6 +33,8 @@ public static class PortraitHd
         if (texture is not HdInterfaceTexture hd || hd.FrameForBoard?.Hd is not { } query) return (true, "no HD question for this portrait");
         if (hd.GetWidth() != size || hd.GetHeight() != size) return (false, $"size {hd.GetWidth()}x{hd.GetHeight()}, expected {size}x{size}");
         if (!pack.Entries.Any(e => e.Kind == HdEntryKind.Portrait && e.Key == query.Key && e.Legacy == query.Legacy)) return (true, "the pack has no entry for this bitmap: Legacy");
-        return hd.IsHd && (hd.HdScale == pack.Scale || hd.IsAreaResampled) ? (true, "HD") : (false, "the pack holds an entry for this bitmap but the portrait does not draw HD");
+        var drawsHd = hd.IsHd; // first: the draw state (and the pending flag) is refreshed by this call
+        if (hd.IsAreaPending) return (true, "HD (the area copy is still resampling: Legacy draws until it lands)");
+        return drawsHd && (hd.HdScale == pack.Scale || hd.IsAreaResampled) ? (true, "HD") : (false, "the pack holds an entry for this bitmap but the portrait does not draw HD");
     }
 }

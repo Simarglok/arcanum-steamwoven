@@ -206,10 +206,12 @@ public static class InterfaceHd
         public int Height { get; set; }
         public byte[]? Pixels { get => Volatile.Read(ref _pixels); set => Volatile.Write(ref _pixels, value); }
         public volatile bool Failed;
+        /// <summary>ARC-RENDER-3045: set (before <see cref="Failed"/>) when the pack has no usable redraw for the frame: no scale is worth another worker.</summary>
+        public volatile bool Unusable;
     }
 
-    // Up to DirectKeep scales per frame (a frame shared by two views at different scales does not paint again on every draw).
-    private const int DirectKeep = 3;
+    // Up to DirectKeep scales per frame, least recently asked for first out (a frame shared by views at up to four different scales does not resample again on every draw).
+    private const int DirectKeep = 4;
     private static readonly ConditionalWeakTable<AreaInterfaceFrame, List<DirectFrameEntry>> DirectFrames = new();
     private static int _directPending;
     private static long _directTicks;
@@ -232,13 +234,16 @@ public static class InterfaceHd
     }
 
     /// <summary>The scale (rounded to 1/1000) a direct frame of a pack of <paramref name="packScale"/> is resampled to for the real device scale <paramref name="device"/>,
-    /// or null when it draws as before: a whole device scale (1, 2, 3 and 4 and above: a mip level or a magnification is exact enough there) and a scale at or above the pack's.</summary>
+    /// or null when it draws as before: a scale at or above the pack's, and a whole scale that divides the pack's (1 and 2 for a 4× pack: an exact mip level).
+    /// ARC-RENDER-3045: a whole scale that does not divide it (3 for a 4× pack, which the trilinear draw over-blurs) is resampled to exactly that whole scale (within 0.01).</summary>
     internal static double? DirectScale(double device, int packScale)
     {
         if (!double.IsFinite(device) || device <= 0 || packScale < 2) return null;
         var scale = Math.Round(device, 3);
         if (scale <= 0 || scale >= packScale - 0.001) return null;
-        return Math.Abs(scale - Math.Round(scale)) < 0.01 ? null : scale;
+        var whole = Math.Round(scale);
+        if (Math.Abs(scale - whole) >= 0.01) return scale;
+        return whole >= 1 && packScale % (int)whole != 0 ? whole : null;
     }
 
     /// <summary>The entry of <paramref name="frame"/> for <paramref name="pack"/> at <paramref name="scale"/> (<see cref="DirectScale"/>): <c>Pixels</c> are set when ready, <c>Failed</c>
@@ -248,9 +253,17 @@ public static class InterfaceHd
         lock (DirectFrames)
         {
             var entries = DirectFrames.GetOrCreateValue(frame);
-            var known = entries.Find(e => ReferenceEquals(e.Pack, pack) && e.Scale == scale);
-            if (known is not null) return known;
             entries.RemoveAll(e => !ReferenceEquals(e.Pack, pack));
+            // ARC-RENDER-3045: a pack with no usable redraw for the frame has none at any scale; the failed entry answers every scale (no worker per new scale).
+            var unusable = entries.Find(e => e.Unusable);
+            if (unusable is not null) return unusable;
+            var known = entries.Find(e => e.Scale == scale);
+            if (known is not null)
+            {
+                // Least recently used: the scale asked for last is the last to go.
+                if (entries[^1] != known) { entries.Remove(known); entries.Add(known); }
+                return known;
+            }
             if (entries.Count >= DirectKeep) entries.RemoveAt(0);
             var entry = new DirectFrameEntry(pack, scale);
             entries.Add(entry);
@@ -270,7 +283,7 @@ public static class InterfaceHd
             var clock = Stopwatch.StartNew();
             var pack = entry.Pack;
             if (pack.ResolveSprite(query, frame.Rgba) is not { Status: HdFrameStatus.Hd, Rgba: { } rgba } hd
-                || hd.Width != frame.Width * pack.Scale || hd.Height != frame.Height * pack.Scale) { entry.Failed = true; return; }
+                || hd.Width != frame.Width * pack.Scale || hd.Height != frame.Height * pack.Scale) { entry.Unusable = true; entry.Failed = true; return; }
             var (width, height) = InterfaceChromeRenderer.PixelSize(frame.Width, frame.Height, entry.Scale);
             var pixels = InterfaceChromeRenderer.ResampleStraight(rgba, hd.Width, hd.Height, width, height);
             lock (DirectFrames) if (!entries.Contains(entry)) { entry.Failed = true; return; }
@@ -281,7 +294,9 @@ public static class InterfaceHd
         }
         catch (Exception e)
         {
-            // Any failure (an out-of-memory at a big scale included) draws the frame with the mip chain as before.
+            // Any failure (an out-of-memory at a big scale included) draws the frame with the mip chain as before. A pack that rejects the frame (a Legacy hash mismatch)
+            // rejects it at every scale: no worker per scale (ARC-RENDER-3045).
+            if (e is ArgumentException) entry.Unusable = true;
             entry.Failed = true;
             GD.PrintErr($"ARC-RENDER-3002 direct interface frame resample failed: {e.GetType().Name}");
         }
@@ -490,6 +505,7 @@ public partial class HdInterfaceTexture : Texture2D
     private ImageTexture? _area;
     private CanvasTexture? _areaCanvas;
     private InterfaceHd.DirectFrameEntry? _areaFrom;
+    private bool _areaPending;
     private int _activeScale = 1;
     // ARC-UI-148: device pixels per Legacy pixel of what draws, for a region draw (a generated frame at a fractional scale is not a whole multiple).
     private float _activeRatio = 1;
@@ -510,6 +526,9 @@ public partial class HdInterfaceTexture : Texture2D
 
     /// <summary>ARC-RENDER-3002: true when what draws is the pack frame area-resampled to the device scale (a self-test reads it).</summary>
     internal bool IsAreaResampled => Active() is { } active && ReferenceEquals(active, _areaCanvas);
+
+    /// <summary>ARC-RENDER-3045: true while a worker resamples the first copy of this frame at the claimed scale (the frame draws Legacy, or its mip chain when one is built; a self-test reads it).</summary>
+    internal bool IsAreaPending => _areaPending;
 
     /// <summary>ARC-RENDER-3002: the pixel size of the uploaded area-resampled copy (zero while none is uploaded; a self-test reads it).</summary>
     internal Vector2I AreaPixelSize => _area is { } image && _areaCanvas is not null ? new(image.GetWidth(), image.GetHeight()) : default;
@@ -550,6 +569,7 @@ public partial class HdInterfaceTexture : Texture2D
     // The canvas texture of the HD image (null while Legacy draws); built with the image, so the two are dropped together.
     private CanvasTexture? Active()
     {
+        _areaPending = false;
         if (InterfaceHd.Generated && _frame?.Hd is { } generatedQuery && InterfaceChromeRecipes.For(generatedQuery) is { } recipe)
         {
             if (GeneratedCanvas(recipe, generatedQuery, out var painting) is { } generated)
@@ -566,7 +586,15 @@ public partial class HdInterfaceTexture : Texture2D
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack || _frame?.Hd is not { } query) return null;
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; DropArea(); }
         // ARC-RENDER-3002: a plain frame at a fractional device scale below the pack's draws from its area-resampled copy once a worker has it (the mip chain is freed then).
-        if (!_premultipliedAlpha && AreaCanvas(pack, query) is { } area) return area;
+        var areaPending = false;
+        if (!_premultipliedAlpha && AreaCanvas(pack, query, out areaPending) is { } area) return area;
+        // ARC-RENDER-3045: while a worker resamples the first copy the frame is not decoded here a second time (no main-thread decode and mip chain, no stall): a mip chain already
+        // built keeps drawing, else the Legacy pixels draw until the copy swaps in by itself.
+        if (areaPending)
+        {
+            if (_hdCanvas is null) { _activeScale = 1; _activeRatio = 1; }
+            return _hdCanvas;
+        }
         if (_hdCanvas is null && !_failed)
         {
             // ARC-DEV-369: a worker may have resolved this frame already; only the upload is left.
@@ -604,12 +632,13 @@ public partial class HdInterfaceTexture : Texture2D
         return _hdCanvas;
     }
 
-    private void DropArea() { _area = null; _areaCanvas = null; _areaFrom = null; }
+    private void DropArea() { _area = null; _areaCanvas = null; _areaFrom = null; _areaPending = false; }
 
     // ARC-RENDER-3002: the area-resampled frame for the device scale this texture is drawn at (its scale source); null while the scale is whole
     // or at least the pack's, the pack has no usable redraw, or nothing is ready yet and no earlier scale draws (the mip chain draws then, as before).
-    private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query)
+    private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query, out bool pending)
     {
+        pending = false; _areaPending = false;
         // Only a view that claims its device scale: a texture with no claim may be drawn at any scale, and a copy for the wrong one is blurrier than the mip chain.
         if (ScaleSource is not { } source || InterfaceHd.DirectScale(source(), pack.Scale) is not { } scale) { DropArea(); return null; }
         var real = (double)source();
@@ -625,7 +654,7 @@ public partial class HdInterfaceTexture : Texture2D
         if (entry.Pixels is not { } pixels)
         {
             // Still resampling: an earlier scale's copy keeps drawing, stretched into the same Legacy rectangle, until the new one is ready.
-            if (_areaCanvas is null) return null;
+            if (_areaCanvas is null) { pending = _areaPending = true; return null; }
         }
         else if (!ReferenceEquals(_areaFrom, entry) || _areaCanvas is null)
         {
