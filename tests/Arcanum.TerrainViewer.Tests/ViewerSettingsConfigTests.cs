@@ -57,6 +57,13 @@ public sealed class ViewerSettingsConfigTests
         Assert.AreEqual(AreaGameSettings.Defaults, ViewerSettingsConfig.ReadGame(Lines("interface layout=Column-Thin\n")));
         Assert.IsFalse(ViewerSettingsConfig.HasGame(Lines("interface layout=column\n")), "the line no longer belongs to the game group");
         Assert.IsFalse(ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults).Any(change => change.Name == ViewerSettingsConfig.InterfaceLayoutLine), "the line is not written");
+        // Kept: a save round trip of the game group leaves the old line in the file as it was, and the settings saved beside it read back.
+        var path = Path.Combine(_root, "arcanum.cfg");
+        File.WriteAllText(path, "interface layout=full-width\ndifficulty=1\n");
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.GameChanges(Chosen)));
+        var after = ArcanumConfig.Read(path);
+        Assert.AreEqual("full-width", after.Entries.Single(entry => entry.Name == ViewerSettingsConfig.InterfaceLayoutLine).Value, "the old line is kept as it was");
+        Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(after));
     }
 
     [TestMethod]

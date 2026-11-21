@@ -36,6 +36,14 @@ public partial class AreaCharacterSheetSpellsView : Control
     internal AreaCharacterSheetSpellsLayout.Hit? HoveredForSelfTest => _hovered;
     internal AreaSpellsPageView? ViewForSelfTest => _spells;
 
+    // ARC-UI-3035: the kit's sheet behind this page (the page draws its own panel art only while the kit has none).
+    private readonly AreaKitSheetView _kitSheet = new();
+    internal bool KitSheetShownForSelfTest => _kitSheet.Shown;
+
+    public override void _EnterTree() => AreaKitSheets.Changed += QueueRedraw;
+
+    public override void _ExitTree() => AreaKitSheets.Changed -= QueueRedraw;
+
     public override void _Ready()
     {
         Name = "SheetSpells";
@@ -46,6 +54,7 @@ public partial class AreaCharacterSheetSpellsView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_kitSheet);
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts)
@@ -121,7 +130,9 @@ public partial class AreaCharacterSheetSpellsView : Control
     public override void _Draw()
     {
         if (_fonts is not { } fonts) return;
-        DrawArt(Art(AreaCharacterSheetSpellsLayout.BackgroundArt), (0, 0));
+        // ARC-UI-3035: the kit's sheet for this page, if any, stands behind and the page's own panel art is not drawn.
+        _kitSheet.Set(AreaCharacterSheetSpellsLayout.BackgroundArt, Size);
+        if (!_kitSheet.Shown) DrawArt(Art(AreaCharacterSheetSpellsLayout.BackgroundArt), (0, 0));
         if (_spells is null) return;
         for (var college = 0; college < AreaCharacterSheetSpellsLayout.Colleges; college++)
         {
