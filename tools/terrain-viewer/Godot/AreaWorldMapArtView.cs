@@ -206,8 +206,16 @@ public partial class AreaWorldMapArtView : Control
         Visible = false;
     }
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += RedrawForKit;
+
+    private void RedrawForKit() => Redraw();
+
+    /// <summary>ARC-UI-3036 (census G13, G14: the map view, the continent view and the town map are the one window, interface mode 5): the kit's <c>backdrop.mapmain</c> shows under this window (the bar panel drew it), so the window draws no frame art of its own (art 138); the view, the buttons, the compass, the lens art and the cover over the view stay.</summary>
+    internal bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.WorldMap;
+
     public override void _ExitTree()
     {
+        AreaGameBarPanel.KitBackgroundChanged -= RedrawForKit;
         AreaGameBarPanel.InsetsChanged -= Place;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
@@ -901,7 +909,7 @@ public partial class AreaWorldMapArtView : Control
     {
         // The background; the view and the buttons are the children above it.
         ClaimScale();
-        if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.BackgroundArt, out var back) == true && back.Length > 0) DrawTexture(back[0], Vector2.Zero);
+        if (!KitBackgroundShown && _look?.Art.TryGetValue(AreaWorldMapArtLayout.BackgroundArt, out var back) == true && back.Length > 0) DrawTexture(back[0], Vector2.Zero);
     }
 
     // The view, in its own coordinates (the window's minus the view's origin).
@@ -1123,6 +1131,13 @@ public partial class AreaWorldMapArtView : Control
             var frame = AreaCharacterArtDraw.Frame(frames.Length, _pressed is not null, _pressed == button, _hovered == button);
             canvas.DrawTexture(frames[Math.Min(frame, frames.Length - 1)], new Vector2(x, y));
         }
+        // ARC-UI-3036: the kit's frame has no compass letters (census: drawn by font on the redrawn frame), so they are written at the places of the original's.
+        if (KitBackgroundShown)
+            foreach (var (letter, (cx, cy)) in AreaWorldMapArtLayout.CompassLetters)
+            {
+                var (width, height) = _look.Font.Font.Measure(letter);
+                AreaArtTextDraw.Text(canvas, _look.Font, letter, cx - width / 2, cy - height / 2, AreaWorldMapArtLayout.CompassLetterColour);
+            }
         // WM51: each box is filled black and its text written at its corner, in the white of the type 0 font with the shadow.
         if (_readoutPixel is { } pixel && _map is { } map)
         {
