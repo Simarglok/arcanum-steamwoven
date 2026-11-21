@@ -139,7 +139,7 @@ public enum ChromeKind
 /// the Parchment material shades, in the same coordinates as the materials (the art's own plus <paramref name="OriginX"/>): the logbook's book has it at its 286, the reading window's book at the
 /// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false, bool KeepFaceWithPictureOnly = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -494,8 +494,8 @@ public static class InterfaceChromeRecipes
         ChromeRecipe Family(ChromeRecipe recipe) => recipe with { FamilyWood = true };
         return [top, bottom, Family(inventory with { OriginX = InterfaceChromeRenderer.SteamwovenFamilySplitUnits }), Family(doll), Family(loot), Family(barter), Family(follower), Family(lootDoll), Family(barterDoll), Family(dollCover),
             .. lenses.Select(recipe => recipe.File is "lns_bart.art" or "lns_loot.art" or "lns_papr.art" ? Family(recipe) : recipe), .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), // ARC-UI-3058: the four round buttons of the bottom strip keep the art's own picture inside the generated rim: the glyph mask of PaintButton is a Legacy-grid lookup (the HD glyph
-            // came out as stair-steps of the original's 39 x 39 pixels) and its colour threshold misses a dull glyph (the idle key, 4 % of the dome's pixels over it), while the pack's picture is smooth and complete.
-            .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: file is "combat_button.art" or "skills_button.art" or "spells_button.art" or "schematics_button.art")),
+            // came out as stair-steps of the original's 39 x 39 pixels) and its colour threshold misses a dull glyph (the idle key, 4 % of the dome's pixels over it), while the pack's picture is smooth and complete. Only with a pack picture (KeepFaceWithPictureOnly): the Legacy pixels alone are drawn as before.
+            .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: file is "combat_button.art" or "skills_button.art" or "spells_button.art" or "schematics_button.art", KeepFaceWithPictureOnly: true)),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
@@ -720,7 +720,7 @@ public static class InterfaceChromeRenderer
         var picturePixels = picture.IsEmpty ? null : picture.ToArray();
         if (recipe.LensFrom is { } lensFrom) MoveLens(lensFrom, legacyPixels, width, height, picturePixels, pixelWidth, pixelHeight, scale);
         var canvas = new Canvas(width, height, legacyPixels, picturePixels, scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, FoldX = recipe.FoldX, Down = frameIndex == recipe.DownFrame };
-        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
+        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace && (picturePixels != null || !recipe.KeepFaceWithPictureOnly));
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);
 

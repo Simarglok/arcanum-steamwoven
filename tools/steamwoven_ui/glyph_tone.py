@@ -3,15 +3,16 @@
 A button glyph (key, gear, arrows, shield) is drawn in two looks, dull (idle frame) and lit (hover and pressed frames). The ORIGINAL's look of each state is a number: the mean
 CIE L*a*b* (sRGB, D65) of the glyph's pixels in the frame, and the mean of the plate's dome around it. The generator keeps the shape but not the brightness (the first pilot's idle key
 was almost invisible), so after `fit.py` the glyph master's colours are moved, as one shift of the mean L*, a* and b* over its interior (texture, relief and edge kept), to the ORIGINAL's mean of the
-pixels the glyph covers. The ORIGINAL's glyph is dithered (about half of its pixels are the dark ground): its mean would make a smooth redraw as dark as the dome (the first pilot's idle key was almost invisible), so the target is
-the mean of the brighter half of the glyph's pixels, the colour the dither shows (`--stat mean` takes the plain mean).
+pixels the glyph covers. The ORIGINAL's glyph is dithered (about half of its pixels are the dark ground): its mean would make a smooth redraw as dark as the dome, so the target is
+the mean of the brighter half of the glyph's pixels, the colour the dither shows (`--stat mean` takes the plain mean). `--dome-frame` takes the plate reference from another frame of the ORIGINAL (the idle frame for a lit glyph:
+the hover frame's dome is lit by the glow, the kit's plate is not).
 
 The glyph's place on the original's 39 x 39 grid is its master alpha placed at the layout's centre (units) at the master scale (3.6 px per unit by default) and sampled 4 x 4 per unit pixel; a pixel
 counts as glyph when at least 0.9 of it is covered and as plate (dome) when none is and it lies within 13 units of the frame's centre (the plate's rim is left out).
 
-    python3 -B tools/steamwoven_ui/glyph_tone.py measure ORIGINAL_FRAME.png GLYPH_MASTER.png --centre X,Y [--json]
-    python3 -B tools/steamwoven_ui/glyph_tone.py fit ORIGINAL_FRAME.png GLYPH_MASTER.png OUT.png --centre X,Y [--strength S] [--plate PLATE_MASTER.png]
-    python3 -B tools/steamwoven_ui/glyph_tone.py report ORIGINAL_FRAME.png RESULT_FRAME.png GLYPH_MASTER.png --centre X,Y
+    python3 -B tools/steamwoven_ui/glyph_tone.py measure ORIGINAL_FRAME.png GLYPH_MASTER.png --centre X,Y [--stat bright|mean] [--dome-frame IDLE_FRAME.png] [--plate PLATE_MASTER.png] [--json]
+    python3 -B tools/steamwoven_ui/glyph_tone.py fit ORIGINAL_FRAME.png GLYPH_MASTER.png OUT.png --centre X,Y [--strength S] [--stat bright|mean] [--dome-frame IDLE_FRAME.png] [--plate PLATE_MASTER.png]
+    python3 -B tools/steamwoven_ui/glyph_tone.py report ORIGINAL_FRAME.png RESULT_FRAME.png GLYPH_MASTER.png --centre X,Y [--stat bright|mean] [--dome-frame IDLE_FRAME.png]
 
 `measure` prints the mean L*a*b* of the ORIGINAL's glyph and dome pixels and of the master. `fit` writes the master with the shift (`--strength` 0..1 scales it). With `--plate` (the kit's plate master the glyph will sit on) the target is the
 ORIGINAL's glyph brightness *relative to its plate*: the master's mean L* goes to the plate's dome L* plus the ORIGINAL's (glyph - dome) L*, a* and b* go to the ORIGINAL glyph's (the plate stays as it is, the owner's rule); without it the target is the ORIGINAL's absolute mean. `report` compares an assembled frame
@@ -197,13 +198,17 @@ def fit(original: "pngio.Image", glyph: "pngio.Image", centre: tuple[float, floa
     return out, report
 
 
-def report_frame(original: "pngio.Image", result: "pngio.Image", glyph: "pngio.Image", centre: tuple[float, float], master_scale: float = 3.6) -> dict:
+def report_frame(original: "pngio.Image", result: "pngio.Image", glyph: "pngio.Image", centre: tuple[float, float], master_scale: float = 3.6,
+                 stat: str = "mean", dome_original: "pngio.Image | None" = None) -> dict:
+    """The glyph's L*a*b* and its brightness over the dome in the ORIGINAL and in the RESULT; `stat` and `dome_original` are the options of `measure` and apply to the ORIGINAL (the result is a smooth redraw: its plain mean)."""
     cover = coverage(glyph, centre, master_scale)
     glyph_w, dome_w = regions(cover)
     out = {}
     for name, image in (("original", original), ("result", result)):
         grid = reduce_to_grid(image)
-        g, d = mean_lab(grid, glyph_w), mean_lab(grid, dome_w)
+        pick = bright_lab if name == "original" and stat == "bright" else mean_lab
+        dome_grid = reduce_to_grid(dome_original) if name == "original" and dome_original is not None else grid
+        g, d = pick(grid, glyph_w), mean_lab(dome_grid, dome_w)
         out[name] = {"glyph_lab": g[:3], "dome_lab": d[:3], "glyph_minus_dome_l": g[0] - d[0]}
     out["delta_glyph_l"] = out["result"]["glyph_lab"][0] - out["original"]["glyph_lab"][0]
     out["delta_contrast_l"] = out["result"]["glyph_minus_dome_l"] - out["original"]["glyph_minus_dome_l"]
@@ -226,9 +231,10 @@ def main(argv: list[str] | None = None) -> int:
         if name == "fit":
             p.add_argument("out")
             p.add_argument("--strength", type=float, default=1.0)
-        if name in ("fit", "measure"):
+        if name in ("fit", "measure", "report"):
             p.add_argument("--stat", choices=("bright", "mean"), default="bright", help="the ORIGINAL's glyph tone: the brighter half's mean (default, the dither's colour) or the mean of all glyph pixels")
             p.add_argument("--dome-frame", help="another frame of the ORIGINAL whose dome is the plate reference (the idle frame for a lit glyph: the hover frame's dome is lit by the glow, the kit's plate is not)")
+        if name in ("fit", "measure"):
             p.add_argument("--plate", help="the kit plate master the glyph sits on: fit to the ORIGINAL's glyph brightness relative to the plate")
         p.add_argument("--centre", required=True)
         p.add_argument("--master-scale", type=float, default=3.6)
@@ -247,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
                                  pngio.read(args.dome_frame) if args.dome_frame else None)
             pngio.write(args.out, image)
         else:
-            result = report_frame(original, pngio.read(args.result), glyph, centre, args.master_scale)
+            result = report_frame(original, pngio.read(args.result), glyph, centre, args.master_scale, args.stat, pngio.read(args.dome_frame) if args.dome_frame else None)
     except (OSError, pngio.PngError, ToneError) as error:
         print(f"GLYPH TONE error: {error}", file=sys.stderr)
         return 2

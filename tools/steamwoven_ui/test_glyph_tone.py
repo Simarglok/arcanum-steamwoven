@@ -88,6 +88,28 @@ class GlyphToneTest(unittest.TestCase):
         worse = glyph_tone.report_frame(original, dim, master((80, 60, 30)), CENTRE)
         self.assertLess(worse["delta_glyph_l"], -10)
 
+    def test_dome_frame_is_the_plate_reference(self) -> None:
+        idle = frame(DOME, DOME, dither=False)
+        lit = solid(156, 156, (70, 80, 50))  # the hover frame's dome is lit by the glow
+        for y in range(58, 98):
+            for x in range(58, 98):
+                lit.data[(y * 156 + x) * 4:(y * 156 + x) * 4 + 3] = bytes(BRIGHT)
+        own = glyph_tone.measure(lit, master((80, 60, 30)), CENTRE)
+        ref = glyph_tone.measure(lit, master((80, 60, 30)), CENTRE, dome_original=idle)
+        self.assertGreater(own["original_dome"][0], ref["original_dome"][0] + 5)
+        self.assertAlmostEqual(ref["original_dome"][0], tone_check._pixel_lab(*DOME)[0], delta=0.5)
+        plate = solid(156, 156, DOME)
+        relative = glyph_tone.measure(lit, master((80, 60, 30)), CENTRE, plate=plate, dome_original=idle)
+        self.assertAlmostEqual(relative["target_glyph"][0] - relative["plate_dome"][0], relative["original_glyph"][0] - relative["original_dome"][0], delta=0.01)
+        report = glyph_tone.report_frame(lit, lit, master((80, 60, 30)), CENTRE, stat="bright", dome_original=idle)
+        self.assertGreater(report["original"]["glyph_minus_dome_l"], report["result"]["glyph_minus_dome_l"] - 0.0001 + 5)
+
+    def test_stat_mean_through_fit(self) -> None:
+        original = frame(BRIGHT, DOME, dither=True)
+        bright_l, dome_l = tone_check._pixel_lab(*BRIGHT)[0], tone_check._pixel_lab(*DOME)[0]
+        fitted, _ = glyph_tone.fit(original, master((80, 60, 30)), CENTRE, stat="mean")
+        self.assertAlmostEqual(lightness(fitted), (bright_l + dome_l) / 2, delta=1.5)
+
     def test_frame_size_must_fit_the_grid(self) -> None:
         with self.assertRaises(glyph_tone.ToneError):
             glyph_tone.reduce_to_grid(solid(100, 100, DOME))

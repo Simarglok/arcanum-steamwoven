@@ -959,6 +959,35 @@ public sealed class InterfaceChromeTests
     }
 
     [TestMethod]
+    public void The_four_strip_buttons_keep_the_art_face_only_with_a_pack_picture()
+    {
+        // ARC-UI-3058: the glyph mask is a Legacy-grid lookup (stair-steps with HD art), so with a pack picture the art's own picture stays inside the generated rim; with the Legacy pixels alone the button is drawn as before.
+        const int size = 39;
+        var legacy = new byte[size * size * 4];
+        for (var y = 0; y < size; y++)
+        for (var x = 0; x < size; x++)
+        {
+            double dx = x + 0.5 - size / 2.0, dy = y + 0.5 - size / 2.0;
+            var i = (y * size + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = dx * dx + dy * dy < size * size / 4.0 ? ((byte)120, (byte)30, (byte)20, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+        }
+        foreach (var file in new[] { "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art" })
+        {
+            var recipe = Recipe(file);
+            Assert.IsTrue(recipe.KeepFace && recipe.KeepFaceWithPictureOnly, file);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(size, size, 2.0);
+            var picture = new byte[pw * ph * 4];
+            for (var i = 0; i < picture.Length; i += 4) (picture[i], picture[i + 1], picture[i + 2], picture[i + 3]) = (30, 90, 200, 255);
+            foreach (var frame in new[] { 0, 1, 2 })
+            {
+                Assert.AreEqual((30, 90, 200, 255), Pixel(InterfaceChromeRenderer.Render(recipe, size, size, legacy, picture, frame, 2.0), pw, pw / 2, ph / 2), $"{file} frame {frame} keeps the pack picture");
+                var plain = Pixel(InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], frame, 2.0), pw, pw / 2, ph / 2);
+                Assert.AreNotEqual((120, 30, 20, 255), plain, $"{file} frame {frame}: the Legacy pixels alone get the generated face");
+            }
+        }
+    }
+
+    [TestMethod]
     public void The_travel_and_compass_balls_and_the_lens_follow_their_silhouette_at_fractional_scales()
     {
         // A round 57 x 57 Travel ball and a 45 x 45 compass ball: the silhouette stays, the down frame differs from idle; the compass keeps the art's whole picture inside the rim.
