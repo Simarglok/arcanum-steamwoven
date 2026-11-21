@@ -108,9 +108,10 @@ public static class AreaArtTextDraw
 
     /// <summary>Placed glyphs (their x from the text's left edge) from (x, y) in <paramref name="colour"/>; <paramref name="alpha"/> (ARC-DEV-156,
     /// the floaters' fade) scales the draw's effect on the canvas under it, as the original's art blit with an opacity does.
-    /// ARC-UI-2795: <paramref name="scale"/> (a window drawn larger than the original's 1:1) enlarges the glyphs and their advances alike.</summary>
+    /// ARC-UI-2795: <paramref name="scale"/> (a window drawn larger than the original's 1:1) enlarges the glyphs and their advances alike.
+    /// ARC-RENDER-2939: <paramref name="drawSetScale"/> is the scale a caller has set with <c>DrawSetTransform</c> on <paramref name="canvas"/> (the floaters and bubbles); the node's own transform does not hold it, and it only picks the glyph's filter.</summary>
     public static void Glyphs(CanvasItem canvas, AreaArtFontFace face, IEnumerable<(int X, AreaArtGlyph Glyph)> placed, int x, int y,
-        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f)
+        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f, float drawSetScale = 1f)
     {
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(placed);
@@ -118,7 +119,7 @@ public static class AreaArtTextDraw
         // Premultiplied: the colour and the alpha both carry the opacity.
         var opacity = alpha / 255f;
         var tint = new Color(colour.R / 255f * opacity, colour.G / 255f * opacity, colour.B / 255f * opacity, opacity);
-        var deviceScale = AreaFilterDeviceScale(canvas, scale);
+        var deviceScale = AreaFilterDeviceScale(canvas, scale * drawSetScale);
         foreach (var (gx, glyph) in placed)
             if (face.Texture(glyph.Frame, blend, deviceScale) is { } texture)
                 canvas.DrawTextureRect(texture, new Rect2(x + gx * scale, y, glyph.Width * scale, glyph.Height * scale), false, tint);
@@ -135,5 +136,5 @@ public static class AreaArtTextDraw
 
     /// <summary>One line of text from (x, y) in <paramref name="colour"/>.</summary>
     public static void Text(CanvasItem canvas, AreaArtFontFace face, string text, int x, int y, (byte R, byte G, byte B) colour,
-        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha, scale);
+        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f, float drawSetScale = 1f) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha, scale, drawSetScale);
 }
