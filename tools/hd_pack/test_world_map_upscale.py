@@ -12,6 +12,10 @@ try:
 except ImportError:  # the recipe is a local research tool; the missing libraries are named by the skip reason
     cv2 = None
     np = None
+try:
+    import PIL  # noqa: F401
+except ImportError:
+    PIL = None
 
 from tools.hd_pack import world_map_upscale as wm
 
@@ -22,19 +26,29 @@ def _synthetic_map(size: int = 96):
     image = np.full((size, size, 3), (170, 200, 225), dtype=np.uint8)
     image = np.clip(image.astype(np.int16) + rng.integers(-3, 4, image.shape), 0, 255).astype(np.uint8)
     image[40:48, 8:88] = (20, 25, 30)  # a strong ink line
-    image[10, 10] = (120, 130, 140)  # a single weak speck, below the component size
+    image[10:13, 10:13] = (5, 5, 5)  # a small isolated dark speck: its edge ring is under the component size
     return image
 
 
-@unittest.skipIf(cv2 is None, "numpy, opencv-python-headless and Pillow are needed")
+@unittest.skipIf(cv2 is None or PIL is None, "numpy, opencv-python-headless and Pillow are needed")
 class WorldMapUpscaleTests(unittest.TestCase):
     def test_mask_is_one_on_the_line_and_zero_far_from_it(self) -> None:
         original = _synthetic_map()
         mask = wm.line_mask(original)
         self.assertEqual(mask.shape, (96 * wm.SCALE, 96 * wm.SCALE))
         self.assertGreater(float(mask[38 * wm.SCALE : 42 * wm.SCALE, 48 * wm.SCALE].max()), 0.9)  # at the line's edge
-        self.assertLess(float(mask[10 * wm.SCALE, 10 * wm.SCALE]), 0.01)
+        self.assertLess(float(mask[11 * wm.SCALE, 11 * wm.SCALE]), 0.01)  # the speck is dropped as grain
         self.assertLess(float(mask[90 * wm.SCALE, 5 * wm.SCALE]), 0.01)
+
+    def test_the_component_filter_is_what_drops_the_speck(self) -> None:
+        original = _synthetic_map()
+        saved = wm.MASK_MIN_COMPONENT
+        try:
+            wm.MASK_MIN_COMPONENT = 0
+            unfiltered = wm.line_mask(original)
+        finally:
+            wm.MASK_MIN_COMPONENT = saved
+        self.assertGreater(float(unfiltered[10 * wm.SCALE : 13 * wm.SCALE, 10 * wm.SCALE : 13 * wm.SCALE].max()), 0.5)
 
     def test_blend_takes_the_network_on_lines_and_lanczos_elsewhere(self) -> None:
         original = _synthetic_map()

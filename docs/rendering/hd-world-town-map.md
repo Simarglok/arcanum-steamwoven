@@ -143,10 +143,11 @@ mask ("Blend B") are dropped; plain Lanczos is the fallback. The recipe is the s
 
 1. The 2000 x 2000 map is upscaled x4 with `realesrgan-ncnn-vulkan -n realesr-animevideov3 -s 4 -t 250` (the network picture) and with Pillow's Lanczos (the baseline).
 2. The mask is made on the original: Gaussian blur sigma 1.0, Canny 100/200, edge components under 30 pixels dropped (paper grain), dilation by an ellipse of radius 2
-   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered.
+   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map).
 3. Result = mask x network + (1 - mask) x Lanczos, per channel, rounded.
 4. Outline check (rebuilt, the script of ARC-RES-2992 was lost, [#3080](https://github.com/Simarglok/arcanum-steamwoven/issues/3080)): the candidate is box-downscaled back to
-   2000 x 2000 and compared with the original; Canny 40/100 (chosen so that Lanczos gives F1 0.965, close to 0.964 above), tolerance 1 and 2 pixels.
+   2000 x 2000 and compared with the original; Canny 40/100 (chosen so that Lanczos gives F1 0.965, close to 0.964 above), tolerance as an elliptical dilation of radius 1 and 2
+   (a plus-shaped 3 x 3 and a 5 x 5 disc, so a diagonal step of one pixel is outside tolerance 1).
 
 | Picture (x4) | MAE | Edge precision / recall (1 px) | Edge F1 (1 px / 2 px) |
 | --- | ---: | --- | --- |

@@ -27,7 +27,7 @@ MASK_DILATE_RADIUS = 2  # original pixels (elliptical kernel of 2 * radius + 1)
 MASK_FEATHER_SIGMA = 1.2  # original pixels; the soft transition between the network and Lanczos
 # Outline check recipe: Canny thresholds that give the Lanczos x4 picture F1 0.965 (the check of ARC-RES-2992 was lost, #3080).
 CHECK_CANNY = (40, 100)
-STRIP = 1000  # output rows blended at a time (bounded memory at 8000 x 8000)
+STRIP = 1000  # output rows blended at a time: bounds the float32 temporaries (the 8000 x 8000 pictures and the mask stay resident, about 1 GB)
 
 
 def _imports():
@@ -140,15 +140,19 @@ def main(argv: list[str] | None = None) -> int:
     p_check.add_argument("--candidate", action="append", required=True, metavar="NAME=PATH")
     args = parser.parse_args(argv)
     cv2, _, _ = _imports()
+    if args.command == "blend":
+        out_path = Path(args.out)
+        if out_path.exists() or out_path.is_symlink():
+            raise SystemExit(f"refusing to overwrite {out_path}")
+        if not out_path.parent.is_dir():
+            raise SystemExit(f"the folder of --out does not exist: {out_path.parent}")
     original = read_bgr(args.original)
     if args.command == "blend":
         network = read_bgr(args.network)
         lanczos = read_bgr(args.lanczos) if args.lanczos else None
-        out_path = Path(args.out)
-        if out_path.exists():
-            raise SystemExit(f"refusing to overwrite {out_path}")
         result, coverage = blend(original, network, lanczos)
-        cv2.imwrite(str(out_path), result, [cv2.IMWRITE_PNG_COMPRESSION, 1])
+        if not cv2.imwrite(str(out_path), result, [cv2.IMWRITE_PNG_COMPRESSION, 1]):
+            raise SystemExit(f"cannot write {out_path}")
         print(f"wrote {out_path} (mask coverage {coverage:.3f})")
         print(_format("blend", outline_check(original, result)))
         return 0
