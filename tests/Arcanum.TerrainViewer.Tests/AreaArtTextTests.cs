@@ -96,4 +96,38 @@ public sealed class AreaArtTextTests
         AreaArtTextRules.Render(clipped, 2, new AreaArtFont(frames), frames, " ", 1, 0, (200, 0, 0), AreaArtTextBlend.Coverage);
         Assert.AreEqual(100, clipped[4], "the part past the screen's edge is dropped");
     }
+
+    [TestMethod]
+    public void The_area_copy_takes_only_the_Steamwoven_step_below_point_four_of_the_4x_frame()
+    {
+        // ARC-RENDER-2939: a 4x pack frame drawn at 3.6, 2.4, 1.8 and 1.2 device px per original px is 0.9, 0.6, 0.45 and 0.3 of its pixels.
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaCopy(3.6f, 4), "x1 keeps the owner's bilinear sample (ARC-UI-145)");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaCopy(2.4f, 4), "x2/3 (0.6) keeps it");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaCopy(1.8f, 4), "x1/2 (0.45) keeps it (owner decision 2026-11-21)");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaCopy(1.6f, 4), "exactly 0.4 stays bilinear, not broken by float rounding");
+        Assert.IsTrue(AreaArtTextRules.NeedsAreaCopy(1.2f, 4), "x1/3 (0.3) takes the area copy");
+        Assert.IsTrue(AreaArtTextRules.NeedsAreaCopy(1.5f, 4), "a scale between the steps (0.375) takes it too");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaCopy(0f, 4), "an unknown scale (0: no Steamwoven layout) never takes it");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaCopy(1.2f, 1), "a pack that is not a redraw at 2x or more is left alone");
+    }
+
+    [TestMethod]
+    public void Area_average_is_the_exact_box_filter_on_a_premultiplied_layer()
+    {
+        // A 4 x 4 layer of one white 2 x 2 block (255 on every channel) in the top-left corner: to 2 x 2 the block is one full pixel, to 1 x 1 a quarter.
+        var layer = new byte[4 * 4 * 4];
+        foreach (var (x, y) in new[] { (0, 0), (1, 0), (0, 1), (1, 1) }) for (var c = 0; c < 4; c++) layer[(y * 4 + x) * 4 + c] = 255;
+        var half = AreaArtTextRules.AreaAverage(layer, 4, 4, 2, 2);
+        CollectionAssert.AreEqual(new byte[] { 255, 255, 255, 255 }, half[..4], "the block is one full pixel");
+        Assert.AreEqual(0, half[4], "the next pixel has no ink");
+        Assert.AreEqual(64, AreaArtTextRules.AreaAverage(layer, 4, 4, 1, 1)[0], "a quarter of the area is ink (255 / 4 rounded)");
+        // 4 to 3 weighs the pixels a target edge splits: a one-pixel-wide full column becomes a third of a pixel per target pixel it touches.
+        var column = new byte[4 * 1 * 4];
+        for (var c = 0; c < 4; c++) column[c] = 255;
+        var third = AreaArtTextRules.AreaAverage(column, 4, 1, 3, 1);
+        Assert.AreEqual(191, third[0], "target pixel 0 covers 4/3 source px: 255 of its 4/3 -> 255 * 3/4 = 191");
+        Assert.AreEqual(0, third[8], "the last target pixel has no ink");
+        CollectionAssert.AreEqual(layer, AreaArtTextRules.AreaAverage(layer, 4, 4, 4, 4), "the same size is the layer itself");
+        Assert.Throws<ArgumentException>(() => AreaArtTextRules.AreaAverage(new byte[3], 1, 1, 1, 1));
+    }
 }
