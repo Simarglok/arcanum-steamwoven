@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Arcanum.Presentation.Steamwoven;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -15,7 +16,8 @@ public partial class TerrainViewerApp
     private (SteamwovenBackdropFamily Family, SteamwovenKitWindow? Window)? _smokeKitBackdrop;
 
     private static readonly Color KitTop = new(0.85f, 0.15f, 0.15f), KitBottom = new(0.15f, 0.15f, 0.85f), KitCapLeft = new(0.95f, 0.8f, 0.1f), KitCapRight = new(0.1f, 0.8f, 0.95f),
-        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f);
+        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f),
+        KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -24,6 +26,7 @@ public partial class TerrainViewerApp
         ("cap.top_strip_left", 120, 150, KitCapLeft), ("cap.top_strip_right", 120, 150, KitCapRight),
         ("cap.bottom_strip_left", 120, 570, KitCapLeft), ("cap.bottom_strip_right", 120, 570, KitCapRight),
         ("backdrop.pdoll", 1290, 1440, KitDoll), ("backdrop.inventor", 1590, 1440, KitInventory),
+        ("backdrop.loot", 1290, 1440, KitLoot), ("backdrop.loot_pd", 1290, 960, KitLootDoll), ("backdrop.pd_cover4inven", 1230, 1440, KitDollCover),
         ("backdrop.mainmenuback", 2880, 2160, KitPlate), ("backdrop.optionsmenuback", 2880, 2160, KitOptionsPlate),
         ("plate.char_but", 120, 120, KitPlate), ("plate.char_but_hover", 120, 120, KitHover),
     ];
@@ -67,6 +70,63 @@ public partial class TerrainViewerApp
     }
 
     private static bool Near(Color a, Color b) => Math.Abs(a.R - b.R) < 0.02f && Math.Abs(a.G - b.G) < 0.02f && Math.Abs(a.B - b.B) < 0.02f;
+
+    /// <summary>
+    /// ARC-UI-3032 (AC2): the real loot window over the kit background: a junk pile of the hero's dropped coin is opened in the loot window and the window draws neither of its background arts (234 and 221) and takes both doll covers
+    /// from the kit; with the kit background gone it draws the arts again and no cover. The step is skipped, and says so, when the smoke's hero has no coin to drop, no known tile or the original arts do not read (the loot look).
+    /// </summary>
+    private async Task CheckKitLootWindowAsync(string tag, Func<int, Task> frames, Action<bool, string> require)
+    {
+        string? skip = null;
+        string? pile = null;
+        var session = _areaSession;
+        var goldBefore = session?.QueryGold() ?? 0;
+        if (session is null || !InventoryActive || InventoryOpen) skip = "no session or the inventory is already open";
+        else if (session.QueryGold() < 2) skip = "the hero has fewer than two coins";
+        else if (!HeroLocationKnown()) skip = "the hero's tile is not known";
+        else
+        {
+            // Two coins dropped one after the other lie on the hero's tile as a junk pile (a single dropped item stays a plain ground item).
+            var dropped = session.DropHeroGold(session.Version, 1, GoldPileKind());
+            var second = session.DropHeroGold(session.Version, 1, GoldPileKind());
+            pile = dropped.Disposition == GameSessionDisposition.Changed && second.Disposition == GameSessionDisposition.Changed
+                ? session.QueryJunkPiles().FirstOrDefault(p => p.Items.Any(item => item.Entity == dropped.Item || item.Entity == second.Item))?.Entity : null;
+            if (pile is null) skip = $"the drop makes no junk pile (dispositions {dropped.Disposition}, {second.Disposition}, piles {session.QueryJunkPiles().Count})";
+        }
+        if (skip is null)
+        {
+            // The real host names the kit window from the interface stack: the smoke override stands down while the loot window is open.
+            var override_ = _smokeKitBackdrop;
+            _smokeKitBackdrop = null;
+            OpenInventory(pile);
+            await frames(4);
+            var area = _inventoryPanel?.GridAreaForSelfTest;
+            if (!InventoryOpen || area is null || !area.LootLook) skip = "the loot window did not open in its original look";
+            else
+            {
+                require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Loot, $"[{tag}] the open loot window takes the kit's loot background");
+                // Both doll views on (a pile has no body doll, so these show only where the object allows them): the covers drawn are the kit's.
+                area.SetBodyDoll(true); area.SetHeroDoll(true);
+                area.QueueRedraw();
+                await frames(2);
+                var (backgrounds, covers) = area.LootDrawForSelfTest;
+                require(area.KitBackgroundShown && backgrounds.Count == 0, $"[{tag}] over the kit background the loot window draws no background art of its own (drew {string.Join(",", backgrounds)})");
+                // The hero's doll cover shows on a pile too (only the body's doll view needs a body), so it is asserted positively.
+                require(!area.HeroDoll || covers.Contains(341), $"[{tag}] the hero's doll cover is the kit's when its view is on (kit covers {string.Join(",", covers)})");
+                require(covers.Contains(349) == area.BodyDoll && covers.Contains(341) == area.HeroDoll, $"[{tag}] the doll covers it draws are the kit's (kit covers {string.Join(",", covers)}, body doll {area.BodyDoll}, hero doll {area.HeroDoll})");
+                await CaptureHudAsync("steamwoven-" + tag + "-loot-open", frames);
+                EndInventory();
+                await frames(3);
+            }
+            _smokeKitBackdrop = override_;
+            if (InventoryOpen) EndInventory();
+            // The coins come back out of the pile one by one (a pile's items are looted, not picked up from the ground).
+            if (pile is not null && _areaSession is { } cleanup)
+                foreach (var item in cleanup.QueryJunkPiles().Where(p => p.Entity == pile).SelectMany(p => p.Items).ToList()) _inventoryHost?.Loot(cleanup, pile, item.Entity);
+            require(_areaSession is { } after && after.QueryGold() == goldBefore, $"[{tag}] the two dropped coins are back in the hero's purse (had {goldBefore}, has {_areaSession?.QueryGold()})");
+        }
+        if (skip is not null) GD.Print($"ARC-UI-3032 kit-loot-window {tag} SKIP {skip}");
+    }
 
     private async Task CaptureSteamwovenKitAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
@@ -157,6 +217,27 @@ public partial class TerrainViewerApp
                 _smokeKitBackdrop = null;
                 await frames(3);
                 require(panel.KitForSelfTest.Background.Count == 0 && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] the background goes with the window and is released");
+                // ARC-UI-3032 (AC1): the loot, steal and See Contents windows' kit background, shown with no window over it: the loot part left, the inventory's part right, tiling the zone; the doll covers are resident with it.
+                _smokeKitBackdrop = (SteamwovenBackdropFamily.Inventory, SteamwovenKitWindow.Loot);
+                await frames(3);
+                var lootBackground = panel.KitForSelfTest.Background;
+                require(lootBackground.Count == 2 && lootBackground.Select(piece => piece.PartId).SequenceEqual(["backdrop.loot", "backdrop.inventor"]) && lootBackground[0].Rect.X == zone.X && lootBackground[1].Rect.Right == zone.Right
+                    && lootBackground[0].Rect.Right == lootBackground[1].Rect.X, $"[{tag}] the loot window's kit background is the loot part and the inventory's tiling the zone, got {string.Join(" + ", lootBackground.Select(piece => piece.PartId + piece.Rect))}");
+                await CaptureHudAsync("steamwoven-" + tag + "-loot-window", frames);
+                using (var image = GetViewport().GetTexture().GetImage())
+                {
+                    Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
+                    var y0 = zone.Y + zone.Height / 2;
+                    require(Near(Pixel(zone.X + 16, y0), KitLoot) && Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the loot zone's left is the loot piece and its right the inventory piece (got {Pixel(zone.X + 16, y0)} and {Pixel(zone.Right - 16, y0)})");
+                }
+                require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Loot && AreaGameBarPanel.KitCover(349) is not null && AreaGameBarPanel.KitCover(341) is not null,
+                    $"[{tag}] the loot window's kit background and both doll covers are published for the window over it");
+                require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 4, $"[{tag}] the loot window holds its two pieces and its two covers");
+                await CheckKitLootWindowAsync(tag, frames, require);
+                _smokeKitBackdrop = null;
+                await frames(3);
+                require(AreaGameBarPanel.KitBackgroundWindow is null && AreaGameBarPanel.KitCover(349) is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)),
+                    $"[{tag}] the loot window's kit background and covers go with it");
                 // The real window path: the inventory on the interface stack names the kit window through the host.
                 OpenInventory(); await frames(4);
                 require(InventoryOpen && panel.KitForSelfTest.Background.Count == 2, $"[{tag}] the open inventory takes its kit background (got {panel.KitForSelfTest.Background.Count} pieces)");
