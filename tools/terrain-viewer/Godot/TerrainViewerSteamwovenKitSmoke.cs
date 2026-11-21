@@ -164,6 +164,21 @@ public partial class TerrainViewerApp
                 OpenInventory(); await frames(4);
                 require(InventoryOpen && panel.KitForSelfTest.Background.Count == 2, $"[{tag}] the open inventory takes its kit background (got {panel.KitForSelfTest.Background.Count} pieces)");
                 EndInventory(); await frames(3);
+                // ARC-UI-3033: the real barter window of the map's trading NPC through the host: it takes the kit's background, its frame draws no background art of its own, and the rest of its content (grids, portrait, name,
+                // counters, buttons) is drawn over it as before; captured as PREFIX-hud-steamwoven-kit-WxH-barter-window.png.
+                for (var wait = 0; wait < 1800 && _barterData is null; wait++) { AdoptBarterData(); await frames(1); }
+                if (SteamwovenBarter() is { } barterModel)
+                {
+                    OpenBarterWindow(barterModel); await frames(6);
+                    for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+                    var frame = _barterPanel?.GridAreaForSelfTest;
+                    require(BarterOpen && _barterPanel is { KitState.InZone: true } && frame is { KitBackdrop: not null, BarterLook: true } && frame.KitDrawForSelfTest is { Background: false, Pack: false }, $"[{tag}] the open barter window takes the kit background and its frame draws no background art (frame {frame?.KitDrawForSelfTest}, kit {frame?.KitBackdrop is not null})");
+                    require(panel.KitForSelfTest.Background.Count == 2 && panel.KitForSelfTest.Background[0].PartId is "backdrop.barter" or "backdrop.barter_follower", $"[{tag}] the barter window's kit background is the merchant piece and the inventory piece");
+                    await CaptureHudAsync("steamwoven-" + tag + "-barter-window", frames);
+                    CloseBarterByPlayer(); await frames(3);
+                    require(!BarterOpen && frame!.KitBackdrop is null, $"[{tag}] closing the barter window drops the kit background from its frame");
+                }
+                else require(false, $"[{tag}] the map has a trading NPC for the barter window");
                 // ARC-UI-3033 (G03): the barter window's kit background, with no window over it: the merchant's side (plain, or the follower's variant) and the hero's inventory tile the zone at the 1290 px split, the
                 // kit's doll view and doll cover are resident with them, and the window's frame is told to draw no background of its own while it shows (the frame's own draw is checked by the barter stage).
                 foreach (var (kitWindow, leftId, leftColour, name) in new[] { (SteamwovenKitWindow.Barter, "backdrop.barter", KitBarter, "barter"), (SteamwovenKitWindow.BarterFollower, "backdrop.barter_follower", KitBarterFollower, "barter-follower") })

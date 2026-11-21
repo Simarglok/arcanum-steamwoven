@@ -193,6 +193,31 @@ public partial class AreaInventoryGridArea : Control
     }
     private bool _menuUp;
 
+    /// <summary>
+    /// ARC-UI-3033: what the original's window arts paint into their background and the kit has no layer for yet (kit.json <c>grid.inventory_cells</c>, size open): the two item grids' black cells with their grid lines, the five
+    /// counter fields and the quote line's field (barter). Drawn under the content while the kit's background shows, so the grids and fields do not vanish with the old art; a stand-in until the kit's grid layer lands.
+    /// </summary>
+    private void KitFields(bool barter)
+    {
+        var black = new Color(0f, 0f, 0f);
+        var line = new Color(.2f, .24f, .32f);
+        void Field(float x, float y, float w, float h) => DrawRect(new Rect2(x * _scale, y * _scale, w * _scale, h * _scale), black);
+        void Grid(float x, float y, int columns, int rows)
+        {
+            Field(x, y, columns * AreaInventoryDrag.CellPixels, rows * AreaInventoryDrag.CellPixels);
+            for (var column = 0; column <= columns; column++)
+                DrawLine(new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, y * _scale), new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, (y + rows * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
+            for (var row = 0; row <= rows; row++)
+                DrawLine(new Vector2(x * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), new Vector2((x + columns * AreaInventoryDrag.CellPixels) * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
+        }
+        // The hero's pack grid, and the holder's (the merchant's or the body's) grid below the holder's lines.
+        Grid(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, Arcanum.Session.SessionHeroGrid.Columns, Arcanum.Session.SessionHeroGrid.Rows);
+        if (barter) Grid(AreaBarterArtLayout.GridX, AreaBarterArtLayout.GridY, AreaBarterArtLayout.Columns, AreaBarterArtLayout.ShownRows);
+        else Grid(AreaLootArtLayout.GridX, AreaLootArtLayout.GridY, AreaLootArtLayout.Columns, AreaLootArtLayout.ShownRows);
+        foreach (var (x, y, w, h) in AreaInventoryArtLayout.Counts) Field(x, y, w, h);
+        if (barter) { var quote = AreaBarterArtLayout.QuoteLine; Field(quote.X - 7, quote.Y - 3, quote.Width + 14, quote.Height + 6); }
+    }
+
     // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.
     private void Background(AreaInventoryArtLook look, int number, AreaInventoryMode mode)
     {
@@ -945,6 +970,7 @@ public partial class AreaInventoryGridArea : Control
         void Overlay(AreaKitOverlay overlay, float x, float y) => DrawTextureRect(overlay.Texture, Scaled(x, y, (float)overlay.UnitWidth, (float)overlay.UnitHeight), false);
         _kitDraw = (kit is null, kit is null, false, false);
         if (kit is null) Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
+        else KitFields(barter is not null);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
         if (!_menuUp) Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
         // ARC-UI-1908 (0x576520 modes 1-4, IW27): a portrait the image function answers is drawn at its own size at the image's corner by 0x4CE470; PROJECT: a portrait file that
