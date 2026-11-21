@@ -42,6 +42,14 @@ public partial class AreaCharacterSheetPageView : Control
     internal AreaSheetTab ShownForSelfTest => _page == Page.Skills ? AreaSheetTab.Skills : AreaSheetTab.Tech;
     internal Vector2 PointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 
+    // ARC-UI-3035: the kit's sheet behind this page (the page draws its own panel art only while the kit has none).
+    private readonly AreaKitSheetView _kitSheet = new();
+    internal bool KitSheetShownForSelfTest => _kitSheet.Shown;
+
+    public override void _EnterTree() => AreaKitSheets.Changed += QueueRedraw;
+
+    public override void _ExitTree() => AreaKitSheets.Changed -= QueueRedraw;
+
     public override void _Ready()
     {
         Name = "SheetPages";
@@ -52,6 +60,7 @@ public partial class AreaCharacterSheetPageView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_kitSheet);
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts)
@@ -153,6 +162,8 @@ public partial class AreaCharacterSheetPageView : Control
     public override void _Draw()
     {
         if (_fonts is not { } fonts) return;
+        // ARC-UI-3035: the kit's sheet for this page, if any, stands behind and the page's own panel art is not drawn.
+        _kitSheet.Set(_page == Page.Skills ? AreaCharacterSheetPagesLayout.SkillsBackgroundArt : AreaCharacterSheetPagesLayout.TechBackgroundArt, Size);
         if (_page == Page.Skills) DrawSkills(fonts); else DrawTech(fonts);
     }
 
@@ -169,7 +180,7 @@ public partial class AreaCharacterSheetPageView : Control
 
     private void DrawSkills(AreaCharacterSheetFonts fonts)
     {
-        DrawArt(AreaCharacterSheetPagesLayout.SkillsBackgroundArt, (0, 0));
+        if (!_kitSheet.Shown) DrawArt(AreaCharacterSheetPagesLayout.SkillsBackgroundArt, (0, 0));
         if (_skills is null) return;
         for (var group = 0; group < AreaCharacterSheetPagesLayout.Groups; group++)
         {
@@ -198,7 +209,7 @@ public partial class AreaCharacterSheetPageView : Control
 
     private void DrawTech(AreaCharacterSheetFonts fonts)
     {
-        DrawArt(AreaCharacterSheetPagesLayout.TechBackgroundArt, (0, 0));
+        if (!_kitSheet.Shown) DrawArt(AreaCharacterSheetPagesLayout.TechBackgroundArt, (0, 0));
         if (_tech is null) return;
         for (var discipline = 0; discipline < AreaCharacterSheetPagesLayout.Disciplines; discipline++)
         {

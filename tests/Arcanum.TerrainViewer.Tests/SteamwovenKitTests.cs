@@ -25,6 +25,7 @@ public sealed class SteamwovenKitTests
         };
         foreach (var window in SteamwovenKitTable.Windows.Values)
             foreach (var (id, width) in window.Pieces) parts.Add(new(id, B(width), B(1440)));
+        foreach (var sheet in SteamwovenKitTable.Sheets.Values) parts.Add(new(sheet.Part, B(sheet.MasterWidth), B(sheet.MasterHeight)));
         return SteamwovenKitSet.FromParts(step, "/kit/" + SteamwovenKitSet.FolderName(step), parts.Where(part => !without.Contains(part.Id)));
     }
 
@@ -173,6 +174,50 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    public void The_hero_s_sheet_and_the_NPC_sheet_of_a_dialog_are_one_window_with_the_kit_s_character_background()
+    {
+        // ARC-UI-3035 AC1 (census G10): the NPC sheet of a dialog opens as the sheet's interface mode (the viewer's OpenNpcSheet is the window of mode Character, read-only), so it is the kit's character window like the hero's sheet.
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf(InterfaceMode.Character));
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf([InterfaceMode.Character]));
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf([InterfaceMode.Game, InterfaceMode.Character]));
+        // A dialog left under the sheet does not hide the window; a dialog over it does (the world stays in view, no kit background).
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf([InterfaceMode.Dialog, InterfaceMode.Character]));
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Character, InterfaceMode.Dialog]));
+        CollectionAssert.AreEqual(new[] { "backdrop.char_maint" }, SteamwovenKitTable.Windows[SteamwovenKitWindow.Character].Pieces.Select(piece => piece.Part).ToArray());
+    }
+
+    [TestMethod]
+    public void The_four_pages_have_a_kit_sheet_of_their_own_panel_size_and_the_page_arts_the_viewer_draws()
+    {
+        // ARC-UI-3035 AC2: the keys are the arts the page views draw as their own panels (29 skills, 30 tech, 31 spells, 567 schemes), at the panel's 235 x 325 units (3.6 master px each).
+        CollectionAssert.AreEquivalent(new[] { AreaCharacterSheetPagesLayout.SkillsBackgroundArt, AreaCharacterSheetPagesLayout.TechBackgroundArt, AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSchemesLayout.BackgroundArt },
+            SteamwovenKitTable.Sheets.Keys.ToArray());
+        var (_, _, width, height) = AreaCharacterSheetArtLayout.Panel;
+        foreach (var sheet in SteamwovenKitTable.Sheets.Values)
+            Assert.AreEqual((width * 3.6, height * 3.6), ((double)sheet.MasterWidth, (double)sheet.MasterHeight), sheet.Part);
+    }
+
+    [TestMethod]
+    [DataRow(29, "sheet.skills_window")]
+    [DataRow(30, "sheet.disciplines_window")]
+    [DataRow(31, "sheet.char_spells")]
+    [DataRow(567, "sheet.scheme_rot")]
+    public void A_page_takes_its_kit_sheet_only_when_the_set_has_it_at_the_table_s_size(int art, string id)
+    {
+        foreach (var step in new[] { SteamwovenStep.One, SteamwovenStep.Half, SteamwovenStep.Third })
+        {
+            Assert.AreEqual(id, SteamwovenKitComposer.Sheet(Full(step), art)?.Id);
+            // Missing: the page keeps its own art.
+            Assert.IsNull(SteamwovenKitComposer.Sheet(Full(step, id), art));
+        }
+        // Wrong size: the page keeps its own art.
+        var wrong = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new(id, 100, 100)]);
+        Assert.IsNull(SteamwovenKitComposer.Sheet(wrong, art));
+        // An art that is no page panel has no sheet.
+        Assert.IsNull(SteamwovenKitComposer.Sheet(Full(SteamwovenStep.Half), 22));
+    }
+
+    [TestMethod]
     public void A_plate_needs_the_composition_size_at_the_step()
     {
         Assert.IsNotNull(SteamwovenKitComposer.Plate(Full(SteamwovenStep.Half), 329));
@@ -204,7 +249,7 @@ public sealed class SteamwovenKitTests
     {
         var ids = SteamwovenKitTable.Strips.Values.SelectMany(strip => new[] { strip.Board, strip.CapLeft, strip.CapRight })
             .Concat(SteamwovenKitTable.Windows.Values.SelectMany(window => window.Pieces.Select(piece => piece.Part)))
-            .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).ToList();
+            .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).Concat(SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)).ToList();
         Assert.IsTrue(ids.All(SteamwovenKitSet.ValidId));
         // Every id is a row of the committed kit manifest (identifiers only), so a renamed part cannot leave the table behind.
         var manifest = System.IO.File.ReadAllText(FindKit());
