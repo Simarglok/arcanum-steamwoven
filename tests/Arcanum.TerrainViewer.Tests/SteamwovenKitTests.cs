@@ -170,11 +170,11 @@ public sealed class SteamwovenKitTests
         Assert.AreEqual(SteamwovenKitWindow.Logbook, SteamwovenKitComposer.WindowOf([InterfaceMode.Logbook]));
         Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.InventoryKind5]));
         Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.InventoryKind6]));
-        // ARC-UI-3032: the loot, steal and See Contents windows (census G02, G04) have a kit background of their own, over an inventory too; the barter window (another window of the family) keeps the generated backdrop.
+        // ARC-UI-3032: the loot, steal and See Contents windows (census G02, G04) have a kit background of their own, over an inventory too; the barter window (ARC-UI-3033) has its own two, picked by the frame's state in the other overload.
         Assert.AreEqual(SteamwovenKitWindow.Loot, SteamwovenKitComposer.WindowOf([InterfaceMode.Loot]));
         Assert.AreEqual(SteamwovenKitWindow.Loot, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Steal]));
         Assert.AreEqual(SteamwovenKitWindow.Loot, SteamwovenKitComposer.WindowOf([InterfaceMode.Loot, InterfaceMode.QuantityPicker]));
-        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Barter]));
+        Assert.AreEqual(SteamwovenKitWindow.Barter, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Barter]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Loot, InterfaceMode.Dialog]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Dialog]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([]));
