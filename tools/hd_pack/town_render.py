@@ -298,9 +298,9 @@ def cmd_stitch(args):
         raise SystemExit(f"FAIL: a 64 x 64 window differs by more than {WINDOW_LIMIT} from the original (see worst_64x64_windows)")
 
 
-# Measured on Ashbury (2991 tiles), 2026-11-21, on a Mac whose window queue was shared with other threads: capture 692 s, stitch with the check 289 s,
+# Measured on Ashbury (2991 tiles), 2026-11-21: capture 692 s on a Mac whose window queue was shared with other threads (queue waits included, so an upper bound), stitch with the check 24 s,
 # 112.7 MB of 24-bit PNG tiles at scale 1.0 (37.7 KB per tile). The 0.5 box tiles are about a third of that (12.6 KB per tile).
-ASHBURY = {"tiles": 2991, "capture_seconds": 692, "stitch_seconds": 289, "bytes_1.0": 112_672_145}
+ASHBURY = {"tiles": 2991, "capture_seconds": 692, "stitch_seconds": 24, "bytes_1.0": 112_672_145}
 
 
 def cmd_cost(args):

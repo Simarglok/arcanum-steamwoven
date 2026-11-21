@@ -173,11 +173,11 @@ The windows of the highest error left are low-level vegetation texture (plants a
 check of the two findings above is the render after the lattice change. Not measured: the fog bit and the PC marker (they use the layout, which is unchanged,
 and the scale of the `.tmi`, which the loader slice carries), other towns.
 
-**Cost (AC3), measured on Ashbury on a Mac whose window queue was shared with other threads:** capture 692 s for 7 windows (26–184 s each), stitch with the
-check 289 s (a throwaway numpy path, not tuned), together about 16 minutes for 2,991 tiles; 24-bit PNG tiles at 1.0 are 37.7 KB each (112.7 MB for the town),
-about 12.6 KB at 0.5 by a box. For all 125 towns (64,199 tiles; `town_render.py cost --index townmap-index.tsv` prints each) that scales to about **5.8 hours and 2.4 GB at 1.0**
-(0.8 GB at 0.5), Tarant (6,191 tiles) about 34 minutes and 233 MB. This is an extrapolation by tile count; it assumes every town is a window run of the main map:
-the interior maps among the 125 (for example "Ashbury Crematorium - Lev 1") are separate maps of the module, so their capture needs `--area-map` and its own sector, which
+**Cost (AC3), measured on Ashbury:** capture 692 s for 7 windows (26–184 s each) on a Mac whose window queue was shared with other threads, so queue waits are in it and it is an upper
+bound; stitch with the check 24 s on a quiet Mac (289 s once while the Mac was busy; numpy, not tuned); 24-bit PNG tiles at 1.0 are 37.7 KB each (112.7 MB for the town), about
+12.6 KB at 0.5 by a box. A second full run with the final tool gave the same pixels and bytes. For all 125 towns (64,199 tiles; `town_render.py cost --index townmap-index.tsv` prints each)
+that scales to about **4.3 hours at most and 2.4 GB at 1.0** (0.8 GB at 0.5), Tarant (6,191 tiles) about 25 minutes and 233 MB. This is an extrapolation by tile count; it assumes every town
+is a window run of the main map: the interior maps among the 125 (for example "Ashbury Crematorium - Lev 1") are separate maps of the module, so their capture needs `--area-map` and its own sector, which
 the plan does not know yet ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107); Vormantown is its own module).
 
 **Drawing a tile of 256 × 128 (not built here).** The town-map panel sizes a tile from tile 000000's bitmap (`AreaTownMapPlan.TileWidth`, `TileHeight`) and draws it 1:1 in the
