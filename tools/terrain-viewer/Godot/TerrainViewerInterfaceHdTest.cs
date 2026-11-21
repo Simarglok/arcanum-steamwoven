@@ -481,12 +481,16 @@ public static partial class TerrainViewerSelfTest
             require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step)!.Value.Texture == copy!.Value.Texture, "the copy is made once");
             require(copy!.Value.Texture is CanvasTexture { TextureFilter: CanvasItem.TextureFilterEnum.Linear } && !((CanvasTexture)copy.Value.Texture).DiffuseTexture.GetImage().HasMipmaps(), "the copy is drawn 1:1 with no mip chain");
         }
-        // Three scales are kept (1.2, 1.5 and a third), a fourth drops the oldest.
+        // The three most recently used scales are kept: 1.5 is the least recently used once 1.2 is touched again, so the fourth scale drops 1.5 and keeps 1.2.
         var first = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture;
+        var second = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture;
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f);
         face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.3f);
-        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture == first, "three scales are kept");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture == second, "three scales are kept");
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f); face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.3f);
         face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.4f);
-        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture != first, "the oldest of four scales is dropped");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture == first, "the scale in use stays when a fourth comes");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture != second, "the least recently used of four scales is dropped");
 
         var viewport = new SubViewport { Size = new(W, H), TransparentBg = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var probe = new FontProbe(face) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };

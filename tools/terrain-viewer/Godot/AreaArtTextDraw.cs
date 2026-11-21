@@ -95,7 +95,7 @@ public sealed class AreaArtFontFace
     public readonly record struct AreaGlyphCopy(Texture2D Texture, int Width, int Height);
 
     /// <summary>ARC-RENDER-2939: below 0.4 of the HD frame's pixels (the Steamwoven step x1/3) the HD glyph of the Coverage or Additive blend is an area-averaged copy of the pack frame at the exact
-    /// device size (the Legacy size times <paramref name="deviceScale"/>, each edge rounded), made once per scale and blend and kept for the last three scales (the pack frame's average of the same
+    /// device size (the Legacy size times <paramref name="deviceScale"/>, each edge rounded), made once per scale and blend and kept for the three most recently used scales (the pack frame's average of the same
     /// box filter as the direct frames' copies, ARC-RENDER-3002, made here on the main thread because a glyph is a few hundred pixels); null when the glyph draws as before (no HD entry, another blend, the scale
     /// at or above the bound, a frame that is not the pack's scale times the Legacy one).</summary>
     public AreaGlyphCopy? AreaCopy(int frame, AreaArtTextBlend blend, float deviceScale)
@@ -103,8 +103,11 @@ public sealed class AreaArtFontFace
         if (blend is not (AreaArtTextBlend.Coverage or AreaArtTextBlend.Additive) || !HdPackNow(out var pack)
             || !AreaArtTextRules.NeedsAreaCopy(deviceScale, pack.Scale)) return null;
         var milli = (int)Math.Round(deviceScale * 1000f);
+        // Least recently used: the scale drawn now moves to the end, so a scale in use is not the one dropped.
+        var at = _copyScales.IndexOf(milli);
+        if (at >= 0 && at != _copyScales.Count - 1) { _copyScales.RemoveAt(at); _copyScales.Add(milli); }
         if (_copies.TryGetValue((frame, blend, milli), out var known)) return known;
-        if (!_copyScales.Contains(milli))
+        if (at < 0)
         {
             // The last three scales stay (a frame shared by two views at different scales does not rebuild on every draw).
             if (_copyScales.Count >= 3)
@@ -164,14 +167,14 @@ public static class AreaArtTextDraw
         // Premultiplied: the colour and the alpha both carry the opacity.
         var opacity = alpha / 255f;
         var tint = new Color(colour.R / 255f * opacity, colour.G / 255f * opacity, colour.B / 255f * opacity, opacity);
-        var unit = DeviceUnit(canvas, drawSetScale);
+        var (unit, origin) = DeviceUnit(canvas, drawSetScale);
         foreach (var (gx, glyph) in placed)
         {
-            // ARC-RENDER-2939: below 0.4 of the HD frame (x1/3) the glyph is the area copy at the exact device size, drawn 1:1 at a whole device pixel (a window at a whole origin lands on the grid).
+            // ARC-RENDER-2939: below 0.4 of the HD frame (x1/3) the glyph is the area copy at the exact device size, drawn 1:1 at a whole device pixel (the position is snapped in device space from the node's own origin).
             if (unit > 0f && face.AreaCopy(glyph.Frame, blend, scale * unit) is { } copy)
             {
-                var left = MathF.Round((x + gx * scale) * unit) / unit;
-                var top = MathF.Round(y * unit) / unit;
+                var left = (MathF.Round(origin.X + (x + gx * scale) * unit) - origin.X) / unit;
+                var top = (MathF.Round(origin.Y + y * unit) - origin.Y) / unit;
                 canvas.DrawTextureRect(copy.Texture, new Rect2(left, top, copy.Width / unit, copy.Height / unit), false, tint);
             }
             else if (face.Texture(glyph.Frame, blend) is { } texture)
@@ -179,13 +182,14 @@ public static class AreaArtTextDraw
         }
     }
 
-    /// <summary>ARC-RENDER-2939: the device pixels per drawn unit of <paramref name="canvas"/> while the Steamwoven layout is on: its canvas and viewport scale (as the inventory area's DeviceScale) times
-    /// <paramref name="drawSetScale"/>; 0 otherwise, which keeps the whole-number layout and the Original mode on the bilinear glyph they drew before.</summary>
-    private static float DeviceUnit(CanvasItem canvas, float drawSetScale)
+    /// <summary>ARC-RENDER-2939: the device pixels per drawn unit of <paramref name="canvas"/> while the Steamwoven layout is on (its canvas and viewport scale, as the inventory area's DeviceScale, times
+    /// <paramref name="drawSetScale"/>) and the device position of its origin; (0, zero) otherwise, which keeps the whole-number layout and the Original mode on the bilinear glyph they drew before.</summary>
+    private static (float Unit, Vector2 Origin) DeviceUnit(CanvasItem canvas, float drawSetScale)
     {
-        if (!AreaGameBarPanel.SteamwovenOn) return 0f;
-        if (!canvas.IsInsideTree()) return drawSetScale;
-        return drawSetScale * canvas.GetGlobalTransformWithCanvas().Scale.X * canvas.GetViewport().GetStretchTransform().Scale.X;
+        if (!AreaGameBarPanel.SteamwovenOn) return (0f, Vector2.Zero);
+        if (!canvas.IsInsideTree()) return (drawSetScale, Vector2.Zero);
+        var device = canvas.GetViewport().GetStretchTransform() * canvas.GetGlobalTransformWithCanvas();
+        return (drawSetScale * device.Scale.X, device.Origin);
     }
 
     /// <summary>One line of text from (x, y) in <paramref name="colour"/>.</summary>
