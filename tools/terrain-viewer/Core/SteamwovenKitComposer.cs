@@ -37,6 +37,20 @@ public enum SteamwovenKitWindow
     Logbook,
     WorldMap,
     Schematic,
+    /// <summary>The barter window (census G03, mode 1) with the merchant's plain background (art 235): <c>backdrop.barter</c> 1290 + <c>backdrop.inventor</c> 1590 (ARC-UI-3033).</summary>
+    Barter,
+    /// <summary>The barter window while the merchant is a follower with the cycle buttons (art 825): <c>backdrop.barter_follower</c> 1290 + <c>backdrop.inventor</c> 1590 (ARC-UI-3033).</summary>
+    BarterFollower,
+}
+
+/// <summary>A part a window draws over its kit background where its content lies (the doll views, the doll covers), sized in master pixels: the window draws it at its unit position in the unit scale of its frame (ARC-UI-3033). The part is
+/// used only when the set holds it at the table's size; else the window keeps its own art for that overlay.</summary>
+public sealed record SteamwovenKitOverlay(string Part, int MasterWidth, int MasterHeight)
+{
+    /// <summary>The overlay's size in original UI units: a unit is 3.6 master pixels (<see cref="SteamwovenGrid"/>).</summary>
+    public double UnitWidth => MasterWidth / 3.6;
+
+    public double UnitHeight => MasterHeight / 3.6;
 }
 
 /// <summary>
@@ -65,7 +79,21 @@ public static class SteamwovenKitTable
         [SteamwovenKitWindow.Logbook] = new([("backdrop.logbooks_side", 594), ("backdrop.book_main", 2286)]),
         [SteamwovenKitWindow.WorldMap] = new([("backdrop.mapmain", 2880)]),
         [SteamwovenKitWindow.Schematic] = new([("backdrop.schematic_base", 2880)]),
+        // ARC-UI-3033 (G03): the barter window, the merchant's side 1290 (art 235, or 825 with the follower's cycle buttons) and the hero's inventory 1590 (art 221).
+        [SteamwovenKitWindow.Barter] = new([("backdrop.barter", 1290), ("backdrop.inventor", 1590)]),
+        [SteamwovenKitWindow.BarterFollower] = new([("backdrop.barter_follower", 1290), ("backdrop.inventor", 1590)]),
     };
+
+    /// <summary>ARC-UI-3033: the merchant's doll view (art 337, 1290 × 876 master px: it replaces the merchant's grid from y 157 units to the zone's foot) and the hero's doll cover (art 341, 1230 × 1440, over the pack at x 361 units).</summary>
+    public static SteamwovenKitOverlay BarterDoll { get; } = new("backdrop.barter_pd", 1290, 876);
+
+    public static SteamwovenKitOverlay HeroDollCover { get; } = new("backdrop.pd_cover4inven", 1230, 1440);
+
+    /// <summary>The overlays a kit window's content draws over its background; they stay resident with it (SWI-RUN-5).</summary>
+    public static IReadOnlyList<SteamwovenKitOverlay> OverlaysOf(SteamwovenKitWindow window) =>
+        window is SteamwovenKitWindow.Barter or SteamwovenKitWindow.BarterFollower ? BarterOverlays : [];
+
+    private static readonly SteamwovenKitOverlay[] BarterOverlays = [BarterDoll, HeroDollCover];
 
     /// <summary>The doll covers the loot window lays over its background (census G02, G04; kit.json <c>backdrop.loot_pd</c> art 349 and <c>backdrop.pd_cover4inven</c> art 341): the art number it replaces, the part, the part's master size
     /// (the window draws it at the place of the art it replaces, <see cref="AreaLootArtLayout.DollView"/> and <see cref="AreaHeroDollToggle.Cover"/>). A cover the set lacks
@@ -202,12 +230,21 @@ public static class SteamwovenKitComposer
         return new(draws, []);
     }
 
-    /// <summary>The window of an interface mode stack (bottom first) that has a kit background: the mode nearest the top that is one of the covered windows; a dialog or sleep view on top, or another window (the loot window, the barter window) on top, has none (the generated backdrop stays until its integration issue).</summary>
-    public static SteamwovenKitWindow? WindowOf(IReadOnlyList<InterfaceMode> stack)
+    /// <summary>The window of an interface mode stack (bottom first) that has a kit background: the mode nearest the top that is one of the covered windows; a dialog or sleep view on top, or another window (the loot window) on top, has none (the generated backdrop stays until its integration issue; the barter window has its own, ARC-UI-3033).</summary>
+    public static SteamwovenKitWindow? WindowOf(IReadOnlyList<InterfaceMode> stack) => WindowOf(stack, null);
+
+    /// <summary>ARC-UI-3033: as <see cref="WindowOf(IReadOnlyList{InterfaceMode})"/>, told how the barter window stands: the merchant's background art (825 picks the follower's variant) and whether its frame lies in the window zone (the frame
+    /// docked in the opening shop's screen, or the diagnostic look, is not in it, so it keeps its generated look and has no kit background). Without <paramref name="barter"/> the barter window is the plain one.</summary>
+    public static SteamwovenKitWindow? WindowOf(IReadOnlyList<InterfaceMode> stack, SteamwovenKitBarterState? barter)
     {
         for (var i = stack.Count - 1; i >= 0; i--)
         {
-            if (WindowOf(stack[i]) is { } window) return window;
+            if (WindowOf(stack[i]) is { } window)
+            {
+                if (window == SteamwovenKitWindow.Barter && barter is { } state)
+                    return !state.InZone ? null : AreaBarterArtLayout.CycleShown(state.Background) ? SteamwovenKitWindow.BarterFollower : SteamwovenKitWindow.Barter;
+                return window;
+            }
             if (SteamwovenBackdrops.FamilyOf(stack[i]) is not null || stack[i] is InterfaceMode.Dialog or InterfaceMode.Sleep) return null;
         }
         return null;
@@ -223,8 +260,13 @@ public static class SteamwovenKitComposer
         InterfaceMode.Logbook => SteamwovenKitWindow.Logbook,
         InterfaceMode.WorldMap => SteamwovenKitWindow.WorldMap,
         InterfaceMode.Schematic => SteamwovenKitWindow.Schematic,
+        InterfaceMode.Barter => SteamwovenKitWindow.Barter,
         _ => null,
     };
+
+    /// <summary>ARC-UI-3033: the part of an overlay when the set holds it at the overlay's size at the step, else null (the window keeps its own art for it).</summary>
+    public static SteamwovenKitPart? Overlay(SteamwovenKitSet set, SteamwovenKitOverlay overlay) =>
+        set.TryGet(overlay.Part, out var part) && part.Width == SteamwovenGrid.BakedLength(overlay.MasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(overlay.MasterHeight, set.Step) ? part : null;
 
     /// <summary>
     /// ARC-UI-3032: the kit part that replaces the original doll cover <paramref name="art"/> (349, 341) of the loot window: the part of the set when it is the table's size at the step, else null (the original art stays; the
@@ -243,6 +285,7 @@ public static class SteamwovenKitComposer
     /// </summary>
     public static IReadOnlyList<int> LootBackgroundArts(bool kitBackground) => kitBackground ? [] : [AreaLootArtLayout.LootArt, AreaInventoryArtLayout.PackArt];
 
+    /// <summary>
     /// ARC-UI-3035 (AC2): the kit sheet that replaces the character sheet page's own panel art <paramref name="art"/> (29, 30, 31, 567): the part of the set when it is the table's size at the step, else null (the page keeps its art).
     /// It is asked for only while the kit background of the character window shows under the sheet (<see cref="WindowOf(InterfaceMode)"/>, the same for the hero's sheet and the NPC sheet of a dialog).
     /// </summary>
@@ -269,6 +312,9 @@ public static class SteamwovenKitComposer
         return layers;
     }
 }
+
+/// <summary>How the barter window stands for the kit: the merchant's background art (235, or 825 with the follower's cycle buttons) and whether its frame lies in the window zone (the original look, not docked in the opening shop's screen; ARC-UI-3033).</summary>
+public readonly record struct SteamwovenKitBarterState(int Background, bool InZone);
 
 /// <summary>The parts of one strip from the kit: the strip art, its two caps and its hardware layers, each a draw in device pixels.</summary>
 public sealed record SteamwovenKitStripPlan(SteamwovenKitDraw Board, IReadOnlyList<SteamwovenKitDraw> Caps, IReadOnlyList<SteamwovenKitDraw> Layers);

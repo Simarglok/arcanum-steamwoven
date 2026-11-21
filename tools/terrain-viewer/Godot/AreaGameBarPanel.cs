@@ -48,6 +48,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     private readonly Dictionary<AreaBarStrip, SteamwovenKitStripPlan?> _kitStrips = new() { [AreaBarStrip.Top] = null, [AreaBarStrip.Bottom] = null };
     private SteamwovenKitWindow? _kitWindow;
     private IReadOnlyList<SteamwovenKitDraw> _kitBackground = [];
+    private readonly Dictionary<string, AreaKitOverlay> _kitOverlays = [];
+    private AreaKitBackdrop? _kitWindowBackdrop;
 
     // ARC-UI-3032: the window whose kit background shows now and the doll covers of the set that are the table's size, for the window drawn over it (the loot window drops its own background art and takes the covers).
     // One bar panel lives at a time; the windows read these statics (as they read ZoneWindow) and redraw on KitBackgroundChanged.
@@ -772,6 +774,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         // ARC-UI-2890: the layer also holds the dimmed world, so it shows with an open menu even where the window leaves no gap (the fitted column: no wood piece).
         var count = kitTextures?.Count ?? pieces.Count;
         _backdropLayer.Visible = _backdropFamily is not null && Visible && middle.Height > 0 && _backdrops.Take(count).All(backdrop => backdrop.Visible);
+        // ARC-UI-3033: the window's frame drops its own background art exactly while the kit's background shows.
+        _kitWindowBackdrop = kitTextures is not null && _backdropLayer.Visible && _kitWindow is { } shown && SteamwovenKitTable.OverlaysOf(shown).Count > 0
+            ? new(_kitOverlays.GetValueOrDefault(SteamwovenKitTable.BarterDoll.Part), _kitOverlays.GetValueOrDefault(SteamwovenKitTable.HeroDollCover.Part))
+            : null;
         UpdateColumnParts(plan);
         // Holes follow the lens squares now showing; a hidden layer clears them (no stale holes for the next menu).
         if (_backdropLayer.Visible) ApplyBackdropHoles(); else foreach (var backdrop in _backdrops) backdrop.SetHoles([]);
@@ -819,7 +825,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2461 (SWI-BDR-3): the open menu window's kit background as loaded textures, or null (no kit window, no set, a piece missing or not loading: the generated backdrop stands). Also keeps only that window's background resident (SWI-RUN-5).</summary>
     private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? ApplyKitBackground(SteamwovenHudPlan plan, int middleHeight)
     {
-        _kitBackground = [];
+        _kitBackground = []; _kitOverlays.Clear();
         if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
         Dictionary<int, Texture2D>? covers = null, sheets = null;
@@ -831,6 +837,9 @@ public partial class AreaGameBarPanel : CanvasLayer
             {
                 _kitBackground = draws;
                 held.AddRange(draws.Select(draw => draw.PartId));
+                // ARC-UI-3033: the overlays the window's content draws over this background (the doll view, the doll cover) stay resident with it; one the set lacks or that does not load is left out, and the window keeps its own art for it.
+                foreach (var overlay in SteamwovenKitTable.OverlaysOf(window))
+                    if (SteamwovenKitComposer.Overlay(set, overlay) is { } overlayPart && SteamwovenKitStore.Texture(set, overlayPart.Id) is { } overlayTexture) { _kitOverlays[overlay.Part] = new(overlayTexture, overlay.UnitWidth, overlay.UnitHeight); held.Add(overlayPart.Id); }
                 // ARC-UI-3032: the loot window's doll covers that the set holds at the table's size; a cover missing or not loading leaves the original art, the background stays.
                 if (window == SteamwovenKitWindow.Loot)
                     foreach (var art in SteamwovenKitTable.Covers.Keys)
@@ -856,7 +865,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             _kitStrips[strip] = null;
             foreach (var name in new[] { "Black", "Art", "Sides" }) _strips[strip].GetNode<CanvasItem>(name).Visible = true;
         }
-        _kitBoards.Visible = false; _kitCaps.Visible = false; _kitBackground = [];
+        _kitBoards.Visible = false; _kitCaps.Visible = false; _kitBackground = []; _kitOverlays.Clear(); _kitWindowBackdrop = null;
         PublishKitBackground(null, null);
         AreaKitSheets.Publish(null);
         ApplyKitButtons();
@@ -865,6 +874,9 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2461: the backdrop nodes now shown: visible, position, size and the pixel size of the texture (a kit piece is its baked size), for the self-test.</summary>
     internal IReadOnlyList<(bool Visible, Vector2 Position, Vector2 Size, Vector2I Pixels, CanvasItem.TextureFilterEnum Filter)> BackdropsForSelfTest =>
         [.. _backdrops.Select(backdrop => (backdrop.Visible, backdrop.Position, backdrop.Size, backdrop.PixelSizeForSelfTest, backdrop.TextureFilter))];
+
+    /// <summary>ARC-UI-3033: the kit background of the open window while it shows under it (the window's frame draws no background art of its own then), with the overlays the kit has for the frame's content; null: no kit background shows.</summary>
+    internal AreaKitBackdrop? KitWindowBackdrop => _kitWindowBackdrop;
 
     /// <summary>ARC-UI-2461: the kit parts drawn for the strips, the caps and the open window's background now, for the self-test (empty: the generated chrome).</summary>
     internal (SteamwovenKitStripPlan? Top, SteamwovenKitStripPlan? Bottom, IReadOnlyList<SteamwovenKitDraw> Background, SteamwovenKitView Boards, SteamwovenKitView Caps) KitForSelfTest =>

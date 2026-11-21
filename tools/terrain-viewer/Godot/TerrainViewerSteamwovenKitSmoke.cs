@@ -17,6 +17,7 @@ public partial class TerrainViewerApp
 
     private static readonly Color KitTop = new(0.85f, 0.15f, 0.15f), KitBottom = new(0.15f, 0.15f, 0.85f), KitCapLeft = new(0.95f, 0.8f, 0.1f), KitCapRight = new(0.1f, 0.8f, 0.95f),
         KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f),
+        KitBarter = new(0.55f, 0.35f, 0.15f), KitBarterFollower = new(0.15f, 0.55f, 0.55f),
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f);
 
@@ -27,6 +28,8 @@ public partial class TerrainViewerApp
         ("cap.top_strip_left", 120, 150, KitCapLeft), ("cap.top_strip_right", 120, 150, KitCapRight),
         ("cap.bottom_strip_left", 120, 570, KitCapLeft), ("cap.bottom_strip_right", 120, 570, KitCapRight),
         ("backdrop.pdoll", 1290, 1440, KitDoll), ("backdrop.inventor", 1590, 1440, KitInventory),
+        // ARC-UI-3033: the barter window's merchant side (plain and with the follower's cycle buttons) and its two overlays, the merchant's doll view and the hero's doll cover.
+        ("backdrop.barter", 1290, 1440, KitBarter), ("backdrop.barter_follower", 1290, 1440, KitBarterFollower), ("backdrop.barter_pd", 1290, 876, KitDoll),
         ("backdrop.loot", 1290, 1440, KitLoot), ("backdrop.loot_pd", 1290, 960, KitLootDoll), ("backdrop.pd_cover4inven", 1230, 1440, KitDollCover),
         ("backdrop.mainmenuback", 2880, 2160, KitPlate), ("backdrop.optionsmenuback", 2880, 2160, KitOptionsPlate),
         ("plate.char_but", 120, 120, KitPlate), ("plate.char_but_hover", 120, 120, KitHover),
@@ -304,6 +307,48 @@ public partial class TerrainViewerApp
                 OpenInventory(); await frames(4);
                 require(InventoryOpen && panel.KitForSelfTest.Background.Count == 2, $"[{tag}] the open inventory takes its kit background (got {panel.KitForSelfTest.Background.Count} pieces)");
                 EndInventory(); await frames(3);
+                // ARC-UI-3033: the real barter window of the map's trading NPC through the host: it takes the kit's background, its frame draws no background art of its own, and the rest of its content (grids, portrait, name,
+                // counters, buttons) is drawn over it as before; captured as PREFIX-hud-steamwoven-kit-WxH-barter-window.png.
+                for (var wait = 0; wait < 1800 && _barterData is null; wait++) { AdoptBarterData(); await frames(1); }
+                if (SteamwovenBarter() is { } barterModel)
+                {
+                    OpenBarterWindow(barterModel); await frames(6);
+                    for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+                    var frame = _barterPanel?.GridAreaForSelfTest;
+                    require(BarterOpen && _barterPanel is { KitState.InZone: true } && frame is { KitBackdrop: not null, BarterLook: true } && frame.KitDrawForSelfTest is { Background: false, Pack: false }, $"[{tag}] the open barter window takes the kit background and its frame draws no background art (frame {frame?.KitDrawForSelfTest}, kit {frame?.KitBackdrop is not null})");
+                    require(panel.KitForSelfTest.Background.Count == 2 && panel.KitForSelfTest.Background[0].PartId is "backdrop.barter" or "backdrop.barter_follower", $"[{tag}] the barter window's kit background is the merchant piece and the inventory piece");
+                    await CaptureHudAsync("steamwoven-" + tag + "-barter-window", frames);
+                    CloseBarterByPlayer(); await frames(3);
+                    require(!BarterOpen && frame!.KitBackdrop is null, $"[{tag}] closing the barter window drops the kit background from its frame");
+                }
+                else require(false, $"[{tag}] the map has a trading NPC for the barter window");
+                // ARC-UI-3033 (G03): the barter window's kit background, with no window over it: the merchant's side (plain, or the follower's variant) and the hero's inventory tile the zone at the 1290 px split, the
+                // kit's doll view and doll cover are resident with them, and the window's frame is told to draw no background of its own while it shows (the frame's own draw is checked by the barter stage).
+                foreach (var (kitWindow, leftId, leftColour, name) in new[] { (SteamwovenKitWindow.Barter, "backdrop.barter", KitBarter, "barter"), (SteamwovenKitWindow.BarterFollower, "backdrop.barter_follower", KitBarterFollower, "barter-follower") })
+                {
+                    _smokeKitBackdrop = (SteamwovenBackdropFamily.Inventory, kitWindow);
+                    await frames(3);
+                    var pieces = panel.KitForSelfTest.Background;
+                    require(pieces.Count == 2 && pieces[0].PartId == leftId && pieces[1].PartId == "backdrop.inventor" && pieces[0].Rect.X == zone.X && pieces[1].Rect.Right == zone.Right && pieces[0].Rect.Right == pieces[1].Rect.X
+                        && pieces.All(piece => piece.Rect.Y == zone.Y && piece.Rect.Bottom == zone.Bottom), $"[{tag}] the {name} window's kit background is {leftId} + backdrop.inventor tiling the zone, got {string.Join(" + ", pieces.Select(piece => piece.PartId + piece.Rect))}");
+                    require(panel.KitWindowBackdrop is { Doll: not null, HeroDollCover: not null } overlays && overlays.Doll.UnitWidth > 358 && overlays.Doll.UnitWidth < 359 && Math.Abs(overlays.HeroDollCover.UnitHeight - 400) < 1e-6,
+                        $"[{tag}] the {name} window names the kit's doll view and doll cover for its frame");
+                    var barterBackdrops = panel.BackdropsForSelfTest;
+                    require(barterBackdrops[0].Visible && barterBackdrops[1].Visible && !barterBackdrops[2].Visible && !barterBackdrops[3].Visible, $"[{tag}] two backdrop pieces show for the {name} window");
+                    require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 4, $"[{tag}] the {name} window holds its two pieces and its two overlays resident");
+                    if (kitWindow == SteamwovenKitWindow.Barter) await CaptureHudAsync("steamwoven-" + tag + "-barter", frames);
+                    else
+                    {
+                        using var image = GetViewport().GetTexture().GetImage();
+                        Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
+                        var yMid = zone.Y + zone.Height / 2;
+                        require(Near(Pixel(zone.X + 16, yMid), leftColour) && Near(Pixel(zone.Right - 16, yMid), KitInventory), $"[{tag}] the {name} window's zone is the merchant piece on the left (got {Pixel(zone.X + 16, yMid)}) and the inventory piece on the right (got {Pixel(zone.Right - 16, yMid)})");
+                    }
+                }
+                _smokeKitBackdrop = null;
+                await frames(3);
+                require(panel.KitWindowBackdrop is null && panel.KitForSelfTest.Background.Count == 0 && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)),
+                    $"[{tag}] the barter window's background and overlays are released with it");
                 await CheckKitSheetPagesAsync(panel, tag, frames, require);
                 // AC2 (fallback): a set without the four sheets keeps the kit's background and every page's own panel art.
                 Ensure("sheetless", sheetlessRoot, step, [.. SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)]);
