@@ -96,4 +96,17 @@ public sealed class AreaArtTextTests
         AreaArtTextRules.Render(clipped, 2, new AreaArtFont(frames), frames, " ", 1, 0, (200, 0, 0), AreaArtTextBlend.Coverage);
         Assert.AreEqual(100, clipped[4], "the part past the screen's edge is dropped");
     }
+
+    [TestMethod]
+    public void The_area_filter_takes_the_Steamwoven_steps_below_point_six_of_the_4x_frame()
+    {
+        // ARC-RENDER-2939: a 4x frame (legacy 10 px, HD 40 px) drawn at 3.6, 2.4, 1.8 and 1.2 device px per original px is 0.9, 0.6, 0.45 and 0.3 of its pixels.
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaFilter(3.6f, 10, 40), "x1 keeps the owner's bilinear sample (ARC-UI-145)");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaFilter(2.4f, 10, 40), "x2/3 (0.6) keeps it as well, not broken by float rounding");
+        Assert.IsTrue(AreaArtTextRules.NeedsAreaFilter(1.8f, 10, 40), "x1/2 (0.45) takes the area filter");
+        Assert.IsTrue(AreaArtTextRules.NeedsAreaFilter(1.2f, 10, 40), "x1/3 (0.3) takes it");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaFilter(3f, 10, 40), "the whole-number layout's 3x window scale stays bilinear");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaFilter(0f, 10, 40), "an unknown scale (0: no Steamwoven layout) never takes it");
+        Assert.IsFalse(AreaArtTextRules.NeedsAreaFilter(1.2f, 0, 40) || AreaArtTextRules.NeedsAreaFilter(1.2f, 10, 10), "an empty glyph or a frame that is not larger than the Legacy one is left alone");
+    }
 }

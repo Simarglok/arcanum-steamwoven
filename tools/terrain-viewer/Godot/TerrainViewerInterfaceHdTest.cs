@@ -469,6 +469,18 @@ public static partial class TerrainViewerSelfTest
         // ARC-UI-2795: the additive blend (the inventory counts' font flag 0x10) takes the HD frame too, as an added layer; the multiply blend stays Legacy.
         require(face.Texture(Glyph, AreaArtTextBlend.Additive) is CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage and Additive blends take the HD frame");
         require(face.Texture(Glyph, AreaArtTextBlend.Coverage)!.GetWidth() == W * Scale, "the HD glyph texture is 4× the Legacy frame");
+        // ARC-RENDER-2939: below 0.6 of the 4× frame (a device scale of 1.8 and 1.2 per original px) the glyph takes its own mipmapped texture; 3.6 and 2.4, and no scale, keep the plain bilinear one.
+        var plainGlyph = face.Texture(Glyph, AreaArtTextBlend.Coverage);
+        require(ReferenceEquals(face.Texture(Glyph, AreaArtTextBlend.Coverage, 3.6f), plainGlyph) && ReferenceEquals(face.Texture(Glyph, AreaArtTextBlend.Coverage, 2.4f), plainGlyph), "x1 and x2/3 draw the plain bilinear glyph");
+        foreach (var step in new[] { 1.8f, 1.2f })
+        {
+            var mipped = face.Texture(Glyph, AreaArtTextBlend.Coverage, step) as CanvasTexture;
+            require(mipped is not null && !ReferenceEquals(mipped, plainGlyph) && mipped.TextureFilter == CanvasItem.TextureFilterEnum.LinearWithMipmaps
+                && mipped.DiffuseTexture.GetImage().HasMipmaps() && mipped.GetWidth() == W * Scale, $"device scale {step}: the HD glyph has its mip chain and a mipmapped filter");
+            require(ReferenceEquals(mipped, face.Texture(Glyph, AreaArtTextBlend.Coverage, step)), "the mipmapped glyph is made once");
+        }
+        require(plainGlyph is CanvasTexture { TextureFilter: CanvasItem.TextureFilterEnum.Linear }, "the plain glyph keeps the Linear filter without mipmaps (ARC-UI-145)");
+        require(face.Texture(NoEntry, AreaArtTextBlend.Coverage, 1.2f) is not CanvasTexture, "a glyph without an HD entry stays the Legacy frame at any scale");
 
         var viewport = new SubViewport { Size = new(W, H), TransparentBg = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var probe = new FontProbe(face) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };

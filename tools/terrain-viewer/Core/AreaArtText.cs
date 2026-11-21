@@ -28,6 +28,16 @@ public static class AreaArtTextRules
 {
     public const int AdditiveFontFlag = 0x100, OpaqueFontFlag = 0x80;
 
+    /// <summary>ARC-RENDER-2939: an HD glyph frame drawn at a smaller share of its own pixels than this (0.6 = a 2.4 px/original-px draw of a 4× frame) is minified with an area filter (mipmaps);
+    /// at this share and above the glyph keeps the owner's bilinear sample without mipmaps (ARC-UI-145: 0.6 to 0.9, the sheet's and the windows' scales).</summary>
+    public const float AreaFilterBelow = 0.6f;
+
+    /// <summary>ARC-RENDER-2939: true when an HD glyph frame of <paramref name="hdWidth"/> px for a Legacy glyph of <paramref name="legacyWidth"/> px, drawn at <paramref name="deviceScale"/> device px per
+    /// original px, is minified below <see cref="AreaFilterBelow"/> of its own pixels, so that it needs the area filter. The Steamwoven steps give 0.45 (x1/2) and 0.3 (x1/3) of a 4× frame; 0.6 and 0.9 stay bilinear.
+    /// The comparison keeps a thousandth of slack, so 2.4 / 4 does not fall below the bound by float rounding.</summary>
+    public static bool NeedsAreaFilter(float deviceScale, int legacyWidth, int hdWidth) =>
+        deviceScale > 0f && legacyWidth > 0 && hdWidth > legacyWidth && deviceScale * legacyWidth / hdWidth < AreaFilterBelow - 0.001f;
+
     /// <summary>The blend of a font's flags (0x535570: flag 0x100 makes the blit additive whatever else is set, 0x505EB0).</summary>
     public static AreaArtTextBlend Blend(int fontFlags) => (fontFlags & AdditiveFontFlag) != 0 ? AreaArtTextBlend.Additive
         : (fontFlags & OpaqueFontFlag) != 0 ? AreaArtTextBlend.Multiply : AreaArtTextBlend.Coverage;

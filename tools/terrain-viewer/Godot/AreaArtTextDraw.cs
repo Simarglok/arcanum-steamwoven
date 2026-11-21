@@ -16,7 +16,7 @@ public sealed class AreaArtFontFace
 {
     private readonly IReadOnlyList<AreaInterfaceFrame> _frames;
     private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _textures = [];
-    private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _hdTextures = [];
+    private readonly Dictionary<(int Frame, AreaArtTextBlend Blend, bool Mips), Texture2D?> _hdTextures = [];
     private HdPack? _hdFor;
 
     public AreaArtFontFace(IReadOnlyList<AreaInterfaceFrame> frames)
@@ -32,11 +32,13 @@ public sealed class AreaArtFontFace
         new(Enumerable.Repeat(new AreaInterfaceFrame(5, 12, Enumerable.Repeat((byte)255, 5 * 12 * 4).ToArray(), 6), 225).ToArray());
     public IReadOnlyList<AreaInterfaceFrame> Frames => _frames;
 
-    /// <summary>A glyph frame's texture for <paramref name="blend"/>; null for an empty frame.</summary>
-    public Texture2D? Texture(int frame, AreaArtTextBlend blend)
+    /// <summary>A glyph frame's texture for <paramref name="blend"/>; null for an empty frame. ARC-RENDER-2939: with <paramref name="deviceScale"/> (device px per original px of this draw, 0 = unknown) set
+    /// by the Steamwoven layout, an HD frame drawn below <see cref="AreaArtTextRules.AreaFilterBelow"/> of its own pixels (the steps x1/2 and x1/3) comes with its mip chain and a mipmapped filter, an area
+    /// filter for thin strokes; every other draw keeps the bilinear texture without mipmaps (ARC-UI-145).</summary>
+    public Texture2D? Texture(int frame, AreaArtTextBlend blend, float deviceScale = 0f)
     {
         // ARC-UI-2795: the additive blend (the inventory windows' counts, font flag 0x10) draws the same HD coverage frame, as the glyph pixel added instead of covering.
-        if (blend is AreaArtTextBlend.Coverage or AreaArtTextBlend.Additive && HdTexture(frame, blend) is { } hd) return hd;
+        if (blend is AreaArtTextBlend.Coverage or AreaArtTextBlend.Additive && HdTexture(frame, blend, deviceScale) is { } hd) return hd;
         if (_textures.TryGetValue((frame, blend), out var known)) return known;
         var art = _frames[frame];
         var texture = art.Width > 0 && art.Height > 0
@@ -47,11 +49,11 @@ public sealed class AreaArtFontFace
     }
 
     /// <summary>True when <paramref name="frame"/> draws its HD coverage frame now (the switch is on and the pack holds a valid entry).</summary>
-    public bool IsHd(int frame) => HdTexture(frame, AreaArtTextBlend.Coverage) is not null;
+    public bool IsHd(int frame) => HdTexture(frame, AreaArtTextBlend.Coverage, 0f) is not null;
 
     // The glyph's HD frame as a premultiplied coverage layer (the HD pixels are grey with alpha 255 on ink: LayerPixels gives (w, w, w, w)),
     // decoded once per pack and frame; null while Legacy draws. Dropped when the pack or the switch changes.
-    private Texture2D? HdTexture(int frame, AreaArtTextBlend blend)
+    private Texture2D? HdTexture(int frame, AreaArtTextBlend blend, float deviceScale)
     {
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack)
         {
@@ -59,7 +61,15 @@ public sealed class AreaArtFontFace
             return null;
         }
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hdTextures.Clear(); }
-        if (_hdTextures.TryGetValue((frame, blend), out var known)) return known;
+        // ARC-RENDER-2939: the plain texture is made first (every draw at 0.6 of the HD frame's pixels or more uses it); its width gives the share the draw keeps of the frame.
+        var plain = HdVariant(pack, frame, blend, false);
+        return plain is null || deviceScale <= 0f || !AreaArtTextRules.NeedsAreaFilter(deviceScale, _frames[frame].Width, plain.GetWidth())
+            ? plain : HdVariant(pack, frame, blend, true);
+    }
+
+    private Texture2D? HdVariant(HdPack pack, int frame, AreaArtTextBlend blend, bool mips)
+    {
+        if (_hdTextures.TryGetValue((frame, blend, mips), out var known)) return known;
         Texture2D? texture = null;
         var art = _frames[frame];
         if (art.Hd is { } query && art.Width > 0 && art.Height > 0
@@ -68,9 +78,11 @@ public sealed class AreaArtFontFace
             using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(rgba, blend));
             // ARC-UI-145: bilinear, no mipmaps. The mip chain of a 4× glyph blurred the edge at the sheet's and the windows' scales (2.5-3.5 here),
             // where one level down is a quarter of the detail; the owner chose this over trilinear, nearest and a sharper trace by comparing them on screen.
-            texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.Linear };
+            // ARC-RENDER-2939: only below 0.6 of the frame's pixels (the Steamwoven steps x1/2 and x1/3) the frame carries its mip chain (premultiplied, so the averages stay right) and is sampled trilinear.
+            if (mips) image.GenerateMipmaps();
+            texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = mips ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : CanvasItem.TextureFilterEnum.Linear };
         }
-        _hdTextures[(frame, blend)] = texture;
+        _hdTextures[(frame, blend, mips)] = texture;
         return texture;
     }
 }
@@ -106,9 +118,19 @@ public static class AreaArtTextDraw
         // Premultiplied: the colour and the alpha both carry the opacity.
         var opacity = alpha / 255f;
         var tint = new Color(colour.R / 255f * opacity, colour.G / 255f * opacity, colour.B / 255f * opacity, opacity);
+        var deviceScale = AreaFilterDeviceScale(canvas, scale);
         foreach (var (gx, glyph) in placed)
-            if (face.Texture(glyph.Frame, blend) is { } texture)
+            if (face.Texture(glyph.Frame, blend, deviceScale) is { } texture)
                 canvas.DrawTextureRect(texture, new Rect2(x + gx * scale, y, glyph.Width * scale, glyph.Height * scale), false, tint);
+    }
+
+    /// <summary>ARC-RENDER-2939: the device pixels per original pixel of a draw at <paramref name="scale"/> on <paramref name="canvas"/> while the Steamwoven layout is on (the draw's own scale times its canvas
+    /// and viewport scale, as the inventory area's DeviceScale); 0 otherwise, which keeps the whole-number layout and the Original mode on the bilinear glyph they drew before.</summary>
+    private static float AreaFilterDeviceScale(CanvasItem canvas, float scale)
+    {
+        if (!AreaGameBarPanel.SteamwovenOn) return 0f;
+        if (!canvas.IsInsideTree()) return scale;
+        return scale * canvas.GetGlobalTransformWithCanvas().Scale.X * canvas.GetViewport().GetStretchTransform().Scale.X;
     }
 
     /// <summary>One line of text from (x, y) in <paramref name="colour"/>.</summary>
