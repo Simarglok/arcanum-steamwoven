@@ -384,6 +384,35 @@ public partial class TerrainViewerApp
             Require(panel.ArtMode && area.BarterLook && area.LookMode == AreaInventoryMode.Barter && area.BarterFrame is { Background: 235, Name: "Smith" },
                 "the original look opened in mode 1 with background 235");
             Require(panel.LookToggleForSelfTest is { Visible: false } && !panel.SellButtonsForSelfTest[0].IsVisibleInTree(), "ARC-UI-2764: no Diagnostic view switch in play, the list hidden");
+            // ARC-UI-3033: without a kit background the frame draws its own background art and the hero's inventory art; over a complete kit background it draws neither, and the kit's doll view and doll cover (when it has
+            // them) are drawn in place of the window's; the opening shop's docked frame and the diagnostic look never take the kit.
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.KitBackdrop is null && area.KitDrawForSelfTest is { Background: true, Pack: true, KitDoll: false, KitCover: false }, "without a kit background the frame draws its own art: " + area.KitDrawForSelfTest);
+            var kitTexture = ImageTexture.CreateFromImage(Image.CreateEmpty(4, 4, false, Image.Format.Rgba8));
+            panel.SetKitBackdrop(new AreaKitBackdrop(new AreaKitOverlay(kitTexture, 1290 / 3.6, 876 / 3.6), null));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.KitBackdrop is not null && area.KitDrawForSelfTest is { Background: false, Pack: false, KitDoll: false, KitCover: false }, "over a kit background the frame draws neither its background nor the hero's inventory art: " + area.KitDrawForSelfTest);
+            Require(panel.KitState is { Background: 235, InZone: true }, "the window is the plain barter window in the zone: " + panel.KitState);
+            var kitDollButton = new Vector2(AreaBarterArtLayout.DollButton.X + 5, AreaBarterArtLayout.DollButton.Y + 5);
+            area.PressAt(kitDollButton); area.ReleaseAt(kitDollButton);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.BodyDoll && area.KitDrawForSelfTest is { Background: false, KitDoll: true, KitCover: false }, "the merchant's doll view is the kit's: " + area.KitDrawForSelfTest);
+            var kitBagButton = new Vector2(AreaBarterArtLayout.BagButton.X + 5, AreaBarterArtLayout.BagButton.Y + 5);
+            area.PressAt(kitBagButton); area.ReleaseAt(kitBagButton);
+            Require(!area.BodyDoll, "the bag button shows the grid again");
+            panel.SetKitBackdrop(null);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.KitBackdrop is null && area.KitDrawForSelfTest is { Background: true, Pack: true, KitDoll: false }, "without the kit background the frame is as before: " + area.KitDrawForSelfTest);
+            panel.Docked = true;
+            Require(!panel.KitState.InZone, "the docked frame is not in the window zone");
+            panel.SetKitBackdrop(new AreaKitBackdrop(null, null));
+            Require(area.KitBackdrop is null, "a docked frame takes no kit background");
+            panel.Docked = false;
+            panel.SetKitBackdrop(new AreaKitBackdrop(null, null));
+            panel.Docked = true;
+            Require(area.KitBackdrop is null, "docking drops a kit background at once");
+            panel.Docked = false;
+            Require(panel.KitState is { Background: 235, InZone: true }, "undocked again the frame is in the zone: " + panel.KitState);
             panel.DiagnosticSwitch = true;
             Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" }, "the debug switch below the frame");
             panel.DiagnosticSwitch = false;

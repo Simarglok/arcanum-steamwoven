@@ -23,8 +23,11 @@ public sealed class SteamwovenKitTests
             new("plate.char_but", B(120), B(120)), new("plate.char_but_hover", B(120), B(120)), new("plate.char_but_pressed", B(120), B(120)), new("state.char_on", B(120), B(120)),
             new("backdrop.mainmenuback", B(2880), B(2160)),
         };
+        // The inventory's right piece is shared by several windows (ARC-UI-3033): a part is added once.
         foreach (var window in SteamwovenKitTable.Windows.Values)
-            foreach (var (id, width) in window.Pieces) parts.Add(new(id, B(width), B(1440)));
+            foreach (var (id, width) in window.Pieces)
+                if (parts.All(part => part.Id != id)) parts.Add(new(id, B(width), B(1440)));
+        foreach (var overlay in new[] { SteamwovenKitTable.BarterDoll, SteamwovenKitTable.HeroDollCover }) parts.Add(new(overlay.Part, B(overlay.MasterWidth), B(overlay.MasterHeight)));
         return SteamwovenKitSet.FromParts(step, "/kit/" + SteamwovenKitSet.FolderName(step), parts.Where(part => !without.Contains(part.Id)));
     }
 
@@ -170,6 +173,77 @@ public sealed class SteamwovenKitTests
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Loot]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Dialog]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([]));
+    }
+
+    [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(1280, 720, SteamwovenStep.Third)]
+    public void The_barter_window_is_the_merchant_s_side_and_the_inventory_split_at_1290_and_its_follower_variant_swaps_only_the_left_piece(int width, int height, SteamwovenStep step)
+    {
+        // ARC-UI-3033 (G03).
+        var plan = Plan(width, height);
+        var zone = SteamwovenWindowZone.ZoneOf(plan);
+        var plain = SteamwovenKitComposer.Background(plan, Full(step), SteamwovenKitWindow.Barter).Value!;
+        CollectionAssert.AreEqual(new[] { "backdrop.barter", "backdrop.inventor" }, plain.Select(draw => draw.PartId).ToList());
+        Assert.AreEqual(zone.X, plain[0].Rect.X);
+        Assert.AreEqual(zone.Right, plain[1].Rect.Right);
+        Assert.AreEqual(plain[0].Rect.Right, plain[1].Rect.X, "the pieces share the split");
+        Assert.AreEqual(zone.X + (new Ratio(1290) * plan.Layout.Scale).RoundHalfUp(), plain[0].Rect.Right);
+        var follower = SteamwovenKitComposer.Background(plan, Full(step), SteamwovenKitWindow.BarterFollower).Value!;
+        CollectionAssert.AreEqual(new[] { "backdrop.barter_follower", "backdrop.inventor" }, follower.Select(draw => draw.PartId).ToList());
+        Assert.AreEqual(plain[0].Rect, follower[0].Rect);
+        Assert.AreEqual(plain[1].Rect, follower[1].Rect);
+    }
+
+    [TestMethod]
+    public void A_barter_window_with_a_missing_piece_has_no_kit_background_and_the_other_variant_is_not_held_back()
+    {
+        var plan = Plan(1920, 1080);
+        var noFollower = Full(SteamwovenStep.Half, "backdrop.barter_follower");
+        Assert.IsFalse(SteamwovenKitComposer.Background(plan, noFollower, SteamwovenKitWindow.BarterFollower).Complete);
+        CollectionAssert.Contains(SteamwovenKitComposer.Background(plan, noFollower, SteamwovenKitWindow.BarterFollower).Missing.ToList(), "backdrop.barter_follower");
+        Assert.IsTrue(SteamwovenKitComposer.Background(plan, noFollower, SteamwovenKitWindow.Barter).Complete);
+        // The hero's inventory piece is shared with the inventory window: without it neither window has a kit background.
+        var noInventor = Full(SteamwovenStep.Half, "backdrop.inventor");
+        Assert.IsFalse(SteamwovenKitComposer.Background(plan, noInventor, SteamwovenKitWindow.Barter).Complete);
+        Assert.IsFalse(SteamwovenKitComposer.Background(plan, noInventor, SteamwovenKitWindow.BarterFollower).Complete);
+        var wrong = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("backdrop.barter", 645, 700), new("backdrop.inventor", 795, 720)]);
+        Assert.IsTrue(SteamwovenKitComposer.Background(plan, wrong, SteamwovenKitWindow.Barter).Missing.Single().Contains("wrong size"));
+    }
+
+    [TestMethod]
+    public void The_barter_window_is_the_plain_or_follower_variant_by_the_merchant_s_art_and_none_out_of_the_zone()
+    {
+        // ARC-UI-3033: mode 1; art 825 (the follower's cycle buttons) picks the follower variant; a frame out of the window zone (docked in the opening shop, or the diagnostic look) has none.
+        Assert.AreEqual(SteamwovenKitWindow.Barter, SteamwovenKitComposer.WindowOf([InterfaceMode.Barter]));
+        Assert.AreEqual(SteamwovenKitWindow.Barter, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Barter], new(AreaBarterArtLayout.BarterArt, true)));
+        Assert.AreEqual(SteamwovenKitWindow.BarterFollower, SteamwovenKitComposer.WindowOf([InterfaceMode.Dialog, InterfaceMode.Barter], new(AreaBarterArtLayout.FollowerArt, true)));
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Barter], new(AreaBarterArtLayout.BarterArt, false)));
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Barter], new(AreaBarterArtLayout.FollowerArt, false)));
+        // A dialog on top of the barter window, or the loot window over it, has none; the barter window over a loot window has its own.
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Barter, InterfaceMode.Dialog], new(AreaBarterArtLayout.BarterArt, true)));
+        Assert.AreEqual(SteamwovenKitWindow.Barter, SteamwovenKitComposer.WindowOf([InterfaceMode.Loot, InterfaceMode.Barter], new(AreaBarterArtLayout.BarterArt, true)));
+        // The state does not touch the other windows.
+        Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory], new(AreaBarterArtLayout.FollowerArt, true)));
+    }
+
+    [TestMethod]
+    public void A_barter_overlay_is_the_part_at_its_size_at_the_step_and_has_unit_sizes_from_the_master_size()
+    {
+        // ARC-UI-3033: the merchant's doll 1290 x 876 and the hero's doll cover 1230 x 1440 master px; a unit is 3.6 master px.
+        var set = Full(SteamwovenStep.Half);
+        Assert.IsNotNull(SteamwovenKitComposer.Overlay(set, SteamwovenKitTable.BarterDoll));
+        Assert.IsNotNull(SteamwovenKitComposer.Overlay(set, SteamwovenKitTable.HeroDollCover));
+        Assert.IsNull(SteamwovenKitComposer.Overlay(Full(SteamwovenStep.Half, "backdrop.barter_pd"), SteamwovenKitTable.BarterDoll));
+        Assert.IsNotNull(SteamwovenKitComposer.Overlay(Full(SteamwovenStep.Half, "backdrop.barter_pd"), SteamwovenKitTable.HeroDollCover), "an overlay does not hold the other back");
+        var wrong = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("backdrop.barter_pd", 645, 400)]);
+        Assert.IsNull(SteamwovenKitComposer.Overlay(wrong, SteamwovenKitTable.BarterDoll));
+        Assert.AreEqual(1290 / 3.6, SteamwovenKitTable.BarterDoll.UnitWidth, 1e-9);
+        Assert.AreEqual(400.0, SteamwovenKitTable.HeroDollCover.UnitHeight, 1e-9);
+        CollectionAssert.AreEqual(new[] { "backdrop.barter_pd", "backdrop.pd_cover4inven" }, SteamwovenKitTable.OverlaysOf(SteamwovenKitWindow.Barter).Select(overlay => overlay.Part).ToList());
+        CollectionAssert.AreEqual(SteamwovenKitTable.OverlaysOf(SteamwovenKitWindow.Barter).ToList(), SteamwovenKitTable.OverlaysOf(SteamwovenKitWindow.BarterFollower).ToList());
+        Assert.AreEqual(0, SteamwovenKitTable.OverlaysOf(SteamwovenKitWindow.Inventory).Count);
     }
 
     [TestMethod]

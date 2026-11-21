@@ -113,7 +113,10 @@ public partial class TerrainViewerApp
         // ARC-UI-2461: the covered windows also name their kit background (the family's generated backdrop stays where the kit has none).
         // The kit smoke shows a window's kit background with no window over it (the window's own art would hide it): its override stands in for the open window.
         if (_smokeKitBackdrop is { } smoke) _gameBarPanel.SetMenuBackdrop(smoke.Family, smoke.Window);
-        else _gameBarPanel.SetMenuBackdrop(menuOpen ? SteamwovenBackdrops.FamilyOf(_interfaceWindows.Stack.Modes) : null, menuOpen ? SteamwovenKitComposer.WindowOf(_interfaceWindows.Stack.Modes) : null);
+        else _gameBarPanel.SetMenuBackdrop(menuOpen ? SteamwovenBackdrops.FamilyOf(_interfaceWindows.Stack.Modes) : null,
+            menuOpen ? SteamwovenKitComposer.WindowOf(_interfaceWindows.Stack.Modes, _barterPanel?.KitState) : null);
+        // ARC-UI-3033: the barter window's frame draws no background art of its own while the kit's background of its window shows under it (the kit smoke's own override has no barter frame).
+        _barterPanel?.SetKitBackdrop(menuOpen && _smokeKitBackdrop is null ? _gameBarPanel.KitWindowBackdrop : null);
         _gameBarPanel.SetClock(_gameClock.Face);
         // ARC-UI-1365 (GB13): the experience strip follows the hero's progress toward the next level (null without a hero or experience data).
         _gameBarPanel.SetExperience(_areaSession?.QueryHeroExperience()?.Progress);
