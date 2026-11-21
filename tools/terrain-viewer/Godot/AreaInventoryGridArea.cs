@@ -269,8 +269,11 @@ public partial class AreaInventoryGridArea : Control
         }
     }
 
+    public override void _EnterTree() => AreaKitBackground.Changed += QueueRedraw;
+
     public override void _ExitTree()
     {
+        AreaKitBackground.Changed -= QueueRedraw;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -795,8 +798,13 @@ public partial class AreaInventoryGridArea : Control
             var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
             DrawTextureRect(texture, placed, false);
         }
-        Background(look, AreaInventoryArtLayout.DollArt, AreaInventoryMode.Own);
-        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        // ARC-UI-3037: over the kit's background (the paper doll and the pack, also of the identify and repair windows) the window draws neither of its own background arts; the view window's art, items and text stay.
+        if (!AreaKitBackground.Shown(SteamwovenKitWindow.Inventory))
+        {
+            Background(look, AreaInventoryArtLayout.DollArt, AreaInventoryMode.Own);
+            Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        }
+        else AreaKitStandIns.Inventory(this, _scale);
         // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
         var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
         Art(AreaInventoryHole.Art(AreaInventoryMode.Own), holeX, holeY);

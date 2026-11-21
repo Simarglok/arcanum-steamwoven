@@ -799,7 +799,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? ApplyKitBackground(SteamwovenHudPlan plan, int middleHeight)
     {
         _kitBackground = [];
-        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { AreaKitSheets.Publish(null); return null; }
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { AreaKitSheets.Publish(null); AreaKitBackground.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
         Dictionary<int, Texture2D>? sheets = null;
         var held = new List<string>();
@@ -818,6 +818,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
         SteamwovenKitStore.Retain("window", set, held);
         AreaKitSheets.Publish(loaded is not null ? sheets : null);
+        // ARC-UI-3037: the window whose own background art gives way to the kit's.
+        AreaKitBackground.Publish(loaded is not null ? _kitWindow : null);
         return loaded;
     }
 
@@ -831,7 +833,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             foreach (var name in new[] { "Black", "Art", "Sides" }) _strips[strip].GetNode<CanvasItem>(name).Visible = true;
         }
         _kitBoards.Visible = false; _kitCaps.Visible = false; _kitBackground = [];
-        AreaKitSheets.Publish(null);
+        AreaKitSheets.Publish(null); AreaKitBackground.Publish(null);
         ApplyKitButtons();
     }
 
@@ -893,7 +895,7 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     public override void _ExitTree()
     {
-        AreaKitSheets.Publish(null); // ARC-UI-3035: no stale kit sheet for a sheet over a later panel
+        AreaKitSheets.Publish(null); AreaKitBackground.Publish(null); // ARC-UI-3035, ARC-UI-3037: no stale kit sheet or background for a window over a later panel
         AreaRoundView.RectsChanged -= ApplyBackdropHoles;
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;
