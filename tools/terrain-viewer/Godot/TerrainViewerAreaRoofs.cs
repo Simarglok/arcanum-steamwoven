@@ -20,6 +20,8 @@ public partial class TerrainViewerApp
     private AreaLoadResult? _areaRoofArea;
     private AreaStepCell? _areaRoofCell;
     private AreaStepCell? _areaRoofDeparture;
+    // ARC-RENDER-3063: the town-map render keeps every roof drawn whatever the hero cell is (no recalculation, no wall fade).
+    private bool _areaRoofsClosed;
     private HashSet<AreaObjectKey> _areaRoofWalls = new();
     private long _areaRoofRevision = -1;
     private string? _areaRoofCompanionCells;
@@ -48,13 +50,15 @@ public partial class TerrainViewerApp
         if (_areaRoofDeparture is { } departure) { grid.FillOff(departure.X, departure.Y); _areaRoofDeparture = null; }
         if (departed || _areaRoofCell != cell)
         {
-            grid.Recalc(cell.X, cell.Y);
+            if (!_areaRoofsClosed) grid.Recalc(cell.X, cell.Y);
             _areaRoofCell = cell;
         }
+        if (_areaRoofsClosed) foreach (var roof in grid.Records) { grid.FillOff(roof.BlockX, roof.BlockY); grid.FadeOff(roof.BlockX, roof.BlockY); }
         // Each wall the wall check holds (one whose flags forbid fading included) fades the roof block of its tile while it
         // is there (RF9).
         var walls = _areaWallCheck?.State.HeldWalls.Where(key => _areaRoofObjects.TryGetValue(key, out var row) && row.WorldX is not null && row.WorldY is not null)
             .ToHashSet() ?? [];
+        if (_areaRoofsClosed) walls = [];
         foreach (var key in walls.Except(_areaRoofWalls)) grid.AddWallFade(_areaRoofObjects[key].WorldX!.Value, _areaRoofObjects[key].WorldY!.Value);
         foreach (var key in _areaRoofWalls.Except(walls)) grid.ReleaseWallFade(_areaRoofObjects[key].WorldX!.Value, _areaRoofObjects[key].WorldY!.Value);
         _areaRoofWalls = walls;

@@ -51,6 +51,27 @@ public partial class AreaGameBarPanel : CanvasLayer
     private readonly Dictionary<string, AreaKitOverlay> _kitOverlays = [];
     private AreaKitBackdrop? _kitWindowBackdrop;
 
+    // ARC-UI-3032: the window whose kit background shows now and the doll covers of the set that are the table's size, for the window drawn over it (the loot window drops its own background art and takes the covers).
+    // One bar panel lives at a time; the windows read these statics (as they read ZoneWindow) and redraw on KitBackgroundChanged.
+    private static SteamwovenKitWindow? s_kitWindowShown;
+    private static readonly Dictionary<int, Texture2D> KitCovers = [];
+    /// <summary>ARC-UI-3032: the kit background of this window is drawn under the open window now (null: none, so the window draws its own art).</summary>
+    internal static SteamwovenKitWindow? KitBackgroundWindow => s_kitWindowShown;
+    /// <summary>ARC-UI-3032: the kit's cover for the original art <paramref name="art"/> (349, 341) while the kit background shows, with its size in original units; null: the original art stays.</summary>
+    internal static (Texture2D Texture, double Width, double Height)? KitCover(int art) =>
+        KitCovers.TryGetValue(art, out var texture) && SteamwovenKitTable.Covers.TryGetValue(art, out var cover) ? (texture, SteamwovenKitComposer.CoverUnits(cover).Width, SteamwovenKitComposer.CoverUnits(cover).Height) : null;
+    /// <summary>ARC-UI-3032: the kit background or its covers changed; the windows over it redraw.</summary>
+    internal static event Action? KitBackgroundChanged;
+
+    private static void PublishKitBackground(SteamwovenKitWindow? window, IReadOnlyDictionary<int, Texture2D>? covers)
+    {
+        var same = s_kitWindowShown == window && KitCovers.Count == (covers?.Count ?? 0) && (covers is null || covers.All(pair => KitCovers.TryGetValue(pair.Key, out var held) && ReferenceEquals(held, pair.Value)));
+        if (same) return;
+        s_kitWindowShown = window; KitCovers.Clear();
+        if (covers is not null) foreach (var pair in covers) KitCovers[pair.Key] = pair.Value;
+        KitBackgroundChanged?.Invoke();
+    }
+
     private const string DimShader = """
         shader_type canvas_item;
         uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
@@ -805,20 +826,33 @@ public partial class AreaGameBarPanel : CanvasLayer
     private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? ApplyKitBackground(SteamwovenHudPlan plan, int middleHeight)
     {
         _kitBackground = []; _kitOverlays.Clear();
-        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) return null;
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
+        Dictionary<int, Texture2D>? covers = null, sheets = null;
+        var held = new List<string>();
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
         {
             loaded = LoadKit(set, draws);
             if (loaded is not null)
             {
                 _kitBackground = draws;
+                held.AddRange(draws.Select(draw => draw.PartId));
                 // ARC-UI-3033: the overlays the window's content draws over this background (the doll view, the doll cover) stay resident with it; one the set lacks or that does not load is left out, and the window keeps its own art for it.
                 foreach (var overlay in SteamwovenKitTable.OverlaysOf(window))
-                    if (SteamwovenKitComposer.Overlay(set, overlay) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) _kitOverlays[overlay.Part] = new(texture, overlay.UnitWidth, overlay.UnitHeight);
+                    if (SteamwovenKitComposer.Overlay(set, overlay) is { } overlayPart && SteamwovenKitStore.Texture(set, overlayPart.Id) is { } overlayTexture) { _kitOverlays[overlay.Part] = new(overlayTexture, overlay.UnitWidth, overlay.UnitHeight); held.Add(overlayPart.Id); }
+                // ARC-UI-3032: the loot window's doll covers that the set holds at the table's size; a cover missing or not loading leaves the original art, the background stays.
+                if (window == SteamwovenKitWindow.Loot)
+                    foreach (var art in SteamwovenKitTable.Covers.Keys)
+                        if (SteamwovenKitComposer.Cover(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (covers ??= [])[art] = texture; held.Add(part.Id); }
+                // ARC-UI-3035: the character sheet's pages lay the kit's sheets over this background where the set has them at the table's size; a sheet missing or not loading leaves the page's own art, the background stays.
+                if (window == SteamwovenKitWindow.Character)
+                    foreach (var art in SteamwovenKitTable.Sheets.Keys)
+                        if (SteamwovenKitComposer.Sheet(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (sheets ??= [])[art] = texture; held.Add(part.Id); }
             }
         }
-        SteamwovenKitStore.Retain("window", set, [.. _kitBackground.Select(draw => draw.PartId), .. _kitOverlays.Keys]);
+        SteamwovenKitStore.Retain("window", set, held);
+        PublishKitBackground(loaded is not null ? _kitWindow : null, covers);
+        AreaKitSheets.Publish(loaded is not null ? sheets : null);
         return loaded;
     }
 
@@ -832,6 +866,8 @@ public partial class AreaGameBarPanel : CanvasLayer
             foreach (var name in new[] { "Black", "Art", "Sides" }) _strips[strip].GetNode<CanvasItem>(name).Visible = true;
         }
         _kitBoards.Visible = false; _kitCaps.Visible = false; _kitBackground = []; _kitOverlays.Clear(); _kitWindowBackdrop = null;
+        PublishKitBackground(null, null);
+        AreaKitSheets.Publish(null);
         ApplyKitButtons();
     }
 
@@ -896,6 +932,8 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     public override void _ExitTree()
     {
+        PublishKitBackground(null, null); // ARC-UI-3032: no stale kit background for a window over a later panel
+        AreaKitSheets.Publish(null); // ARC-UI-3035: no stale kit sheet for a sheet over a later panel
         AreaRoundView.RectsChanged -= ApplyBackdropHoles;
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;

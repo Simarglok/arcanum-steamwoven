@@ -1,0 +1,64 @@
+"""ARC-RES-2457: tests of the surface study planners and command builders (no ImageMagick run, no art)."""
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+from . import method_c, surface_study
+
+
+class SurfaceStudyTests(unittest.TestCase):
+    def test_zones_cover_the_composition_exactly(self):
+        zones = list(surface_study.ZONES.values())
+        self.assertEqual(zones[0][1], 0)
+        for a, b in zip(zones, zones[1:]):
+            self.assertEqual(a[1] + a[3], b[1])
+        self.assertEqual(zones[-1][1] + zones[-1][3], surface_study.MASTER[1])
+        self.assertTrue(all(z[0] == 0 and z[2] == surface_study.MASTER[0] for z in zones))
+
+    def test_tiles_cover_the_window_zone_with_overlaps(self):
+        rects = surface_study.tile_rects()
+        window_w, window_h = surface_study.ZONES["window"][2:4]
+        self.assertEqual(len(rects), surface_study.TILE_COLUMNS * surface_study.TILE_ROWS)
+        self.assertEqual(max(r["x"] + r["w"] for r in rects), window_w)
+        self.assertEqual(max(r["y"] + r["h"] for r in rects), window_h)
+        self.assertEqual(min(r["x"] for r in rects), 0)
+        self.assertEqual(min(r["y"] for r in rects), 0)
+        self.assertEqual(len({r["id"] for r in rects}), len(rects))
+        first = rects[0]
+        self.assertEqual((first["left"], first["top"]), (0, 0))
+        for r in rects[1:]:
+            self.assertTrue(r["left"] > 0 or r["top"] > 0)
+        # every point of the zone is inside some tile
+        for x in (0, 1319, 1320, 1559, 2879):
+            for y in (0, 359, 360, 1079, 1439):
+                self.assertTrue(any(r["x"] <= x < r["x"] + r["w"] and r["y"] <= y < r["y"] + r["h"] for r in rects), (x, y))
+
+    def test_ramp_mask_command_uses_the_overlaps(self):
+        rect = {"w": 100, "h": 50, "left": 20, "top": 0}
+        command = surface_study.ramp_mask_command(rect, Path("m.png"))
+        self.assertIn("min(1,(i+0.5)/20)", command)
+        both = surface_study.ramp_mask_command({"w": 100, "h": 50, "left": 20, "top": 10}, Path("m.png"))
+        self.assertIn("min(min(1,(i+0.5)/20),(j+0.5)/10)", both)
+        none = surface_study.ramp_mask_command({"w": 100, "h": 50, "left": 0, "top": 0}, Path("m.png"))
+        self.assertIn("1", none)
+
+    def test_prompts_are_ascii_and_have_the_size(self):
+        zone = surface_study.ZONE_BODY.format(w=2880, h=148, aspect="19.5", what="the top strip")
+        tile = surface_study.TILE_BODY.format(w=1560, h=1080)
+        for text in (zone, tile, surface_study.COMMON.read_text(encoding="utf-8")):
+            text.encode("ascii")
+        self.assertIn("2880 x 148", zone)
+        self.assertIn("1560 x 1080", tile)
+
+    def test_method_c_commands(self):
+        tile = method_c.tile_command(Path("t.png"), 432, (2880, 2160), Path("o.png"))
+        self.assertIn("432x432!", tile)
+        self.assertIn("2880x2160", tile)
+        self.assertIn("compose:args=0,-1,1,0.5", method_c.high_pass_command(Path("a.png"), 6.0, Path("o.png")))
+        self.assertIn("compose:args=0,1,1,-0.5", method_c.add_command(Path("l.png"), Path("h.png"), Path("o.png")))
+        self.assertEqual(method_c.low_pass_command(Path("a.png"), 6.0, Path("o.png")), ["magick", "a.png", "-blur", "0x6.0", "o.png"])
+
+
+if __name__ == "__main__":
+    unittest.main()

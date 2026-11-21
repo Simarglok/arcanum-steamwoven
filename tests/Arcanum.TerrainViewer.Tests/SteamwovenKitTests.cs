@@ -26,7 +26,8 @@ public sealed class SteamwovenKitTests
         // The inventory's right piece is shared by several windows (ARC-UI-3033): a part is added once.
         foreach (var window in SteamwovenKitTable.Windows.Values)
             foreach (var (id, width) in window.Pieces)
-                if (parts.All(part => part.Id != id)) parts.Add(new(id, B(width), B(1440)));
+                if (parts.All(part => part.Id != id)) parts.Add(new(id, B(width), B(1440))); // the inventory's right half is shared by the loot window
+        foreach (var sheet in SteamwovenKitTable.Sheets.Values) parts.Add(new(sheet.Part, B(sheet.MasterWidth), B(sheet.MasterHeight)));
         foreach (var overlay in new[] { SteamwovenKitTable.BarterDoll, SteamwovenKitTable.HeroDollCover }) parts.Add(new(overlay.Part, B(overlay.MasterWidth), B(overlay.MasterHeight)));
         return SteamwovenKitSet.FromParts(step, "/kit/" + SteamwovenKitSet.FolderName(step), parts.Where(part => !without.Contains(part.Id)));
     }
@@ -169,8 +170,12 @@ public sealed class SteamwovenKitTests
         Assert.AreEqual(SteamwovenKitWindow.Logbook, SteamwovenKitComposer.WindowOf([InterfaceMode.Logbook]));
         Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.InventoryKind5]));
         Assert.AreEqual(SteamwovenKitWindow.Inventory, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.InventoryKind6]));
-        // The loot window is another window of the inventory family: it keeps the generated backdrop, even over an inventory.
-        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Loot]));
+        // ARC-UI-3032: the loot, steal and See Contents windows (census G02, G04) have a kit background of their own, over an inventory too; the barter window (another window of the family) keeps the generated backdrop.
+        Assert.AreEqual(SteamwovenKitWindow.Loot, SteamwovenKitComposer.WindowOf([InterfaceMode.Loot]));
+        Assert.AreEqual(SteamwovenKitWindow.Loot, SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Steal]));
+        Assert.AreEqual(SteamwovenKitWindow.Loot, SteamwovenKitComposer.WindowOf([InterfaceMode.Loot, InterfaceMode.QuantityPicker]));
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Barter]));
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Loot, InterfaceMode.Dialog]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Inventory, InterfaceMode.Dialog]));
         Assert.IsNull(SteamwovenKitComposer.WindowOf([]));
     }
@@ -247,6 +252,107 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(1280, 1024, SteamwovenStep.Third)]
+    public void The_loot_background_is_the_loot_part_left_and_the_inventory_part_right_tiling_the_zone(int width, int height, SteamwovenStep step)
+    {
+        var plan = Plan(width, height);
+        var zone = SteamwovenWindowZone.ZoneOf(plan);
+        var result = SteamwovenKitComposer.Background(plan, Full(step), SteamwovenKitWindow.Loot);
+        var pieces = result.Value!;
+        CollectionAssert.AreEqual(new[] { "backdrop.loot", "backdrop.inventor" }, pieces.Select(piece => piece.PartId).ToArray());
+        Assert.AreEqual(zone.X, pieces[0].Rect.X); Assert.AreEqual(zone.Right, pieces[1].Rect.Right);
+        Assert.AreEqual(pieces[0].Rect.Right, pieces[1].Rect.X, "no gap at the split");
+        Assert.AreEqual(zone.X + (new Ratio(1290) * plan.Layout.Scale).RoundHalfUp(), pieces[0].Rect.Right);
+        Assert.IsTrue(pieces.All(piece => piece.Rect.Y == zone.Y && piece.Rect.Bottom == zone.Bottom));
+        // The right half is the inventory's, one part for both windows.
+        Assert.AreEqual("backdrop.inventor", SteamwovenKitComposer.Background(plan, Full(step), SteamwovenKitWindow.Inventory).Value![1].PartId);
+    }
+
+    [TestMethod]
+    public void A_loot_background_with_a_missing_or_wrong_sized_piece_is_missing_whole_and_the_inventory_is_not_held_back()
+    {
+        var plan = Plan(1920, 1080);
+        var noLoot = SteamwovenKitComposer.Background(plan, Full(SteamwovenStep.Half, "backdrop.loot"), SteamwovenKitWindow.Loot);
+        Assert.IsFalse(noLoot.Complete);
+        CollectionAssert.Contains(noLoot.Missing.ToList(), "backdrop.loot");
+        Assert.IsTrue(SteamwovenKitComposer.Background(plan, Full(SteamwovenStep.Half, "backdrop.loot"), SteamwovenKitWindow.Inventory).Complete);
+        var wrong = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("backdrop.loot", 400, 700), new("backdrop.inventor", 795, 720)]);
+        Assert.IsTrue(SteamwovenKitComposer.Background(plan, wrong, SteamwovenKitWindow.Loot).Missing.Single().Contains("wrong size"));
+    }
+
+    [TestMethod]
+    public void The_loot_window_draws_no_background_art_over_a_kit_background_and_both_of_them_without()
+    {
+        CollectionAssert.AreEqual(new[] { 234, 221 }, SteamwovenKitComposer.LootBackgroundArts(false).ToArray());
+        Assert.AreEqual(0, SteamwovenKitComposer.LootBackgroundArts(true).Count);
+    }
+
+    [TestMethod]
+    public void A_doll_cover_is_the_kit_part_of_the_table_size_and_the_original_art_stays_without_it()
+    {
+        SteamwovenKitSet With(SteamwovenStep step, params (string Id, int Width, int Height)[] parts) =>
+            SteamwovenKitSet.FromParts(step, "/kit/" + SteamwovenKitSet.FolderName(step), parts.Select(part => new SteamwovenKitPart(part.Id, SteamwovenGrid.BakedLength(part.Width, step), SteamwovenGrid.BakedLength(part.Height, step))));
+        var set = With(SteamwovenStep.Half, ("backdrop.loot_pd", 1290, 960), ("backdrop.pd_cover4inven", 1230, 1440));
+        Assert.AreEqual("backdrop.loot_pd", SteamwovenKitComposer.Cover(set, 349)?.Id);
+        Assert.AreEqual("backdrop.pd_cover4inven", SteamwovenKitComposer.Cover(set, 341)?.Id);
+        Assert.IsNull(SteamwovenKitComposer.Cover(With(SteamwovenStep.Half, ("backdrop.pd_cover4inven", 1230, 1440)), 349), "a missing cover");
+        Assert.IsNull(SteamwovenKitComposer.Cover(With(SteamwovenStep.Half, ("backdrop.loot_pd", 1290, 1440)), 349), "a wrong sized cover");
+        Assert.IsNull(SteamwovenKitComposer.Cover(set, 234), "an art that has no cover");
+        // The covers are sized in original units from their master size (2880 over 800 units): 358.3 x 266.7 and 341.7 x 400.
+        var (w, h) = SteamwovenKitComposer.CoverUnits(SteamwovenKitTable.Covers[349]);
+        Assert.AreEqual(358.33, w, .01); Assert.AreEqual(266.67, h, .01);
+        Assert.AreEqual(400.0, SteamwovenKitComposer.CoverUnits(SteamwovenKitTable.Covers[341]).Height, .001);
+        // A set at another step holds the cover at that step's size.
+        Assert.IsNotNull(SteamwovenKitComposer.Cover(With(SteamwovenStep.Third, ("backdrop.loot_pd", 1290, 960)), 349));
+    }
+
+    [TestMethod]
+    public void The_hero_s_sheet_and_the_NPC_sheet_of_a_dialog_are_one_window_with_the_kit_s_character_background()
+    {
+        // ARC-UI-3035 AC1 (census G10): the NPC sheet of a dialog opens as the sheet's interface mode (the viewer's OpenNpcSheet is the window of mode Character, read-only), so it is the kit's character window like the hero's sheet.
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf(InterfaceMode.Character));
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf([InterfaceMode.Character]));
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf([InterfaceMode.Game, InterfaceMode.Character]));
+        // A dialog left under the sheet does not hide the window; a dialog over it does (the world stays in view, no kit background).
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitComposer.WindowOf([InterfaceMode.Dialog, InterfaceMode.Character]));
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.Character, InterfaceMode.Dialog]));
+        CollectionAssert.AreEqual(new[] { "backdrop.char_maint" }, SteamwovenKitTable.Windows[SteamwovenKitWindow.Character].Pieces.Select(piece => piece.Part).ToArray());
+    }
+
+    [TestMethod]
+    public void The_four_pages_have_a_kit_sheet_of_their_own_panel_size_and_the_page_arts_the_viewer_draws()
+    {
+        // ARC-UI-3035 AC2: the keys are the arts the page views draw as their own panels (29 skills, 30 tech, 31 spells, 567 schemes), at the panel's 235 x 325 units (3.6 master px each).
+        CollectionAssert.AreEquivalent(new[] { AreaCharacterSheetPagesLayout.SkillsBackgroundArt, AreaCharacterSheetPagesLayout.TechBackgroundArt, AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSchemesLayout.BackgroundArt },
+            SteamwovenKitTable.Sheets.Keys.ToArray());
+        var (_, _, width, height) = AreaCharacterSheetArtLayout.Panel;
+        foreach (var sheet in SteamwovenKitTable.Sheets.Values)
+            Assert.AreEqual((width * 3.6, height * 3.6), ((double)sheet.MasterWidth, (double)sheet.MasterHeight), sheet.Part);
+    }
+
+    [TestMethod]
+    [DataRow(29, "sheet.skills_window")]
+    [DataRow(30, "sheet.disciplines_window")]
+    [DataRow(31, "sheet.char_spells")]
+    [DataRow(567, "sheet.scheme_rot")]
+    public void A_page_takes_its_kit_sheet_only_when_the_set_has_it_at_the_table_s_size(int art, string id)
+    {
+        foreach (var step in new[] { SteamwovenStep.One, SteamwovenStep.Half, SteamwovenStep.Third })
+        {
+            Assert.AreEqual(id, SteamwovenKitComposer.Sheet(Full(step), art)?.Id);
+            // Missing: the page keeps its own art.
+            Assert.IsNull(SteamwovenKitComposer.Sheet(Full(step, id), art));
+        }
+        // Wrong size: the page keeps its own art.
+        var wrong = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new(id, 100, 100)]);
+        Assert.IsNull(SteamwovenKitComposer.Sheet(wrong, art));
+        // An art that is no page panel has no sheet.
+        Assert.IsNull(SteamwovenKitComposer.Sheet(Full(SteamwovenStep.Half), 22));
+    }
+
+    [TestMethod]
     public void A_plate_needs_the_composition_size_at_the_step()
     {
         Assert.IsNotNull(SteamwovenKitComposer.Plate(Full(SteamwovenStep.Half), 329));
@@ -278,7 +384,7 @@ public sealed class SteamwovenKitTests
     {
         var ids = SteamwovenKitTable.Strips.Values.SelectMany(strip => new[] { strip.Board, strip.CapLeft, strip.CapRight })
             .Concat(SteamwovenKitTable.Windows.Values.SelectMany(window => window.Pieces.Select(piece => piece.Part)))
-            .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).ToList();
+            .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).Concat(SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)).Concat(SteamwovenKitTable.Covers.Values.Select(cover => cover.Part)).ToList();
         Assert.IsTrue(ids.All(SteamwovenKitSet.ValidId));
         // Every id is a row of the committed kit manifest (identifiers only), so a renamed part cannot leave the table behind.
         var manifest = System.IO.File.ReadAllText(FindKit());

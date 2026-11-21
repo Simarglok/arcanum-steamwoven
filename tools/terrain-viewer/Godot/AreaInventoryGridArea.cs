@@ -309,8 +309,20 @@ public partial class AreaInventoryGridArea : Control
         }
     }
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += RedrawForKit;
+
+    private void RedrawForKit() => QueueRedraw();
+
+    /// <summary>ARC-UI-3032: the kit's background of the loot, steal and See Contents windows shows under this window (the bar panel drew it), so the window draws no background art of its own, and takes the kit's doll covers where the set has them.
+    /// Never in the barter window (its own backdrop family has no kit window yet) nor the own window.</summary>
+    internal bool KitBackgroundShown => _barter is null && LootLook && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Loot;
+
+    /// <summary>ARC-UI-3032: for the self-test: the background arts this window drew at its last loot-mode redraw (the loot art 234 and pack art 221, or none), and the arts it drew from a kit cover instead.</summary>
+    internal (IReadOnlyList<int> Backgrounds, IReadOnlyList<int> KitCovers) LootDrawForSelfTest { get; private set; } = ([], []);
+
     public override void _ExitTree()
     {
+        AreaGameBarPanel.KitBackgroundChanged -= RedrawForKit;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -941,8 +953,17 @@ public partial class AreaInventoryGridArea : Control
         var view = _view!;
         var barter = BarterLook ? _barter : null;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
+        // ARC-UI-3032: over the kit's background the loot window draws no background art of its own and the doll covers come from the kit when the set has them (the original art otherwise).
+        var kit = KitBackgroundShown;
+        var coversFromKit = new List<int>();
         void Art(int number, float x, float y)
         {
+            if (kit && AreaGameBarPanel.KitCover(number) is { } cover)
+            {
+                DrawTextureRect(cover.Texture, Scaled(x, y, (float)cover.Width, (float)cover.Height), false);
+                coversFromKit.Add(number);
+                return;
+            }
             if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
         // An item's art centred in its rectangle (scaled down when larger) and cut to the band from clipTop to clipBottom of the frame.
@@ -965,12 +986,14 @@ public partial class AreaInventoryGridArea : Control
             var ratio = texture.GetHeight() / h;
             DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
         }
-        // ARC-UI-3033: over a complete kit background the frame's own background art (the merchant's side or the body's, and the hero's inventory below) is not drawn.
-        var kit = _kit;
+        // ARC-UI-3033: over a complete kit background of the barter window the frame's own background art (the merchant's side, and the hero's inventory below) is not drawn; the loot window's kit (ARC-UI-3032) is the bool above.
+        var barterKit = _kit;
         void Overlay(AreaKitOverlay overlay, float x, float y) => DrawTextureRect(overlay.Texture, Scaled(x, y, (float)overlay.UnitWidth, (float)overlay.UnitHeight), false);
-        _kitDraw = (kit is null, kit is null, false, false);
-        if (kit is null) Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
-        else KitFields(barter is not null);
+        _kitDraw = (barterKit is null, barterKit is null, false, false);
+        IReadOnlyList<int>? backgrounds = barterKit is not null ? [] : barter is not null ? null : SteamwovenKitComposer.LootBackgroundArts(kit);
+        LootDrawForSelfTest = (backgrounds ?? [barter!.Background, AreaInventoryArtLayout.PackArt], coversFromKit);
+        if (barterKit is not null) KitFields(barter is not null);
+        else if (backgrounds is null || backgrounds.Contains(AreaLootArtLayout.LootArt)) Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
         if (!_menuUp) Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
         // ARC-UI-1908 (0x576520 modes 1-4, IW27): a portrait the image function answers is drawn at its own size at the image's corner by 0x4CE470; PROJECT: a portrait file that
@@ -990,13 +1013,13 @@ public partial class AreaInventoryGridArea : Control
                 Line(titleFace, AreaSaveListArtLayout.Fit(titleFace.Font, barter.Name, AreaBarterArtLayout.NameLine.Width), AreaBarterArtLayout.NameLine, AreaArtLabel.Alignment.Centre);
             if (barter.Quote.Length > 0) Block(fonts?.Text, barter.Quote, AreaBarterArtLayout.QuoteLine);
         }
-        if (kit is null) Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        if (backgrounds is null || backgrounds.Contains(AreaInventoryArtLayout.PackArt)) Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         // ARC-UI-1918 (IW26, 0x576520): with the hero's toggle set the doll cover 341 is drawn over the pack at (361, 0), then the three weight lines in the rectangles of 0x5CAEC8
         // and the two ratings in those of 0x5CAF18 (the own window's lines and ratings, moved).
         var heroDoll = HeroDoll;
         if (heroDoll)
         {
-            if (kit?.HeroDollCover is { } kitCover) { Overlay(kitCover, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y); _kitDraw.KitCover = true; }
+            if (barterKit?.HeroDollCover is { } kitCover) { Overlay(kitCover, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y); _kitDraw.KitCover = true; }
             else Art(AreaHeroDollToggle.CoverArt, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y);
             var lines = look.Texts.Lines(view.Carry, view.Speed);
             for (var i = 0; i < lines.Count && lines[i].Length > 0; i++)
@@ -1059,7 +1082,7 @@ public partial class AreaInventoryGridArea : Control
         if (doll)
         {
             var (dollX, dollY) = barter is not null ? AreaBarterArtLayout.DollView : AreaLootArtLayout.DollView;
-            if (kit?.Doll is { } kitDoll) { Overlay(kitDoll, dollX, dollY); _kitDraw.KitDoll = true; }
+            if (barterKit?.Doll is { } kitDoll) { Overlay(kitDoll, dollX, dollY); _kitDraw.KitDoll = true; }
             else Art(DollArt, dollX, dollY);
             foreach (var (slot, rect) in AreaLootArtLayout.BodySlotRects)
             {
