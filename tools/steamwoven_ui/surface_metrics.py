@@ -80,8 +80,9 @@ def mask_weights(mask: "pngio.Image", w: int, h: int) -> list[float]:
 
 
 def sharpness(image: "pngio.Image", mask: "pngio.Image | None" = None) -> dict:
-    """Sharpness at the master step (x1) and after a reduction by 3 (x1/3); `ratio_third` = x1/3 over x1 of the mean gradient (a soft image
-    keeps little at x1 but the same at x1/3, so a ratio near 1 means no detail beyond the reduced step)."""
+    """Sharpness at the master step (x1) and after a reduction by 3 (x1/3); `ratio_third` = x1/3 over x1 of the mean gradient. The gradient is per pixel,
+    so a smooth or upscaled picture reads a ratio above 1 (about 3 for a smooth ramp) and a picture with real detail at the master size reads nearer 1: a
+    ratio near 1 means sharp, not soft; compare it between candidates, do not gate it unnormalised."""
     plane = luma(image)
     weights = mask_weights(mask, image.w, image.h) if mask else None
     x1 = gradient_stats(plane, image.w, image.h, weights)

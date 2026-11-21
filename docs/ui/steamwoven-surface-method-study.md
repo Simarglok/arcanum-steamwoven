@@ -27,7 +27,7 @@ no ornament, no shine, dull brass, no text.
   Lanczos to the zone. Window: 1774 x 887 px returned (2.0:1, 1.57 MP), upscaled x1.62.
 - **B. Upscale, regenerate overlapping tiles, blend.** The window zone cut into four 4:3 tiles of 1560 x 1080 px with 240 px (horizontal) and 720 px (vertical)
   overlaps (`tiles-inbox`, batch `surface-tiles`); each returned 1507 x 1044 px (1.57 MP), was resized to its rectangle and laid over the original in painter's
-  order with a linear 0 to 1 ramp over the overlap (`surface_study.py blend`; identical tiles reproduce the original exactly, checked). B covers the window only.
+  order with a linear 0 to 1 ramp over the overlap (`surface_study.py blend`; identical tiles reproduced the original exactly when checked by hand, there is no unit test for it). B covers the window only.
 - **C. Seamless material plus macro image.** The wood tile (Codex attempt 2 of #2457, 1254 px, reduced to 432 px per repeat) repeated over the picture; where the
   ORIGINAL is wood (the tone check's wood class, as solid regions) the result is the original's low pass (Gaussian sigma 6 px: plank layout, tone variation) plus
   the high pass of the tiled texture (`tools/steamwoven_ui/method_c.py`, needs ImageMagick).
@@ -52,7 +52,8 @@ refused items are not accepted outputs of the tool (no provenance record); their
 `tools/steamwoven_ui/surface_metrics.py` (standard library; tests in `test_surface_metrics.py`):
 
 - **Seam ratio at a join** (a strip against the window zone, y = 148 and y = 1588; SWI-VER-5): the mean colour step across the join over the mean step between
-  neighbouring lines in 24 lines on each side; 1.0 is as smooth as the inside, the gate is 1.5. The designed split of a two-part window is exempt.
+  neighbouring lines in 24 lines on each side; 1.0 is as smooth as the inside, the gate is 1.5. The band is 24 lines, wider than the 8 px band of the U4 measure that SWI-VER-5 cites
+  ([hd-interface-art](../rendering/hd-interface-art.md#9-slice-side-pieces-u4)), so the gate of 1.5 is carried over, not identical. The designed split of a two-part window is exempt.
 - **Repetition**: peak of the normalised autocorrelation of the high-passed luma (reduced x8, lags beyond the texture's own width, up to half the axis), along x
   and y; a tiled texture shows a peak near 1 at its period.
 - **Sharpness** at the master step (x1) and after a x1/3 reduction: the mean gradient magnitude of the luma. An upscaled original has little at x1 and more at
