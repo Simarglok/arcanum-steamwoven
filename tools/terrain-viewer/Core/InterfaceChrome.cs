@@ -727,7 +727,7 @@ public static class InterfaceChromeRenderer
         var picturePixels = picture.IsEmpty ? null : picture.ToArray();
         if (recipe.LensFrom is { } lensFrom) MoveLens(lensFrom, legacyPixels, width, height, picturePixels, pixelWidth, pixelHeight, scale);
         var canvas = new Canvas(width, height, legacyPixels, picturePixels, scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, FoldX = recipe.FoldX, Down = frameIndex == recipe.DownFrame };
-        if (recipe.Kind == ChromeKind.Button && recipe.WholePicture && picturePixels is not null) PaintWholePicture(canvas);
+        if (recipe.Kind == ChromeKind.Button && recipe.WholePicture && picturePixels is not null && picturePixels.Length == canvas.Color.Length * 4) PaintWholePicture(canvas);
         else if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);

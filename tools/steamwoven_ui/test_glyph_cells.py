@@ -131,6 +131,31 @@ class GlyphCellsTest(unittest.TestCase):
         with self.assertRaises(gc.CellsError):
             gc.render(empty, "flat")
 
+    def test_weak_checker_parts_join_by_colour_and_specks_are_dropped(self) -> None:
+        image = frame()
+        # a part with no checker (a flat brass bar through the dome's lower part) is glyph by its colour; a lone bright cell far away is a speck
+        for x in range(12, 28):
+            for y in (27, 28):
+                image.data[(y * 39 + x) * 4:(y * 39 + x) * 4 + 3] = bytes((180, 160, 90))
+        image.data[(5 * 39 + 30) * 4:(5 * 39 + 30) * 4 + 3] = bytes(BRIGHT)
+        mask, _ = gc.glyph_mask(gc.lab_grid(image))
+        self.assertTrue(mask[27 * 39 + 20] and mask[28 * 39 + 20], "the flat bar is glyph")
+        self.assertFalse(mask[5 * 39 + 30], "a lone cell is a speck")
+
+    def test_scale_two_and_bad_inputs_through_main(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pngio.write(root / "f.png", frame())
+            master = pngio.Image(138, 138, bytearray(bytes((120, 90, 40, 255)) * (138 * 138)))
+            pngio.write(root / "m.png", master)
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "p.png"), "--scale", "2"]), 0)
+                self.assertEqual(gc.main(["cells", str(root / "f.png"), str(root / "g.png"), "--scale", "2", "--plate", str(root / "p.png"), "--dome-frame", str(root / "f.png"), "--mask-frame", str(root / "f.png")]), 0)
+            self.assertEqual(pngio.read(root / "g.png").w, 78)
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(gc.main(["cells", str(root / "f.png"), str(root / "x.png"), "--scale", "0"]), 2)
+                self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "x.png"), "--plate-units", "40"]), 2)
+
     def test_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

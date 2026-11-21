@@ -149,6 +149,8 @@ def glyph_mask(labs: list[tuple[float, float, float]]) -> tuple[list[bool], floa
         near = neighbours4(i)
         diff[i] = labs[i][0] - sum(labs[j][0] for j in near) / len(near)
     threshold = otsu([abs(diff[i]) for i in range(n) if inside[i]])
+    if threshold <= 0.0:
+        raise CellsError("no glyph found in the frame (no checker inside the dome)")
     bright = [inside[i] and diff[i] >= threshold for i in range(n)]
     away = dilate(bright, 1)
     dome_cells = [inside[i] and not away[i] for i in range(n)]
@@ -179,7 +181,7 @@ def glyph_mask(labs: list[tuple[float, float, float]]) -> tuple[list[bool], floa
     return out, threshold
 
 
-def phase_of(mask: list[bool], labs: list[tuple[float, float, float]], threshold: float) -> int:
+def phase_of(mask: list[bool], labs: list[tuple[float, float, float]]) -> int:
     """The parity ((x + y) % 2) of the bright cells of the checker: the one whose cells in the mask are lighter on average."""
     sums, counts = [0.0, 0.0], [0, 0]
     for i, on in enumerate(mask):
@@ -279,7 +281,7 @@ def render(frame: "pngio.Image", look: str = "flat", scale: int = 4, mask_frame:
     mask, threshold = glyph_mask(mask_labs)
     if not any(mask):
         raise CellsError("no glyph found in the frame")
-    phase = phase_of(mask, mask_labs, threshold)
+    phase = phase_of(mask, mask_labs)
     fields = tone_fields(labs, mask, phase)
     size = GRID * scale
     alpha = silhouette(mask, scale)
@@ -326,6 +328,8 @@ def plate_canvas(plate: "pngio.Image", scale: int = 4, plate_units: float = 36.5
                  offset_units: tuple[float, float] = (0.2, 0.3)) -> "pngio.Image":
     """The kit plate master brought to `plate_units` across and centred on the 39-unit canvas (`scale` px per unit), a soft dark shadow (its alpha `shadow`, blurred by
     `sigma_units`, moved by `offset_units`: down and right, the kit's light falls from the upper left) under it in the alpha."""
+    if not 0 < plate_units <= GRID:
+        raise CellsError(f"--plate-units {plate_units} must be above 0 and at most {GRID}")
     size = GRID * scale
     target = max(1, int(round(plate_units * scale)))
     resized = assemble.resample(plate, target, target)
@@ -391,6 +395,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--offset", default="0.2,0.3")
     args = parser.parse_args(argv)
     try:
+        if getattr(args, "scale", 4) < 1:
+            raise CellsError("--scale must be at least 1")
         if args.command == "mask":
             frame = pngio.read(args.frame)
             labs = lab_grid(frame)
