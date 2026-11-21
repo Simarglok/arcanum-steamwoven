@@ -15,7 +15,8 @@ public partial class TerrainViewerApp
     private (SteamwovenBackdropFamily Family, SteamwovenKitWindow? Window)? _smokeKitBackdrop;
 
     private static readonly Color KitTop = new(0.85f, 0.15f, 0.15f), KitBottom = new(0.15f, 0.15f, 0.85f), KitCapLeft = new(0.95f, 0.8f, 0.1f), KitCapRight = new(0.1f, 0.8f, 0.95f),
-        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f);
+        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f),
+        KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -26,6 +27,9 @@ public partial class TerrainViewerApp
         ("backdrop.pdoll", 1290, 1440, KitDoll), ("backdrop.inventor", 1590, 1440, KitInventory),
         ("backdrop.mainmenuback", 2880, 2160, KitPlate), ("backdrop.optionsmenuback", 2880, 2160, KitOptionsPlate),
         ("plate.char_but", 120, 120, KitPlate), ("plate.char_but_hover", 120, 120, KitHover),
+        // ARC-UI-3035: the character window's backdrop and the sheets of its four pages (846 x 1170 master px each).
+        ("backdrop.char_maint", 2880, 1440, KitCharacter), ("sheet.skills_window", 846, 1170, KitSkillsSheet), ("sheet.disciplines_window", 846, 1170, KitTechSheet),
+        ("sheet.char_spells", 846, 1170, KitSpellsSheet), ("sheet.scheme_rot", 846, 1170, KitSchemesSheet),
     ];
 
     /// <summary>Writes the synthetic set of <paramref name="step"/> under <paramref name="root"/> (parts named in <paramref name="without"/> left out, their records too).</summary>
@@ -68,10 +72,48 @@ public partial class TerrainViewerApp
 
     private static bool Near(Color a, Color b) => Math.Abs(a.R - b.R) < 0.02f && Math.Abs(a.G - b.G) < 0.02f && Math.Abs(a.B - b.B) < 0.02f;
 
+    /// <summary>
+    /// ARC-UI-3035 (census G06 to G09; the NPC sheet G10 is the same window in the same interface mode, read-only): the open sheet takes the kit's character backdrop, and each page lays its kit sheet over it, read back by pixel, in
+    /// place of its own panel art (29, 30, 31, 567); the sheets go with the window. With <paramref name="kitSheets"/> false the set lacks the four sheets: the background is still the kit's and every page keeps its own art (the fallback).
+    /// </summary>
+    private async Task CheckKitSheetPagesAsync(AreaGameBarPanel panel, string tag, Func<int, Task> frames, Action<bool, string> require, bool kitSheets = true)
+    {
+        OpenSheet(); await frames(5);
+        require(SheetOpen && panel.KitForSelfTest.Background is [{ PartId: "backdrop.char_maint" }], $"[{tag}] the open sheet takes the kit's character backdrop (got {string.Join(",", panel.KitForSelfTest.Background.Select(draw => draw.PartId))})");
+        require(kitSheets ? AreaKitSheets.ShownForSelfTest.SequenceEqual([29, 30, 31, 567]) : AreaKitSheets.ShownForSelfTest.Count == 0, $"[{tag}] the page sheets are {(kitSheets ? "the kit's" : "left to the pages' own art")} (got {string.Join(",", AreaKitSheets.ShownForSelfTest)})");
+        var view = _sheetPanel!.ArtViewForSelfTest!;
+        // A corner of the page's rectangle holds no text or button: the probe reads the sheet colour of the page's kit part.
+        var pages = new (AreaSheetTab Tab, string Name, Func<bool> Visible, Func<bool> Shown, Func<double, double, Vector2> Point, Color Colour)[]
+        {
+            (AreaSheetTab.Skills, "skills", () => view.Pages.Visible, () => view.Pages.KitSheetShownForSelfTest, view.Pages.PointForSelfTest, KitSkillsSheet),
+            (AreaSheetTab.Tech, "tech", () => view.Pages.Visible, () => view.Pages.KitSheetShownForSelfTest, view.Pages.PointForSelfTest, KitTechSheet),
+            (AreaSheetTab.Spells, "spells", () => view.Spells.Visible, () => view.Spells.KitSheetShownForSelfTest, view.Spells.PointForSelfTest, KitSpellsSheet),
+            (AreaSheetTab.Schemes, "schemes", () => view.Schemes.Visible, () => view.Schemes.KitSheetShownForSelfTest, view.Schemes.PointForSelfTest, KitSchemesSheet),
+        };
+        foreach (var page in pages)
+        {
+            _sheetPanel.SelectTabForSelfTest(page.Tab);
+            await frames(4);
+            require(page.Visible() && page.Shown() == kitSheets, $"[{tag}] the {page.Name} page shows and draws {(kitSheets ? "its kit sheet" : "its own panel art (no kit sheet)")}");
+            using var shot = GetViewport().GetTexture().GetImage();
+            var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
+            var at = page.Point(3, 321);
+            var probe = shot.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, shot.GetHeight() - 1));
+            require(Near(probe, page.Colour) == kitSheets, $"[{tag}] the {page.Name} page's pixels are {(kitSheets ? "" : "not ")}its kit sheet's colour (got {probe})");
+            await CaptureHudAsync("steamwoven-" + tag + "-sheet-" + page.Name + (kitSheets ? "" : "-own"), frames);
+        }
+        require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("sheet.", StringComparison.Ordinal)) == (kitSheets ? 4 : 0), $"[{tag}] the open sheet holds {(kitSheets ? "its four kit sheets" : "no kit sheet")} in memory");
+        EndSheet(); await frames(3);
+        require(!SheetOpen && AreaKitSheets.ShownForSelfTest.Count == 0 && panel.KitForSelfTest.Background.Count == 0, $"[{tag}] the kit sheets go with the window");
+        // SWI-RUN-5: the open window's sheets are resident while it is open and released with it.
+        require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("sheet.", StringComparison.Ordinal)), $"[{tag}] no kit sheet stays resident after the window closes");
+    }
+
     private async Task CaptureSteamwovenKitAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
         var root = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-").FullName;
         var fallbackRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fallback-").FullName;
+        var sheetlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-sheetless-").FullName;
         var (savedHd, savedGenerated) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface);
         var done = new HashSet<(string, SteamwovenStep)>();
         void Ensure(string where, string folder, SteamwovenStep step, params string[] without)
@@ -161,6 +203,16 @@ public partial class TerrainViewerApp
                 OpenInventory(); await frames(4);
                 require(InventoryOpen && panel.KitForSelfTest.Background.Count == 2, $"[{tag}] the open inventory takes its kit background (got {panel.KitForSelfTest.Background.Count} pieces)");
                 EndInventory(); await frames(3);
+                await CheckKitSheetPagesAsync(panel, tag, frames, require);
+                // AC2 (fallback): a set without the four sheets keeps the kit's background and every page's own panel art.
+                Ensure("sheetless", sheetlessRoot, step, [.. SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)]);
+                SteamwovenKitStore.UseRoot(sheetlessRoot);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitSheetPagesAsync(panel, tag, frames, require, kitSheets: false);
+                SteamwovenKitStore.UseRoot(root);
+                panel.Relayout();
+                await frames(4);
                 await CaptureHudAsync("steamwoven-" + tag, frames);
                 if (first)
                 {
@@ -200,7 +252,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }
