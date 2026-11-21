@@ -28,15 +28,47 @@ public static class AreaArtTextRules
 {
     public const int AdditiveFontFlag = 0x100, OpaqueFontFlag = 0x80;
 
-    /// <summary>ARC-RENDER-2939: an HD glyph frame drawn at a smaller share of its own pixels than this (0.6 = a 2.4 px/original-px draw of a 4× frame) is minified with an area filter (mipmaps);
-    /// at this share and above the glyph keeps the owner's bilinear sample without mipmaps (ARC-UI-145: 0.6 to 0.9, the sheet's and the windows' scales).</summary>
-    public const float AreaFilterBelow = 0.6f;
+    /// <summary>ARC-RENDER-2939: an HD glyph frame drawn at a smaller share of its own pixels than this (0.4: the Steamwoven step x1/3 is 0.3, x1/2 is 0.45) is drawn from an area-averaged copy at the exact device size,
+    /// 1:1; at this share and above (x1/2 = 0.45, x2/3 = 0.6, x1 = 0.9) the glyph keeps the owner's bilinear sample without mipmaps (ARC-UI-145, owner decision 2026-11-21: x1/2 stays as it is).</summary>
+    public const float AreaCopyBelow = 0.4f;
 
-    /// <summary>ARC-RENDER-2939: true when an HD glyph frame of <paramref name="hdWidth"/> px for a Legacy glyph of <paramref name="legacyWidth"/> px, drawn at <paramref name="deviceScale"/> device px per
-    /// original px, is minified below <see cref="AreaFilterBelow"/> of its own pixels, so that it needs the area filter. The Steamwoven steps give 0.45 (x1/2) and 0.3 (x1/3) of a 4× frame; 0.6 and 0.9 stay bilinear.
-    /// The comparison keeps a thousandth of slack, so 2.4 / 4 does not fall below the bound by float rounding.</summary>
-    public static bool NeedsAreaFilter(float deviceScale, int legacyWidth, int hdWidth) =>
-        deviceScale > 0f && legacyWidth > 0 && hdWidth > legacyWidth && deviceScale * legacyWidth / hdWidth < AreaFilterBelow - 0.001f;
+    /// <summary>ARC-RENDER-2939: true when an HD glyph frame of a pack of <paramref name="packScale"/> (4 for the 4× pack), drawn at <paramref name="deviceScale"/> device px per original px, is below
+    /// <see cref="AreaCopyBelow"/> of its own pixels and so takes the area copy. A thousandth of slack keeps a share of exactly 0.4 on the bilinear side.</summary>
+    public static bool NeedsAreaCopy(float deviceScale, int packScale) =>
+        deviceScale > 0f && packScale >= 2 && deviceScale / packScale < AreaCopyBelow - 0.001f;
+
+    /// <summary>ARC-RENDER-2939: the pixels of a glyph layer (<see cref="LayerPixels"/>, premultiplied, so every channel averages linearly) of <paramref name="width"/> × <paramref name="height"/> averaged over the area each
+    /// pixel of a <paramref name="targetWidth"/> × <paramref name="targetHeight"/> picture covers: the exact box filter for a whole ratio and the area-weighted one otherwise; each channel rounded to the nearest.</summary>
+    public static byte[] AreaAverage(ReadOnlySpan<byte> layer, int width, int height, int targetWidth, int targetHeight)
+    {
+        if (width < 1 || height < 1 || targetWidth < 1 || targetHeight < 1) throw new ArgumentOutOfRangeException(nameof(width));
+        if (layer.Length != width * height * 4) throw new ArgumentException("layer RGBA size", nameof(layer));
+        var output = new byte[targetWidth * targetHeight * 4];
+        double fx = (double)width / targetWidth, fy = (double)height / targetHeight;
+        Span<double> sum = stackalloc double[4];
+        for (var ty = 0; ty < targetHeight; ty++)
+        {
+            double y0 = ty * fy, y1 = y0 + fy;
+            for (var tx = 0; tx < targetWidth; tx++)
+            {
+                double x0 = tx * fx, x1 = x0 + fx;
+                sum.Clear();
+                for (var sy = (int)y0; sy < Math.Min(height, (int)Math.Ceiling(y1)); sy++)
+                {
+                    var wy = Math.Min(sy + 1, y1) - Math.Max(sy, y0);
+                    for (var sx = (int)x0; sx < Math.Min(width, (int)Math.Ceiling(x1)); sx++)
+                    {
+                        var w = wy * (Math.Min(sx + 1, x1) - Math.Max(sx, x0));
+                        var at = (sy * width + sx) * 4;
+                        for (var c = 0; c < 4; c++) sum[c] += w * layer[at + c];
+                    }
+                }
+                var area = fx * fy;
+                for (var c = 0; c < 4; c++) output[(ty * targetWidth + tx) * 4 + c] = (byte)Math.Min(255, Math.Round(sum[c] / area));
+            }
+        }
+        return output;
+    }
 
     /// <summary>The blend of a font's flags (0x535570: flag 0x100 makes the blit additive whatever else is set, 0x505EB0).</summary>
     public static AreaArtTextBlend Blend(int fontFlags) => (fontFlags & AdditiveFontFlag) != 0 ? AreaArtTextBlend.Additive
