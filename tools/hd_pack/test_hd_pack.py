@@ -67,9 +67,9 @@ class HdPackTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
-        # installed: two interface entries and one extra-folder entry (a Codex repair), plus an unlisted menu file
+        # installed: two interface entries and one extra-folder entry (a Codex repair), plus an unlisted extra file
         self.inst = make_pack(self.tmp / "game" / "hd-packs" / "interface-redraw-4x",
-                              [("a", "interface", "v1"), ("b", "interface", "v1"), ("c", "character-hd114", "v1")], {"main-menu-16x9.png": png(1664, 936)})
+                              [("a", "interface", "v1"), ("b", "interface", "v1"), ("c", "character-hd114", "v1")], {"extra-unlisted.png": png(1664, 936)})
         # staged: a rebuilt pack in which a changed, b unchanged, c rebuilt in the interface folder (the repair must survive)
         self.stage = make_pack(self.tmp / "local" / "pack-out" / "interface-redraw-4x", [("a", "interface", "v2"), ("b", "interface", "v1"), ("c", "interface", "v9")])
         self.backups = self.tmp / "game" / "hd-pack-backups"
@@ -111,7 +111,7 @@ class HdPackTests(unittest.TestCase):
         new_a = next(e["file"] for e in manifest["entries"] if e["file"].startswith("interface/a-"))
         old_a = next(k for k in before if k.startswith("interface/a-"))
         self.assertEqual(changed, {"manifest.json", old_a, new_a})
-        self.assertEqual(after["main-menu-16x9.png"], before["main-menu-16x9.png"])  # unlisted file untouched
+        self.assertEqual(after["extra-unlisted.png"], before["extra-unlisted.png"])  # unlisted file untouched
         self.assertTrue(any(e["file"].startswith("character-hd114/") for e in manifest["entries"]))  # the repair stays
         self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
         backup = next(self.backups.iterdir())
@@ -212,28 +212,8 @@ class HdPackTests(unittest.TestCase):
     def test_status_lists_unlisted_files(self):
         rc, out, _ = run("status", "--installed", self.inst)
         self.assertEqual(rc, 0)
-        self.assertIn("main-menu-16x9.png", out)
+        self.assertIn("extra-unlisted.png", out)
         self.assertIn("character-hd114 1", out)
-
-    def test_menu_art_checks_header_and_rolls_back(self):
-        before = tree(self.inst)
-        good = self.tmp / "menu.png"
-        good.write_bytes(png(1664, 936))
-        good.write_bytes(good.read_bytes() + b"\0")  # a different file of the same header
-        args = ("menu-art", "--installed", self.inst, "--image", good, "--backup-root", self.backups, "--task", "ARC-TEST-002")
-        self.assertEqual(run(*args, "--dry-run")[0], 0)
-        self.assertEqual(tree(self.inst), before)
-        self.assertEqual(run(*args)[0], 0)
-        self.assertNotEqual(tree(self.inst)["main-menu-16x9.png"], before["main-menu-16x9.png"])
-        backup = next(self.backups.iterdir())
-        self.assertEqual(run("rollback", backup, "--installed", self.inst)[0], 0)
-        self.assertEqual(tree(self.inst), before)
-        for name, data in (("big.png", png(4000, 2250)), ("interlaced.png", png(1664, 936, interlace=1)), ("rgb16.png", png(1664, 936, depth=16)), ("bad.png", b"nope" * 20)):
-            f = self.tmp / name
-            f.write_bytes(data)
-            rc, _, err = run("menu-art", "--installed", self.inst, "--image", f, "--backup-root", self.backups, "--task", "ARC-TEST-003")
-            self.assertEqual(rc, 2, name)
-        self.assertEqual(tree(self.inst), before)
 
     def test_mirror_copies_manifest_last_and_never_deletes(self):
         dst = self.tmp / "drive" / "interface-redraw-4x"
@@ -483,20 +463,17 @@ class HdPackTests(unittest.TestCase):
         next(self.inst.glob("interface/a-*.png")).unlink()
         self.assertEqual(run("mirror", "--src", self.inst, "--dst", dst, "--dry-run")[0], 2)
 
-    def test_menu_rollback_checks_the_backup_and_zero_size_png_is_refused(self):
-        img = self.tmp / "m.png"
-        img.write_bytes(png(0, 0))
-        rc, _, err = run("menu-art", "--installed", self.inst, "--image", img, "--backup-root", self.backups, "--task", "T")
-        self.assertEqual(rc, 2)
-        img.write_bytes(png(1664, 936) + b"\0")
-        self.assertEqual(run("menu-art", "--installed", self.inst, "--image", img, "--backup-root", self.backups, "--task", "T")[0], 0)
-        backup = next(self.backups.iterdir())
-        (backup / "main-menu-16x9.png").write_bytes(b"tampered")
+    def test_old_menu_art_receipt_is_refused(self):
+        # ARC-DEV-3030: menu-art is gone; a receipt from the old command is refused, nothing is touched
+        backup = self.backups / "OLD-menu-none"
+        backup.mkdir(parents=True)
+        (backup / "RECEIPT.json").write_text('{"kind":"menu","task":"OLD","status":"applied","oldSha256":null,"newSha256":"0"}')
+        before = tree(self.inst)
         rc, _, err = run("rollback", backup, "--installed", self.inst)
         self.assertEqual(rc, 2)
-        self.assertIn("does not match", err)
-        (backup / "RECEIPT.json").write_text('{"status":"applied"}')
-        self.assertEqual(run("rollback", backup, "--installed", self.inst)[0], 2)
+        self.assertIn("menu-art receipt cannot be rolled back", err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertNotIn("menu-art", hp.parser().format_help())  # the command is gone
 
 
 class LayoutTests(unittest.TestCase):
@@ -515,7 +492,7 @@ class LayoutTests(unittest.TestCase):
         real_users = hp.pack_users  # the owner's game or a smoke may be running while the tests run
         hp.pack_users = lambda pack: []
         self.addCleanup(setattr, hp, "pack_users", real_users)
-        # old layout: two folders (one a Codex extra), a frame 0 and 1 of btn, a font frame, an unlisted menu file
+        # old layout: two folders (one a Codex extra), a frame 0 and 1 of btn, a font frame, an unlisted extra file
         self.inst.mkdir(parents=True)
         entries = []
         for art, folder, frame, slice_ in (("btn", "interface", 0, "interface"), ("btn", "interface", 1, "interface"), ("back", "refinement02", 0, "interface-refinement02-soft"),
@@ -530,7 +507,7 @@ class LayoutTests(unittest.TestCase):
             entries.append(e)
         recipe = b'{"kind":"arcanum-steamwoven-hd-recipe"}'
         (self.inst / "recipe.json").write_bytes(recipe)
-        (self.inst / "main-menu-16x9.png").write_bytes(png(1664, 936))
+        (self.inst / "extra-unlisted.png").write_bytes(png(1664, 936))
         manifest = {"schema": 1, "kind": "arcanum-steamwoven-hd-pack", "id": "interface-redraw-4x", "scale": 4,
                     "recipe": {"file": "recipe.json", "sha256": hashlib.sha256(recipe).hexdigest()}, "entries": entries}
         (self.inst / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
@@ -586,7 +563,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual({e["sha256"] for e in self.manifest()["entries"]}, set(old))  # content unchanged
         for folder in ("refinement02", "character-hd114"):
             self.assertFalse((self.inst / folder).exists())
-        self.assertTrue((self.inst / "main-menu-16x9.png").is_file() and (self.inst / "recipe.json").is_file())
+        self.assertTrue((self.inst / "extra-unlisted.png").is_file() and (self.inst / "recipe.json").is_file())
         self.assertTrue((self.inst / "layout-map.tsv").is_file())
         self.assertIn("window-a", (self.inst / "INDEX.md").read_text())
         self.assertIn("btn", (self.inst / "index.tsv").read_text())
