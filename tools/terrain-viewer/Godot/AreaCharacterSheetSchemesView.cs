@@ -33,6 +33,14 @@ public partial class AreaCharacterSheetSchemesView : Control
     internal int ScrollForSelfTest => _scroll;
     internal int HoverRowForSelfTest => _hoverRow;
 
+    // ARC-UI-3035: the kit's sheet behind this page (the page draws its own panel art only while the kit has none).
+    private readonly AreaKitSheetView _kitSheet = new();
+    internal bool KitSheetShownForSelfTest => _kitSheet.Shown;
+
+    public override void _EnterTree() => AreaKitSheets.Changed += QueueRedraw;
+
+    public override void _ExitTree() => AreaKitSheets.Changed -= QueueRedraw;
+
     public override void _Ready()
     {
         Name = "SheetSchemes";
@@ -43,6 +51,7 @@ public partial class AreaCharacterSheetSchemesView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_kitSheet);
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts)
@@ -107,7 +116,9 @@ public partial class AreaCharacterSheetSchemesView : Control
     public override void _Draw()
     {
         if (_fonts is null) return;
-        DrawArt(Art(AreaCharacterSheetSchemesLayout.BackgroundArt), 0, 0);
+        // ARC-UI-3035: the kit's sheet for this page, if any, stands behind and the page's own panel art is not drawn.
+        _kitSheet.Set(AreaCharacterSheetSchemesLayout.BackgroundArt, Size);
+        if (!_kitSheet.Shown) DrawArt(Art(AreaCharacterSheetSchemesLayout.BackgroundArt), 0, 0);
         if (_view is not { } view) return;
         if (view.SchemeName is { } name) DrawText(name, AreaCharacterSheetSchemesLayout.HeaderCentreX, AreaCharacterSheetSchemesLayout.HeaderY, AreaSheetColour.Blue, centred: true);
         for (var row = 0; row < view.ShownRows; row++)

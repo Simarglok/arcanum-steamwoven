@@ -252,7 +252,7 @@ public partial class AreaCombatHud : CanvasLayer
             }
         }
         // The list under the top strip at the right (the follower portraits stand at the left edge), unscaled (its text is a normal label).
-        // ARC-UI-2604: at the frame's right edge, not under a pillarbox bar; without the layout FreeRect is the whole window, as before.
+        // ARC-UI-2604: at the right edge of the frame's edge rectangle (EdgeRect); without the layout it is the whole window, as before.
         _list.ResetSize();
         // ARC-UI-2890: in the column mode against the frame's right edge over the world, from the frame's top.
         var free = AreaGameBarPanel.EdgeRect(size);

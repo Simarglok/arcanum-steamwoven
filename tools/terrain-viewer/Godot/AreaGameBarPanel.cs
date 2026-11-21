@@ -29,7 +29,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
     private AreaExperienceStripView _experience = null!;
     private int? _experienceProgress;
-    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the board of the top strip's sliver, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
+    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the board of the top strip's sliver, the black bars around the frame in a window that is not the frame's shape and the backdrop an open menu gets over the middle band.
     private SteamwovenHudPlan? _plan;
     private Control _boards = null!, _bars = null!;
     private SteamwovenBoardView _topBoard = null!;
@@ -88,16 +88,16 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>Raised after the insets changed (the bars shown, hidden or scaled): the panels placed by them place themselves again.</summary>
     public static event Action? InsetsChanged;
 
-    /// <summary>ARC-UI-2510: the left edge of the frame the Steamwoven layout lays the play screen out in, while the bars are shown (0 otherwise, and in a window with no pillarbox bar).</summary>
+    /// <summary>ARC-UI-2510: the left edge of the column the Steamwoven layout lays the windows out in, while the bars are shown (0 otherwise).</summary>
     public static float FreeLeft { get; private set; }
     private static float _freeWidth;
 
-    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size. ARC-UI-2510: in the Steamwoven layout the free width is the frame's (a window wider than the
-    /// 16:9 frame has a pillarbox bar on each side, which a window must not lie under); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
+    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size. ARC-UI-2510: in the Steamwoven layout the free width is the column's (the windows stand in the column,
+    /// not over the world beside it); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(_freeWidth > 0 ? _freeWidth : size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
 
-    /// <summary>ARC-UI-2603: the rectangle in window pixels the strips and the pillarbox bars leave free, for what must stay clear of them (a text bubble's placement). In the Steamwoven layout it is
-    /// the frame's width from <see cref="FreeLeft"/> between the strips; without the layout (the generated interface off) the strips are the original's and the whole window stands, as before.</summary>
+    /// <summary>ARC-UI-2603: the rectangle in window pixels the strips leave free, for what must stay clear of them (a text bubble's placement). In the Steamwoven layout it is
+    /// the frame's width (the whole frame, ARC-UI-2890) between the strips; without the layout (the generated interface off) the strips are the original's and the whole window stands, as before.</summary>
     public static Rect2 FreeRect(Vector2 size)
     {
         if (_freeWidth <= 0) return new Rect2(Vector2.Zero, size);
@@ -799,14 +799,25 @@ public partial class AreaGameBarPanel : CanvasLayer
     private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? ApplyKitBackground(SteamwovenHudPlan plan, int middleHeight)
     {
         _kitBackground = [];
-        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) return null;
+        if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
+        Dictionary<int, Texture2D>? sheets = null;
+        var held = new List<string>();
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
         {
             loaded = LoadKit(set, draws);
-            if (loaded is not null) _kitBackground = draws;
+            if (loaded is not null)
+            {
+                _kitBackground = draws;
+                held.AddRange(draws.Select(draw => draw.PartId));
+                // ARC-UI-3035: the character sheet's pages lay the kit's sheets over this background where the set has them at the table's size; a sheet missing or not loading leaves the page's own art, the background stays.
+                if (window == SteamwovenKitWindow.Character)
+                    foreach (var art in SteamwovenKitTable.Sheets.Keys)
+                        if (SteamwovenKitComposer.Sheet(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (sheets ??= [])[art] = texture; held.Add(part.Id); }
+            }
         }
-        SteamwovenKitStore.Retain("window", set, [.. _kitBackground.Select(draw => draw.PartId)]);
+        SteamwovenKitStore.Retain("window", set, held);
+        AreaKitSheets.Publish(loaded is not null ? sheets : null);
         return loaded;
     }
 
@@ -820,6 +831,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             foreach (var name in new[] { "Black", "Art", "Sides" }) _strips[strip].GetNode<CanvasItem>(name).Visible = true;
         }
         _kitBoards.Visible = false; _kitCaps.Visible = false; _kitBackground = [];
+        AreaKitSheets.Publish(null);
         ApplyKitButtons();
     }
 
@@ -881,6 +893,7 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     public override void _ExitTree()
     {
+        AreaKitSheets.Publish(null); // ARC-UI-3035: no stale kit sheet for a sheet over a later panel
         AreaRoundView.RectsChanged -= ApplyBackdropHoles;
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;

@@ -178,7 +178,7 @@ public partial class AreaSpellPane : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         _panel.ResetSize();
         var panel = _panel.GetCombinedMinimumSize();
-        // ARC-UI-2604: from the frame's left edge (a pillarbox bar is not lain under); without the layout FreeRect is the whole window, as before.
+        // ARC-UI-2604: from the left edge of the frame's edge rectangle (EdgeRect); without the layout it is the whole window, as before.
         // ARC-UI-2890: in the column mode it stands against the frame's left edge over the world, down to the frame's bottom (the strips are in the column).
         _panel.Position = new(AreaGameBarPanel.EdgeRect(size).Position.X + 12, Math.Max(12, AreaGameBarPanel.EdgeBottom(size) - panel.Y - 12));
     }

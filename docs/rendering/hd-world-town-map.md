@@ -17,7 +17,7 @@ entry kind for these bitmaps is the question of [#2952](https://github.com/Simar
 
 | Part | Verdict |
 | --- | --- |
-| Town maps (AC1) | **Pure render.** The original tiles are the town's area drawn by the engine at 1:1 and decimated to 1/4 (nearest neighbour). No hand-painted additions found in the three towns tested (two small differences stay unclassified, below). Rendering with our engine is feasible and reproduces the original at scale 0.25 to a mean error of about 1.8 of 255 (on the compared pixels of the stitched town). |
+| Town maps (AC1) | **Pure render.** The original tiles are the town's area drawn by the engine at 1:1 and decimated to 1/4 (nearest neighbour). No hand-painted additions found in the three towns tested (the small differences (two found first, two more later) are classified in part, see "Executable check and the open details"). Rendering with our engine is feasible and reproduces the original at scale 0.25 to a mean error of about 1.8 of 255 (on the compared pixels of the stitched town). |
 | Town maps at a larger scale (AC2) | Feasible: same renderer, larger sampling step. Proposal and cost below (extrapolated, not measured at the larger scale). |
 | World map (AC3) | Feasible, with a caveat: a super-resolution x4 upscale (Real-ESRGAN family, not text-prompted) is sharper but moves outlines more than plain resampling. Best of the three models tried: `realesr-animevideov3` (edge F1 0.918 against 0.964 for plain Lanczos). `Map_Zoomed` is derived from the same big picture. |
 
@@ -49,14 +49,49 @@ picture, decimated to 1/4 and registered against the mosaic of the original tile
 - **Drawn:** static objects (buildings, fences, lamps, plants, ships) and roofs, closed. **Not drawn:** NPCs and critters (three NPCs and one ship-deck
   NPC of our render are absent in the original). **No text or labels** anywhere in the difference image.
 - **Differences found.** The hero's own house shows its roof hidden in ours (about 6,800 pixels in Ashbury) but closed in the original: a render path must
-  force roofs on. One Tarant door differs (open against closed). One Ashbury cluster of about 390 pixels (a row of small features and a rock in ours) is
-  not classified. A thin line at window boundaries is visible in the Tarant difference (a capture seam of the probe, not of the original).
+  force roofs on. One Tarant spot differs (read as a door in the first pass; see below). One Ashbury cluster of about 390 pixels (a row of small features and a rock in ours) is
+  classified in part below (ARC-RES-3064). A thin line at window boundaries is visible in the Tarant difference (a capture seam of the probe, not of the original).
 - **Black border.** The stair-stepped border follows the **tile** grid, not the sector diamond. A full sector is exactly 200 tiles. The rule "any pixel
   of the tile lies in a rendered sector" reproduces 2,757 of the 2,990 non-black Ashbury tiles with no false positive; the remaining 233 tiles
-  (about one tile of fringe) are not explained. Inside a rendered sector nothing is black. Ashbury's rendered sectors: x 503–505 by y 974–977 plus
+  (about one tile of fringe) are not explained by that rule (an empirical fit of ours; the true rule belongs to the offline tool, see below). Inside a rendered sector nothing is black. Ashbury's rendered sectors: x 503–505 by y 974–977 plus
   (502,976).
 
-Not tested: other towns, interiors, Vormantown, other clock hours (and so the hour of the original render), the cause of the two unclassified differences.
+Not tested: other towns, interiors, Vormantown, other clock hours (and so the hour of the original render).
+
+### Executable check and the open details (ARC-RES-3064)
+
+Read 2026-11-21 in the exports (strings, imports, the two tile functions; one reader). **The executable only reads town-map tiles.** The tile file name
+`townmap\<name>\<name>%06d.bmp` is referenced by exactly two functions, the loader 0x563000 (builds the name; falls back to tile 0 when the file is
+missing; loads the picture through the shared bitmap loader 0x5630F0) and the existence test 0x4BEDD0 (tile index against the town's reveal bitmap, then a
+file check). It imports `CreateFileA` and `WriteFile`, but the only BMP writers with a live caller are the savegame preview (`save\%s.bmp`) and the screenshot key
+(`screen%04d.bmp`), plus a debug art-frame dumper (0x5360F0, 640 × 480, no caller in the export); none touches town maps, none chooses palette indexes for town tiles, none walks sectors. So the tiles were produced **before shipping by a tool
+outside the game** (not in the executable, not in the player's data); its rules cannot be read from the player's installation.
+
+- **Border rule (AC1): not needed for an HD render.** The game does not decide the border; it draws a tile when its reveal bit is set and its file exists, fades or fills the rest black
+  (ledger WM77). Our render decides its own extent. Recommendation: draw a tile when any of its pixels lies in a rendered sector (reproduces 92 % of
+  the original's non-black Ashbury tiles with no false positive) and **accept one tile of fringe** beyond that, or keep the original tile set's own
+  extent where a pack must match it exactly. The 233 tiles of fringe stay unexplained at the tool's level, as the tool is not available.
+- **Palette choice (AC2): out of scope for 24-bit HD tiles.** The game loads each BMP with its own palette and expands it to the display format; the
+  quantiser that chose the indexes lived in the offline tool. A 24-bit HD tile has no palette. The 48 % exact-index measure is therefore only a
+  description of the shipped tiles, not a rule to reproduce.
+- **Differences (AC3), classified as far as the evidence reaches** (re-read from the saved 0.25 renders against the original mosaics and the object
+  lists of the areas, no probe re-run, the capture folders were gone):
+  - *Ashbury rock* (about 127 strong pixels, cell (32364, 62531), sector (505, 977)): a **mobile record (critter class)**, drawn as a boulder by ours,
+    absent in the original, consistent with "the original tiles hold no NPCs or critters" (**original content state, not a bug of ours**; confidence
+    about 85 %; the prototype was not looked up).
+  - *Ashbury tuft row* (about 265 strong pixels, cells X 32353–32362 near Y 62527, on the sector 976/977 boundary): the **original is the brighter side**;
+    ours is missing pale tufts. All 217 objects of the box (static grass tuft, one prototype) have draw commands in our plan and none is off or
+    invisible, so it is **not an object our loader skips**. **Unresolved**: a viewer render of window (505, 976) or a capture-window or stitch artefact
+    near the boundary; low confidence in any cause.
+  - *Tarant ship deck* (a difference the first pass did not list): the original shows a tall cage-like structure, ours a low stump. Two static scenery
+    objects at (62201, 65665) and (62205, 65666) carry the **off** flag; our loader suppresses them, so the offline
+    tool either ignores the off flag or the objects are switched on by a script. **Content state (original quirk or script-set state)**, confidence about 70 %; whether an off-flag
+    object is drawn in the original in game is not checked.
+  - *Tarant door (the one of the first pass, open against closed)*: the nearest candidate is a band of wall cells (X 61930–61934, Y 65630–65639,
+    sector (967, 1025)) that is continuous in the original and has a gap in ours; **no door or portal object lies in the gap** and all its objects are
+    drawn by our plan, so it is probably **not a door state**; the gap is more likely a capture-window effect of the probe. **Unresolved**.
+- **What is left** ([#3086](https://github.com/Simarglok/arcanum-steamwoven/issues/3086)): re-render the two places with the committed town render path (#3063) and compare window by window; count
+  off-flag scenery in the three towns against the original tiles.
 
 ## Town maps at a larger scale (AC2)
 
@@ -184,10 +219,35 @@ picture itself. A low-strength re-detail pass was **not** tested (the owner rule
 filter, 5.2 with Lanczos). The same downscale of the upscaled picture gives 7.1 (box), so deriving it from the big picture keeps the two views
 consistent as well as the original does. The original scales a `Map_Zoomed` of another size to its 365 rectangle (ledger row WM53), but our viewer draws the texture at its
 own size and keeps 365 constants for the dots and the hover box (`AreaWorldMapArt.cs`, `AreaWorldMapArtView.cs`), so a larger `Map_Zoomed` (x4 = 1460 × 1460) needs a
-draw-to-rectangle change ([#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065)); the black margins of 68 pixels are added by the window.
+draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079)); the black margins of 68 pixels are added by the window.
 
 **Cut back.** The 8000 × 8000 picture was cut into 64 tiles of 1000 × 1000 (about 112 MB as PNG for the whole set; the single 8000 × 8000 picture is 164 MB as PNG); the cut took
 6 s. A single large picture is equally possible; the tile split only follows the original's file layout.
+
+**Recipe chosen by the owner (2026-11-21, ARC-RENDER-3065): "Blend A", an edge-masked blend of `realesr-animevideov3` and Lanczos.** The plain network
+turns the canvas weave of the parchment into a grid and the plain Lanczos picture is soft, so the picture takes the network only on strong ink lines and
+lettering and Lanczos everywhere else (still non-generative: a super-resolution network and a resampler, no text prompt). Plain `animevideov3` and the wider
+mask ("Blend B") are dropped; plain Lanczos is the fallback. The recipe is the script [`tools/hd_pack/world_map_upscale.py`](../../tools/hd_pack/world_map_upscale.py)
+(`blend` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
+
+1. The 2000 x 2000 map is upscaled x4 with `realesrgan-ncnn-vulkan -n realesr-animevideov3 -s 4 -t 250` (the network picture) and with Pillow's Lanczos (the baseline).
+2. The mask is made on the original: Gaussian blur sigma 1.0, Canny 100/200, edge components under 30 pixels dropped (paper grain), dilation by an ellipse of radius 2
+   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map).
+3. Result = mask x network + (1 - mask) x Lanczos, per channel, rounded.
+4. Outline check (rebuilt, the script of ARC-RES-2992 was lost, [#3080](https://github.com/Simarglok/arcanum-steamwoven/issues/3080)): the candidate is box-downscaled back to
+   2000 x 2000 and compared with the original; Canny 40/100 (chosen so that Lanczos gives F1 0.965, close to 0.964 above), tolerance as an elliptical dilation of radius 1 and 2
+   (a plus-shaped 3 x 3 and a 5 x 5 disc, so a diagonal step of one pixel is outside tolerance 1).
+
+| Picture (x4) | MAE | Edge precision / recall (1 px) | Edge F1 (1 px / 2 px) |
+| --- | ---: | --- | --- |
+| Lanczos | 4.16 | 0.984 / 0.946 | 0.965 / 0.991 |
+| `animevideov3` plain | 7.17 | 0.971 / 0.921 | 0.945 / 0.982 |
+| **Blend A (chosen)** | 5.07 | 0.982 / 0.940 | **0.960 / 0.989** |
+| Blend B (wider mask, dropped) | 5.37 | 0.982 / 0.933 | 0.957 / 0.987 |
+
+The thresholds differ from the lost script, so the absolute numbers differ a little from the table above; the comparison inside this table is consistent. Seams: the
+fine canvas weave has the same strength in the blend's transition band as in plain Lanczos (ratio of the weave to the far field 0.93 against 0.92 for Lanczos), so no
+step in the texture was measured at the mask border; Blend A and Lanczos were also compared at the display scales 0.9 (4K) and 0.6 (1440p) of the x4 texture.
 
 Not tested: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
 super-resolution tool installed), x2 or x3 variants, test-time augmentation, a comparison on the owner's 4K screen against the stopgap of
@@ -198,9 +258,9 @@ super-resolution tool installed), x2 or x3 variants, test-time augmentation, a c
 1. **Town maps: render with our engine.** The tiles are a pure render, so a larger one is a render at a larger scale, not a redraw; no generator is
    involved. Start with 0.5 and decide 1.0 after the owner's look at one town; keep the `.tmi` layout and the fog and marker logic unchanged and carry
    the scale in the pack entry. Ship it as a follow-up task after the owner decides #2952.
-2. **World map: take the `animevideov3` x4 picture, the tile split and the derived `Map_Zoomed` as the proposal**, judged by the owner on the crops;
-   the alternative is to keep the original pixels (the stopgap of #2993). Do not use the `x4plus` models. A re-detail pass stays an option only if
-   the outline check still passes.
+2. **World map: Blend A (the edge-masked blend above), the tile split and the derived `Map_Zoomed`**, picked by the owner on the crops (2026-11-21); plain Lanczos is the
+   fallback, the original pixels stay the stopgap of #2993. Do not use the `x4plus` models. A re-detail pass stays an option only if
+   the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079).
 3. **Both** are local derived bitmaps of the player's own installation: never in git or distributed ([hard rules](../../CLAUDE.md)); the pack holds
    them.
 
