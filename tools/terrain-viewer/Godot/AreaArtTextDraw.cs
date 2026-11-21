@@ -17,6 +17,8 @@ public sealed class AreaArtFontFace
     private readonly IReadOnlyList<AreaInterfaceFrame> _frames;
     private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _textures = [];
     private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _hdTextures = [];
+    private readonly Dictionary<(int Frame, AreaArtTextBlend Blend, int ScaleMilli), AreaGlyphCopy?> _copies = [];
+    private readonly List<int> _copyScales = [];
     private HdPack? _hdFor;
 
     public AreaArtFontFace(IReadOnlyList<AreaInterfaceFrame> frames)
@@ -53,25 +55,83 @@ public sealed class AreaArtFontFace
     // decoded once per pack and frame; null while Legacy draws. Dropped when the pack or the switch changes.
     private Texture2D? HdTexture(int frame, AreaArtTextBlend blend)
     {
-        if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack)
-        {
-            if (_hdFor is not null) { _hdFor = null; _hdTextures.Clear(); }
-            return null;
-        }
-        if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hdTextures.Clear(); }
+        if (!HdPackNow(out var pack)) return null;
         if (_hdTextures.TryGetValue((frame, blend), out var known)) return known;
         Texture2D? texture = null;
-        var art = _frames[frame];
-        if (art.Hd is { } query && art.Width > 0 && art.Height > 0
-            && pack.ResolveSprite(query, art.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result)
+        if (HdLayer(pack, frame, blend) is { } layer)
         {
-            using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(rgba, blend));
+            using var image = Image.CreateFromData(layer.Width, layer.Height, false, Image.Format.Rgba8, layer.Pixels);
             // ARC-UI-145: bilinear, no mipmaps. The mip chain of a 4× glyph blurred the edge at the sheet's and the windows' scales (2.5-3.5 here),
             // where one level down is a quarter of the detail; the owner chose this over trilinear, nearest and a sharper trace by comparing them on screen.
             texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.Linear };
         }
         _hdTextures[(frame, blend)] = texture;
         return texture;
+    }
+
+    // The pack the HD glyphs come from now, false (and every HD cache dropped once) while Legacy draws or the pack changed.
+    private bool HdPackNow(out HdPack pack)
+    {
+        if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } active)
+        {
+            if (_hdFor is not null) { _hdFor = null; _hdTextures.Clear(); _copies.Clear(); _copyScales.Clear(); }
+            pack = null!;
+            return false;
+        }
+        if (!ReferenceEquals(_hdFor, active)) { _hdFor = active; _hdTextures.Clear(); _copies.Clear(); _copyScales.Clear(); }
+        pack = active;
+        return true;
+    }
+
+    private (int Width, int Height, byte[] Pixels)? HdLayer(HdPack pack, int frame, AreaArtTextBlend blend)
+    {
+        var art = _frames[frame];
+        return art.Hd is { } query && art.Width > 0 && art.Height > 0
+            && pack.ResolveSprite(query, art.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result
+            ? (result.Width, result.Height, AreaArtTextRules.LayerPixels(rgba, blend)) : null;
+    }
+
+    /// <summary>ARC-RENDER-2939: one glyph's area-averaged copy at a device scale: the texture and its size in device pixels (drawn 1:1).</summary>
+    public readonly record struct AreaGlyphCopy(Texture2D Texture, int Width, int Height);
+
+    /// <summary>ARC-RENDER-2939: below 0.4 of the HD frame's pixels (the Steamwoven step x1/3) the HD glyph of the Coverage or Additive blend is an area-averaged copy of the pack frame at the exact
+    /// device size (the Legacy size times <paramref name="deviceScale"/>, each edge rounded), made once per scale and blend and kept for the three most recently used scales (the pack frame's average of the same
+    /// box filter as the direct frames' copies, ARC-RENDER-3002, made here on the main thread because a glyph is a few hundred pixels); null when the glyph draws as before (no HD entry, another blend, the scale
+    /// at or above the bound, a frame that is not the pack's scale times the Legacy one).</summary>
+    public AreaGlyphCopy? AreaCopy(int frame, AreaArtTextBlend blend, float deviceScale)
+    {
+        if (blend is not (AreaArtTextBlend.Coverage or AreaArtTextBlend.Additive) || !HdPackNow(out var pack)
+            || !AreaArtTextRules.NeedsAreaCopy(deviceScale, pack.Scale)) return null;
+        var milli = (int)Math.Round(deviceScale * 1000f);
+        // Least recently used: the scale drawn now moves to the end, so a scale in use is not the one dropped.
+        var at = _copyScales.IndexOf(milli);
+        if (at >= 0 && at != _copyScales.Count - 1) { _copyScales.RemoveAt(at); _copyScales.Add(milli); }
+        if (_copies.TryGetValue((frame, blend, milli), out var known)) return known;
+        if (at < 0)
+        {
+            // The last three scales stay (a frame shared by two views at different scales does not rebuild on every draw).
+            if (_copyScales.Count >= 3)
+            {
+                var drop = _copyScales[0];
+                _copyScales.RemoveAt(0);
+                foreach (var key in _copies.Keys.Where(key => key.ScaleMilli == drop).ToArray()) _copies.Remove(key);
+            }
+            _copyScales.Add(milli);
+        }
+        AreaGlyphCopy? copy = null;
+        var art = _frames[frame];
+        if (HdLayer(pack, frame, blend) is { } layer && layer.Width == art.Width * pack.Scale && layer.Height == art.Height * pack.Scale)
+        {
+            var (width, height) = InterfaceChromeRenderer.PixelSize(art.Width, art.Height, milli / 1000.0);
+            if (width >= 1 && height >= 1)
+            {
+                using var image = Image.CreateFromData(width, height, false, Image.Format.Rgba8, AreaArtTextRules.AreaAverage(layer.Pixels, layer.Width, layer.Height, width, height));
+                // Drawn 1:1, so the filter only decides a sub-pixel offset of the window's origin: linear, not nearest (as the direct frames' copies at a fractional device scale).
+                copy = new AreaGlyphCopy(new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.Linear }, width, height);
+            }
+        }
+        _copies[(frame, blend, milli)] = copy;
+        return copy;
     }
 }
 
@@ -96,9 +156,10 @@ public static class AreaArtTextDraw
 
     /// <summary>Placed glyphs (their x from the text's left edge) from (x, y) in <paramref name="colour"/>; <paramref name="alpha"/> (ARC-DEV-156,
     /// the floaters' fade) scales the draw's effect on the canvas under it, as the original's art blit with an opacity does.
-    /// ARC-UI-2795: <paramref name="scale"/> (a window drawn larger than the original's 1:1) enlarges the glyphs and their advances alike.</summary>
+    /// ARC-UI-2795: <paramref name="scale"/> (a window drawn larger than the original's 1:1) enlarges the glyphs and their advances alike.
+    /// ARC-RENDER-2939: <paramref name="drawSetScale"/> is the scale a caller has set with <c>DrawSetTransform</c> on <paramref name="canvas"/> (the floaters and bubbles); the node's own transform does not hold it, and it only picks the glyph's area copy.</summary>
     public static void Glyphs(CanvasItem canvas, AreaArtFontFace face, IEnumerable<(int X, AreaArtGlyph Glyph)> placed, int x, int y,
-        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f)
+        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f, float drawSetScale = 1f)
     {
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(placed);
@@ -106,12 +167,32 @@ public static class AreaArtTextDraw
         // Premultiplied: the colour and the alpha both carry the opacity.
         var opacity = alpha / 255f;
         var tint = new Color(colour.R / 255f * opacity, colour.G / 255f * opacity, colour.B / 255f * opacity, opacity);
+        var (unit, origin) = DeviceUnit(canvas, drawSetScale);
         foreach (var (gx, glyph) in placed)
-            if (face.Texture(glyph.Frame, blend) is { } texture)
+        {
+            // ARC-RENDER-2939: below 0.4 of the HD frame (x1/3) the glyph is the area copy at the exact device size, drawn 1:1 at a whole device pixel (the position is snapped in device space from the node's own origin).
+            if (unit > 0f && face.AreaCopy(glyph.Frame, blend, scale * unit) is { } copy)
+            {
+                var left = (MathF.Round(origin.X + (x + gx * scale) * unit) - origin.X) / unit;
+                var top = (MathF.Round(origin.Y + y * unit) - origin.Y) / unit;
+                canvas.DrawTextureRect(copy.Texture, new Rect2(left, top, copy.Width / unit, copy.Height / unit), false, tint);
+            }
+            else if (face.Texture(glyph.Frame, blend) is { } texture)
                 canvas.DrawTextureRect(texture, new Rect2(x + gx * scale, y, glyph.Width * scale, glyph.Height * scale), false, tint);
+        }
+    }
+
+    /// <summary>ARC-RENDER-2939: the device pixels per drawn unit of <paramref name="canvas"/> while the Steamwoven layout is on (its canvas and viewport scale, as the inventory area's DeviceScale, times
+    /// <paramref name="drawSetScale"/>) and the device position of its origin; (0, zero) otherwise, which keeps the whole-number layout and the Original mode on the bilinear glyph they drew before.</summary>
+    private static (float Unit, Vector2 Origin) DeviceUnit(CanvasItem canvas, float drawSetScale)
+    {
+        if (!AreaGameBarPanel.SteamwovenOn) return (0f, Vector2.Zero);
+        if (!canvas.IsInsideTree()) return (drawSetScale, Vector2.Zero);
+        var device = canvas.GetViewport().GetStretchTransform() * canvas.GetGlobalTransformWithCanvas();
+        return (drawSetScale * device.Scale.X, device.Origin);
     }
 
     /// <summary>One line of text from (x, y) in <paramref name="colour"/>.</summary>
     public static void Text(CanvasItem canvas, AreaArtFontFace face, string text, int x, int y, (byte R, byte G, byte B) colour,
-        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha, scale);
+        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue, float scale = 1f, float drawSetScale = 1f) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha, scale, drawSetScale);
 }

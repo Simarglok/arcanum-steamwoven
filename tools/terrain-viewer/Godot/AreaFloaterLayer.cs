@@ -142,8 +142,8 @@ public partial class AreaFloaterLayer : CanvasLayer
             {
                 if (_face is not { } face) continue;
                 // The shadow first at +1,+1 (font flag 0x08), then the line.
-                AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X) + TextBubbleRules.ShadowOffset, (int)MathF.Round(position.Y) + TextBubbleRules.ShadowOffset, (sr, sg, sb));
-                AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b));
+                AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X) + TextBubbleRules.ShadowOffset, (int)MathF.Round(position.Y) + TextBubbleRules.ShadowOffset, (sr, sg, sb), drawSetScale: factor);
+                AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), drawSetScale: factor);
             }
         }
     }
@@ -180,7 +180,7 @@ public partial class AreaFloaterLayer : CanvasLayer
             var position = scaledPosition / factor;
             var (r, g, b) = FloaterRules.Rgb(color);
             if (_face is not { } face) continue;
-            AreaArtTextDraw.Text(_surface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), alpha: (byte)alpha);
+            AreaArtTextDraw.Text(_surface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), alpha: (byte)alpha, drawSetScale: factor);
         }
     }
 }

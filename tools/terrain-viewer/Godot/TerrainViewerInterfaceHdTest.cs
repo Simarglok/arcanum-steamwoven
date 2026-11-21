@@ -469,6 +469,28 @@ public static partial class TerrainViewerSelfTest
         // ARC-UI-2795: the additive blend (the inventory counts' font flag 0x10) takes the HD frame too, as an added layer; the multiply blend stays Legacy.
         require(face.Texture(Glyph, AreaArtTextBlend.Additive) is CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage and Additive blends take the HD frame");
         require(face.Texture(Glyph, AreaArtTextBlend.Coverage)!.GetWidth() == W * Scale, "the HD glyph texture is 4× the Legacy frame");
+        // ARC-RENDER-2939: below 0.4 of the 4× frame (a device scale of 1.2 and 1.5 per original px, the step x1/3) the glyph has an area copy at the exact device size; 1.6, 1.8, 2.4 and 3.6 and no scale keep the plain bilinear one.
+        var plainGlyph = face.Texture(Glyph, AreaArtTextBlend.Coverage);
+        foreach (var step in new[] { 3.6f, 2.4f, 1.8f, 1.6f, 0f }) require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step) is null, $"device scale {step}: no area copy");
+        require(plainGlyph is CanvasTexture { TextureFilter: CanvasItem.TextureFilterEnum.Linear }, "the plain glyph keeps the Linear filter without mipmaps (ARC-UI-145)");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Multiply, 1.2f) is null && face.AreaCopy(NoEntry, AreaArtTextBlend.Coverage, 1.2f) is null, "no copy for the multiply blend or a glyph without an HD entry");
+        foreach (var (step, width, height) in new[] { (1.2f, 7, 6), (1.5f, 9, 8) })
+        {
+            var copy = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step);
+            require(copy is { } c && c.Width == width && c.Height == height && c.Texture.GetWidth() == width && c.Texture.GetHeight() == height, $"device scale {step}: the copy is the Legacy size times the scale, {width} × {height}");
+            require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step)!.Value.Texture == copy!.Value.Texture, "the copy is made once");
+            require(copy!.Value.Texture is CanvasTexture { TextureFilter: CanvasItem.TextureFilterEnum.Linear } && !((CanvasTexture)copy.Value.Texture).DiffuseTexture.GetImage().HasMipmaps(), "the copy is drawn 1:1 with no mip chain");
+        }
+        // The three most recently used scales are kept: 1.5 is the least recently used once 1.2 is touched again, so the fourth scale drops 1.5 and keeps 1.2.
+        var first = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture;
+        var second = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture;
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f);
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.3f);
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture == second, "three scales are kept");
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f); face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.3f);
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.4f);
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture == first, "the scale in use stays when a fourth comes");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture != second, "the least recently used of four scales is dropped");
 
         var viewport = new SubViewport { Size = new(W, H), TransparentBg = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var probe = new FontProbe(face) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
