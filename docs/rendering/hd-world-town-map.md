@@ -17,7 +17,7 @@ entry kind for these bitmaps is the question of [#2952](https://github.com/Simar
 
 | Part | Verdict |
 | --- | --- |
-| Town maps (AC1) | **Pure render.** The original tiles are the town's area drawn by the engine at 1:1 and decimated to 1/4 (nearest neighbour). No hand-painted additions found in the three towns tested (two small differences stay unclassified, below). Rendering with our engine is feasible and reproduces the original at scale 0.25 to a mean error of about 1.8 of 255 (on the compared pixels of the stitched town). |
+| Town maps (AC1) | **Pure render.** The original tiles are the town's area drawn by the engine at 1:1 and decimated to 1/4 (nearest neighbour). No hand-painted additions found in the three towns tested (the small differences (two found first, two more later) are classified in part, see "Executable check and the open details"). Rendering with our engine is feasible and reproduces the original at scale 0.25 to a mean error of about 1.8 of 255 (on the compared pixels of the stitched town). |
 | Town maps at a larger scale (AC2) | Feasible: same renderer, larger sampling step. Proposal and cost below (extrapolated, not measured at the larger scale). |
 | World map (AC3) | Feasible, with a caveat: a super-resolution x4 upscale (Real-ESRGAN family, not text-prompted) is sharper but moves outlines more than plain resampling. Best of the three models tried: `realesr-animevideov3` (edge F1 0.918 against 0.964 for plain Lanczos). `Map_Zoomed` is derived from the same big picture. |
 
@@ -49,14 +49,49 @@ picture, decimated to 1/4 and registered against the mosaic of the original tile
 - **Drawn:** static objects (buildings, fences, lamps, plants, ships) and roofs, closed. **Not drawn:** NPCs and critters (three NPCs and one ship-deck
   NPC of our render are absent in the original). **No text or labels** anywhere in the difference image.
 - **Differences found.** The hero's own house shows its roof hidden in ours (about 6,800 pixels in Ashbury) but closed in the original: a render path must
-  force roofs on. One Tarant door differs (open against closed). One Ashbury cluster of about 390 pixels (a row of small features and a rock in ours) is
-  not classified. A thin line at window boundaries is visible in the Tarant difference (a capture seam of the probe, not of the original).
+  force roofs on. One Tarant spot differs (read as a door in the first pass; see below). One Ashbury cluster of about 390 pixels (a row of small features and a rock in ours) is
+  classified in part below (ARC-RES-3064). A thin line at window boundaries is visible in the Tarant difference (a capture seam of the probe, not of the original).
 - **Black border.** The stair-stepped border follows the **tile** grid, not the sector diamond. A full sector is exactly 200 tiles. The rule "any pixel
   of the tile lies in a rendered sector" reproduces 2,757 of the 2,990 non-black Ashbury tiles with no false positive; the remaining 233 tiles
-  (about one tile of fringe) are not explained. Inside a rendered sector nothing is black. Ashbury's rendered sectors: x 503–505 by y 974–977 plus
+  (about one tile of fringe) are not explained by that rule (an empirical fit of ours; the true rule belongs to the offline tool, see below). Inside a rendered sector nothing is black. Ashbury's rendered sectors: x 503–505 by y 974–977 plus
   (502,976).
 
-Not tested: other towns, interiors, Vormantown, other clock hours (and so the hour of the original render), the cause of the two unclassified differences.
+Not tested: other towns, interiors, Vormantown, other clock hours (and so the hour of the original render).
+
+### Executable check and the open details (ARC-RES-3064)
+
+Read 2026-11-21 in the exports (strings, imports, the two tile functions; one reader). **The executable only reads town-map tiles.** The tile file name
+`townmap\<name>\<name>%06d.bmp` is referenced by exactly two functions, the loader 0x563000 (builds the name; falls back to tile 0 when the file is
+missing; loads the picture through the shared bitmap loader 0x5630F0) and the existence test 0x4BEDD0 (tile index against the town's reveal bitmap, then a
+file check). It imports `CreateFileA` and `WriteFile`, but the only BMP writers with a live caller are the savegame preview (`save\%s.bmp`) and the screenshot key
+(`screen%04d.bmp`), plus a debug art-frame dumper (0x5360F0, 640 × 480, no caller in the export); none touches town maps, none chooses palette indexes for town tiles, none walks sectors. So the tiles were produced **before shipping by a tool
+outside the game** (not in the executable, not in the player's data); its rules cannot be read from the player's installation.
+
+- **Border rule (AC1): not needed for an HD render.** The game does not decide the border; it draws a tile when its reveal bit is set and its file exists, fades or fills the rest black
+  (ledger WM77). Our render decides its own extent. Recommendation: draw a tile when any of its pixels lies in a rendered sector (reproduces 92 % of
+  the original's non-black Ashbury tiles with no false positive) and **accept one tile of fringe** beyond that, or keep the original tile set's own
+  extent where a pack must match it exactly. The 233 tiles of fringe stay unexplained at the tool's level, as the tool is not available.
+- **Palette choice (AC2): out of scope for 24-bit HD tiles.** The game loads each BMP with its own palette and expands it to the display format; the
+  quantiser that chose the indexes lived in the offline tool. A 24-bit HD tile has no palette. The 48 % exact-index measure is therefore only a
+  description of the shipped tiles, not a rule to reproduce.
+- **Differences (AC3), classified as far as the evidence reaches** (re-read from the saved 0.25 renders against the original mosaics and the object
+  lists of the areas, no probe re-run, the capture folders were gone):
+  - *Ashbury rock* (about 127 strong pixels, cell (32364, 62531), sector (505, 977)): a **mobile record (critter class)**, drawn as a boulder by ours,
+    absent in the original, consistent with "the original tiles hold no NPCs or critters" (**original content state, not a bug of ours**; confidence
+    about 85 %; the prototype was not looked up).
+  - *Ashbury tuft row* (about 265 strong pixels, cells X 32353–32362 near Y 62527, on the sector 976/977 boundary): the **original is the brighter side**;
+    ours is missing pale tufts. All 217 objects of the box (static grass tuft, one prototype) have draw commands in our plan and none is off or
+    invisible, so it is **not an object our loader skips**. **Unresolved**: a viewer render of window (505, 976) or a capture-window or stitch artefact
+    near the boundary; low confidence in any cause.
+  - *Tarant ship deck* (a difference the first pass did not list): the original shows a tall cage-like structure, ours a low stump. Two static scenery
+    objects at (62201, 65665) and (62205, 65666) carry the **off** flag; our loader suppresses them, so the offline
+    tool either ignores the off flag or the objects are switched on by a script. **Content state (original quirk or script-set state)**, confidence about 70 %; whether an off-flag
+    object is drawn in the original in game is not checked.
+  - *Tarant door (the one of the first pass, open against closed)*: the nearest candidate is a band of wall cells (X 61930–61934, Y 65630–65639,
+    sector (967, 1025)) that is continuous in the original and has a gap in ours; **no door or portal object lies in the gap** and all its objects are
+    drawn by our plan, so it is probably **not a door state**; the gap is more likely a capture-window effect of the probe. **Unresolved**.
+- **What is left** ([#3086](https://github.com/Simarglok/arcanum-steamwoven/issues/3086)): re-render the two places with the committed town render path (#3063) and compare window by window; count
+  off-flag scenery in the three towns against the original tiles.
 
 ## Town maps at a larger scale (AC2)
 
