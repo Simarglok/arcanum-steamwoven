@@ -105,13 +105,13 @@ for the production surfaces, which the composite below already meets with the or
 the original is wood (the wood class as solid regions, a 6 px margin and a 3 px soft edge); everything else, text and fields and metal parts, is the original's
 pixels, the stand-in for the kit parts until the pilot chain delivers them. In the wood: dark specks (more than 12 levels below the 9 px horizontal median) are
 replaced by that median, so the grain running along x survives; the original's rows of dots (faint dark dots, six or more in a row, found at 6 levels) are put
-back; L*, contrast and chroma are fitted by the wood mask the tone check uses; the 6 px each side of both strip joins stay the original's.
+back; L*, contrast and chroma are fitted by the wood mask the tone check uses; about 3 px each side of both strip joins stay fully the original's (a 12 px band, blended by a 2 px soft edge). On the inventory screen 98 650 speck pixels were replaced and 388 dots of the original's rows kept.
 
 | | wood L* | wood contrast | wood chroma | seam y=148 | seam y=1588 | sharp. x1 / x1/3 | repetition x / y | tone_check dL* / contrast / dE mean, p95 |
 |---|---|---|---|---|---|---|---|---|
 | Original | 20.13 | 3.94 | 9.54 | 1.82 | 1.73 | 3.96 / 7.16 | 0.016 / 0.107 | |
-| A as generated, assembled | 17.10 (clean) | 3.42 | 9.66 | 3.61 | 3.57 | 7.95 / 8.53 | 0.023 / 0.099 | -1.48 / -15.1 % / 3.16, 9.85 |
-| A as the player sees it | 20.12 | 3.86 | 9.45 | 0.95 | 1.11 | 8.36 / 9.14 | 0.068 / 0.078 | -0.02 / -0.8 % / 1.02, 5.32 |
+| A as generated, assembled | 17.64 (after the speck clean) | 3.49 | 9.89 | 3.61 | 3.57 | 7.95 / 8.53 | 0.023 / 0.099 | -1.48 / -15.1 % / 3.16, 9.85 |
+| A as the player sees it | 20.04 | 3.82 | 9.44 | 0.96 | 1.11 | 8.67 / 9.60 | 0.072 / 0.111 | +0.06 / -0.3 % / 0.97, 5.02 |
 
 The remaining gap to the production state: the kit parts replace the original's metal stand-ins (pilot #3058, [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459));
 the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step ([#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));

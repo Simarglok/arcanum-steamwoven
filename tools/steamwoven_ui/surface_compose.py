@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from bisect import bisect_left, bisect_right
 from pathlib import Path
 
 try:
@@ -29,7 +30,7 @@ ROW_GAP = 40              # px: neighbouring dots of one row are at most this fa
 ROW_MIN_DOTS = 6
 MASK_FEATHER = 3.0
 JOINS = (148, 1588)       # rows where the strips meet the window zone (surface_study.ZONES); the ORIGINAL's rows are kept there
-JOIN_KEEP = 6             # px each side of a join that stay the ORIGINAL's
+JOIN_KEEP = 6             # px each side of a join that are the ORIGINAL's (about 3 px fully, the rest blended by the soft edge)
 JOIN_FEATHER = 2.0
 
 
@@ -65,6 +66,8 @@ def components(points: set[int], width: int) -> list[list[int]]:
             y, x = divmod(q, width)
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
+                    if not 0 <= x + dx < width:
+                        continue
                     r = (y + dy) * width + x + dx
                     if r in points and r not in seen:
                         seen.add(r)
@@ -73,37 +76,49 @@ def components(points: set[int], width: int) -> list[list[int]]:
     return out
 
 
+def chains_at(order_by_y: list[int], ys: list[float], centres: list[tuple[float, float]], anchor_y: float, used: set[int], tolerance: float, gap: float) -> list[list[int]]:
+    """The chains (dots along x, neighbours at most `gap` apart) among the unused dots whose y is within `tolerance` of `anchor_y`."""
+    lo, hi = bisect_left(ys, anchor_y - tolerance), bisect_right(ys, anchor_y + tolerance)
+    band = sorted((j for j in order_by_y[lo:hi] if j not in used), key=lambda j: centres[j][1])
+    chains: list[list[int]] = []
+    for j in band:
+        if chains and centres[j][1] - centres[chains[-1][-1]][1] <= gap:
+            chains[-1].append(j)
+        else:
+            chains.append([j])
+    return chains
+
+
 def dot_rows(centres: list[tuple[float, float]], tolerance: float = ROW_TOLERANCE, gap: float = ROW_GAP, min_dots: int = ROW_MIN_DOTS) -> set[int]:
-    """Indices of the dots that belong to a row: at least `min_dots` dots whose y is within `tolerance` of the row's first dot and whose neighbours along x
-    are at most `gap` apart. `centres` are (y, x)."""
-    order = sorted(range(len(centres)), key=lambda i: (centres[i][0], centres[i][1]))
+    """Indices of the dots that belong to a row: at least `min_dots` dots whose y is within `tolerance` of the row's y and whose neighbours along x are at
+    most `gap` apart. The row with the longest chain is taken first and only its chain's dots are used up, so a stray dot near a row cannot split it.
+    `centres` are (y, x)."""
+    order = sorted(range(len(centres)), key=lambda i: centres[i][0])
+    ys = [centres[i][0] for i in order]
     kept: set[int] = set()
-    used: set[int] = set()
-    for i in order:
-        if i in used:
-            continue
-        band = sorted((j for j in order if j not in used and abs(centres[j][0] - centres[i][0]) <= tolerance), key=lambda j: centres[j][1])
-        chain: list[int] = []
-        for j in band:
-            if chain and centres[j][1] - centres[chain[-1]][1] > gap:
-                if len(chain) >= min_dots:
-                    kept.update(chain)
-                used.update(chain)
-                chain = []
-            chain.append(j)
-        if len(chain) >= min_dots:
-            kept.update(chain)
-        used.update(chain)
-    return kept
+    while True:
+        best: list[list[int]] = []
+        best_len = 0
+        for y in sorted({centres[i][0] for i in order if i not in kept}):
+            chains = chains_at(order, ys, centres, y, kept, tolerance, gap)
+            longest = max((len(c) for c in chains), default=0)
+            if longest > best_len:
+                best_len, best = longest, chains
+        if best_len < min_dots:
+            return kept
+        for chain in best:
+            if len(chain) >= min_dots:
+                kept.update(chain)
 
 
 def speck_map(path: Path, threshold: int, width: int, height: int, work: Path, name: str) -> bytes:
-    """Per pixel 255 where the luma is more than `threshold` darker than its horizontal median, else 0."""
+    """Per pixel 255 where the luma is more than `threshold` darker than its horizontal median, else 0 (`Minus` is the first image minus the second, so
+    the gray image goes first)."""
     gray, median = work / f"{name}-gray.png", work / f"{name}-median.png"
     run(["magick", str(path), "-colorspace", "Gray", "-alpha", "off", str(gray)])
     run(["magick", str(gray), "-statistic", "Median", MEDIAN, str(median)])
     out = work / f"{name}-speck.png"
-    run(["magick", str(median), str(gray), "-compose", "Minus", "-composite", "-threshold", f"{threshold / 255 * 100:.2f}%", str(out)])
+    run(["magick", str(gray), str(median), "-compose", "Minus", "-composite", "-threshold", f"{threshold / 255 * 100:.2f}%", str(out)])
     data = gray_bytes(out)
     if len(data) != width * height:
         raise ComposeError(f"{name}: speck map is {len(data)} bytes, expected {width * height}")
