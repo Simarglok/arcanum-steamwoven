@@ -1,6 +1,6 @@
 # Surface method study: strips and window background at the master size (ARC-RES-2457)
 
-Status: **study done, owner pick pending** ([#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458)), 2026-11-21
+Status: **study done, method A picked by the owner** ([#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458)), 2026-11-21
 ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457), epic [#2446](https://github.com/Simarglok/arcanum-steamwoven/issues/2446)).
 Requirement touched: [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (status unchanged). Linked from the TRD
 ([SWI-GEN-5](steamwoven-interface-trd.md), SWI-VER-5). Every image of the study is local (`local/steamwoven-ui/compare/surface-study/`, never in git);
@@ -85,9 +85,37 @@ black fields and metal do not decide them; the seams are whole-line. Tone is the
   composite. It would need a mask of its own that keeps those parts.
 - The x1/3 readings of A and B stay above C's, so at the third step C is the softest.
 
-None of the three is accepted by this page. The owner picks from the composite (labels Original, A, B, C) at
-[#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458); the metrics are inputs, not a verdict. Repetition and sharpness bounds are not added to
-SWI-VER-5 here (the seam ratio stays the only gate) and wait for the pick.
+## Owner pick and conditions (2026-11-21)
+
+**Method A for all three zones** (strips and window); B and C are dropped. A gives the **wooden surface with its relief and nothing else**; the conditions
+for the production surfaces, which the composite below already meets with the original's parts standing in for the kit:
+
+1. Text, counters, digits and fields are not part of the generated surface; the game draws them over it. (The generated picture covered them; that is no loss
+   of the method.)
+2. Zones filled in play (the portrait circle, text plates, counter windows, grids) are taken by the ORIGINAL's mask, never from the generation (Codex had drawn
+   its own scene in the portrait circle).
+3. Metal parts (the infinity sign, the symbols on the plates, the buttons) come from the kit as in the pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058),
+   not redrawn by Codex in every zone.
+4. Seams at the strip joins: not worse than the original's (1.82 and 1.73); the target is at most 1.8 (A alone: 3.6).
+5. Wood tone: mean L* and contrast (and chroma) fitted to the ORIGINAL by the wood mask; random dark specks removed, the original's rows of dots kept.
+
+### A as the player sees it
+
+`tools/steamwoven_ui/surface_compose.py compose` builds the prototype of that composition (local, 2880 x 2160): the Codex wood replaces the ORIGINAL only where
+the original is wood (the wood class as solid regions, a 6 px margin and a 3 px soft edge); everything else, text and fields and metal parts, is the original's
+pixels, the stand-in for the kit parts until the pilot chain delivers them. In the wood: dark specks (more than 12 levels below the 9 px horizontal median) are
+replaced by that median, so the grain running along x survives; the original's rows of dots (faint dark dots, six or more in a row, found at 6 levels) are put
+back; L*, contrast and chroma are fitted by the wood mask the tone check uses; the 6 px each side of both strip joins stay the original's.
+
+| | wood L* | wood contrast | wood chroma | seam y=148 | seam y=1588 | sharp. x1 / x1/3 | repetition x / y | tone_check dL* / contrast / dE mean, p95 |
+|---|---|---|---|---|---|---|---|---|
+| Original | 20.13 | 3.94 | 9.54 | 1.82 | 1.73 | 3.96 / 7.16 | 0.016 / 0.107 | |
+| A as generated, assembled | 17.10 (clean) | 3.42 | 9.66 | 3.61 | 3.57 | 7.95 / 8.53 | 0.023 / 0.099 | -1.48 / -15.1 % / 3.16, 9.85 |
+| A as the player sees it | 20.12 | 3.86 | 9.45 | 0.95 | 1.11 | 8.36 / 9.14 | 0.068 / 0.078 | -0.02 / -0.8 % / 1.02, 5.32 |
+
+The remaining gap to the production state: the kit parts replace the original's metal stand-ins (pilot #3058, [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459));
+the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step ([#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));
+the composition is a script today, not a pipeline step. Repetition and sharpness bounds are not added to SWI-VER-5 here; the seam ratio stays the only gate.
 
 ## Reproduction
 
@@ -99,6 +127,7 @@ python3 -B tools/steamwoven_ui/codex_batch.py run surface-tiles
 python3 -B tools/steamwoven_ui/surface_study.py blend --original ORIG_2880x2160.png --out B.png --work WORKDIR
 python3 -B tools/steamwoven_ui/method_c.py --original ORIG_2880x2160.png --tile TILE.png --out C.png
 python3 -B tools/steamwoven_ui/method_c.py --original ORIG_2880x2160.png --out MASK.png --mask-only
+python3 -B tools/steamwoven_ui/surface_compose.py compose --original ORIG_2880x2160.png --a A.png --out A_PLAYER.png --work WORKDIR
 python3 -B tools/steamwoven_ui/surface_metrics.py --mask MASK.png --join y=148 --join y=1588 RESULT.png
 python3 -B tools/steamwoven_ui/tone_check.py compare ORIG_2880x2160.png RESULT.png
 ```
