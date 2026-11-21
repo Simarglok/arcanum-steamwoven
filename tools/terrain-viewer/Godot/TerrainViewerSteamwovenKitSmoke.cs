@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
     /// ARC-UI-3032 (AC2): the real loot window over the kit background: a junk pile of the hero's dropped coin is opened in the loot window and the window draws neither of its background arts (234 and 221) and takes both doll covers
     /// from the kit; with the kit background gone it draws the arts again and no cover. The step is skipped, and says so, when the smoke's hero has no coin to drop, no known tile or the original arts do not read (the loot look).
     /// </summary>
-    private async Task CheckKitLootWindowAsync(string tag, Func<int, Task> frames, Action<bool, string> require)
+    private async Task CheckKitLootWindowAsync(string tag, AreaGameBarPanel panel, string root, Func<int, Task> frames, Action<bool, string> require)
     {
         string? skip = null;
         string? pile = null;
@@ -98,6 +98,26 @@ public partial class TerrainViewerApp
             // The real host names the kit window from the interface stack: the smoke override stands down while the loot window is open.
             var override_ = _smokeKitBackdrop;
             _smokeKitBackdrop = null;
+            // The same window with no kit (the "before" of the owner's composite): the window draws its own arts 234 and 221 and no kit cover.
+            SteamwovenKitStore.UseRoot(null);
+            panel.Relayout();
+            await frames(4);
+            OpenInventory(pile);
+            await frames(4);
+            if (_inventoryPanel?.GridAreaForSelfTest is { LootLook: true } plain)
+            {
+                plain.QueueRedraw();
+                await frames(2);
+                var (plainBackgrounds, plainCovers) = plain.LootDrawForSelfTest;
+                require(AreaGameBarPanel.KitBackgroundWindow is null && !plain.KitBackgroundShown && plainBackgrounds.SequenceEqual([234, 221]) && plainCovers.Count == 0,
+                    $"[{tag}] with no kit the loot window draws its own arts 234 and 221 and no kit cover (drew {string.Join(",", plainBackgrounds)}, kit covers {string.Join(",", plainCovers)})");
+                await CaptureHudAsync("steamwoven-" + tag + "-loot-before", frames);
+            }
+            EndInventory();
+            await frames(3);
+            SteamwovenKitStore.UseRoot(root);
+            panel.Relayout();
+            await frames(4);
             OpenInventory(pile);
             await frames(4);
             var area = _inventoryPanel?.GridAreaForSelfTest;
@@ -233,7 +253,7 @@ public partial class TerrainViewerApp
                 require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Loot && AreaGameBarPanel.KitCover(349) is not null && AreaGameBarPanel.KitCover(341) is not null,
                     $"[{tag}] the loot window's kit background and both doll covers are published for the window over it");
                 require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 4, $"[{tag}] the loot window holds its two pieces and its two covers");
-                await CheckKitLootWindowAsync(tag, frames, require);
+                await CheckKitLootWindowAsync(tag, panel, root, frames, require);
                 _smokeKitBackdrop = null;
                 await frames(3);
                 require(AreaGameBarPanel.KitBackgroundWindow is null && AreaGameBarPanel.KitCover(349) is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)),
