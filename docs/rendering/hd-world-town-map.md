@@ -105,9 +105,9 @@ critters, roofs closed. The pack entry kind, the writer into the pack and the lo
 
 **Parts.** `ARC_TOWNCAP=JOB.json` through the `door-close` stage of the map smoke (`tools/terrain-viewer/Godot/TerrainViewerTownCapture.cs`): the capture
 takes the viewport at camera centres given as picture offsets from the town map's origin location, with the hero not drawn (`SetActorVisibilityForReadback`),
-no critter body (`TerrainCanvas.HideCritters`: art classes 2, 12, 13, 14, so fallen bodies and AI-moved NPCs go too; scenery, doors and items stay), every
+no critter body (`TerrainCanvas.HideCritters`: art classes 2, 12, 13, 14, so fallen bodies and AI-moved NPCs go too, and spell eye candy, class 14, which a static render has none of; scenery, doors and items stay), every
 roof drawn (`_areaRoofsClosed`: no recalculation at the hero cell, every roof block filled off and faded off, no wall fade), every overlay layer of the
-viewer hidden, the pointer's highlight and rings cleared, and the clock at hour 15. `tools/hd_pack/town_render.py` (numpy and Pillow, the venv `local/res094/venv`;
+viewer hidden, the pointer's highlight and rings cleared, and the clock at hour 15. The capture changes the viewer's state for the run (the clock, the hover highlight) and is meant for a throwaway window process. `tools/hd_pack/town_render.py` (numpy and Pillow, the venv `local/res094/venv`;
 unit tests `test_town_render.py`) plans the windows, runs them through `./arcanum smoke map`, stitches the captures and cuts the tiles. Everything it writes
 stays under the ignored `local/`.
 
@@ -120,7 +120,7 @@ lies beyond it**: a tall object of the next sector (a roof, a wall) is missing a
 window that held it) left a thin black diagonal where two windows met and made one Ashbury building look like two with a passage (a roof piece and a wall
 of the sector next door missing, which is not off-flag scenery, [#3086](https://github.com/Simarglok/arcanum-steamwoven/issues/3086)). The plan is now a **lattice of
 windows at a step of 2 sectors** (the phase with the fewest windows), every lattice window that holds a needed sector, and each pixel is taken from the window in
-which its sector lies **deepest** (distance to the window's edge in sectors, at least 0.5 from some window everywhere). A sector counts as needed when at
+which its sector lies **deepest** (distance to the window's edge in sectors, at least 0.5 from some window inside the needed sectors). A sector counts as needed when at
 least 25 % of its pixels lie in the tiles to write (the fringe below that is drawn as the neighbour's edge). Ashbury: 14 needed sectors, 7 windows, 60 shots of
 5120 × 1296.
 

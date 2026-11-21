@@ -25,6 +25,7 @@ import csv
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -41,7 +42,7 @@ SECTOR = 64
 MAIN_MAP = "Arcanum1-024-fixed"
 # Terrain the viewer draws as filler beyond the loaded map (ARC-RES-2992): never taken as town pixels.
 FILLER = [(96, 96, 255), (200, 200, 128), (32, 128, 32), (32, 96, 32)]
-WINDOW_LIMIT = 10.0                    # the worst 64 x 64 window (0.25 sampling) must stay under this mean error (a missing building piece gives 14, the whole town 1.7)
+WINDOW_LIMIT = 10.0                    # the worst 64 x 64 window (0.25 sampling) must stay under this mean error (a missing building piece gave 14.4 where the whole town had 1.7)
 HOUR = 15                              # the clock of the viewer's default start (ARC-RES-2992 measured it)
 
 
@@ -119,18 +120,21 @@ def plan_windows(tmi, tiles, step=32):
                 y0, y1, x0, x1 = r * SHOT_H, (r + 1) * SHOT_H, c * SHOT_W, (c + 1) * SHOT_W
                 sub = mine[max(y0 // step - 2, 0):y1 // step + 3, max(x0 // step - 2, 0):x1 // step + 3]
                 if sub.any():
-                    shots.append({"name": f"r{r}c{c}", "dx": int(c * SHOT_W + SHOT_W / 2 - w / 2), "dy": int(r * SHOT_H + SHOT_H / 2 - h / 2)})
+                    shots.append({"name": f"r{r}c{c}", "dx": int(c * SHOT_W + SHOT_W / 2 - w / 2), "dy": int(r * SHOT_H + SHOT_H / 2 - h / 2 - 20)})
         if shots:
             shots_per_window[centre] = shots
     return needed, shots_per_window
 
 
-def run_smoke(sector, job, extra=()):
+def run_smoke(sector, job, extra=(), expect=None):
     command = [str(REPO / "arcanum"), "smoke", "map", MAIN_MAP, "--stages", "door-close", "--sector", f"{sector[0]},{sector[1]}",
                "--no-config-check", "--env", f"ARC_TOWNCAP={job}", *extra]
     started = time.time()
     result = subprocess.run(command, cwd=REPO, capture_output=True, text=True)
     ok = "SMOKE PASS" in result.stdout
+    if ok and expect is not None:
+        # the viewer can leave the capture early (no town, no session) and still pass the stage: the output must be there and new
+        ok = expect.exists() and expect.stat().st_mtime >= started - 1
     if not ok:
         print(result.stdout[-1500:], result.stderr[-500:])
     return ok, time.time() - started
@@ -143,7 +147,7 @@ def cmd_plan(args):
     seconds = 0.0
     if not (info_dir / "tiles.txt").exists():
         job.write_text(json.dumps({"out": str(info_dir), "w": 1280, "h": 720, "zoom": 1.0, "town": args.town, "hour": HOUR, "shots": []}))
-        ok, seconds = run_smoke(args.info_sector, job)
+        ok, seconds = run_smoke(args.info_sector, job, expect=info_dir / "tiles.txt")
         if not ok:
             raise SystemExit("info run failed")
     tmi = read_tmi(info_dir / "tmi-all.tsv", args.town)
@@ -152,6 +156,8 @@ def cmd_plan(args):
     plan = {"town": args.town, "tmi": tmi, "tiles": tiles, "needed_sectors": sorted(needed),
             "windows": [{"centre": list(c), "shots": s} for c, s in windows.items()]}
     (out / "plan.json").write_text(json.dumps(plan))
+    for stale in out.glob("cap_*"):                     # captures of an earlier plan (another shot grid) are never reused
+        shutil.rmtree(stale)
     for centre, shots in windows.items():
         n = f"{centre[0]}_{centre[1]}"
         (out / f"job_{n}.json").write_text(json.dumps({"out": str(out / f"cap_{n}"), "w": SHOT_W, "h": SHOT_H, "zoom": 1.0, "town": args.town,
@@ -167,7 +173,7 @@ def cmd_capture(args):
         n = f"{window['centre'][0]}_{window['centre'][1]}"
         if (out / f"cap_{n}" / "origin.txt").exists() and not args.force:
             print(f"window {n}: done"); continue
-        ok, seconds = run_smoke(window["centre"], out / f"job_{n}.json", ("--no-build",))
+        ok, seconds = run_smoke(window["centre"], out / f"job_{n}.json", ("--no-build",), expect=out / f"cap_{n}" / "shots.tsv")
         total += seconds
         print(f"window {n}: {'ok' if ok else 'FAILED'} {seconds:.0f}s, {len(window['shots'])} shots")
         if not ok:
@@ -189,6 +195,8 @@ def stitch_picture(out: Path, plan: dict):
         for row in rows:
             image = np.asarray(Image.open(cap / f"{row['name']}.png").convert("RGB"))
             ih, iw = image.shape[:2]
+            if (iw, ih) != (SHOT_W, SHOT_H):
+                raise SystemExit(f"{cap.name}/{row['name']}.png is {iw}x{ih}, the plan needs {SHOT_W}x{SHOT_H} (the viewer window was clamped by the screen)")
             px = int(round(float(row["camX"]) - iw / 2 - ox + w / 2)); py = int(round(float(row["camY"]) - ih / 2 - oy + h / 2 + 20))
             x0, y0, x1, y1 = max(px, 0), max(py, 0), min(px + iw, w), min(py + ih, h)
             if x1 <= x0 or y1 <= y0:

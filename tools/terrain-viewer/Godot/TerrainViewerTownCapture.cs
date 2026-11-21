@@ -21,6 +21,7 @@ public partial class TerrainViewerApp
 
     private async Task RunTownCaptureAsync(string jobPath)
     {
+        _townCaptured = true;                       // also when an early return follows: the run then has no PASS marker and fails
         using var job = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(jobPath));
         var root = job.RootElement;
         var outDir = root.GetProperty("out").GetString()!;
@@ -44,24 +45,23 @@ public partial class TerrainViewerApp
         System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "tiles.txt"), tiles.ToString());
         if (_worldActor.Session is not AreaGridSession session || _camera is null || _readyArea is null || _canvas is null) { GD.Print("TOWNCAP no session"); return; }
         var w = root.GetProperty("w").GetInt32(); var h = root.GetProperty("h").GetInt32(); var zoom = root.GetProperty("zoom").GetDouble();
-        // Only the world: every overlay layer of the viewer is hidden, the hero and the critters are not drawn, the roofs stay closed.
         var hidden = new List<CanvasItem>(); var hiddenLayers = new List<CanvasLayer>();
-        foreach (var child in GetChildren())
-        {
-            if (child is CanvasLayer layer && layer.Visible && !layer.IsAncestorOf(_canvas)) { layer.Visible = false; hiddenLayers.Add(layer); }
-            else if (child is CanvasItem item && item.Visible && item != _canvas && !item.IsAncestorOf(_canvas)) { item.Visible = false; hidden.Add(item); }
-        }
-        _canvas.SetActorVisibilityForReadback(false); _canvas.HideCritters = true; _canvas.AreaHighlight = null; _canvas.AreaRing = null;
-        _areaRoofsClosed = true; ResetAreaRoofs(); _canvas.SetAreaWallFades(null);
-        if (root.TryGetProperty("hour", out var hourProperty) && _areaAmbient is { } ambient)
-        {
-            var advance = (hourProperty.GetInt32() - ambient.Clock.Hour + 24) % 24;
-            if (advance > 0) ambient.AdvanceHours(advance, AmbientSector());
-            AreaAmbientChanged("town capture hour");
-        }
-        _townCaptured = true;
         try
         {
+            // Only the world: every overlay layer of the viewer is hidden, the hero and the critters are not drawn, the roofs stay closed.
+            foreach (var child in GetChildren())
+            {
+                if (child is CanvasLayer layer && layer.Visible && !layer.IsAncestorOf(_canvas)) { layer.Visible = false; hiddenLayers.Add(layer); }
+                else if (child is CanvasItem item && item.Visible && item != _canvas && !item.IsAncestorOf(_canvas)) { item.Visible = false; hidden.Add(item); }
+            }
+            _canvas.SetActorVisibilityForReadback(false); _canvas.HideCritters = true; _canvas.AreaHighlight = null; _canvas.AreaRing = null;
+            _areaRoofsClosed = true; ResetAreaRoofs(); _canvas.SetAreaWallFades(null);
+            if (root.TryGetProperty("hour", out var hourProperty) && _areaAmbient is { } ambient)
+            {
+                var advance = (hourProperty.GetInt32() - ambient.Clock.Hour + 24) % 24;
+                if (advance > 0) ambient.AdvanceHours(advance, AmbientSector());
+                AreaAmbientChanged("town capture hour");
+            }
             await SetSmokeWindowSizeAsync(new Vector2I(w, h));
             var heroCell = session.State.CommittedCell; var heroLoc = session.Chart.ToWorld(heroCell);
             var foot = _worldActor.FootAnchor;
@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
         {
             foreach (var layer in hiddenLayers) layer.Visible = true;
             foreach (var item in hidden) item.Visible = true;
-            _canvas.SetActorVisibilityForReadback(true); _canvas.HideCritters = false; _areaRoofsClosed = false; ResetAreaRoofs();
+            _canvas.SetActorVisibilityForReadback(true); _canvas.HideCritters = false; _areaRoofsClosed = false; ResetAreaRoofs(); _areaWallCell = null;
         }
     }
 }
