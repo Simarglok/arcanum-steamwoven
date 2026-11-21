@@ -29,7 +29,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
     private AreaExperienceStripView _experience = null!;
     private int? _experienceProgress;
-    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the board of the top strip's sliver, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
+    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the board of the top strip's sliver, the black bars around the frame in a window that is not the frame's shape and the backdrop an open menu gets over the middle band.
     private SteamwovenHudPlan? _plan;
     private Control _boards = null!, _bars = null!;
     private SteamwovenBoardView _topBoard = null!;
@@ -88,16 +88,16 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>Raised after the insets changed (the bars shown, hidden or scaled): the panels placed by them place themselves again.</summary>
     public static event Action? InsetsChanged;
 
-    /// <summary>ARC-UI-2510: the left edge of the frame the Steamwoven layout lays the play screen out in, while the bars are shown (0 otherwise, and in a window with no pillarbox bar).</summary>
+    /// <summary>ARC-UI-2510: the left edge of the column the Steamwoven layout lays the windows out in, while the bars are shown (0 otherwise).</summary>
     public static float FreeLeft { get; private set; }
     private static float _freeWidth;
 
-    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size. ARC-UI-2510: in the Steamwoven layout the free width is the frame's (a window wider than the
-    /// 16:9 frame has a pillarbox bar on each side, which a window must not lie under); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
+    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size. ARC-UI-2510: in the Steamwoven layout the free width is the column's (the windows stand in the column,
+    /// not over the world beside it); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(_freeWidth > 0 ? _freeWidth : size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
 
-    /// <summary>ARC-UI-2603: the rectangle in window pixels the strips and the pillarbox bars leave free, for what must stay clear of them (a text bubble's placement). In the Steamwoven layout it is
-    /// the frame's width from <see cref="FreeLeft"/> between the strips; without the layout (the generated interface off) the strips are the original's and the whole window stands, as before.</summary>
+    /// <summary>ARC-UI-2603: the rectangle in window pixels the strips leave free, for what must stay clear of them (a text bubble's placement). In the Steamwoven layout it is
+    /// the frame's width (the whole frame, ARC-UI-2890) between the strips; without the layout (the generated interface off) the strips are the original's and the whole window stands, as before.</summary>
     public static Rect2 FreeRect(Vector2 size)
     {
         if (_freeWidth <= 0) return new Rect2(Vector2.Zero, size);

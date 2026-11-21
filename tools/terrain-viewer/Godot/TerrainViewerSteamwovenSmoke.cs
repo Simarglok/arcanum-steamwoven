@@ -330,6 +330,7 @@ public partial class TerrainViewerApp
         require(barArea + (long)frame.Width * frame.Height == (long)size.X * size.Y, $"[{tag}] the bars ({barArea}) and the frame {frame} fill the window");
         require(panel.CapsForSelfTest.SequenceEqual(SteamwovenColumnEdges.Parts(plan, false)) && panel.CapsForSelfTest.Count == 2, $"[{tag}] the end caps stand on the two strips ({panel.CapsForSelfTest.Count} parts)");
         await CheckSteamwovenColumnPartsAsync(tag, plan, size, frames, require);
+        await CaptureSteamwovenPartsAsync(tag, frames);
         await CaptureHudAsync("steamwoven-" + tag, frames);
         // Read back: the brass edge of the top strip's end, and the world's brightness at the sides for the dimming comparison below.
         double worldBefore;
