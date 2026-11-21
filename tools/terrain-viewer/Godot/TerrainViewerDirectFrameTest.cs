@@ -48,14 +48,14 @@ public static partial class TerrainViewerSelfTest
                 return false;
             }
             Require(texture.IsHd && !texture.IsAreaResampled, "no scale claimed: the mip chain draws as before (" + pack.ResolveSprite(frame.Hd!, legacy).Status + ")");
-            // ARC-RENDER-3045: a texture that claims the scale before anything is built, its first copy pending: Legacy draws (no main-thread decode and mip chain), and the worker's copy swaps in.
+            // ARC-RENDER-3045: a texture that claims the scale before anything is built draws the mip chain while its first copy pends (never the Legacy pixels), then the copy.
             var fresh = (HdInterfaceTexture)InterfaceHd.Texture(frame);
             fresh.ScaleSource = () => device;
-            Require(!fresh.IsHd && fresh.IsAreaPending && fresh.HdScale == 1, "the first copy pending: the Legacy pixels draw, no second decode here");
-            Require(await Settled(fresh) && !fresh.IsAreaPending, "the first copy lands and replaces the Legacy pixels");
+            Require(fresh.IsHd, "the first copy pending or not, the HD frame draws, never the Legacy pixels");
+            Require(await Settled(fresh) && fresh.IsHd, "the first copy lands and replaces the mip chain");
             texture.ScaleSource = () => device;
             plain.ScaleSource = () => device;
-            Require(await Settled(texture) && !texture.IsAreaPending, "at 4/3 the frame is resampled by a worker and drawn from the copy");
+            Require(await Settled(texture) && texture.IsHd, "at 4/3 the frame is resampled by a worker and drawn from the copy");
             var (width, height) = InterfaceChromeRenderer.PixelSize(W, H, 1.333);
             Require(texture.AreaPixelSize == new Vector2I(width, height) && texture.GetWidth() == W && texture.GetHeight() == H, $"the copy is {width}x{height} device pixels and the texture keeps the Legacy size");
             Require(texture.HdScale == 1 && texture.AreaPixelSize.X > 0, "the copy is not a whole multiple of the Legacy size (11 of 8 texels)");

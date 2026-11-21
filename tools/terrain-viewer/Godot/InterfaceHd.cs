@@ -505,7 +505,6 @@ public partial class HdInterfaceTexture : Texture2D
     private ImageTexture? _area;
     private CanvasTexture? _areaCanvas;
     private InterfaceHd.DirectFrameEntry? _areaFrom;
-    private bool _areaPending;
     private int _activeScale = 1;
     // ARC-UI-148: device pixels per Legacy pixel of what draws, for a region draw (a generated frame at a fractional scale is not a whole multiple).
     private float _activeRatio = 1;
@@ -526,9 +525,6 @@ public partial class HdInterfaceTexture : Texture2D
 
     /// <summary>ARC-RENDER-3002: true when what draws is the pack frame area-resampled to the device scale (a self-test reads it).</summary>
     internal bool IsAreaResampled => Active() is { } active && ReferenceEquals(active, _areaCanvas);
-
-    /// <summary>ARC-RENDER-3045: true while a worker resamples the first copy of this frame at the claimed scale (the frame draws Legacy, or its mip chain when one is built; a self-test reads it).</summary>
-    internal bool IsAreaPending => _areaPending;
 
     /// <summary>ARC-RENDER-3002: the pixel size of the uploaded area-resampled copy (zero while none is uploaded; a self-test reads it).</summary>
     internal Vector2I AreaPixelSize => _area is { } image && _areaCanvas is not null ? new(image.GetWidth(), image.GetHeight()) : default;
@@ -569,7 +565,6 @@ public partial class HdInterfaceTexture : Texture2D
     // The canvas texture of the HD image (null while Legacy draws); built with the image, so the two are dropped together.
     private CanvasTexture? Active()
     {
-        _areaPending = false;
         if (InterfaceHd.Generated && _frame?.Hd is { } generatedQuery && InterfaceChromeRecipes.For(generatedQuery) is { } recipe)
         {
             if (GeneratedCanvas(recipe, generatedQuery, out var painting) is { } generated)
@@ -586,15 +581,7 @@ public partial class HdInterfaceTexture : Texture2D
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack || _frame?.Hd is not { } query) return null;
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; DropArea(); }
         // ARC-RENDER-3002: a plain frame at a fractional device scale below the pack's draws from its area-resampled copy once a worker has it (the mip chain is freed then).
-        var areaPending = false;
-        if (!_premultipliedAlpha && AreaCanvas(pack, query, out areaPending) is { } area) return area;
-        // ARC-RENDER-3045: while a worker resamples the first copy the frame is not decoded here a second time (no main-thread decode and mip chain, no stall): a mip chain already
-        // built keeps drawing, else the Legacy pixels draw until the copy swaps in by itself.
-        if (areaPending)
-        {
-            if (_hdCanvas is null) { _activeScale = 1; _activeRatio = 1; }
-            return _hdCanvas;
-        }
+        if (!_premultipliedAlpha && AreaCanvas(pack, query) is { } area) return area;
         if (_hdCanvas is null && !_failed)
         {
             // ARC-DEV-369: a worker may have resolved this frame already; only the upload is left.
@@ -632,13 +619,12 @@ public partial class HdInterfaceTexture : Texture2D
         return _hdCanvas;
     }
 
-    private void DropArea() { _area = null; _areaCanvas = null; _areaFrom = null; _areaPending = false; }
+    private void DropArea() { _area = null; _areaCanvas = null; _areaFrom = null; }
 
     // ARC-RENDER-3002: the area-resampled frame for the device scale this texture is drawn at (its scale source); null while the scale is whole
     // or at least the pack's, the pack has no usable redraw, or nothing is ready yet and no earlier scale draws (the mip chain draws then, as before).
-    private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query, out bool pending)
+    private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query)
     {
-        pending = false; _areaPending = false;
         // Only a view that claims its device scale: a texture with no claim may be drawn at any scale, and a copy for the wrong one is blurrier than the mip chain.
         if (ScaleSource is not { } source || InterfaceHd.DirectScale(source(), pack.Scale) is not { } scale) { DropArea(); return null; }
         var real = (double)source();
@@ -654,7 +640,7 @@ public partial class HdInterfaceTexture : Texture2D
         if (entry.Pixels is not { } pixels)
         {
             // Still resampling: an earlier scale's copy keeps drawing, stretched into the same Legacy rectangle, until the new one is ready.
-            if (_areaCanvas is null) { pending = _areaPending = true; return null; }
+            if (_areaCanvas is null) return null;
         }
         else if (!ReferenceEquals(_areaFrom, entry) || _areaCanvas is null)
         {

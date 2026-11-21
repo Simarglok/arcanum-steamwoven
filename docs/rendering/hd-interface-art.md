@@ -417,7 +417,7 @@ No model was trained; no weight is added to the repository. Generated frames are
   claims its device scale (`ScaleSource`) is area-resampled once per scale on a worker (`InterfaceChromeRenderer.ResampleStraight`, straight alpha kept,
   colour weighted by alpha) and drawn 1:1 from that copy, the mip chain freed (ARC-RENDER-3045: a **whole** scale the pack's does not divide, 3 of a 4× pack, is
   resampled to exactly that scale too; the copies kept per frame are the four scales asked for last; a pack with no usable redraw for a frame costs one failed worker, not one per scale;
-  while the first copy of a frame that nothing has drawn yet is pending the Legacy pixels draw, no second decode and mip chain on the main thread); whole scales that divide the pack's (1 and 2), scales from 4 up, art-font canvases and textures that claim no
+  until the first copy lands the trilinear mip chain draws, as before, so the Legacy pixels never show in HD mode); whole scales that divide the pack's (1 and 2), scales from 4 up, art-font canvases and textures that claim no
   scale (the Steamwoven strips' direct frames included) keep the trilinear draw, and the fonts' glyphs are [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939)); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
   draw), not a judgement of real art at 200–300 %. Mip levels average straight alpha (not premultiplied), so a pack's transparent
   texels must carry sensible colour (the U1/U2 colour bleed does); the edge of a region draw may take up to about 7 % of the
