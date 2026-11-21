@@ -22,6 +22,9 @@ public sealed record SteamwovenKitStripSpec(string Board, string CapLeft, string
 /// <summary>The kit window backgrounds a window mode is made of, left to right: part id and master width; the master height is the zone's, 1440 px. The widths add up to the composition's 2880 px (SWI-BDR-3, SWI-BDR-5).</summary>
 public sealed record SteamwovenKitWindowSpec(IReadOnlyList<(string Part, int MasterWidth)> Pieces);
 
+/// <summary>A doll cover of the loot window from the kit: its part and master size (the zone's master pixels).</summary>
+public sealed record SteamwovenKitCover(string Part, int MasterWidth, int MasterHeight);
+
 /// <summary>A document the kit lays over a window's background in place of an original panel art: its part and master size (the zone's master pixels, 3.6 per original unit).</summary>
 public sealed record SteamwovenKitSheetSpec(string Part, int MasterWidth, int MasterHeight);
 
@@ -29,6 +32,7 @@ public sealed record SteamwovenKitSheetSpec(string Part, int MasterWidth, int Ma
 public enum SteamwovenKitWindow
 {
     Inventory,
+    Loot,
     Character,
     Logbook,
     WorldMap,
@@ -55,11 +59,25 @@ public static class SteamwovenKitTable
     public static IReadOnlyDictionary<SteamwovenKitWindow, SteamwovenKitWindowSpec> Windows { get; } = new Dictionary<SteamwovenKitWindow, SteamwovenKitWindowSpec>
     {
         [SteamwovenKitWindow.Inventory] = new([("backdrop.pdoll", 1290), ("backdrop.inventor", 1590)]),
+        // ARC-UI-3032 (census G02, G04): the loot window with the body's doll, the steal window and See Contents share the left half 234 (the loot art) and the inventory's right half 221.
+        [SteamwovenKitWindow.Loot] = new([("backdrop.loot", 1290), ("backdrop.inventor", 1590)]),
         [SteamwovenKitWindow.Character] = new([("backdrop.char_maint", 2880)]),
         [SteamwovenKitWindow.Logbook] = new([("backdrop.logbooks_side", 594), ("backdrop.book_main", 2286)]),
         [SteamwovenKitWindow.WorldMap] = new([("backdrop.mapmain", 2880)]),
         [SteamwovenKitWindow.Schematic] = new([("backdrop.schematic_base", 2880)]),
     };
+
+    /// <summary>The doll covers the loot window lays over its background (census G02, G04; kit.json <c>backdrop.loot_pd</c> art 349 and <c>backdrop.pd_cover4inven</c> art 341): the art number it replaces, the part, the part's master size
+    /// (the window draws it at the place of the art it replaces, <see cref="AreaLootArtLayout.DollView"/> and <see cref="AreaHeroDollToggle.Cover"/>). A cover the set lacks
+    /// or holds at another size leaves the original art in its place; the background is not held back by it.</summary>
+    public static IReadOnlyDictionary<int, SteamwovenKitCover> Covers { get; } = new Dictionary<int, SteamwovenKitCover>
+    {
+        [AreaLootArtLayout.DollViewArt] = new("backdrop.loot_pd", 1290, 960),
+        [AreaHeroDollToggle.CoverArt] = new("backdrop.pd_cover4inven", 1230, 1440),
+    };
+
+    /// <summary>The master pixels of one original unit in the window zone (2880 over the 800-unit frame, SWI-BDR-2).</summary>
+    public const double MasterPerUnit = CompositionMasterWidth / 800.0;
 
     /// <summary>The pages of the character sheet (census G06 to G09, also the NPC sheet G10 and the editor's pages): the art number of the page's own panel (29 skills, 30 tech, 31 spells, 567 auto-level schemes, each 235 x 325 units at the
     /// sheet's (503, 63)) and the kit sheet that replaces it over the kit's <c>backdrop.char_maint</c> (846 x 1170 master px). A sheet the set lacks or holds at another size leaves the page's own art in its place.</summary>
@@ -197,6 +215,8 @@ public static class SteamwovenKitComposer
 
     public static SteamwovenKitWindow? WindowOf(InterfaceMode mode) => mode switch
     {
+        // ARC-UI-3032: the loot window (with the body's doll), the steal window and See Contents (census G02, G04).
+        InterfaceMode.Loot or InterfaceMode.Steal => SteamwovenKitWindow.Loot,
         // The identify and repair windows (modes 5 and 6, census G17) stand on the inventory's two arts (221 and 223).
         InterfaceMode.Inventory or InterfaceMode.InventoryKind5 or InterfaceMode.InventoryKind6 => SteamwovenKitWindow.Inventory,
         InterfaceMode.Character => SteamwovenKitWindow.Character,
@@ -207,6 +227,22 @@ public static class SteamwovenKitComposer
     };
 
     /// <summary>
+    /// ARC-UI-3032: the kit part that replaces the original doll cover <paramref name="art"/> (349, 341) of the loot window: the part of the set when it is the table's size at the step, else null (the original art stays; the
+    /// background still shows from the kit). The part's drawn size in original units is <see cref="CoverUnits"/>.
+    /// </summary>
+    public static SteamwovenKitPart? Cover(SteamwovenKitSet set, int art) =>
+        SteamwovenKitTable.Covers.TryGetValue(art, out var cover) && set.TryGet(cover.Part, out var part)
+        && part.Width == SteamwovenGrid.BakedLength(cover.MasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(cover.MasterHeight, set.Step) ? part : null;
+
+    /// <summary>The size of a cover in original units: its master size over 3.6 master px per unit.</summary>
+    public static (double Width, double Height) CoverUnits(SteamwovenKitCover cover) => (cover.MasterWidth / SteamwovenKitTable.MasterPerUnit, cover.MasterHeight / SteamwovenKitTable.MasterPerUnit);
+
+    /// <summary>
+    /// ARC-UI-3032 (AC2): the background arts the loot window draws itself in the loot, steal and See Contents modes: the loot art 234 and the pack art 221 over the whole frame, or none while the kit background shows under
+    /// the window (the window is then drawn over it; the view-window art over the round view and every item layer stay as before).
+    /// </summary>
+    public static IReadOnlyList<int> LootBackgroundArts(bool kitBackground) => kitBackground ? [] : [AreaLootArtLayout.LootArt, AreaInventoryArtLayout.PackArt];
+
     /// ARC-UI-3035 (AC2): the kit sheet that replaces the character sheet page's own panel art <paramref name="art"/> (29, 30, 31, 567): the part of the set when it is the table's size at the step, else null (the page keeps its art).
     /// It is asked for only while the kit background of the character window shows under the sheet (<see cref="WindowOf(InterfaceMode)"/>, the same for the hero's sheet and the NPC sheet of a dialog).
     /// </summary>
