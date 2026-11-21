@@ -102,8 +102,11 @@ public partial class TerrainViewerApp
             require(Near(probe, page.Colour) == kitSheets, $"[{tag}] the {page.Name} page's pixels are {(kitSheets ? "" : "not ")}its kit sheet's colour (got {probe})");
             await CaptureHudAsync("steamwoven-" + tag + "-sheet-" + page.Name + (kitSheets ? "" : "-own"), frames);
         }
+        require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("sheet.", StringComparison.Ordinal)) == (kitSheets ? 4 : 0), $"[{tag}] the open sheet holds {(kitSheets ? "its four kit sheets" : "no kit sheet")} in memory");
         EndSheet(); await frames(3);
         require(!SheetOpen && AreaKitSheets.ShownForSelfTest.Count == 0 && panel.KitForSelfTest.Background.Count == 0, $"[{tag}] the kit sheets go with the window");
+        // SWI-RUN-5: the open window's sheets are resident while it is open and released with it.
+        require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("sheet.", StringComparison.Ordinal)), $"[{tag}] no kit sheet stays resident after the window closes");
     }
 
     private async Task CaptureSteamwovenKitAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
