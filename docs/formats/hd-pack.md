@@ -474,6 +474,43 @@ per file, otherwise the BMP. Import: `hd_pack.py maps-plan` writes the plan (kin
 `365 × scale`), the importer (`hd-interface-import --plan`) checks each picture against the bitmap it reads from the game and writes the entries into a staging pack (a map plan replaces only the bitmaps it names;
 the pack's sprites, portraits and other maps stay), and the update goes in with `apply --add-new` ([workflow](../workflow/hd-pack.md#world-map-pictures-arc-render-3079)); every step has a dry run.
 
+## Town-map entries (ARC-RENDER-3106)
+
+The town-map window draws a town's picture from tiles of `townmap/<town>/<town>NNNNNN.bmp` (64 × 32, 8-bit, the layout of the `.tmi` record, [ARC-UI-084](../rendering/hd-world-town-map.md)); a town is up to
+thousands of tiles (Ashbury 2,991, all 125 towns 64,199). The owner decided on 2026-11-21 ([decisions](../architecture/decisions.md), [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952))
+that town maps are **rendered by our engine at scale 1.0** (no hero, NPCs or critters, roofs closed; [render path](../rendering/hd-world-town-map.md#render-path-arc-render-3063)) and kept as pack entries
+of kind `townmap`, one per tile, built exactly like a world-map entry:
+
+```json
+{ "kind": "townmap", "file": "interface/town-map/ashbury/townmap-ashbury-000748-f000.png", "sha256": "<png sha256>", "bytes": 29850,
+  "slice": "interface", "townmap": { "path": "townmap/ashbury/ashbury000748.bmp" },
+  "legacy": { "width": 64, "height": 32, "rgbaSha256": "<Legacy RGBA sha256>" }, "review": "unreviewed" }
+```
+
+An older reader refuses a pack that holds one (unknown kind), like `portrait` and `worldmap`.
+
+| Part | Rule |
+| --- | --- |
+| `kind` | `townmap`; the entry's exact properties are the common ones (`file`, `sha256`, `bytes`, `slice`, `legacy`, `review`) and `townmap`, which holds `path` only. |
+| `path` | the original tile's path, lowercase, exactly `townmap/<town>/<town>NNNNNN.bmp` as `AreaTownMapLayout.TilePath` builds it: the town (the folder name of `rules/townmap.mes`, lowercased) of at most 40 characters of `[a-z0-9 '._-]` with no edge space or dot (the shipped names use letters, digits, space, apostrophe, dot and hyphen), and the tile index as six digits. The key of the entry, unique in the pack (`HdTownMapKey`). A tile outside the pattern has no HD entry and draws the BMP. A tile of another module with the same path has other pixels, so the `legacy` check refuses it (the pack has one key space, as for every other kind); the module is not in the key. |
+| `legacy` | the tile's decoded pixels as `Arcanum.Data.Characters.PortraitBitmap` reads them (an 8-bit palette tile becomes RGBA, alpha 255): **64 × 32**, and the SHA-256 of the RGBA; any other size is refused when the pack opens. A tile another game version or a mod replaced is `SourceMismatch` and draws the BMP. Tile 000000, which stands in for every tile the town has no file for, is an entry like the others. |
+| ratio | the HD file is exactly `Scale × Legacy size`, so the pack's **recorded `scale`** is the ratio: **256 × 128 at a 4× pack, which is render scale 1.0** (the tile covers 256 × 128 pixels of the `.tmi`'s picture at scale 1, the original covers the same area with 64 × 32 at scale 0.25) and 128 × 64 at a 2× pack (render scale 0.5). There is no per-entry scale (an extra property is refused), so one pack carries one render scale. The render scale is `pack scale / 4`. |
+| `slice` | a slice whose kinds include `interface` (the pack's `interface` slice): a tile is interface art for the alpha rule, so the slice's Legacy alpha applies and the HD file is **fully opaque**. |
+| HD file | the pack's one PNG profile (8-bit RGBA, written opaque). The town render's tiles are 24-bit RGB PNGs: the importer takes them as they are and writes RGBA with alpha 255. |
+| key | carried as an `HdSpriteKey` (hash of the path, `View` 0, group, frame and palette 0), so the pack's lookup, file checks and `ResolveSprite` serve these entries like frames; `HdEntryKind.TownMap`. The device cache (`HdPack.InterfaceSprites`, `hd-cache`) **leaves them out**: a town has thousands of tiles, drawn once per device scale from the area copy and never as a mip chain, and converting them would put gigabytes into the cache. |
+
+**The grid is the original's.** The viewer keeps a tile's texture at its Legacy size (64 × 32; `TownMapHd.Texture`), so `AreaTownMapPlan` (the tile size is that of the original's tile 000000), the scroll, `ToPixel`, `CellOf`
+(the fog bit), `ToLocation` (clicks) and the party marker read the `.tmi`'s own scale 0.25 and are the same whatever the pack holds; with the HD setting on and an entry for the tile that was read (the stand-in's entry is tile
+000000's) the same texture draws the pack's redraw into the same 64 × 32 rectangle. A tile of another size than tile 000000 (a mod's) has no HD question and draws as before, so it cannot break the layout. The picture
+is far larger than the screen it is drawn on (a 256 × 128 tile on a 1080p screen covers 0.45 device pixels per picture pixel), and a 1:1 draw of it rings: the textures claim their view's device scale and draw the **area copy** of [#3091](https://github.com/Simarglok/arcanum-steamwoven/pull/3091) (`InterfaceHd.DirectFor`: resampled once per device scale on a worker with the area filter,
+drawn 1:1 from that copy), with the Legacy pixels drawing while the copy of a tile is made (`HdInterfaceTexture.AreaFirst`: no PNG decode and mip chain per tile on the main thread); the copy is made at the device scale at every scale, whole scales included, and at most the pack's own (the redraw as it is), always on the worker,
+and a tile the pack cannot serve draws the BMP. A tile of a town that is gone is released at once (its images are freed and its queued copy is dropped). A faded tile (a tile beside the revealed ones) draws its polygon with the same texture.
+
+Import: `hd_pack.py townmap-plan` writes the plan (kind `arcanum-steamwoven-hd-townmap-plan`) from the folder of one town's rendered tiles (`<Town>NNNNNN.png` at `64 × scale` by `32 × scale`, `--expect` the town's
+tile count), the importer (`hd-interface-import --plan`) checks each picture against the tile it reads from the game and writes the entries into a staging pack (a town plan replaces only the tiles it names; the pack's sprites,
+portraits, maps and other towns stay), and the update goes in with `apply --add-new`; each town is one plan ([workflow](../workflow/hd-pack.md#town-map-tiles-arc-render-3106)). A staged tile needs no row in
+`layout-map.tsv`: it is placed at `interface/town-map/<town>/` (the town with every character outside `[a-z0-9_-]` turned into `-`) as `townmap-<town>-NNNNNN-f000.png` and `apply` appends its row.
+
 ## Device budget file
 
 `HdDeviceBudget` / `HdDeviceBudgetCodec` read the per-device HD limits that the contract
