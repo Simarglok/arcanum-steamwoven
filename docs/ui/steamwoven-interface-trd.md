@@ -289,11 +289,12 @@ Part kinds:
 - **SWI-GEN-5** The strips and the window backgrounds are made by **method A** (owner decision 2026-11-21,
   [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458), from the comparison
   [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)): one Codex item per zone at the generator's size, upscaled to the zone;
-  methods B (overlapping tiles) and C (seamless material plus macro image) are dropped. A gives the wooden surface with its relief and nothing else, under the five
-  conditions of the [owner pick](steamwoven-surface-method-study.md#owner-pick-and-conditions-2026-11-21): no text, counters or fields in the generated surface; zones
-  filled in play taken by the original's mask; metal parts from the kit (pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058)); strip-join seam ratio
-  at most 1.8 (the original's are 1.82 and 1.73); wood tone fitted to the original by the wood mask with the specks removed. Method note and numbers:
-  [steamwoven-surface-method-study.md](steamwoven-surface-method-study.md).
+  methods B (overlapping tiles) and C (seamless material plus macro image) are dropped. A gives the wooden surface with its relief and nothing else; its five
+  conditions are those of the [owner pick](steamwoven-surface-method-study.md#owner-pick-and-conditions-2026-11-21): (1) text, counters, digits and fields are not part of the
+  generated surface, the game draws them over it; (2) zones filled in play are taken by the original's mask, never from the generation; (3) metal parts come from the kit
+  (pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058)); (4) seams at the strip joins not worse than the original's (1.82 and 1.73), the target is at most 1.8
+  (SWI-VER-5 below keeps its own gate); (5) wood tone: mean L\* and contrast (and chroma) fitted to the original by the wood mask, random dark specks removed, the original's rows of dots kept.
+  Method note and numbers: [steamwoven-surface-method-study.md](steamwoven-surface-method-study.md).
 - **SWI-GEN-6** Every generated image has a provenance record: generator and version, date, prompt id and the hash of
   its text, reference ids and hashes, who ran it. The batch runner (SWI-GEN-7) also records the Codex thread id, the pixel size, the
   outcome and the refusal text.
@@ -399,7 +400,7 @@ Agent-checkable (acceptance criteria of the slices):
 - **SWI-VER-4** Bake: exact sizes and identical bytes on a second run.
 - **SWI-VER-5** Surfaces: seam ratio R ≤ 1.5 at every join inside the composition (a window zone's edge against the strips, the parts of one strip; the measure of
   [ARC-RES-094 U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4); the designed split of a two-part window is exempt, SWI-BDR-5); there are no sides to match, so the former side-versus-centre statistics are dropped. [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) may add
-  repetition and sharpness bounds for the surfaces it compares ([the study's measures](steamwoven-surface-method-study.md#metrics)); the owner has picked method A (SWI-GEN-5) and added no bounds, so only the seam ratio is a gate.
+  repetition and sharpness bounds for the surfaces it compares ([the study's measures](steamwoven-surface-method-study.md#metrics)); the owner has picked method A (SWI-GEN-5) and added no bounds, so only the seam ratio is a gate, R ≤ 1.5 as above; the owner's 1.8 for the method A strip joins (SWI-GEN-5 condition 4) is a target that the original's own joins (1.82, 1.73) would not meet at 1.5, and the prototype's 0.96 and 1.11 meet both.
 - **SWI-VER-6** Smoke captures (local only) at 3840 × 2160, 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200,
   1280 × 800, 1366 × 768, 3440 × 1440, 5120 × 1440 (32:9), 1024 × 768 (4:3) and 1280 × 1024 (5:4); the owner's composite shows 16:9, 16:10, 21:9, 4:3 and 5:4.
 - **SWI-VER-7** With the HD option off the Legacy art is drawn unchanged at whole `s` (pixel check against nearest scaling) and the out-of-sight rules are the original's (SWI-RUN-4, SWI-ORG-3).
@@ -407,7 +408,7 @@ Agent-checkable (acceptance criteria of the slices):
 Owner gates (separate issues, never acceptance criteria): proportions
 [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453), material sheet
 [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456), surface method
-[#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458), and the look of each production batch (named by
+[#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) (decided 2026-11-21: method A), and the look of each production batch (named by
 its issue).
 
 ## Work breakdown
@@ -436,7 +437,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images at the composition size, material sheet, prompts | #2451 |
 | 3. Style | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) | owner: material sheet | #2455 |
 | 3. Style | [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) | surface method comparison on a strip and a window background | #2456 |
-| 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method | #2457 |
+| 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method (decided: A, 2026-11-21) | #2457 |
 | 4. Tools | [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459) | fit tool | #2454 |
 | 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
 | 4. Tools | [#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972) | kit assembly tool: base plus details at the original coordinates, baked per original frame (`tools/steamwoven_ui/assemble.py`, [page](steamwoven-kit-assembly.md); done) | #2893, #2971 |
