@@ -74,7 +74,7 @@ public partial class AreaBarterPanel : CanvasLayer
     {
         get => _docked;
         // Above the menu's backdrop (layer 4), whichever panel the tree made first.
-        set { _docked = value; Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
+        set { _docked = value; if (value) _area?.SetKitBackdrop(null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
     }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;
@@ -82,6 +82,12 @@ public partial class AreaBarterPanel : CanvasLayer
     internal string MessageForSelfTest => _message.Text;
     internal string HeaderForSelfTest => _header.Text;
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
+
+    /// <summary>ARC-UI-3033: how the window stands for the kit: the merchant's background art, and whether the frame lies in the window zone (the original look undocked; the diagnostic look and the opening shop's docked frame keep their generated look).</summary>
+    internal SteamwovenKitBarterState KitState => new(_art?.Frame.Background ?? AreaBarterArtLayout.BarterArt, IsOpen && ArtMode && !_docked);
+
+    /// <summary>ARC-UI-3033: the kit background under the frame, or null (the frame draws its own art).</summary>
+    internal void SetKitBackdrop(AreaKitBackdrop? kit) => _area?.SetKitBackdrop(ArtMode && !_docked ? kit : null);
     internal Button LookToggleForSelfTest => _lookToggle;
 
     /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
