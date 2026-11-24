@@ -161,6 +161,8 @@ public partial class AreaItemServicePanel : CanvasLayer
         _lookToggle.Visible = _diagnosticSwitch && _look is not null && _art is not null;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
+        // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
+        _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
     }
 
     /// <summary>ARC-UI-2071 (ledger DH10): the lone left release after the reply that opened the window (screen point); only the original look takes it.

@@ -163,7 +163,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         AddChild(_artNote);
         // ARC-DEV-047: which build this is (ARC-DEV-050: and the debug mode); above the art (ARC-UI-058), which may cover the corner.
         AddChild(ViewerBuild.MakeLabel(DebugMode));
-        _panel = new PanelContainer { Name = "AreaMainMenu", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = "AreaMainMenu", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f),

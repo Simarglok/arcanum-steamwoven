@@ -61,7 +61,7 @@ public partial class AreaLogbookPanel : CanvasLayer
     public override void _Ready()
     {
         Layer = 4;
-        _panel = new PanelContainer { Name = "AreaLogbook", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = "AreaLogbook", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f),

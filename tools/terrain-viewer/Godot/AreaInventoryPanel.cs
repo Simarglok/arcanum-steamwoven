@@ -448,6 +448,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         _lookToggle.Visible = _diagnosticSwitch && _look is not null && OriginalAvailable;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
+        // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
+        _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
     }
 
     private List<Button> Focusable()

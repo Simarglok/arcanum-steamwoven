@@ -40,10 +40,8 @@ public partial class AreaSaveListArtView : Control
     private int _selected = -1, _top;
     private bool _blocked;
     private AreaSaveListArtButton? _hovered, _pressed;
-    // ARC-UI-3038: the kit's screen drawn now (null: the screen's own art) and the set whose body part this view holds resident; the textures the kit parts are sampled with (nearest only where a draw is exact, SWI-LAY-5).
-    private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? _kitScreen;
-    private SteamwovenKitSet? _kitHeld;
-    private readonly Dictionary<Texture2D, (CanvasTexture Texture, bool Exact)> _kitSampled = [];
+    // ARC-UI-3038: the kit's three parts of the screen (the shared two-strip layer, ARC-UI-3039).
+    private readonly AreaKitTwoStripLayer _kit = new(SteamwovenKitScreen.SaveLoad, "twostrip-saveload");
     private IReadOnlyList<int> _ownBackdropDrawn = [];
 
     /// <summary>A press on a row (its index in the list).</summary>
@@ -61,11 +59,11 @@ public partial class AreaSaveListArtView : Control
         ? [.. Enumerable.Range(_top, Math.Clamp(_rows.Count - _top, 0, AreaSaveListArtLayout.ShownRows))
             .Select(row => AreaSaveListArtLayout.Fit(font, _rows[row], AreaSaveListArtLayout.Row(0).Width))] : [];
     /// <summary>ARC-UI-3038: the kit's three draws of the screen as of the last draw (top strip, body, bottom strip), null while the screen draws its own art.</summary>
-    internal IReadOnlyList<SteamwovenKitDraw>? KitScreenForSelfTest => _kitScreen?.Select(item => item.Draw).ToList();
+    internal IReadOnlyList<SteamwovenKitDraw>? KitScreenForSelfTest => _kit.DrawsForSelfTest;
     /// <summary>ARC-UI-3038: the original arts drawn as the backdrop in the last draw (336, 335, 745 as far as the pack has them; none over the kit).</summary>
     internal IReadOnlyList<int> OwnBackdropDrawnForSelfTest => _ownBackdropDrawn;
     /// <summary>ARC-UI-3038: true when the kit part drawn for <paramref name="index"/> (0 top, 1 body, 2 bottom) is sampled nearest (its draw is exact).</summary>
-    internal bool KitSampledNearestForSelfTest(int index) => _kitScreen is { } kit && index < kit.Count && _kitSampled.TryGetValue(kit[index].Texture, out var sampled) && sampled.Texture.TextureFilter == CanvasItem.TextureFilterEnum.Nearest;
+    internal bool KitSampledNearestForSelfTest(int index) => _kit.SampledNearestForSelfTest(index);
     internal int FrameForSelfTest(AreaSaveListArtButton button) => Frame(button);
     internal int ToggleFrameForSelfTest => ToggleFrame();
     internal bool InfoShownForSelfTest => _infoShown;
@@ -128,54 +126,8 @@ public partial class AreaSaveListArtView : Control
     {
         Visible = false;
         (_hovered, _pressed, _preview, _portrait, _info) = (null, null, null, null, null);
-        ReleaseKit();
+        _kit.Release();
         _ownBackdropDrawn = [];
-    }
-
-    /// <summary>ARC-UI-3038 (SWI-RUN-5): the screen is closed or draws its own art: the body part is no longer held, so it goes with the screen. <paramref name="loaded"/> is the set a failed composition had already loaded parts of
-    /// (a part that did not load after the body did leaves the body unowned unless it is released here).</summary>
-    private void ReleaseKit(SteamwovenKitSet? loaded = null)
-    {
-        _kitScreen = null;
-        _kitSampled.Clear();
-        if ((loaded ?? _kitHeld) is { } held) SteamwovenKitStore.Retain(KitOwner, held, []);
-        _kitHeld = null;
-    }
-
-    private const string KitOwner = "twostrip-saveload";
-
-    /// <summary>
-    /// ARC-UI-3038: the kit's three parts of this screen in the plate's rectangles, loaded; null when the layout is off, the set does not read, or any part is missing, the wrong size or does not load (the screen then draws its own art
-    /// whole, SWI-RUN-3). The body part stays resident while the screen shows it.
-    /// </summary>
-    private List<(Texture2D Texture, SteamwovenKitDraw Draw)>? KitScreen()
-    {
-        if (!_zoned || AreaGameBarPanel.ColumnMenuPlan(GetViewportRect().Size) is not { } plan || SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { ReleaseKit(); return null; }
-        if (SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.SaveLoad).Value is not { } composed) { ReleaseKit(); return null; }
-        var loaded = new List<(Texture2D, SteamwovenKitDraw)>(3);
-        foreach (var draw in composed.Draws)
-        {
-            if (SteamwovenKitStore.Texture(set, draw.PartId) is not { } texture) { ReleaseKit(set); return null; }
-            loaded.Add((texture, draw));
-        }
-        SteamwovenKitStore.Retain(KitOwner, set, [composed.Body.PartId]);
-        _kitHeld = set;
-        // The sampled copies follow the textures drawn now (a rebaked set or another step gives new ones).
-        foreach (var stale in _kitSampled.Keys.Where(key => loaded.All(item => !ReferenceEquals(item.Item1, key))).ToList()) _kitSampled.Remove(stale);
-        return loaded;
-    }
-
-    /// <summary>The kit part drawn into its device rectangle: the view is placed at the plate's corner and scale, so the rectangle is taken back into the view's own units; the part is sampled nearest only where its draw is exact (the
-    /// baked pixels are the device pixels, SWI-LAY-5), else linear.</summary>
-    private void DrawKit(Texture2D texture, SteamwovenKitDraw draw)
-    {
-        if (!_kitSampled.TryGetValue(texture, out var sampled) || sampled.Exact != draw.Exact)
-        {
-            sampled = (new CanvasTexture { DiffuseTexture = texture, TextureFilter = draw.Exact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear }, draw.Exact);
-            _kitSampled[texture] = sampled;
-        }
-        var rect = draw.Rect;
-        DrawTextureRect(sampled.Texture, new Rect2((rect.X - Position.X) / Scale.X, (rect.Y - Position.Y) / Scale.Y, rect.Width / Scale.X, rect.Height / Scale.Y), false);
     }
 
     /// <summary>The screen at the bars' whole factor, centred in the viewport.</summary>
@@ -238,10 +190,10 @@ public partial class AreaSaveListArtView : Control
         if (_font is null || _face is null) return;
         DrawRect(new Rect2(0, 0, AreaSaveListArtLayout.ScreenWidth, AreaSaveListArtLayout.ScreenHeight), Colors.Black);
         // ARC-UI-3038: over a complete kit the strips and the body are the kit's and the screen's own arts 336, 335 and 745 are not drawn.
-        _kitScreen = KitScreen();
-        var own = SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.SaveLoad, _kitScreen is not null);
+        var kit = _kit.Compose(_zoned, GetViewportRect().Size);
+        var own = SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.SaveLoad, kit);
         var ownDrawn = new List<int>(3);
-        if (_kitScreen is not null) foreach (var (texture, draw) in _kitScreen) DrawKit(texture, draw);
+        _kit.Draw(this, Position, Scale);
         if (own.Contains(AreaSaveListArtLayout.TopStripArt) && Art(AreaSaveListArtLayout.TopStripArt) is { } top) { DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false); ownDrawn.Add(AreaSaveListArtLayout.TopStripArt); }
         if (own.Contains(AreaSaveListArtLayout.BottomStripArt) && Art(AreaSaveListArtLayout.BottomStripArt) is { } bottom)
         {
@@ -251,7 +203,7 @@ public partial class AreaSaveListArtView : Control
         }
         var (px, py, pw, ph) = AreaSaveListArtLayout.Preview;
         // ARC-UI-3038: the preview's field, which the original's background leaves as a hole over its black, and the bottom strip's message box stand as plain black fields over the kit's background.
-        if (_kitScreen is not null) AreaKitStandIns.SaveLoad(this);
+        if (kit) AreaKitStandIns.SaveLoad(this);
         // MW23: the picture at its own size (the original's fills the 468 × 300 rectangle from its corner); none, the new-save row or
         // an unread info leave the preview black. PROJECT: the stored picture is the screen fitted into 468 × 300 keeping its shape, so
         // a narrower or lower one is centred; kept within the preview.

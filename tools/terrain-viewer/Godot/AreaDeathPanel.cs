@@ -64,7 +64,7 @@ public partial class AreaDeathPanel : CanvasLayer
         _veil.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_veil);
         // The quit box's look (AreaMainMenuPanel): the parchment panel, a dark question, Yes and No.
-        _box = new PanelContainer { Name = "DeathLoadBox", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        _box = new AreaFallbackBox { Name = "DeathLoadBox", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
         _box.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f),
