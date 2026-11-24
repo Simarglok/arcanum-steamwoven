@@ -20,7 +20,8 @@ public partial class TerrainViewerApp
         KitBarter = new(0.55f, 0.35f, 0.15f), KitBarterFollower = new(0.15f, 0.55f, 0.55f),
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
-        KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f);
+        KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
+        KitFixture = new(0.95f, 0.95f, 0.2f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -40,6 +41,8 @@ public partial class TerrainViewerApp
         ("sheet.char_spells", 846, 1170, KitSpellsSheet), ("sheet.scheme_rot", 846, 1170, KitSchemesSheet),
         // ARC-UI-3037: the logbook's two pieces and the schematic window's backdrop.
         ("backdrop.logbooks_side", 594, 1440, KitLogSide), ("backdrop.book_main", 2286, 1440, KitLogBook), ("backdrop.schematic_base", 2880, 1440, KitSchematic),
+        // ARC-UI-3098: the fixtures, flat (a part the windows draw at its place is the one colour; ARC_STEAMWOVEN_KIT_FIXTURES=DIR takes the real ones of tools/steamwoven_ui/fixtures.py from a baked root for a look capture).
+        .. SteamwovenKitTable.FixtureUnits.Select(pair => (pair.Key, SteamwovenKitTable.MasterOf(pair.Value.Width), SteamwovenKitTable.MasterOf(pair.Value.Height), KitFixture)),
     ];
 
     /// <summary>Writes the synthetic set of <paramref name="step"/> under <paramref name="root"/> (parts named in <paramref name="without"/> left out, their records too).</summary>
@@ -53,9 +56,14 @@ public partial class TerrainViewerApp
         {
             if (without.Contains(id)) continue;
             var (baked, bakedHeight) = (SteamwovenGrid.BakedLength(width, step), SteamwovenGrid.BakedLength(height, step));
-            using var image = Image.CreateEmpty(baked, bakedHeight, false, Image.Format.Rgba8);
-            image.Fill(colour);
-            if (image.SavePng(System.IO.Path.Combine(directory, id + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-2461 synthetic kit part not saved: " + id);
+            var real = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_FIXTURES") is { Length: > 0 } fixtureRoot && SteamwovenKitTable.FixtureUnits.ContainsKey(id) ? System.IO.Path.Combine(fixtureRoot, SteamwovenKitSet.FolderName(step), id + ".png") : null;
+            if (real is not null && System.IO.File.Exists(real)) System.IO.File.Copy(real, System.IO.Path.Combine(directory, id + ".png"), true);
+            else
+            {
+                using var image = Image.CreateEmpty(baked, bakedHeight, false, Image.Format.Rgba8);
+                image.Fill(colour);
+                if (image.SavePng(System.IO.Path.Combine(directory, id + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-2461 synthetic kit part not saved: " + id);
+            }
             records.Add(new Dictionary<string, object> { ["id"] = id, ["bake_version"] = 1, ["master"] = new Dictionary<string, object> { ["size"] = new[] { width, height }, ["sha256"] = "synthetic" },
                 ["size"] = new[] { baked, bakedHeight }, ["bytes"] = 0, ["sha256"] = "synthetic", ["pixels_sha256"] = "synthetic" });
         }
@@ -261,7 +269,7 @@ public partial class TerrainViewerApp
     /// of the zone's pixels (sampled) that are the window's kit colours says which one shows: most of the zone with the kit, none without (<paramref name="kit"/> false: the set lacks each window's backdrop, the generated backdrop and the
     /// window's own art stand). The window's controls, text and holes are drawn either way. The identify and repair windows are the inventory's draw path (<c>WindowOf</c> is unit-tested).
     /// </summary>
-    private async Task CheckKitWindowBackgroundsAsync(AreaGameBarPanel panel, SteamwovenHudPlan plan, string tag, Func<int, Task> frames, Action<bool, string> require, bool kit)
+    private async Task CheckKitWindowBackgroundsAsync(AreaGameBarPanel panel, SteamwovenHudPlan plan, string tag, Func<int, Task> frames, Action<bool, string> require, bool kit, bool fixtures = true)
     {
         var zone = SteamwovenWindowZone.ZoneOf(plan);
         (string Name, Action Open, Func<bool> IsOpen, Action Close, SteamwovenKitWindow Window, Color[] Colours)[] windows =
@@ -276,6 +284,7 @@ public partial class TerrainViewerApp
             if (isOpen()) close();
             await frames(3);
             AreaKitStandIns.ResetForSelfTest();
+            AreaKitFixtures.ResetForSelfTest();
             open();
             await frames(6);
             require(isOpen(), $"[{tag}] the {name} window opens");
@@ -283,6 +292,10 @@ public partial class TerrainViewerApp
             await frames(3);
             // The window's own draw took the kit branch (it drew its stand-ins for the elements the old art held) exactly when the kit's background shows.
             require(AreaKitStandIns.DrawnForSelfTest.Contains(window) == kit, $"[{tag}] the {name} window {(kit ? "drew its stand-in fields over the kit's background" : "drew its own art, no stand-in fields")}");
+            // ARC-UI-3098: the window's fixtures that the set holds are the ones published and drawn from the kit; with the set lacking them none is, and the stand-ins are (the pixel probes of the sheet below say which).
+            var expectedFixtures = kit && fixtures ? SteamwovenKitTable.FixturesOf(window).Order().ToArray() : [];
+            require(AreaKitFixtures.ShownForSelfTest.SequenceEqual(expectedFixtures), $"[{tag}] the {name} window shows {(expectedFixtures.Length > 0 ? "its fixtures" : "no fixture")} from the kit (got {string.Join(", ", AreaKitFixtures.ShownForSelfTest)})");
+            require(expectedFixtures.All(id => AreaKitFixtures.DrawnForSelfTest.Contains(id)) && (expectedFixtures.Length > 0 || AreaKitFixtures.DrawnForSelfTest.Count == 0), $"[{tag}] the {name} window draws every fixture the kit has (drawn {string.Join(", ", AreaKitFixtures.DrawnForSelfTest)})");
             using (var shot = GetViewport().GetTexture().GetImage())
             {
                 var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
@@ -302,15 +315,15 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-3037 {tag} {name} kit-colour share {share:F3}");
                 require(kit ? share > 0.10 : share < 0.01, $"[{tag}] the {name} window's pixels are {(kit ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kit ? "not drawn" : "drawn")}");
                 // ARC-UI-3037: the sheet's three gauges stand in (a point of each, in window units): the health heart, the fatigue cross, the alignment dial's face and the ruler's parchment.
-                if (kit && name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } sheetView)
-                    foreach (var (what, wx, wy, expected) in new (string, float, float, Color)[] { ("health heart", 449, 164, new(.72f, .12f, .1f)), ("fatigue cross", 449, 236, new(.1f, .1f, .8f)), ("alignment dial face", 30, 170, new(.8f, .74f, .58f)), ("magic-technology ruler", 783, 300, new(.8f, .74f, .58f)) })
+                if (kit && name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } sheetView && !(fixtures && System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_FIXTURES") is { Length: > 0 }))
+                    foreach (var (what, wx, wy, expected) in new (string, float, float, Color)[] { ("health heart", 449, 164, fixtures ? KitFixture : new(.72f, .12f, .1f)), ("fatigue cross", 449, 236, fixtures ? KitFixture : new(.1f, .1f, .8f)), ("alignment dial face", 30, 170, fixtures ? KitFixture : new(.8f, .74f, .58f)), ("magic-technology ruler", 783, 300, fixtures ? KitFixture : new(.8f, .74f, .58f)) })
                     {
                         var at = sheetView.GetGlobalTransform() * new Vector2(wx, wy);
                         var probe = shot.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, shot.GetHeight() - 1));
-                        require(Math.Abs(probe.R - expected.R) < .12f && Math.Abs(probe.G - expected.G) < .12f && Math.Abs(probe.B - expected.B) < .12f, $"[{tag}] the sheet's {what} stand-in is drawn at ({wx}, {wy}) (got {probe})");
+                        require(Math.Abs(probe.R - expected.R) < .12f && Math.Abs(probe.G - expected.G) < .12f && Math.Abs(probe.B - expected.B) < .12f, $"[{tag}] the sheet's {what} {(fixtures ? "kit part" : "stand-in")} is drawn at ({wx}, {wy}) (got {probe})");
                     }
             }
-            await CaptureHudAsync("steamwoven-" + tag + "-" + name + (kit ? "-kit" : "-own"), frames);
+            await CaptureHudAsync("steamwoven-" + tag + "-" + name + (kit ? (fixtures ? "-kit" : "-kit-standin") : "-own"), frames);
             close();
             await frames(4);
             require(!isOpen() && AreaGameBarPanel.KitBackgroundWindow is null, $"[{tag}] the {name} window's kit background goes with it");
@@ -324,6 +337,7 @@ public partial class TerrainViewerApp
         var sheetlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-sheetless-").FullName;
         var backdroplessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-backdropless-").FullName;
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
+        var fixturelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fixtureless-").FullName;
         var (savedHd, savedGenerated) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface);
         var done = new HashSet<(string, SteamwovenStep)>();
         void Ensure(string where, string folder, SteamwovenStep step, params string[] without)
@@ -488,6 +502,15 @@ public partial class TerrainViewerApp
                 panel.Relayout();
                 await frames(4);
                 await CheckKitWindowBackgroundsAsync(panel, plan, tag, frames, require, kit: true);
+                // ARC-UI-3098: a set without the fixtures keeps the kit's background and every window draws its stand-ins for them (no fixture shown).
+                Ensure("fixtureless", fixturelessRoot, step, [.. SteamwovenKitTable.FixtureUnits.Keys]);
+                SteamwovenKitStore.UseRoot(fixturelessRoot);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitWindowBackgroundsAsync(panel, plan, tag, frames, require, kit: true, fixtures: false);
+                SteamwovenKitStore.UseRoot(root);
+                panel.Relayout();
+                await frames(4);
                 Ensure("backdropless", backdroplessRoot, step, "backdrop.pdoll", "backdrop.char_maint", "backdrop.book_main", "backdrop.schematic_base");
                 SteamwovenKitStore.UseRoot(backdroplessRoot);
                 panel.Relayout();
@@ -536,7 +559,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot, fixturelessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }

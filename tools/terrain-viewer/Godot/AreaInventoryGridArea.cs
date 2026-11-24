@@ -194,28 +194,13 @@ public partial class AreaInventoryGridArea : Control
     private bool _menuUp;
 
     /// <summary>
-    /// ARC-UI-3033: what the original's window arts paint into their background and the kit has no layer for yet (kit.json <c>grid.inventory_cells</c>, size open): the two item grids' black cells with their grid lines, the five
-    /// counter fields and the quote line's field (barter). Drawn under the content while the kit's background shows, so the grids and fields do not vanish with the old art; a stand-in until the kit's grid layer lands.
+    /// ARC-UI-3033, ARC-UI-3098: what the original's window arts paint into their background: the two item grids with their pits, the five count fields with their signs and the quote line's field (barter). The kit's parts
+    /// (<see cref="AreaKitFixtures"/>) where the set has them, else the plain stand-ins (<see cref="AreaKitStandIns"/>); drawn under the content while the kit's background shows.
     /// </summary>
     private void KitFields(bool barter)
     {
-        var black = new Color(0f, 0f, 0f);
-        var line = new Color(.2f, .24f, .32f);
-        void Field(float x, float y, float w, float h) => DrawRect(new Rect2(x * _scale, y * _scale, w * _scale, h * _scale), black);
-        void Grid(float x, float y, int columns, int rows)
-        {
-            Field(x, y, columns * AreaInventoryDrag.CellPixels, rows * AreaInventoryDrag.CellPixels);
-            for (var column = 0; column <= columns; column++)
-                DrawLine(new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, y * _scale), new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, (y + rows * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
-            for (var row = 0; row <= rows; row++)
-                DrawLine(new Vector2(x * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), new Vector2((x + columns * AreaInventoryDrag.CellPixels) * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
-        }
-        // The hero's pack grid, and the holder's (the merchant's or the body's) grid below the holder's lines.
-        Grid(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, Arcanum.Session.SessionHeroGrid.Columns, Arcanum.Session.SessionHeroGrid.Rows);
-        if (barter) Grid(AreaBarterArtLayout.GridX, AreaBarterArtLayout.GridY, AreaBarterArtLayout.Columns, AreaBarterArtLayout.ShownRows);
-        else Grid(AreaLootArtLayout.GridX, AreaLootArtLayout.GridY, AreaLootArtLayout.Columns, AreaLootArtLayout.ShownRows);
-        foreach (var (x, y, w, h) in AreaInventoryArtLayout.Counts) Field(x, y, w, h);
-        if (barter) { var quote = AreaBarterArtLayout.QuoteLine; Field(quote.X - 7, quote.Y - 3, quote.Width + 14, quote.Height + 6); }
+        AreaKitStandIns.Pack(this, _scale);
+        AreaKitStandIns.Holder(this, _scale, barter);
     }
 
     // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.

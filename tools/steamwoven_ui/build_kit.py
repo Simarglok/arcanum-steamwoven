@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
+from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
@@ -82,6 +83,19 @@ def new_part(ident: str, kind: str, anchor: str, used_by: list[str], family: str
             "note": note}
 
 
+FIXTURE_BATCH = {"G05": "BD-B", "G15": "BD-F"}  # the window family of a fixture's first window; every other fixture is the inventory family's (BD-A)
+
+
+def fixture_part(fixture: fixtures.Fixture) -> dict:
+    """ARC-UI-3098: a required detail the old window arts painted into themselves, a part of its own at the size of its place in the original (`fixtures.py` draws it by rule)."""
+    batch = FIXTURE_BATCH.get(fixture.windows[0], "BD-A")
+    kind = "grid" if fixture.ident.startswith("grid.") else "fixture"
+    part = new_part(fixture.ident, kind, "zone" if kind == "grid" else "window", list(fixture.windows), batch, batch,
+                    f"{fixture.note}; no original art, drawn by fixtures.py (ARC-UI-3098)")
+    part["size"], part["size_basis"] = list(fixture.master), "placed"
+    return part
+
+
 def new_parts() -> list[dict]:
     parts = [
         new_part(f"cap.{strip}_strip_{side}", "cap", f"{strip}-strip-{side}-end", [window], "BOARD", "B-BOARD",
@@ -91,10 +105,7 @@ def new_parts() -> list[dict]:
     for material in ("wood", "dark_wood", "brass", "iron", "paper", "parchment"):
         parts.append(new_part(f"material.{material}", "material", "none", [], None, None,
                               "surface of the material sheet (#2455, #2456); no original art; size fixed with the sheet"))
-    parts.append(new_part("grid.inventory_cells", "grid", "zone", ["G01", "G02", "G03", "G04", "G17", "M10"], "BD-A", "BD-A",
-                          "inventory cell grid as its own layer over the BD-A window background (painted into the pack arts today); no original art"))
-    parts.append(new_part("grid.schematic", "grid", "zone", ["G15"], "BD-F", "BD-F",
-                          "schematic page grid as its own layer over art 365 (painted in today); no original art"))
+    parts.extend(fixture_part(fixture) for fixture in fixtures.FIXTURES)
     for decor in ("corner_piece", "rivet"):
         parts.append(new_part(f"decor.{decor}", "decor", "none", [], None, "B-HARDWARE",
                               "ornament that is not hardware; no original art; size fixed by #2481"))

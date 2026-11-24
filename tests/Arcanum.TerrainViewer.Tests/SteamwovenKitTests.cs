@@ -508,4 +508,58 @@ public sealed class SteamwovenKitTests
         }
         finally { Directory.Delete(root, true); }
     }
+
+    private static System.Text.Json.JsonElement KitManifest()
+    {
+        for (var directory = new System.IO.DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var path = System.IO.Path.Combine(directory.FullName, "tools", "steamwoven_ui", "kit.json");
+            if (System.IO.File.Exists(path)) return System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path)).RootElement.Clone();
+        }
+        throw new System.IO.FileNotFoundException("tools/steamwoven_ui/kit.json not found above " + AppContext.BaseDirectory);
+    }
+
+    /// <summary>ARC-UI-3098: the runtime's fixture table is the manifest's: the same ids, each at the master size of its unit size on the 6 px grid.</summary>
+    [TestMethod]
+    public void The_fixture_table_is_the_manifest_s_fixtures_at_the_size_of_their_place()
+    {
+        var parts = KitManifest().GetProperty("parts").EnumerateArray().ToDictionary(part => part.GetProperty("id").GetString()!);
+        foreach (var (id, units) in SteamwovenKitTable.FixtureUnits)
+        {
+            Assert.IsTrue(parts.TryGetValue(id, out var part), id + " is a manifest part");
+            Assert.AreEqual("placed", part.GetProperty("size_basis").GetString(), id);
+            Assert.AreEqual(SteamwovenKitTable.MasterOf(units.Width), part.GetProperty("size")[0].GetInt32(), id + " width");
+            Assert.AreEqual(SteamwovenKitTable.MasterOf(units.Height), part.GetProperty("size")[1].GetInt32(), id + " height");
+        }
+        var placed = parts.Values.Where(part => part.GetProperty("size_basis").GetString() == "placed").Select(part => part.GetProperty("id").GetString()!).Order().ToArray();
+        CollectionAssert.AreEqual(placed, SteamwovenKitTable.FixtureUnits.Keys.Order().ToArray(), "every placed part of the manifest is in the table");
+        Assert.AreEqual(1164, SteamwovenKitTable.MasterOf(324));
+        Assert.AreEqual(114, SteamwovenKitTable.MasterOf(32));
+    }
+
+    [TestMethod]
+    public void Each_covered_window_names_the_fixtures_it_draws_and_no_other()
+    {
+        foreach (var window in Enum.GetValues<SteamwovenKitWindow>())
+        {
+            var ids = SteamwovenKitTable.FixturesOf(window);
+            Assert.AreEqual(ids.Count, ids.Distinct().Count(), window + " lists a fixture twice");
+            Assert.IsTrue(ids.All(SteamwovenKitTable.FixtureUnits.ContainsKey), window + " names a fixture the table does not size");
+        }
+        CollectionAssert.AreEqual(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Barter).ToArray(), SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.BarterFollower).ToArray());
+        Assert.AreEqual(0, SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Logbook).Count);
+        Assert.IsTrue(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Character).Contains("fixture.mt_ruler") && SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Schematic).Contains("fixture.gear_hat"));
+    }
+
+    [TestMethod]
+    public void A_fixture_is_the_set_s_part_at_the_table_s_size_else_nothing()
+    {
+        var step = SteamwovenStep.Half;
+        int B(int units) => SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units), step);
+        var set = SteamwovenKitSet.FromParts(step, "/kit/x1-2", [new("fixture.count_pit", B(61), B(17)), new("fixture.mt_ruler", B(46), B(330) + 1)]);
+        Assert.AreEqual("fixture.count_pit", SteamwovenKitComposer.Fixture(set, "fixture.count_pit")?.Id);
+        Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.mt_ruler"), "a wrong sized part is left out");
+        Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.align_dial"), "a missing part is left out");
+        Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.unknown"), "an id the table does not size");
+    }
 }
