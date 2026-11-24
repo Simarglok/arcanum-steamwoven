@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
         KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
-        KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f),
+        KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f),
         KitFixture = new(0.95f, 0.95f, 0.2f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
@@ -46,6 +46,8 @@ public partial class TerrainViewerApp
         ("backdrop.logbooks_side", 594, 1440, KitLogSide), ("backdrop.book_main", 2286, 1440, KitLogBook), ("backdrop.schematic_base", 2880, 1440, KitSchematic),
         // ARC-UI-3038: the save and load screen's two strips (the provisional 150 and 570 px) and its body.
         ("board.charcreatetopbar", 2880, 150, KitSaveTop), ("backdrop.saveloadbackground", 2880, 1440, KitSaveBody), ("board.charcreatebottombar", 2880, 570, KitSaveBottom),
+        // ARC-UI-3039: the pre-made browser's body (its strips are the save screen's).
+        ("backdrop.pregencharacterbase", 2880, 1440, KitPremadeBody),
         // ARC-UI-3098: the fixtures, flat (a part the windows draw at its place is the one colour; ARC_STEAMWOVEN_KIT_FIXTURES=DIR takes the real ones of tools/steamwoven_ui/fixtures.py from a baked root for a look capture).
         .. SteamwovenKitTable.FixtureUnits.Select(pair => (pair.Key, SteamwovenKitTable.MasterOf(pair.Value.Width), SteamwovenKitTable.MasterOf(pair.Value.Height), KitFixture)),
     ];
@@ -154,6 +156,83 @@ public partial class TerrainViewerApp
         SyncInterfaceHd();
         await frames(4);
         require(art.KitScreenForSelfTest is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
+        _gameSettings = _gameSettings with { HdInterface = savedHd };
+        SyncInterfaceHd();
+        await frames(4);
+        require(art.KitScreenForSelfTest is not null, $"[{tag}] the kit screen is back with the HD option on");
+    }
+
+    /// <summary>
+    /// ARC-UI-3039 (census M07; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the menu column pass, the "premade" screen): the real pre-made browser over the synthetic kit's three parts. At each size the view draws the composer's plan (the strips and the
+    /// pre-made body tiling the plate, the body sampled nearest exactly where its draw is exact), none of the original's arts 336, 335 and 766, and the pixels read back are the kit's colours in each of the three rows and across both seams, with the
+    /// portrait's and the story's fields black (the character draw fills them). With <paramref name="firstSize"/> it also checks the fallback (a bottom strip that does not load after the body did gives the screen's own three arts whole and
+    /// no resident pre-made body; the kit is back when the set is) and the HD option off (no kit at all); the body part goes with the screen (SWI-RUN-5) at the caller's close.
+    /// </summary>
+    private async Task CheckKitPremadeScreenAsync(string tag, SteamwovenFullScreenPlan plan, AreaPremadeBrowserArtView art, bool firstSize, string kitRoot, Func<int, Task> frames, Action<bool, string> require)
+    {
+        const string Body = "backdrop.pregencharacterbase";
+        bool BodyResident() => SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith(Body, StringComparison.Ordinal));
+        art.Place(); art.QueueRedraw();
+        await frames(3);
+        var set = SteamwovenKitStore.SetFor(plan.Layout.Step);
+        var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.PremadeBrowser).Value;
+        require(composed is not null, $"[{tag}] the synthetic set composes the pre-made browser");
+        var drawn = art.KitScreenForSelfTest;
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the pre-made browser draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] over the kit the screen draws none of its own arts 336, 335 and 766 (drew {string.Join(",", art.OwnBackdropDrawnForSelfTest)})");
+        if (composed is null || drawn is null) return;
+        require(art.KitSampledNearestForSelfTest(1) == composed.Body.Exact, $"[{tag}] the body is sampled {(composed.Body.Exact ? "nearest" : "linear")} as its draw is {(composed.Body.Exact ? "exact" : "scaled")}");
+        require(BodyResident(), $"[{tag}] the screen's own body is resident while it is open");
+        require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.saveloadbackground", StringComparison.Ordinal)), $"[{tag}] the save screen's body is not resident");
+        using (var image = GetViewport().GetTexture().GetImage())
+        {
+            var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+            Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
+            Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
+            // Clear of every field and button: the left margin of the body, the right margin below the story, the top strip row, the bottom strip row at its right end.
+            var (top, body, bodyRight, bottom) = (AtUnit(400, 20), AtUnit(20, 60), AtUnit(775, 420), AtUnit(790, 465));
+            require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
+            require(Near(body, KitPremadeBody) && Near(bodyRight, KitPremadeBody), $"[{tag}] the body's margins are the kit's pre-made body (got {body} and {bodyRight})");
+            require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
+            var x = (int)Math.Round(plan.ToDevice(20, 0).X);
+            var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
+            var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
+            require(Near(aboveTop, KitSaveTop) && Near(belowTop, KitPremadeBody), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(Near(aboveBottom, KitPremadeBody) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            // The character draw fills its fields black itself, so nothing of the kit's body shows in the story's field.
+            var story = AtUnit(AreaPremadeBrowserArtLayout.Description.X + AreaPremadeBrowserArtLayout.Description.Width - 6, AreaPremadeBrowserArtLayout.Description.Y + AreaPremadeBrowserArtLayout.Description.Height - 6);
+            require(story.R8 + story.G8 + story.B8 < 12, $"[{tag}] the story's field is black (got {story})");
+        }
+        if (!firstSize) return;
+        // Fallback: a set whose bottom strip file is another size than its manifest says (the body loads first, then the strip does not) gives the screen's own arts whole and no resident body (SWI-RUN-5); the same set whole is the kit again.
+        var broken = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-premade-broken-").FullName;
+        try
+        {
+            WriteSyntheticKitSet(broken, plan.Layout.Step);
+            using (var wrong = Image.CreateEmpty(10, 10, false, Image.Format.Rgba8))
+                require(wrong.SavePng(System.IO.Path.Combine(broken, SteamwovenKitSet.FolderName(plan.Layout.Step), "board.charcreatebottombar.png")) == Error.Ok, $"[{tag}] the broken strip file written");
+            SteamwovenKitStore.UseRoot(broken);
+            art.QueueRedraw();
+            await frames(3);
+            var ownArts = new[] { AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt }.Where(number => art.TexturesForSelfTest.ContainsKey(number)).ToArray();
+            require(art.KitScreenForSelfTest is null && art.OwnBackdropDrawnForSelfTest.SequenceEqual(ownArts) && ownArts.Length > 0,
+                $"[{tag}] a strip that does not load: the screen draws its own arts whole (kit {(art.KitScreenForSelfTest is null ? "none" : "drawn")}, own {string.Join(",", art.OwnBackdropDrawnForSelfTest)} of {string.Join(",", ownArts)})");
+            require(!BodyResident(), $"[{tag}] a strip that does not load leaves no kit body resident (the body was loaded first)");
+        }
+        finally
+        {
+            SteamwovenKitStore.UseRoot(kitRoot);
+            try { System.IO.Directory.Delete(broken, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3039 kit smoke: temporary folder not removed: " + exception.Message); }
+        }
+        art.QueueRedraw();
+        await frames(3);
+        require(art.KitScreenForSelfTest is not null && art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] the kit is back with a whole set");
+        // The HD option off (the Original look): nothing of the kit is drawn or resident, the screen's own arts are the original's.
+        var savedHd = _gameSettings.HdInterface;
+        _gameSettings = _gameSettings with { HdInterface = false };
+        SyncInterfaceHd();
+        await frames(4);
+        require(art.KitScreenForSelfTest is null && !BodyResident(), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
         _gameSettings = _gameSettings with { HdInterface = savedHd };
         SyncInterfaceHd();
         await frames(4);

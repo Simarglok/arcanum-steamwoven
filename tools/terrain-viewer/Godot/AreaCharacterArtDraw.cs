@@ -49,16 +49,30 @@ internal static class AreaCharacterArtDraw
         }
     }
 
-    /// <summary>The screen's black, the strips and the window's background at (0, 41) (MW1).</summary>
-    public static void Window(CanvasItem canvas, IReadOnlyDictionary<int, Texture2D[]> art, int background)
+    /// <summary>The screen's black, the strips and the window's background at (0, 41) (MW1). ARC-UI-3039: with <paramref name="kit"/> (the view's two-strip layer, composed for this draw, and the view's place) the kit's three parts are drawn over the black
+    /// and none of the original's arts 336, 335 and <paramref name="background"/> is (the character draw and the buttons stand on it as before). Returns the original arts drawn.</summary>
+    public static IReadOnlyList<int> Window(CanvasItem canvas, IReadOnlyDictionary<int, Texture2D[]> art, int background, (AreaKitTwoStripLayer Layer, Vector2 Position, Vector2 Scale)? kit = null)
     {
         canvas.DrawRect(new Rect2(0, 0, AreaPremadeBrowserArtLayout.ScreenWidth, AreaPremadeBrowserArtLayout.ScreenHeight), Colors.Black);
-        if (Art(art, AreaPremadeBrowserArtLayout.TopStripArt) is { } top) canvas.DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false);
+        var drawn = new List<int>(3);
+        if (kit is { Layer.Active: true } layer)
+        {
+            layer.Layer.Draw(canvas, layer.Position, layer.Scale);
+            return drawn;
+        }
+        if (Art(art, AreaPremadeBrowserArtLayout.TopStripArt) is { } top) { canvas.DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false); drawn.Add(AreaPremadeBrowserArtLayout.TopStripArt); }
         if (Art(art, AreaPremadeBrowserArtLayout.BottomStripArt) is { } bottom)
+        {
             foreach (var (x, y, width, height) in AreaSaveListArtLayout.BottomStripParts)
                 canvas.DrawTextureRectRegion(bottom, new Rect2(x, y, width, height), new Rect2(x, 0, width, height));
+            drawn.Add(AreaPremadeBrowserArtLayout.BottomStripArt);
+        }
         if (Art(art, background) is { } window)
+        {
             canvas.DrawTextureRect(window, new Rect2(0, AreaPremadeBrowserArtLayout.WindowTop, window.GetWidth(), window.GetHeight()), false);
+            drawn.Add(background);
+        }
+        return drawn;
     }
 
     /// <summary>The character draw 0x5448E0 of <paramref name="view"/> (all but the name, which each window's redraw adds), the
