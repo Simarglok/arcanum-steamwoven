@@ -116,23 +116,12 @@ public partial class AreaReadingArtView : Control
         _picture = document.Subtype == WrittenSubtype.Picture ? Picture?.Invoke(document.BackgroundArt)?.FirstOrDefault() : null;
         Watch(_picture);
         if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
-        else
-        {
-            // ARC-UI-2765: a local capture draws a note in one of the owner's variants over synthetic text (the generated interface only); play always draws the original's.
-            if (document.Subtype == WrittenSubtype.Note && SyntheticNoteText is { } synthetic) document = document with { Joined = synthetic };
-            var style = InterfaceHd.Generated && (NoteStyle == AreaReadingNoteStyle.PepperLarge || _faces.ContainsKey(NoteFace)) ? NoteStyle : AreaReadingNoteStyle.Original;
-            _pages = []; _single = AreaReadingFlow.Single(document, FontOf, style, NoteFace);
-        }
+        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf, InterfaceHd.Generated && _faces.ContainsKey(AreaReadingArtLayout.NoteBodyFont)); }
         Visible = true;
         Place();
         QueueRedraw();
         return true;
     }
-
-    /// <summary>ARC-UI-2765: a local capture's choice of how a note's body is drawn, its readable face and its synthetic text (the original's draw, no face and none in play).</summary>
-    internal static AreaReadingNoteStyle NoteStyle { get; set; } = AreaReadingNoteStyle.Original;
-    internal static int NoteFace { get; set; }
-    internal static string? SyntheticNoteText { get; set; }
 
     /// <summary>A font's face; a font art that did not read (a markup font the installed game does not hold) draws in the note's font.</summary>
     private AreaArtFontFace Face(int number) =>
@@ -215,7 +204,7 @@ public partial class AreaReadingArtView : Control
         if (HasNext && Texture(AreaReadingArtLayout.NextArt, PageFrame(1, AreaReadingArtLayout.NextArt)) is { } next)
             DrawTextureRect(next, new Rect2(AreaReadingArtLayout.NextCorner.X, AreaReadingArtLayout.NextCorner.Y, next.GetWidth(), next.GetHeight()), false);
         var colour = AreaReadingArtLayout.Colour(document.Subtype);
-        foreach (var line in Lines()) AreaArtTextDraw.Glyphs(this, Face(line.Font), line.Glyphs, line.X, line.Y, colour, scale: line.Scale);
+        foreach (var line in Lines()) AreaArtTextDraw.Glyphs(this, Face(line.Font), line.Glyphs, line.X, line.Y, colour);
     }
 
     // The frame art; with the round view under it the lens's square is left out.

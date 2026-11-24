@@ -23,24 +23,8 @@ public partial class TerrainViewerApp
         _readingPanel?.ArtView.ClearArt();
         var module = arguments.ModulePath;
         _readingArtModule = module;
-        ReadingNoteCaptureSwitches();
         _readingArtTask = SelfTestBootstrap || module is null ? Task.FromResult(AreaReadingArtContent.Empty("self-test: no game folder"))
             : Task.Run(() => AreaReadingArtContent.Load(module));
-    }
-
-    /// <summary>ARC-UI-2765: a local capture of the owner's note variants: ARC_AREA_READING_NOTE_VARIANT=pepper-large|heading-signature|readable, ARC_AREA_READING_NOTE_FACE=ART (the readable face's font art, default 840,
-    /// NewTimes16) and ARC_AREA_READING_SYNTHETIC=1 (a synthetic English text in place of the note's). Play sets none of them.</summary>
-    private static void ReadingNoteCaptureSwitches()
-    {
-        AreaReadingArtView.NoteStyle = System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_VARIANT") switch
-        {
-            "pepper-large" => AreaReadingNoteStyle.PepperLarge, "heading-signature" => AreaReadingNoteStyle.HeadingSignature, "readable" => AreaReadingNoteStyle.Readable, _ => AreaReadingNoteStyle.Original,
-        };
-        var face = int.TryParse(System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_FACE"), out var number) && number > 0 ? number : 840;
-        var wanted = AreaReadingArtView.NoteStyle is AreaReadingNoteStyle.HeadingSignature or AreaReadingNoteStyle.Readable;
-        AreaReadingArtView.NoteFace = wanted ? face : 0;
-        AreaReadingArtLayout.ExtraFontArts = wanted ? [face] : [];
-        AreaReadingArtView.SyntheticNoteText = System.Environment.GetEnvironmentVariable("ARC_AREA_READING_SYNTHETIC") == "1" ? AreaReadingArtLayout.SyntheticNote : null;
     }
 
     private AreaReadingArtContent? AdoptReadingArt()
