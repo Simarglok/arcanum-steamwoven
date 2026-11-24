@@ -959,6 +959,78 @@ public sealed class InterfaceChromeTests
     }
 
     [TestMethod]
+    public void The_four_strip_buttons_draw_the_pack_picture_whole_and_the_legacy_ones_as_before()
+    {
+        // ARC-UI-3058: with a pack picture the kit plate is drawn whole (colour and alpha, so its rim and soft shadow stay), instead of a generated rim; with the Legacy pixels alone the button is drawn as before.
+        const int size = 39;
+        var legacy = new byte[size * size * 4];
+        for (var y = 0; y < size; y++)
+        for (var x = 0; x < size; x++)
+        {
+            double dx = x + 0.5 - size / 2.0, dy = y + 0.5 - size / 2.0;
+            var i = (y * size + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = dx * dx + dy * dy < size * size / 4.0 ? ((byte)120, (byte)30, (byte)20, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+        }
+        foreach (var file in new[] { "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art" })
+        {
+            var recipe = Recipe(file);
+            Assert.IsTrue(recipe.WholePicture, file);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(size, size, 2.0);
+            var picture = new byte[pw * ph * 4];
+            for (var y = 0; y < ph; y++)
+            for (var x = 0; x < pw; x++)
+            {
+                var i = (y * pw + x) * 4;
+                var rim = x < 6 || x >= pw - 6 || y < 6 || y >= ph - 6;  // a soft edge: half transparent
+                (picture[i], picture[i + 1], picture[i + 2], picture[i + 3]) = rim ? ((byte)200, (byte)150, (byte)40, (byte)128) : ((byte)30, (byte)90, (byte)200, (byte)255);
+            }
+            foreach (var frame in new[] { 0, 1, 2 })
+            {
+                var whole = InterfaceChromeRenderer.Render(recipe, size, size, legacy, picture, frame, 2.0);
+                Assert.AreEqual((30, 90, 200, 255), Pixel(whole, pw, pw / 2, ph / 2), $"{file} frame {frame} draws the pack picture");
+                Assert.AreEqual((200, 150, 40, 128), Pixel(whole, pw, 2, ph / 2), $"{file} frame {frame} keeps the picture's own alpha (a soft edge), whatever the Legacy silhouette says");
+                var plain = Pixel(InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], frame, 2.0), pw, pw / 2, ph / 2);
+                Assert.AreNotEqual((120, 30, 20, 255), plain, $"{file} frame {frame}: the Legacy pixels alone get the generated face");
+                Assert.AreEqual(255, plain.A, $"{file} frame {frame}: the Legacy silhouette decides without a picture");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_bottom_strip_draws_no_ring_in_the_sockets_of_the_four_round_buttons()
+    {
+        // ARC-UI-3058: the button art carries its own setting; a generated hole ring around it showed as a second, jagged rim.
+        var bare = Recipe("intbotom.art").Parts.OfType<ChromeBoardHole>().Select(b => (b.X, b.Y, b.Width, b.Height)).ToArray();
+        foreach (var socket in new[] { (86, 16, 39, 39), (693, 15, 39, 39), (649, 53, 39, 39), (693, 98, 39, 39) }) CollectionAssert.Contains(bare, socket);
+    }
+
+    [TestMethod]
+    public void A_board_hole_keeps_the_board_colour_in_its_transparent_texels_and_a_plain_hole_keeps_ink()
+    {
+        // ARC-UI-3058: the round buttons' sockets of the bottom strip: the hole's texels carry the board's colour (no dark fringe of ink around the picture laid over it).
+        var legacy = Frame(48, 20);
+        var plain = InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 2, 10, 10, ChromeMaterial.Dark)), 48, 20, legacy, [], 0);
+        var socket = InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 2, 10, 10, ChromeMaterial.Dark), new ChromeBoardHole(4, 4, 10, 8)), 48, 20, legacy, [], 0);
+        var (inkR, inkG, inkB, inkA) = Pixel(plain, 48 * S, 8 * S, 8 * S);
+        Assert.AreEqual(0, inkA, "a hole is transparent");
+        var (r, g, b, a) = Pixel(socket, 48 * S, 8 * S, 8 * S);
+        Assert.AreEqual(0, a, "a board hole is transparent too");
+        Assert.AreNotEqual((inkR, inkG, inkB), (r, g, b), "but it carries the board's colour, not ink");
+        Assert.AreEqual((inkR, inkG, inkB), (Pixel(socket, 48 * S, 36 * S, 9 * S).R, Pixel(socket, 48 * S, 36 * S, 9 * S).G, Pixel(socket, 48 * S, 36 * S, 9 * S).B), "a hole that is no socket keeps ink");
+    }
+
+    [TestMethod]
+    public void A_whole_picture_of_the_wrong_size_is_refused_not_misread()
+    {
+        var recipe = Recipe("skills_button.art");
+        var legacy = new byte[39 * 39 * 4];
+        for (var i = 0; i < legacy.Length; i += 4) (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = (120, 30, 20, 255);
+        var wrong = new byte[10 * 10 * 4];
+        // a picture whose size is not the frame's is refused by Render (the pack path resamples it to the frame's size first); PaintWholePicture is never reached with a different length
+        Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.Render(recipe, 39, 39, legacy, wrong, 0, 2.0));
+    }
+
+    [TestMethod]
     public void The_travel_and_compass_balls_and_the_lens_follow_their_silhouette_at_fractional_scales()
     {
         // A round 57 x 57 Travel ball and a 45 x 45 compass ball: the silhouette stays, the down frame differs from idle; the compass keeps the art's whole picture inside the rim.
