@@ -478,7 +478,7 @@ public partial class AreaWorldMapArtView : Control
         // scale a tile is drawn into 250 / unit window units, which no device scale describes, so the trilinear draw of a mip chain serves that.
         // ARC-UI-3154: with the HD world map the tiles are drawn at the window's own scale (picture scale 1), so they claim it: below the pack's scale the area copy of ARC-RENDER-3045 draws
         // them, where the mip chain would over-blur a fractional scale. The continent picture is always drawn into its 365 window units, so it claims it too.
-        var tilesAtWindowScale = HdTilesDrawn;
+        var tilesAtWindowScale = HdTilesDrawn && PixelsPerUnit == AreaWorldMapArtLayout.OriginalPixelsPerUnit;
         foreach (var tile in _look.Tiles)
             if (tile is HdInterfaceTexture hd)
             {
