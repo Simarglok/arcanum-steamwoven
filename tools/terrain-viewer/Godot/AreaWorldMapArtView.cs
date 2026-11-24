@@ -256,8 +256,8 @@ public partial class AreaWorldMapArtView : Control
     // WM72, WM75: each load of a town starts afresh (the original leaks the earlier tile buffers; the viewer frees its textures).
     private void SetTown(AreaTownMapShow? town)
     {
-        foreach (var texture in _townTextures.Values) texture?.Dispose();
-        _townTextures.Clear(); _townFiles.Clear();
+        DropTownTextures();
+        _townFiles.Clear();
         EndQuill();
         _town = town;
         if (town is null) { _townOffset = _townMax = _townParty = default; return; }
@@ -948,7 +948,7 @@ public partial class AreaWorldMapArtView : Control
         var (first, endColumn, firstRow, endRow) = AreaTownMapLayout.VisibleTiles(plan, _townOffset);
         var columns = plan.Info.Columns;
         // The cache is trimmed before the draw (a texture freed inside it would blank the tiles already issued).
-        if (_townTextures.Count >= MaxTownTextures - 512) { foreach (var old in _townTextures.Values) old?.Dispose(); _townTextures.Clear(); }
+        if (_townTextures.Count >= MaxTownTextures - 512) DropTownTextures();
         bool Revealed(int index) => town.CellRevealed(index) && TownFile(index);
         for (var row = firstRow; row < endRow; row++)
             for (var column = first; column < endColumn; column++)
@@ -962,7 +962,7 @@ public partial class AreaWorldMapArtView : Control
                 var (w, h) = (plan.TileWidth, plan.TileHeight);
                 Color Corner(int bit) => (corners & bit) != 0 ? Colors.White : Colors.Black;
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
-                    [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
+                    [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture is HdInterfaceTexture hd ? hd.DrawSource() : texture);
             }
         // WM82: the notes next, each with the art of its type (ARC-UI-2330; the original's town map draws all with 143, WM79, WM142, but the scenery notes are the only ones it makes there) centred on its pixel
         // (no label: the text shows on hover, WM59).
@@ -992,19 +992,41 @@ public partial class AreaWorldMapArtView : Control
     }
 
     // WM74: a tile reads when first drawn, a missing file standing in as tile 000000; a tile that does not decode stays unread (drawn black).
+    // ARC-RENDER-3106: the texture keeps the tile's 64 x 32 (the grid, the scroll and the clicks stay in the original's coordinates) and, with HD on and a pack entry for the tile that was read
+    // (the stand-in's entry is tile 000000's), draws the redraw into the same rectangle from the area copy of the window's device scale.
     private Texture2D? TownTexture(int index)
     {
         if (_townTextures.TryGetValue(index, out var cached)) return cached;
-        ImageTexture? texture = null;
-        if (_town!.Source.ReadTile(_town.Plan.Entry, index) is { } bytes)
+        Texture2D? texture = null;
+        var entry = _town!.Plan.Entry;
+        if (_town.Source.ReadTile(entry, index) is { } bytes)
         {
-            var image = new Image();
-            if (image.LoadBmpFromBuffer(bytes) == Error.Ok) { image.Convert(Image.Format.Rgba8); texture = ImageTexture.CreateFromImage(image); }
-            image.Dispose();
+            texture = TownMapHd.Texture(AreaTownMapLayout.TilePath(entry.Name, TownFile(index) ? index : 0), bytes);
+            if (texture is HdInterfaceTexture hd)
+            {
+                hd.ScaleSource = _deviceScale ??= DeviceScale;
+                _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) Redraw(); };
+                hd.Changed += _onTextureChanged;
+            }
         }
         _townTextures[index] = texture;
         return texture;
     }
+
+    // Frees the tile textures of the town (an HD tile's handler is taken off first: it holds this view).
+    private void DropTownTextures()
+    {
+        foreach (var texture in _townTextures.Values)
+        {
+            // An HD tile is registered with the HD layer (a refresh may still reach it): it lets go of its images and is freed by the collector; the others are freed now.
+            if (texture is HdInterfaceTexture hd) { if (_onTextureChanged is not null) hd.Changed -= _onTextureChanged; hd.Release(); }
+            else texture?.Dispose();
+        }
+        _townTextures.Clear();
+    }
+
+    /// <summary>ARC-RENDER-3106: the town map's tile textures held now (index and texture; a native smoke checks them against the pack).</summary>
+    internal IReadOnlyList<(int Index, Texture2D Texture)> TownTextureList() => [.. _townTextures.Where(pair => pair.Value is not null).Select(pair => (pair.Key, pair.Value!))];
 
     private void DrawMapView(CanvasItem canvas)
     {

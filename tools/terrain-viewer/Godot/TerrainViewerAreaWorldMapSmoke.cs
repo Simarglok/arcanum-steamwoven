@@ -633,6 +633,23 @@ public partial class TerrainViewerApp
         // The view as it opened: a whole map shows every tile; else the session's reveal decides (a town opened by a script has all bits; otherwise none).
         var (wholeLit, wholeDark) = await Sample(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".town.png"));
         Require(view.TownTexturesForSelfTest > 0 && view.TownTexturesForSelfTest <= 400, $"tiles read as drawn: {view.TownTexturesForSelfTest}");
+        // ARC-RENDER-3106: the tile textures keep the tile size of the plan whatever the HD setting (the grid, the party marker and the fog cell above are the original's); with the HD setting on and the pack
+        // holding an entry for a tile that tile draws the redraw from the area copy of this window's device scale (the copies are made on a worker: wait for them), otherwise the original pixels.
+        for (var wait = 0; wait < 1800 && InterfaceHd.DirectPending > 0; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        for (var f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var townHdProblems = new List<string>();
+        int townHdTextures = 0, townHdDrawing = 0, townHdCopies = 0;
+        foreach (var (tileIndex, tileTexture) in view.TownTextureList())
+        {
+            if (tileTexture.GetWidth() != plan.TileWidth || tileTexture.GetHeight() != plan.TileHeight) { townHdProblems.Add($"tile {tileIndex}: {tileTexture.GetWidth()}x{tileTexture.GetHeight()}, the plan's tile is {plan.TileWidth}x{plan.TileHeight}"); continue; }
+            if (tileTexture is HdInterfaceTexture) townHdTextures++;
+            if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } townPack) continue;
+            var (ok, detail) = TownMapHd.Check(tileTexture, townPack);
+            if (!ok) townHdProblems.Add($"tile {tileIndex}: {detail}");
+            else if (detail == "HD") { townHdDrawing++; if (((HdInterfaceTexture)tileTexture).IsAreaResampled) townHdCopies++; }
+        }
+        Require(townHdProblems.Count == 0, "the town-map tiles keep their size and draw HD where the pack has an entry: " + string.Join("; ", townHdProblems.Take(4)));
+        GD.Print($"ARC-RENDER-3106 native-smoke worldmap-town-hd PASS tiles={view.TownTexturesForSelfTest} hd-capable={townHdTextures} drawing-hd={townHdDrawing} from-area-copy={townHdCopies} hd={InterfaceHd.Enabled} pack={(InterfaceHd.Pack?.Id ?? "-")} device-scale={view.DeviceScale():0.###}");
         if (plan.Entry.Whole) Require(wholeLit > wholeDark / 2, $"a whole map shows its tiles: {wholeLit} lit, {wholeDark} dark");
         // A fogged town (the whole flag off) with the session's real reveal: the tile under the hero plain, its neighbours fading, the rest black.
         view.TownRevealForSelfTest(false, index => session.IsTownMapCellRevealed(number, index));

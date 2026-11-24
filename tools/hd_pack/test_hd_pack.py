@@ -1078,5 +1078,96 @@ class WorldMapTests(BitmapPackFixture):
         self.assertEqual(run("maps-plan", "--maps", maps, "--out", out, "--partial", "--dry-run")[0], 2)
 
 
+def town_entry(path: str, rel: str, body: bytes) -> dict:
+    return {"kind": "townmap", "file": rel, "sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body), "slice": "interface",
+            "townmap": {"path": path}, "legacy": {"width": 64, "height": 32, "rgbaSha256": hashlib.sha256(path.encode()).hexdigest()}, "review": "unreviewed"}
+
+
+class TownMapTests(BitmapPackFixture):
+    """ARC-RENDER-3106: `townmap` entries (keyed by the original tile's path) through plan (dry run first), apply into a folder per town, verify and rollback, and the town-map plan."""
+
+    TILES = (("townmap/ashbury/ashbury000000.bmp", "ashbury-000000"), ("townmap/ashbury/ashbury000748.bmp", "ashbury-000748"),
+             ("townmap/ashbury crematorium - lev 1/ashbury crematorium - lev 1000001.bmp", "ashbury-crematorium---lev-1-000001"))
+
+    def setUp(self):
+        super().setUp()
+        entries = []
+        for path, stem in self.TILES:
+            body = png(8, 8) + fake(stem)
+            rel = f"interface/townmap-{stem}-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
+            (self.stage / rel).write_bytes(body)
+            entries.append(town_entry(path, rel, body))
+        self.write_pack(self.stage, entries)
+
+    def test_the_key_of_a_town_tile_is_its_kind_and_tile_path(self):
+        a = town_entry("townmap/ashbury/ashbury000748.bmp", "interface/x.png", b"a")
+        b = town_entry("townmap/ashbury/ashbury000749.bmp", "interface/y.png", b"b")
+        self.assertEqual(hp.entry_key(a), ("townmap", "townmap/ashbury/ashbury000748.bmp"))
+        self.assertEqual(len(hp.keyed({"entries": [a, b]}, "t")), 2)
+
+    def test_default_rows_put_a_towns_tiles_in_one_folder(self):
+        rows = hp.town_rows(hp.keyed(json.loads((self.stage / "manifest.json").read_text()), "stage"))
+        self.assertEqual(rows["townmap-ashbury-000748"], ("town-map", "ashbury", False))
+        self.assertEqual(rows["townmap-ashbury-crematorium---lev-1-000001"], ("town-map", "ashbury-crematorium---lev-1", False))
+
+    def test_apply_adds_town_entries_by_default_rows_and_rolls_back(self):
+        before = tree(self.inst)
+        rc, out, err = self.apply("--dry-run")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertIn("3 new entries are placed by it", out)
+        rc, out, err = self.apply()
+        self.assertEqual(rc, 0, out + err)
+        files = {e["file"] for e in self.manifest()["entries"]}
+        self.assertEqual(files, {"interface/window-a/buttons/btn-f000.png", "interface/town-map/ashbury/townmap-ashbury-000000-f000.png", "interface/town-map/ashbury/townmap-ashbury-000748-f000.png",
+                                 "interface/town-map/ashbury-crematorium---lev-1/townmap-ashbury-crematorium---lev-1-000001-f000.png"})
+        rows = (self.inst / "layout-map.tsv").read_text()
+        self.assertIn("townmap-ashbury-000748\ttown-map\tashbury\t0", rows)
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--add-new")
+        self.assertIn("staged-only entries: 0", out)
+        backup = next(self.backups.iterdir())
+        rc, out, err = run("rollback", backup, "--installed", self.inst)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+
+    def test_townmap_plan_checks_names_sizes_sums_and_completeness(self):
+        local = self.tmp / "local"
+        tiles = local / "tiles"
+        tiles.mkdir(parents=True)
+        (self.tmp / ".git").mkdir()  # local/ must sit beside a .git
+        out = local / "plans" / "t.json"
+        for n in (0, 748, 749):
+            (tiles / f"Ashbury{n:06d}.png").write_bytes(png(256, 128, ctype=2) + fake(str(n)))
+        rc, text, err = run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--expect", "3", "--dry-run")
+        self.assertEqual(rc, 0, text + err)
+        self.assertIn("3 tiles of Ashbury", text)
+        self.assertIn("render scale 1", text)
+        self.assertFalse(out.exists())
+        rc, text, err = run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--expect", "3")
+        self.assertEqual(rc, 0, text + err)
+        plan = json.loads(out.read_text())
+        self.assertEqual((plan["kind"], plan["scale"], len(plan["items"])), (hp.TOWN_PLAN_KIND, 4, 3))
+        self.assertEqual(plan["items"][1], {"bmp": "townmap/ashbury/ashbury000748.bmp", "image": "../tiles/Ashbury000748.png"})
+        # a count other than the town's, a sums file that no longer matches, a wrong size (a 0.5 render for a 4x pack), a bad town name and a stray file are refused
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--expect", "4", "--dry-run")[0], 2)
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--expect", "4", "--partial", "--dry-run")[0], 0)
+        (tiles / "SHA256SUMS.txt").write_text("".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  ./{p.name}\n" for p in sorted(tiles.glob("*.png"))))
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--dry-run")[0], 0)
+        (tiles / "Ashbury000749.png").write_bytes(png(256, 128, ctype=2) + b"changed")
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--dry-run")[0], 2)
+        (tiles / "SHA256SUMS.txt").unlink()
+        (tiles / "Ashbury000749.png").write_bytes(png(128, 64, ctype=2))
+        rc, _, err = run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--dry-run")
+        self.assertEqual(rc, 2)
+        self.assertIn("expected 256x128", err)
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--scale", "2", "--dry-run")[0], 2)
+        (tiles / "Ashbury000749.png").write_bytes(png(256, 128, ctype=2))
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ash#bury", "--out", out, "--dry-run")[0], 2)
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Tarant", "--out", out, "--dry-run")[0], 2)
+        (tiles / "extra.png").write_bytes(png(256, 128, ctype=2))
+        self.assertEqual(run("townmap-plan", "--tiles", tiles, "--town", "Ashbury", "--out", out, "--dry-run")[0], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,7 +5,8 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-3037: what the original's background arts paint into themselves and a window still needs (a field a number or text stands on, a cell grid, a page the text is written on), drawn by the window under its content while the
-/// kit's background shows, a stand-in until the kit's layers for them exist (the sheets' and backgrounds' batch, <a href="https://github.com/Simarglok/arcanum-steamwoven/issues/3098">#3098</a>). Only the elements the owner marked
+/// kit's background shows. <b>ARC-UI-3098:</b> each such element is a kit part (<see cref="AreaKitFixtures"/>, <c>fixture.*</c> in kit.json) drawn at its place when the set holds it at the table's size; the plain stand-in below is
+/// drawn only for an element whose part the set lacks (one element at a time), so a half-made kit still reads. Only the elements the owner marked
 /// as required are here (the TRD's table "Elements the old arts held"); the decorative ones (compass rose, gears, tab sockets, rivets, brass rims) are left to the kit. Coordinates are the window's units (800 × 400), from the recipes
 /// of <c>InterfaceChrome</c>; <c>scale</c> is the device pixels of one unit where the node is not itself scaled by it (the inventory's frame), else 1. A stand-in is plain: black fields with a grey-blue edge, paper for the blueprint.
 /// </summary>
@@ -83,22 +84,68 @@ internal static class AreaKitStandIns
         }
     }
 
-    /// <summary>The own inventory and the identify and repair windows (arts 223 and 221): the pack's pit and its 10 × 12 grid, the five count pits, the name plate's pit, the doll's pit with its 10 × 9 equipment grid, the quarter-disc frames of the weapon's and the shield's slots at the bottom, and the picture row "dots, arrow, grid" (the arrange button's legend).</summary>
+    /// <summary>One element: the kit's fixture <paramref name="id"/> at (<paramref name="x"/>, <paramref name="y"/>) units, else <paramref name="standIn"/>.</summary>
+    private static void Part(CanvasItem canvas, float scale, string id, float x, float y, Action standIn)
+    {
+        if (!AreaKitFixtures.Draw(canvas, scale, id, x, y)) standIn();
+    }
+
+    /// <summary>A grid of <paramref name="columns"/> x <paramref name="rows"/> cells of 32 units with its corner at (<paramref name="x"/>, <paramref name="y"/>): copies of the kit's cell well, else the stand-in's lines over the black pit.</summary>
+    internal static void Cells(CanvasItem canvas, float scale, float x, float y, int columns, int rows)
+    {
+        if (AreaKitFixtures.Has("grid.inventory_cells"))
+        {
+            for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++) AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32);
+        }
+        else Lines(canvas, scale, x, y, columns, rows, 32, Edge);
+    }
+
+    /// <summary>The pack's pit with its 10 x 12 grid, the five count pits and their five signs (art 221, shared by the inventory, loot, steal and barter windows).</summary>
+    internal static void Pack(CanvasItem canvas, float scale)
+    {
+        Part(canvas, scale, "fixture.pack_pit", 366, 6, () => Field(canvas, scale, 366, 6, 324, 388));
+        Cells(canvas, scale, 368, 8, 10, 12);
+        for (var k = 0; k < 5; k++)
+        {
+            var y = 71 + 23 * k;
+            Part(canvas, scale, "fixture.count_pit", 727, y, () => Field(canvas, scale, 727, y, 61, 17));
+        }
+        AreaKitFixtures.Draw(canvas, scale, "fixture.count_icons", 690, 68); // a sign has no stand-in: a number without its sign is the old art's loss the kit's part makes good
+    }
+
+    /// <summary>The holder's pit and grid in the loot and steal windows (10 x 8 cells at 8, 136) or the barter window (10 x 7 at 8, 168), and the barter's quote field.</summary>
+    internal static void Holder(CanvasItem canvas, float scale, bool barter)
+    {
+        if (barter)
+        {
+            Part(canvas, scale, "fixture.holder_pit_barter", 6, 166, () => Field(canvas, scale, 6, 166, 324, 228));
+            Cells(canvas, scale, 8, 168, 10, 7);
+            Part(canvas, scale, "fixture.quote_field", 82, 125, () => Field(canvas, scale, 82, 125, 267, 36));
+        }
+        else
+        {
+            Part(canvas, scale, "fixture.holder_pit_loot", 6, 134, () => Field(canvas, scale, 6, 134, 324, 260));
+            Cells(canvas, scale, 8, 136, 10, 8);
+        }
+    }
+
+    /// <summary>The own inventory and the identify and repair windows (arts 223 and 221): the pack's pit and its 10 x 12 grid, the five count pits with their signs, the name plate's pit, the doll's pit with its 10 x 9 equipment grid, the quarter-disc frames of the weapon's and the shield's slots at the bottom, and the picture row "dots, arrow, grid" (the arrange button's legend).</summary>
     internal static void Inventory(CanvasItem canvas, float scale)
     {
         Drawn.Add(SteamwovenKitWindow.Inventory);
-        Field(canvas, scale, 366, 6, 324, 388);
-        Lines(canvas, scale, 368, 8, 10, 12, 32, Edge);
-        for (var k = 0; k < 5; k++) Field(canvas, scale, 727, 71 + 23 * k, 61, 17);
-        Field(canvas, scale, 124, 25, 223, 55);
-        Field(canvas, scale, 18, 100, 330, 300);
-        Lines(canvas, scale, 23, 107, 10, 9, 32, Edge);
-        QuarterFrame(canvas, scale, 10, 400, 97, true, new(.2f, .05f, .05f));
-        QuarterFrame(canvas, scale, 358, 400, 97, false, new(.04f, .05f, .2f));
+        Pack(canvas, scale);
+        Part(canvas, scale, "fixture.name_pit", 124, 25, () => Field(canvas, scale, 124, 25, 223, 55));
+        Part(canvas, scale, "fixture.doll_pit", 18, 100, () => Field(canvas, scale, 18, 100, 330, 300));
+        Cells(canvas, scale, 23, 107, 10, 9);
+        Part(canvas, scale, "fixture.weapon_frame", 10, 303, () => QuarterFrame(canvas, scale, 10, 400, 97, true, new(.2f, .05f, .05f)));
+        Part(canvas, scale, "fixture.shield_frame", 244, 303, () => QuarterFrame(canvas, scale, 358, 400, 97, false, new(.04f, .05f, .2f)));
         // The arrange legend (690, 192, 78, 32): scattered dots, a red arrow, a small grid.
-        foreach (var (dx, dy) in new (float, float)[] { (0, 4), (6, 0), (6, 9), (12, 5), (14, 12), (19, 1), (20, 9) }) Field(canvas, scale, 693 + dx, 197 + dy, 4, 4, Pale, edge: false);
-        Arrow(canvas, scale, 721, 205, 17, 7, RedInk);
-        for (var gx = 0; gx < 4; gx++) for (var gy = 0; gy < 4; gy++) Field(canvas, scale, 741 + gx * 5, 197 + gy * 5, 4, 4, Pale, edge: false);
+        Part(canvas, scale, "fixture.arrange_legend", 690, 192, () =>
+        {
+            foreach (var (dx, dy) in new (float, float)[] { (0, 4), (6, 0), (6, 9), (12, 5), (14, 12), (19, 1), (20, 9) }) Field(canvas, scale, 693 + dx, 197 + dy, 4, 4, Pale, edge: false);
+            Arrow(canvas, scale, 721, 205, 17, 7, RedInk);
+            for (var gx = 0; gx < 4; gx++) for (var gy = 0; gy < 4; gy++) Field(canvas, scale, 741 + gx * 5, 197 + gy * 5, 4, 4, Pale, edge: false);
+        });
     }
 
     /// <summary>The words and numbers baked into art 22 that the sheet writes itself with its own font while the kit's background shows: text, where it starts, and the colour (the gold of the stat names, dark ink on the parchment of the dial and the ruler).</summary>
@@ -113,18 +160,27 @@ internal static class AreaKitStandIns
         for (var i = 0; i < steps.Length; i++) yield return (steps[i], 766, 120 + 32 * i, ink);
     }
 
-    /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals, the alignment dial with its needle's face, the health disc with its heart and the fatigue disc with its cross, the magic-technology ruler with its divisions and its two end signs, and the derived-stats box (the letters and the ruler's numbers are written by the sheet, <see cref="SheetLabels"/>).</summary>
+    /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals, the alignment dial, the health disc with its heart and the fatigue disc with its cross, the magic-technology ruler with its ticks and its two end signs, and the derived-stats box (the letters and the ruler's numbers are written by the sheet, <see cref="SheetLabels"/>).</summary>
     internal static void CharacterSheet(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Character);
-        Field(canvas, 1, 119, 9, 360, 87);
-        Field(canvas, 1, 24, 278, 452, 113);
+        Part(canvas, 1, "fixture.sheet_name_box", 119, 9, () => Field(canvas, 1, 119, 9, 360, 87));
+        Part(canvas, 1, "fixture.sheet_derived_box", 24, 278, () => Field(canvas, 1, 24, 278, 452, 113));
         for (var r = 0; r < 4; r++)
         {
-            Field(canvas, 1, 172, 111 + 40 * r, 70, 31);
-            Field(canvas, 1, 315, 111 + 40 * r, 70, 31);
+            var y = 111 + 40 * r;
+            Part(canvas, 1, "fixture.stat_oval", 172, y, () => Field(canvas, 1, 172, y, 70, 31));
+            Part(canvas, 1, "fixture.stat_oval", 315, y, () => Field(canvas, 1, 315, y, 70, 31));
         }
-        // The alignment dial: a brass ring, a parchment half face with its tick marks, the number pit under the hub.
+        Part(canvas, 1, "fixture.align_dial", 6, 131, () => DialStandIn(canvas));
+        Part(canvas, 1, "fixture.health_disc", 411, 127, () => HeartStandIn(canvas));
+        Part(canvas, 1, "fixture.fatigue_disc", 411, 197, () => CrossStandIn(canvas));
+        Part(canvas, 1, "fixture.mt_ruler", 747, 60, () => RulerStandIn(canvas));
+    }
+
+    // The alignment dial: a brass ring, a parchment half face with its tick marks, the number pit under the hub.
+    private static void DialStandIn(CanvasItem canvas)
+    {
         Disc(canvas, 1, 56, 181, 50, Brass);
         Disc(canvas, 1, 56, 181, 45, Parchment);
         for (var i = 0; i <= 12; i++)
@@ -135,13 +191,26 @@ internal static class AreaKitStandIns
         Field(canvas, 1, 6, 181, 100, 50, Brass, edge: false);
         Disc(canvas, 1, 56, 181, 8, Black);
         Field(canvas, 1, 40, 198, 34, 17);
-        // The health disc (a heart) and the fatigue disc (a cross): black discs in brass rings.
+    }
+
+    // The health disc (a heart): a black disc in a brass ring.
+    private static void HeartStandIn(CanvasItem canvas)
+    {
         Disc(canvas, 1, 449, 155, 24, Black); Ring(canvas, 1, 449, 155, 25, Brass, 3);
         Disc(canvas, 1, 442, 150, 7, RedInk); Disc(canvas, 1, 456, 150, 7, RedInk); Poly(canvas, 1, RedInk, (435, 153), (463, 153), (449, 170));
+    }
+
+    // The fatigue disc (a cross).
+    private static void CrossStandIn(CanvasItem canvas)
+    {
         Disc(canvas, 1, 449, 225, 24, Black); Ring(canvas, 1, 449, 225, 25, Brass, 3);
         var blue = new Color(.1f, .1f, .8f);
         Field(canvas, 1, 443, 209, 13, 29, blue, edge: false); Field(canvas, 1, 435, 217, 29, 13, blue, edge: false);
-        // The magic-technology ruler: a parchment strip, a tick every 6.4 units and a long one at each division, the magic sign (blue) on top, the technology gear (orange) at the bottom, the two number pits.
+    }
+
+    // The magic-technology ruler: a parchment strip, a tick every 6.4 units and a long one at each division, the magic sign (blue) on top, the technology gear (orange) at the bottom, the two number pits.
+    private static void RulerStandIn(CanvasItem canvas)
+    {
         Field(canvas, 1, 750, 62, 40, 324, Parchment, edge: false);
         for (var i = -17; i <= 17; i++)
         {
@@ -157,17 +226,26 @@ internal static class AreaKitStandIns
     internal static void Schematic(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Schematic);
-        Field(canvas, 1, 201, 13, 506, 367, Paper, edge: false);
-        for (var x = 227f; x < 707; x += 32) canvas.DrawLine(new Vector2(x, 13), new Vector2(x, 380), Rule, 1);
-        for (var y = 22f; y < 380; y += 32) canvas.DrawLine(new Vector2(201, y), new Vector2(707, y), Rule, 1);
-        Field(canvas, 1, 577, 179, 103, 71, Paper);
-        Field(canvas, 1, 577, 275, 103, 71, Paper);
-        Field(canvas, 1, 39, 334, 126, 30);
+        Part(canvas, 1, "fixture.schem_page", 201, 13, () => Field(canvas, 1, 201, 13, 506, 367, Paper, edge: false));
+        Part(canvas, 1, "grid.schematic", 201, 13, () =>
+        {
+            for (var x = 227f; x < 707; x += 32) canvas.DrawLine(new Vector2(x, 13), new Vector2(x, 380), Rule, 1);
+            for (var y = 22f; y < 380; y += 32) canvas.DrawLine(new Vector2(201, y), new Vector2(707, y), Rule, 1);
+        });
+        Part(canvas, 1, "fixture.schem_slot", 577, 179, () => Field(canvas, 1, 577, 179, 103, 71, Paper));
+        Part(canvas, 1, "fixture.schem_slot", 577, 275, () => Field(canvas, 1, 577, 275, 103, 71, Paper));
+        Part(canvas, 1, "fixture.schem_channel", 39, 334, () => Field(canvas, 1, 39, 334, 126, 30));
         // The legends: a dark oval, a gear and its sign (the mortarboard of the learned list, the scroll of the found list).
-        Disc(canvas, 1, 117, 179, 35, DarkWood); Gear(canvas, 1, 117, 179, 30, Grey);
-        Poly(canvas, 1, new(.25f, .25f, .28f), (92, 173), (118, 162), (146, 173), (120, 184)); Poly(canvas, 1, new(.2f, .2f, .23f), (104, 178), (104, 192), (120, 198), (136, 192), (136, 178), (120, 184));
-        Disc(canvas, 1, 119, 267, 35, DarkWood); Gear(canvas, 1, 119, 267, 30, Grey);
-        Field(canvas, 1, 92, 261, 56, 15, new(.85f, .78f, .6f), edge: false); Disc(canvas, 1, 93, 268, 8, new(.8f, .72f, .55f)); Disc(canvas, 1, 147, 268, 8, new(.8f, .72f, .55f));
+        Part(canvas, 1, "fixture.gear_hat", 72, 144, () =>
+        {
+            Disc(canvas, 1, 117, 179, 35, DarkWood); Gear(canvas, 1, 117, 179, 30, Grey);
+            Poly(canvas, 1, new(.25f, .25f, .28f), (92, 173), (118, 162), (146, 173), (120, 184)); Poly(canvas, 1, new(.2f, .2f, .23f), (104, 178), (104, 192), (120, 198), (136, 192), (136, 178), (120, 184));
+        });
+        Part(canvas, 1, "fixture.gear_scroll", 71, 231, () =>
+        {
+            Disc(canvas, 1, 119, 267, 35, DarkWood); Gear(canvas, 1, 119, 267, 30, Grey);
+            Field(canvas, 1, 92, 261, 56, 15, new(.85f, .78f, .6f), edge: false); Disc(canvas, 1, 93, 268, 8, new(.8f, .72f, .55f)); Disc(canvas, 1, 147, 268, 8, new(.8f, .72f, .55f));
+        });
     }
 
     /// <summary>The logbook (arts 264 and 260): nothing the kit's two pieces do not carry (the pages are the book's own picture); only the mark for the smoke.</summary>
