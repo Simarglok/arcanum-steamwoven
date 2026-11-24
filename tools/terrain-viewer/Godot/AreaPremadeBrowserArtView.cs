@@ -36,6 +36,8 @@ public partial class AreaPremadeBrowserArtView : Control
     internal AreaPremadeBrowserView? ViewForSelfTest => Visible ? _view : null;
     internal bool PortraitForSelfTest => Visible && _portrait is not null;
     internal int FrameForSelfTest(AreaPremadeBrowserButton button) => Frame(button);
+    /// <summary>ARC-UI-2924: the button the pointer lights now, or null.</summary>
+    internal AreaPremadeBrowserButton? HoveredForSelfTest => _hovered;
     /// <summary>The window position of a screen point of the 800 × 600 screen.</summary>
     internal Vector2 ScreenPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 

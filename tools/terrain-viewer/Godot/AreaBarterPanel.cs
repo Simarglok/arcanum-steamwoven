@@ -289,8 +289,9 @@ public partial class AreaBarterPanel : CanvasLayer
             // ARC-UI-069: the window's 800 × 400 at the screen's (0, 41) of the menu's 800 × 600 screen, at the bars' whole factor (as the
             // shop's strips, AreaShopArtView).
             var screen = GetViewport().GetVisibleRect().Size;
-            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
-            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale; ARC-UI-2924: the docked window is the opening shop's barter, a two-strip screen,
+            // so it stands on the fitted plate with the shop's strips (AreaShopArtView).
+            if (AreaGameBarPanel.TwoStripScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
             {
                 var unit = (float)zone.Scale;
                 _area.FitScale(unit);

@@ -84,6 +84,8 @@ public partial class AreaCharacterSheetArtView : Control
         ? AreaCharacterSheetArtLayout.Texts(view, _texts, (font, text) => fonts.For(font).Font.Measure(text).Width) : [];
     /// <summary>The window position of a window-relative point of the sheet.</summary>
     internal Vector2 PointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
+    /// <summary>ARC-UI-2924: the button the pointer lights now (its kind and index), or null.</summary>
+    internal (string Kind, int Index)? HoveredForSelfTest => _hovered is { } hit ? (hit.Kind.ToString(), hit.Index) : null;
 
     public override void _Ready()
     {
@@ -169,8 +171,9 @@ public partial class AreaCharacterSheetArtView : Control
         {
             // ARC-UI-147: the menu's 800 × 600 screen at the bars' whole factor, centred; the window under the top strip (as AreaShopArtLayout.Window).
             var screen = GetViewportRect().Size;
-            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
-            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale; ARC-UI-2924: the editor is a two-strip screen like the shop it shares its strips with, so
+            // the whole 800 × 600 screen is the fitted plate (SteamwovenColumnMenu.Fit), black beside it.
+            if (AreaGameBarPanel.TwoStripScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
             {
                 Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
                 Position = new Vector2((float)zone.X, (float)Math.Round(zone.Y + AreaShopArtLayout.Window.Y * zone.Scale));
