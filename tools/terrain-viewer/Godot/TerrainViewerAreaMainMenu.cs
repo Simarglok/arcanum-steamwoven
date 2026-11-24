@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
             _mainMenuPanel.SoundRequested += id => PlayBarSound(id, "menu button");
             _mainMenuPanel.CreationPressed += button => MainMenuCommand(() => { _mainMenu!.PressCreation(button, CreationRules()); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
+            // ARC-UI-3041: the kit's body of the shop and the editor tells the windows over it to skip their own backdrop.
+            _mainMenuPanel.ShopKitChanged += SyncShopKit;
             _mainMenuPanel.NameClicked += () => MainMenuCommand(() => { _mainMenu!.BeginName(); return AreaMenuCommand.Nothing; });
             // ARC-UI-068: a press beside the name field ends its typing (NW8); without typing nothing changes and nothing is redrawn.
             _mainMenuPanel.PressedOutsideName += () =>
