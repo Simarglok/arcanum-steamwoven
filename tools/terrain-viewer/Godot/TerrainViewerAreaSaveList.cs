@@ -89,6 +89,8 @@ public partial class TerrainViewerApp
             _saveListPanel.SoundRequested += id => PlayBarSound(id, "save window button");
         }
         AttachSaveListArt(_saveListPanel);
+        // ARC-UI-2968: the overwrite and delete questions are the original's dialog box.
+        if (DialogBoxArt() is { } dialogArt) _saveListPanel.SetDialogArt(dialogArt);
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("SAVE_LIST");
@@ -283,6 +285,55 @@ public partial class TerrainViewerApp
         }
     }
 
+    /// <summary>ARC-UI-2968: the details, the notice and the question of an open save or load window are the original's text font and dialog box, not Godot's
+    /// font or buttons: the details are an art paragraph, a refusal's notice is one under them, and a question is the dialog box with its text and no Godot button;
+    /// the selection is put back at the end.</summary>
+    private async Task SaveListArtTextsForSmoke(Action<bool, string> require, Func<int, Task> frames)
+    {
+        var panel = _saveListPanel!;
+        var list = _saveList!;
+        var kept = list.Selected;
+        require(panel.DetailArtForSelfTest.Items.Count > 0 == (panel.DetailArtForSelfTest.Text.Length > 0),
+            "the details are drawn as art text in the original's font: " + panel.DetailArtForSelfTest.Items.Count);
+        var rows = list.Rows();
+        var auto = rows.ToList().FindIndex(row => row.Entry is { IsAuto: true });
+        if (auto >= 0)
+        {
+            SaveListCommand(() => { list.Select(auto); return AreaSaveCommand.Nothing; });
+            SaveListCommand(() => list.RequestDelete());
+            await frames(2);
+            require(panel.ArtNoticeForSelfTest == "the auto-save cannot be deleted" && panel.NoticeArtForSelfTest.Items.Count > 0 && !panel.DialogForSelfTest.Visible,
+                "a refusal's notice is art text under the details: " + panel.ArtNoticeForSelfTest);
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)
+            {
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var image = GetViewport().GetTexture().GetImage();
+                require(image.SavePng(System.IO.Path.ChangeExtension(capture, null) + "-" + list.Mode.ToString().ToLowerInvariant() + "-notice.png") == Error.Ok, "the notice capture saved to " + capture);
+            }
+        }
+        // A question to ask: an overwrite of a listed save in the save window, a delete of a listed save that is not the auto-save in the load window.
+        var saving = list.Mode == AreaSaveListMode.Save;
+        var askable = rows.ToList().FindIndex(row => row.Entry is { } entry && (saving || !entry.IsAuto));
+        GD.Print($"ARC-UI-2968 save list art texts mode={list.Mode} rows={rows.Count} auto={auto} askable={askable} dialogArt={panel.DialogForSelfTest.HasArt}");
+        if (askable >= 0)
+        {
+            var (prompt, word) = saving ? (AreaSavePrompt.ConfirmOverwrite, "Overwrite") : (AreaSavePrompt.ConfirmDelete, "Delete");
+            SaveListCommand(() => { list.Select(askable); return AreaSaveCommand.Nothing; });
+            SaveListCommand(() => saving ? list.Confirm() : list.RequestDelete());
+            await frames(2);
+            var asked = panel.DialogForSelfTest.TextForSelfTest;
+            require(list.Prompt == prompt && (panel.DialogForSelfTest.HasArt
+                ? panel.DialogForSelfTest.Visible && asked.StartsWith(word, StringComparison.Ordinal) && panel.NoticeArtForSelfTest.Text.Length == 0
+                : panel.NoticeArtForSelfTest.Text.StartsWith(word, StringComparison.Ordinal)) && panel.ArtDetailForSelfTest.Length == 0,
+                "the question is the original's dialog box, the details wait: " + asked);
+            SaveListCommand(() => list.Answer(false));
+            await frames(2);
+            require(list.Prompt == AreaSavePrompt.None && !panel.DialogForSelfTest.Visible && panel.NoticeArtForSelfTest.Text.Length == 0, "No closes the question box");
+        }
+        if (kept >= 0) SaveListCommand(() => { list.Select(kept); return AreaSaveCommand.Nothing; });
+        await frames(1);
+    }
+
     private async Task SaveListArtForSmokeCore(Action<bool, string> require)
     {
         async Task Frames(int count)
@@ -304,6 +355,7 @@ public partial class TerrainViewerApp
         require(shown.Count > 0 && shown.SequenceEqual(expected), $"the rows show the descriptions: {string.Join(" | ", shown)}");
         require(list.SelectedEntry is null || panel.ArtDetailForSelfTest == AreaSaveList.Detail(list.SelectedEntry), "the box shows the selected save's details: " + panel.ArtDetailForSelfTest);
         require(list.Selected < 0 || (list.Selected >= art.TopForSelfTest && list.Selected < art.TopForSelfTest + AreaSaveListArtLayout.ShownRows), "the selected row is shown");
+        await SaveListArtTextsForSmoke(require, Frames);
         require(list.SelectedEntry is not null || art.InfoTextsForSelfTest.Count == 0, "ARC-UI-067: with no save selected the preview shows no info");
         await Frames(2);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)
