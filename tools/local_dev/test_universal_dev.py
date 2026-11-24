@@ -113,6 +113,19 @@ class UniversalDevTests(unittest.TestCase):
         self.assertEqual(launch.pinned_roles("crash-site-area", "ARC-RENDER-008")[-1], "caveMobile")
         launch.map_arguments(inputs, "crash site cave")
 
+    def test_map_arguments_take_another_module_of_the_installation(self):
+        # ARC-RENDER-3107: `--env ARC_SMOKE_MODULE=Vormantown` of a map smoke names a module archive of the same game folder
+        inputs = self.inputs()
+        modules = Path(inputs["gameRoot"]) / "modules"
+        modules.mkdir(exist_ok=True)
+        (modules / "Vormantown.dat").write_bytes(b"public fixture")
+        argv = launch.map_arguments(inputs, "multiplayer-map", module="Vormantown")
+        self.assertEqual(argv[argv.index("--module") + 1], str((modules / "Vormantown.dat").resolve()))
+        self.assertNotEqual(argv[argv.index("--module") + 1], launch.map_arguments(inputs, "multiplayer-map")[argv.index("--module") + 1])
+        for bad in ("../Arcanum", "a/b", "", "Missing"):
+            with self.subTest(module=bad), self.assertRaises(ValueError):
+                launch.map_arguments(inputs, "multiplayer-map", module=bad)
+
     def launch_cli(self, task: str, *arguments: str, installation: dict | None = None) -> tuple[dict, object]:
         self.authority_fixture(task=task, tool="terrain")
         conf = config.load_config(); conf["inputs"] = self.inputs()

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import re
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -60,6 +61,7 @@ UNIVERSAL_ROLES: tuple[str, ...] = MAP_ROLES
 # run), launched in map mode only.
 UNIVERSAL_TASK = "ARC-DEV-015"
 MAX_MAP_NAME = 128
+MODULE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,39}")
 # ARC-WORLD-027: `--hero NAME` starts the AREA session as one original pre-made hero (main-menu order, basic prototypes
 # 16067..16078). Keep in step with `AreaStartingHero.Premade` in src/Arcanum.World/AreaStartingHero.cs
 # (tools/local_dev/test_launcher_sync.py fails on any drift). Only AREA builds exported with ARC-WORLD-027 accept it.
@@ -236,7 +238,7 @@ def sector_argument(sector: str | None) -> list[str]:
 
 
 def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None, main_menu: bool = False,
-                  debug_mode: bool = False) -> list[str]:
+                  debug_mode: bool = False, module: str | None = None) -> list[str]:
     """ARC-RENDER-017: the explicit argument set for one map in area map mode. ARC-RENDER-024: a map too large
     to load whole (the main world map) opens as a window around `sector`, else around its map-list start."""
     if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
@@ -248,6 +250,11 @@ def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, se
     if missing:
         raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
                          + "; run ./arcanum setup again)")
+    if module is not None:
+        # ARC-RENDER-3107: another module of the same installation (`<game>/modules/<module>.dat`, e.g. Vormantown); the file is checked like the configured one.
+        if not MODULE_NAME.fullmatch(module):
+            raise ValueError("module must be one plain module name")
+        inputs = {**inputs, "module": str(Path(_local(inputs, "gameRoot", directory=True)) / "modules" / f"{module}.dat")}
     arguments = ["--mode", "area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
                  "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
                  "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero), *sector_argument(sector),

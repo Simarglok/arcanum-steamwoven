@@ -34,6 +34,28 @@ public partial class TerrainViewerApp
             if (source.Table.Find(number) is { } entry && source.Prepare(number) is { } plan)
                 tsv.Append($"{number}\t{entry.Name}\t{plan.Info.Width}\t{plan.Info.Height}\t{plan.Info.Columns}\t{plan.Info.Rows}\t{plan.Info.OriginX}\t{plan.Info.OriginY}\t{plan.Info.Scale}\n");
         System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "tmi-all.tsv"), tsv.ToString());
+        if (root.TryGetProperty("scan", out var scanProperty) && scanProperty.GetBoolean())
+        {
+            // ARC-RENDER-3107: which map each town map belongs to (the sectors whose metadata word names it), for every map of the run's module.
+            var scan = AreaTownMapScan.Scan(_arguments!.ModulePath!, out var scanDetail);
+            GD.Print("TOWNCAP scan " + scanDetail);
+            if (scan is not { } scanned) return;
+            var (mapsTsv, sectorsTsv) = AreaTownMapScan.ToTsv(scanned.Maps, scanned.Sectors);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "maps-scan.tsv"), mapsTsv);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "townmap-sectors.tsv"), sectorsTsv);
+            // The tile list of every town map (the tiles the original has), so the plan of all towns needs no run of its own.
+            var listDir = System.IO.Path.Combine(outDir, "tiles-all");
+            System.IO.Directory.CreateDirectory(listDir);
+            for (var number = 0; number < 400; number++)
+                if (source.Table.Find(number) is { } listed && source.Prepare(number) is { } listedPlan)
+                {
+                    var list = new System.Text.StringBuilder();
+                    for (var index = 0; index < listedPlan.Info.Columns * listedPlan.Info.Rows; index++)
+                        if (source.TileExists(listed, index)) list.Append(index).Append('\n');
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(listDir, number + ".txt"), list.ToString());
+                }
+            if (!root.TryGetProperty("town", out _)) { GD.Print("ARC-DEV-138 native-smoke door-close PASS town-scan"); return; }
+        }
         var townName = root.GetProperty("town").GetString()!;
         var townNumber = Enumerable.Range(0, 400).FirstOrDefault(n => source.Table.Find(n) is { } e && string.Equals(e.Name, townName, StringComparison.OrdinalIgnoreCase), -1);
         var town = townNumber < 0 ? null : source.Prepare(townNumber);
