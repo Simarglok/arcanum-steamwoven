@@ -7,7 +7,7 @@
 
 Owner decision 2026-11-24 (#3098, option A): these parts are kit parts, not a layer of the window's old art. Their shapes follow the original's (the place, the size and the sign of each, TRD "Elements the old arts held") and
 are drawn here by rule, deterministically, with no generator and no pixel of the original (the pilot's glyph rule, #3058): the same call gives the same bytes. `build` writes one master PNG per part, RGBA, at the part's master
-size (the unit size x 3.6 on the 6 px grid, `kit_check.snap`), to `local/steamwoven-ui/masters/<id>.png` (ignored by git), ready for `bake.py`. The viewer's table of the same parts is `SteamwovenKitTable.FixtureSizes`
+size (the unit size x 3.6 on the 6 px grid, `kit_check.snap`), to `local/steamwoven-ui/masters/<id>.png` (ignored by git), ready for `bake.py`. The viewer's table of the same parts is `SteamwovenKitTable.FixtureUnits`
 (`tools/terrain-viewer/Core/SteamwovenKitComposer.cs`); a test pins it to `FIXTURES` through `kit.json`.
 
 `flat` is the look decided for the cells (no bevel): black wells and thin grey-blue lines; `brass` adds a brass trim to the pits and boxes. Both draw the same shapes at the same places. Standard library only, on `pngio`.
@@ -289,8 +289,8 @@ def _dial(c: Canvas) -> None:
         angle = math.pi + math.pi * i / 12
         inner = c.s * (34 if i % 6 == 0 else 38)
         c.segment(cx + math.cos(angle) * inner, cy + math.sin(angle) * inner, cx + math.cos(angle) * c.s * 43, cy + math.sin(angle) * c.s * 43, max(2.0, c.s * 0.5), INK)
-    c.rect(c.X(33), c.Y(66), c.X(67), c.Y(83), BLACK)
-    c.frame(c.X(33), c.Y(66), c.X(67), c.Y(83), 2, EDGE)
+    c.rect(c.X(34), c.Y(67), c.X(68), c.Y(84), BLACK)
+    c.frame(c.X(34), c.Y(67), c.X(68), c.Y(84), 2, EDGE)
     c.disc(cx, cy, c.s * 8, DARK_WOOD)
     c.disc(cx, cy, c.s * 8, BRASS, ring=2)
 
