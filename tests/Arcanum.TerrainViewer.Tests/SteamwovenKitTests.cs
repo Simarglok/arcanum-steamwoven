@@ -21,6 +21,7 @@ public sealed class SteamwovenKitTests
             new("cap.top_strip_left", B(120), B(150)), new("cap.top_strip_right", B(120), B(150)),
             new("cap.bottom_strip_left", B(120), B(570)), new("cap.bottom_strip_right", B(120), B(570)),
             new("plate.char_but", B(120), B(120)), new("plate.char_but_hover", B(120), B(120)), new("plate.char_but_pressed", B(120), B(120)), new("state.char_on", B(120), B(120)),
+            new("glyph.char_but", B(120), B(120)), new("plate.lilgrnbut", B(84), B(84)), new("glyph.fate_but", B(84), B(84)), new("glyph.sleep_but", B(84), B(84)),
             new("backdrop.mainmenuback", B(2880), B(2160)),
         };
         // The inventory's right piece is shared by several windows (ARC-UI-3033): a part is added once.
@@ -382,20 +383,51 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
-    public void A_button_is_its_face_and_the_overlay_of_its_look_and_none_without_the_face()
+    public void A_button_is_its_face_its_glyph_and_the_overlay_of_its_look_and_none_without_the_face()
     {
         var set = Full(SteamwovenStep.Half);
-        CollectionAssert.AreEqual(new[] { "plate.char_but" }, SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Idle).Select(part => part.Id).ToArray());
-        CollectionAssert.AreEqual(new[] { "plate.char_but", "plate.char_but_hover" }, SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Hovered).Select(part => part.Id).ToArray());
-        CollectionAssert.AreEqual(new[] { "plate.char_but", "plate.char_but_pressed" }, SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Down).Select(part => part.Id).ToArray());
-        // The lit face of a light button is its own part.
-        CollectionAssert.AreEqual(new[] { "state.char_on" }, SteamwovenKitComposer.ButtonLayers(set, 561, AreaBarButtonLook.Idle).Select(part => part.Id).ToArray());
+        static string[] Ids(IReadOnlyList<SteamwovenKitPart> layers) => [.. layers.Select(part => part.Id)];
+        CollectionAssert.AreEqual(new[] { "plate.char_but", "glyph.char_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Idle)));
+        // The overlay of the look lies over the glyph (ARC-UI-3096).
+        CollectionAssert.AreEqual(new[] { "plate.char_but", "glyph.char_but", "plate.char_but_hover" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Hovered)));
+        CollectionAssert.AreEqual(new[] { "plate.char_but", "glyph.char_but", "plate.char_but_pressed" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Down)));
+        // The lit face of a light button is its own part and takes its button's glyph.
+        CollectionAssert.AreEqual(new[] { "state.char_on", "glyph.char_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 561, AreaBarButtonLook.Idle)));
+        // Art 137 stands under two buttons with their own symbols: the glyph is told by the button, and none is drawn without it.
+        CollectionAssert.AreEqual(new[] { "plate.lilgrnbut", "glyph.fate_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 137, AreaBarButtonLook.Idle, AreaBarButton.FatePoints)));
+        CollectionAssert.AreEqual(new[] { "plate.lilgrnbut", "glyph.sleep_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 137, AreaBarButtonLook.Idle, AreaBarButton.Sleep)));
+        Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(set, 137, AreaBarButtonLook.Idle).Count);
         // No face (a button the kit has not made yet, or an art that is no button): the generated or legacy art stays.
         Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(set, 472, AreaBarButtonLook.Idle).Count);
         Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(set, 1, AreaBarButtonLook.Idle).Count);
         // An overlay of another size is not drawn.
-        var odd = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_but", 60, 60), new("plate.char_but_hover", 30, 30)]);
-        Assert.AreEqual(1, SteamwovenKitComposer.ButtonLayers(odd, 169, AreaBarButtonLook.Hovered).Count);
+        var odd = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_but", 60, 60), new("glyph.char_but", 60, 60), new("plate.char_but_hover", 30, 30)]);
+        Assert.AreEqual(2, SteamwovenKitComposer.ButtonLayers(odd, 169, AreaBarButtonLook.Hovered).Count);
+    }
+
+    [TestMethod]
+    public void A_face_without_its_glyph_or_with_one_of_another_size_is_not_drawn_from_the_kit()
+    {
+        // ARC-UI-3096 (AC1): the plate alone would be a button without its symbol, so the whole button stays the generated or legacy art.
+        var without = Full(SteamwovenStep.Half, "glyph.char_but");
+        foreach (var look in new[] { AreaBarButtonLook.Idle, AreaBarButtonLook.Hovered, AreaBarButtonLook.Down })
+        {
+            Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(without, 169, look).Count, look.ToString());
+            Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(without, 561, look).Count, look.ToString());
+        }
+        var odd = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_but", 60, 60), new("glyph.char_but", 30, 30)]);
+        Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(odd, 169, AreaBarButtonLook.Idle).Count);
+    }
+
+    [TestMethod]
+    public void Every_button_face_has_a_glyph_by_its_art_or_by_its_button()
+    {
+        foreach (var art in SteamwovenKitTable.ButtonFaces.Keys.Where(art => art != 137)) Assert.IsNotNull(SteamwovenKitTable.GlyphOf(null, art), art.ToString());
+        Assert.IsNull(SteamwovenKitTable.GlyphOf(null, 137));
+        foreach (var spec in AreaGameBarLayout.Buttons.Where(spec => spec.Art == 137)) Assert.IsNotNull(SteamwovenKitTable.GlyphOf(spec.Button, 137), spec.Button.ToString());
+        // A lit face and its idle face show one symbol; the glyph names are safe file names.
+        Assert.AreEqual(SteamwovenKitTable.GlyphOf(null, 169), SteamwovenKitTable.GlyphOf(null, 561));
+        Assert.IsTrue(SteamwovenKitTable.ButtonGlyphs.Values.Concat(SteamwovenKitTable.SharedArtGlyphs.Values).All(SteamwovenKitSet.ValidId));
     }
 
     [TestMethod]
