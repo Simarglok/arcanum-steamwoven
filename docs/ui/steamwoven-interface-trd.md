@@ -286,10 +286,15 @@ Part kinds:
   crop and scale to the manifest size (area average down, Catmull-Rom up, premultiplied, linear light), real alpha or a keyed flat background, edge decontamination against the nearest opaque colour,
   alpha clean-up (levels and specks), the colour lock to the approved sheet (SWI-GEN-11) by material, and the record `provenance/fit/<part id>.json`; a master is written only when the gates of SWI-VER-3 hold.
   Needs of the pilot production ([#2950](https://github.com/Simarglok/arcanum-steamwoven/issues/2950)): per part the batch names the sheet materials (`--material`) and, if the generator returns no alpha, the key; the batch PR then sets the part's `status` to `master` and its `provenance` to `fit:<part id>`.
-- **SWI-GEN-5** The strips and the window backgrounds are made by the method the owner picks
-  ([#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458)) from the comparison
-  ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457), method note and numbers:
-  [steamwoven-surface-method-study.md](steamwoven-surface-method-study.md)).
+- **SWI-GEN-5** The strips and the window backgrounds are made by **method A** (owner decision 2026-11-21,
+  [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458), from the comparison
+  [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)): one Codex item per zone at the generator's size, upscaled to the zone;
+  methods B (overlapping tiles) and C (seamless material plus macro image) are dropped. A gives the wooden surface with its relief and nothing else; its five
+  conditions are those of the [owner pick](steamwoven-surface-method-study.md#owner-pick-and-conditions-2026-11-21): (1) text, counters, digits and fields are not part of the
+  generated surface, the game draws them over it; (2) zones filled in play are taken by the original's mask, never from the generation; (3) metal parts come from the kit
+  (pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058)); (4) seams at the strip joins not worse than the original's (1.82 and 1.73), the target is at most 1.8
+  (SWI-VER-5 below keeps its own gate); (5) wood tone: mean L\* and contrast (and chroma) fitted to the original by the wood mask, random dark specks removed, the original's rows of dots kept.
+  Method note and numbers: [steamwoven-surface-method-study.md](steamwoven-surface-method-study.md).
 - **SWI-GEN-6** Every generated image has a provenance record: generator and version, date, prompt id and the hash of
   its text, reference ids and hashes, who ran it. The batch runner (SWI-GEN-7) also records the Codex thread id, the pixel size, the
   outcome and the refusal text.
@@ -301,7 +306,12 @@ Part kinds:
   The owner can still fill the outbox by hand and run `prompt_library.py provenance`.
 - **SWI-GEN-8** The result of an item is accepted only as a PNG at the asked aspect (within 1 %); the generator keeps a budget of about 1.57 MP per
   image, so a master size above it is reached by the fit tool, never by an upscale inside the generation session. A refusal or a failure is
-  logged with Codex's own text; the prompt is never reworded automatically.
+  logged with Codex's own text; the prompt is never reworded automatically. **Extreme aspects** (decision of ARC-UI-3083,
+  [#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083), FR-UI-007): for the strips (19.5:1, 5:1) the generator returns a 2103 × 748 canvas with the piece drawn
+  at the right proportion between white or black bars. The cropped band is accepted as the result when the tool step (`codex_batch.py run --crop-band`, or `codex_batch.py crop`) produced it:
+  the band's aspect is within 1 % of the asked one before the resize, the columns cut to land on it are at most 2 % of the band's width, the band is cut, never stretched, before the resize to the zone, and the provenance record
+  keeps the crop section and the hash of the canvas Codex returned. A canvas with no bars, or a band that cannot reach the aspect, stays `wrong-aspect`. The resize of the band to the zone size
+  is part of that step (Lanczos, an upscale of about x1.37 for the two strips); it is not an upscale inside the generation session.
 - **SWI-GEN-9** A context image is a refinement of its ORIGINAL (owner decision 2026-11-20, [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)): the upscaled ORIGINAL is
   given to Codex as the one image to edit ("refine this image, raise its detail, do not change its colour or its shape"), and the redraw adds only resolution and surface texture: the same
   palette, brightness, contrast and shapes, no new ornament, shine or detail; brass is dull, dark and matte, glass slightly cloudy, the whole look dusty and muted. A tone check follows every
@@ -329,6 +339,12 @@ runs one inbox batch and writes the outbox. It never writes into the inbox and n
 - **Per item**: exit code, the final JSON `{"ok", "path", "error"}`, the file `<id>.png` in the work folder, a PNG, the aspect within 1 %. Outcomes: `ok`, `refused` (ok false, with Codex's text), `failed`, `timeout` (`--timeout`, default 900 s, the process group is killed), `bad-result`, `missing-file`, `not-png`, `wrong-aspect`. The batch goes on after a failed item. Only an `ok` image is copied to the outbox, and an existing outbox file is kept unless `--overwrite`.
 - **Provenance** `outbox/<batch>/<id>.provenance.json`: generator `codex-cli <version> image_gen`, date, batch, id, `prompt_sha256`, each reference with its sha256, `thread_id`, pixel size, asked size and aspect, outcome, refusal text, image sha256.
 - **Commands**: `codex_batch.py check`; `codex_batch.py run BATCH --dry-run [--only ID,ID]` prints the commands and sends nothing; `codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite] [--model M]`. Every `exec` and `exec resume` pins `-m gpt-6.1-sol -c model_reasoning_effort="medium"` (owner decision 2026-11-20, [#3043](https://github.com/Simarglok/arcanum-steamwoven/issues/3043)); `--model` overrides only with the owner's approval. Exit 0 all ok, 1 an item not ok, 2 pre-check or batch file failed.
+- **Band crop** (ARC-UI-3083, `tools/steamwoven_ui/band_crop.py`, needs ImageMagick; only used with the option below): `run BATCH --crop-band` turns an item judged `wrong-aspect` whose canvas has bars above and below into `ok`
+  (the file is cropped from the canvas in the work folder, a refusal or a failure by Codex is not cropped); `codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz P]` does the same for one file and
+  writes `OUT.crop.json`. Steps: a 4 % fuzz trim of the colour at the canvas corner (each bar must be at least 5 % of the canvas height); a shave of 2 to 4 px at the top and the bottom (the light anti-aliasing line; the shave that
+  brings the band closest to the asked aspect, 2 px at each side at least) and 2 px at a trimmed side edge; equal columns cut at both sides when the band is still wider than the asked aspect (at most 2 % of its width);
+  a band aspect within 1 % of the asked one, else the band is refused with the reason in `detail`; a Lanczos resize to the item's `size` (8 bit RGBA PNG). Measured on the two canvases of #2457: 19.5:1 → band 2102 × 108 (bars 306/327 px, shave 4/3 px, 1 column cut, aspect +0.02 %),
+  5:1 → band 2100 × 417 (bars 141/186 px, shave 2/2 px, 3 columns cut, +0.02 %). The provenance record adds `crop` (canvas, trim box, bars, shave, columns cut, band, aspect error, fuzz, filter, tool, `raw_sha256`, `cropped_sha256`), `raw_file` and `raw_pixel_size`.
 - First real run (2026-11-19): a two-item synthetic text batch, both items `ok` in one resumed session; the tool returned 1448 × 1086 px (1.57 MP) for a 4:3 ask. Reference attachment (repeated `--image=PATH` before the `-` prompt, on `exec` and on `exec resume`) was checked once with two tiny synthetic images against the real CLI.
 - The agent skill that drives it, `.claude/skills/steamwoven-codex-images/SKILL.md`, is narrow: only running ready interface image batches.
 
@@ -395,7 +411,7 @@ Agent-checkable (acceptance criteria of the slices):
 - **SWI-VER-4** Bake: exact sizes and identical bytes on a second run.
 - **SWI-VER-5** Surfaces: seam ratio R ≤ 1.5 at every join inside the composition (a window zone's edge against the strips, the parts of one strip; the measure of
   [ARC-RES-094 U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4); the designed split of a two-part window is exempt, SWI-BDR-5); there are no sides to match, so the former side-versus-centre statistics are dropped. [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) may add
-  repetition and sharpness bounds for the surfaces it compares ([the study's measures](steamwoven-surface-method-study.md#metrics); the bounds wait for the owner's pick); until then only the seam ratio is a gate.
+  repetition and sharpness bounds for the surfaces it compares ([the study's measures](steamwoven-surface-method-study.md#metrics)); the owner has picked method A (SWI-GEN-5) and added no bounds, so only the seam ratio is a gate, R ≤ 1.5 as above; the owner's 1.8 for the method A strip joins (SWI-GEN-5 condition 4) is a target that the original's own joins (1.82, 1.73) would not meet at 1.5, and the prototype's 0.96 and 1.11 meet both.
 - **SWI-VER-6** Smoke captures (local only) at 3840 × 2160, 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200,
   1280 × 800, 1366 × 768, 3440 × 1440, 5120 × 1440 (32:9), 1024 × 768 (4:3) and 1280 × 1024 (5:4); the owner's composite shows 16:9, 16:10, 21:9, 4:3 and 5:4.
 - **SWI-VER-7** With the HD option off the Legacy art is drawn unchanged at whole `s` (pixel check against nearest scaling) and the out-of-sight rules are the original's (SWI-RUN-4, SWI-ORG-3).
@@ -403,7 +419,7 @@ Agent-checkable (acceptance criteria of the slices):
 Owner gates (separate issues, never acceptance criteria): proportions
 [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453), material sheet
 [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456), surface method
-[#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458), and the look of each production batch (named by
+[#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) (decided 2026-11-21: method A), and the look of each production batch (named by
 its issue).
 
 ## Work breakdown
@@ -432,7 +448,7 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images at the composition size, material sheet, prompts | #2451 |
 | 3. Style | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) | owner: material sheet | #2455 |
 | 3. Style | [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) | surface method comparison on a strip and a window background | #2456 |
-| 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method | #2457 |
+| 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method (decided: A, 2026-11-21) | #2457 |
 | 4. Tools | [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459) | fit tool | #2454 |
 | 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
 | 4. Tools | [#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972) | kit assembly tool: base plus details at the original coordinates, baked per original frame (`tools/steamwoven_ui/assemble.py`, [page](steamwoven-kit-assembly.md); done) | #2893, #2971 |

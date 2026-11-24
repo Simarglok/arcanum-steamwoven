@@ -114,7 +114,7 @@ back; L*, contrast and chroma are fitted by the wood mask the tone check uses; a
 | A as the player sees it | 20.04 | 3.82 | 9.44 | 0.96 | 1.11 | 8.67 / 9.60 | 0.072 / 0.111 | +0.06 / -0.3 % / 0.97, 5.02 |
 
 The remaining gap to the production state: the kit parts replace the original's metal stand-ins (pilot #3058, [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459));
-the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step ([#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));
+the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step (`codex_batch.py crop`, [#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));
 the composition is a script today, not a pipeline step. Repetition and sharpness bounds are not added to SWI-VER-5 here; the seam ratio stays the only gate.
 
 ## Reproduction
@@ -132,5 +132,6 @@ python3 -B tools/steamwoven_ui/surface_metrics.py --mask MASK.png --join y=148 -
 python3 -B tools/steamwoven_ui/tone_check.py compare ORIG_2880x2160.png RESULT.png
 ```
 
-The three strip results of A are made from the work folder files by a fuzz trim, a shave and a Lanczos resize with ImageMagick (this page's "Codex at the
-extreme aspects"); that step is not yet a tool command.
+The two strip results of A are made from the work folder files by the tool step `codex_batch.py crop IMAGE --size WxH --out OUT.png` (fuzz trim, shave of 2 to 4 px, band aspect check
+within 1 %, Lanczos resize; [TRD](steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001), "Band crop"), and `codex_batch.py run BATCH --crop-band` does it inside a batch; the shave is now chosen per canvas to
+bring the band closest to the asked aspect (7 px for the 19.5:1 canvas, 4 px for the 5:1 one) instead of a fixed 4 px.
