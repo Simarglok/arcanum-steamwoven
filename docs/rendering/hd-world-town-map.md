@@ -132,6 +132,60 @@ layout, sampling at the scale chosen, writing the pack entries and the scale. Th
 either pinned down or replaced by a rule of our own (include a tile when any of its pixels is in a rendered sector, then accept the one-tile fringe).
 Nothing of this exists in the viewer today. Follow-ups: the render path [#3063](https://github.com/Simarglok/arcanum-steamwoven/issues/3063), the open details of the border rule, palette choice and two differences [#3064](https://github.com/Simarglok/arcanum-steamwoven/issues/3064), and staging the upscaled world map [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065).
 
+## Render path (ARC-RENDER-3063)
+
+Status: **built and measured on Ashbury, 2026-11-21** ([#3063](https://github.com/Simarglok/arcanum-steamwoven/issues/3063)). Owner decisions: render scale
+**1.0** (the 1:1 frame, no reduction; 0.5 by a 2 × 2 box from the same frame only if space is needed later, nearest at 0.5 is not taken); no hero, NPCs or
+critters, roofs closed. The pack entry kind, the writer into the pack and the loader are the next slice ([#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106)), the other towns another ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107)); this section is the render itself.
+
+**Parts.** `ARC_TOWNCAP=JOB.json` through the `door-close` stage of the map smoke (`tools/terrain-viewer/Godot/TerrainViewerTownCapture.cs`): the capture
+takes the viewport at camera centres given as picture offsets from the town map's origin location, with the hero not drawn (`SetActorVisibilityForReadback`),
+no critter body (`TerrainCanvas.HideCritters`: art classes 2, 12, 13, 14, so fallen bodies and AI-moved NPCs go too, and spell eye candy, class 14, which a static render has none of; scenery, doors and items stay), every
+roof drawn (`_areaRoofsClosed`: no recalculation at the hero cell, every roof block filled off and faded off, no wall fade), every overlay layer of the
+viewer hidden, the pointer's highlight and rings cleared, and the clock at hour 15. The capture changes the viewer's state for the run (the clock, the hover highlight) and is meant for a throwaway window process. `tools/hd_pack/town_render.py` (numpy and Pillow, the venv `local/res094/venv`;
+unit tests `test_town_render.py`) plans the windows, runs them through `./arcanum smoke map`, stitches the captures and cuts the tiles. Everything it writes
+stays under the ignored `local/`.
+
+**Tile set.** The tiles written are exactly the tiles the original has (`AreaTownMapSource.TileExists`, 2,991 for Ashbury with tile 000000), so the border
+follows the original's stair-step by construction and no inclusion rule of our own is needed: the rule of the research ("any pixel in a rendered sector",
+2,757 of 2,990) is not used. A tile's index is row × columns + column; tile 000000 (the stand-in for a missing tile) is cut like the others.
+
+**Windows.** One run is a window of 3 × 3 sectors (a viewer started with `--sector`), and a window draws its outermost ring of sectors **without what
+lies beyond it**: a tall object of the next sector (a roof, a wall) is missing at the edge. The first plan (greedy 3 × 3 windows, every pixel from the first
+window that held it) left a thin black diagonal where two windows met and made one Ashbury building look like two with a passage (a roof piece and a wall
+of the sector next door missing, which is not off-flag scenery, [#3086](https://github.com/Simarglok/arcanum-steamwoven/issues/3086)). The plan is now a **lattice of
+windows at a step of 2 sectors** (the phase with the fewest windows), every lattice window that holds a needed sector, and each pixel is taken from the window in
+which its sector lies **deepest** (distance to the window's edge in sectors, at least 0.5 from some window inside the needed sectors). A sector counts as needed when at
+least 25 % of its pixels lie in the tiles to write (the fringe below that is drawn as the neighbour's edge). Ashbury: 14 needed sectors, 7 windows, 60 shots of
+5120 × 1296.
+
+**Check against the original (AC1, AC2), Ashbury, scale 1.0 sampled like the original (nearest at phase 2 → 0.25):**
+
+| Measure | Ashbury render |
+| --- | --- |
+| Compared pixels (both non-black) | 6,087,271 of the original's 6,098,193 non-black pixels (99.8 %) |
+| Mean absolute error (RGB, 0–255) | 1.68 (1.81 in the research, which still had the NPCs); 97.4 % of the pixels differ by less than 5, 99.5 % by less than 10 |
+| Worst 64 × 64 window (at 0.25, stride 32, at least a quarter of it compared) | mean error 6.3; the earlier stitch had 14.4 at the building that showed a gap, while its whole-town mean was 1.71 |
+| Pixels non-black in ours only | 650 (the render adds nothing outside the original's tiles) |
+
+The window metric is part of the tool (`stitch --original DIR`, limit 10 per window; it exits with a failure over the limit) because a whole-town mean hides a local gap.
+The windows of the highest error left are low-level vegetation texture (plants at nearest sampling, a one-pixel phase difference), not missing objects; the eye
+check of the two findings above is the render after the lattice change. Not measured: the fog bit and the PC marker (they use the layout, which is unchanged,
+and the scale of the `.tmi`, which the loader slice carries), other towns.
+
+**Cost (AC3), measured on Ashbury:** capture 692 s for 7 windows (26–184 s each) on a Mac whose window queue was shared with other threads, so queue waits are in it and it is an upper
+bound; stitch with the check 24 s on a quiet Mac (289 s once while the Mac was busy; numpy, not tuned); 24-bit PNG tiles at 1.0 are 37.7 KB each (112.7 MB for the town), about
+12.6 KB at 0.5 by a box. A second full run with the final tool gave the same pixels and bytes. For all 125 towns (64,199 tiles; `town_render.py cost --index townmap-index.tsv` prints each)
+that scales to about **4.3 hours at most and 2.4 GB at 1.0** (0.8 GB at 0.5), Tarant (6,191 tiles) about 25 minutes and 233 MB. This is an extrapolation by tile count; it assumes every town
+is a window run of the main map: the interior maps among the 125 (for example "Ashbury Crematorium - Lev 1") are separate maps of the module, so their capture needs `--area-map` and its own sector, which
+the plan does not know yet ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107); Vormantown is its own module).
+
+**Drawing a tile of 256 × 128 (not built here).** The town-map panel sizes a tile from tile 000000's bitmap (`AreaTownMapPlan.TileWidth`, `TileHeight`) and draws it 1:1 in the
+panel's units; a tile of 256 × 128 therefore needs the scale carried with the entry (the layout stays at the original's 64 × 32 grid, the pixel maths stays in the `.tmi`'s scale
+0.25) and, on a 1080p screen where the composition is enlarged by 1.8, a draw at 0.45 device pixels per picture pixel. Drawn straight that rings; the tiles are
+resampled once per device scale on a worker with the area filter ([#3091](https://github.com/Simarglok/arcanum-steamwoven/pull/3091), `InterfaceHd.DirectFor`), then drawn 1:1 from that copy. The loader slice ([#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106)) does this
+and also replaces the 8-bit BMP, 64 KB, 512 px limits (`AreaTownMapLayout.TryTileSize`, `MaxTileBytes`) for pack tiles (24-bit PNG).
+
 ## World map: one picture, non-generative upscale (AC3)
 
 **Method.** The 64 tiles of 250 × 250 (row-major 8 × 8) are joined into one 2000 × 2000 picture and upscaled x4 (8000 × 8000) with

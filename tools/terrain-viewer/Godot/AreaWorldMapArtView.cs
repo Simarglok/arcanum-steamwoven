@@ -206,11 +206,11 @@ public partial class AreaWorldMapArtView : Control
         Visible = false;
     }
 
-    public override void _EnterTree() => AreaKitBackground.Changed += QueueRedraw;
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
 
     public override void _ExitTree()
     {
-        AreaKitBackground.Changed -= QueueRedraw;
+        AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
         AreaGameBarPanel.InsetsChanged -= Place;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
@@ -909,7 +909,7 @@ public partial class AreaWorldMapArtView : Control
         else if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.BackgroundArt, out var back) == true && back.Length > 0) DrawTexture(back[0], Vector2.Zero);
     }
 
-    private static bool KitBackgroundShown => AreaKitBackground.Shown(SteamwovenKitWindow.WorldMap);
+    private static bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.WorldMap;
 
     // The view, in its own coordinates (the window's minus the view's origin).
     private void DrawView(CanvasItem canvas)

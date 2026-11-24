@@ -1,4 +1,3 @@
-using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -55,29 +54,5 @@ internal sealed partial class AreaKitSheetView : TextureRect
     {
         var texture = AreaKitSheets.For(art);
         Texture = texture; Position = Vector2.Zero; Size = size; Visible = texture is not null;
-    }
-}
-
-/// <summary>
-/// ARC-UI-3037 (census G01, G05, G10 to G12, G15, G17): which covered window stands over a complete kit background now. The bar panel publishes the window exactly while it draws the kit's background under the open window
-/// (the set read, every piece the table's size and loaded); a window reads <see cref="Shown"/> for itself and draws none of its own background art while it is true (its controls, text, holes and content are drawn as before),
-/// and redraws on <see cref="Changed"/>. Nothing is published without a complete kit background, with the HD option off or after the window closes: the window then draws its own art as before.
-/// </summary>
-internal static class AreaKitBackground
-{
-    /// <summary>The window whose kit background shows now, or null.</summary>
-    internal static SteamwovenKitWindow? Window { get; private set; }
-
-    /// <summary>True while the kit's background of <paramref name="window"/> shows (the window draws no background art of its own).</summary>
-    internal static bool Shown(SteamwovenKitWindow window) => Window == window;
-
-    /// <summary>The window whose kit background shows changed; the windows redraw.</summary>
-    internal static event Action? Changed;
-
-    internal static void Publish(SteamwovenKitWindow? window)
-    {
-        if (Window == window) return;
-        Window = window;
-        Changed?.Invoke();
     }
 }

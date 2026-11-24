@@ -62,11 +62,11 @@ public partial class AreaLogbookArtView : Control
     public bool HasNext => _spread.End < _wrapped.Count - 1 && _starts.Count > _spreadIndex + 1;
     internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 
-    public override void _EnterTree() => AreaKitBackground.Changed += QueueRedraw;
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
 
-    public override void _ExitTree() => AreaKitBackground.Changed -= QueueRedraw;
+    public override void _ExitTree() => AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
 
-    private static bool KitBackgroundShown => AreaKitBackground.Shown(SteamwovenKitWindow.Logbook);
+    private static bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Logbook;
 
     public override void _Ready()
     {

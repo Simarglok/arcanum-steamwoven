@@ -255,11 +255,11 @@ public partial class AreaCharacterSheetArtView : Control
             }
     }
 
-    public override void _EnterTree() => AreaKitBackground.Changed += QueueRedraw;
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
 
     public override void _ExitTree()
     {
-        AreaKitBackground.Changed -= QueueRedraw;
+        AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -269,7 +269,7 @@ public partial class AreaCharacterSheetArtView : Control
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
     /// <summary>ARC-UI-3037: the kit's character background shows under this window (never on the new-character screen, which has no kit).</summary>
-    private bool KitBackgroundShown => !MenuScreen && AreaKitBackground.Shown(SteamwovenKitWindow.Character);
+    private bool KitBackgroundShown => !MenuScreen && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
 
     public override void _Draw()
     {
