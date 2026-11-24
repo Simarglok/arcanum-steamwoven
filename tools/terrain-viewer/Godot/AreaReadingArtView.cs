@@ -111,21 +111,37 @@ public partial class AreaReadingArtView : Control
         if (!ArtSet || view.Art is not { } document) return false;
         _view = view;
         _spread = 0;
-        AreaArtFont FontOf(int number) => Face(number).Font;
         // A picture's art (the written item's own number) is read when the window shows it, not inside the draw, and watched like the others.
         _picture = document.Subtype == WrittenSubtype.Picture ? Picture?.Invoke(document.BackgroundArt)?.FirstOrDefault() : null;
         Watch(_picture);
-        if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
-        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf); }
+        _factor = AreaGameBarPanel.ScreenFactor(GetViewportRect().Size);
+        Compose(document);
         Visible = true;
         Place();
         QueueRedraw();
         return true;
     }
 
+    // The screen factor the text was laid out at: a font under 9 px at it is drawn with Garmond9 (ARC-UI-1462), whose glyphs are wider, so the layout depends on it.
+    private int _factor = 1;
+
+    private void Compose(AreaReadingArtDocument document)
+    {
+        AreaArtFont FontOf(int number) => Face(number).Font;
+        if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
+        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf); }
+    }
+
+    /// <summary>The font art a line of font <paramref name="number"/> is drawn with (<see cref="AreaReadingText.ShownFont"/> at the current screen factor, when that font read), else the font itself.</summary>
+    internal int ShownFontNumber(int number)
+    {
+        var shown = AreaReadingText.ShownFont(number, _factor);
+        return shown != number && _faces.ContainsKey(shown) ? shown : number;
+    }
+
     /// <summary>A font's face; a font art that did not read (a markup font the installed game does not hold) draws in the note's font.</summary>
     private AreaArtFontFace Face(int number) =>
-        _faces.TryGetValue(number, out var face) ? face : _faces.TryGetValue(AreaReadingArtLayout.NoteFont, out var fallback) ? fallback : _faces.Values.First();
+        _faces.TryGetValue(ShownFontNumber(number), out var face) ? face : _faces.TryGetValue(AreaReadingArtLayout.NoteFont, out var fallback) ? fallback : _faces.Values.First();
 
     public void CloseView()
     {
@@ -150,6 +166,15 @@ public partial class AreaReadingArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
+        var factor = AreaGameBarPanel.ScreenFactor(size);
+        // ARC-UI-1462: a new screen factor changes which fonts are under 9 px, so the text is laid out again (a book keeps its spread where it still exists).
+        if (_view?.Art is { } document && factor != _factor)
+        {
+            _factor = factor;
+            Compose(document);
+            _spread = Math.Clamp(_spread, 0, Spreads - 1);
+            QueueRedraw();
+        }
         var (scale, position) = ReadingScale(size, InterfaceHd.Enabled && InterfaceHd.Pack is not null);
         Scale = new Vector2(scale, scale);
         Position = position;

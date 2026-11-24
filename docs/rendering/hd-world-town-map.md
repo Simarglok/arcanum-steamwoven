@@ -230,11 +230,11 @@ draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwove
 turns the canvas weave of the parchment into a grid and the plain Lanczos picture is soft, so the picture takes the network only on strong ink lines and
 lettering and Lanczos everywhere else (still non-generative: a super-resolution network and a resampler, no text prompt). Plain `animevideov3` and the wider
 mask ("Blend B") are dropped; plain Lanczos is the fallback. The recipe is the script [`tools/hd_pack/world_map_upscale.py`](../../tools/hd_pack/world_map_upscale.py)
-(`blend` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
+(`blend`, `cut` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
 
 1. The 2000 x 2000 map is upscaled x4 with `realesrgan-ncnn-vulkan -n realesr-animevideov3 -s 4 -t 250` (the network picture) and with Pillow's Lanczos (the baseline).
 2. The mask is made on the original: Gaussian blur sigma 1.0, Canny 100/200, edge components under 30 pixels dropped (paper grain), dilation by an ellipse of radius 2
-   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map).
+   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map; the thickness gate of the final recipe below narrows this to about 14 %).
 3. Result = mask x network + (1 - mask) x Lanczos, per channel, rounded.
 4. Outline check (rebuilt, the script of ARC-RES-2992 was lost, [#3080](https://github.com/Simarglok/arcanum-steamwoven/issues/3080)): the candidate is box-downscaled back to
    2000 x 2000 and compared with the original; Canny 40/100 (chosen so that Lanczos gives F1 0.965, close to 0.964 above), tolerance as an elliptical dilation of radius 1 and 2
@@ -251,9 +251,41 @@ The thresholds differ from the lost script, so the absolute numbers differ a lit
 fine canvas weave has the same strength in the blend's transition band as in plain Lanczos (ratio of the weave to the far field 0.93 against 0.92 for Lanczos), so no
 step in the texture was measured at the mask border; Blend A and Lanczos were also compared at the display scales 0.9 (4K) and 0.6 (1440p) of the x4 texture.
 
-Not tested: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
+**Sea-hatching fix and the final picture (owner review 2026-11-21 and 2026-11-24, ARC-RENDER-3065).** The owner's look at the 0.9 crops found one defect in Blend A: the dense grey
+hatching of the sea beside the coasts (strokes 1 to 2 pixels wide) is caught by the mask as edges, and the network turns it into thick black-and-white blotches
+(the `Lanczos` picture keeps it as soft grey hatching). What was tried, each judged by eye on four hatching crops and by the numbers below:
+
+- A mask gate on dark ink (a pixel counts only near luma below 90): not enough, the hatching has dark strokes too.
+- A limit on the network's move from Lanczos, `L + clamp(V - L, -k, k)`, and a local min/max limiter: the blotches are inside both limits; only a tiny `k` removes them, and then the gain is gone.
+- **Back-projection onto the original** (option "Q"): after the blend, the original minus the box downscale of the picture is added back (bicubic), once. The picture then agrees
+  with the original at its own resolution; the thick blotches shrink to fine strokes. Back-projecting only the network picture (option "P") gave the same look on the crops and leaves
+  flat paper exactly Lanczos, but a lower outline score (below).
+- At the display scale 0.9 (4K) the owner chose Q, with the condition that thin light halos around the hatching strokes would send dense hatching to Lanczos. They are visible.
+  Rather than detecting hatching zones (a hatching detector on orientation, saturation or network deviation also took tree shadows, frames and the compass, or missed the enclosed straits),
+  the mask itself was changed: **the network counts only near thick dark ink**. A pixel is a core when it is dark (luma below 100) and at least 1.5 original pixels from a non-dark pixel (a stroke about 3 pixels
+  wide or more); the mask is the old edge mask times the dilated cores (radius 3, feather sigma 1.0). Shoreline, trees, mountains and the stems of lettering are cores; the 1 to 2 pixel sea hatching, thin roads and grid lines are not, so they stay Lanczos
+  without a zone map.
+
+**The final recipe is Blend A with the thickness gate and one back-projection (`world_map_upscale.py blend`).** Measured on the owner's map with the script (the canvas column is new and uses the mask of the final recipe for its flat zone, so Blend A reads 1.16 here):
+
+| Picture (x4) | MAE | Edge F1 (1 px / 2 px) | Blotch pixels (luma more than 60 from Lanczos) | Canvas strength vs Lanczos |
+| --- | ---: | --- | ---: | ---: |
+| Lanczos | 4.16 | 0.965 / 0.991 | 0 | 1.00 |
+| `animevideov3` plain | 7.17 | 0.945 / 0.982 | not measured | 1.36 |
+| Blend A (before the fix) | 5.07 | 0.960 / 0.989 | 0.35 % | 1.16 |
+| Q: Blend A, back-projected | 1.86 | 0.986 / 0.997 | 0.12 % | 1.26 |
+| **Final: Q with the thickness gate** | **1.77** | **0.986 / 0.997** | **0.03 %** | 1.20 |
+
+The canvas strength is the high-pass energy of flat paper and water (the mask is 0 there) over that of Lanczos; the original drawn at x4 with nearest pixels reads 1.27 and with bicubic 0.95, so the final
+picture is not stronger than the original's own canvas. Outline gates of the owner's decision: edge F1 at 1 px above the Lanczos baseline (0.986 against 0.965, met), canvas not stronger than the original (met), MAE next to the earlier rows (above; the SSIM column exists only in the first model table).
+Lanczos stays the fallback. Cost of the fix: thin ornaments and hairline serifs of lettering get less of the network (mask coverage 0.136 against 0.27), the compass rose is softer than in Blend A; the lettering and coasts are as crisp as in Q.
+
+The 8000 x 8000 picture is cut by `world_map_upscale.py cut` into the 64 tiles `smallmapchunks001.png` .. `064.png` (1000 x 1000, row-major) and `map_zoomed.png` (1460 x 1460, Lanczos from the whole picture), with a `SHA256SUMS.txt`; `hd_pack.py maps-plan`, `stage` and `apply --add-new` put them into the installed pack
+([workflow](../workflow/hd-pack.md#world-map-pictures-arc-render-3079)); installed 2026-11-24 (backup `ARC-UI-3065-c3bc53185579`, `verify --deep` 7141 entries, 0 problems).
+
+Not tested after the fix: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
 super-resolution tool installed), x2 or x3 variants, test-time augmentation, a comparison on the owner's 4K screen against the stopgap of
-[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles).
+[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles; the owner's look on the 4K screen moved to [#3154](https://github.com/Simarglok/arcanum-steamwoven/issues/3154), which removes that stopgap).
 
 ## Recommendation (AC4)
 
