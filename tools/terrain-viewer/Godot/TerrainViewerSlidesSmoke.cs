@@ -102,7 +102,10 @@ public partial class TerrainViewerApp
             _moviesForSelfTest = true; _moviePathForSelfTest = null; _movieTableForSelfTest = null; _movieSourceForSelfTest = null; _startupMoviesDone = true;
             var movies = MovieRefusal() is null;
             _moviesForSelfTest = false;
+            // ARC-DEV-3116: a PR run ends each movie by the real key path (HandleMovieInput) once its checks are done; ARC_SMOKE_ALL=1 (the complete run, the daily build, `--all`) plays every movie to its own last frame.
+            var full = SmokeAll;
             GD.Print($"{SlidesCode} slides smoke movies {(movies ? "play (installed table, real decoder)" : "passed over: " + MovieRefusal())}");
+            GD.Print($"{SlidesCode} slides smoke mode {(!movies ? "movies passed over" : full ? "full (every movie plays to its end)" : "skip (each movie ends by the key skip after its checks)")}");
 
             // The movies of one script run: each covers the game with the clocks standing still and draws frames, and the show does not begin under them.
             async Task<List<Vector2I>> PlayMovies(GameSessionOwner game, string label, int count, int playedBefore, int failedBefore)
@@ -110,6 +113,7 @@ public partial class TerrainViewerApp
                 var frameSizes = new List<Vector2I>();
                 long gameMs = 0, realMs = 0;
                 var movieClock = System.Diagnostics.Stopwatch.StartNew();
+                var (endedBefore, skippedBefore) = (_moviesPlayed, _moviesSkipped);
                 while (_heroDeath.Stage == AreaDeathStage.Watching)
                 {
                     Require(movieClock.Elapsed.TotalSeconds < (movies ? 120 : 5), $"{label}: the movies played and the end game began within {(movies ? 120 : 5)} s (movie covering {MovieCovering}, played {_scriptFadesPlayed - playedBefore})");
@@ -125,6 +129,8 @@ public partial class TerrainViewerApp
                                 $"{label}: the session's clocks stand still under movie {frameSizes.Count} (game {game.QueryClockSnapshot().GameTimestampMs - gameMs} ms, real {game.QueryFrameClocks().RealMs - realMs} ms)");
                             GD.Print($"{SlidesCode} slides smoke {label} movie {frameSizes.Count}: {panel.FrameSize}, audio {panel.AudioPlaying}");
                             await Shoot($"{label}-movie-{frameSizes.Count}");
+                            // The PR run's end of the movie: a key press and release through the world's input, the path a player's skip takes (the cover takes the press, ends the movie, and takes the release too).
+                            if (!full) Key(Godot.Key.Space);
                         }
                     }
                     await Frames(1);
@@ -133,6 +139,10 @@ public partial class TerrainViewerApp
                 {
                     Require(frameSizes.Count == count && frameSizes.All(size => size.X >= 640 && size.Y >= 300), $"{label}: the {count} installed movies drew frames ({string.Join(" ", frameSizes)})");
                     Require(_scriptFadesPlayed - playedBefore == count && _moviesFailed == failedBefore, $"{label}: the movies started and none failed (started {_scriptFadesPlayed - playedBefore}, failed {_moviesFailed})");
+                    // A skipped movie is not a failed one: the skip run counts them skipped and none ended by itself; the full run counts them played and none skipped.
+                    var (ended, skipped) = (_moviesPlayed - endedBefore, _moviesSkipped - skippedBefore);
+                    Require(full ? ended == count && skipped == 0 : skipped == count && ended == 0,
+                        $"{label}: the movies {(full ? "ended by themselves" : "were ended by the key skip")} (ended {ended}, skipped {skipped}, of {count})");
                 }
                 else Require(frameSizes.Count == 0, $"{label}: no movie played");
                 return frameSizes;
@@ -265,7 +275,7 @@ public partial class TerrainViewerApp
             endings.Add(new { Name = "dying-3061-quest-1058-flag-1016", Queue = expected4.Slides, Slides = shown4.Select(slide => slide.Id) });
             GD.Print("ARC-RENDER-1879 native-smoke slides PASS " + System.Text.Json.JsonSerializer.Serialize(new
             {
-                Start = start, Movies = movies, MovieFrames = frameSizes.Select(size => size.ToString()), Queue = expected.Slides, EndGameWaitMs = waitMs,
+                Start = start, Movies = movies, Mode = !movies ? "passed-over" : full ? "full" : "skip", MovieFrames = frameSizes.Select(size => size.ToString()), Queue = expected.Slides, EndGameWaitMs = waitMs,
                 Slides = shown.Select(slide => new { slide.Id, slide.Image, Size = slide.Size.ToString(), slide.Voice, slide.InMs, slide.OutMs }),
                 Endings = endings,
             }));

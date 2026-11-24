@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
     private (SteamwovenBackdropFamily Family, SteamwovenKitWindow? Window)? _smokeKitBackdrop;
 
     private static readonly Color KitTop = new(0.85f, 0.15f, 0.15f), KitBottom = new(0.15f, 0.15f, 0.85f), KitCapLeft = new(0.95f, 0.8f, 0.1f), KitCapRight = new(0.1f, 0.8f, 0.95f),
-        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f),
+        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f), KitMap = new(0.8f, 0.75f, 0.1f),
         KitBarter = new(0.55f, 0.35f, 0.15f), KitBarterFollower = new(0.15f, 0.55f, 0.55f),
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
@@ -33,6 +33,7 @@ public partial class TerrainViewerApp
         ("backdrop.barter", 1290, 1440, KitBarter), ("backdrop.barter_follower", 1290, 1440, KitBarterFollower), ("backdrop.barter_pd", 1290, 876, KitDoll),
         ("backdrop.loot", 1290, 1440, KitLoot), ("backdrop.loot_pd", 1290, 960, KitLootDoll), ("backdrop.pd_cover4inven", 1230, 1440, KitDollCover),
         ("backdrop.mainmenuback", 2880, 2160, KitPlate), ("backdrop.optionsmenuback", 2880, 2160, KitOptionsPlate),
+        ("backdrop.mapmain", 2880, 1440, KitMap),
         ("plate.char_but", 120, 120, KitPlate), ("plate.char_but_hover", 120, 120, KitHover),
         // ARC-UI-3035: the character window's backdrop and the sheets of its four pages (846 x 1170 master px each).
         ("backdrop.char_maint", 2880, 1440, KitCharacter), ("sheet.skills_window", 846, 1170, KitSkillsSheet), ("sheet.disciplines_window", 846, 1170, KitTechSheet),
@@ -77,6 +78,66 @@ public partial class TerrainViewerApp
         Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
         var (topLeft, bottomRight) = (Pixel(layout.Zone.X + 8, layout.Zone.Y + 8), Pixel(layout.Zone.Right - 8, layout.Zone.Bottom - 8));
         require(Near(topLeft, colour) && Near(bottomRight, colour), $"[{tag}] the plate's corners are the kit plate's colour (got {topLeft} and {bottomRight})");
+    }
+
+    /// <summary>
+    /// ARC-UI-3036 (census G12 to G14, AC2, AC3): the real world map window over the synthetic kit's <c>backdrop.mapmain</c> (a map view, a continent view and, when the data has one, a town map are one window, interface mode 5). The kit background shows
+    /// under it, the window draws no frame art of its own (art 138), and the frame, the map view's hole and the lens read back by pixel: a bare piece of the frame is the kit's colour, the view's and the lens's squares are not. With the part missing
+    /// (<paramref name="withoutMap"/>, at the first size) the window keeps its own art and no kit piece is resident; the window closed leaves no trace of the part (SWI-RUN-5).
+    /// </summary>
+    private async Task CheckKitWorldMapAsync(string tag, SteamwovenHudPlan plan, AreaGameBarPanel panel, Func<int, Task> frames, Action<bool, string> require, Action? withoutMap, Action restore)
+    {
+        OpenWorldMap(); await frames(4);
+        if (!WorldMapOpen || _worldMapPanel?.ArtViewForSelfTest is not { } view) { GD.Print($"ARC-UI-3036 steamwoven {tag} the world map did not open here (not checked)"); if (WorldMapOpen) CloseWorldMapByPlayer(); return; }
+        for (var wait = 0; wait < 600 && !view.KitBackgroundShown; wait++) await frames(1);
+        await frames(2);
+        var zone = SteamwovenWindowZone.ZoneOf(plan);
+        require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.WorldMap && panel.KitForSelfTest.Background.Count == 1 && view.KitBackgroundShown, $"[{tag}] the open world map takes the kit's map background (window {AreaGameBarPanel.KitBackgroundWindow}, pieces {panel.KitForSelfTest.Background.Count})");
+        var piece = panel.KitForSelfTest.Background.Single();
+        require(piece.Rect.X == zone.X && piece.Rect.Right == zone.Right && piece.Rect.Y == zone.Y && piece.Rect.Bottom == zone.Bottom, $"[{tag}] the map background tiles the zone {zone}, got {piece.Rect}");
+        // Where each probe stands: a bare piece of the frame (left of the zoom button, clear of the buttons and the lens) is the kit's colour; the centre of the map view and of the lens are not (the view draws its own black and picture, the lens the game's view).
+        foreach (var (kind, name) in new[] { (AreaWorldMapKind.Map, "map view"), (AreaWorldMapKind.Continent, "continent view"), (AreaWorldMapKind.Town, "town map") })
+        {
+            if (kind == AreaWorldMapKind.Town && !view.HasTown) continue;
+            view.SetKind(kind);
+            await frames(3);
+            require(view.Kind == kind && view.KitBackgroundShown, $"[{tag}] the {name} is shown over the kit's background");
+            using var image = GetViewport().GetTexture().GetImage();
+            Color Pixel(Vector2 point) => image.GetPixel(Math.Clamp((int)point.X, 0, image.GetWidth() - 1), Math.Clamp((int)point.Y, 0, image.GetHeight() - 1));
+            var frame = Pixel(view.WindowPointForSelfTest(12, 215));
+            var inView = Pixel(view.WindowPointForSelfTest(AreaWorldMapArtLayout.View.X + AreaWorldMapArtLayout.View.Width / 2.0, AreaWorldMapArtLayout.View.Y + AreaWorldMapArtLayout.View.Height / 2.0));
+            var inLens = Pixel(view.WindowPointForSelfTest(AreaWorldMapArtLayout.Lens.X + AreaWorldMapArtLayout.Lens.Side / 2.0, AreaWorldMapArtLayout.Lens.Y + AreaWorldMapArtLayout.Lens.Side / 2.0));
+            require(Near(frame, KitMap), $"[{tag}] the {name}'s frame is the kit's colour (got {frame})");
+            require(!Near(inView, KitMap), $"[{tag}] the {name}'s hole is clear of the kit's colour (got {inView})");
+            require(!Near(inLens, KitMap), $"[{tag}] the lens's hole is clear of the kit's colour (got {inLens})");
+            // The kit's frame has no compass letters: the window writes N E S W in the art's dark red at the places of the original's.
+            foreach (var (letter, (cx, cy)) in AreaWorldMapArtLayout.CompassLetters)
+            {
+                var found = false;
+                for (var dy = -6; dy <= 6 && !found; dy++)
+                    for (var dx = -6; dx <= 6 && !found; dx++)
+                    {
+                        var c = Pixel(view.WindowPointForSelfTest(cx + dx, cy + dy));
+                        found = c.R > 0.35f && c.G < 0.2f && c.B < 0.2f;
+                    }
+                require(found, $"[{tag}] the {name} writes the compass letter {letter} near ({cx}, {cy}) of the window");
+            }
+            if (kind == AreaWorldMapKind.Map) await CaptureHudAsync("steamwoven-" + tag + "-kit-map", frames);
+            else if (kind == AreaWorldMapKind.Continent) await CaptureHudAsync("steamwoven-" + tag + "-kit-continent", frames);
+            else await CaptureHudAsync("steamwoven-" + tag + "-kit-town", frames);
+        }
+        view.ShowMapOrTown();
+        require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 1, $"[{tag}] only the map's piece is resident while the map is open");
+        CloseWorldMapByPlayer(); await frames(4);
+        require(!WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] the map closed leaves no kit background resident");
+        if (withoutMap is null) return;
+        // SWI-BDR-3: a set without the piece leaves the generated backdrop and the window's own art.
+        withoutMap();
+        panel.Relayout(); OpenWorldMap(); await frames(6);
+        require(WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && panel.KitForSelfTest.Background.Count == 0 && !view.KitBackgroundShown, $"[{tag}] with the map piece missing the window keeps the generated backdrop and its own art");
+        CloseWorldMapByPlayer(); await frames(3);
+        restore();
+        panel.Relayout(); await frames(4);
     }
 
     private static bool Near(Color a, Color b) => Math.Abs(a.R - b.R) < 0.02f && Math.Abs(a.G - b.G) < 0.02f && Math.Abs(a.B - b.B) < 0.02f;
@@ -262,6 +323,7 @@ public partial class TerrainViewerApp
         var fallbackRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fallback-").FullName;
         var sheetlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-sheetless-").FullName;
         var backdroplessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-backdropless-").FullName;
+        var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var (savedHd, savedGenerated) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface);
         var done = new HashSet<(string, SteamwovenStep)>();
         void Ensure(string where, string folder, SteamwovenStep step, params string[] without)
@@ -434,6 +496,7 @@ public partial class TerrainViewerApp
                 SteamwovenKitStore.UseRoot(root);
                 panel.Relayout();
                 await frames(4);
+                await CheckKitWorldMapAsync(tag, plan, panel, frames, require, first ? () => { Ensure("nomap", noMapRoot, step, "backdrop.mapmain"); SteamwovenKitStore.UseRoot(noMapRoot); } : null, () => SteamwovenKitStore.UseRoot(root));
                 await CaptureHudAsync("steamwoven-" + tag, frames);
                 if (first)
                 {
@@ -473,7 +536,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, backdroplessRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }

@@ -63,7 +63,9 @@ def settings_file(name: str) -> str:
 
 
 # ARC-DEV-395: the stages that check a sample unless --all (the viewer reads ALL_ENV: docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
-SAMPLED_STAGES = frozenset({"container-click", "walk"})
+# ARC-DEV-3116: `slides` is one of them: it ends each installed movie by the key skip after its checks, and plays every movie to its end with --all
+# (the complete run and the daily build always do).
+SAMPLED_STAGES = frozenset({"container-click", "slides", "walk"})
 ALL_ENV = "ARC_SMOKE_ALL"
 # The owner's opt-in data, smoke and settings variables never reach a smoke (as in the player package); the queue's stay.
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_", "ALWAYS_RUN_",
@@ -81,6 +83,7 @@ BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minut
 # 525 s (72 window moves) and `container-click` on the town 675 s in full, and about a fifth of that as a sample (ARC-DEV-395:
 # the default; the sampled figures are estimates, not measured); `census` is every map of the catalogue and was not
 # measured: an assumption.
+SLIDES_SKIP_SECONDS = 90.0  # ARC-DEV-3116: `slides` with the movies ended by the key skip (measured 89 s; about 232 s with every movie played to its end)
 RUN_SECONDS = 20.0  # a viewer run with no stage on top of it
 STAGE_SECONDS = 3.0  # each cheap stage, with room for the dearer ones (opening 13 s, perf 16 s)
 BATTERY_SECONDS = 60.0  # the whole map battery with its load
@@ -88,8 +91,8 @@ CRASH_SITE_SECONDS = 110.0
 SELF_TEST_SECONDS = {"window": 30.0, "quick": 15.0}
 BUILD_SECONDS, IMPORT_SECONDS = 30.0, 5.0
 IMPORT_MINUTES = 30.0  # a first import of a new checkout is not the warm 3 s (the limit the headless run had)
-SLOW_STAGES = {"walk": 540.0, "container-click": 700.0, "census": 900.0, "soak": 420.0}  # in full (--all); `soak` at its default 6 minutes (ARC-DEV-1398)
-SAMPLED_SLOW_SECONDS = {"walk": 100.0, "container-click": 120.0}  # as the sample they run by default
+SLOW_STAGES = {"walk": 540.0, "container-click": 700.0, "census": 900.0, "soak": 420.0, "slides": 260.0}  # in full (--all); `soak` at its default 6 minutes (ARC-DEV-1398)
+SAMPLED_SLOW_SECONDS = {"walk": 100.0, "container-click": 120.0, "slides": SLIDES_SKIP_SECONDS}  # as the sample they run by default
 
 
 def estimate(stages: Sequence[str], full: bool = False) -> float:

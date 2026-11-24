@@ -49,6 +49,11 @@ public static class AreaWorldMapArtLayout
     /// (art 840 <c>NewTimes16Font</c>, WM45).</summary>
     public const int CoverArt = 217, FontArt = 840;
 
+    /// <summary>ARC-UI-3036 (census "Text baked into art": art 138 has the compass letters N E S W): the centres, in window units, of the four letters on the compass rose of the frame art (read in the art), and their colour (the dark red the art
+    /// paints them in). Over the kit's redrawn frame, which has no letters, the window draws them by font at these places.</summary>
+    public static readonly IReadOnlyList<(string Letter, (int X, int Y) Centre)> CompassLetters = [("N", (728, 37)), ("E", (761, 74)), ("W", (694, 74)), ("S", (728, 109))];
+    public static readonly (byte R, byte G, byte B) CompassLetterColour = (130, 14, 14);
+
     public const int WindowWidth = 800, WindowHeight = 400;
     /// <summary>The map view's rectangle in the window: the executable's (150, 52, 501, 365) of the screen minus the window's 41 rows (WM14);
     /// it is the hole of the background art.</summary>
