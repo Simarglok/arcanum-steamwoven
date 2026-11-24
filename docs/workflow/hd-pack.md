@@ -243,6 +243,28 @@ python3 -B tools/hd_pack/hd_pack.py verify --deep && python3 -B tools/hd_pack/hd
 - The device cache (`hd-cache`) converts the portraits too (about 80 MB more), which it does by itself a few seconds after the pack attaches.
 - A portrait whose bitmap changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; nothing else of the pack depends on portraits.
 
+### World-map pictures (ARC-RENDER-3079)
+
+The HD world map (the 64 tiles and `Map_Zoomed`, upscaled without a generator, [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065)) enters the installed pack as entries of kind
+`worldmap` and `map-zoomed` ([format](../formats/hd-pack.md#world-map-entries-arc-render-3079)), built into their own staging pack and added with `apply --add-new`, like the portraits. The pictures stay
+under `local/` (never in git). Dry run first at every step:
+
+```sh
+python3 -B tools/hd_pack/hd_pack.py maps-plan --maps local/hd-maps/ARC-RENDER-3065/pictures --out local/hd-maps/ARC-RENDER-3065/maps-plan.json --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-maps/ARC-RENDER-3065/maps-plan.json --staging local/res095/pack-out/interface-maps --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-maps/ARC-RENDER-3065/maps-plan.json --staging local/res095/pack-out/interface-maps --fresh
+python3 -B tools/hd_pack/hd_pack.py verify --installed local/res095/pack-out/interface-maps --deep
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-maps --add-new
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-maps --add-new --no-base-check --task ARC-RENDER-3065 --dry-run
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-maps --add-new --no-base-check --task ARC-RENDER-3065
+```
+
+- `maps-plan` takes a folder of `<base>001.png` .. `<base>064.png` (the 64 tiles, `250 × scale` square, default scale 4 = 1000) and `map_zoomed.png` (`365 × scale`, 1460 at 4×; `--zoomed-name` for another `ZoomedName`),
+  checks every file's PNG header (8-bit RGB or RGBA, not interlaced, the exact size) and the folder's `SHA256SUMS.txt` when there is one, and refuses a gap in the 64 tiles unless `--partial`. It writes only a plan file under a checkout's `local/`.
+- `stage` runs the importer: for each item it reads the original bitmap from the game (the content stack's winner), takes the entry kind from its size (250 × 250: `worldmap`, 365 × 365: `map-zoomed`) and refuses a picture that is not exactly the pack scale times that size. The pictures are taken as they are (no fit, no lock) and written opaque.
+- A staged map bitmap needs no row in `layout-map.tsv`: it is placed at `interface/world-map/maps/` as `<kind>-<stem>-f000.png` and `apply` appends its row. `--no-base-check` is right for the first add (only new entries); a later new picture of one tile is a replacement and goes in with `--base` as usual.
+- The device cache (`hd-cache`) converts these entries too, which it does by itself a few seconds after the pack attaches. A bitmap whose original changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; without the HD option or without entries the window draws the original pixels as before.
+
 ### Back up and roll back
 
 Every `apply` writes `<backup-root>/<TASK>-<old manifest sha12>/` with
