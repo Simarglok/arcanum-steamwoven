@@ -127,7 +127,7 @@ internal static class SteamwovenKitStore
         Retained[owner] = [.. ids];
         foreach (var id in set.Ids)
         {
-            if (!(id.StartsWith("backdrop.", StringComparison.Ordinal) || id.StartsWith("sheet.", StringComparison.Ordinal)) || Retained.Values.Any(held => held.Contains(id))) continue;
+            if (!(id.StartsWith("backdrop.", StringComparison.Ordinal) || id.StartsWith("sheet.", StringComparison.Ordinal) || id.StartsWith("fixture.", StringComparison.Ordinal) || id.StartsWith("grid.", StringComparison.Ordinal)) || Retained.Values.Any(held => held.Contains(id))) continue;
             Drop(Key(set, id));
         }
     }

@@ -63,10 +63,11 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-3032: the kit background or its covers changed; the windows over it redraw.</summary>
     internal static event Action? KitBackgroundChanged;
 
-    private static void PublishKitBackground(SteamwovenKitWindow? window, IReadOnlyDictionary<int, Texture2D>? covers)
+    private static void PublishKitBackground(SteamwovenKitWindow? window, IReadOnlyDictionary<int, Texture2D>? covers, IReadOnlyDictionary<string, Texture2D>? fixtures = null)
     {
-        var same = s_kitWindowShown == window && KitCovers.Count == (covers?.Count ?? 0) && (covers is null || covers.All(pair => KitCovers.TryGetValue(pair.Key, out var held) && ReferenceEquals(held, pair.Value)));
+        var same = s_kitWindowShown == window && KitCovers.Count == (covers?.Count ?? 0) && (covers is null || covers.All(pair => KitCovers.TryGetValue(pair.Key, out var held) && ReferenceEquals(held, pair.Value))) && AreaKitFixtures.Same(fixtures);
         if (same) return;
+        AreaKitFixtures.Publish(fixtures); // ARC-UI-3098: the window's fixtures (the baked pits, dials, signs) go out with its background, before the windows redraw
         s_kitWindowShown = window; KitCovers.Clear();
         if (covers is not null) foreach (var pair in covers) KitCovers[pair.Key] = pair.Value;
         KitBackgroundChanged?.Invoke();
@@ -845,6 +846,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
         Dictionary<int, Texture2D>? covers = null, sheets = null;
+        Dictionary<string, Texture2D>? fixtures = null;
         var held = new List<string>();
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
         {
@@ -864,10 +866,13 @@ public partial class AreaGameBarPanel : CanvasLayer
                 if (window == SteamwovenKitWindow.Character)
                     foreach (var art in SteamwovenKitTable.Sheets.Keys)
                         if (SteamwovenKitComposer.Sheet(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (sheets ??= [])[art] = texture; held.Add(part.Id); }
+                // ARC-UI-3098: the window's fixtures (pits, fields, signs, dials, the ruler, gears, cell wells) that the set holds at the table's size; one missing or not loading is left out and the window draws its stand-in for it.
+                foreach (var id in SteamwovenKitTable.FixturesOf(window))
+                    if (SteamwovenKitComposer.Fixture(set, id) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (fixtures ??= [])[id] = texture; held.Add(part.Id); }
             }
         }
         SteamwovenKitStore.Retain("window", set, held);
-        PublishKitBackground(loaded is not null ? _kitWindow : null, covers);
+        PublishKitBackground(loaded is not null ? _kitWindow : null, covers, loaded is not null ? fixtures : null);
         AreaKitSheets.Publish(loaded is not null ? sheets : null);
         return loaded;
     }
