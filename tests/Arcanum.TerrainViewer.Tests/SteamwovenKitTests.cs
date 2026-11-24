@@ -443,9 +443,9 @@ public sealed class SteamwovenKitTests
     [DataRow(3840, 2160, SteamwovenStep.One)]
     [DataRow(2560, 1440, SteamwovenStep.TwoThirds)]
     [DataRow(1920, 1080, SteamwovenStep.Half)]
-    [DataRow(1920, 1200, SteamwovenStep.TwoThirds)]
+    [DataRow(1920, 1200, SteamwovenStep.Half)]
     [DataRow(1280, 1024, SteamwovenStep.Third)]
-    [DataRow(1024, 768, SteamwovenStep.Half)]
+    [DataRow(1024, 768, SteamwovenStep.Third)]
     public void A_two_strip_screen_is_the_top_strip_the_body_and_the_bottom_strip_tiling_the_plate_with_the_body_exactly_its_400_units(int width, int height, SteamwovenStep step)
     {
         var plan = Screen(width, height);
