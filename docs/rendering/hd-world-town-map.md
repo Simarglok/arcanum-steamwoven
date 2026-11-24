@@ -285,7 +285,7 @@ The 8000 x 8000 picture is cut by `world_map_upscale.py cut` into the 64 tiles `
 
 Not tested after the fix: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
 super-resolution tool installed), x2 or x3 variants, test-time augmentation, a comparison on the owner's 4K screen against the stopgap of
-[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles; the owner's look on the 4K screen moved to [#3154](https://github.com/Simarglok/arcanum-steamwoven/issues/3154), which removes that stopgap).
+[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles; the owner's look on the 4K screen moved to [#3154](https://github.com/Simarglok/arcanum-steamwoven/issues/3154), which removes that stopgap; done in ARC-UI-3154: with a redraw for every tile in the pack the map view draws at the composition's scale, otherwise the stopgap stays).
 
 ## Recommendation (AC4)
 

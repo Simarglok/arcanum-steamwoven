@@ -1,3 +1,4 @@
+using Arcanum.Data.Hd;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -105,10 +106,27 @@ public partial class AreaWorldMapArtView : Control
     public (int X, int Y) Offset => _offset;
     public (int X, int Y) MaxOffset => MapMax;
 
-    /// <summary>ARC-UI-2993 (stopgap of #2992): picture pixels per window unit of the map view. 1 in the original look; under the HD option (the Steamwoven layout) the window lies at the
-    /// composition's scale s and the picture is drawn at 1:1 device pixels, so it is the window's device scale: the view shows more of the continent, sharp, and the markers, labels,
-    /// route lines and the frame stay at s. The town map, the continent view and every rule read picture pixels as before.</summary>
-    public double PixelsPerUnit => _pixelsPerUnitForSelfTest ?? (AreaGameBarPanel.SteamwovenOn && IsInsideTree() ? Math.Max(.25, DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit);
+    /// <summary>ARC-UI-3154 (ends the stopgap of ARC-UI-2993 where the pack allows): picture pixels per window unit of the map view. With the HD world map (every tile of the look has its
+    /// redraw in the pack, <see cref="HdTilesDrawn"/>) it is 1 like the original look, and the tiles, which draw their redraw into the original's 250-unit rectangles, are drawn at the
+    /// composition's scale s with the window: the same part of the map as the original shows, larger and sharp. Without the HD world map the stopgap stays: under the HD option (the
+    /// Steamwoven layout) the window lies at s and the Legacy picture is drawn at 1:1 device pixels, so it is the window's device scale (the view shows more of the continent, never
+    /// blown up blurred), and the markers, labels, route lines and the frame stay at s. The town map, the continent view and every rule read picture pixels as before.</summary>
+    public double PixelsPerUnit => _pixelsPerUnitForSelfTest ?? (AreaGameBarPanel.SteamwovenOn && IsInsideTree() && !HdTilesDrawn ? Math.Max(.25, DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit);
+
+    // ARC-UI-3154: whether the HD option is on with a pack that holds a redraw for every tile of the look (checked once per look, pack and setting; a partial pack draws as the Legacy does).
+    private (AreaWorldMapArtLook? Look, HdPack? Pack, bool Enabled, bool Result) _hdTiles;
+
+    /// <summary>ARC-UI-3154: the map view's tiles draw HD (the HD option is on and the pack has a redraw for every tile).</summary>
+    public bool HdTilesDrawn
+    {
+        get
+        {
+            var (look, pack, enabled) = (_look, InterfaceHd.Pack, InterfaceHd.Enabled);
+            if (!ReferenceEquals(_hdTiles.Look, look) || !ReferenceEquals(_hdTiles.Pack, pack) || _hdTiles.Enabled != enabled)
+                _hdTiles = (look, pack, enabled, look is not null && enabled && pack is not null && WorldMapHd.AllTilesHaveEntries(look.Tiles, pack));
+            return _hdTiles.Result;
+        }
+    }
     private double? _pixelsPerUnitForSelfTest;
     private double _fittedPixelsPerUnit = AreaWorldMapArtLayout.OriginalPixelsPerUnit;
     private (int X, int Y) MapMax => _map is { } map ? AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width, PixelsPerUnit) : AreaWorldMapArtLayout.MaxOffset();
@@ -456,10 +474,22 @@ public partial class AreaWorldMapArtView : Control
                 hd.ScaleSource = _deviceScale;
                 if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
             }
-        // ARC-RENDER-3079: the map tiles and the continent picture may draw HD redraws too; they are watched (an HD setting or pack change redraws the window) but claim no device scale: they are
-        // drawn into their rectangles of 250 / 365 window units at any picture scale, and the trilinear draw of a mip chain serves that, where a scale-sized copy would be minified without one.
-        foreach (var texture in _look.Tiles.Cast<Texture2D?>().Append(_look.Zoomed))
-            if (texture is HdInterfaceTexture hd && _watched.Add(hd)) hd.Changed += _onTextureChanged;
+        // ARC-RENDER-3079: the map tiles and the continent picture may draw HD redraws too; they are watched (an HD setting or pack change redraws the window). Under the stopgap picture
+        // scale a tile is drawn into 250 / unit window units, which no device scale describes, so the trilinear draw of a mip chain serves that.
+        // ARC-UI-3154: with the HD world map the tiles are drawn at the window's own scale (picture scale 1), so they claim it: below the pack's scale the area copy of ARC-RENDER-3045 draws
+        // them, where the mip chain would over-blur a fractional scale. The continent picture is always drawn into its 365 window units, so it claims it too.
+        var tilesAtWindowScale = HdTilesDrawn && PixelsPerUnit == AreaWorldMapArtLayout.OriginalPixelsPerUnit;
+        foreach (var tile in _look.Tiles)
+            if (tile is HdInterfaceTexture hd)
+            {
+                hd.ScaleSource = tilesAtWindowScale ? _deviceScale : null;
+                if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+            }
+        if (_look.Zoomed is HdInterfaceTexture zoomed)
+        {
+            zoomed.ScaleSource = _deviceScale;
+            if (_watched.Add(zoomed)) zoomed.Changed += _onTextureChanged;
+        }
     }
 
     /// <summary>ARC-UI-1197: the textures of the given art numbers that the window holds, every frame, with the art number of each (the native smoke).</summary>
