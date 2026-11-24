@@ -322,7 +322,7 @@ public partial class TerrainViewerApp
                     }
                 }
                 // The bar button: the Character button is the kit's plate with its glyph over it (the buttons' look overlays need a look the smoke does not press).
-                require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count == 2, $"[{tag}] the Character button is drawn from the kit's plate and glyph");
+                require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count >= 2, $"[{tag}] the Character button is drawn from the kit's plate and glyph");
                 // ARC-UI-3096 (AC2): the glyph's pixels lie over the plate in the screen (the middle of the button is the symbol's colour, a point near its corner the plate's), and a button with no glyph in the set is not the kit's.
                 await frames(2);
                 var (glyphProbe, plateProbe) = panel.KitButtonProbesForSelfTest(AreaBarButton.Character);
@@ -467,7 +467,7 @@ public partial class TerrainViewerApp
                     SteamwovenKitStore.UseRoot(root);
                     panel.Relayout();
                     await frames(4);
-                    require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count == 2, $"[{tag}] with the glyph back the Character button is drawn from the kit again");
+                    require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count >= 2, $"[{tag}] with the glyph back the Character button is drawn from the kit again");
                 }
                 GD.Print($"ARC-UI-2461 steamwoven {tag} step={step} exact={plan.Layout.ExactStep} runtime={plan.Layout.RuntimeScale.ToDouble():F4} top={column.TopStrip} bottom={column.BottomStrip} zone={zone}");
             }

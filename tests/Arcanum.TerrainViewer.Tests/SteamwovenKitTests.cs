@@ -424,7 +424,9 @@ public sealed class SteamwovenKitTests
     {
         foreach (var art in SteamwovenKitTable.ButtonFaces.Keys.Where(art => art != 137)) Assert.IsNotNull(SteamwovenKitTable.GlyphOf(null, art), art.ToString());
         Assert.IsNull(SteamwovenKitTable.GlyphOf(null, 137));
-        foreach (var spec in AreaGameBarLayout.Buttons.Where(spec => spec.Art == 137)) Assert.IsNotNull(SteamwovenKitTable.GlyphOf(spec.Button, 137), spec.Button.ToString());
+        var shared = AreaGameBarLayout.Buttons.Where(spec => spec.Art == 137).ToList();
+        CollectionAssert.AreEquivalent(new[] { AreaBarButton.FatePoints, AreaBarButton.Sleep }, shared.Select(spec => spec.Button).ToArray());
+        foreach (var spec in shared) Assert.IsNotNull(SteamwovenKitTable.GlyphOf(spec.Button, 137), spec.Button.ToString());
         // A lit face and its idle face show one symbol; the glyph names are safe file names.
         Assert.AreEqual(SteamwovenKitTable.GlyphOf(null, 169), SteamwovenKitTable.GlyphOf(null, 561));
         Assert.IsTrue(SteamwovenKitTable.ButtonGlyphs.Values.Concat(SteamwovenKitTable.SharedArtGlyphs.Values).All(SteamwovenKitSet.ValidId));
