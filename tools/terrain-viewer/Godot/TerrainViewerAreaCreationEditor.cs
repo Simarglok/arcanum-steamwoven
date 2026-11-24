@@ -157,6 +157,20 @@ public partial class TerrainViewerApp
         require(art.ViewForSelfTest is { UnspentPoints: 5 } && art.PortraitForSelfTest, $"the draft's sheet and portrait: {art.ViewForSelfTest?.UnspentPoints} portrait={art.PortraitForSelfTest}");
         var (wx, wy, _, _) = AreaShopArtLayout.Window;
         require(art.PointForSelfTest(0, 0).DistanceTo(panel.ShopArtForSelfTest.ScreenPointForSelfTest(wx, wy)) < 1, "the sheet stands at the menu screen's (0, 41)");
+        if (ColumnMenuSmokeOn())
+        {
+            // ARC-UI-2924: in the column layout the editor stands in the fitted plate like the shop it shares its strips with: the screen's place, the black beside it, the strips' Accept and Back and the sheet's + − and tab hit where the plan draws them.
+            var (plusX, plusY) = AreaCharacterSheetArtLayout.Plus(7);
+            var (minusX, minusY) = AreaCharacterSheetArtLayout.Minus(3);
+            var tabSpells = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);
+            (string Name, int X, int Y)[] spots =
+            [
+                .. ShopStripSpots(),
+                ($"Plus:7", plusX, plusY + wy), ($"Minus:3", minusX, minusY + wy), ($"Tab:{(int)AreaSheetTab.Spells}", tabSpells.X, tabSpells.Y + wy),
+            ];
+            await TwoStripScreenColumnForSmoke("editor", () => (art.Position - new Vector2(0, wy * art.Scale.X), art.Scale.X), () => art.PointForSelfTest(0, 0),
+                () => panel.ShopArtForSelfTest.HoveredForSelfTest is { } shopButton ? shopButton.ToString() : art.HoveredForSelfTest is { } hit ? $"{hit.Kind}:{hit.Index}" : null, spots, require, Frames);
+        }
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture)
         {
             using var image = GetViewport().GetTexture().GetImage();

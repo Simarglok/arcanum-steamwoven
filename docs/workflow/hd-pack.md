@@ -243,6 +243,28 @@ python3 -B tools/hd_pack/hd_pack.py verify --deep && python3 -B tools/hd_pack/hd
 - The device cache (`hd-cache`) converts the portraits too (about 80 MB more), which it does by itself a few seconds after the pack attaches.
 - A portrait whose bitmap changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; nothing else of the pack depends on portraits.
 
+### World-map pictures (ARC-RENDER-3079)
+
+The HD world map (the 64 tiles and `Map_Zoomed`, upscaled without a generator, [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065)) enters the installed pack as entries of kind
+`worldmap` and `map-zoomed` ([format](../formats/hd-pack.md#world-map-entries-arc-render-3079)), built into their own staging pack and added with `apply --add-new`, like the portraits. The pictures stay
+under `local/` (never in git). Dry run first at every step:
+
+```sh
+python3 -B tools/hd_pack/hd_pack.py maps-plan --maps local/hd-maps/ARC-RENDER-3065/pictures --out local/hd-maps/ARC-RENDER-3065/maps-plan.json --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-maps/ARC-RENDER-3065/maps-plan.json --staging local/res095/pack-out/interface-maps --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-maps/ARC-RENDER-3065/maps-plan.json --staging local/res095/pack-out/interface-maps --fresh
+python3 -B tools/hd_pack/hd_pack.py verify --installed local/res095/pack-out/interface-maps --deep
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-maps --add-new
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-maps --add-new --no-base-check --task ARC-RENDER-3065 --dry-run
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-maps --add-new --no-base-check --task ARC-RENDER-3065
+```
+
+- `maps-plan` takes a folder of `<base>001.png` .. `<base>064.png` (the 64 tiles, `250 × scale` square, default scale 4 = 1000) and `map_zoomed.png` (`365 × scale`, 1460 at 4×; `--zoomed-name` for another `ZoomedName`),
+  checks every file's PNG header (8-bit RGB or RGBA, not interlaced, the exact size) and the folder's `SHA256SUMS.txt` when there is one, and refuses a gap in the 64 tiles unless `--partial`. It writes only a plan file under a checkout's `local/`.
+- `stage` runs the importer: for each item it reads the original bitmap from the game (the content stack's winner), takes the entry kind from its size (250 × 250: `worldmap`, 365 × 365: `map-zoomed`) and refuses a picture that is not exactly the pack scale times that size. The pictures are taken as they are (no fit, no lock) and written opaque.
+- A staged map bitmap needs no row in `layout-map.tsv`: it is placed at `interface/world-map/maps/` as `<kind>-<stem>-f000.png` and `apply` appends its row. `--no-base-check` is right for the first add (only new entries); a later new picture of one tile is a replacement and goes in with `--base` as usual.
+- The device cache (`hd-cache`) converts these entries too, which it does by itself a few seconds after the pack attaches. A bitmap whose original changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; without the HD option or without entries the window draws the original pixels as before.
+
 ### Back up and roll back
 
 Every `apply` writes `<backup-root>/<TASK>-<old manifest sha12>/` with
@@ -398,6 +420,40 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
   `./arcanum smoke pr --stages map --env ARC_AREA_WINDOW_ART=hd --env ARC_HD_PACK=<pack> --env ARC_AREA_WINDOW_CAPTURE=<prefix> --env ARC_AREA_READING_SIZE=2560x1440` (about 65 s, a capture of each reading window; `ARC_AREA_WINDOW_ART=legacy`
   without a pack gives the original-look reference) saves the windows for a labelled before/after composite (local, never in git). Applied on 2026-11-15 with the owner's go: manifest 175a19a0fed1 to a39a9dfef966 (3370 to 5599 entries, `interface/fonts` 2228 to 4457), `verify --deep` PASS, `mirror` 2233 files; the backup is `ARC-UI-2309-175a19a0fed1`, so the next base is its `staged-manifest.json`. Garmond6 and Garmond8 were not in that update; they followed in ARC-UI-2329 (next bullet).
 - **Garmond8 and Garmond6 (ARC-UI-2329, 2026-11-16, owner-run Codex delivery, generated like the nine Codex fonts).** Each font is its own staging pack (62 generated Latin letters and digits, the other 161 frames the cap 0.5 trace; 223 keys each) with the saved base manifest of the ARC-UI-2309 backup. Dry-run on the current pack: `0 interface entries differ`, `staged-only entries: 223`, no CONFLICT. Applied one after the other with the owner's go, game closed: `apply --add-new --map layout-additions.tsv`, manifest a39a9dfef966 to a31b8f3f9c32 (Garmond8, 482, backup `ARC-UI-2329-a39a9dfef966`) to 9292e4afa87d (Garmond6, 481, backup `ARC-UI-2329-a31b8f3f9c32`), 5599 to 6045 entries (`interface/fonts` 4457 to 4903), `verify --deep` PASS after each, `mirror` 450 files. The next base of this line is the `staged-manifest.json` of `ARC-UI-2329-a31b8f3f9c32`. Rollback is these two backups, newest first. The newspaper masthead (482) and the telegram form lines (481) are the reading-window callers (ledger WR8, WR20); the owner's brief said some masthead/legend text already uses Garmond9, which is unverified here, so installing these frames changes only the callers that still ask for 481/482. Garmond6 stays tiny at 1x and its spacing follows the original advances.
+
+## Kit-assembled frames in the pack (ARC-UI-3077)
+
+The frames of the Steamwoven kit assembly tool ([`assemble.py`](../ui/steamwoven-kit-assembly.md), TRD [pipeline](../ui/steamwoven-interface-trd.md#generation-pipeline) row 6b) are
+`<art>-fNNN.png` files plus `<art>.assembly.json`. `tools/steamwoven_ui/pack_plan.py` (row 6c) turns them into the importer plan, so nobody writes a plan or a mask by hand.
+All of it is local: the plan names original ART files and the frames are derived from them, so the tool refuses an output folder inside the checkout other than `local/`.
+A worktree has its own empty `local/`: give the commands the **main checkout's** `local/` paths. Run every command with `--dry-run` first where it has one:
+
+```sh
+python3 -B tools/steamwoven_ui/assemble.py LAYOUT.json --out local/steamwoven-ui/assembled/<batch>        # the frames and their records
+python3 -B tools/steamwoven_ui/pack_plan.py local/steamwoven-ui/assembled/<batch> --dry-run               # the art map, nothing written
+python3 -B tools/steamwoven_ui/pack_plan.py local/steamwoven-ui/assembled/<batch>                         # plan.json and masks/ next to the frames
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/steamwoven-ui/assembled/<batch>/plan.json --staging local/res095/pack-out/interface-redraw-4x --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/steamwoven-ui/assembled/<batch>/plan.json --staging local/res095/pack-out/interface-redraw-4x --fresh
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-redraw-4x --base INSTALLED
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-redraw-4x --base INSTALLED --task ARC-XXX-NNN --dry-run
+```
+
+`INSTALLED` is the installed pack folder, as for the fonts above. The real `apply` (then `verify --deep`, then `mirror`) is the owner's to allow, with the game closed.
+
+- **What it writes.** Per assembled frame one `ready` item (`"lock": false`: an assembled frame is final, the importer's shading lock would pull it back to the original's tone) whose tile
+  names the ART file as `interface.mes` gives it (`Schematics_Button.ART`); image and mask paths are relative to the plan file. A frame assembled in the `masked` alpha mode (a plate
+  that must not keep the original frame's rim and corners) also gets an `alphaMask`: the frame's own alpha as an 8-bit grey PNG of the HD frame's size in `masks/` (the importer takes
+  such a mask as the alpha itself, cut to the Legacy-opaque texels, and writes the entry as `"alpha": "masked"`, [format](../formats/hd-pack.md#interface-art-arc-dev-242)). A `legacySmooth`
+  frame gets none: the importer's own alpha for a frame with no mask is that rule. A `legacy` frame (the exact original alpha, which the importer does not keep without a mask) and a
+  record written before the record carried `alphaMode` get masks; `--masks always|never` overrides. The importer **cuts** every HD mask to the texels the Legacy frame leaves
+  opaque and refuses one that leaves nothing opaque, and the tool does not read the Legacy frame: a plate part outside the silhouette (the one-texel reach the `masked` gate allows)
+  is cleared at `stage`, and a mask refused there is reported there.
+- **The art map.** The tool prints `art -> ART file` for every art (`470 -> Combat_Button.ART (3 frames of 156x156, alpha masks; name from census)`). A number is looked up in the census
+  (`docs/ui/steamwoven-interface-census-arts.tsv`) and the frame count and size are checked against its row; another identifier is taken as the file's own name; `--art-name 471=Schematics_Button.ART`
+  names an art the census does not. It refuses two arts naming one ART file, different scales in one plan, a frame that differs from its record, and a frame with nothing visible to mask and a `--art-name` for an art that has no record. The census row's frame count and size are checked under `--art-name` too. Files are written whole (a temporary file moved over the old one), the plan last.
+- `--pack-id` (default `interface-redraw-4x`) is the staging pack's id. The plan is replaced only when the existing `plan.json` is an importer plan.
+- Frames the staging build replaces in the installed pack show in `plan` as differing entries; frames the installed pack lacks need `--add-new`. The plan must name exactly the frames the assembly wrote.
+- Checks: `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan` (synthetic frames only; also in the batched `tools/local_dev/run_tests.py`).
 
 ## Producing and repairing art (who does what)
 

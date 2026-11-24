@@ -167,6 +167,28 @@ public static class SteamwovenKitTable
         [187] = "plate.log_but", [169] = "plate.char_but", [186] = "plate.invn_but", [193] = "plate.tmap_but", [194] = "plate.wmap_but", [137] = "plate.lilgrnbut",
         [561] = "state.char_on", [560] = "state.log_on", [558] = "state.tmap_on", [195] = "state.wmap_on", [559] = "state.invn_on",
     };
+
+    /// <summary>
+    /// ARC-UI-3096 (SWI-KIT-5): the glyph of a bar button by the art it shows, one part per button, drawn over the face at the face's size (a symbol on a transparent background); the lit face of a light button takes the glyph of
+    /// its idle face. The names are this runtime's convention until the buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) makes the rows: <c>glyph.&lt;plate name&gt;</c>. Art 137 is shared by two
+    /// buttons with two symbols, so it has none here: <see cref="SharedArtGlyphs"/> names theirs by button.
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> ButtonGlyphs { get; } = new Dictionary<int, string>
+    {
+        [472] = "glyph.skills_button", [473] = "glyph.spells_button", [470] = "glyph.combat_button", [471] = "glyph.schematics_button",
+        [187] = "glyph.log_but", [169] = "glyph.char_but", [186] = "glyph.invn_but", [193] = "glyph.tmap_but", [194] = "glyph.wmap_but",
+        [561] = "glyph.char_but", [560] = "glyph.log_but", [558] = "glyph.tmap_but", [195] = "glyph.wmap_but", [559] = "glyph.invn_but",
+    };
+
+    /// <summary>ARC-UI-3096: the glyphs of the two buttons that stand on art 137 (the Fate Points and Sleep balls), by button.</summary>
+    public static IReadOnlyDictionary<AreaBarButton, string> SharedArtGlyphs { get; } = new Dictionary<AreaBarButton, string>
+    {
+        [AreaBarButton.FatePoints] = "glyph.fate_but", [AreaBarButton.Sleep] = "glyph.sleep_but",
+    };
+
+    /// <summary>The glyph part of the bar button <paramref name="button"/> showing <paramref name="art"/>, or null when the art has none.</summary>
+    public static string? GlyphOf(AreaBarButton? button, int art) =>
+        ButtonGlyphs.TryGetValue(art, out var glyph) ? glyph : button is { } b && SharedArtGlyphs.TryGetValue(b, out glyph) ? glyph : null;
 }
 
 /// <summary>
@@ -338,14 +360,17 @@ public static class SteamwovenKitComposer
         && part.Width == SteamwovenGrid.BakedLength(SteamwovenKitTable.CompositionMasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(SteamwovenKitTable.FullScreenMasterHeight, set.Step) ? part : null;
 
     /// <summary>
-    /// The layers of a bar button the bar shows with <paramref name="art"/>: its face (the plate, or the lit face of a light button) and, over it, the overlay of the look when the set has one (<c>&lt;face&gt;_hover</c> for a hovered button,
-    /// <c>&lt;face&gt;_pressed</c> for a pressed one; the original has no disabled frame, SWI-KIT-5). Empty when the set has no face: the button keeps its generated or legacy art. The overlay names are the convention of this runtime until the
-    /// buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) fixes the sheets.
+    /// The layers of a bar button the bar shows with <paramref name="art"/>, bottom first: its face (the plate, or the lit face of a light button), its glyph (the symbol on a transparent background at the face's size, ARC-UI-3096)
+    /// and, over them, the overlay of the look when the set has one (<c>&lt;face&gt;_hover</c> for a hovered button, <c>&lt;face&gt;_pressed</c> for a pressed one; the original has no disabled frame, SWI-KIT-5). All or nothing: empty
+    /// when the set has no face, or no glyph at the face's size, because a plate alone is a button without its symbol; the button then keeps its generated or legacy art. The ring round a button is the strip's hardware layer
+    /// (SWI-LAY-12), not a layer of the button. The glyph and overlay names are the convention of this runtime until the buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) fixes the sheets.
+    /// <paramref name="button"/> tells the two buttons that share art 137 apart.
     /// </summary>
-    public static IReadOnlyList<SteamwovenKitPart> ButtonLayers(SteamwovenKitSet set, int art, AreaBarButtonLook look)
+    public static IReadOnlyList<SteamwovenKitPart> ButtonLayers(SteamwovenKitSet set, int art, AreaBarButtonLook look, AreaBarButton? button = null)
     {
         if (!SteamwovenKitTable.ButtonFaces.TryGetValue(art, out var face) || !set.TryGet(face, out var plate)) return [];
-        var layers = new List<SteamwovenKitPart> { plate };
+        if (SteamwovenKitTable.GlyphOf(button, art) is not { } glyphId || !set.TryGet(glyphId, out var glyph) || glyph.Width != plate.Width || glyph.Height != plate.Height) return [];
+        var layers = new List<SteamwovenKitPart> { plate, glyph };
         var suffix = look switch { AreaBarButtonLook.Hovered => "_hover", AreaBarButtonLook.Down => "_pressed", _ => null };
         if (suffix is not null && set.TryGet(face + suffix, out var overlay) && overlay.Width == plate.Width && overlay.Height == plate.Height) layers.Add(overlay);
         return layers;

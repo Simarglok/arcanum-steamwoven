@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
     private (SteamwovenBackdropFamily Family, SteamwovenKitWindow? Window)? _smokeKitBackdrop;
 
     private static readonly Color KitTop = new(0.85f, 0.15f, 0.15f), KitBottom = new(0.15f, 0.15f, 0.85f), KitCapLeft = new(0.95f, 0.8f, 0.1f), KitCapRight = new(0.1f, 0.8f, 0.95f),
-        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f), KitMap = new(0.8f, 0.75f, 0.1f),
+        KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f), KitGlyph = new(0.05f, 0.05f, 0.05f), KitMap = new(0.8f, 0.75f, 0.1f),
         KitBarter = new(0.55f, 0.35f, 0.15f), KitBarterFollower = new(0.15f, 0.55f, 0.55f),
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
@@ -36,6 +36,8 @@ public partial class TerrainViewerApp
         ("backdrop.mainmenuback", 2880, 2160, KitPlate), ("backdrop.optionsmenuback", 2880, 2160, KitOptionsPlate),
         ("backdrop.mapmain", 2880, 1440, KitMap),
         ("plate.char_but", 120, 120, KitPlate), ("plate.char_but_hover", 120, 120, KitHover),
+        // ARC-UI-3096: the Character button's glyph, a symbol (the middle half of the part) on a transparent background at the plate's size.
+        ("glyph.char_but", 120, 120, KitGlyph),
         // ARC-UI-3035: the character window's backdrop and the sheets of its four pages (846 x 1170 master px each).
         ("backdrop.char_maint", 2880, 1440, KitCharacter), ("sheet.skills_window", 846, 1170, KitSkillsSheet), ("sheet.disciplines_window", 846, 1170, KitTechSheet),
         ("sheet.char_spells", 846, 1170, KitSpellsSheet), ("sheet.scheme_rot", 846, 1170, KitSchemesSheet),
@@ -61,7 +63,12 @@ public partial class TerrainViewerApp
             else
             {
                 using var image = Image.CreateEmpty(baked, bakedHeight, false, Image.Format.Rgba8);
-                image.Fill(colour);
+                if (id.StartsWith("glyph.", StringComparison.Ordinal))
+                {
+                    image.Fill(new Color(0, 0, 0, 0));
+                    image.FillRect(new Rect2I(baked / 4, bakedHeight / 4, baked / 2, bakedHeight / 2), colour);
+                }
+                else image.Fill(colour);
                 if (image.SavePng(System.IO.Path.Combine(directory, id + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-2461 synthetic kit part not saved: " + id);
             }
             records.Add(new Dictionary<string, object> { ["id"] = id, ["bake_version"] = 1, ["master"] = new Dictionary<string, object> { ["size"] = new[] { width, height }, ["sha256"] = "synthetic" },
@@ -338,6 +345,7 @@ public partial class TerrainViewerApp
         var backdroplessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-backdropless-").FullName;
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var fixturelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fixtureless-").FullName;
+        var noGlyphRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-noglyph-").FullName;
         var (savedHd, savedGenerated) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface);
         var done = new HashSet<(string, SteamwovenStep)>();
         void Ensure(string where, string folder, SteamwovenStep step, params string[] without)
@@ -392,8 +400,17 @@ public partial class TerrainViewerApp
                         require(Near(probe, left ? KitCapLeft : KitCapRight), $"[{tag}] {draw.PartId}'s pixels are the kit cap's colour (got {probe})");
                     }
                 }
-                // The bar button: the Character button's plate is the kit's face (the buttons' look overlays need a look the smoke does not press).
-                require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count >= 1, $"[{tag}] the Character button is drawn from the kit's plate");
+                // The bar button: the Character button is the kit's plate with its glyph over it (the buttons' look overlays need a look the smoke does not press).
+                require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count >= 2, $"[{tag}] the Character button is drawn from the kit's plate and glyph");
+                // ARC-UI-3096 (AC2): the glyph's pixels lie over the plate in the screen (the middle of the button is the symbol's colour, a point near its corner the plate's), and a button with no glyph in the set is not the kit's.
+                await frames(2);
+                var (glyphProbe, plateProbe) = panel.KitButtonProbesForSelfTest(AreaBarButton.Character);
+                using (var image = GetViewport().GetTexture().GetImage())
+                {
+                    Color Pixel(Vector2 point) => image.GetPixel(Math.Clamp((int)point.X, 0, image.GetWidth() - 1), Math.Clamp((int)point.Y, 0, image.GetHeight() - 1));
+                    require(Near(Pixel(glyphProbe), KitGlyph), $"[{tag}] the Character button's middle is the kit glyph's colour (got {Pixel(glyphProbe)} at {glyphProbe})");
+                    require(Near(Pixel(plateProbe), KitPlate), $"[{tag}] the Character button's corner is the kit plate's colour (got {Pixel(plateProbe)} at {plateProbe})");
+                }
                 // AC: the covered window's background, with no window over it: the pieces tile the zone and meet at the 1290 px split; the world beside is dimmed by the layer as with a window.
                 _smokeKitBackdrop = (SteamwovenBackdropFamily.Inventory, SteamwovenKitWindow.Inventory);
                 await frames(3);
@@ -539,6 +556,16 @@ public partial class TerrainViewerApp
                     SteamwovenKitStore.UseRoot(root);
                     panel.Relayout();
                     await frames(4);
+                    // ARC-UI-3096 (AC1): a face whose glyph is missing is not drawn from the kit (the generated art stays), the strips still are.
+                    Ensure("noglyph", noGlyphRoot, step, "glyph.char_but");
+                    SteamwovenKitStore.UseRoot(noGlyphRoot);
+                    panel.Relayout();
+                    await frames(4);
+                    require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count == 0 && panel.KitForSelfTest is { Top: not null, Bottom: not null }, $"[{tag}] with the glyph missing the Character button is not the kit's plate and the strips still are");
+                    SteamwovenKitStore.UseRoot(root);
+                    panel.Relayout();
+                    await frames(4);
+                    require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count >= 2, $"[{tag}] with the glyph back the Character button is drawn from the kit again");
                 }
                 GD.Print($"ARC-UI-2461 steamwoven {tag} step={step} exact={plan.Layout.ExactStep} runtime={plan.Layout.RuntimeScale.ToDouble():F4} top={column.TopStrip} bottom={column.BottomStrip} zone={zone}");
             }
@@ -559,7 +586,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot, fixturelessRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }

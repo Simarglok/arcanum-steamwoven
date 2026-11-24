@@ -13,7 +13,8 @@ public partial class TerrainViewerApp
     {
         static void Require(bool ok, string why)
         {
-            if (!ok) throw new InvalidOperationException("ARC-UI-116 top bar HD smoke: " + why);
+            // ARC-DEV-3093: print the check's own sentence (the frontier fault withholds a message that is not a closed code), as the bar smoke's Require does.
+            if (!ok) { GD.Print("ARC-UI-116 top bar HD smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-116 top bar HD smoke: " + why); }
         }
         var pack = InterfaceHd.Pack;
         Require(InterfaceHd.Enabled && pack is not null, "HD interface enabled with a pack");

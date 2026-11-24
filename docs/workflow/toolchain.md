@@ -6,7 +6,7 @@ The player's local HD interface pack (staging build, diff-only update, backup, r
 The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. These three are task checks, run by a change to the manifest, the census tables or these tools, and are not in the root check list. It holds identifiers, sizes and verdicts only, never pixels.
 The Steamwoven context tone check (ARC-RES-2455, `tools/steamwoven_ui/tone_check.py`, [SWI-GEN-9](../ui/steamwoven-interface-trd.md); masks `tools/steamwoven_ui/prompts/tone_masks.json`) is standard library only: `python3 -B tools/steamwoven_ui/tone_check.py batch --originals local/steamwoven-ui/refs --results local/steamwoven-ui/outbox/style-anchors-contexts` (about 5 s per screen; exit 1 = a region over a limit) and `... fit SCREEN ORIGINAL RESULT OUTPUT --material paper`; tests `python3 -B -m unittest tools.steamwoven_ui.test_tone_check` (about 55 s, a task check, not in `run_tests.py`).
 The Steamwoven material cut-outs and tiles (ARC-RES-2455, `tools/steamwoven_ui/cutouts.py`, [SWI-GEN-10](../ui/steamwoven-interface-trd.md); list `tools/steamwoven_ui/prompts/cutouts.json`) are standard library only: `check`, `cut` (the cut-outs, the context crop of each small one, the provenance record), `tiles-inbox` (then `codex_batch.py run style-anchors-tiles`) and `tile-check`; tests `python3 -B -m unittest tools.steamwoven_ui.test_cutouts` (task check, under a second).
-The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`.
+The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`. Its sibling `tools/steamwoven_ui/pack_plan.py` (ARC-UI-3077, standard library only, tests `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan`, batched the same way) writes the pack importer's plan and alpha masks from the assembled frames ([workflow](hd-pack.md#kit-assembled-frames-in-the-pack-arc-ui-3077)).
 The Steamwoven kit fit tool (ARC-DEV-2459, `tools/steamwoven_ui/fit.py`, [section](#steamwoven-kit-fit-arc-dev-2459)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_fit` (about 5 s) also run in the batched `tools/local_dev/run_tests.py`.
 
 ## Process-local environment
@@ -937,6 +937,13 @@ reads no system pointer either (headless runs and the self-test's bootstrap apps
 test places the pointer. The hotkey bar smoke checks
 the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
 every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
+
+The bar smoke's first button hover (the Character button, `ARC-UI-018 bar smoke FAIL hover: '' frame 0` once in a rolling
+run, ARC-UI-3108) no longer trusts the hover state read right after the move: it waits up to 30 more frames, pushing the same
+motion again (nudged by a pixel and back), and prints `ARC-UI-3108 bar smoke Character hover seen after N extra frames`.
+The top bar HD check prints its own failing sentence (`ARC-UI-116 top bar HD smoke FAIL ...`) instead of the frontier
+fault's `(withheld)` (ARC-DEV-3093; the kit/Steamwoven bar smoke passes with the installed `interface-redraw-4x`, which
+carries the top bar frames, 2026-11-24).
 
 Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
 (mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.

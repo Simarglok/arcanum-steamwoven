@@ -26,8 +26,8 @@ public sealed class HdPack
     {
         Directory = directory; Identity = identity; Review = review; RecipeFile = recipeFile; RecipeSha256 = recipeSha256; Recipe = recipe;
         Build = build; Entries = entries; _options = options;
-        _sprites = entries.Where(e => e.Kind is HdEntryKind.Sprite or HdEntryKind.Portrait).ToDictionary(e => e.Key!.Value);
-        _spriteArts = entries.Where(e => e.Kind is HdEntryKind.Sprite or HdEntryKind.Portrait).GroupBy(e => e.NameSha256!, StringComparer.Ordinal)
+        _sprites = entries.Where(e => e.IsSpriteLike).ToDictionary(e => e.Key!.Value);
+        _spriteArts = entries.Where(e => e.IsSpriteLike).GroupBy(e => e.NameSha256!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Select(e => e.Key!.Value.ArtSha256).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
         var chunks = entries.Where(e => e.Kind == HdEntryKind.TerrainChunk).ToArray();
         _chunks = chunks.GroupBy(e => (e.ChunkX!.Value, e.ChunkY!.Value)).ToDictionary(g => g.Key, g => g.ToArray());
@@ -242,7 +242,7 @@ public sealed class HdPack
         get
         {
             var slices = Recipe.Slices.Where(s => s.Kinds.Contains(HdSliceKind.Interface)).Select(s => s.Name).ToHashSet(StringComparer.Ordinal);
-            return Entries.Where(e => (e.Kind is HdEntryKind.Sprite or HdEntryKind.Portrait) && slices.Contains(e.Slice));
+            return Entries.Where(e => e.IsSpriteLike && slices.Contains(e.Slice));
         }
     }
 
@@ -389,7 +389,8 @@ public sealed class HdPack
     // ARC-UI-113: the one entry-level alpha mode ("masked"); the value says whether the entry is masked.
     private static readonly Dictionary<string, bool> EntryAlphas = new(StringComparer.Ordinal) { ["masked"] = true };
     private static readonly Dictionary<string, HdEntryKind> EntryKinds = new(StringComparer.Ordinal)
-    { ["sprite"] = HdEntryKind.Sprite, ["terrainChunk"] = HdEntryKind.TerrainChunk, ["portrait"] = HdEntryKind.Portrait };
+    { ["sprite"] = HdEntryKind.Sprite, ["terrainChunk"] = HdEntryKind.TerrainChunk, ["portrait"] = HdEntryKind.Portrait,
+      ["worldmap"] = HdEntryKind.WorldMap, ["map-zoomed"] = HdEntryKind.MapZoomed };
 
     internal static HdPackOpenResult Parse(string directory, byte[] manifestBytes, JsonElement element, HdPackOptions options)
     {
@@ -453,6 +454,8 @@ public sealed class HdPack
         {
             HdEntryKind.Sprite => HdJson.Object(item, path, [.. common, "art", "group", "frame", "palette"], "alpha"),
             HdEntryKind.Portrait => HdJson.Object(item, path, [.. common, "portrait"]),
+            HdEntryKind.WorldMap => HdJson.Object(item, path, [.. common, "worldmap"]),
+            HdEntryKind.MapZoomed => HdJson.Object(item, path, [.. common, "map-zoomed"]),
             _ => HdJson.Object(item, path, [.. common, "chunk", "tiles"]),
         };
         var file = HdPackPath.Validate(HdJson.String(e["file"], path + ".file"), path + ".file", ".png");
@@ -473,6 +476,19 @@ public sealed class HdPack
             var text = HdJson.String(p["path"], path + ".portrait.path");
             if (!HdPortraitKey.TryPath(text, out var portraitPath) || portraitPath != text) throw HdJson.Invalid(path + ".portrait.path", "is not portrait/<name>.bmp (lowercase [a-z0-9_-], at most 48 characters)");
             return new(index, kind, file, sha, bytes, sliceName, HdPortraitKey.Key(portraitPath), HdPortraitKey.NameSha256(portraitPath), legacy, review, PortraitPath: portraitPath);
+        }
+
+        if (kind is HdEntryKind.WorldMap or HdEntryKind.MapZoomed)
+        {
+            // ARC-RENDER-3079: a world-map bitmap redraw is interface art like a portrait: its slice holds interface art, so the slice's Legacy alpha rule applies (the bitmap is opaque, and so must the redraw be).
+            if (!slice.Kinds.Contains(HdSliceKind.Interface)) throw HdJson.Invalid(path + ".slice", "does not select interface");
+            var property = kind == HdEntryKind.WorldMap ? "worldmap" : "map-zoomed";
+            var m = HdJson.Object(e[property], $"{path}.{property}", ["path"]);
+            var text = HdJson.String(m["path"], $"{path}.{property}.path");
+            if (!HdMapKey.TryPath(text, out var mapPath) || mapPath != text) throw HdJson.Invalid($"{path}.{property}.path", "is not worldmap/<name>.bmp (lowercase [a-z0-9_-], at most 48 characters)");
+            var side = HdMapKey.LegacySide(kind);
+            if (legacy.Width != side || legacy.Height != side) throw HdJson.Invalid(path + ".legacy", $"must be {side} x {side} for a {property} entry");
+            return new(index, kind, file, sha, bytes, sliceName, HdMapKey.Key(mapPath), HdMapKey.NameSha256(mapPath), legacy, review, MapPath: mapPath);
         }
 
         if (kind == HdEntryKind.Sprite)
