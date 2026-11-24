@@ -43,7 +43,7 @@ public partial class AreaSleepPanel : CanvasLayer
         _fade.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _fadeLayer.AddChild(_fade);
         AddChild(_fadeLayer);
-        _panel = new PanelContainer { Name = "AreaSleep", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = "AreaSleep", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(226 / 255f, 216 / 255f, 192 / 255f, .97f),

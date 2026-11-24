@@ -128,5 +128,17 @@ Found by reading the viewer on 2026-11-19; each drew player-facing text with God
 names of item entries whose icon art did not read (`AreaHotkeyBarView`, art 229), the follower portraits' initials and chrome words (`AreaFollowerPortraits`, art 229; the Godot tooltip of a portrait is gone, the hover
 window names the follower), the hovered critter's bar texts in the floating tooltip (`AreaHoverLifeBars`, art 229, white), and the no-font paths of the bar numbers (`AreaBarNumber`) and the floaters and bubbles (`AreaFloaterLayer`). Without
 the font (no game folder) these draw nothing: the lines of the floater layer are laid out at a nominal 15 px line and 6 px advance, and a self-test that needs the text gives a synthetic face (`AreaArtFontFace.SyntheticForSelfTest`).
-The sites that remain (menu notes, the save list's detail, notice and question buttons, the gamepad prompt strip, Godot tooltips, and the fallback `Label` panels of the windows that run without their art) are listed with an audit of
-the other `Label` sites (developer, launcher and QA panels excluded) in [#2968](https://github.com/Simarglok/arcanum-steamwoven/issues/2968).
+[#3136](https://github.com/Simarglok/arcanum-steamwoven/issues/3136) (ARC-UI-3136, split from #2968) finished the rest, with the font of each site:
+
+| Site | Font now |
+|---|---|
+| Godot tooltips (`TooltipText`) of `AreaConversationPanel` (a blocked reply's reason), `AreaSchematicsPanel`, `AreaSpellPane`, `AreaCharacterSheetPanel` | `AreaArtTip`: the hint is kept as the control's own text and drawn in a popup in art 229, white (HD redraw with the HD interface on), below and right of the pointer after 0.5 s, flipped inside the viewport (the floating hover tooltip's placement; the original has no tooltip of this kind). Without the font: nothing. |
+| The floating hover tooltip's `_hoverLabel` (`TerrainViewerAreaHover`) | Removed: art 229 (`AreaArtTextBlock`) or nothing without the font. |
+| Item name in `AreaInventoryGridArea` where the item's art did not read (inventory, loot, barter, item service) and the diagnostic frame's slot and item labels | Art 229, white, wrapped in the box (`Line`/`Block`); nothing without the font or where the loot scroll clips the box. |
+| `AreaMessageLogView` (7 text labels, `_paneName`), `AreaConversationPanel` (header, outcome, effects, hint, reply and leave captions) without the original font | Developer-only: drawn in Godot's font only while `AreaFallbackLook.Allowed` (debug mode, a self-test, a smoke run); otherwise nothing. |
+| `AreaMainMenuPanel._panel`, `AreaDeathPanel`, `AreaQuitPanel`, `AreaSleepPanel`, `AreaReadingPanel`, `AreaSchematicsPanel`, `AreaLogbookPanel`, `AreaWorldMapPanel`, `AreaCharacterSheetPanel` (its fallback pages and the "not built" note), `AreaSpellPane` (a no-bars viewer's diagnostic pane) | Developer-only fallback boxes (`AreaFallbackBox`): fully transparent in a player's run, so the window's state and keys behave as before. |
+| `AreaInventoryPanel`, `AreaBarterPanel`, `AreaItemServicePanel` diagnostic look | Developer-only: the panel is transparent in the diagnostic look unless `AreaFallbackLook.Allowed`; the original look is unchanged. |
+| `AreaSaveListPanel._panel` (diagnostic look without the art) | Left to #3150 (the panel also carries the typed description field in the art look, so it cannot be made transparent as a whole); the art look's detail text is #3150's. |
+
+`AreaFallbackLook.Allowed` is set by the app (`SyncFallbackLook`): true with `--debug-mode`, in a self-test and in a smoke run, false in a player's run. A self-test
+without a game folder keeps reading the fallback text, as before.

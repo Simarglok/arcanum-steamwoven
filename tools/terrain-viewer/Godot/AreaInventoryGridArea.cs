@@ -750,13 +750,12 @@ public partial class AreaInventoryGridArea : Control
     {
         if (LootLook || BarterLook) { DrawLoot(Look!); return; }
         if (Look is { } look) { DrawOriginal(look); return; }
-        var font = GetThemeDefaultFont();
-        var size = Math.Max(8, (int)(11 * _scale));
         var line = new Color(.35f, .4f, .45f);
-        var text = new Color(.85f, .88f, .9f);
+        // ARC-UI-3136: the diagnostic look's labels are the original's art font (text font 229) in white, or nothing without the font; never Godot's default font.
+        var face = AreaFallbackLook.Fonts?.Invoke()?.Text;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
-        void Label(Rect2 rect, string label, Color color) =>
-            DrawString(font, rect.Position + new Vector2(3, size + 2), label, HorizontalAlignment.Left, Math.Max(1, rect.Size.X - 6), size, color);
+        void Label(Rect2 rect, string label) =>
+            Line(face, label, ((int)MathF.Round(rect.Position.X / _scale) + 2, (int)MathF.Round(rect.Position.Y / _scale) + 1, Math.Max(1, (int)(rect.Size.X / _scale) - 4), Math.Max(1, (int)(rect.Size.Y / _scale) - 2)), middle: false);
         foreach (var (slot, r) in AreaInventoryDrag.SlotRects)
         {
             var rect = Scaled(r.X, r.Y, r.Width, r.Height);
@@ -764,14 +763,14 @@ public partial class AreaInventoryGridArea : Control
             var shown = worn?.Entity is { } entity && entity != Held?.Entity;
             DrawRect(rect, shown ? new Color(.25f, .22f, .14f) : new Color(.1f, .11f, .14f));
             DrawRect(rect, line, false);
-            Label(rect, shown ? worn!.Name ?? "?" : AreaInventoryHost.SlotName(slot), shown ? text : new Color(.5f, .55f, .6f));
+            Label(rect, shown ? worn!.Name ?? "?" : AreaInventoryHost.SlotName(slot));
         }
         foreach (var (icon, y) in new[] { (AreaInventoryIcon.Drop, AreaInventoryDrag.DropIconY), (AreaInventoryIcon.Use, AreaInventoryDrag.UseIconY) })
         {
             var rect = Scaled(AreaInventoryDrag.IconX, y, AreaInventoryDrag.IconWidth, AreaInventoryDrag.IconHeight);
             DrawRect(rect, new Color(.16f, .14f, .1f));
             DrawRect(rect, line, false);
-            Label(rect, icon.ToString(), new Color(1f, .85f, .55f));
+            Label(rect, icon.ToString());
         }
         var grid = Scaled(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, AreaInventoryDrag.GridRight - AreaInventoryDrag.GridX,
             AreaInventoryDrag.GridBottom - AreaInventoryDrag.GridY);
@@ -788,7 +787,7 @@ public partial class AreaInventoryGridArea : Control
             var rect = Item(item).Grow(-2 * _scale);
             DrawRect(rect, new Color(.2f, .3f, .38f));
             DrawRect(rect, new Color(.5f, .65f, .75f), false);
-            Label(rect, item.Name, text);
+            Label(rect, item.Name);
         }
         if (Held is { } held)
         {
@@ -800,7 +799,7 @@ public partial class AreaInventoryGridArea : Control
             var rect = new Rect2(origin, new Vector2(w, h) * cell);
             DrawRect(rect, new Color(.45f, .38f, .18f, .85f));
             DrawRect(rect, new Color(1f, .85f, .55f), false);
-            Label(rect, name, text);
+            Label(rect, name);
         }
 
         Rect2 Item(AreaGridItem item) => Scaled(AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
@@ -825,7 +824,8 @@ public partial class AreaInventoryGridArea : Control
                 var box = (origin is { } start ? new Rect2(start, new Vector2(rect.Width, rect.Height) * _scale) : Scaled(rect.X, rect.Y, rect.Width, rect.Height)).Grow(-2 * _scale);
                 DrawRect(box, new Color(.2f, .3f, .38f, .85f));
                 DrawRect(box, new Color(.5f, .65f, .75f), false);
-                if (name is not null) DrawString(GetThemeDefaultFont(), box.Position + new Vector2(3, 11 * _scale + 2), name, HorizontalAlignment.Left, Math.Max(1, box.Size.X - 6), Math.Max(8, (int)(11 * _scale)), AreaInventoryArtLook.TextColour);
+                // ARC-UI-3136: the name in the original's art font (text font 229), nothing without the font; never Godot's default font.
+                if (name is not null) Block(look.Fonts?.Text, name, ((int)MathF.Round(box.Position.X / _scale) + 2, (int)MathF.Round(box.Position.Y / _scale) + 1, Math.Max(1, (int)(box.Size.X / _scale) - 4), Math.Max(1, (int)(box.Size.Y / _scale) - 2)));
                 return;
             }
             var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
@@ -967,7 +967,8 @@ public partial class AreaInventoryGridArea : Control
                 var box = Scaled(rect.X, top, rect.Width, bottom - top).Grow(-2 * _scale);
                 DrawRect(box, new Color(.2f, .3f, .38f, .85f));
                 DrawRect(box, new Color(.5f, .65f, .75f), false);
-                DrawString(GetThemeDefaultFont(), box.Position + new Vector2(3, 11 * _scale + 2), name, HorizontalAlignment.Left, Math.Max(1, box.Size.X - 6), Math.Max(8, (int)(11 * _scale)), AreaInventoryArtLook.TextColour);
+                // ARC-UI-3136: the name in the original's art font (text font 229), nothing without the font or where the scroll clips the box; never Godot's default font.
+                if (top == rect.Y && bottom == rect.Y + rect.Height) Block(look.Fonts?.Text, name, ((int)MathF.Round(box.Position.X / _scale) + 2, (int)MathF.Round(box.Position.Y / _scale) + 1, Math.Max(1, (int)(box.Size.X / _scale) - 4), Math.Max(1, (int)(box.Size.Y / _scale) - 2)));
                 return;
             }
             var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
@@ -1162,5 +1163,4 @@ public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Ar
     public AreaTextFonts? Fonts { get; init; }
 
     /// <summary>PROJECT: the colour of the diagnostic look's texts and of an item's name when its art did not read (the windows' own texts are white, in the original's fonts).</summary>
-    public static readonly Color TextColour = new(.92f, .86f, .72f);
 }

@@ -66,6 +66,7 @@ public partial class TerrainViewerApp : Node
         AddChild(_hud);
         _hud.SetDiagnosticText("Editor diagnostic order | loading", automatedTestMode: false);
 
+        SyncFallbackLook();
         // ARC-DEV-052: automated runs read and measure the panel, so it is shown for them.
         if (SelfTestBootstrap) { _hud.ShowPanel("self-test"); return; }
 
@@ -82,6 +83,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-060: its pointer is only the events its tests push or parse, never the system pointer.
             if (DisplayServer.GetName() != "headless") { AddChild(new HiddenWindowDrawKeeper()); AddChild(new AutomatedPointerGate()); }
         }
+        SyncFallbackLook();
         // ARC-DEV-2270: an interactive window asks the quit question on a close request (Cmd+Q, Alt+F4, the close button).
         InstallQuitRequest();
         if (RunWorldSettingsTest(args)) return;

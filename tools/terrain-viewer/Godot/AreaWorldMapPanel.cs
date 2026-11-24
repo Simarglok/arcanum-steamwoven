@@ -85,7 +85,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public override void _Ready()
     {
         Layer = 4;
-        _panel = new PanelContainer { Name = "AreaWorldMap", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = "AreaWorldMap", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(214 / 255f, 205 / 255f, 186 / 255f, .97f),

@@ -26,7 +26,6 @@ public partial class TerrainViewerApp
     private object? _hoverRoutesSession;
     private CanvasLayer? _hoverLayer;
     private PanelContainer? _hoverPanel;
-    private Label? _hoverLabel;
     // ARC-DEV-156 (B27): the tooltip's text in the original's font art (text font 229) while the fonts read; the label otherwise.
     private AreaArtTextBlock? _hoverArt;
     // ARC-UI-020: the hovered critter's health and fatigue bars under its name.
@@ -63,11 +62,10 @@ public partial class TerrainViewerApp
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .9f),
             ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 4, ContentMarginBottom = 4,
         });
-        _hoverLabel = new Label { MouseFilter = Control.MouseFilterEnum.Ignore };
         _hoverArt = new AreaArtTextBlock { Name = "HoverArtText", FitContent = true, Visible = false };
         var lines = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _hoverBars = new AreaHoverLifeBars();
-        lines.AddChild(_hoverLabel); lines.AddChild(_hoverArt); lines.AddChild(_hoverBars);
+        lines.AddChild(_hoverArt); lines.AddChild(_hoverBars);
         _hoverPanel.AddChild(lines); _hoverLayer.AddChild(_hoverPanel); AddChild(_hoverLayer);
     }
 
@@ -276,12 +274,11 @@ public partial class TerrainViewerApp
         // ARC-UI-057: with the interface bars drawn the object is described in the message window, as the original does; the floating
         // tooltip is the viewer's without the bars.
         var inBars = _gameBarPanel is { Visible: true };
-        if (_hoverPanel is not null && _hoverLabel is not null)
+        if (_hoverPanel is not null)
         {
             if (text is null || screen is not { } at || inBars) _hoverPanel.Visible = false;
             else
             {
-                _hoverLabel.Text = text;
                 SetHoverText(text);
                 _hoverBars?.SetFont(TextFonts()?.Text);
                 _hoverBars?.Show(HoverLife(key!.Value));
@@ -299,11 +296,12 @@ public partial class TerrainViewerApp
         if (changed && refreshStatus) RefreshAreaStatus();
     }
 
-    /// <summary>ARC-DEV-156: the tooltip's text in the original's font art when it read (the label hides), else in the label.</summary>
+    /// <summary>ARC-DEV-156: the tooltip's text in the original's font art when it read, else nothing.</summary>
     private void SetHoverText(string text)
     {
         var fonts = TextFonts();
-        _hoverLabel!.Visible = fonts is null;
+        // ARC-UI-3136: without the original's font the tooltip draws nothing (its text is still `_hoverText`); Godot's default font is not used.
+        _hoverPanel!.Modulate = fonts is null ? new Color(1, 1, 1, 0) : Colors.White;
         _hoverArt!.Visible = fonts is not null;
         if (fonts is null) return;
         var (placed, _, _) = AreaTextFontLayout.Block(fonts.Text.Font, fonts.TextLineHeight, text);

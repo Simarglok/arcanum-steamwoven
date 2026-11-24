@@ -68,7 +68,7 @@ public partial class AreaSpellPane : CanvasLayer
     public override void _Ready()
     {
         Layer = 2;
-        _panel = new PanelContainer { Name = "SpellPane", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _panel = new AreaFallbackBox { Name = "SpellPane", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .88f),
@@ -122,8 +122,8 @@ public partial class AreaSpellPane : CanvasLayer
             var button = new Button
             {
                 Text = choice.Cost is { } cost ? $"{choice.Name} ({cost})" : choice.Name, FocusMode = Control.FocusModeEnum.None,
-                TooltipText = choice.College,
             };
+            AreaArtTip.Set(button, choice.College);
             button.Pressed += () => Activated?.Invoke(spell);
             button.GuiInput += input => RightPress(button, input, () => SpellDragStarted?.Invoke(spell));
             _buttons.AddChild(button);
@@ -139,8 +139,8 @@ public partial class AreaSpellPane : CanvasLayer
             var button = new Button
             {
                 Text = choice.Name, FocusMode = Control.FocusModeEnum.None, Disabled = !choice.Activates,
-                TooltipText = choice.Activates ? $"slot {slot + 1}" : $"slot {slot + 1}: cast by the item's own events, not from the pane",
             };
+            AreaArtTip.Set(button, choice.Activates ? $"slot {slot + 1}" : $"slot {slot + 1}: cast by the item's own events, not from the pane");
             button.Pressed += () => ItemActivated?.Invoke(slot);
             button.GuiInput += input => RightPress(button, input, () => ItemDragStarted?.Invoke(slot));
             _buttons.AddChild(button);
