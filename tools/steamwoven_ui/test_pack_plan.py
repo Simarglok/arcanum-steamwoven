@@ -89,7 +89,7 @@ class PlanTests(unittest.TestCase):
         self.assertIn(0, set(mask.data[0::4]))
         self.assertIn(255, set(mask.data[0::4]))
 
-    def test_a_smooth_or_legacy_frame_keeps_the_original_alpha_unless_asked(self) -> None:
+    def test_a_smooth_frame_keeps_the_importers_alpha_unless_asked(self) -> None:
         folder = Folder(self)
         path = folder.art("470", mode="legacySmooth")
         auto = plan_of(folder, [path])
@@ -99,6 +99,8 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(len(plan_of(folder, [path], masks="always").files), 3)
         masked = folder.art("471", mode="masked")
         self.assertEqual(plan_of(folder, [masked], masks="never").files, {})
+        exact = folder.art("472", mode="legacy")  # the importer's mask-less alpha is smooth: only a mask keeps the exact legacy alpha
+        self.assertEqual(len(plan_of(folder, [exact]).files), 3)
 
     def test_an_older_record_without_the_alpha_mode_gets_masks(self) -> None:
         folder = Folder(self)
@@ -141,9 +143,12 @@ class PlanTests(unittest.TestCase):
             plan_of(folder, [folder.art("470")], arts={"470": row("470", "Combat_Button", 3, size=(20, 16))})
         with self.assertRaisesRegex(pack_plan.PlanError, "census"):
             plan_of(folder, [folder.art("470")], arts={})
-        # an override replaces the census row, so a differing census size does not apply to it
-        plan = plan_of(folder, [folder.art("470")], arts={}, overrides={"470": "Combat_Button.ART"})
+        plan = plan_of(folder, [folder.art("470")], arts={}, overrides={"470": "Combat_Button.ART"})  # no census row: the override names it
         self.assertEqual(plan.arts[0].source, "--art-name")
+        with self.assertRaisesRegex(pack_plan.PlanError, "3 assembled frames, the census says 2"):  # a census row still checks the art under an override
+            plan_of(folder, [folder.art("470")], arts={"470": row("470", "Combat_Button", 2)}, overrides={"470": "Other.ART"})
+        with self.assertRaisesRegex(pack_plan.PlanError, "no record of that art"):
+            plan_of(folder, [folder.art("470")], overrides={"417": "Other.ART"})
 
     def test_two_arts_naming_one_file_are_refused(self) -> None:
         folder = Folder(self)
@@ -167,8 +172,8 @@ class PlanTests(unittest.TestCase):
         with self.assertRaisesRegex(pack_plan.PlanError, "no visible pixel"):
             plan_of(folder, [path])
         folder = Folder(self)
-        path = folder.art("470", mode="legacy")
-        pngio.write(folder.root / "470-f000.png", Image.blank(*HD))  # nothing to mask in the legacy mode: the plan is still written
+        path = folder.art("470", mode="legacySmooth")
+        pngio.write(folder.root / "470-f000.png", Image.blank(*HD))  # nothing to mask in the legacySmooth mode: the plan is still written
         self.assertEqual(len(plan_of(folder, [path]).document["items"]), 3)
 
     def test_a_png_without_alpha_is_refused(self) -> None:
@@ -238,8 +243,12 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(json.loads((folder.root / "plan.json").read_text()), plan.document)
         for index in range(3):
             self.assertEqual(pngio.read(folder.root / f"masks/470-f00{index}.png").w, HD[0])
-        # again: replaces its own plan
-        pack_plan.write_plan(plan, folder.root)
+        pack_plan.write_plan(plan, folder.root)  # again: replaces its own plan
+        self.assertEqual(sorted(p.name for p in folder.root.glob("*.tmp")), [])
+        (folder.root / "masks/470-f000.png").unlink()
+        (folder.root / "masks/470-f000.png").symlink_to(folder.root / "470-f000.png")
+        with self.assertRaisesRegex(pack_plan.PlanError, "is a link"):
+            pack_plan.write_plan(plan, folder.root)
 
     def test_it_never_replaces_another_file_named_plan_json(self) -> None:
         folder = Folder(self)

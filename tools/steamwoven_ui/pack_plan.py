@@ -202,7 +202,10 @@ def mask_path(art: str, frame: int) -> str:
 # --- the plan ---------------------------------------------------------------------------------------------------------
 
 def _relative(path: Path, start: Path) -> str:
-    return os.path.relpath(path, start).replace(os.sep, "/")
+    try:
+        return os.path.relpath(path, start).replace(os.sep, "/")
+    except ValueError as error:  # another drive on Windows
+        raise PlanError(f"{path} and {start} cannot be given relative to each other: {error}") from error
 
 
 def build_plan(assemblies: list[Assembly], out_dir: Path, pack_id: str = DEFAULT_PACK_ID, masks: str = "auto",
@@ -223,6 +226,9 @@ def build_plan(assemblies: list[Assembly], out_dir: Path, pack_id: str = DEFAULT
     if arts is None:
         arts = {row.ident: row for row in census.load_arts()}
     overrides = overrides or {}
+    unused = sorted(set(overrides) - {a.art for a in assemblies})
+    if unused:
+        raise PlanError(f"--art-name {unused[0]}: no record of that art (the records are {', '.join(a.art for a in assemblies)})")
     items, planned, files, taken = [], [], {}, {}
     for assembly in assemblies:
         art_file, source = art_file_name(assembly.art, overrides, arts)
@@ -230,13 +236,15 @@ def build_plan(assemblies: list[Assembly], out_dir: Path, pack_id: str = DEFAULT
             raise PlanError(f"art {assembly.art} and art {taken[art_file.lower()]} both name {art_file}")
         taken[art_file.lower()] = assembly.art
         row = arts.get(assembly.art)
-        if row is not None and source == "census":
+        if row is not None:  # also under --art-name: the frame count and size are the art's whatever file name is given
             if len(assembly.frames) != row.frames:
                 raise PlanError(f"art {assembly.art}: {len(assembly.frames)} assembled frames, the census says {row.frames} for {row.name}")
             want = (row.size[0] * assembly.scale, row.size[1] * assembly.scale)
         else:
             want = assembly.frames[0].size
-        write_masks = masks == "always" or (masks == "auto" and assembly.alpha_mode in ("masked", None))
+        # legacySmooth is the importer's own rule for a frame with no mask (EdgeAlpha); the exact `legacy` alpha and the `masked` plate shape are
+        # kept only by a mask, and an older record that does not say gets one
+        write_masks = masks == "always" or (masks == "auto" and assembly.alpha_mode != "legacySmooth")
         for frame in assembly.frames:
             what = f"art {assembly.art} frame {frame.frame}"
             if frame.size != want:
@@ -270,6 +278,13 @@ def check_out_dir(out_dir: Path) -> None:
             raise PlanError(f"{out_dir} is inside the checkout outside local/: a plan and its frames are local files, never in git")
 
 
+def _atomic_write(path: Path, blob: bytes) -> None:
+    """A file is whole or absent: written beside it and moved over it."""
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(blob)
+    os.replace(temporary, path)
+
+
 def write_plan(plan: Plan, out_dir: Path) -> list[Path]:
     """Writes the masks, then the plan last. An existing plan.json is replaced only when it is an importer plan (never an unrelated file)."""
     target = out_dir / PLAN_NAME
@@ -285,9 +300,11 @@ def write_plan(plan: Plan, out_dir: Path) -> list[Path]:
         out_dir.mkdir(parents=True, exist_ok=True)
         for path, blob in sorted(plan.files.items()):
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(blob)
+            if path.is_symlink():
+                raise PlanError(f"{path} is a link; remove it first")
+            _atomic_write(path, blob)
             written.append(path)
-        target.write_text(json.dumps(plan.document, indent=1) + "\n", encoding="utf-8")
+        _atomic_write(target, (json.dumps(plan.document, indent=1) + "\n").encode("utf-8"))
         written.append(target)
     except OSError as error:
         raise PlanError(f"cannot write to {out_dir}: {error}") from error
@@ -305,8 +322,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="where plan.json and masks/ go (default: the folder of the first record, next to the frames)")
     parser.add_argument("--pack-id", default=DEFAULT_PACK_ID, help=f"id of the staging pack the plan builds (default {DEFAULT_PACK_ID})")
     parser.add_argument("--masks", choices=MASK_MODES, default="auto",
-                        help="auto (default): a grey alpha mask for each frame assembled in the masked alpha mode (and for an older record that does not say); "
-                             "always, never")
+                        help="auto (default): a grey alpha mask for each frame except those assembled in the legacySmooth alpha mode, whose alpha is the importer's own "
+                             "(a masked plate, the exact legacy alpha and an older record that does not say get one); always, never")
     parser.add_argument("--art-name", action="append", default=[], metavar="ART=File.ART", help="the ART file of an art the census does not name (repeatable)")
     parser.add_argument("--dry-run", action="store_true", help="read and check everything, print the art map, write nothing")
     args = parser.parse_args(argv)

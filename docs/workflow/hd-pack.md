@@ -421,12 +421,14 @@ python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interfa
 - **What it writes.** Per assembled frame one `ready` item (`"lock": false`: an assembled frame is final, the importer's shading lock would pull it back to the original's tone) whose tile
   names the ART file as `interface.mes` gives it (`Schematics_Button.ART`); image and mask paths are relative to the plan file. A frame assembled in the `masked` alpha mode (a plate
   that must not keep the original frame's rim and corners) also gets an `alphaMask`: the frame's own alpha as an 8-bit grey PNG of the HD frame's size in `masks/` (the importer takes
-  such a mask as the alpha itself, cut to the Legacy-opaque texels, and writes the entry as `"alpha": "masked"`, [format](../formats/hd-pack.md#interface-art-arc-dev-242)). A `legacy` or
-  `legacySmooth` frame gets none, since the importer's own Legacy alpha is the rule the assembly already followed; `--masks always|never` overrides, and a record written before the
-  record carried `alphaMode` gets masks.
+  such a mask as the alpha itself, cut to the Legacy-opaque texels, and writes the entry as `"alpha": "masked"`, [format](../formats/hd-pack.md#interface-art-arc-dev-242)). A `legacySmooth`
+  frame gets none: the importer's own alpha for a frame with no mask is that rule. A `legacy` frame (the exact original alpha, which the importer does not keep without a mask) and a
+  record written before the record carried `alphaMode` get masks; `--masks always|never` overrides. The importer **cuts** every HD mask to the texels the Legacy frame leaves
+  opaque and refuses one that leaves nothing opaque, and the tool does not read the Legacy frame: a plate part outside the silhouette (the one-texel reach the `masked` gate allows)
+  is cleared at `stage`, and a mask refused there is reported there.
 - **The art map.** The tool prints `art -> ART file` for every art (`470 -> Combat_Button.ART (3 frames of 156x156, alpha masks; name from census)`). A number is looked up in the census
   (`docs/ui/steamwoven-interface-census-arts.tsv`) and the frame count and size are checked against its row; another identifier is taken as the file's own name; `--art-name 471=Schematics_Button.ART`
-  names an art the census does not. It refuses two arts naming one ART file, different scales in one plan, a frame that differs from its record, and a frame with nothing visible to mask.
+  names an art the census does not. It refuses two arts naming one ART file, different scales in one plan, a frame that differs from its record, and a frame with nothing visible to mask and a `--art-name` for an art that has no record. The census row's frame count and size are checked under `--art-name` too. Files are written whole (a temporary file moved over the old one), the plan last.
 - `--pack-id` (default `interface-redraw-4x`) is the staging pack's id. The plan is replaced only when the existing `plan.json` is an importer plan.
 - Frames the staging build replaces in the installed pack show in `plan` as differing entries; frames the installed pack lacks need `--add-new`. The plan must name exactly the frames the assembly wrote.
 - Checks: `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan` (synthetic frames only; also in the batched `tools/local_dev/run_tests.py`).

@@ -120,7 +120,7 @@ python3 -B tools/steamwoven_ui/pack_plan.py DIR [--out PLANDIR] [--pack-id ID] [
 ```
 
 It prints the **art map** (`470 -> Combat_Button.ART`, the name from the census or `--art-name`) and then the `hd_pack.py stage` command that follows. Per frame one `ready` item with `lock` false;
-a `masked` frame also gets a grey `alphaMask` of the HD frame's size, made from the frame's alpha; the record therefore carries `alphaMode` (and `part`) since this change. The whole route
+a `masked` or `legacy` frame (and a record that does not say) also gets a grey `alphaMask` of the HD frame's size, made from the frame's alpha; the record therefore carries `alphaMode` (and `part`) since this change. The whole route
 (`stage`, `plan`, `apply`) and the refusals are in the [HD pack workflow](../workflow/hd-pack.md#kit-assembled-frames-in-the-pack-arc-ui-3077). On the four buttons of the pilot
 ([#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058)) it writes the same plan and the same twelve masks the pilot made by hand (a local comparison, 2026-11-24).
 
