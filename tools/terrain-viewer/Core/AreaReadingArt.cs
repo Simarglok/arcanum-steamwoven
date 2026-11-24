@@ -314,7 +314,7 @@ public static class AreaReadingFlow
     }
 
     /// <summary>ARC-UI-2765: a note's body. The original's draw (Pepper20, a handwriting face) unless <paramref name="readable"/> (the generated interface with the face loaded): then the address (first line, ending in a comma) and
-    /// the signature (<see cref="AreaReadingNoteRule"/>) stay in Pepper20 and the body between them is in the first of <see cref="AreaReadingArtLayout.NoteBodyFonts"/> that holds the letter; a letter that does not fit the rule is drawn whole in the readable face;
+    /// the signature (<see cref="AreaReadingNoteRule"/>) stay in Pepper20 and the body between them is in the first of <see cref="AreaReadingArtLayout.NoteBodyFonts"/> that holds the letter; a letter that does not fit the rule, or whose address, body and signature do not fit the rectangle in a face, is tried whole in that face before the next face;
     /// a letter no readable face holds in the note's rectangle keeps the original's draw.</summary>
     public static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, bool readable)
     {
