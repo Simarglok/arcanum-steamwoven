@@ -443,6 +443,37 @@ otherwise the BMP. Import: `hd_pack.py portraits-plan` writes the plan (kind `ar
 (`hd-interface-import --plan`) checks each redraw against the bitmap it reads from the game and writes the entries into a staging pack (a portrait plan replaces only the portraits it names; the pack's sprites and other portraits stay), and the update goes in with `apply --add-new`
 ([workflow](../workflow/hd-pack.md#portraits-arc-ui-2865)).
 
+## World-map entries (ARC-RENDER-3079)
+
+The world-map window draws the 64 map tiles (`worldmap/smallmapchunksNNN.bmp`, 250 × 250, 8 × 8) and the continent picture (`Map_Zoomed`, 365 × 365) from bitmaps of the
+module. The owner decided on 2026-11-21 ([decisions](../architecture/decisions.md), [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952)) that these get HD entries, and that
+none is redrawn by a generator; the picture itself (a non-generative upscale, [ARC-RES-2992](../rendering/hd-world-town-map.md)) is staged by [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065).
+The pack holds a bitmap as an entry of kind `worldmap` (one tile) or `map-zoomed` (the continent picture), built exactly like a portrait entry:
+
+```json
+{ "kind": "worldmap", "file": "interface/world-map/maps/worldmap-smallmapchunks001-f000.png", "sha256": "<png sha256>", "bytes": 1234567,
+  "slice": "interface", "worldmap": { "path": "worldmap/smallmapchunks001.bmp" },
+  "legacy": { "width": 250, "height": 250, "rgbaSha256": "<Legacy RGBA sha256>" }, "review": "unreviewed" }
+```
+
+`map-zoomed` is the same with `"map-zoomed": { "path": "worldmap/map_zoomed.bmp" }` and a 365 × 365 `legacy`. An older reader refuses a pack that holds either (unknown kind), like `portrait`.
+
+| Part | Rule |
+| --- | --- |
+| `kind` | `worldmap` or `map-zoomed`; the entry's exact properties are the common ones (`file`, `sha256`, `bytes`, `slice`, `legacy`, `review`) and the property named like its kind, which holds `path` only. |
+| `path` | the original bitmap's path, lowercase, exactly `worldmap/<name>.bmp` with `<name>` of `[a-z0-9_-]` and at most 48 characters (the names come from entry 50 of the module's `worldmap/worldmap.mes`: the tile base name and `ZoomedName`, lowercased). The key of the entry, unique in the pack (`HdMapKey`; a path is one entry whichever kind it names). A name outside the pattern has no HD entry and draws the BMP. |
+| `legacy` | the bitmap's decoded pixels as `Arcanum.Data.Characters.PortraitBitmap` reads them (the same reader as a portrait: an uncompressed 1/4/8/24-bit Windows bitmap, top row first, alpha 255): width, height and the SHA-256 of the RGBA. **A `worldmap` entry is 250 × 250 and a `map-zoomed` entry 365 × 365**; any other size is refused when the pack opens. A bitmap another game version or a mod replaced is `SourceMismatch` and draws the BMP. |
+| ratio | the HD file is exactly `Scale × Legacy size`, so the integer ratio is the **pack's recorded `scale`** (2 or 4): a tile is a multiple of 250 (500 or 1000), the continent picture a multiple of 365 (730 or 1460). There is no per-entry ratio, so the one texture machinery (`HdInterfaceTexture`, the device cache) serves these entries unchanged. The map textures claim no device scale, so they draw from the mip chain (trilinear) into their rectangle and not from an area-resampled copy. Cost: an HD tile at 4× is 1000 × 1000 pixels (about 5 MB with mips) and the window's textures are kept while it is open, so up to about 450 MB for the 64 tiles; the device cache holds the converted tiles so the first draw only uploads. |
+| `slice` | a slice whose kinds include `interface` (the pack's `interface` slice): a map bitmap is interface art for the alpha rule, so the slice's Legacy alpha applies and the HD file is **fully opaque** (a map has no alpha). No new slice or recipe change is needed. |
+| HD file | the pack's one PNG profile (8-bit RGBA). Taken as it is: no registration or lock. |
+| key | carried as an `HdSpriteKey` (hash of the path, `View` 0, group, frame and palette 0), so the pack's lookup, file checks and the device cache serve these entries like frames (`HdPack.ResolveSprite`, `CheckPrepared`, `InterfaceSprites`); `HdEntryKind.WorldMap` and `HdEntryKind.MapZoomed`. The review tool (`HdReview`) lists sprites only and leaves them as they are. |
+
+The viewer (`WorldMapHd.Texture`) makes every tile and the continent texture from the bitmap's own pixels and keeps its size (250 or 365), so the draw rectangles, the dots, the hover boxes and
+the clicks stay in the original's coordinates; with the HD setting on and an entry for that bitmap it draws the redraw into the same rectangle (`Map_Zoomed` x4 = 1460 × 1460 into its 365 × 365),
+per file, otherwise the BMP. Import: `hd_pack.py maps-plan` writes the plan (kind `arcanum-steamwoven-hd-map-plan`) from a folder of the pictures (`<base>001.png` .. `064.png` at `250 × scale`, `map_zoomed.png` at
+`365 × scale`), the importer (`hd-interface-import --plan`) checks each picture against the bitmap it reads from the game and writes the entries into a staging pack (a map plan replaces only the bitmaps it names;
+the pack's sprites, portraits and other maps stay), and the update goes in with `apply --add-new` ([workflow](../workflow/hd-pack.md#world-map-pictures-arc-render-3079)); every step has a dry run.
+
 ## Device budget file
 
 `HdDeviceBudget` / `HdDeviceBudgetCodec` read the per-device HD limits that the contract

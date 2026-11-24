@@ -132,6 +132,24 @@ public partial class TerrainViewerApp
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.ChangeExtension(lensShot, ".lens.png"));
                 }
+                // ARC-RENDER-3079: the 64 tiles and the continent picture keep the bitmaps' own sizes whatever the HD setting (the draws go into the original rectangles, so the dots, the hover box and the
+                // clicks stay in the original's coordinates); with the HD setting on and the pack holding an entry for a bitmap that texture draws the redraw, otherwise the original pixels.
+                var mapHdProblems = new List<string>();
+                int mapHdTextures = 0, mapHdDrawing = 0;
+                void CheckMapTexture(string name, Texture2D? texture, int side)
+                {
+                    if (texture is null) { mapHdProblems.Add($"{name}: no texture"); return; }
+                    if (texture.GetWidth() != side || texture.GetHeight() != side) { mapHdProblems.Add($"{name}: {texture.GetWidth()}x{texture.GetHeight()}, expected {side}x{side}"); return; }
+                    if (texture is HdInterfaceTexture) mapHdTextures++;
+                    if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } mapPack) return;
+                    var (ok, detail) = WorldMapHd.Check(texture, mapPack, side);
+                    if (!ok) mapHdProblems.Add($"{name}: {detail}");
+                    else if (detail == "HD") mapHdDrawing++;
+                }
+                for (var tileIndex = 0; tileIndex < artLook.Tiles.Count; tileIndex++) CheckMapTexture($"tile {tileIndex}", artLook.Tiles[tileIndex], AreaWorldMapArtLayout.TileSize);
+                if (artLook.Zoomed is not null) CheckMapTexture("continent picture", artLook.Zoomed, AreaWorldMapArtLayout.ZoomedSize);
+                Require(mapHdProblems.Count == 0, "the world-map bitmaps keep their sizes and draw HD where the pack has an entry: " + string.Join("; ", mapHdProblems.Take(4)));
+                GD.Print($"ARC-RENDER-3079 native-smoke worldmap-hd PASS tiles={artLook.Tiles.Count} hd-capable={mapHdTextures} drawing-hd={mapHdDrawing} hd={InterfaceHd.Enabled} pack={(InterfaceHd.Pack?.Id ?? "-")}");
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
                 await WorldMapWindowArtAsync("worldmap", artView);
                 // ARC-UI-133 (WM36): through the real pointer route (so an input layer over the hole would be seen), a left release in the PC lens closes the

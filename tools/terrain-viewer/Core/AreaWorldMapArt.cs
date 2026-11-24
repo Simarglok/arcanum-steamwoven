@@ -329,6 +329,13 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
 {
     /// <summary>ARC-UI-083: <c>Map_Zoomed.bmp</c> (365 × 365, 8 bit), the continent view's picture.</summary>
     public byte[]? Zoomed { get; init; }
+    /// <summary>ARC-RENDER-3079: the module's tile base name (entry 50 of <c>worldmap/worldmap.mes</c>), the key of the HD pack's <c>worldmap</c> entries; null when the set did not read.</summary>
+    public string? TileBaseName { get; init; }
+    /// <summary>ARC-RENDER-3079: the lowercase bitmap path of the continent picture (<c>worldmap/&lt;ZoomedName&gt;.bmp</c>), the key of the HD pack's <c>map-zoomed</c> entry; null without a continent picture.</summary>
+    public string? ZoomedPath { get; init; }
+    /// <summary>ARC-RENDER-3079: the bitmap path of tile <paramref name="index"/> (column + 8 × row), or null when the base name is unknown.</summary>
+    public string? TilePathOf(int index) => TileBaseName is { } name
+        ? AreaWorldMapArtLayout.TilePath(name, index % AreaWorldMapArtLayout.TileColumns, index / AreaWorldMapArtLayout.TileColumns) : null;
     /// <summary>ARC-UI-083: the texts of <c>mes/worldmap.mes</c> the window uses (<see cref="TextNumbers"/>).</summary>
     public IReadOnlyDictionary<int, string> Texts { get; init; } = new Dictionary<int, string>();
     /// <summary>ARC-UI-083: the longitude and latitude offsets of the readouts (entry 20 of <c>worldmap/worldmap.mes</c>, WM4).</summary>
@@ -402,10 +409,10 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         using var stack = opened.Stack!;
         var art = AreaInterfaceArt.Load(stack, AreaWorldMapArtLayout.LoadedArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToList();
-        var tiles = ReadTiles(stack, out var tileDetail, out var zoomed, out var offsets);
+        var tiles = ReadTiles(stack, out var tileDetail, out var zoomed, out var offsets, out var baseName, out var zoomedPath);
         var texts = ReadTexts(stack);
         return new(art, tiles, $"art {art.Count - failed.Count}/{art.Count} read{(failed.Count == 0 ? "" : " (" + string.Join("; ", failed) + ")")}; {tileDetail}; texts {texts.Count}/{TextNumbers.Count}")
-            { Zoomed = zoomed, Texts = texts, Offsets = offsets };
+            { Zoomed = zoomed, Texts = texts, Offsets = offsets, TileBaseName = baseName, ZoomedPath = zoomedPath };
     }
 
     private static Dictionary<int, string> ReadTexts(ContentStack stack)
@@ -419,9 +426,9 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         return texts;
     }
 
-    private static IReadOnlyList<byte[]?> ReadTiles(ContentStack stack, out string detail, out byte[]? zoomed, out (int, int) offsets)
+    private static IReadOnlyList<byte[]?> ReadTiles(ContentStack stack, out string detail, out byte[]? zoomed, out (int, int) offsets, out string? baseName, out string? zoomedPath)
     {
-        zoomed = null; offsets = default;
+        zoomed = null; offsets = default; baseName = null; zoomedPath = null;
         if (ContentPhase.Candidate(stack, MesPath, ContentLoadPhase.ModuleLoaded) is not { } candidate) { detail = MesPath + " missing"; return []; }
         var read = stack.Read(candidate);
         if (read.Status != ContentReadStatus.Read || read.Bytes is not { } mesBytes) { detail = $"{MesPath} {read.Status}"; return []; }
@@ -431,6 +438,7 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         if (AreaWorldMapTileSet.Parse(Encoding.Latin1.GetString(entry.Bytes.Span)) is not { } set
             || set.Columns != AreaWorldMapArtLayout.TileColumns || set.Rows != AreaWorldMapArtLayout.TileRows)
         { detail = $"{MesPath} entry {TileEntry} is not an 8 x 8 tile set"; return []; }
+        baseName = set.BaseName;
         var tiles = new byte[]?[set.Columns * set.Rows];
         var bad = 0;
         for (var row = 0; row < set.Rows; row++)
@@ -443,7 +451,8 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
             }
         detail = $"tiles {tiles.Length - bad}/{tiles.Length} read";
         if (set.ZoomedName is { } zoomedName && zoomedName.IndexOfAny(['/', '\\']) < 0 && !zoomedName.Contains("..", StringComparison.Ordinal) && stack.Resolve($"worldmap/{zoomedName.ToLowerInvariant()}.bmp").Winner is { } zoomedFile && zoomedFile.Length <= MaxZoomedBytes
-            && stack.Read(zoomedFile) is { Status: ContentReadStatus.Read, Bytes: { } zoomedBytes } && IsBitmap(zoomedBytes, AreaWorldMapArtLayout.ZoomedSize)) zoomed = zoomedBytes;
+            && stack.Read(zoomedFile) is { Status: ContentReadStatus.Read, Bytes: { } zoomedBytes } && IsBitmap(zoomedBytes, AreaWorldMapArtLayout.ZoomedSize))
+        { zoomed = zoomedBytes; zoomedPath = $"worldmap/{set.ZoomedName!.ToLowerInvariant()}.bmp"; }
         detail += zoomed is null ? "; no continent picture" : "; continent picture read";
         return tiles;
     }
