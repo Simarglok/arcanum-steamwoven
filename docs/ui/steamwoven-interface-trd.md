@@ -268,6 +268,7 @@ Part kinds:
 | 5. Parts | owner in Codex, per batch | raw generations | `local/steamwoven-ui/outbox/` |
 | 6. Fit | agent tool ([#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459)) | masters | `local/steamwoven-ui/masters/` |
 | 6b. Assemble | agent tool ([#2972](https://github.com/Simarglok/arcanum-steamwoven/issues/2972), [page](steamwoven-kit-assembly.md)) | clean base plus placed details baked into the HD frame of the original ART, one frame per original frame with its state | local |
+| 6c. Pack plan | agent tool ([#3077](https://github.com/Simarglok/arcanum-steamwoven/issues/3077), `pack_plan.py`, [page](steamwoven-kit-assembly.md#from-assembled-frames-to-the-pack-arc-ui-3077)) | the importer plan and the grey alpha masks of the assembled frames, written next to them from the assembly records; then `hd_pack.py stage`, `plan`, `apply` ([workflow](../workflow/hd-pack.md#kit-assembled-frames-in-the-pack-arc-ui-3077)) | local |
 | 7. Look check | owner | per-batch composite | thread only |
 | 8. Bake | agent tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460), `tools/steamwoven_ui/bake.py`) | four step sets | `local/steamwoven-ui/baked/<step>/`, local only (SWI-PRV-4) |
 | 9. Runtime | agent ([#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)) | composed interface | code in git |
