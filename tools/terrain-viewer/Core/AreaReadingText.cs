@@ -6,8 +6,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// 1 of the 1280 × 800 and 1920 × 1080 handhelds: Garmond8 (the newspaper masthead's three small lines, size 8) and Garmond6 (size 6; no
 /// installed text uses it, a markup font number may name it). The rule (owner decision 2026-11-12: whole numbers only): the line is drawn with a
 /// <b>text-only</b> whole factor, the smallest that reaches 9 px (<see cref="AreaUiScale.TextOnlyFactor"/>: Garmond8 → 16 px, Garmond6 → 12 px);
-/// the window art keeps the screen factor. The viewer's diagnostic panel draws these lines with its fallback font at that size; a later drawing
-/// with the original fonts applies the same factor to the glyphs. A font at or above 9 px is drawn at its own size times the screen factor.
+/// the window art keeps the screen factor. The viewer's diagnostic panel draws these lines with its fallback font at that size; the original-look window
+/// (ARC-UI-1462) draws those lines with Garmond9 instead (<see cref="ShownFont"/>; the telegram's printed legend stays Garmond6), as the factor does not fit its printed art. A font at or above 9 px is drawn at its own size times the screen factor.
 /// </summary>
 public static class AreaReadingText
 {
@@ -37,4 +37,18 @@ public static class AreaReadingText
         var shown = nominal * factor * AreaUiScale.TextOnlyFactor(nominal, factor);
         return Math.Clamp(shown, AreaUiScale.MinimumTextPx, Math.Max(AreaUiScale.MinimumTextPx, MaximumLinePx * factor));
     }
+
+    /// <summary>ARC-UI-1462: Garmond9, the next size of the same Garmond family the newspaper text is drawn in. In the original-look window (<see cref="AreaReadingArtLayout"/>) a line of Garmond8 that would be
+    /// under <see cref="AreaUiScale.MinimumTextPx"/> (the newspaper masthead's "Price" lines and tagline) is drawn with it instead of the original's own glyphs multiplied by the text-only factor: the printed
+    /// masthead band is 13 px tall, so glyphs doubled to 16 px strike through the rules (checked on the real art at screen factor 1).</summary>
+    public const int SubstituteFont = 483;
+
+    /// <summary>Garmond6 (481): the telegram's printed form legend and fine print. It stays the original's own glyphs (6 px) at every screen factor: its lines sit in printed boxes sized for it, and neither doubled
+    /// glyphs nor Garmond9 fit them (owner decision 2026-11-15, issue #1462); the telegram's message is Courier10.</summary>
+    public const int PrintedLegendFont = 481;
+
+    /// <summary>The font art a line of font <paramref name="fontArt"/> is drawn with at the screen factor <paramref name="screenFactor"/> in the original-look window: <see cref="SubstituteFont"/> when the font's own
+    /// size at that factor is under <see cref="AreaUiScale.MinimumTextPx"/>, else the font itself (a font whose size is not in <see cref="FontPx"/>, and <see cref="PrintedLegendFont"/>, are never replaced).</summary>
+    public static int ShownFont(int fontArt, int screenFactor) =>
+        fontArt != PrintedLegendFont && FontPx.TryGetValue(fontArt, out var size) && size > 0 && size * Math.Max(1, screenFactor) < AreaUiScale.MinimumTextPx ? SubstituteFont : fontArt;
 }
