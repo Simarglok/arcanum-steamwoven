@@ -157,6 +157,9 @@ class GlyphCellsTest(unittest.TestCase):
             with redirect_stderr(io.StringIO()):
                 self.assertEqual(gc.main(["cells", str(root / "f.png"), str(root / "x.png"), "--scale", "0"]), 2)
                 self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "x.png"), "--plate-units", "40"]), 2)
+                self.assertEqual(gc.main(["pressed", str(root / "p.png"), str(root / "x.png"), "--plate-units", "0"]), 2)
+                self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "x.png"), "--shadow", "0.5", "--sigma", "0"]), 2)
+                self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "x.png"), "--offset", "0.2"]), 2)
 
     def test_enclosed_hole_is_regularized_to_a_circle_and_a_small_eye_is_kept(self) -> None:
         ringed = frame(radius=9.0, hole=3.2)
@@ -187,6 +190,13 @@ class GlyphCellsTest(unittest.TestCase):
         self.assertFalse(any(eye_mask[y * 39 + x] for x, y in ((20, 18), (21, 18), (20, 19), (21, 19))), "the eye stays a hole")
         speck_mask, _ = gc.glyph_mask(gc.lab_grid(speck))
         self.assertTrue(speck_mask[17 * 39 + 20], "a speck is filled")
+        # a DARK enclosed hole of two cells is a speck and is filled (the older fill rule leaves dark holes alone), one of three cells stays a hole
+        for cells, filled in ((((20, 17), (21, 17)), True), (((20, 17), (21, 17), (22, 17)), False)):
+            dark = frame(radius=8.0)
+            for x, y in cells:
+                dark.data[(y * 39 + x) * 4:(y * 39 + x) * 4 + 3] = bytes((5, 5, 5))
+            dark_mask, _ = gc.glyph_mask(gc.lab_grid(dark))
+            self.assertEqual(all(dark_mask[y * 39 + x] for x, y in cells), filled, f"{len(cells)} dark cells")
 
     def test_union_of_masks_reaches_the_rim_only_with_the_wider_radius(self) -> None:
         far = frame(radius=3.0, centre=(34.0, 19.5))  # its tip lies beyond the dome's radius

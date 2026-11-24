@@ -9,7 +9,7 @@ picture and not a dither to smooth away. The kit's glyph keeps that and redraws 
 * **cells**: every cell of the 39 x 39 grid is one of the two checker tones by the original's own parity (the phase read from the frame); a tone is the local colour of that kind
   of cell in the ORIGINAL (a window of 3 x 3 cells, grown when it holds none), so the contrast of the cells in each state (idle, hover, pressed) is the original's and the glyph keeps
   its shading (the shield's brass bar, the key's hole, the hover glow);
-* **two looks**: `flat` (crisp square cells, a soft-edged silhouette) and `bevel` (the same with a thin bevel: a light edge on the upper left, a dark one on the lower right, as the
+* **two looks**: `flat` (crisp square cells, a soft-edged silhouette; the pilot's look) and `bevel` (the same with a thin bevel, dropped by the owner in round four: a light edge on the upper left, a dark one on the lower right, as the
   kit's light falls);
 * **tone** per state against the plate by numbers: the glyph is then shifted as one (the L*a*b* mean over its cells) so that its brightness over the kit plate's dome equals the ORIGINAL's
   over its own dome (`glyph_tone.py`, `--stat mean` because the cells are drawn now).
@@ -21,7 +21,7 @@ picture and not a dither to smooth away. The kit's glyph keeps that and redraws 
 
 `mask` prints the glyph's mask (rows of # and .) and its centroid in units; `cells` writes the glyph canvas, the whole 39-unit frame at `--scale` px per unit (alpha is the
 silhouette, nothing else is drawn), so a layout places it at 0,0 and the glyph lies where the ORIGINAL's does; `plate` writes the kit plate master centred on a 39-unit canvas
-at the same scale, with a soft shadow in its alpha (the original's brass rim has a soft shadow). Standard library only; exit 0, 2 = an input could not be used.
+at the same scale (38.6 units across by default, filling the socket, its last unit a little darker; an optional soft shadow in the alpha with `--shadow`); `pressed` writes the plate's pressed look from its idle canvas. Standard library only; exit 0, 2 = an input could not be used.
 """
 from __future__ import annotations
 
@@ -393,10 +393,12 @@ def bevel(image: "pngio.Image", scale: int) -> None:
 def plate_canvas(plate: "pngio.Image", scale: int = 4, plate_units: float = 38.6, shadow: float = 0.0, sigma_units: float = 0.45,
                  offset_units: tuple[float, float] = (0.2, 0.3), edge_dark: float = 0.4) -> "pngio.Image":
     """The kit plate master brought to `plate_units` across and centred on the 39-unit canvas (`scale` px per unit): by default it fills the socket as the original's plate does (38.6 units,
-    the rim's last unit softened to a darker edge by `edge_dark`, a soft shadow in the alpha as the original's dark outer ring). With `shadow` above 0 a soft dark shadow (its alpha `shadow`,
+    the rim's last unit softened to a darker edge by `edge_dark`, no shadow). With `shadow` above 0 a soft dark shadow (its alpha `shadow`,
     blurred by `sigma_units`, moved by `offset_units`) lies under it in the alpha, beyond the plate's edge (it needs a plate smaller than the canvas, or the frame's box cuts it)."""
     if not 0 < plate_units <= GRID:
         raise CellsError(f"--plate-units {plate_units} must be above 0 and at most {GRID}")
+    if sigma_units <= 0 or shadow < 0 or edge_dark < 0:
+        raise CellsError("--sigma must be above 0; --shadow and --edge-dark must not be negative")
     size = GRID * scale
     target = max(1, int(round(plate_units * scale)))
     resized = assemble.resample(plate, target, target)
@@ -454,6 +456,8 @@ def ramp(table: tuple, r: float) -> float:
 def pressed_plate(idle: "pngio.Image", scale: int = 4, plate_units: float = 38.6) -> "pngio.Image":
     """The plate's pressed look from its idle canvas: the original's rule (see PRESSED_SHADOW): the whole plate darker toward the rim and an inner shadow on the upper left. The radius
     is taken in the original's units, so the rule follows the plate's size (`plate_units` is the diameter the idle canvas was made at)."""
+    if not 0 < plate_units <= GRID:
+        raise CellsError(f"--plate-units {plate_units} must be above 0 and at most {GRID}")
     size = GRID * scale
     if idle.w != size or idle.h != size:
         raise CellsError(f"the idle plate canvas is {idle.w} x {idle.h} px, not {size} x {size} (39 units at {scale} px)")
@@ -531,7 +535,9 @@ def main(argv: list[str] | None = None) -> int:
             frame = pngio.read(args.frame)
             frames = []
             for spec in args.mask_frame or []:
-                path, _, radius = spec.partition(":")
+                path, colon, radius = spec.rpartition(":")
+                if not colon or not radius.replace(".", "", 1).isdigit():
+                    path, radius = spec, ""
                 frames.append((pngio.read(path), float(radius) if radius else DOME_RADIUS))
             image, info = render(frame, args.look, args.scale, mask_frames=frames or None, round_holes=args.round_holes)
             if args.plate:
@@ -540,7 +546,10 @@ def main(argv: list[str] | None = None) -> int:
             pngio.write(args.out, image)
             print(json.dumps(info) if args.json else f"GLYPH CELLS {args.look}: {info['cells']} cells, centroid {info['centroid_units'][0]:.2f},{info['centroid_units'][1]:.2f} units -> {args.out}")
         elif args.command == "plate":
-            ox, oy = (float(v) for v in args.offset.split(","))
+            offset = args.offset.split(",")
+            if len(offset) != 2:
+                raise CellsError(f"--offset {args.offset!r} is not X,Y in units")
+            ox, oy = (float(v) for v in offset)
             pngio.write(args.out, plate_canvas(pngio.read(args.plate_master), args.scale, args.plate_units, args.shadow, args.sigma, (ox, oy), args.edge_dark))
             print(f"GLYPH CELLS plate canvas -> {args.out}")
         else:
