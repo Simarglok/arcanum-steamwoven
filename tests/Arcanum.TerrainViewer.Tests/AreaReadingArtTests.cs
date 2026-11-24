@@ -48,6 +48,7 @@ public sealed class AreaReadingArtTests
         Assert.AreEqual(AreaReadingArtLayout.White, AreaReadingArtLayout.Colour(WrittenSubtype.Plaque));
         Assert.AreEqual(AreaReadingArtLayout.Black, AreaReadingArtLayout.Colour(WrittenSubtype.Book));
         Assert.IsFalse(AreaReadingArtLayout.RequiredArtNumbers.Contains(817) || AreaReadingArtLayout.RequiredArtNumbers.Contains(815), "the alternate newspaper's arts are optional");
+        Assert.IsFalse(AreaReadingArtLayout.RequiredArtNumbers.Contains(AreaReadingText.SubstituteFont), "Garmond9, the small fonts' substitute at screen factor 1, is optional (ARC-UI-1462)");
     }
 
     [TestMethod]
@@ -341,6 +342,6 @@ public sealed class AreaReadingArtTests
     {
         var texts = WrittenTexts.Create(Mes("{100}{12 A}{101}{1c B}{102}{12 C}{103}{Plain}"), Mes("{200}{9 note}"), Mes("{0}{482 x}{1}{5 y}"), null, Mes("{500}{40c p}"));
         CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 482 }, texts.MarkupFonts().ToArray(), "the note's file has no markup; a message with no prefix is font 0 and left out");
-        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 301, 479, 480, 481, 482, 484, 485, 497, 815, 840 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 301, 479, 480, 481, 482, 483, 484, 485, 497, 815, 840 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
     }
 }

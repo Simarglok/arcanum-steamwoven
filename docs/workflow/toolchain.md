@@ -463,6 +463,12 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   The viewer's start line `ARC-DEV-392 map-cache folder=...` names the folder, and the load's `ARC-WORLD-031 load stage=transitions` line says `source=memory|device|content|content+stored`.
   `ARC_MAP_CACHE=0` (`--env ARC_MAP_CACHE=0` on a smoke) turns only this store off, `ARC_AREA_RESIDENT=0` turns it off with the resident stores, `ARC_MAP_CACHE_DIR=<folder>`
   names another folder; a smoke drops the owner's `ARC_*` variables, so pass them with `--env`. Deleting the folder only costs one read; at most 96 files are kept.
+- **Animated-light line (ARC-RENDER-3126).** With the probe on, the viewer prints one line a second on every map, lit or not (`lights=0` without animated lights; not in a smoke):
+  `ARC-DEV-367 perf light-anim switch=on|off lights=N frames=F fps-avg=A fps-engine=E pushes=P push-ms-total=T push-ms-max=M push-alloc-kib=K view-rebuilds=R view-ms-total=V view-ms-max=W gc=G0/G1/G2 t=MS`
+  (`lights` = the map's animated lights, `pushes` = the lighting views the animated lights pushed in the window, `push-*` the main-thread time and
+  managed bytes of `PushAreaAmbient` for them, which only stores the view; `view-*` the canvas's rebuilds of its visible view in the window (the lattice and body colours, made at the next draw, on the main thread) and `fps-avg` the frames counted in the window). `ARC_LIGHT_ANIM=0` is a diagnostic switch: the animation
+  time still runs but no new pose is pushed (`switch=off`); any other value or none keeps the default behaviour. It is read once at start.
+  `LightAnimationProbe` in `src/Arcanum.World`, tests `LightAnimationProbeTests`.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
@@ -937,6 +943,13 @@ reads no system pointer either (headless runs and the self-test's bootstrap apps
 test places the pointer. The hotkey bar smoke checks
 the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
 every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
+
+The bar smoke's first button hover (the Character button, `ARC-UI-018 bar smoke FAIL hover: '' frame 0` once in a rolling
+run, ARC-UI-3108) no longer trusts the hover state read right after the move: it waits up to 30 more frames, pushing the same
+motion again (nudged by a pixel and back), and prints `ARC-UI-3108 bar smoke Character hover seen after N extra frames`.
+The top bar HD check prints its own failing sentence (`ARC-UI-116 top bar HD smoke FAIL ...`) instead of the frontier
+fault's `(withheld)` (ARC-DEV-3093; the kit/Steamwoven bar smoke passes with the installed `interface-redraw-4x`, which
+carries the top bar frames, 2026-11-24).
 
 Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
 (mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.
