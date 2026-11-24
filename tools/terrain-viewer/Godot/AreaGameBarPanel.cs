@@ -306,19 +306,21 @@ public partial class AreaGameBarPanel : CanvasLayer
     private const string LookMeta = "bar_look", UnitSizeMeta = "bar_unit_size", KitMeta = "bar_kit";
 
     /// <summary>
-    /// ARC-UI-2461 (SWI-KIT-5, SWI-RUN-2): a bar button drawn as kit layers: the face part of the art the bar shows (the plate, or the lit face) and the overlay of its look, each the baked texture stretched to the button's own
-    /// rectangle, so the hit area, the ring and the sounds are the button's as before. A button with no face in the set, or whose textures do not load, keeps the pack's frame; one the kit drew before and no longer does gets it back.
+    /// ARC-UI-2461 (SWI-KIT-5, SWI-RUN-2): a bar button drawn as kit layers: the face part of the art the bar shows (the plate, or the lit face), over it the button's glyph (ARC-UI-3096) and the overlay of its look, each the
+    /// baked texture stretched to the button's own rectangle, so the hit area, the ring and the sounds are the button's as before. A button with no face or no glyph in the set, or whose textures do not load, keeps the pack's frame
+    /// (a plate without its symbol is never drawn); one the kit drew before and no longer does gets it back.
     /// </summary>
     private void ApplyKitButtons()
     {
         var set = _plan is { } plan && Visible ? SteamwovenKitStore.SetFor(plan.Layout.Step) : null;
-        foreach (var rect in _buttons.Values)
+        foreach (var (button, rect) in _buttons)
         {
+            var glyph = rect.GetNodeOrNull<TextureRect>("KitGlyph");
             var overlay = rect.GetNodeOrNull<TextureRect>("KitOverlay");
             List<Texture2D>? textures = null;
             if (set is not null && rect.HasMeta(ArtMeta) && rect.HasMeta(LookMeta) && rect.HasMeta(UnitSizeMeta))
             {
-                var layers = SteamwovenKitComposer.ButtonLayers(set, (int)rect.GetMeta(ArtMeta), (AreaBarButtonLook)(int)rect.GetMeta(LookMeta));
+                var layers = SteamwovenKitComposer.ButtonLayers(set, (int)rect.GetMeta(ArtMeta), (AreaBarButtonLook)(int)rect.GetMeta(LookMeta), button);
                 var loaded = layers.Select(layer => SteamwovenKitStore.Texture(set, layer.Id)).ToList();
                 if (loaded.Count > 0 && loaded.All(texture => texture is not null)) textures = [.. loaded.Select(texture => texture!)];
             }
@@ -327,14 +329,13 @@ public partial class AreaGameBarPanel : CanvasLayer
                 var size = (Vector2)rect.GetMeta(UnitSizeMeta);
                 rect.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; rect.StretchMode = TextureRect.StretchModeEnum.Scale;
                 rect.Texture = textures[0]; rect.Size = size; rect.SetMeta(KitMeta, true);
-                if (textures.Count > 1)
-                {
-                    if (overlay is null) rect.AddChild(overlay = new TextureRect { Name = "KitOverlay", MouseFilter = Control.MouseFilterEnum.Ignore, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale });
-                    overlay.Texture = textures[1]; overlay.Size = size; overlay.Visible = true;
-                }
+                glyph = KitLayer(rect, glyph, "KitGlyph", textures[1], size);
+                // The glyph comes before the overlay among the children, so the look's overlay lies over the symbol.
+                if (textures.Count > 2) { overlay = KitLayer(rect, overlay, "KitOverlay", textures[2], size); rect.MoveChild(overlay, rect.GetChildCount() - 1); }
                 else if (overlay is not null) overlay.Visible = false;
                 continue;
             }
+            if (glyph is not null) glyph.Visible = false;
             if (overlay is not null) overlay.Visible = false;
             if (!rect.HasMeta(KitMeta)) continue;
             // The kit drew it before: the pack's frame comes back.
@@ -348,11 +349,26 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
     }
 
-    /// <summary>ARC-UI-2461: the kit layers a button draws now (the face and the look's overlay), for the self-test; empty for a button the pack draws.</summary>
+    /// <summary>ARC-UI-3096: one stretched kit layer over a button's face, made on first use and shown with <paramref name="texture"/> at <paramref name="size"/>.</summary>
+    private static TextureRect KitLayer(TextureRect rect, TextureRect? layer, string name, Texture2D texture, Vector2 size)
+    {
+        if (layer is null) rect.AddChild(layer = new TextureRect { Name = name, MouseFilter = Control.MouseFilterEnum.Ignore, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale });
+        layer.Texture = texture; layer.Size = size; layer.Visible = true;
+        return layer;
+    }
+
+    /// <summary>ARC-UI-2461: the kit layers a button draws now (the face, the glyph and the look's overlay), for the self-test; empty for a button the pack draws.</summary>
     internal IReadOnlyList<Texture2D> KitButtonForSelfTest(AreaBarButton button) =>
         _buttons.TryGetValue(button, out var rect) && rect.HasMeta(KitMeta)
-            ? [.. new[] { rect.Texture, rect.GetNodeOrNull<TextureRect>("KitOverlay") is { Visible: true } overlay ? overlay.Texture : null }.Where(texture => texture is not null).Select(texture => texture!)]
+            ? [.. new[] { rect.Texture, KitLayerTexture(rect, "KitGlyph"), KitLayerTexture(rect, "KitOverlay") }.Where(texture => texture is not null).Select(texture => texture!)]
             : [];
+    /// <summary>ARC-UI-3096: two points of a button in window pixels through its transform, for the kit smoke's pixel readback: its middle (where a glyph stands) and one near its top-left corner (the plate only).</summary>
+    internal (Vector2 Middle, Vector2 Corner) KitButtonProbesForSelfTest(AreaBarButton button)
+    {
+        var rect = _buttons[button];
+        return (rect.GetGlobalTransform() * (rect.Size * 0.5f), rect.GetGlobalTransform() * (rect.Size * 0.12f));
+    }
+    private static Texture2D? KitLayerTexture(TextureRect rect, string name) => rect.GetNodeOrNull<TextureRect>(name) is { Visible: true } layer ? layer.Texture : null;
     private const ulong DownMinimumMs = 80;
     private readonly Dictionary<AreaBarButton, DownFeedback> _downFeedback = new()
     {
