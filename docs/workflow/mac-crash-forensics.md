@@ -1,18 +1,21 @@
 # Mac crashes during play: how to read them (ARC-DEV-2274)
 
-The owner's Mac (M4 Pro, 24 GB, macOS 27.2) has three WindowServer watchdog
-reports (2026-11-08 about 13:32, 2026-11-12 about 20:21 and 2026-11-15 about
-18:00 local time); the last two happened while the packaged game was open and
+The owner's Mac (M4 Pro, 24 GB, macOS 27.2) has four WindowServer watchdog
+reports (2026-11-08 about 13:32, 2026-11-12 about 20:21, 2026-11-15 about
+18:00 and 2026-11-21 about 14:13 local time); the last three happened while the packaged game was open and
 the 11-12 one ended in a panic. This page keeps the diagnosis so the next incident is read in
 minutes. The mitigation work is [#2273](https://github.com/Simarglok/arcanum-steamwoven/issues/2273)
 (viewer cap, "owner is playing" mode, panic forensics); the investigation is
-[#2274](https://github.com/Simarglok/arcanum-steamwoven/issues/2274).
+[#2274](https://github.com/Simarglok/arcanum-steamwoven/issues/2274); the fourth incident is
+[#3115](https://github.com/Simarglok/arcanum-steamwoven/issues/3115), and
+[`tools/local_dev/windowserver_report.py`](../../tools/local_dev/windowserver_report.py) reads a report's wait chain
+(see "How to read the next incident").
 
 ## Finding
 
 The game is **not the proximate cause**; it is the victim of a hang in the
-system. Our process-start rate may be a trigger (see the context below). In all
-three reports:
+system. Our process-start rate may be a trigger (see the context below). In the first
+three reports (the fourth, 2026-11-21, has the same signature: see "Fourth incident" below):
 
 1. `/Library/Logs/DiagnosticReports/.WindowServer-DATE.ips` (a hidden file; the
    JSON is cut off, so append the missing closing braces to parse it) says the watchdog found the
@@ -176,6 +179,74 @@ Recipe for any vanished process (replace the pid; `YYYY-MM-DD HH:MM:SS` is a few
 /usr/bin/log show --start 'YYYY-MM-DD HH:MM:SS' --end 'YYYY-MM-DD HH:MM:SS' --info --debug --predicate 'eventMessage CONTAINS "PID" AND (process == "runningboardd" OR process == "launchservicesd" OR process == "launchd")'
 ```
 
+## Fourth incident, 2026-11-21 (ARC-DEV-3115)
+
+Black screen, no input, forced power-button reboot (about 14:14; new boot 14:15:01); local time +04:00. Same signature as the
+three before; **the game is a victim, not the cause**.
+
+- 13:49:14 the packaged game started (Steamwoven rules, Crash Site area); 9 Ctrl+B reports 13:50-14:09. Its resource counters
+  stayed bounded (texture 206-430 MiB, video 261-476 MiB, working set 1.4-1.7 GB, 130 fds, no climb).
+- About 14:12:25 a freshly forked `Python` child (resident 49200 bytes, forked and not yet executed) entered an uninterruptible
+  kernel wait (`TH_WAIT|TH_UNINT`). Ancestry: `Python <- Python <- bash <- codex <- Codex (Aperitif) <- ChatGPT`, a shell
+  command of the Codex app, **not** our launch queue.
+- `runningboardd` (assertion call-out thread), `ArcanumQueue-*` (our menu-bar app), `com.docker.backend` and `spindump` sat in
+  the same uninterruptible wait on the **same wait event** as that child. The WindowServer main thread (`ws_main_thread`)
+  blocked on `runningboardd` (turnstile, 3 hops).
+- 14:13:19 watchdogd: "unresponsive work processor(s): WindowServer main thread, 40 seconds since last successful checkin" ->
+  `/Library/Logs/DiagnosticReports/.WindowServer-2026-11-21-141319.ips` (bug_type 409, displayState OFF).
+- 14:13:20 the game aborted: an Objective-C exception in `-[NSCGLSurface flushRect:]` under `NSOpenGLContext flushBuffer` (its
+  window-server connection went away), `Arcanum Steamwoven-2026-11-21-141322.ips`, SIGABRT; the same consequence as 11-12 and 11-15.
+- About 14:14:00 WindowServer was relaunched (pid 93747) but the system stayed wedged (airportd: "gRunLoop Health check NOT
+  alive"); the unified log stops at 14:14:18; no panic file (the forced reboot came before the userspace-watchdog panic).
+- The 14:09 Ctrl+B report ("periodic freeze with a location refresh, music restarts, camera re-centres") is game-side and
+  nothing ties it to the hang; it goes to the usual Ctrl+B triage.
+
+### Cross-incident comparison
+
+| Incident | Stuck forked child (rss 49200) and its origin | Fellow waiters | Game | Godot/dotnet | VM |
+|---|---|---|---|---|---|
+| 11-08 13:32 | zsh <- claude (Claude Code) | runningboardd | **not running** | 154 dotnet | 1.9 GB VM |
+| 11-12 20:21 | Python <- zsh <- claude | runningboardd, sysmond, spindump, replayd | yes | 16 dotnet | 1.5 GB VM |
+| 11-15 18:00 | python3.14 <- ... <- claude | runningboardd | yes | 0 | none |
+| 11-21 14:13 | Python <- bash <- codex (ChatGPT app) | runningboardd, ArcanumQueue, docker backend, spindump | yes | **0 (queue idle)** | 4.8 + 2.5 GB VMs |
+
+The first eight kernel frames of the stuck child are **identical in all four reports** (frame offsets 599200, 593904, 6429656,
+6429112, 6428256, 6506048, 746152, 160372), and `runningboardd`'s are identical too (..., 746152, 339328). Process counts
+616-874; 10-39 Claude Code CLI processes each time.
+
+### Hypotheses, ranked
+
+1. **macOS 27.2 kernel or RunningBoard deadlock around process creation (most likely).** A fork from an agent shell (Claude Code
+   or Codex) gets stuck before exec; the `runningboardd` assertion call-out waits on the same kernel event; WindowServer waits
+   on `runningboardd`; the watchdog kills WindowServer and the relaunched one wedges too. Evidence: 4 of 4 identical kernel
+   stacks, different spawning programs, one incident with no game at all, no GPU fault. The trigger probably scales with the
+   process-spawn rate (many agent threads running shells).
+2. **Memory pressure as an aggravator (possible, not proven).** 11-21 had two Virtualization VMs (7.3 GB resident), the Claude
+   renderer 2 GB and the game 2.1 GB: summed resident sizes 33 GB on a 24 GB machine (overcounts shared pages). No Jetsam
+   report near 14:13, so not a memory-exhaustion kill. 11-15 had 21 GB summed and no VM, so pressure is not required.
+3. **Parallel Godot smoke runs (ruled out as necessary).** On 11-21 the queue was idle (no Godot or dotnet process in the
+   stackshot), so the "owner is playing" mode of #2273 would not have helped.
+4. **GPU, Metal or OpenGL driver hang (unlikely).** WindowServer's main thread waits on `runningboardd`, not on IOGPU; no
+   GPU-restart report; the game's OpenGL abort comes after the watchdog fired.
+5. **Our game leaking resources (ruled out for 11-21).** Counters bounded over 20 minutes; 11-08 happened without the game.
+
+### Owner note, 2026-11-24
+
+No hang has happened while the agents (Claude Code, Codex) were off. macOS 27.2.1 has not yet been tested with agents on, so a
+fix there is neither confirmed nor ruled out.
+
+### Next steps (owner side unless noted)
+
+- At the next hang do **not** press the power button at once; wait about 3 minutes. The userspace watchdog then panics and
+  writes `panic-full-*.panic` with the kernel stack (as on 11-12), which Apple needs.
+- Right after the reboot: `sudo sysdiagnose -u -b -f ~/Desktop`, then a Feedback Assistant report (macOS, "system hang / WindowServer
+  watchdog") with the `.WindowServer-*.ips` files, the panic file and the sysdiagnose.
+- Install any macOS 27.2.x update (`softwareupdate --list` shows them, no sudo), then play with agents on and note the result here.
+- Optional: symbolicate the kernel frames with the Kernel Debug Kit for build 26B123 (free Apple developer download) to name the
+  kernel function.
+- Mitigation to decide (owner): hold shell-heavy agent work (Claude Code and Codex threads) while the owner plays, not only the
+  queue's own runs; the queue's playing mode covers only our queue (#3115 AC3, open).
+
 ## How to read the next incident
 
 System reports (`.WindowServer-*.ips` is hidden, so `-A`; also `panic-full-*`
@@ -194,7 +265,18 @@ ls -At ~/Library/Logs/DiagnosticReports | head
 /usr/bin/log show --start 'YYYY-MM-DD HH:MM:SS' --end 'YYYY-MM-DD HH:MM:SS' --style compact --predicate 'process == "WindowServer"'
 ```
 
-- In the `.WindowServer` stackshot, `stackshot.processByPid` holds each
+- Read the wait chain with the tool instead of by hand (it only reads the file and writes nothing; it repairs the cut-off JSON,
+  prints the WindowServer main-thread chain, every `TH_UNINT` thread with its ancestry, resident size, wait event and first kernel
+  frames, and marks the threads that share the wait event of the chain's last thread; `--frames N` sets how many kernel frames):
+
+  ```sh
+  python3 -B tools/local_dev/windowserver_report.py /Library/Logs/DiagnosticReports/.WindowServer-DATE.ips
+  ```
+
+  Its unit test uses a synthetic fixture only (`test_windowserver_report.py`); no real report is stored in git. The field names it
+  reads were taken by hand from the four reports; a missing field prints `?`. Check the tool's output against the raw report the
+  first time a new macOS version writes one.
+- By hand, in the `.WindowServer` stackshot, `stackshot.processByPid` holds each
   process with `threadById`, `turnstileInfo` (who blocks on whom) and
   `waitEvent`. Follow `blocked on` from the WindowServer main thread until the
   thread has no turnstile, then list every thread with the same `waitEvent`.
@@ -207,6 +289,6 @@ ls -At ~/Library/Logs/DiagnosticReports | head
 
 - Keep the number of simultaneous viewers and the process start rate low while
   the owner plays (#2273).
-- The owner can send the three `.WindowServer` stackshots and `sysdiagnose` to Apple through
+- The owner can send the four `.WindowServer` stackshots and `sysdiagnose` to Apple through
   Feedback Assistant (macOS 27.2, RunningBoard / process creation hang); this
   is an owner action.
