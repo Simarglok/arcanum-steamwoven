@@ -11,7 +11,7 @@ import unittest
 from tools.local_dev import windowserver_report as ws
 
 EVENT = [7001, 7002]
-FRAMES = [[0, 599200], [0, 593904], [0, 6429656], [0, 6429112], [0, 6428256], [0, 6506048], [0, 746152], [0, 160372], [0, 99]]
+FRAMES = [[0, 1101], [0, 1102], [0, 1103], [0, 1104], [0, 1105], [0, 1106], [0, 1107], [0, 1108], [0, 99]]
 
 
 def _thread(name: str, state: list[str], wait_event=None, wait_info: str = "", frames=None) -> dict:
@@ -119,6 +119,24 @@ class ReportTests(unittest.TestCase):
         assert start is not None
         self.assertEqual("601", ws.wait_chain(report, start)[-1].tid)
 
+    def test_chain_end_naming_a_thread_outside_the_report_is_flagged(self) -> None:
+        body = {"processByPid": {"1": _process("WindowServer", 0, 1, {
+            "1": _thread("ws_main_thread", ["TH_WAIT"], wait_info="thread 77: blocked on 0x1, 2 hops")})}}
+        self.assertIn("thread 77, which is not in the report: cut off?", ws.render(ws.build_report(body)))
+
+    def test_hex_thread_ids_are_not_read_as_decimal_zero(self) -> None:
+        body = {"processByPid": {"1": _process("WindowServer", 0, 1, {
+            "0": _thread("a", ["TH_WAIT"]),
+            "1": _thread("ws_main_thread", ["TH_WAIT"], wait_info="thread 0x1f: x")})}}
+        report = ws.build_report(body)
+        start = ws.main_thread(report)
+        assert start is not None
+        self.assertEqual(["1"], [thread.tid for thread in ws.wait_chain(report, start)])
+
+    def test_fallback_start_thread_is_announced(self) -> None:
+        body = {"processByPid": {"1": _process("WindowServer", 0, 1, {"3": _thread("renamed", ["TH_WAIT"])})}}
+        self.assertIn("no thread named ws_main_thread", ws.render(ws.build_report(body)))
+
     def test_missing_fields_are_printed_not_raised(self) -> None:
         report = ws.build_report({"stackshot": {"processByPid": {"5": {"threadById": {"6": {}}}}}})
         text = ws.render(report)
@@ -137,7 +155,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn("0: thread 500 'ws_main_thread' in WindowServer[400]", text)
         self.assertIn("2: thread 601 'RBAssertionManagerCallOut' in runningboardd[410]", text)
         self.assertIn("uninterruptible (TH_UNINT) threads: 3", text)
-        self.assertIn("kernel[599200,593904,6429656]", text)
+        self.assertIn("kernel[1101,1102,1103]", text)
         self.assertIn("ancestry: Python[-93270] <- Python[92] <- bash[91] <- codex[90] <- Codex Helper[80] <- launchd[1]; rss=49200", text)
         self.assertEqual(2, text.count("[same wait event as chain end]"))
         self.assertIn("distinct kernel signatures (first 3 frames) among them: 2", text)

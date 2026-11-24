@@ -29,6 +29,7 @@ DEFAULT_FRAMES = 8
 MAX_CHAIN = 32
 MAX_REPAIR_TRIES = 64
 MAX_ANCESTRY = 16
+THREAD_ID_PATTERN = r"thread\s+(\d+)\b(?!x)"  # decimal ids only ("thread 0x1f" is not read as 0)
 
 NAME_KEYS = ("procname", "name", "processName")
 PARENT_KEYS = ("parentPid", "ppid", "parentpid", "parent_pid")
@@ -113,13 +114,13 @@ def repair_json(text: str) -> tuple[Any, bool]:
     Returns (value, repaired). Raises ValueError when no cut point gives valid JSON."""
     try:
         return json.loads(text), False
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, RecursionError):
         pass
     candidates = _scan_closers(text)
     for end, closers in reversed(candidates[-MAX_REPAIR_TRIES:]):
         try:
             return json.loads(text[:end] + closers), True
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, RecursionError):
             continue
     raise ValueError("the report JSON cannot be repaired (no complete '},' cut point gives valid JSON)")
 
@@ -251,7 +252,7 @@ def wait_chain(report: Report, start: Thread) -> list[Thread]:
     seen = {start.tid}
     while len(chain) < MAX_CHAIN:
         current = chain[-1]
-        next_thread = next((index[tid] for tid in re.findall(r"thread\s+(\d+)", current.wait_text)
+        next_thread = next((index[tid] for tid in re.findall(THREAD_ID_PATTERN, current.wait_text)
                             if tid != current.tid and tid in index), None)
         if next_thread is None or next_thread.tid in seen:
             break
@@ -279,14 +280,20 @@ def render(report: Report, frames: int = DEFAULT_FRAMES) -> str:
     if start is None:
         out.append("  no WindowServer process in the stackshot")
     else:
+        if "ws_main_thread" not in start.name:
+            out.append("  note: no thread named ws_main_thread; starting from the first WindowServer thread")
         chain = wait_chain(report, start)
         for hop, thread in enumerate(chain):
             out.append(f"  {hop}: {_describe(thread, frames)}")
             if thread.wait_text:
                 out.append(f"     wait: {thread.wait_text}")
         last = chain[-1]
-        out.append(f"  ends at thread {last.tid} in {last.process}[{last.pid}]"
-                   + ("" if last.wait_text else " (it names no further thread)"))
+        known = {thread.tid for thread in report.threads()}
+        named = [tid for tid in re.findall(THREAD_ID_PATTERN, last.wait_text) if tid != last.tid]
+        missing = [tid for tid in named if tid not in known]
+        note = (" (it names no further thread)" if not last.wait_text
+                else f" (it waits on thread {', '.join(missing)}, which is not in the report: cut off?)" if missing and len(missing) == len(named) else "")
+        out.append(f"  ends at thread {last.tid} in {last.process}[{last.pid}]{note}")
     event = chain[-1].wait_event if chain else ""
     stuck = [thread for thread in report.threads() if thread.uninterruptible]
     out.append("")
