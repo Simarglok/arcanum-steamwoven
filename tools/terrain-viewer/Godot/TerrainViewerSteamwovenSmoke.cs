@@ -541,10 +541,13 @@ public partial class TerrainViewerApp
     }
 
     // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none.
-    private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null)
+    private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null, int? noteLine = null)
     {
         if (_areaSession is not { } session || _readingData?.Data is not { } data) return null;
-        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || p.Value.Subtype == (int)only))
+        // ARC-UI-2765: a note named by its start line (a local capture) is read from the text file, whatever prototype or script opens it.
+        if (noteLine is { } line) return session.QueryWrittenDocument(new((int)WrittenSubtype.Note, line), data.Texts) is { Readable: true } named ? named : null;
+        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell)
+            .Where(p => ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || p.Value.Subtype == (int)only))
             .Select(p => (p.Value.Subtype, Document: session.QueryWrittenDocument(p.Value, data.Texts))).Where(p => p.Document is { Readable: true, Body.Count: > 0 })
             .OrderBy(p => p.Subtype != (int)WrittenSubtype.Book).Select(p => p.Document).FirstOrDefault();
     }
@@ -565,6 +568,9 @@ public partial class TerrainViewerApp
     private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
         for (var wait = 0; wait < 1800 && (_barterData is null || _readingData is null); wait++) { AdoptBarterData(); AdoptReadingData(); await frames(1); }
+        // ARC-UI-2765: a local census of the note address and signature rule (counts and prototype numbers only), and ARC_AREA_READING_NOTE_LINES=A,B captures the notes with those start lines as reading-note-N.
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_CENSUS") is { Length: > 0 } censusFile) ReadingNoteCensus(censusFile);
+        var noteLines = (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_LINES") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(part => int.TryParse(part, out var n) ? n : -1).Where(n => n >= 0).ToArray();
         SteamwovenWindowProbe[] windows =
         [
             new("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody, SteamwovenBackdropFamily.Inventory),
@@ -583,6 +589,8 @@ public partial class TerrainViewerApp
             .. new[] { (WrittenSubtype.Note, "letter"), (WrittenSubtype.Newspaper, "newspaper"), (WrittenSubtype.Telegram, "telegram"), (WrittenSubtype.Plaque, "plaque") }.Select(kind =>
                 new SteamwovenWindowProbe("reading-" + kind.Item2, () => { if (SteamwovenReading(kind.Item1) is { } document) OpenReading(document, "steamwoven", replaceWindows: true); }, () => ReadingOpen, CloseReadingByPlayer,
                     () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading, SteamwovenBackdropFamily.Reading, Optional: true)),
+            .. noteLines.Select(line => new SteamwovenWindowProbe("reading-note-" + line, () => { if (SteamwovenReading(WrittenSubtype.Note, line) is { } document) OpenReading(document, "steamwoven", replaceWindows: true); },
+                () => ReadingOpen, CloseReadingByPlayer, () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading, SteamwovenBackdropFamily.Reading, Optional: true)),
             new("premade", () => SteamwovenOpenMenuWindow(420, require), () => _mainMenu is { Window: AreaMenuWindow.PickCharacter }, () => EndMainMenu("steamwoven smoke"),
                 () => _mainMenuPanel is { PremadeArtMode: true } m ? (m.PremadeArtForSelfTest.Position, m.PremadeArtForSelfTest.Scale.X) : null, ZoneScreen),
             new("newcharacter", () => SteamwovenOpenMenuWindow(421, require), () => _mainMenu is { Window: AreaMenuWindow.NewCharacter }, () => EndMainMenu("steamwoven smoke"),
