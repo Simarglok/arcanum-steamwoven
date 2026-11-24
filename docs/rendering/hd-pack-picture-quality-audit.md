@@ -29,8 +29,8 @@ The numbers are a proxy; every category was also looked at in the composites (sa
 
 | Category | Arts | Pack frames | Contour recall (median, arts below 0.85) | Colour (dE median, dL median) | Verdict |
 | --- | ---: | ---: | --- | --- | --- |
-| Spell and skill icons (#2484) | 88 | 88 | 0.97, 6 | 9.7, -1.8 | faithful, richer texture, no dither, no halo |
-| Item-type, critter, status, other icons (#2485) | 162 | 151 | 0.97, 7 (+ 5 of 12 indicator arts) | 9.3, -1.0 | faithful except named exceptions |
+| Spell and skill icons (#2484) | 88 | 88 | 0.97, 6 | 9.7, -1.8 | faithful, richer texture, no dither, no systematic halo |
+| Item-type, critter, status, other icons (#2485) | 162 | 151 | 0.97, 7 (+ 5 of 12 indicator arts) | 9.2, -1.0 | faithful except named exceptions |
 | Schematic record pictures (#2486) | 134 | 72 | 0.88, 20 | 17.8, -10.3 | shapes kept, tone and paper restyled; 62 without frame |
 | Cursors (#2487) | 12 | 0 | n/a | n/a | Legacy by design, nothing to compare |
 | Portraits (outside the kit) | 126 | 126 | 0.99, 0 | 7.0, -3.0 | faithful |
@@ -50,14 +50,13 @@ tiny). Defects found: **ghost bleed** on black backgrounds (faint outlines of ne
 `Ammo_Icon_Fuel`, `Ammo_Icon_Bullets`, `TechSkillIcon`, `E_EarthIcon`, `SocialIcon`, `CombatIcon`, `Cont_Junk`, `racedarkelficon`; 0.3 to 4 % of the
 background); the 37x24 ammo icons are soft. **Indicators** (turn-based, jump, waypoint, scroll lines): `tb_td` redraws the square grid dots as round dots with a
 blurred rim (recall 0.26), `ts_iso`, `jmp_td`, `wp_iso` thin lines are re-rendered softer (recall 0.33 to 0.60 on the line art; shapes read the same); there is
-no gain in HD for flat line art. 11 arts have no pack frame (8 scroll cursors, `scroll_not`, `BlockedShot`, `hoverover`). Halo: none (fringe lighter than
-interior at most +11 on 17 alpha arts; the dark fringe of the `Pen_*` arts is the original's own outline). Recommendation: **pack as is for the 135 arts, with
+no gain in HD for flat line art. 11 arts have no pack frame (8 scroll cursors, `scroll_not`, `BlockedShot`, `hoverover`). Halo: no systematic halo; the arts with partial alpha were checked (partial-alpha pixels against interior lightness): the dark fringe of the `Pen_*` arts is the original's own outline, a lighter fringe (up to +32 lightness) appears only on some frames of `CompassN` and on the dozen corner pixels of `SKL_Traps`. Recommendation: **pack as is for the 135 arts, with
 fixes** (clear the ghost background of the 10 arts above; leave the indicators and the 11 frameless arts **Legacy**, or **kit by rule** from the original's mask if the owner
 wants crisp lines); batch #2485 shrinks to those 21 arts or is closed.
 
 ### Schematic record pictures
 
-72 of 134 arts have a pack frame (the other 62 draw Legacy, see the gap census). Contour recall median 0.88 (3 at 0.95 or more, 48 at 0.85 to 0.95, 20 below;
+72 of 134 arts have a pack frame (the other 62 draw Legacy, see the gap census). Contour recall median 0.88 (3 at 0.95 or more, 49 at 0.85 to 0.95, 20 below, by art;
 `S_Miners_Helmet` 0.50 and a grey bar down its left edge). The objects keep their shapes but the redraw is a **restyle**: 66 of 72 are darker than the original by
 more than 8 lightness units (median dL -10.3, dE 17.8), the original's red and orange paper grid is replaced by a fine grey grid, detail is added. It looks
 good by itself and reads as a different paper. A pack where 72 pictures are restyled and 62 stay Legacy would look mixed on one screen. Recommendation:
