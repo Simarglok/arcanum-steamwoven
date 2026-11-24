@@ -91,6 +91,12 @@ class WorldMapUpscaleTests(unittest.TestCase):
         projected = wm.back_project(original, blotchy, 1)
         self.assertEqual(projected.shape, blotchy.shape)
         self.assertLess(wm.outline_check(original, projected)["mae"], before / 4)
+        saved = wm.STRIP
+        try:
+            wm.STRIP = 100  # several strips: the padded bicubic rows must leave no seam
+            self.assertTrue(np.array_equal(wm.back_project(original, blotchy, 1), projected))
+        finally:
+            wm.STRIP = saved
         self.assertTrue(np.array_equal(wm.back_project(original, blotchy, 0), blotchy))
         with self.assertRaises(SystemExit):
             wm.back_project(original, np.zeros((10, 10, 3), np.uint8))

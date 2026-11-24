@@ -228,7 +228,7 @@ draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwove
 turns the canvas weave of the parchment into a grid and the plain Lanczos picture is soft, so the picture takes the network only on strong ink lines and
 lettering and Lanczos everywhere else (still non-generative: a super-resolution network and a resampler, no text prompt). Plain `animevideov3` and the wider
 mask ("Blend B") are dropped; plain Lanczos is the fallback. The recipe is the script [`tools/hd_pack/world_map_upscale.py`](../../tools/hd_pack/world_map_upscale.py)
-(`blend` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
+(`blend`, `cut` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
 
 1. The 2000 x 2000 map is upscaled x4 with `realesrgan-ncnn-vulkan -n realesr-animevideov3 -s 4 -t 250` (the network picture) and with Pillow's Lanczos (the baseline).
 2. The mask is made on the original: Gaussian blur sigma 1.0, Canny 100/200, edge components under 30 pixels dropped (paper grain), dilation by an ellipse of radius 2
@@ -264,8 +264,7 @@ hatching of the sea beside the coasts (strokes 1 to 2 pixels wide) is caught by 
   wide or more); the mask is the old edge mask times the dilated cores (radius 3, feather sigma 1.0). Shoreline, trees, mountains and the stems of lettering are cores; the 1 to 2 pixel sea hatching, thin roads and grid lines are not, so they stay Lanczos
   without a zone map.
 
-**The final recipe is Blend A with the thickness gate and one back-projection (`world_map_upscale.py blend`).** Measured on the owner's map with the script (the numbers of the first table used a
-different mask definition for the weave row only; the other rows do not depend on it):
+**The final recipe is Blend A with the thickness gate and one back-projection (`world_map_upscale.py blend`).** Measured on the owner's map with the script (the canvas column is new and uses the mask of the final recipe for its flat zone, so Blend A reads 1.16 here):
 
 | Picture (x4) | MAE | Edge F1 (1 px / 2 px) | Blotch pixels (luma more than 60 from Lanczos) | Canvas strength vs Lanczos |
 | --- | ---: | --- | ---: | ---: |
@@ -276,7 +275,7 @@ different mask definition for the weave row only; the other rows do not depend o
 | **Final: Q with the thickness gate** | **1.77** | **0.986 / 0.997** | **0.03 %** | 1.20 |
 
 The canvas strength is the high-pass energy of flat paper and water (the mask is 0 there) over that of Lanczos; the original drawn at x4 with nearest pixels reads 1.27 and with bicubic 0.95, so the final
-picture is not stronger than the original's own canvas. Outline gates of the owner's decision: edge F1 at 1 px above the Lanczos baseline (0.986 against 0.965, met), canvas not stronger than the original (met), MAE and SSIM-style numbers next to the earlier rows (above).
+picture is not stronger than the original's own canvas. Outline gates of the owner's decision: edge F1 at 1 px above the Lanczos baseline (0.986 against 0.965, met), canvas not stronger than the original (met), MAE next to the earlier rows (above; the SSIM column exists only in the first model table).
 Lanczos stays the fallback. Cost of the fix: thin ornaments and hairline serifs of lettering get less of the network (mask coverage 0.136 against 0.27), the compass rose is softer than in Blend A; the lettering and coasts are as crisp as in Q.
 
 The 8000 x 8000 picture is cut by `world_map_upscale.py cut` into the 64 tiles `smallmapchunks001.png` .. `064.png` (1000 x 1000, row-major) and `map_zoomed.png` (1460 x 1460, Lanczos from the whole picture), with a `SHA256SUMS.txt`; `hd_pack.py maps-plan`, `stage` and `apply --add-new` put them into the installed pack

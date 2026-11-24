@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ARC-RENDER-3065: the HD world map recipe (docs/rendering/hd-world-town-map.md#world-map-one-picture-non-generative-upscale-ac3).
 
-Two commands, both on the player's own local picture (the assembled 2000 x 2000 world map); nothing of the original or of a result is stored in git.
+Three commands, all on the player's own local picture (the assembled 2000 x 2000 world map); nothing of the original or of a result is stored in git.
 
     blend   edge-masked blend of a `realesr-animevideov3` x4 picture (made by `realesrgan-ncnn-vulkan`, a non-generative
             super-resolution network) and a Lanczos x4 picture of the same map: the network wins on strong ink lines and
@@ -198,7 +198,7 @@ def cut_pictures(picture, out_dir: Path, scale: int = SCALE, tiles_per_side: int
     tile = 250 * scale
     if (height, width) != (tile * tiles_per_side, tile * tiles_per_side):
         raise SystemExit(f"the picture is {width}x{height}, expected {tile * tiles_per_side} square ({tiles_per_side} tiles of {tile})")
-    if out_dir.exists() and any(out_dir.iterdir()):
+    if out_dir.exists() and (not out_dir.is_dir() or any(out_dir.iterdir())):
         raise SystemExit(f"refusing to write into a folder that is not empty: {out_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
