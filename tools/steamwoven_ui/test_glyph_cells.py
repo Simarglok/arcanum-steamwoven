@@ -18,13 +18,13 @@ CENTRE = (21.5, 18.5)  # the glyph's centre in units (not the frame's centre: th
 RADIUS = 7.0
 
 
-def frame(bright=BRIGHT, dark=DARK, phase=0, radius=RADIUS) -> pngio.Image:
-    """A 39 x 39 frame: a uniform dome and a round glyph of the one-pixel checker (bright cells on the parity `phase`)."""
+def frame(bright=BRIGHT, dark=DARK, phase=0, radius=RADIUS, centre=CENTRE, hole=0.0) -> pngio.Image:
+    """A 39 x 39 frame: a uniform dome and a round glyph of the one-pixel checker (bright cells on the parity `phase`), with a round hole of `hole` units' radius (dome colour) in it."""
     image = pngio.Image(39, 39, bytearray(39 * 39 * 4))
     for y in range(39):
         for x in range(39):
             o = (y * 39 + x) * 4
-            inside = (x + 0.5 - CENTRE[0]) ** 2 + (y + 0.5 - CENTRE[1]) ** 2 <= radius ** 2
+            inside = (x + 0.5 - centre[0]) ** 2 + (y + 0.5 - centre[1]) ** 2 <= radius ** 2 and (x + 0.5 - centre[0]) ** 2 + (y + 0.5 - centre[1]) ** 2 > hole ** 2
             colour = (bright if (x + y) % 2 == phase else dark) if inside else DOME
             image.data[o:o + 4] = bytes((*colour, 255))
     return image
@@ -104,7 +104,7 @@ class GlyphCellsTest(unittest.TestCase):
             for x in range(138):
                 if (x + 0.5 - 69) ** 2 + (y + 0.5 - 69) ** 2 <= 69 ** 2:
                     master.data[(y * 138 + x) * 4:(y * 138 + x) * 4 + 4] = bytes((120, 90, 40, 255))
-        canvas = gc.plate_canvas(master, 4, 36.5)
+        canvas = gc.plate_canvas(master, 4, 36.5, shadow=0.55)
         self.assertEqual((canvas.w, canvas.h), (156, 156))
         self.assertEqual(alpha_at(canvas, 78, 78), 255)
         outside = [alpha_at(canvas, x, 78) for x in range(0, 78)]
@@ -150,11 +150,76 @@ class GlyphCellsTest(unittest.TestCase):
             pngio.write(root / "m.png", master)
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "p.png"), "--scale", "2"]), 0)
+                self.assertEqual(gc.main(["pressed", str(root / "p.png"), str(root / "q.png"), "--scale", "2"]), 0)
+                self.assertEqual(gc.main(["cells", str(root / "f.png"), str(root / "h.png"), "--mask-frame", str(root / "f.png") + ":18.5", "--round-holes"]), 0)
                 self.assertEqual(gc.main(["cells", str(root / "f.png"), str(root / "g.png"), "--scale", "2", "--plate", str(root / "p.png"), "--dome-frame", str(root / "f.png"), "--mask-frame", str(root / "f.png")]), 0)
             self.assertEqual(pngio.read(root / "g.png").w, 78)
             with redirect_stderr(io.StringIO()):
                 self.assertEqual(gc.main(["cells", str(root / "f.png"), str(root / "x.png"), "--scale", "0"]), 2)
                 self.assertEqual(gc.main(["plate", str(root / "m.png"), str(root / "x.png"), "--plate-units", "40"]), 2)
+
+    def test_enclosed_hole_is_regularized_to_a_circle_and_a_small_eye_is_kept(self) -> None:
+        ringed = frame(radius=9.0, hole=3.2)
+        mask, _ = gc.glyph_mask(gc.lab_grid(ringed))
+        holes = gc.enclosed_holes(mask)
+        self.assertEqual(len(holes), 1)
+        cx, cy, r = holes[0]
+        self.assertAlmostEqual(cx, CENTRE[0], delta=0.6)
+        self.assertAlmostEqual(cy, CENTRE[1], delta=0.6)
+        self.assertAlmostEqual(r, 3.2, delta=0.8)
+        plain, _ = gc.render(ringed, "flat", 4)
+        round_, info = gc.render(ringed, "flat", 4, round_holes=True)
+        self.assertEqual(len(info["round_holes"]), 1)
+        # a true circle: the alpha is 0 at the same radius in every direction (left, right, up, down of the centre), and 255 just outside it
+        px, py = CENTRE[0] * 4, CENTRE[1] * 4
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            inner = alpha_at(round_, int(px + dx * (r * 4 - 3)), int(py + dy * (r * 4 - 3)))
+            outer = alpha_at(round_, int(px + dx * (r * 4 + 4)), int(py + dy * (r * 4 + 4)))
+            self.assertEqual((inner, outer), (0, 255))
+        self.assertEqual(len(plain.data), len(round_.data))
+        # a small dark hole (the key's eye: darker than the dome) is kept, a one-cell speck of a bright glyph is filled
+        eyed = frame(radius=8.0)
+        for x, y in ((20, 18), (21, 18), (20, 19), (21, 19)):
+            eyed.data[(y * 39 + x) * 4:(y * 39 + x) * 4 + 3] = bytes((5, 5, 5))
+        speck = frame(radius=8.0)
+        speck.data[(17 * 39 + 20) * 4:(17 * 39 + 20) * 4 + 3] = bytes(DOME)
+        eye_mask, _ = gc.glyph_mask(gc.lab_grid(eyed))
+        self.assertFalse(any(eye_mask[y * 39 + x] for x, y in ((20, 18), (21, 18), (20, 19), (21, 19))), "the eye stays a hole")
+        speck_mask, _ = gc.glyph_mask(gc.lab_grid(speck))
+        self.assertTrue(speck_mask[17 * 39 + 20], "a speck is filled")
+
+    def test_union_of_masks_reaches_the_rim_only_with_the_wider_radius(self) -> None:
+        far = frame(radius=3.0, centre=(34.0, 19.5))  # its tip lies beyond the dome's radius
+        narrow, _ = gc.glyph_mask(gc.lab_grid(far), gc.DOME_RADIUS)
+        wide, _ = gc.glyph_mask(gc.lab_grid(far), gc.PRESSED_RADIUS)
+        self.assertLess(sum(narrow), sum(wide))
+        image, info = gc.render(frame(centre=(34.0, 19.5), radius=3.0), "flat", 4, mask_frames=[(far, gc.DOME_RADIUS), (far, gc.PRESSED_RADIUS)])
+        self.assertEqual(info["cells"], sum(wide))
+
+    def test_pressed_plate_is_darker_with_an_inner_shadow_on_the_upper_left(self) -> None:
+        idle = pngio.Image(156, 156, bytearray(bytes((200, 150, 100, 255)) * (156 * 156)))
+        pressed = gc.pressed_plate(idle)
+        self.assertEqual(lightness(pressed, 78, 78), lightness(idle, 78, 78), "the middle is the same")
+        ul = lightness(pressed, 78 - 54, 78 - 54)  # about 19 units from the centre on the upper left (rim)
+        lr = lightness(pressed, 78 + 54, 78 + 54)
+        self.assertLess(ul, lightness(idle, 78 - 54, 78 - 54) * 0.5)
+        self.assertLess(ul, lr)
+        self.assertLess(lr, lightness(idle, 78 + 54, 78 + 54), "the whole rim a little darker")
+        # the dome's upper-left ring darker than the lower-right one (the inner shadow)
+        self.assertLess(lightness(pressed, 78 - 40, 78 - 40), lightness(pressed, 78 + 40, 78 + 40))
+        with self.assertRaises(gc.CellsError):
+            gc.pressed_plate(pngio.Image(10, 10, bytearray(400)))
+
+    def test_plate_fills_the_socket_by_default_with_a_darker_edge(self) -> None:
+        master = pngio.Image(138, 138, bytearray(138 * 138 * 4))
+        for y in range(138):
+            for x in range(138):
+                if (x + 0.5 - 69) ** 2 + (y + 0.5 - 69) ** 2 <= 69 ** 2:
+                    master.data[(y * 138 + x) * 4:(y * 138 + x) * 4 + 4] = bytes((200, 150, 100, 255))
+        canvas = gc.plate_canvas(master, 4)
+        self.assertEqual(alpha_at(canvas, 78, 3), 255)  # the plate reaches the box's edge (38.6 of 39 units)
+        self.assertLess(lightness(canvas, 78, 4), lightness(canvas, 78, 40), "the last unit is a darker edge")
+        self.assertEqual(alpha_at(canvas, 0, 0), 0)
 
     def test_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

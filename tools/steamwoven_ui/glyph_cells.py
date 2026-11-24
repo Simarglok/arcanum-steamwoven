@@ -15,8 +15,9 @@ picture and not a dither to smooth away. The kit's glyph keeps that and redraws 
   over its own dome (`glyph_tone.py`, `--stat mean` because the cells are drawn now).
 
     python3 -B tools/steamwoven_ui/glyph_cells.py mask FRAME.png [--json]
-    python3 -B tools/steamwoven_ui/glyph_cells.py cells FRAME.png OUT.png [--look flat|bevel] [--scale 4] [--mask-frame LIT_FRAME.png] [--plate PLATE_CANVAS.png --dome-frame IDLE_FRAME.png]
-    python3 -B tools/steamwoven_ui/glyph_cells.py plate PLATE_MASTER.png OUT.png [--scale 4] [--plate-units 36.5] [--shadow 0.55] [--sigma 0.45] [--offset 0.2,0.3]
+    python3 -B tools/steamwoven_ui/glyph_cells.py cells FRAME.png OUT.png [--look flat|bevel] [--scale 4] [--mask-frame FRAME.png[:RADIUS]]... [--round-holes] [--plate PLATE_CANVAS.png --dome-frame IDLE_FRAME.png]
+    python3 -B tools/steamwoven_ui/glyph_cells.py plate PLATE_MASTER.png OUT.png [--scale 4] [--plate-units 38.6] [--shadow 0] [--edge-dark 0.4]
+    python3 -B tools/steamwoven_ui/glyph_cells.py pressed IDLE_PLATE_CANVAS.png OUT.png [--scale 4] [--plate-units 38.6]
 
 `mask` prints the glyph's mask (rows of # and .) and its centroid in units; `cells` writes the glyph canvas, the whole 39-unit frame at `--scale` px per unit (alpha is the
 silhouette, nothing else is drawn), so a layout places it at 0,0 and the glyph lies where the ORIGINAL's does; `plate` writes the kit plate master centred on a 39-unit canvas
@@ -41,9 +42,13 @@ except ImportError:  # run as a script
 
 GRID = 39
 DOME_RADIUS = 15.5  # units from the frame's centre: inside the plate's rim (its rim starts at about 16.5)
-MIN_PART_CELLS = 6
+MIN_PART_CELLS = 6  # a connected piece of the mask smaller than this is a speck, dropped
 DOME_WINDOW = 4  # the dome colour a cell is compared with: the mean of the cells that are no glyph in a 9 x 9 window
-COLOUR_DISTANCE = 24.0  # a cell this far (dE76) from the dome colour is glyph even where the checker is too weak to alternate (the shield's bar, a dim idle arrow)  # a connected piece of the mask smaller than this is a speck, dropped
+COLOUR_DISTANCE = 24.0  # a cell this far (dE76) from the dome colour is glyph even where the checker does not alternate (the shield's bar, a dim arrow); the dark cells of a checker (about 8 to 14 away) join by the fill rule
+QUIET = 4.0  # a cell whose lightness differs from the mean of its four neighbours by less than this is quiet (dome, not checker)
+HOLE_DARKER = 4.0  # a cell this much darker (L*) than the dome is a hole of the glyph (the key's eye), never filled
+PRESSED_RADIUS = 18.5  # the radius (units) a mask of the pressed frame is taken to: the glyph may reach the rim, whose pressed look is dark
+ROUND_HOLE_MIN_CELLS = 10  # an enclosed hole of this many cells or more is regularized to a circle by `--round-holes`
 SIGMA_CELLS = 0.6  # the Gaussian of the mask, in cells
 EDGE_WIDTH = 0.2  # the soft threshold's half width (of the Gaussian's 0..1)
 WINDOW = 1  # the colour window of a cell tone: 3 x 3 cells (grown up to MAX_WINDOW when it holds no cell of the kind)
@@ -88,8 +93,8 @@ def otsu(values: list[float], bins: int = 100) -> float:
     return threshold
 
 
-def interior(ux: int, uy: int) -> bool:
-    return math.hypot(ux + 0.5 - GRID / 2, uy + 0.5 - GRID / 2) <= DOME_RADIUS
+def interior(ux: int, uy: int, radius: float = DOME_RADIUS) -> bool:
+    return math.hypot(ux + 0.5 - GRID / 2, uy + 0.5 - GRID / 2) <= radius
 
 
 def neighbours4(i: int) -> list[int]:
@@ -136,49 +141,88 @@ def erode(mask: list[bool]) -> list[bool]:
     return [on and all(mask[j] for j in neighbours4(i)) and len(neighbours4(i)) == 4 for i, on in enumerate(mask)]
 
 
-def glyph_mask(labs: list[tuple[float, float, float]]) -> tuple[list[bool], float]:
-    """The cells of the glyph (True) and the alternation threshold that found them. First the cells of the checker: a bright cell is lighter than the mean of its four neighbours
-    by at least the threshold (Otsu split of that difference inside the dome: a smooth dome varies little, a checker a lot). Then the dome's colour near each cell (the mean of the cells
-    that are not near the checker, a 9 x 9 window) and every cell COLOUR_DISTANCE away from it joins (a part whose checker is too weak to alternate, the shield's bar, a dim idle arrow).
-    The dark cells of the checker, whose four neighbours (three at the edge) are glyph, are filled in, the mask is closed (grown, then shrunk by one cell), and connected pieces
-    under MIN_PART_CELLS are dropped."""
+def outside_cells(mask: list[bool]) -> list[bool]:
+    """The non-glyph cells that a path of non-glyph cells joins to the frame's edge."""
+    outside = [False] * len(mask)
+    stack = [i for i in range(len(mask)) if not mask[i] and (i % GRID in (0, GRID - 1) or i // GRID in (0, GRID - 1))]
+    for i in stack:
+        outside[i] = True
+    while stack:
+        i = stack.pop()
+        for j in neighbours4(i):
+            if not mask[j] and not outside[j]:
+                outside[j] = True
+                stack.append(j)
+    return outside
+
+
+SPECK_CELLS = 2  # an enclosed hole of this many cells or fewer is a speck of the checker, filled (the key's eye is larger)
+
+
+def glyph_mask(labs: list[tuple[float, float, float]], radius: float = DOME_RADIUS) -> tuple[list[bool], float]:
+    """The cells of the glyph (True) and the alternation threshold that found them, up to `radius` units from the frame's centre (the dome, or further for a frame whose rim is dark).
+    First the cells of the checker: a bright cell is lighter than the mean of its four neighbours by at least the threshold (Otsu split of that difference inside the dome: a smooth dome
+    varies little, a checker a lot). Then the dome's colour near each cell (the mean of the cells that are not near the checker, a 9 x 9 window) and every cell COLOUR_DISTANCE away from
+    it joins (the dark cells of a checker lie above the dome; the shield's bar and a dim idle arrow do not alternate). A cell HOLE_DARKER darker than the dome is a hole of the glyph
+    (the key's eye) and is never filled. The other cells whose four neighbours (three at the edge) are glyph are filled in, the mask is closed (grown, then shrunk by one cell), and
+    connected pieces under MIN_PART_CELLS are dropped."""
     n = GRID * GRID
-    inside = [interior(i % GRID, i // GRID) for i in range(n)]
+    core = [interior(i % GRID, i // GRID) for i in range(n)]
+    inside = [interior(i % GRID, i // GRID, max(radius, DOME_RADIUS)) for i in range(n)]
     diff = [0.0] * n
     for i in range(n):
         near = neighbours4(i)
         diff[i] = labs[i][0] - sum(labs[j][0] for j in near) / len(near)
-    threshold = otsu([abs(diff[i]) for i in range(n) if inside[i]])
+    threshold = otsu([abs(diff[i]) for i in range(n) if core[i]])
     if threshold <= 0.0:
         raise CellsError("no glyph found in the frame (no checker inside the dome)")
     bright = [inside[i] and diff[i] >= threshold for i in range(n)]
     away = dilate(bright, 1)
-    dome_cells = [inside[i] and not away[i] for i in range(n)]
+    dome_cells = [core[i] and not away[i] and abs(diff[i]) < QUIET for i in range(n)]  # quiet cells only: a checker's weak body cells must not become the dome
     pool = [labs[i] for i in range(n) if dome_cells[i]]
     if not pool:
         raise CellsError("no dome cell outside the checker")
     global_dome = tuple(sorted(v[k] for v in pool)[len(pool) // 2] for k in range(3))
+    reference: list = [global_dome] * n
     mask = list(bright)
     for i in range(n):
-        if not inside[i] or bright[i]:
+        if not inside[i]:
             continue
         x, y = i % GRID, i // GRID
         window = [labs[yy * GRID + xx] for yy in range(max(0, y - DOME_WINDOW), min(GRID, y + DOME_WINDOW + 1))
                   for xx in range(max(0, x - DOME_WINDOW), min(GRID, x + DOME_WINDOW + 1)) if dome_cells[yy * GRID + xx]]
-        reference = tuple(sum(v[k] for v in window) / len(window) for k in range(3)) if window else global_dome
-        if lab_distance(labs[i], reference) >= COLOUR_DISTANCE:
+        if window:
+            reference[i] = tuple(sum(v[k] for v in window) / len(window) for k in range(3))
+        if not bright[i] and lab_distance(labs[i], reference[i]) >= COLOUR_DISTANCE:
             mask[i] = True
+    solid = [labs[i][0] >= reference[i][0] - HOLE_DARKER for i in range(n)]
     for i in range(n):
-        if inside[i] and not mask[i] and sum(1 for j in neighbours4(i) if mask[j]) >= 3:
+        if inside[i] and not mask[i] and solid[i] and sum(1 for j in neighbours4(i) if mask[j]) >= 3:
             mask[i] = True
     closed = erode(dilate(mask, 1))
-    mask = [(m or c) and inside[i] for i, (m, c) in enumerate(zip(mask, closed))]
+    mask = [(m or (c and solid[i])) and inside[i] for i, (m, c) in enumerate(zip(mask, closed))]
+    out_of = outside_cells(mask)
+    for part in components([not m and not o for m, o in zip(mask, out_of)]):
+        if len(part) <= SPECK_CELLS:
+            for i in part:
+                mask[i] = True
     out = [False] * n
     for part in components(mask):
         if len(part) >= MIN_PART_CELLS:
             for i in part:
                 out[i] = True
     return out, threshold
+
+
+def enclosed_holes(mask: list[bool]) -> list[tuple[float, float, float]]:
+    """The holes of the glyph that no path of non-glyph cells joins to the frame's edge, as circles (centre x, y in units, radius in units: the circle of the hole's area); only holes of
+    ROUND_HOLE_MIN_CELLS cells or more (the gear's hole, not the key's eye)."""
+    outside = outside_cells(mask)
+    holes = []
+    for part in components([not m and not o for m, o in zip(mask, outside)]):
+        if len(part) >= ROUND_HOLE_MIN_CELLS:
+            holes.append((sum(i % GRID + 0.5 for i in part) / len(part), sum(i // GRID + 0.5 for i in part) / len(part), math.sqrt(len(part) / math.pi)))
+    return holes
 
 
 def phase_of(mask: list[bool], labs: list[tuple[float, float, float]]) -> int:
@@ -263,28 +307,50 @@ def smoothstep(edge0: float, edge1: float, x: float) -> float:
     return t * t * (3 - 2 * t)
 
 
-def silhouette(mask: list[bool], scale: int) -> list[float]:
-    """The smooth outline of the 39 x 39 mask at `scale` px per cell: alpha 0..1 per output pixel."""
+def silhouette(mask: list[bool], scale: int, holes: "list[tuple[float, float, float]] | tuple" = ()) -> list[float]:
+    """The smooth outline of the 39 x 39 mask at `scale` px per cell: alpha 0..1 per output pixel. `holes` (circles, see `enclosed_holes`) are filled in the mask and cut out again as
+    true circles, soft by one device pixel."""
     size = GRID * scale
-    plane = [1.0 if mask[(y // scale) * GRID + (x // scale)] else 0.0 for y in range(size) for x in range(size)]
+    filled = list(mask)
+    for cx, cy, r in holes:
+        for i in range(len(filled)):
+            if math.hypot(i % GRID + 0.5 - cx, i // GRID + 0.5 - cy) <= r + 1.2:
+                filled[i] = True
+    plane = [1.0 if filled[(y // scale) * GRID + (x // scale)] else 0.0 for y in range(size) for x in range(size)]
     soft = blur(plane, size, size, SIGMA_CELLS * scale)
-    return [smoothstep(0.5 - EDGE_WIDTH, 0.5 + EDGE_WIDTH, v) for v in soft]
+    alpha = [smoothstep(0.5 - EDGE_WIDTH, 0.5 + EDGE_WIDTH, v) for v in soft]
+    for cx, cy, r in holes:
+        px, py, pr = cx * scale, cy * scale, r * scale
+        for y in range(max(0, int(py - pr - 3)), min(size, int(py + pr + 3))):
+            for x in range(max(0, int(px - pr - 3)), min(size, int(px + pr + 3))):
+                d = math.hypot(x + 0.5 - px, y + 0.5 - py)
+                alpha[y * size + x] *= smoothstep(pr - 0.75, pr + 0.75, d)
+    return alpha
 
 
-def render(frame: "pngio.Image", look: str = "flat", scale: int = 4, mask_frame: "pngio.Image | None" = None) -> tuple["pngio.Image", dict]:
+def render(frame: "pngio.Image", look: str = "flat", scale: int = 4, mask_frame: "pngio.Image | None" = None,
+           mask_frames: "list[tuple[pngio.Image, float]] | None" = None, round_holes: bool = False) -> tuple["pngio.Image", dict]:
     """The glyph canvas of one ORIGINAL frame: GRID x scale square, RGBA, alpha the silhouette, colour the cells (and for `bevel` the edge light). The silhouette (and the checker's
-    phase) is read from `mask_frame` when given (the lit frame: its checker is strong, and the glyph is one shape in all three states), else from the frame itself."""
+    phase) is read from `mask_frame` when given (the lit frame: its checker is strong, and the glyph is one shape in all three states), else from the frame itself.
+    `mask_frames` ((frame, radius in units) pairs) takes the union of the masks of all of them (the first gives the phase): the lit frames' masks, the pressed one out to the rim.
+    `round_holes` regularizes the enclosed holes of the glyph to circles (a simple shape is aligned after the mask is taken, the gear's hole)."""
     if look not in ("flat", "bevel"):
         raise CellsError("--look must be flat or bevel")
     labs = lab_grid(frame)
-    mask_labs = lab_grid(mask_frame) if mask_frame is not None else labs
-    mask, threshold = glyph_mask(mask_labs)
+    if mask_frames is None:
+        mask_frames = [(mask_frame if mask_frame is not None else frame, DOME_RADIUS)]
+    mask_labs = lab_grid(mask_frames[0][0])
+    mask, threshold = glyph_mask(mask_labs, mask_frames[0][1])
+    for other, radius in mask_frames[1:]:
+        extra, _ = glyph_mask(lab_grid(other), radius)
+        mask = [a or b for a, b in zip(mask, extra)]
     if not any(mask):
         raise CellsError("no glyph found in the frame")
     phase = phase_of(mask, mask_labs)
     fields = tone_fields(labs, mask, phase)
     size = GRID * scale
-    alpha = silhouette(mask, scale)
+    holes = enclosed_holes(mask) if round_holes else []
+    alpha = silhouette(mask, scale, holes)
     out = pngio.Image(size, size, bytearray(size * size * 4))
     for y in range(size):
         for x in range(size):
@@ -301,7 +367,7 @@ def render(frame: "pngio.Image", look: str = "flat", scale: int = 4, mask_frame:
         bevel(out, scale)
     cx = sum(i % GRID + 0.5 for i, on in enumerate(mask) if on) / sum(mask)
     cy = sum(i // GRID + 0.5 for i, on in enumerate(mask) if on) / sum(mask)
-    info = {"alternation_threshold": threshold, "phase": phase, "cells": sum(mask), "centroid_units": (cx, cy), "look": look}
+    info = {"alternation_threshold": threshold, "phase": phase, "cells": sum(mask), "centroid_units": (cx, cy), "look": look, "round_holes": [list(h) for h in holes]}
     return out, info
 
 
@@ -324,10 +390,11 @@ def bevel(image: "pngio.Image", scale: int) -> None:
                 image.data[o + c] = int(round(max(0.0, min(255.0, v))))
 
 
-def plate_canvas(plate: "pngio.Image", scale: int = 4, plate_units: float = 36.5, shadow: float = 0.55, sigma_units: float = 0.45,
-                 offset_units: tuple[float, float] = (0.2, 0.3)) -> "pngio.Image":
-    """The kit plate master brought to `plate_units` across and centred on the 39-unit canvas (`scale` px per unit), a soft dark shadow (its alpha `shadow`, blurred by
-    `sigma_units`, moved by `offset_units`: down and right, the kit's light falls from the upper left) under it in the alpha."""
+def plate_canvas(plate: "pngio.Image", scale: int = 4, plate_units: float = 38.6, shadow: float = 0.0, sigma_units: float = 0.45,
+                 offset_units: tuple[float, float] = (0.2, 0.3), edge_dark: float = 0.4) -> "pngio.Image":
+    """The kit plate master brought to `plate_units` across and centred on the 39-unit canvas (`scale` px per unit): by default it fills the socket as the original's plate does (38.6 units,
+    the rim's last unit softened to a darker edge by `edge_dark`, a soft shadow in the alpha as the original's dark outer ring). With `shadow` above 0 a soft dark shadow (its alpha `shadow`,
+    blurred by `sigma_units`, moved by `offset_units`) lies under it in the alpha, beyond the plate's edge (it needs a plate smaller than the canvas, or the frame's box cuts it)."""
     if not 0 < plate_units <= GRID:
         raise CellsError(f"--plate-units {plate_units} must be above 0 and at most {GRID}")
     size = GRID * scale
@@ -340,12 +407,14 @@ def plate_canvas(plate: "pngio.Image", scale: int = 4, plate_units: float = 36.5
             plane[(y + left) * size + x + left] = resized.data[(y * target + x) * 4 + 3] / 255.0
     dx, dy = int(round(offset_units[0] * scale)), int(round(offset_units[1] * scale))
     shifted = [0.0] * (size * size)
-    for y in range(size):
-        for x in range(size):
-            sx, sy = x - dx, y - dy
-            if 0 <= sx < size and 0 <= sy < size:
-                shifted[y * size + x] = plane[sy * size + sx]
-    shade = blur(shifted, size, size, sigma_units * scale)
+    if shadow > 0:
+        for y in range(size):
+            for x in range(size):
+                sx, sy = x - dx, y - dy
+                if 0 <= sx < size and 0 <= sy < size:
+                    shifted[y * size + x] = plane[sy * size + sx]
+    shade = blur(shifted, size, size, sigma_units * scale) if shadow > 0 else shifted
+    edge = plate_units / 2
     out = pngio.Image(size, size, bytearray(size * size * 4))
     for y in range(size):
         for x in range(size):
@@ -354,13 +423,54 @@ def plate_canvas(plate: "pngio.Image", scale: int = 4, plate_units: float = 36.5
             sa = min(1.0, shade[y * size + x]) * shadow
             if p > 0:
                 ro = ((y - left) * target + (x - left)) * 4
-                pr, pg, pb = resized.data[ro], resized.data[ro + 1], resized.data[ro + 2]
+                r = math.hypot((x + 0.5) / scale - GRID / 2, (y + 0.5) / scale - GRID / 2)
+                dark = 1.0 - edge_dark * smoothstep(edge - 1.6, edge - 0.2, r)
+                pr, pg, pb = (resized.data[ro + k] * dark for k in range(3))
                 a = p + sa * (1 - p)
-                out.data[o:o + 3] = bytes(int(round((c * p + 8 * sa * (1 - p)) / a)) for c in (pr, pg, pb))
+                out.data[o:o + 3] = bytes(int(round(max(0.0, min(255.0, (c * p + 8 * sa * (1 - p)) / a)))) for c in (pr, pg, pb))
                 out.data[o + 3] = int(round(a * 255))
             elif sa > 0.004:
                 out.data[o:o + 3] = bytes((8, 7, 5))
                 out.data[o + 3] = int(round(sa * 255))
+    return out
+
+
+# The pressed look of the original's plate against its idle look, by numbers (mean L* of the plate's pixels, the glyph left out; upper left = on the side of the light): the dome's upper-left
+# ring at 12-15 units goes from 14.2 to 9.3 (x0.65), the rim at 15-17 from 17.5 to 7.4 (x0.42) and at 17-19.5 from 22.0 to 6.4 (x0.29); the lower-right side barely changes at the dome
+# (19.8 to 19.8) and darkens a little at the rim (x0.94 at 15-17, x0.81 at 17-19.5). `pressed_plate` is that rule: an inner shadow on the upper left that grows toward the rim, and the whole rim a little darker.
+PRESSED_SHADOW = ((9.0, 0.0), (12.0, 0.13), (14.0, 0.35), (16.0, 0.58), (18.0, 0.71), (19.5, 0.71))  # (radius in original units, shadow depth on the upper-left side)
+PRESSED_RIM = ((14.5, 0.0), (16.0, 0.06), (18.0, 0.19), (19.5, 0.19))  # (radius, extra darkening of the whole rim)
+
+
+def ramp(table: tuple, r: float) -> float:
+    if r <= table[0][0]:
+        return table[0][1]
+    for (r0, v0), (r1, v1) in zip(table, table[1:]):
+        if r <= r1:
+            return v0 + (v1 - v0) * (r - r0) / (r1 - r0)
+    return table[-1][1]
+
+
+def pressed_plate(idle: "pngio.Image", scale: int = 4, plate_units: float = 38.6) -> "pngio.Image":
+    """The plate's pressed look from its idle canvas: the original's rule (see PRESSED_SHADOW): the whole plate darker toward the rim and an inner shadow on the upper left. The radius
+    is taken in the original's units, so the rule follows the plate's size (`plate_units` is the diameter the idle canvas was made at)."""
+    size = GRID * scale
+    if idle.w != size or idle.h != size:
+        raise CellsError(f"the idle plate canvas is {idle.w} x {idle.h} px, not {size} x {size} (39 units at {scale} px)")
+    out = pngio.Image(size, size, bytearray(idle.data))
+    plate_radius = plate_units / 2
+    for y in range(size):
+        for x in range(size):
+            o = (y * size + x) * 4
+            if idle.data[o + 3] == 0:
+                continue
+            dx, dy = (x + 0.5) / scale - GRID / 2, (y + 0.5) / scale - GRID / 2
+            r = math.hypot(dx, dy)
+            rho = r / plate_radius * 19.5
+            t = (-dx - dy) / (math.sqrt(2) * r) if r > 1e-6 else 0.0
+            factor = (1.0 - ramp(PRESSED_SHADOW, rho) * smoothstep(-0.15, 1.0, t)) * (1.0 - ramp(PRESSED_RIM, rho))
+            for c in range(3):
+                out.data[o + c] = int(round(idle.data[o + c] * factor))
     return out
 
 
@@ -380,7 +490,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("frame")
     c.add_argument("out")
     c.add_argument("--look", choices=("flat", "bevel"), default="flat")
-    c.add_argument("--mask-frame", help="the frame whose glyph mask and checker phase are used (the lit frame: one shape in all three states)")
+    c.add_argument("--mask-frame", action="append", help="a frame whose glyph mask is used, PATH or PATH:RADIUS (units from the centre, default 15.5; the pressed frame's rim is dark, so 18.5 reaches a glyph "
+                   "that touches it); repeated: the union of the masks, the first gives the checker's phase (the lit frame: one shape in all three states)")
+    c.add_argument("--round-holes", action="store_true", help="regularize the glyph's enclosed holes to circles (the gear's hole)")
     c.add_argument("--scale", type=int, default=4)
     c.add_argument("--plate", help="the plate canvas (`plate` output) the glyph sits on: fit the tone against its dome")
     c.add_argument("--dome-frame", help="another frame of the ORIGINAL whose dome is the reference (the idle frame)")
@@ -389,10 +501,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("plate_master")
     p.add_argument("out")
     p.add_argument("--scale", type=int, default=4)
-    p.add_argument("--plate-units", type=float, default=36.5)
-    p.add_argument("--shadow", type=float, default=0.55)
+    p.add_argument("--plate-units", type=float, default=38.6)
+    p.add_argument("--shadow", type=float, default=0.0)
     p.add_argument("--sigma", type=float, default=0.45)
     p.add_argument("--offset", default="0.2,0.3")
+    p.add_argument("--edge-dark", type=float, default=0.4)
+    q = sub.add_parser("pressed")
+    q.add_argument("idle_canvas", help="the `plate` output of the idle look")
+    q.add_argument("out")
+    q.add_argument("--scale", type=int, default=4)
+    q.add_argument("--plate-units", type=float, default=38.6)
     args = parser.parse_args(argv)
     try:
         if getattr(args, "scale", 4) < 1:
@@ -411,16 +529,23 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"alternation threshold {threshold:.1f} L*, {sum(mask)} cells, centroid {cx:.2f},{cy:.2f} units")
         elif args.command == "cells":
             frame = pngio.read(args.frame)
-            image, info = render(frame, args.look, args.scale, pngio.read(args.mask_frame) if args.mask_frame else None)
+            frames = []
+            for spec in args.mask_frame or []:
+                path, _, radius = spec.partition(":")
+                frames.append((pngio.read(path), float(radius) if radius else DOME_RADIUS))
+            image, info = render(frame, args.look, args.scale, mask_frames=frames or None, round_holes=args.round_holes)
             if args.plate:
                 image, tone = fit_tone(frame, image, pngio.read(args.plate), pngio.read(args.dome_frame) if args.dome_frame else None, args.scale)
                 info["tone"] = {k: tone[k] for k in ("original_glyph_mean", "original_dome", "plate_dome", "target_glyph", "applied_shift")}
             pngio.write(args.out, image)
             print(json.dumps(info) if args.json else f"GLYPH CELLS {args.look}: {info['cells']} cells, centroid {info['centroid_units'][0]:.2f},{info['centroid_units'][1]:.2f} units -> {args.out}")
-        else:
+        elif args.command == "plate":
             ox, oy = (float(v) for v in args.offset.split(","))
-            pngio.write(args.out, plate_canvas(pngio.read(args.plate_master), args.scale, args.plate_units, args.shadow, args.sigma, (ox, oy)))
+            pngio.write(args.out, plate_canvas(pngio.read(args.plate_master), args.scale, args.plate_units, args.shadow, args.sigma, (ox, oy), args.edge_dark))
             print(f"GLYPH CELLS plate canvas -> {args.out}")
+        else:
+            pngio.write(args.out, pressed_plate(pngio.read(args.idle_canvas), args.scale, args.plate_units))
+            print(f"GLYPH CELLS pressed plate -> {args.out}")
     except (OSError, pngio.PngError, CellsError, glyph_tone.ToneError, ValueError) as error:
         print(f"GLYPH CELLS error: {error}", file=sys.stderr)
         return 2
