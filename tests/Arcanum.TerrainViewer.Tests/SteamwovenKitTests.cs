@@ -654,11 +654,28 @@ public sealed class SteamwovenKitTests
         Assert.AreEqual(2, screen.BodyPieces.Count);
         var (left, right) = (screen.BodyPieces[0], screen.BodyPieces[1]);
         Assert.AreEqual(plan.Zone.X, left.Rect.X); Assert.AreEqual(left.Rect.Right, right.Rect.X, "no gap between the two pieces"); Assert.AreEqual(plan.Zone.Right, right.Rect.Right);
-        Assert.AreEqual(plan.Zone.X + (int)Math.Round(1290 / 3.6 * plan.Factor, MidpointRounding.AwayFromZero), left.Rect.Right, "the joint is at the 1290 px master position");
+        var plateHeight = plan.Zone.Bottom - plan.Zone.Y;
+        Assert.AreEqual(plan.Zone.X + (int)new Ratio(1290 * plateHeight, 2160).RoundHalfUp(), left.Rect.Right, "the joint is at the 1290 px master position, rounded half up exactly");
         Assert.AreEqual(left.Rect.Y, right.Rect.Y); Assert.AreEqual(left.Rect.Bottom, right.Rect.Bottom);
         Assert.AreEqual(screen.Top.Rect.Bottom, left.Rect.Y); Assert.AreEqual(left.Rect.Bottom, screen.Bottom.Rect.Y);
         Assert.AreEqual(plan.Zone.Y + (int)Math.Round(41 * plan.Factor, MidpointRounding.AwayFromZero), left.Rect.Y);
         Assert.AreEqual(plan.Zone.Y + (int)Math.Round(441 * plan.Factor, MidpointRounding.AwayFromZero), left.Rect.Bottom);
+    }
+
+    [TestMethod]
+    [DataRow(2496, 1404)]
+    [DataRow(2624, 1476)]
+    [DataRow(3008, 1692)]
+    public void The_opening_shop_s_joint_rounds_half_up_exactly_where_the_plate_height_makes_a_tie(int width, int height)
+    {
+        // ARC-UI-3041: at these plate heights 1290 px master is an exact half device pixel; a double computation lands just below it.
+        var plan = Screen(width, height);
+        var composed = SteamwovenKitComposer.Screen(plan, Full(plan.Layout.Step), SteamwovenKitScreen.OpeningShop);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        var plateHeight = plan.Zone.Bottom - plan.Zone.Y;
+        Assert.AreEqual(height, plateHeight);
+        Assert.AreEqual(plan.Zone.X + (int)new Ratio(1290 * plateHeight, 2160).RoundHalfUp(), screen.BodyPieces[0].Rect.Right);
     }
 
     [TestMethod]

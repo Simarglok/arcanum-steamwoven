@@ -349,6 +349,9 @@ public static class SteamwovenKitComposer
     /// their rows, the body exactly its own 800 × 400. The strip arts must be the composition's 2880 px wide at the step (their heights are the provisional 150 and 570 master px and are not checked, as the HUD strips'); the body must be
     /// 2880 × 1440. A part the set lacks or holds at another size makes the whole screen missing and names it, so the viewer draws the screen's own art whole (SWI-RUN-3): a half kit, half original screen never happens.
     /// </summary>
+    /// <summary>ARC-UI-3041: the device offset of a body joint at <paramref name="masterX"/> master px (3.6 an original unit) on a plate <paramref name="plateHeight"/> device px high (600 units), halves up, in exact integer arithmetic.</summary>
+    internal static int JointDevice(int masterX, int plateHeight) => (int)((2L * masterX * plateHeight + 2160) / 4320);
+
     /// <remarks>ARC-UI-3041: a screen whose body is a game window (<see cref="SteamwovenKitScreenSpec.BodyWindow"/>) lays that window's kit background in the body: its pieces left to right across the plate, meeting at edges rounded from their master
     /// position (3.6 master px an original unit) and together exactly the body (SWI-BDR-5); <paramref name="bodyWindow"/> picks the window's variant (the barter window of a follower merchant, <see cref="SteamwovenKitWindow.BarterFollower"/>) and is ignored by
     /// a screen with a body part of its own. A piece the set lacks or holds at another size makes the whole screen missing, as any other part.</remarks>
@@ -396,7 +399,7 @@ public static class SteamwovenKitComposer
         for (var i = 0; i < bodyPieces.Count; i++)
         {
             // The pieces meet at the master position of their joint (3.6 master px an original unit); the last one ends at the plate's right edge.
-            var right = i == bodyPieces.Count - 1 ? zone.Right : zone.X + (int)Math.Round(bodyPieces[i].MasterEnd / 3.6 * plan.Factor, MidpointRounding.AwayFromZero);
+            var right = i == bodyPieces.Count - 1 ? zone.Right : zone.X + JointDevice(bodyPieces[i].MasterEnd, zone.Bottom - zone.Y);
             var rect = PixelRect.FromEdges(left, bodyTop, right, bodyBottom);
             bodyDraws.Add(Draw(bodyPieces[i].Part, rect, rect));
             left = right;

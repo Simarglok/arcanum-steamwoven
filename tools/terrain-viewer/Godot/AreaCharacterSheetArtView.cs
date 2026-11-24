@@ -277,6 +277,8 @@ public partial class AreaCharacterSheetArtView : Control
     /// <summary>ARC-UI-3041 (census M09): the creation editor's kit body (the character window's kit background, drawn by the screen's strips view under this window) shows now: the sheet draws no art 22 of its own and its stand-ins and stat names instead.
     /// Meaningful only on the editor's sheet.</summary>
     internal bool KitBackgroundShownForSelfTest => KitBackgroundShown;
+    /// <summary>ARC-UI-3041: the last draw painted the original's art 22 (false over the kit's background).</summary>
+    internal bool OwnBackgroundDrawnForSelfTest { get; private set; }
 
     public bool KitBody
     {
@@ -290,8 +292,10 @@ public partial class AreaCharacterSheetArtView : Control
         if (_fonts is not { } fonts || _view is not { } view) return;
         ClaimScale();
         // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
+        OwnBackgroundDrawnForSelfTest = false;
         if (!KitBackgroundShown && Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
         {
+            OwnBackgroundDrawnForSelfTest = true;
             float width = window.GetWidth(), height = window.GetHeight();
             if (!_lensCut) DrawTextureRect(window, new Rect2(0, 0, width, height), false);
             else

@@ -206,8 +206,9 @@ public partial class TerrainViewerApp
     {
         if (_mainMenuPanel is not { } panel) return;
         var window = panel.ShopKitWindow;
-        _barterPanel?.SetShopKitBackdrop(window is SteamwovenKitWindow.Barter or SteamwovenKitWindow.BarterFollower ? panel.ShopKitBackdrop ?? new AreaKitBackdrop(null, null) : null);
-        _editorPanel?.SetKitBody(window == SteamwovenKitWindow.Character);
+        if (_barterPanel is { } barter && GodotObject.IsInstanceValid(barter))
+            barter.SetShopKitBackdrop(window is SteamwovenKitWindow.Barter or SteamwovenKitWindow.BarterFollower ? panel.ShopKitBackdrop ?? new AreaKitBackdrop(null, null) : null);
+        if (_editorPanel is { } editor && GodotObject.IsInstanceValid(editor)) editor.SetKitBody(window == SteamwovenKitWindow.Character);
     }
 
     private void SellToMerchant(string entity) => Trade(entity, sell: true);

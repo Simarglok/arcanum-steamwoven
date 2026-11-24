@@ -262,7 +262,7 @@ public partial class TerrainViewerApp
     private KitWindowScreenView KitEditorView() => new("editor", SteamwovenKitScreen.CharacterEditor, ["backdrop.char_maint"], [], () => [KitCharacter], [(4, 41 + 395)],
         _mainMenuPanel!.ShopArtForSelfTest.Place, _mainMenuPanel.ShopArtForSelfTest.QueueRedraw, () => _mainMenuPanel.ShopArtForSelfTest.KitScreenForSelfTest, () => _mainMenuPanel.ShopArtForSelfTest.OwnBackdropDrawnForSelfTest,
         _mainMenuPanel.ShopArtForSelfTest.KitSampledNearestForSelfTest, () => _mainMenuPanel.ShopArtForSelfTest.TexturesForSelfTest,
-        () => !_editorPanel!.ArtViewForSelfTest!.KitBackgroundShownForSelfTest,
+        () => _editorPanel!.ArtViewForSelfTest!.OwnBackgroundDrawnForSelfTest,
         () => { AreaKitStandIns.ResetForSelfTest(); _editorPanel!.ArtViewForSelfTest!.QueueRedraw(); });
 
     private KitWindowScreenView KitShopView() => new("shop", SteamwovenKitScreen.OpeningShop, ["backdrop.barter", "backdrop.inventor"], [SteamwovenKitTable.BarterDoll.Part, SteamwovenKitTable.HeroDollCover.Part], () => [KitBarter, KitInventory],

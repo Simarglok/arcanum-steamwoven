@@ -75,7 +75,7 @@ public partial class AreaBarterPanel : CanvasLayer
         get => _docked;
         // Above the menu's backdrop (layer 4), whichever panel the tree made first.
         // ARC-UI-3041: docking takes the kit body of the shop (when it shows) in place of the in-game window's; undocking drops it.
-        set { _docked = value; _area?.SetKitBackdrop(value && ArtMode ? _shopKit : null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
+        set { var was = _docked; _docked = value; if (value != was) _area?.SetKitBackdrop(value && ArtMode ? _shopKit : null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
     }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;
@@ -88,14 +88,14 @@ public partial class AreaBarterPanel : CanvasLayer
     internal SteamwovenKitBarterState KitState => new(_art?.Frame.Background ?? AreaBarterArtLayout.BarterArt, IsOpen && ArtMode && !_docked);
 
     /// <summary>ARC-UI-3033: the kit background under the frame, or null (the frame draws its own art).</summary>
-    internal void SetKitBackdrop(AreaKitBackdrop? kit) => _area?.SetKitBackdrop(ArtMode && !_docked ? kit : null);
+    internal void SetKitBackdrop(AreaKitBackdrop? kit) { if (!_docked) _area?.SetKitBackdrop(ArtMode ? kit : null); }
 
     /// <summary>ARC-UI-3041 (census M10): the kit's body of the opening shop lies under the docked frame (the shop's view draws it, <see cref="AreaShopArtView"/>): the frame then draws none of its own background art (the merchant's side, the hero's
     /// inventory) and takes the kit's overlays for its doll view and doll cover; null (the screen draws its own art, or the frame is not docked): the frame draws its own art as before.</summary>
     internal void SetShopKitBackdrop(AreaKitBackdrop? kit)
     {
         _shopKit = kit;
-        _area?.SetKitBackdrop(_docked && ArtMode ? kit : null);
+        if (_docked) _area?.SetKitBackdrop(ArtMode ? kit : null);
     }
     private AreaKitBackdrop? _shopKit;
     internal Button LookToggleForSelfTest => _lookToggle;

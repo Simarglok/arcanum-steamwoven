@@ -109,6 +109,7 @@ public partial class AreaShopArtView : Control
     {
         Visible = false;
         (_hovered, _pressed) = (null, null);
+        _barterBackground = AreaBarterArtLayout.BarterArt;
         // ARC-UI-3041 (SWI-RUN-5): the body part goes with the screen.
         ReleaseKit();
     }
