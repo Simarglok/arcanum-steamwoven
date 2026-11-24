@@ -463,10 +463,10 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   The viewer's start line `ARC-DEV-392 map-cache folder=...` names the folder, and the load's `ARC-WORLD-031 load stage=transitions` line says `source=memory|device|content|content+stored`.
   `ARC_MAP_CACHE=0` (`--env ARC_MAP_CACHE=0` on a smoke) turns only this store off, `ARC_AREA_RESIDENT=0` turns it off with the resident stores, `ARC_MAP_CACHE_DIR=<folder>`
   names another folder; a smoke drops the owner's `ARC_*` variables, so pass them with `--env`. Deleting the folder only costs one read; at most 96 files are kept.
-- **Animated-light line (ARC-RENDER-3126).** With the probe on, the viewer prints one line a second on any lit map (not in a smoke):
-  `ARC-DEV-367 perf light-anim switch=on|off lights=N frames=F fps-avg=A fps-engine=E pushes=P push-ms-total=T push-ms-max=M push-alloc-kib=K gc=G0/G1/G2 t=MS`
+- **Animated-light line (ARC-RENDER-3126).** With the probe on, the viewer prints one line a second on every map, lit or not (`lights=0` without animated lights; not in a smoke):
+  `ARC-DEV-367 perf light-anim switch=on|off lights=N frames=F fps-avg=A fps-engine=E pushes=P push-ms-total=T push-ms-max=M push-alloc-kib=K view-rebuilds=R view-ms-total=V view-ms-max=W gc=G0/G1/G2 t=MS`
   (`lights` = the map's animated lights, `pushes` = the lighting views the animated lights pushed in the window, `push-*` the main-thread time and
-  managed bytes of `PushAreaAmbient` for them, `fps-avg` the frames counted in the window). `ARC_LIGHT_ANIM=0` is a diagnostic switch: the animation
+  managed bytes of `PushAreaAmbient` for them, which only stores the view; `view-*` the canvas's rebuilds of its visible view in the window (the lattice and body colours, made at the next draw, on the main thread) and `fps-avg` the frames counted in the window). `ARC_LIGHT_ANIM=0` is a diagnostic switch: the animation
   time still runs but no new pose is pushed (`switch=off`); any other value or none keeps the default behaviour. It is read once at start.
   `LightAnimationProbe` in `src/Arcanum.World`, tests `LightAnimationProbeTests`.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians

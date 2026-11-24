@@ -40,13 +40,13 @@ public sealed class LightAnimationProbeTests
         {
             probe.Frame(second, 50, 4); // opens the window
             for (var i = 1; i <= 9; i++) probe.Frame(second + second * i / 10, 50, 4); // frames inside it: nothing yet
-            probe.Push(3.0, 2048); probe.Push(5.0, 4096);
+            probe.Push(3.0, 2048); probe.Push(5.0, 4096); probe.Rebuild(12.0); probe.Rebuild(2.0);
             probe.Frame(second * 2, 47.5, 4); // the tenth frame ends it
         });
         Assert.AreEqual(1, lines.Count, string.Join("\n", lines));
         var line = lines[0];
         StringAssert.StartsWith(line, "ARC-DEV-367 perf light-anim ");
-        foreach (var part in new[] { "lights=4", "frames=10", "fps-avg=10.0", "fps-engine=47.5", "pushes=2", "push-ms-total=8.0", "push-ms-max=5.0", "push-alloc-kib=6" })
+        foreach (var part in new[] { "lights=4", "frames=10", "fps-avg=10.0", "fps-engine=47.5", "pushes=2", "push-ms-total=8.0", "push-ms-max=5.0", "push-alloc-kib=6", "view-rebuilds=2", "view-ms-total=14.0", "view-ms-max=12.0", "switch=" })
             StringAssert.Contains(line, part);
     }
 

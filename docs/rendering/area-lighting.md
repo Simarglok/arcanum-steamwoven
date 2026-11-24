@@ -245,7 +245,7 @@ A light whose ART has more than one frame animates in map mode, stationary and o
 - **Cost.** A changed pose rebuilds the whole lattice and every body colour of the map, so it is cheap only on maps with
   few lights; the installed module has one animated light, on void (228 lights, 10 to 15 ms per view). An ART whose
   frame steps do not sum to zero would walk the light away over time; the lattice cap is checked at load for frame 0.
-  ARC-RENDER-3126 measures it: with `ARC_PERF_PROBE=1` the viewer prints the pushes per second, their milliseconds and the fps
+  ARC-RENDER-3126 measures it: with `ARC_PERF_PROBE=1` the viewer prints the pushes per second, the canvas's view rebuilds they cause (where the lattice cost falls) and the fps
   ([timing probe](../workflow/toolchain.md#timing-probe-and-the-perf-stages-arc-dev-367)); `ARC_LIGHT_ANIM=0` stops the pushes (diagnostic only).
 - **Native smoke** (map stage): `ARC-RENDER-031 native-smoke light animation PASS` sets three animation times one
   step apart on void: frames 0, 1, 2 at 5 per second, the lattice changes at each step, and at the second and third a

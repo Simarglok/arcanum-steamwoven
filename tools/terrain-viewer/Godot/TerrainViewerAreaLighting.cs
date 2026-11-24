@@ -139,8 +139,8 @@ public partial class TerrainViewerApp
     {
         // Automated runs drive the animation time themselves, as they drive the clock (TickAreaClock).
         if (SelfTestBootstrap || _nativeSmoke) return;
-        // ARC-RENDER-3126: with the timing probe on, one line a second (fps, the animated lights' pushes); a flag test otherwise.
-        _lightAnimationProbe.Frame(System.Diagnostics.Stopwatch.GetTimestamp(), Engine.GetFramesPerSecond(), _readyArea?.Lighting?.Local?.Field.Animated.Count ?? 0);
+        // ARC-RENDER-3126: with the timing probe on, one line a second (fps, the animated lights' pushes, the canvas's view rebuilds); one flag test otherwise.
+        if (PerfProbe.Enabled) LightAnimationProbe.Shared.Frame(System.Diagnostics.Stopwatch.GetTimestamp(), Engine.GetFramesPerSecond(), _readyArea?.Lighting?.Local?.Field.Animated.Count ?? 0);
         if (_areaAmbient is not { } driver || _readyArea?.Lighting?.Local is not { } local || local.Field.Animated.Count == 0) return;
         if (_frameTap?.Clocks is not { } clocks) return;
         _lightAnimationMs = clocks.WorldMs - (_lightAnimationBaseMs ??= clocks.WorldMs);
@@ -155,10 +155,8 @@ public partial class TerrainViewerApp
         if (!PerfProbe.Enabled) { PushAreaAmbient(); return; }
         var (started, allocated) = (System.Diagnostics.Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread());
         PushAreaAmbient();
-        _lightAnimationProbe.Push(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - allocated);
+        LightAnimationProbe.Shared.Push(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - allocated);
     }
-
-    private readonly LightAnimationProbe _lightAnimationProbe = new();
 
     private void TickAreaClock()
     {

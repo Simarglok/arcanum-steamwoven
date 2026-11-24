@@ -7,7 +7,8 @@ namespace Arcanum.World;
 /// lights' view pushes. <c>ARC_LIGHT_ANIM=0</c> makes the viewer not push a new lighting view when an animated light changes its pose (the
 /// animation time still runs); every other value, or none, leaves the default behaviour untouched. With the timing probe on
 /// (<see cref="PerfProbe.Enabled"/>) <see cref="Frame"/> prints one line a second, <c>ARC-DEV-367 perf light-anim ...</c>, with the frames and
-/// the average fps of the window, the pushes and their milliseconds, the managed bytes they allocated and the collections of the window.
+/// the average fps of the window, the pushes and their milliseconds, the managed bytes they allocated, the canvas's view rebuilds and their milliseconds (a push only stores the view;
+/// the lattice and body-colour rebuild is made at the next draw) and the collections of the window.
 /// It measures and gates nothing.</summary>
 public sealed class LightAnimationProbe
 {
@@ -22,10 +23,13 @@ public sealed class LightAnimationProbe
 
     private readonly double _windowMs;
     private long _windowStart;
-    private int _frames, _pushes;
-    private double _pushMs, _pushMaxMs;
+    private int _frames, _pushes, _rebuilds;
+    private double _pushMs, _pushMaxMs, _rebuildMs, _rebuildMaxMs;
     private long _pushAllocated;
     private int _gen0, _gen1, _gen2;
+
+    /// <summary>The viewer's one probe: the lighting tick counts the frames and the pushes, the canvas the view rebuilds it makes after a push.</summary>
+    public static LightAnimationProbe Shared { get; } = new();
 
     /// <summary>A probe printing every <paramref name="windowSeconds"/> seconds.</summary>
     public LightAnimationProbe(double windowSeconds = 1) => _windowMs = windowSeconds * 1000;
@@ -35,6 +39,14 @@ public sealed class LightAnimationProbe
     {
         _pushes++; _pushMs += ms; _pushAllocated += allocatedBytes;
         if (ms > _pushMaxMs) _pushMaxMs = ms;
+    }
+
+    /// <summary>Notes one rebuild of the canvas's visible view (the draw-time work a pushed lighting view causes: the lattice and the body colours)
+    /// of <paramref name="ms"/> milliseconds, made on the main thread.</summary>
+    public void Rebuild(double ms)
+    {
+        _rebuilds++; _rebuildMs += ms;
+        if (ms > _rebuildMaxMs) _rebuildMaxMs = ms;
     }
 
     /// <summary>Notes one frame at the monotonic <paramref name="timestamp"/> (<see cref="Stopwatch.GetTimestamp"/>) and, when the window is over,
@@ -61,13 +73,14 @@ public sealed class LightAnimationProbe
         var gen = $"{GC.CollectionCount(0) - _gen0}/{GC.CollectionCount(1) - _gen1}/{GC.CollectionCount(2) - _gen2}";
         return string.Create(CultureInfo.InvariantCulture,
             $"{Prefix} switch={(Disabled ? "off" : "on")} lights={animatedLights} frames={_frames} fps-avg={N(_frames * 1000.0 / elapsedMs)} fps-engine={N(engineFps)} " +
-            $"pushes={_pushes} push-ms-total={N(_pushMs)} push-ms-max={N(_pushMaxMs)} push-alloc-kib={_pushAllocated / 1024} gc={gen} t={N(PerfProbe.SinceProcessStartMs)}");
+            $"pushes={_pushes} push-ms-total={N(_pushMs)} push-ms-max={N(_pushMaxMs)} push-alloc-kib={_pushAllocated / 1024} " +
+            $"view-rebuilds={_rebuilds} view-ms-total={N(_rebuildMs)} view-ms-max={N(_rebuildMaxMs)} gc={gen} t={N(PerfProbe.SinceProcessStartMs)}");
     }
 
     private void Reset(long timestamp)
     {
         _windowStart = timestamp;
-        (_frames, _pushes, _pushMs, _pushMaxMs, _pushAllocated) = (0, 0, 0, 0, 0);
+        (_frames, _pushes, _rebuilds, _pushMs, _pushMaxMs, _rebuildMs, _rebuildMaxMs, _pushAllocated) = (0, 0, 0, 0, 0, 0, 0, 0);
         (_gen0, _gen1, _gen2) = (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
     }
 }
