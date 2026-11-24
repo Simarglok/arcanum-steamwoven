@@ -414,14 +414,14 @@ public partial class HdInterfaceTexture : Texture2D
     private bool _released;
 
     /// <summary>ARC-RENDER-3106: the owner is done with this texture (a town-map tile of a town that is gone): it stops answering <see cref="Refresh"/>, frees the images it owns (the HD image, its
-    /// area copy, the generated frame and the Legacy texture) at once, and its queued area copy is forgotten (a worker that has not started drops it). It is not drawn again.</summary>
+    /// area copy and the Legacy texture) at once, and its queued area copy is forgotten (a worker that has not started drops it). It is not drawn again.</summary>
     internal void Release()
     {
         _released = true;
         InterfaceHd.ForgetDirect(_frame);
-        _hdCanvas = null; _areaCanvas = null; _generatedCanvas = null; _hdFor = null; _areaFrom = null; _generatedFrom = null;
-        var owned = new Resource?[] { _hd, _area, _generated, _legacy };
-        _hd = null; _area = null; _generated = null;
+        _hdCanvas = null; _areaCanvas = null; _hdFor = null; _areaFrom = null;
+        var owned = new Resource?[] { _hd, _area, _legacy };
+        _hd = null; _area = null;
         foreach (var resource in owned) resource?.Dispose();
     }
 
