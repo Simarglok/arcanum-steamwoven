@@ -387,7 +387,7 @@ def write_provenance(local_root: Path, batch: str, item: Item, result: ItemResul
     if result.crop:
         record["crop"] = result.crop  # the image above is the cropped band; the canvas Codex returned stays in the work folder
         record["raw_file"] = f"codex-work/{batch}/{run_stamp}/{item.id}.png"
-        record["raw_pixel_size"] = result.pixel_size
+        record["raw_pixel_size"] = result.crop["raw_pixel_size"]
         record["detail"] = "padded canvas cropped to the band: " + band_crop.describe(result.crop)
     path = outbox / f"{item.id}.provenance.json"
     if result.outcome != "ok" and (outbox / f"{item.id}.png").exists():
@@ -412,7 +412,9 @@ def crop_padded(item: Item, workdir: Path, result: ItemResult) -> Path | None:
     except (band_crop.CropError, ValueError, OSError) as error:
         result.detail += f"; band crop refused: {error}"
         return None
+    report["raw_pixel_size"] = result.pixel_size
     result.crop = report
+    result.pixel_size = list(final)  # the size of the image the record hashes; the canvas size stays in crop.raw_pixel_size
     result.outcome, result.detail = "ok", band_crop.describe(report)
     return target
 

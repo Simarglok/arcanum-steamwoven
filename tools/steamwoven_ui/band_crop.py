@@ -92,7 +92,10 @@ def run_magick(args: list[str]) -> str:
     magick = shutil.which("magick")
     if not magick:
         raise CropError("ImageMagick (`magick`) is needed for the band crop and was not found")
-    result = subprocess.run([magick, *args], capture_output=True, text=True, timeout=MAGICK_TIMEOUT)
+    try:
+        result = subprocess.run([magick, *args], capture_output=True, text=True, timeout=MAGICK_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise CropError(f"magick did not finish within {MAGICK_TIMEOUT} s") from None
     if result.returncode != 0:
         raise CropError(f"magick failed: {result.stderr.strip()[:300]}")
     return result.stdout
@@ -110,6 +113,8 @@ def magick_version() -> str:
 def crop_file(source: Path, out: Path, canvas: tuple[int, int], asked: list[int] | tuple[int, int], size: list[int] | tuple[int, int] | None = None,
               fuzz: float = DEFAULT_FUZZ, min_shave: int = MIN_SHAVE, max_shave: int = MAX_SHAVE) -> dict:
     """Crops the band of `source` (a PNG of pixel size `canvas`), resizes it to `size` (when given) and writes `out`; returns the report for the provenance record."""
+    if size and abs((size[0] / size[1]) / (asked[0] / asked[1]) - 1) > TOLERANCE:
+        raise CropError(f"the zone size {size[0]} x {size[1]} is not within {TOLERANCE:.0%} of the asked aspect {asked[0]}:{asked[1]}")
     box = parse_box(run_magick([str(source), "-fuzz", f"{fuzz:g}%", "-format", "%@", "info:"]))
     geometry = plan(canvas, box, asked, TOLERANCE, min_shave, max_shave)
     x, y, w, h = geometry["rect"]

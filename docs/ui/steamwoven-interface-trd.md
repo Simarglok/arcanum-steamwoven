@@ -304,7 +304,7 @@ Part kinds:
   logged with Codex's own text; the prompt is never reworded automatically. **Extreme aspects** (decision of ARC-UI-3083,
   [#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083), FR-UI-007): for the strips (19.5:1, 5:1) the generator returns a 2103 × 748 canvas with the piece drawn
   at the right proportion between white or black bars. The cropped band is accepted as the result when the tool step (`codex_batch.py run --crop-band`, or `codex_batch.py crop`) produced it:
-  the band's aspect is within 1 % of the asked one before the resize, the columns cut to land on it are at most 2 % of the band's width, nothing is stretched, and the provenance record
+  the band's aspect is within 1 % of the asked one before the resize, the columns cut to land on it are at most 2 % of the band's width, the band is cut, never stretched, before the resize to the zone, and the provenance record
   keeps the crop section and the hash of the canvas Codex returned. A canvas with no bars, or a band that cannot reach the aspect, stays `wrong-aspect`. The resize of the band to the zone size
   is part of that step (Lanczos, an upscale of about x1.37 for the two strips); it is not an upscale inside the generation session.
 - **SWI-GEN-9** A context image is a refinement of its ORIGINAL (owner decision 2026-11-20, [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)): the upscaled ORIGINAL is

@@ -480,6 +480,7 @@ class BandCropRun(RunnerCase):
         record = json.loads((self.local / "outbox" / "t-batch" / "a.provenance.json").read_text())
         self.assertEqual("ok", record["outcome"])
         self.assertEqual([420, 153], record["raw_pixel_size"])
+        self.assertEqual([200, 10], record["pixel_size"])  # the size of the image the record hashes
         self.assertEqual(cb.sha256_file(out), record["image_sha256"])
         self.assertEqual(cb.sha256_file(next((self.local / "codex-work" / "t-batch").glob("*/a.png"))), record["crop"]["raw_sha256"])
         self.assertEqual(record["crop"]["cropped_sha256"], record["image_sha256"])
@@ -510,7 +511,6 @@ class BandCropRun(RunnerCase):
         source = Path(self.tmp.name) / "canvas.png"
         source.write_bytes(padded_png_bytes())
         out = Path(self.tmp.name) / "strip.png"
-        lines: list[str] = []
         self.assertEqual(0, cb.crop_command(source, out, "200x10", None, band_crop.DEFAULT_FUZZ))
         self.assertEqual((200, 10), cb.png_size(out))
         record = json.loads((Path(self.tmp.name) / "strip.crop.json").read_text())
@@ -518,6 +518,9 @@ class BandCropRun(RunnerCase):
         self.assertEqual([420, 153], record["raw_pixel_size"])
         self.assertEqual(1, cb.crop_command(source, Path(self.tmp.name) / "no.png", "200x100", None, band_crop.DEFAULT_FUZZ))
         self.assertFalse((Path(self.tmp.name) / "no.png").exists())
+        # a size that disagrees with --aspect is refused before anything is written
+        self.assertEqual(1, cb.crop_command(source, Path(self.tmp.name) / "mixed.png", "200x10", "5:1", band_crop.DEFAULT_FUZZ))
+        self.assertFalse((Path(self.tmp.name) / "mixed.png").exists())
 
 
 def padded_png_bytes() -> bytes:
