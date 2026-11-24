@@ -53,14 +53,15 @@ public sealed record SteamwovenKitOverlay(string Part, int MasterWidth, int Mast
     public double UnitHeight => MasterHeight / 3.6;
 }
 
-/// <summary>The two-strip screens whose kit parts the viewer composes (ARC-UI-3038, ARC-UI-3039; the new character screen, the creation editor and the opening shop are [#3040](https://github.com/Simarglok/arcanum-steamwoven/issues/3040) to
-/// [#3041](https://github.com/Simarglok/arcanum-steamwoven/issues/3041), each adds its row).</summary>
+/// <summary>The two-strip screens whose kit parts the viewer composes (ARC-UI-3038, ARC-UI-3039, ARC-UI-3040; the creation editor and the opening shop are [#3041](https://github.com/Simarglok/arcanum-steamwoven/issues/3041), each adds its row).</summary>
 public enum SteamwovenKitScreen
 {
     /// <summary>The save and load windows (census M05, M06): <c>board.charcreatetopbar</c>, <c>backdrop.saveloadbackground</c> (art 745), <c>board.charcreatebottombar</c> (ARC-UI-3038).</summary>
     SaveLoad,
     /// <summary>The pre-made character browser (census M07, BD-G): <c>board.charcreatetopbar</c>, <c>backdrop.pregencharacterbase</c> (art 766), <c>board.charcreatebottombar</c> (ARC-UI-3039).</summary>
     PremadeBrowser,
+    /// <summary>The new character screen (census M08, BD-G): <c>board.charcreatetopbar</c>, <c>backdrop.createcharacterbase</c> (art 765), <c>board.charcreatebottombar</c> (ARC-UI-3040).</summary>
+    NewCharacter,
 }
 
 /// <summary>The kit parts a two-strip screen's 800 × 600 plate is made of, top to bottom: the top strip (the strip art, 2880 px wide), the body background (2880 × 1440, SWI-BDR-3) and the bottom strip. <paramref name="OwnArts"/> are the
@@ -192,6 +193,8 @@ public static class SteamwovenKitTable
             [AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt]),
         [SteamwovenKitScreen.PremadeBrowser] = new("board.charcreatetopbar", "backdrop.pregencharacterbase", "board.charcreatebottombar",
             [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt]),
+        [SteamwovenKitScreen.NewCharacter] = new("board.charcreatetopbar", "backdrop.createcharacterbase", "board.charcreatebottombar",
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt]),
     };
 
     /// <summary>The top and the bottom of the body of a two-strip screen, in the 800 × 600 plate's units (the strips are 41 and 159 units high).</summary>

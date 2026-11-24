@@ -42,6 +42,8 @@ public partial class TerrainViewerApp
         var checkedCases = 0;
         var firstPremade = true;
         var premadeKitCases = 0;
+        var firstNewCharacter = true;
+        var newCharacterKitCases = 0;
         string? syntheticKit = null;
         try
         {
@@ -103,8 +105,9 @@ public partial class TerrainViewerApp
                         if (screen.Hovered is { } hovered) await CheckTwoStripHitsAsync(tag, layout, screen.Spots, hovered, frames, require);
                         // ARC-UI-2461: with the synthetic kit the full-screen menus draw its plates.
                         if (syntheticKit is not null && screen.Name is "main" or "options") await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
-                        // ARC-UI-3039: with the synthetic kit the pre-made browser draws its two strips and its body.
-                        if (syntheticKit is not null && screen.Name == "premade") { await CheckKitPremadeScreenAsync(tag, layout, panel.PremadeArtForSelfTest, firstPremade, syntheticKit, frames, require); firstPremade = false; premadeKitCases++; }
+                        // ARC-UI-3039, ARC-UI-3040: with the synthetic kit the pre-made browser and the new character screen draw their two strips and their bodies.
+                        if (syntheticKit is not null && screen.Name == "premade") { await CheckKitCharacterScreenAsync(tag, layout, KitPremadeView(panel.PremadeArtForSelfTest), firstPremade, syntheticKit, frames, require); firstPremade = false; premadeKitCases++; }
+                        if (syntheticKit is not null && screen.Name == "newcharacter") { await CheckKitCharacterScreenAsync(tag, layout, KitNewCharacterView(panel.NewCharacterArtForSelfTest), firstNewCharacter, syntheticKit, frames, require); firstNewCharacter = false; newCharacterKitCases++; }
                         await SaveAsync($"column-{tag}");
                         checkedCases++;
                     }
@@ -148,6 +151,7 @@ public partial class TerrainViewerApp
                 "with the HD option off the Steamwoven layout draws nothing: no plan, no surroundings");
             GD.Print($"ARC-UI-2891 native-smoke menu column PASS cases={checkedCases}");
             if (syntheticKit is not null) GD.Print($"ARC-UI-3039 native-smoke premade kit PASS cases={premadeKitCases}");
+            if (syntheticKit is not null) GD.Print($"ARC-UI-3040 native-smoke newcharacter kit PASS cases={newCharacterKitCases}");
         }
         finally
         {
