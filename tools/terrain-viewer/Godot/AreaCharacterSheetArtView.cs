@@ -271,8 +271,19 @@ public partial class AreaCharacterSheetArtView : Control
     internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
-    /// <summary>ARC-UI-3037: the kit's character background shows under this window (never on the new-character screen, which has no kit).</summary>
-    private bool KitBackgroundShown => !MenuScreen && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
+    /// <summary>ARC-UI-3037: the kit's character background shows under this window. ARC-UI-3041: the creation editor's sheet (<see cref="MenuScreen"/>) follows the editor screen's own kit body (<see cref="KitBody"/>), not the bars' window (the menu has none).</summary>
+    private bool KitBackgroundShown => MenuScreen ? _kitBody : AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
+
+    /// <summary>ARC-UI-3041 (census M09): the creation editor's kit body (the character window's kit background, drawn by the screen's strips view under this window) shows now: the sheet draws no art 22 of its own and its stand-ins and stat names instead.
+    /// Meaningful only on the editor's sheet.</summary>
+    internal bool KitBackgroundShownForSelfTest => KitBackgroundShown;
+
+    public bool KitBody
+    {
+        get => _kitBody;
+        set { if (_kitBody == value) return; _kitBody = value; QueueRedraw(); }
+    }
+    private bool _kitBody;
 
     public override void _Draw()
     {

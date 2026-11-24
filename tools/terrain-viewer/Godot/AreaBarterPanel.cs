@@ -74,7 +74,8 @@ public partial class AreaBarterPanel : CanvasLayer
     {
         get => _docked;
         // Above the menu's backdrop (layer 4), whichever panel the tree made first.
-        set { _docked = value; if (value) _area?.SetKitBackdrop(null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
+        // ARC-UI-3041: docking takes the kit body of the shop (when it shows) in place of the in-game window's; undocking drops it.
+        set { _docked = value; _area?.SetKitBackdrop(value && ArtMode ? _shopKit : null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
     }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;
@@ -88,6 +89,15 @@ public partial class AreaBarterPanel : CanvasLayer
 
     /// <summary>ARC-UI-3033: the kit background under the frame, or null (the frame draws its own art).</summary>
     internal void SetKitBackdrop(AreaKitBackdrop? kit) => _area?.SetKitBackdrop(ArtMode && !_docked ? kit : null);
+
+    /// <summary>ARC-UI-3041 (census M10): the kit's body of the opening shop lies under the docked frame (the shop's view draws it, <see cref="AreaShopArtView"/>): the frame then draws none of its own background art (the merchant's side, the hero's
+    /// inventory) and takes the kit's overlays for its doll view and doll cover; null (the screen draws its own art, or the frame is not docked): the frame draws its own art as before.</summary>
+    internal void SetShopKitBackdrop(AreaKitBackdrop? kit)
+    {
+        _shopKit = kit;
+        _area?.SetKitBackdrop(_docked && ArtMode ? kit : null);
+    }
+    private AreaKitBackdrop? _shopKit;
     internal Button LookToggleForSelfTest => _lookToggle;
 
     /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
@@ -214,6 +224,8 @@ public partial class AreaBarterPanel : CanvasLayer
         var art = ArtMode;
         // ARC-UI-069: in the opening shop the main menu is up: no round view and no release in its square (IW33, IW34).
         _area.MenuUp = _docked;
+        // ARC-UI-3041: the docked frame (the opening shop's) follows the shop's kit body from the first render on.
+        if (_docked) _area.SetKitBackdrop(art ? _shopKit : null);
         _area.SetLook(art ? _look : null);
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _hint }) control.Visible = !art;

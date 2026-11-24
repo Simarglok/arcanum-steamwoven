@@ -48,6 +48,7 @@ public partial class TerrainViewerApp
             _editorPanel = new AreaCharacterSheetPanel(creation: true); AddChild(_editorPanel);
             // ARC-UI-147: only with the strips and buttons it shares with the shop (an editor whose strips did not read keeps the diagnostic panel).
             if (CharacterEditorArtReady) AttachSheetArt(_editorPanel);
+            SyncShopKit(); // ARC-UI-3041: the editor's sheet follows the screen's kit body from its first draw on
             _editorPanel.SoundRequested += id => PlayBarSound(id, "editor button");
             _editorPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
             _editorPanel.CloseRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
@@ -169,7 +170,7 @@ public partial class TerrainViewerApp
                 ($"Plus:7", plusX, plusY + wy), ($"Minus:3", minusX, minusY + wy), ($"Tab:{(int)AreaSheetTab.Spells}", tabSpells.X, tabSpells.Y + wy),
             ];
             await TwoStripScreenColumnForSmoke("editor", () => (art.Position - new Vector2(0, wy * art.Scale.X), art.Scale.X), () => art.PointForSelfTest(0, 0),
-                () => panel.ShopArtForSelfTest.HoveredForSelfTest is { } shopButton ? shopButton.ToString() : art.HoveredForSelfTest is { } hit ? $"{hit.Kind}:{hit.Index}" : null, spots, require, Frames);
+                () => panel.ShopArtForSelfTest.HoveredForSelfTest is { } shopButton ? shopButton.ToString() : art.HoveredForSelfTest is { } hit ? $"{hit.Kind}:{hit.Index}" : null, spots, require, Frames, KitEditorView);
         }
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture)
         {

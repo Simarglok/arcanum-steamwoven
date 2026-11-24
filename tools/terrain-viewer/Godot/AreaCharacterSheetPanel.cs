@@ -391,9 +391,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
 
     public void SetPortrait(Texture2D? portrait) => _portrait = portrait;
 
+    /// <summary>ARC-UI-3041: the creation editor's screen draws the kit's character window background under this sheet (or stopped doing so): the sheet's art view skips its own art 22 exactly then.</summary>
+    internal void SetKitBody(bool shown) { if (_artView is not null) _artView.KitBody = shown; _kitBodyShown = shown; }
+    private bool _kitBodyShown;
+
     private void BuildArtView()
     {
-        _artView = new AreaCharacterSheetArtView { MenuScreen = _creation };
+        _artView = new AreaCharacterSheetArtView { MenuScreen = _creation, KitBody = _kitBodyShown };
         AddChild(_artView);
         if (!_creation) { _roundView = new AreaRoundView(); AddChild(_roundView); }
         var (px, py, pw, ph) = AreaCharacterSheetArtLayout.Panel;

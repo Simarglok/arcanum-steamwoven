@@ -173,6 +173,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-339: the arrange button's layout flag is cleared at every open (ledger IW37).
         _arrangeLayout = InventoryArrangeLayout.Horizontal;
         _barterPanel.Docked = shop;
+        SyncShopKit();
         _mainMenuPanel?.SetDockedBelow(shop);
         // ARC-UI-064: the window in the world shows the original look when the game's art read; the open centres the game view on the PC
         // (0x5732D5 → 0x4B8CE0, IW33) at the current zoom, as the inventory window's. ARC-UI-069: the opening shop's docked window too (with
@@ -195,6 +196,18 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-050 barter open merchant={merchant.Entity} follower={merchant.Follower} multiplier={merchant.Multiplier} buys={merchant.BuyList.Status} fence={merchant.Fence} script={merchant.BuyScript} hero={view.Hero.Count} wares={view.Wares.Count} gold={view.HeroGold}/{view.MerchantGold} haggle={view.Haggle} reaction={view.Reaction}");
         GD.Print($"ARC-WORLD-090 barter stock container={merchant.Container ?? "none"} containerBuys={merchant.ContainerBuyList?.Status.ToString() ?? "-"} movedCoins={opened.Coins} movedPiles={opened.Piles} identified={opened.Identified}");
         RefreshReadyStatus();
+    }
+
+    /// <summary>
+    /// ARC-UI-3041 (census M09, M10): the kit's body of the opening shop or the creation editor (the strips view of the main menu draws it) tells the window over it to skip exactly its own backdrop: the shop's docked barter frame (no background art of
+    /// its own, the kit's doll view and doll cover) and the editor's sheet (no art 22, its stand-ins and stat names instead); with no kit body both draw their own art as before. Called when the kit's body changes and when either window comes up.
+    /// </summary>
+    private void SyncShopKit()
+    {
+        if (_mainMenuPanel is not { } panel) return;
+        var window = panel.ShopKitWindow;
+        _barterPanel?.SetShopKitBackdrop(window is SteamwovenKitWindow.Barter or SteamwovenKitWindow.BarterFollower ? panel.ShopKitBackdrop ?? new AreaKitBackdrop(null, null) : null);
+        _editorPanel?.SetKitBody(window == SteamwovenKitWindow.Character);
     }
 
     private void SellToMerchant(string entity) => Trade(entity, sell: true);
@@ -259,7 +272,13 @@ public partial class TerrainViewerApp
     /// shop session's, from the shop map's host and the kit's tables. Null without the art.</summary>
     private (AreaInventoryView Inventory, AreaBarterFrame Frame)? BarterArt(AreaBarterView view)
     {
-        if (_barterInShop) return ShopBarterArt(view);
+        if (_barterInShop)
+        {
+            // ARC-UI-3041: the shop's view draws the kit piece of this merchant's side (a follower's background art is its own piece).
+            var shopArt = ShopBarterArt(view);
+            _mainMenuPanel?.SetShopBarterBackground(shopArt?.Frame.Background ?? AreaBarterArtLayout.BarterArt);
+            return shopArt;
+        }
         if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
         var merchant = view.Merchant;
         var inventory = WithMerchantDoll(InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity), HolderPortrait = _inventoryHost.HolderPortrait(session, CurrentAreaMap, merchant.Entity) },
