@@ -20,7 +20,8 @@ public partial class TerrainViewerApp
         KitBarter = new(0.55f, 0.35f, 0.15f), KitBarterFollower = new(0.15f, 0.55f, 0.55f),
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
-        KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f);
+        KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
+        KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -42,6 +43,8 @@ public partial class TerrainViewerApp
         ("sheet.char_spells", 846, 1170, KitSpellsSheet), ("sheet.scheme_rot", 846, 1170, KitSchemesSheet),
         // ARC-UI-3037: the logbook's two pieces and the schematic window's backdrop.
         ("backdrop.logbooks_side", 594, 1440, KitLogSide), ("backdrop.book_main", 2286, 1440, KitLogBook), ("backdrop.schematic_base", 2880, 1440, KitSchematic),
+        // ARC-UI-3038: the save and load screen's two strips (the provisional 150 and 570 px) and its body.
+        ("board.charcreatetopbar", 2880, 150, KitSaveTop), ("backdrop.saveloadbackground", 2880, 1440, KitSaveBody), ("board.charcreatebottombar", 2880, 570, KitSaveBottom),
     ];
 
     /// <summary>Writes the synthetic set of <paramref name="step"/> under <paramref name="root"/> (parts named in <paramref name="without"/> left out, their records too).</summary>
@@ -68,6 +71,82 @@ public partial class TerrainViewerApp
         }
         System.IO.File.WriteAllText(System.IO.Path.Combine(directory, "manifest.json"), JsonSerializer.Serialize(new Dictionary<string, object>
         { ["schema"] = 1, ["bake_version"] = 1, ["step"] = SteamwovenKitSet.FolderName(step), ["ratio"] = new[] { scale.Numerator, scale.Denominator }, ["parts"] = records }));
+    }
+
+    /// <summary>
+    /// ARC-UI-3038 (census M05, M06; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the save window's column pass, <c>SaveListColumnForSmoke</c>): the real save or load window over the synthetic kit's three parts. At each size the view draws the composer's
+    /// plan (the top strip, the body and the bottom strip tiling the plate, the body sampled nearest exactly where its draw is exact), none of the original's arts 336, 335 and 745, the preview's black stand-in, and the pixels read back are the kit's
+    /// colours in each of the three rows and across both seams. With <paramref name="firstSize"/> it also checks the fallback (a set without the body gives the screen's own three arts whole and no resident backdrop; the kit is back when the set is)
+    /// and the HD option off (no kit at all); the body part goes with the screen (SWI-RUN-5) at the caller's close.
+    /// </summary>
+    private async Task CheckKitSaveScreenAsync(string tag, SteamwovenFullScreenPlan plan, AreaSaveListArtView art, bool firstSize, string kitRoot, Func<int, Task> frames, Action<bool, string> require)
+    {
+        AreaKitStandIns.ResetForSelfTest();
+        art.Place(); art.QueueRedraw();
+        await frames(3);
+        var set = SteamwovenKitStore.SetFor(plan.Layout.Step);
+        var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.SaveLoad).Value;
+        require(composed is not null, $"[{tag}] the synthetic set composes the save screen");
+        var drawn = art.KitScreenForSelfTest;
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the save window draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] over the kit the screen draws none of its own arts 336, 335 and 745 (drew {string.Join(",", art.OwnBackdropDrawnForSelfTest)})");
+        require(AreaKitStandIns.DrawnScreensForSelfTest.Contains(SteamwovenKitScreen.SaveLoad), $"[{tag}] the preview's stand-in field is drawn over the kit");
+        if (composed is null || drawn is null) return;
+        require(art.KitSampledNearestForSelfTest(1) == composed.Body.Exact, $"[{tag}] the body is sampled {(composed.Body.Exact ? "nearest" : "linear")} as its draw is {(composed.Body.Exact ? "exact" : "scaled")}");
+        require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 1, $"[{tag}] only the screen's body is resident");
+        using (var image = GetViewport().GetTexture().GetImage())
+        {
+            var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+            Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
+            Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
+            var (top, body, bottom) = (AtUnit(400, 20), AtUnit(250, 41 + 30), AtUnit(400, 465));
+            require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
+            require(Near(body, KitSaveBody), $"[{tag}] the body between the lens and the preview is the kit's body (got {body})");
+            require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
+            // The seams: two device rows either side of the body's top and bottom edges, clear of the buttons, the lens and the list.
+            var x = (int)Math.Round(plan.ToDevice(250, 0).X);
+            var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
+            var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
+            require(Near(aboveTop, KitSaveTop) && Near(belowTop, KitSaveBody), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(Near(aboveBottom, KitSaveBody) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            var preview = AtUnit(AreaSaveListArtLayout.Preview.X + 4, AreaSaveListArtLayout.Preview.Y + 4);
+            require(!Near(preview, KitSaveBody), $"[{tag}] the preview's field is not the kit's body (got {preview})");
+            // The message box of the bottom strip's middle is a black stand-in (the details and the questions are written on it), clear of the kit's bottom strip colour.
+            var message = AtUnit(AreaSaveListArtLayout.MessageBox.X + AreaSaveListArtLayout.MessageBox.Width - 10, AreaSaveListArtLayout.MessageBox.Y + AreaSaveListArtLayout.MessageBox.Height - 10);
+            require(message.R8 + message.G8 + message.B8 < 12, $"[{tag}] the bottom strip's message box is a black field (got {message})");
+        }
+        if (!firstSize) return;
+        // Fallback: a set without the body part gives the screen's own arts whole (strips and background), and nothing of the kit stays resident; the same set with the body is the kit again.
+        var without = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-save-without-").FullName;
+        try
+        {
+            WriteSyntheticKitSet(without, plan.Layout.Step, "backdrop.saveloadbackground");
+            SteamwovenKitStore.UseRoot(without);
+            art.QueueRedraw();
+            await frames(3);
+            var ownArts = new[] { AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt }.Where(number => art.TexturesForSelfTest.ContainsKey(number)).ToArray();
+            require(art.KitScreenForSelfTest is null && art.OwnBackdropDrawnForSelfTest.SequenceEqual(ownArts) && ownArts.Length > 0,
+                $"[{tag}] a set without the body: the screen draws its own arts whole (kit {(art.KitScreenForSelfTest is null ? "none" : "drawn")}, own {string.Join(",", art.OwnBackdropDrawnForSelfTest)} of {string.Join(",", ownArts)})");
+            require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] a set without the body leaves no kit backdrop resident");
+        }
+        finally
+        {
+            SteamwovenKitStore.UseRoot(kitRoot);
+            try { System.IO.Directory.Delete(without, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3038 kit smoke: temporary folder not removed: " + exception.Message); }
+        }
+        art.QueueRedraw();
+        await frames(3);
+        require(art.KitScreenForSelfTest is not null && art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] the kit is back with a whole set");
+        // The HD option off (the Original look): nothing of the kit is read or drawn, the screen's own arts are the original's.
+        var savedHd = _gameSettings.HdInterface;
+        _gameSettings = _gameSettings with { HdInterface = false };
+        SyncInterfaceHd();
+        await frames(4);
+        require(art.KitScreenForSelfTest is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
+        _gameSettings = _gameSettings with { HdInterface = savedHd };
+        SyncInterfaceHd();
+        await frames(4);
+        require(art.KitScreenForSelfTest is not null, $"[{tag}] the kit screen is back with the HD option on");
     }
 
     /// <summary>ARC-UI-2461 (SWI-BDR-6): the full-screen plates of the column menu pass (ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the menu smoke): the synthetic kit's main and options plates are the ones drawn, at the plate's corners, and

@@ -172,6 +172,7 @@ public partial class TerrainViewerApp
         var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         var cases = 0;
+        string? syntheticKit = null;
         try
         {
             _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
@@ -181,6 +182,14 @@ public partial class TerrainViewerApp
             window.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
             window.ContentScaleFactor = 1;
             SteamwovenHud.Options = SteamwovenLayoutOptions.ColumnOriginal;
+            if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_SYNTHETIC") == "1")
+            {
+                // ARC-UI-3038: every step the sizes need, written before the store reads any (a step is read once).
+                syntheticKit = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-save-").FullName;
+                foreach (var step in ColumnMenuSizes().Select(size => SteamwovenColumnMenu.Plan(size.X, size.Y, SteamwovenLayoutOptions.ColumnOriginal)!.Layout.Step).Distinct()) WriteSyntheticKitSet(syntheticKit, step);
+                SteamwovenKitStore.UseRoot(syntheticKit);
+            }
+            var firstSize = true;
             foreach (var size in ColumnMenuSizes())
             {
                 window.ContentScaleSize = size;
@@ -192,6 +201,8 @@ public partial class TerrainViewerApp
                 require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the save list is laid out by the column plan");
                 var art = panel.ArtForSelfTest;
                 await CheckColumnCaseAsync(tag, plan!, panel.ColumnSidesForSelfTest, (art.Position, art.Scale.X), null, frames, require);
+                // ARC-UI-3038: with the synthetic kit the screen draws its strips and body.
+                if (syntheticKit is not null) { await CheckKitSaveScreenAsync(tag, plan!, art, firstSize, syntheticKit, frames, require); firstSize = false; }
                 if (capture is not null)
                 {
                     using var image = GetViewport().GetTexture().GetImage();
@@ -200,6 +211,7 @@ public partial class TerrainViewerApp
                 cases++;
             }
             GD.Print($"ARC-UI-2891 native-smoke save list column PASS cases={cases}");
+            if (syntheticKit is not null) GD.Print($"ARC-UI-3038 native-smoke save screen kit PASS cases={cases}");
         }
         finally
         {
@@ -208,6 +220,11 @@ public partial class TerrainViewerApp
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
+            if (syntheticKit is not null)
+            {
+                SteamwovenKitStore.ClearOverride();
+                try { System.IO.Directory.Delete(syntheticKit, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3038 kit smoke: temporary folder not removed: " + exception.Message); }
+            }
             // The window and its views take the restored size and layout before the caller measures them again.
             await frames(4);
         }

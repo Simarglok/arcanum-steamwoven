@@ -29,6 +29,11 @@ public sealed class SteamwovenKitTests
             foreach (var (id, width) in window.Pieces)
                 if (parts.All(part => part.Id != id)) parts.Add(new(id, B(width), B(1440))); // the inventory's right half is shared by the loot window
         foreach (var sheet in SteamwovenKitTable.Sheets.Values) parts.Add(new(sheet.Part, B(sheet.MasterWidth), B(sheet.MasterHeight)));
+        // ARC-UI-3038: the two-strip screens' strips (provisional 150 / 570 master px) and bodies.
+        foreach (var screen in SteamwovenKitTable.Screens.Values)
+        {
+            parts.Add(new(screen.TopStrip, B(2880), B(150))); parts.Add(new(screen.BottomStrip, B(2880), B(570))); parts.Add(new(screen.Body, B(2880), B(1440)));
+        }
         foreach (var overlay in new[] { SteamwovenKitTable.BarterDoll, SteamwovenKitTable.HeroDollCover }) parts.Add(new(overlay.Part, B(overlay.MasterWidth), B(overlay.MasterHeight)));
         return SteamwovenKitSet.FromParts(step, "/kit/" + SteamwovenKitSet.FolderName(step), parts.Where(part => !without.Contains(part.Id)));
     }
@@ -432,12 +437,100 @@ public sealed class SteamwovenKitTests
         Assert.IsTrue(SteamwovenKitTable.ButtonGlyphs.Values.Concat(SteamwovenKitTable.SharedArtGlyphs.Values).All(SteamwovenKitSet.ValidId));
     }
 
+    private static SteamwovenFullScreenPlan Screen(int width, int height) => SteamwovenFullScreen.Plan(width, height, SteamwovenLayoutOptions.ColumnOriginal)!;
+
+    [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(2560, 1440, SteamwovenStep.TwoThirds)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(1920, 1200, SteamwovenStep.TwoThirds)]
+    [DataRow(1280, 1024, SteamwovenStep.Third)]
+    [DataRow(1024, 768, SteamwovenStep.Half)]
+    public void A_two_strip_screen_is_the_top_strip_the_body_and_the_bottom_strip_tiling_the_plate_with_the_body_exactly_its_400_units(int width, int height, SteamwovenStep step)
+    {
+        var plan = Screen(width, height);
+        var set = Full(step);
+        var composed = SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.SaveLoad);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        CollectionAssert.AreEqual(new[] { "board.charcreatetopbar", "backdrop.saveloadbackground", "board.charcreatebottombar" }, screen.Draws.Select(draw => draw.PartId).ToArray());
+        var zone = plan.Zone;
+        Assert.IsTrue(screen.Draws.All(draw => draw.Rect.X == zone.X && draw.Rect.Right == zone.Right), "each part spans the plate's width");
+        Assert.AreEqual(zone.Y, screen.Top.Rect.Y); Assert.AreEqual(zone.Bottom, screen.Bottom.Rect.Bottom);
+        Assert.AreEqual(screen.Top.Rect.Bottom, screen.Body.Rect.Y, "no gap between the top strip and the body");
+        Assert.AreEqual(screen.Body.Rect.Bottom, screen.Bottom.Rect.Y, "no gap between the body and the bottom strip");
+        Assert.AreEqual(zone.Y + (int)Math.Round(41 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Y);
+        Assert.AreEqual(zone.Y + (int)Math.Round(441 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Bottom);
+        Assert.IsTrue(screen.Draws.All(draw => draw.Clip == draw.Rect), "nothing is clipped");
+    }
+
+    [TestMethod]
+    public void At_the_exact_scale_the_body_is_the_baked_pixels_and_the_strips_are_scaled_into_their_rows()
+    {
+        // 3840 x 2160: 3.6 device px per unit, the step 1: the body 2880 x 1440 is the device pixels; the strips are 150 and 570 master px baked into 148 and 572 device px rows (SWI-LAY-7's open exception): scaled.
+        var plan = Screen(3840, 2160);
+        var screen = SteamwovenKitComposer.Screen(plan, Full(SteamwovenStep.One), SteamwovenKitScreen.SaveLoad).Value!;
+        Assert.AreEqual(2880, screen.Body.Rect.Width); Assert.AreEqual(1440, screen.Body.Rect.Height);
+        Assert.IsTrue(screen.Body.Exact);
+        Assert.AreEqual(148, screen.Top.Rect.Height); Assert.AreEqual(572, screen.Bottom.Rect.Height);
+        Assert.IsFalse(screen.Top.Exact); Assert.IsFalse(screen.Bottom.Exact);
+    }
+
+    [TestMethod]
+    [DataRow("board.charcreatetopbar")]
+    [DataRow("backdrop.saveloadbackground")]
+    [DataRow("board.charcreatebottombar")]
+    public void A_two_strip_screen_with_any_part_missing_has_no_kit_screen_and_names_the_part(string missingPart)
+    {
+        var plan = Screen(1920, 1080);
+        var result = SteamwovenKitComposer.Screen(plan, Full(SteamwovenStep.Half, missingPart), SteamwovenKitScreen.SaveLoad);
+        Assert.IsFalse(result.Complete);
+        CollectionAssert.AreEqual(new[] { missingPart }, result.Missing.ToArray());
+    }
+
+    [TestMethod]
+    public void A_strip_not_2880_wide_or_a_body_of_another_size_makes_the_screen_missing_whole()
+    {
+        var plan = Screen(1920, 1080);
+        SteamwovenKitSet Set(int stripWidth, int bodyHeight) => SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2",
+            [new("board.charcreatetopbar", stripWidth, 75), new("board.charcreatebottombar", 1440, 285), new("backdrop.saveloadbackground", 1440, bodyHeight)]);
+        var narrow = SteamwovenKitComposer.Screen(plan, Set(1000, 720), SteamwovenKitScreen.SaveLoad);
+        Assert.IsFalse(narrow.Complete);
+        Assert.IsTrue(narrow.Missing.Single().Contains("board.charcreatetopbar") && narrow.Missing.Single().Contains("not 2880 px wide"));
+        var low = SteamwovenKitComposer.Screen(plan, Set(1440, 700), SteamwovenKitScreen.SaveLoad);
+        Assert.IsFalse(low.Complete);
+        Assert.IsTrue(low.Missing.Single().Contains("backdrop.saveloadbackground") && low.Missing.Single().Contains("wrong size"));
+        // The strips' heights are not checked (the provisional 150 and 570 master px move with #2927), only their width.
+        Assert.IsTrue(SteamwovenKitComposer.Screen(plan, Set(1440, 720), SteamwovenKitScreen.SaveLoad).Complete);
+    }
+
+    [TestMethod]
+    public void The_save_and_load_screen_draws_none_of_its_own_backdrop_arts_over_a_kit_screen_and_all_three_without()
+    {
+        CollectionAssert.AreEqual(new[] { 336, 335, 745 }, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.SaveLoad, false).ToArray());
+        Assert.AreEqual(0, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.SaveLoad, true).Count);
+        // The arts the table names are the screen's own (strips 336 and 335, the background 745), as the viewer draws them.
+        CollectionAssert.AreEquivalent(new[] { AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt }, SteamwovenKitTable.Screens[SteamwovenKitScreen.SaveLoad].OwnArts.ToArray());
+    }
+
+    [TestMethod]
+    public void The_save_screen_s_message_box_is_the_bottom_strip_below_the_middle_window_s_47_rows()
+    {
+        var box = AreaSaveListArtLayout.MessageBox;
+        Assert.AreEqual((200, 488, 400, 112), box);
+        // The strip art's middle window is 400 x 47 at the strip's top; the box is the rest of the strip below it, up to the screen's bottom edge.
+        var middle = AreaSaveListArtLayout.BottomStripParts[0];
+        Assert.AreEqual((middle.X, middle.Y + middle.Height, middle.Width), (box.X, box.Y, box.Width));
+        Assert.AreEqual(AreaSaveListArtLayout.ScreenHeight, box.Y + box.Height);
+    }
+
     [TestMethod]
     public void The_table_names_only_ids_that_are_safe_file_names_and_parts_of_the_manifest()
     {
         var ids = SteamwovenKitTable.Strips.Values.SelectMany(strip => new[] { strip.Board, strip.CapLeft, strip.CapRight })
             .Concat(SteamwovenKitTable.Windows.Values.SelectMany(window => window.Pieces.Select(piece => piece.Part)))
-            .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).Concat(SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)).Concat(SteamwovenKitTable.Covers.Values.Select(cover => cover.Part)).ToList();
+            .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).Concat(SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)).Concat(SteamwovenKitTable.Covers.Values.Select(cover => cover.Part))
+            .Concat(SteamwovenKitTable.Screens.Values.SelectMany(screen => new[] { screen.TopStrip, screen.Body, screen.BottomStrip })).ToList();
         Assert.IsTrue(ids.All(SteamwovenKitSet.ValidId));
         // Every id is a row of the committed kit manifest (identifiers only), so a renamed part cannot leave the table behind.
         var manifest = System.IO.File.ReadAllText(FindKit());
