@@ -139,16 +139,23 @@ public partial class TerrainViewerApp
     {
         // Automated runs drive the animation time themselves, as they drive the clock (TickAreaClock).
         if (SelfTestBootstrap || _nativeSmoke) return;
+        // ARC-RENDER-3126: with the timing probe on, one line a second (fps, the animated lights' pushes, the canvas's view rebuilds); one flag test otherwise.
+        if (PerfProbe.Enabled) LightAnimationProbe.Shared.Frame(System.Diagnostics.Stopwatch.GetTimestamp(), Engine.GetFramesPerSecond(), _readyArea?.Lighting?.Local?.Field.Animated.Count ?? 0);
         if (_areaAmbient is not { } driver || _readyArea?.Lighting?.Local is not { } local || local.Field.Animated.Count == 0) return;
         if (_frameTap?.Clocks is not { } clocks) return;
         _lightAnimationMs = clocks.WorldMs - (_lightAnimationBaseMs ??= clocks.WorldMs);
         // With the lighting toggled off nothing is drawn lit; the time still runs.
         if (!driver.Enabled) return;
+        // ARC_LIGHT_ANIM=0 (ARC-RENDER-3126, diagnostic only): the animation time runs but no new pose is pushed.
+        if (LightAnimationProbe.Disabled) return;
         var key = local.AtHour(driver.Selection.Hour).AnimationKey((long)_lightAnimationMs);
         if (key == _lightAnimationKey) return;
         _lightAnimationKey = key;
         if (_restDark) return; // SWB11: the light is held during a rest; the stop applies it
+        if (!PerfProbe.Enabled) { PushAreaAmbient(); return; }
+        var (started, allocated) = (System.Diagnostics.Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread());
         PushAreaAmbient();
+        LightAnimationProbe.Shared.Push(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - allocated);
     }
 
     private void TickAreaClock()
