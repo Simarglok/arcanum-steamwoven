@@ -173,6 +173,19 @@ public sealed class AreaWorldMapArtTests
     }
 
     [TestMethod]
+    public void The_content_names_the_bitmap_path_of_every_tile_and_of_the_continent_picture_for_the_hd_pack_key()
+    {
+        // ARC-RENDER-3079: the HD pack's worldmap and map-zoomed entries are keyed by these lowercase paths (tile index = column + 8 x row).
+        var content = new AreaWorldMapArtContent(new Dictionary<int, AreaInterfaceArtLoad>(), [], "synthetic") { TileBaseName = "SmallMapChunks", ZoomedPath = "worldmap/map_zoomed.bmp" };
+        Assert.AreEqual("worldmap/smallmapchunks001.bmp", content.TilePathOf(0));
+        Assert.AreEqual("worldmap/smallmapchunks010.bmp", content.TilePathOf(9), "column 1 of row 1");
+        Assert.AreEqual("worldmap/smallmapchunks064.bmp", content.TilePathOf(63));
+        Assert.IsNull(new AreaWorldMapArtContent(new Dictionary<int, AreaInterfaceArtLoad>(), [], "synthetic").TilePathOf(0), "no base name read: no HD key");
+        for (var index = 0; index < 64; index++) Assert.IsTrue(Arcanum.Data.Hd.HdMapKey.TryPath(content.TilePathOf(index)!, out _), content.TilePathOf(index));
+        Assert.IsTrue(Arcanum.Data.Hd.HdMapKey.TryPath(content.ZoomedPath!, out _));
+    }
+
+    [TestMethod]
     public void The_look_is_ready_only_with_all_its_art_and_all_64_tiles()
     {
         var art = AreaWorldMapArtLayout.ArtNumbers.ToDictionary(number => number,

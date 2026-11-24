@@ -456,6 +456,10 @@ public partial class AreaWorldMapArtView : Control
                 hd.ScaleSource = _deviceScale;
                 if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
             }
+        // ARC-RENDER-3079: the map tiles and the continent picture may draw HD redraws too; they are watched (an HD setting or pack change redraws the window) but claim no device scale: they are
+        // drawn into their rectangles of 250 / 365 window units at any picture scale, and the trilinear draw of a mip chain serves that, where a scale-sized copy would be minified without one.
+        foreach (var texture in _look.Tiles.Cast<Texture2D?>().Append(_look.Zoomed))
+            if (texture is HdInterfaceTexture hd && _watched.Add(hd)) hd.Changed += _onTextureChanged;
     }
 
     /// <summary>ARC-UI-1197: the textures of the given art numbers that the window holds, every frame, with the art number of each (the native smoke).</summary>
