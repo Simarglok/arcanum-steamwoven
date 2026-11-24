@@ -4,8 +4,8 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-156 (B27, B28): the original's text fonts (art 27 and 229; ARC-UI-124 art 230, the combat panel's number) for the message window, its hover text, the floating tooltip and
-// the floaters, read once a module. Without a game folder (a self-test) or when the art did not read they are null and every user draws
-// with the viewer's own font, as before.
+// the floaters, read once a module. Without a game folder (a self-test) or when the art did not read they are null and the users draw nothing
+// (ARC-UI-3136: Godot's default font is a developer-only fallback, AreaFallbackLook).
 public partial class TerrainViewerApp
 {
     private AreaTextFontContent? _textFontContent;

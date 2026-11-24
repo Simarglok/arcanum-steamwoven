@@ -54,7 +54,7 @@ public partial class AreaReadingPanel : CanvasLayer
         _artView.CloseRequested += () => CloseRequested?.Invoke();
         _artView.PageRequested += by => PageRequested?.Invoke(by);
         _roundView = new AreaRoundView(); AddChild(_roundView);
-        _panel = new PanelContainer { Name = "AreaReading", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = "AreaReading", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(226 / 255f, 216 / 255f, 192 / 255f, .97f),

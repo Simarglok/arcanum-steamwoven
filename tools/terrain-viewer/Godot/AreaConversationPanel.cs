@@ -365,9 +365,10 @@ public partial class AreaConversationPanel : CanvasLayer
         if (_originalRows) StyleBandRow(button);
         // ARC-UI-2791: the Original band shows the original's rows only (no grey, no tooltip); Steamwoven marks a reply the runtime cannot run by grey and a tooltip.
         if (_originalRows) blocked = false;
-        else if (reason is not null) button.TooltipText = reason;
+        else if (reason is not null) AreaArtTip.Set(button, reason);
         button.SetMeta(ReplyTextMeta, text);
-        if (_fonts is null) button.Text = text;
+        // ARC-UI-3136: without the original's font the text is the developer-only fallback (Godot's default font), else nothing.
+        if (_fonts is null && AreaFallbackLook.Allowed) button.Text = text;
         else
         {
             // ARC-UI-2022 (0x4C9810, 0x5351D0): a band row is the text at its row's left with a drop shadow 1 px right and down, the shadow drawn first.
@@ -417,7 +418,7 @@ public partial class AreaConversationPanel : CanvasLayer
         var leave = awaiting ? "Leave without answering (diagnostic)" : "Close";
         _leave.SetMeta(ReplyTextMeta, leave);
         _leave.Visible = leaveOffered;
-        _leave.Text = _fonts is null ? leave : string.Empty;
+        _leave.Text = _fonts is null && AreaFallbackLook.Allowed ? leave : string.Empty;
         _leaveArt.Visible = _fonts is not null && leaveOffered;
         _leaveArt.Position = new(ButtonPadX, ButtonPadY);
         _leaveArt.SetText(leave, ReplyColour);
@@ -431,7 +432,7 @@ public partial class AreaConversationPanel : CanvasLayer
     {
         label.Text = text;
         label.Modulate = new Color(colour.R / 255f, colour.G / 255f, colour.B / 255f);
-        label.Visible = _fonts is null && !hidden;
+        label.Visible = _fonts is null && AreaFallbackLook.Allowed && !hidden;
         art.Visible = _fonts is not null && text.Length > 0;
         art.SetText(text, colour);
     }

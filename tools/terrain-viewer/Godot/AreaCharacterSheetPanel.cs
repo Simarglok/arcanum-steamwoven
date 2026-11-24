@@ -122,15 +122,15 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     internal Button SkillPlusForSelfTest(int row) => _skillRows[row].Plus;
     internal Button SkillMinusForSelfTest(int row) => _skillRows[row].Minus;
     internal string SkillTextForSelfTest(int row) => _skillRows[row].Text.Text;
-    internal string SkillHintForSelfTest(int row) => _skillRows[row].Text.TooltipText;
+    internal string SkillHintForSelfTest(int row) => AreaArtTip.Get(_skillRows[row].Text);
     internal string SkillMessageForSelfTest => _skillMessage.Text;
     internal AreaSpellsPageView? SpellsForSelfTest => _spellsView;
     internal Button CollegeTabForSelfTest(int college) => _collegeTabs[college];
     internal Button SpellPlusForSelfTest => _spellPlus;
     internal Button SpellMinusForSelfTest => _spellMinus;
     internal string SpellTextForSelfTest(int rank) => _spellRows[rank].Text;
-    internal string SpellHintForSelfTest(int rank) => _spellRows[rank].TooltipText;
-    internal string CollegeHintForSelfTest(int college) => _collegeTabs[college].TooltipText;
+    internal string SpellHintForSelfTest(int rank) => AreaArtTip.Get(_spellRows[rank]);
+    internal string CollegeHintForSelfTest(int college) => AreaArtTip.Get(_collegeTabs[college]);
     internal AreaStatsPageView? StatsForSelfTest => _statsView;
     internal Button TechPlusForSelfTest(int discipline) => _techRows[discipline].Plus;
     internal Button TechMinusForSelfTest(int discipline) => _techRows[discipline].Minus;
@@ -150,7 +150,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     {
         // ARC-UI-034: the creation editor sits above the main menu's backdrop (layer 4).
         Layer = _creation ? 5 : 4;
-        _panel = new PanelContainer { Name = _creation ? "AreaCharacterEditor" : "AreaCharacterSheet", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = _creation ? "AreaCharacterEditor" : "AreaCharacterSheet", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .96f),
@@ -172,8 +172,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             {
                 var row = group * AreaSkillsPage.RowsPerGroup + i;
                 var line = new HBoxContainer();
-                var minus = new Button { Text = "−", FocusMode = Control.FocusModeEnum.All, TooltipText = "refund (down to the value when the sheet opened)" };
-                var plus = new Button { Text = "+", FocusMode = Control.FocusModeEnum.All, TooltipText = "spend one unspent point" };
+                var minus = AreaArtTip.Tip(new Button { Text = "−", FocusMode = Control.FocusModeEnum.All }, "refund (down to the value when the sheet opened)");
+                var plus = AreaArtTip.Tip(new Button { Text = "+", FocusMode = Control.FocusModeEnum.All }, "spend one unspent point");
                 var text = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart };
                 minus.Pressed += () => SkillRefundRequested?.Invoke(row);
@@ -218,8 +218,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         {
             var r = row;
             var line = new HBoxContainer();
-            var minus = new Button { Text = "−", FocusMode = Control.FocusModeEnum.All, TooltipText = "refund (down to the value when the sheet opened)" };
-            var plus = new Button { Text = "+", FocusMode = Control.FocusModeEnum.All, TooltipText = "spend unspent points" };
+            var minus = AreaArtTip.Tip(new Button { Text = "−", FocusMode = Control.FocusModeEnum.All }, "refund (down to the value when the sheet opened)");
+            var plus = AreaArtTip.Tip(new Button { Text = "+", FocusMode = Control.FocusModeEnum.All }, "spend unspent points");
             var text = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
             minus.Pressed += () => StatRefundRequested?.Invoke(r);
             plus.Pressed += () => StatSpendRequested?.Invoke(r);
@@ -239,8 +239,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         {
             var d = discipline;
             var line = new HBoxContainer();
-            var minus = new Button { Text = "−", FocusMode = Control.FocusModeEnum.All, TooltipText = "give a degree back (down to the value when the editor opened)" };
-            var plus = new Button { Text = "+", FocusMode = Control.FocusModeEnum.All, TooltipText = "buy the next degree for one unspent point (needs the intelligence)" };
+            var minus = AreaArtTip.Tip(new Button { Text = "−", FocusMode = Control.FocusModeEnum.All }, "give a degree back (down to the value when the editor opened)");
+            var plus = AreaArtTip.Tip(new Button { Text = "+", FocusMode = Control.FocusModeEnum.All }, "buy the next degree for one unspent point (needs the intelligence)");
             var text = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
             minus.Pressed += () => TechRefundRequested?.Invoke(d);
             plus.Pressed += () => TechSpendRequested?.Invoke(d);
@@ -323,8 +323,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             var skill = skills?.Rows[row];
             text.Text = skill is null ? "" : AreaSkillsPage.Line(skill);
             // The original's hover hint: the name, the description and the key stat the next point needs.
-            text.TooltipText = skill is null ? "" : string.Join("\n", new[] { skill.Name, skill.Description,
-                skill.NextPointKeyStat == 0 ? null : $"{skill.KeyStat}: {skill.NextPointKeyStat}" }.Where(part => !string.IsNullOrEmpty(part)));
+            AreaArtTip.Set(text, skill is null ? "" : string.Join("\n", new[] { skill.Name, skill.Description,
+                skill.NextPointKeyStat == 0 ? null : $"{skill.KeyStat}: {skill.NextPointKeyStat}" }.Where(part => !string.IsNullOrEmpty(part))));
             minus.Disabled = plus.Disabled = skills is not { EditorOpen: true };
         }
         for (var row = 0; row < _techRows.Count; row++)
@@ -345,17 +345,17 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         {
             var tab = spells?.Colleges[college];
             _collegeTabs[college].Text = tab?.Name ?? $"{college + 1}";
-            _collegeTabs[college].TooltipText = tab is null ? "" : AreaSpellsPage.Hint(tab);
+            AreaArtTip.Set(_collegeTabs[college], tab is null ? "" : AreaSpellsPage.Hint(tab));
             _collegeTabs[college].SetPressedNoSignal(spells?.College == college);
         }
         var shown = spells?.Colleges[spells.College];
         _collegeLine.Text = shown is null ? "" : $"{shown.Name}: {shown.Rank} of {AreaSpellsPage.Ranks} known" + (shown.Mastered ? " (mastered)" : "");
-        _collegeLine.TooltipText = shown is null ? "" : AreaSpellsPage.Hint(shown);
+        AreaArtTip.Set(_collegeLine, shown is null ? "" : AreaSpellsPage.Hint(shown));
         for (var rank = 0; rank < _spellRows.Count; rank++)
         {
             var row = spells?.Spells[rank];
             _spellRows[rank].Text = row is null ? "" : AreaSpellsPage.Line(row);
-            _spellRows[rank].TooltipText = row is null ? "" : AreaSpellsPage.Hint(row);
+            AreaArtTip.Set(_spellRows[rank], row is null ? "" : AreaSpellsPage.Hint(row));
             // The original's look (SG4): the known ranks white, the next one gold, the ranks above it grey.
             _spellRows[rank].Modulate = row?.State switch
             {
@@ -365,8 +365,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         // + over the next rank and − over the highest known show those spells' hints, as the original's buttons do.
         _spellPlus.Disabled = spells is not { CanLearn: true };
         _spellMinus.Disabled = spells is not { CanUnlearn: true };
-        _spellPlus.TooltipText = spells?.NextSpell is { } next ? AreaSpellsPage.Hint(next) : "";
-        _spellMinus.TooltipText = spells?.HighestSpell is { } highest ? AreaSpellsPage.Hint(highest) : "";
+        AreaArtTip.Set(_spellPlus, spells?.NextSpell is { } next ? AreaSpellsPage.Hint(next) : "");
+        AreaArtTip.Set(_spellMinus, spells?.HighestSpell is { } highest ? AreaSpellsPage.Hint(highest) : "");
     }
 
     /// <summary>ARC-UI-075: gives the sheet the original's art, fonts and texts, and the portrait's texture (null: the slot stays empty).</summary>
@@ -433,8 +433,9 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (original) _artView.Pages.ShowPage(tab == AreaSheetTab.Skills);
         if (spells) { _artView.Spells.ShowPage(); _artView.Spells.Render(_spellsView); }
         if (schemes) { _artView.Schemes.ShowPage(); _artView.Schemes.Render(_schemesView); }
-        _host.Visible = !original && !spells && !schemes && tab is AreaSheetTab.Skills or AreaSheetTab.Spells;
-        _notBuilt.Visible = !original && !spells && !schemes && !_host.Visible;
+        // ARC-UI-3136: the fallback pages and the not-built note are Godot's default font, so developer-only.
+        _host.Visible = AreaFallbackLook.Allowed && !original && !spells && !schemes && tab is AreaSheetTab.Skills or AreaSheetTab.Spells;
+        _notBuilt.Visible = AreaFallbackLook.Allowed && !original && !spells && !schemes && !_host.Visible;
         if (_host.Visible) _pages.CurrentTab = tab == AreaSheetTab.Skills ? 1 : 2;
     }
 
