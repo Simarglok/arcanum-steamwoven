@@ -255,8 +255,11 @@ public partial class AreaCharacterSheetArtView : Control
             }
     }
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+
     public override void _ExitTree()
     {
+        AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -265,11 +268,15 @@ public partial class AreaCharacterSheetArtView : Control
     internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
+    /// <summary>ARC-UI-3037: the kit's character background shows under this window (never on the new-character screen, which has no kit).</summary>
+    private bool KitBackgroundShown => !MenuScreen && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
+
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
         ClaimScale();
-        if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
+        // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
+        if (!KitBackgroundShown && Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
         {
             float width = window.GetWidth(), height = window.GetHeight();
             if (!_lensCut) DrawTextureRect(window, new Rect2(0, 0, width, height), false);
@@ -281,6 +288,13 @@ public partial class AreaCharacterSheetArtView : Control
                     (lx + (float)edge, (float)ly, width - lx - edge, (float)edge) })
                     if (pw > 0 && ph > 0) DrawTextureRectRegion(window, new Rect2(px, py, pw, ph), new Rect2(px, py, pw, ph));
             }
+        }
+        if (KitBackgroundShown)
+        {
+            AreaKitStandIns.CharacterSheet(this);
+            // The stat names are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet writes them itself, in its own font.
+            var labelFace = fonts.For(AreaSheetFont.Cloister);
+            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels()) AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb);
         }
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
         if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
