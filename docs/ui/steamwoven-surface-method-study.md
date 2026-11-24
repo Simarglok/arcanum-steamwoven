@@ -116,7 +116,7 @@ Owner review of 2026-11-21 (ARC-UI-3104, issue #3104) added three fixes to the t
 - **Square bevel.** The original's squares have a light right and bottom bevel; the wood weight (blurred, eroded 6 px) swallowed the 5 px right line and the Codex
   wood redrew it thinner. The light vertical lines of the top strip (rows 0 to 148, at least 40 px tall, at most 10 px wide, found by an opening with a 1 x 30 line so
   the bottom bevel is not taken) are put back from the original, by default under the Codex line (`--bevel lighten`: the lighter of the two) or alone (`--bevel original`).
-- **Chip.** The white rim at the right plate's tip (a box of the inventory master, `CHIP_BOXES`) is filled with the plate's darkest metal to its right. Other windows need their own boxes.
+- **Chip.** The white rim at the right plate's tip (a box of the inventory master, `CHIP_BOXES`) is filled with the plate's darkest metal to its right. Other windows need their own boxes. The light glint at that plate tip is part of the kit's metal (production condition 3), not of the wood; filling it with dark metal is temporary, until the kit parts replace the original's stand-ins.
 
 
 
