@@ -163,7 +163,9 @@ public static class InterfaceHd
             if (entry.HdOn && entry.Pack is { } pack
                 && pack.ResolveSprite(query, frame.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } hd
                 && hd.Width == frame.Width * pack.Scale && hd.Height == frame.Height * pack.Scale)
-                picture = InterfaceChromeRenderer.ResamplePicture(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight);
+                picture = recipe.WholePicture
+                    ? InterfaceChromeRenderer.ResampleStraight(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight)
+                    : InterfaceChromeRenderer.ResamplePicture(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight);
             entry.Pixels = InterfaceChromeRenderer.Render(recipe, frame.Width, frame.Height, frame.Rgba, picture, query.Key.Frame, scale);
             // The big strips only: the log line says how long a worker painted (the main thread did not wait for it).
             if ((long)pixelWidth * pixelHeight > 200_000)
