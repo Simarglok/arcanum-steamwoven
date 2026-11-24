@@ -189,6 +189,22 @@ class SyntheticManifestTests(unittest.TestCase):
         manifest["parts"].append(part("picture.ghost", size=None, size_basis="open"))
         self.assertFails(manifest, "must be a new part")
 
+    def test_plate_and_glyph_without_source_art_are_new_parts(self) -> None:
+        # the shared round plate and the button glyphs of the pilot ARC-UI-3058 feed no original art: an open size, a batch, no source art
+        manifest = valid()
+        manifest["parts"].append(part("plate.round", "plate", size=None, size_basis="open", states=["idle"], batch="B-BUTTONS"))
+        manifest["parts"].append(part("glyph.key", "glyph", size=None, size_basis="open", states=["hover"], batch="B-BUTTONS"))
+        self.assertEqual(self.check(manifest, census=False), [])
+        self.assertFails(self.edit(5, source_arts=["33"], size=None, size_basis="open"), "from original art has a size")
+
+    def test_pilot_parts_are_masters_with_a_record(self) -> None:
+        parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
+        for ident in ("plate.round_button", "plate.round_button_pressed"):
+            self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"fit:{ident}", []), ident)
+        for glyph in ("key", "gear", "arrows", "shield"):
+            for ident in (f"glyph.{glyph}", f"glyph.{glyph}_lit"):  # drawn by rule from the original's frame (round 3), no fit record
+                self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"rule:glyph_cells:{ident}", []), ident)
+
     def test_cap_agrees_with_its_id_strip_and_window(self) -> None:
         self.assertFails(self.edit(2, anchor="bottom-strip-right-end"), "to match its id")
         self.assertFails(self.edit(2, used_by=["G01"]), "used by the H01 strip window alone")

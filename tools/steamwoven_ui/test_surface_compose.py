@@ -1,6 +1,8 @@
 """ARC-RES-2457: tests of the pure parts of the method A composition (dot rows, components, tone fit numbers) on synthetic data; no ImageMagick, no art."""
 from __future__ import annotations
 
+import datetime
+import json
 import shutil
 import subprocess
 import tempfile
@@ -186,6 +188,132 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertGreater(data[60 * 200 + 101], 200)                        # on the vertical line
         self.assertGreater(data[60 * 200 + 101 - surface_compose.BEVEL_GROW], 100)   # and the grown band
         self.assertLess(data[126 * 200 + 50], 20)                            # the horizontal line is not taken
+
+
+    # ARC-UI-3100: the pipeline step (zone spec, erase boxes, kit parts, gates, provenance)
+
+    def test_load_spec_reads_a_family_and_refuses_bad_ones(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spec.json"
+            path.write_text(json.dumps({"id": "ctx-logbook", "screen": "ctx-logbook", "joins": [148], "bevel_band": None, "erase_boxes": [[10, 20, 30, 40]],
+                                        "kit_parts": [{"id": "plate.x", "file": "x.png", "x": 5, "y": 6}]}), encoding="utf-8")
+            spec = surface_compose.load_spec(path)
+            self.assertEqual((spec.id, spec.screen, spec.joins, spec.bevel_band, spec.chip_boxes), ("ctx-logbook", "ctx-logbook", (148,), None, ()))
+            self.assertEqual(spec.erase_boxes, ((10, 20, 30, 40),))
+            self.assertEqual(spec.kit_parts[0]["id"], "plate.x")
+            for bad in ({"id": "a"}, {"id": "a", "screen": "s", "extra": 1}, {"id": "a", "screen": "s", "erase_boxes": [[5, 5, 5, 9]]},
+                        {"id": "a", "screen": "s", "kit_parts": [{"id": "p", "file": "f"}]}, {"id": "a", "screen": "s", "joins": [0]},
+                        {"id": "a", "screen": "s", "bevel_band": [9, 3]}, {"id": "../../x", "screen": "s"}, {"id": ".hidden", "screen": "s"}, {"id": "a/b", "screen": "s"},
+                        {"id": "a", "screen": "s", "joins": []}, {"id": "a", "screen": "s", "erase_boxes": None}, {"id": "a", "screen": "s", "bevel_band": ["a", "b"]},
+                        {"id": "a", "screen": "s", "kit_parts": [{"id": "p", "file": 5, "x": 0, "y": 0}]}, {"id": "a", "screen": "s", "erase_boxes": [[True, 0, 3, 3]]},
+                        {"id": "a", "screen": "s", "joins": [True]}, {"id": "a", "screen": "s", "kit_parts": None}, None, 5, [1]):
+                path.write_text(json.dumps(bad), encoding="utf-8")
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.load_spec(path)
+
+    def test_the_inventory_spec_is_the_prototype_and_a_spec_defaults_to_no_chip(self):
+        self.assertEqual((surface_compose.INVENTORY.screen, surface_compose.INVENTORY.joins, surface_compose.INVENTORY.bevel_band, surface_compose.INVENTORY.chip_boxes),
+                         ("ctx-inventory", (148, 1588), (0, 148), ((1900, 0, 1930, 18),)))     # the prototype's literal values, as of ARC-UI-3104
+        self.assertEqual(surface_compose.ZoneSpec(id="x").chip_boxes, ())
+
+    def test_erase_box_at_the_image_corner_uses_the_clipped_ring_and_not_its_own_interior(self):
+        image = self._flat(8, 8, 90)
+        for y in range(0, 3):
+            for x in range(0, 3):
+                image.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 3] = bytes((255, 255, 255))     # box interior, bigger than the clipped ring
+        for x in range(3, 5):
+            for y in range(0, 5):
+                image.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 3] = bytes((40, 40, 40))        # ring column x=3,4 dark, row y=3,4 stays 90
+        surface_compose.erase_boxes(image, ((0, 0, 3, 3),))
+        self.assertEqual(image.pixel(1, 1)[:3], (40, 40, 40))        # median of the ring cells {x=3,4 for y=0..4: 10 cells of 40; y=3,4 for x=0..2: 6 cells of 90}
+
+    def test_erase_boxes_fill_with_the_median_of_the_ring_and_stay_inside(self):
+        image = self._flat(20, 10, 80)
+        for y in range(3, 7):
+            for x in range(8, 12):
+                image.data[(y * 20 + x) * 4:(y * 20 + x) * 4 + 3] = bytes((250, 250, 250))      # baked text
+        self.assertEqual(surface_compose.erase_boxes(image, ((8, 3, 12, 7),)), 16)
+        self.assertEqual(image.pixel(9, 4)[:3], (80, 80, 80))
+        self.assertEqual(image.pixel(7, 4)[:3], (80, 80, 80))                                   # the ring is not touched
+        with self.assertRaises(surface_compose.ComposeError):
+            surface_compose.erase_boxes(image, ((15, 5, 25, 9),))
+
+    def test_kit_parts_are_laid_over_with_alpha_and_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            part = Path(tmp) / "plate.png"
+            pngio.write(part, pngio.Image(2, 1, bytearray(bytes((200, 100, 0, 255)) + bytes((0, 0, 0, 0)))))
+            image = self._flat(6, 4, 50)
+            records = surface_compose.lay_kit_parts(image, ({"id": "plate.round_button", "file": "plate.png", "x": 3, "y": 2},), Path(tmp))
+            self.assertEqual(image.pixel(3, 2)[:3], (200, 100, 0))                              # opaque pixel replaces the stand-in
+            self.assertEqual(image.pixel(4, 2)[:3], (50, 50, 50))                               # alpha 0 leaves it
+            self.assertEqual(records[0]["id"], "plate.round_button")
+            self.assertEqual((records[0]["size"], records[0]["at"]), ([2, 1], [3, 2]))
+            self.assertEqual(len(records[0]["sha256"]), 64)
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.lay_kit_parts(image, ({"id": "p", "file": str(part), "x": 5, "y": 2},))      # leaves the image
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.lay_kit_parts(image, ({"id": "p", "file": "missing.png", "x": 0, "y": 0},), Path(tmp))
+
+    def test_half_covered_kit_part_edge_is_blended(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            part = Path(tmp) / "edge.png"
+            pngio.write(part, pngio.Image(1, 1, bytearray(bytes((200, 200, 200, 128)))))
+            image = self._flat(1, 1, 0)
+            surface_compose.lay_kit_parts(image, ({"id": "e", "file": str(part), "x": 0, "y": 0},))
+            self.assertEqual(image.pixel(0, 0)[0], 100)
+
+    def test_no_measured_join_is_no_passed_seam_gate(self):
+        self.assertFalse(surface_compose.evaluate_gates([], {"pass": True, "failed": []})["passed"])
+
+    def test_main_exit_codes_error_two_gate_failure_one_pass_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bad = root / "bad.json"
+            bad.write_text("[1]", encoding="utf-8")
+            argv = ["build", "--original", "o.png", "--a", "a.png", "--out", str(root / "out.png"), "--work", str(root / "w"), "--provenance", str(root / "rec.json")]
+            self.assertEqual(surface_compose.main(argv + ["--spec", str(bad)]), 2)                  # a wrong spec: an error, not a traceback
+            saved = surface_compose.build
+            try:
+                for passed, code in ((False, 1), (True, 0)):
+                    record = {"zone": "z", "seams": [], "wood": {"after": {"mean_l": 1.0, "std_l": 1.0}, "target": {"mean_l": 1.0, "std_l": 1.0}}, "counts": {"erased_pixels": 0},
+                              "kit_parts": [], "gates": {"passed": passed, "seam_target": 1.8, "seams_within_swi_ver_5": True, "tone_pass": passed, "tone_failed": []}}
+                    surface_compose.build = lambda *a, **k: record
+                    self.assertEqual(surface_compose.main(argv), code)
+            finally:
+                surface_compose.build = saved
+
+    def test_gates_need_every_seam_within_the_target_and_the_tone_check(self):
+        tone = {"pass": True, "failed": []}
+        ok = surface_compose.evaluate_gates([{"join": "y=148", "ratio": 0.96}, {"join": "y=1588", "ratio": 1.7}], tone)
+        self.assertTrue(ok["passed"])
+        self.assertFalse(ok["seams_within_swi_ver_5"])                                          # 1.7 is over 1.5 but under the owner's target of 1.8
+        seam = surface_compose.evaluate_gates([{"join": "y=148", "ratio": 1.85}], tone)
+        self.assertFalse(seam["passed"])
+        self.assertFalse(seam["seams_pass"])
+        failed_tone = surface_compose.evaluate_gates([{"join": "y=148", "ratio": 1.0}], {"pass": False, "failed": ["wood"]})
+        self.assertFalse(failed_tone["passed"])
+        self.assertEqual(failed_tone["tone_failed"], ["wood"])
+
+    def test_provenance_record_holds_hashes_numbers_and_gates_but_no_pixels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("o.png", "a.png", "r.png"):
+                (root / name).write_bytes(name.encode())
+            stats = {"mean_l": 20.0, "std_l": 4.0, "mean_chroma": 9.0}
+            info = {"speck_components": 3, "dots_kept": 4, "bevel_lines": 2, "chip_pixels": 0, "erased_pixels": 16, "kit_parts": [{"id": "p"}], "wood_target": stats,
+                    "wood_before": stats, "wood_after": stats, "fit": {"mean_original": 20.0}}
+            tone = {"pass": True, "failed": [], "regions": {"wood": {"pass": True, "values": {"mean_l_delta": 0.1}}, "brass": {"absent": 3}}}
+            when = datetime.datetime(2026, 11, 24, 12, 0, tzinfo=datetime.timezone.utc)
+            record = surface_compose.provenance_record(surface_compose.ZoneSpec(id="ctx-x", screen="ctx-hud"), root / "o.png", root / "a.png", root / "r.png", info,
+                                                       [{"join": "y=148", "ratio": 1.0}], tone, "lighten", when)
+            json.dumps(record)                                                                  # serialisable
+            self.assertEqual(record["schema"], surface_compose.SCHEMA)
+            self.assertEqual(record["date"], "2026-11-24T12:00:00Z")
+            self.assertEqual(record["inputs"]["original"]["sha256"], surface_compose.sha256_file(root / "o.png"))
+            self.assertEqual(record["counts"]["erased_pixels"], 16)
+            self.assertNotIn("brass", record["tone"]["regions"])                                # an absent region is left out
+            self.assertTrue(record["gates"]["passed"])
+            self.assertEqual(record["spec"]["screen"], "ctx-hud")
 
 
 if __name__ == "__main__":
