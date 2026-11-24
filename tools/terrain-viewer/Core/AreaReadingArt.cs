@@ -4,8 +4,14 @@ using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>One placed line of the reading window's text: the font art it is drawn in, its top left in the window and its glyphs (each with its x from the line's left).</summary>
-public sealed record AreaReadingLine(int Font, int X, int Y, IReadOnlyList<(int X, AreaArtGlyph Glyph)> Glyphs);
+/// <summary>One placed line of the reading window's text: the font art it is drawn in, its top left in the window and its glyphs (each with its x from the line's left); <paramref name="Scale"/> (ARC-UI-2765, 1 in the
+/// original's draw) enlarges the glyphs and their advances alike.</summary>
+public sealed record AreaReadingLine(int Font, int X, int Y, IReadOnlyList<(int X, AreaArtGlyph Glyph)> Glyphs, float Scale = 1f);
+
+/// <summary>ARC-UI-2765: how a note's body is drawn, the owner's three variants of 2026-11-24 (decision still open; only the generated interface takes one): the original's Pepper20 at 1:1 (<see cref="Original"/>),
+/// Pepper20 enlarged to the largest of <see cref="AreaReadingArtLayout.LargeNoteScales"/> that holds the text (<see cref="PepperLarge"/>), Pepper20 for the heading (the text's first line) and the signature (its last) and a readable face
+/// of the player's font set for the body between them (<see cref="HeadingSignature"/>), a readable face throughout (<see cref="Readable"/>). A style that does not hold the text keeps the original's draw.</summary>
+public enum AreaReadingNoteStyle { Original, PepperLarge, HeadingSignature, Readable }
 
 /// <summary>A page of a book or a plaque: its lines and where the text goes on (message index and character offset), null when it ended.</summary>
 public sealed record AreaReadingPage(IReadOnlyList<AreaReadingLine> Lines, (int Index, int Offset)? Next);
@@ -44,6 +50,15 @@ public static class AreaReadingArtLayout
 
     /// <summary>The font arts the fixed texts use: the telegram's form (481 and 479, 0x5CA538) and body (480), the newspaper's masthead (485, 484, 482; the alternate's 815) and the note (497).</summary>
     public const int NoteFont = 497, TelegramBodyFont = 480, TelegramFormFont = 481, TelegramNameFont = 479, MastheadFont = 485, MastheadSideFont = 484, MastheadLineFont = 482;
+    /// <summary>ARC-UI-2765: the scales a note in <see cref="AreaReadingNoteStyle.PepperLarge"/> tries, largest first.</summary>
+    public static IReadOnlyList<float> LargeNoteScales { get; } = [1.5f, 1.25f];
+
+    /// <summary>ARC-UI-2765: the synthetic English letter a local capture draws in place of a note's text (a heading, a body of two paragraphs and a signature); no original text is in git.</summary>
+    public const string SyntheticNote = "Dear Mr. Hollis,\n   The shipment from the northern foundry will reach the station on Thursday. Please have the porters ready before dawn and keep the crates dry.\n   The road is not safe after dark, so do not send anyone out alone.\nYours faithfully, A. Fenwick";
+
+    /// <summary>ARC-UI-2765: more font arts the window loads (a local capture's readable face for the note; empty in play).</summary>
+    public static IReadOnlyList<int> ExtraFontArts { get; set; } = [];
+
     public static IReadOnlyList<int> FixedFontArts { get; } = [TelegramNameFont, TelegramBodyFont, TelegramFormFont, MastheadLineFont, MastheadSideFont, MastheadFont, NoteFont, WrittenTexts.NewspaperAlternateFont];
 
     /// <summary>The arts without which the window is not drawn in the original's look (the alternate newspaper's 817 and 815 are optional).</summary>
@@ -92,7 +107,7 @@ public static class AreaReadingArtLayout
     public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
     /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts.</summary>
-    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
+    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(ExtraFontArts).Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
 }
 
 /// <summary>
@@ -306,14 +321,53 @@ public static class AreaReadingFlow
         return lines;
     }
 
-    /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none).</summary>
-    public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf)
+    /// <summary>ARC-UI-2765: a note's body in <paramref name="style"/> with the readable face <paramref name="face"/> (the original's draw when the style does not hold the text).</summary>
+    public static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, AreaReadingNoteStyle style, int face)
+    {
+        var rect = AreaReadingArtLayout.NoteText;
+        var pepper = AreaReadingArtLayout.NoteFont;
+        var text = document.Joined;
+        IReadOnlyList<AreaReadingLine> Original() => Draw(fontOf(pepper), pepper, text, rect, false);
+        switch (style)
+        {
+            case AreaReadingNoteStyle.PepperLarge:
+                foreach (var scale in AreaReadingArtLayout.LargeNoteScales)
+                {
+                    var inner = new AreaReadingRect(0, 0, (int)(rect.Width / scale), (int)(rect.Height / scale));
+                    if (FitText(fontOf(pepper), pepper, text, false, inner) is { Whole: true } fit)
+                        return [.. fit.Lines.Select(line => line with { X = rect.X + (int)MathF.Round(line.X * scale), Y = rect.Y + (int)MathF.Round(line.Y * scale), Scale = scale })];
+                }
+                return Original();
+            case AreaReadingNoteStyle.Readable:
+                return FitText(fontOf(face), face, text, false, rect) is { Whole: true } readable ? readable.Lines : Original();
+            case AreaReadingNoteStyle.HeadingSignature:
+                var parts = text.Split('\n');
+                if (parts.Length < 3) return Original();
+                var (heading, signature, body) = (parts[0], parts[^1], string.Join('\n', parts[1..^1]));
+                var (pepperFont, bodyFont) = (fontOf(pepper), fontOf(face));
+                const int gap = 8;
+                int headingHeight = Height(pepperFont, heading, rect.Width), bodyHeight = Height(bodyFont, body, rect.Width), signatureHeight = Height(pepperFont, signature, rect.Width);
+                if (headingHeight == 0 || bodyHeight == 0 || signatureHeight == 0 || headingHeight + gap + bodyHeight + gap + signatureHeight > rect.Height) return Original();
+                var indent = Math.Max(0, rect.Width - pepperFont.Measure(signature).Width - 4);
+                return
+                [
+                    .. Draw(pepperFont, pepper, heading, rect with { Height = headingHeight }, false),
+                    .. Draw(bodyFont, face, body, new(rect.X, rect.Y + headingHeight + gap, rect.Width, bodyHeight), false),
+                    .. Draw(pepperFont, pepper, signature, new(rect.X + indent, rect.Y + headingHeight + gap + bodyHeight + gap, rect.Width - indent, signatureHeight), false),
+                ];
+            default:
+                return Original();
+        }
+    }
+
+    /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none); a note's body takes <paramref name="style"/> (ARC-UI-2765).</summary>
+    public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, AreaReadingNoteStyle style = AreaReadingNoteStyle.Original, int face = 0)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontOf);
         return document.Subtype switch
         {
-            WrittenSubtype.Note => Draw(fontOf(AreaReadingArtLayout.NoteFont), AreaReadingArtLayout.NoteFont, document.Joined, AreaReadingArtLayout.NoteText, false),
+            WrittenSubtype.Note => Note(document, fontOf, style, face),
             WrittenSubtype.Telegram => Telegram(document, fontOf),
             WrittenSubtype.Newspaper => Newspaper(document, fontOf),
             WrittenSubtype.Plaque => Page(document.Body, (0, 0), AreaReadingArtLayout.PlaqueText, fontOf).Lines,

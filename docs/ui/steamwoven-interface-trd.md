@@ -92,6 +92,12 @@ Why every aspect: in the Steam Hardware Survey of October 2026 (primary display,
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
   ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)): the original's fonts (HD frames in HD), sizes per step in the
   [font note](steamwoven-interface-fonts.md).
+  **Note body variants (ARC-UI-2765, [#2765](https://github.com/Simarglok/arcanum-steamwoven/issues/2765), owner choice open).** The owner finds a letter in Pepper20 (art 497, handwriting) hard to read.
+  The window draws a note's body in one of three variants of `AreaReadingNoteStyle` (`AreaReadingFlow.Note`), all in fonts of the player's set (the HD pack's version in HD) and only with the
+  generated interface: `PepperLarge` (Pepper20 at x1.5, else x1.25, the largest that holds the whole text in the note's 215 x 300 rectangle), `HeadingSignature` (the text's first line and last
+  line in Pepper20, the body between them in a readable face) and `Readable` (the readable face throughout); a style that does not hold the text keeps the original's draw. Until the owner picks, play
+  draws the original's. Local capture only (never committed): the Steamwoven `bar` smoke with `ARC_AREA_READING_SYNTHETIC=1` (a synthetic English letter), `ARC_AREA_READING_NOTE_VARIANT=pepper-large|heading-signature|readable`
+  and `ARC_AREA_READING_NOTE_FACE=ART` (default 840) saves `PREFIX-hud-steamwoven-column-WxH-reading-letter.png`.
 - **SWI-LAY-16** The follower group moves as one: the portraits, the scroll arrows and the show/hide button (FP1: the button 67 × 13 units at (0, 428), the arrows at (0, 415) and (33, 415), the portraits at x 11, y 50 + 62 per slot) stay **inside the composition** on their original places, counted from the composition's left edge and top, at its scale `s`;
   the button stands on the top left corner of the bottom strip, as in the original, at every window size, and the group is identical to the original at 4:3. **Owner decision 2026-11-20 ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925)):** no group part is carried to the window's edge and the button has no backing of its own (a first plan, the group at the window's left edge on a small brass backing, was built, compared in a composite and dropped). **As built (#2925):** `AreaFollowerPortraits` hangs from the strips' screen (`AreaGameBarPanel.TopScreen`) in the column mode as in the full-width layout; the Steamwoven bar smoke checks every part's place, the button's corner and the group's left edge at each size.
 

@@ -492,11 +492,11 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none.
+    // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none; ARC-UI-2765: a local capture over synthetic text takes a note with a use script too.
     private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null)
     {
         if (_areaSession is not { } session || _readingData?.Data is not { } data) return null;
-        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || p.Value.Subtype == (int)only))
+        return data.Prototypes.OrderBy(p => p.Key).Where(p => (!p.Value.UseScript && !p.Value.ItemSpell || (only == WrittenSubtype.Note && AreaReadingArtView.SyntheticNoteText is not null)) && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || p.Value.Subtype == (int)only))
             .Select(p => (p.Value.Subtype, Document: session.QueryWrittenDocument(p.Value, data.Texts))).Where(p => p.Document is { Readable: true, Body.Count: > 0 })
             .OrderBy(p => p.Subtype != (int)WrittenSubtype.Book).Select(p => p.Document).FirstOrDefault();
     }

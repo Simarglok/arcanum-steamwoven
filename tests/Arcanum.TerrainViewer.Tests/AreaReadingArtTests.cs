@@ -233,6 +233,35 @@ public sealed class AreaReadingArtTests
         Assert.AreEqual((327, 126, 480), (lines[12].X, lines[12].Y, lines[12].Font), "the body");
     }
 
+    /// <summary>ARC-UI-2765: the owner's variants of a note's body on synthetic frames: Pepper20 (497) 10 high, the readable face (840) 8 high, every glyph advancing 6.</summary>
+    [TestMethod]
+    public void A_note_body_takes_the_owner_variants_and_falls_back_when_it_does_not_fit()
+    {
+        AreaArtFont FontOf(int art) => art == 840 ? Font(8) : Font(10);
+        AreaReadingArtDocument Note(string text) => new(WrittenSubtype.Note, 489, false, [], [Message(text)], [], text);
+        var letter = Note("Dear X,\nbody body body\nYours, Y");
+        var original = AreaReadingFlow.Single(letter, FontOf);
+        Assert.IsTrue(original.All(line => line.Font == 497 && line.Scale == 1f), "the default is the original's draw");
+        // Larger: the whole text in the largest scale that holds it, positions scaled from the rectangle's corner.
+        var large = AreaReadingFlow.Single(letter, FontOf, AreaReadingNoteStyle.PepperLarge, 840);
+        Assert.IsTrue(large.All(line => line.Font == 497 && line.Scale == 1.5f), "three short lines fit at x1.5");
+        Assert.AreEqual((349, 49 + 15), (large[1].X, large[1].Y), "the second line is 10 units down, shown 15");
+        // Readable face throughout.
+        var readable = AreaReadingFlow.Single(letter, FontOf, AreaReadingNoteStyle.Readable, 840);
+        Assert.IsTrue(readable.Count == 3 && readable.All(line => line.Font == 840 && line.Scale == 1f));
+        // Heading and signature in Pepper20, the body between them in the readable face; the signature stands at the right.
+        var mixed = AreaReadingFlow.Single(letter, FontOf, AreaReadingNoteStyle.HeadingSignature, 840);
+        CollectionAssert.AreEqual(new[] { 497, 840, 497 }, mixed.Select(line => line.Font).ToArray());
+        Assert.IsTrue(mixed[2].X > mixed[0].X && mixed[2].Y > mixed[1].Y, "the signature is indented under the body");
+        // A text with no heading and signature line, or too long for the style, keeps the original's draw.
+        Assert.IsTrue(AreaReadingFlow.Single(Note("one line only"), FontOf, AreaReadingNoteStyle.HeadingSignature, 840).All(line => line.Font == 497));
+        var longText = string.Join(' ', Enumerable.Repeat("word", 400));
+        Assert.IsTrue(AreaReadingFlow.Single(Note(longText), FontOf, AreaReadingNoteStyle.PepperLarge, 840).All(line => line.Scale == 1f), "a text no scale holds is drawn at 1");
+        Assert.IsTrue(AreaReadingFlow.Single(Note(longText), FontOf, AreaReadingNoteStyle.Readable, 840).All(line => line.Font == 497), "a text the readable face does not hold keeps Pepper20");
+        // Other kinds ignore the style.
+        Assert.AreEqual(0, AreaReadingFlow.Single(new(WrittenSubtype.Picture, 700, false, [], [], [], ""), FontOf, AreaReadingNoteStyle.Readable, 840).Count);
+    }
+
     [TestMethod]
     public void A_note_and_a_plaque_draw_in_their_rectangles()
     {
