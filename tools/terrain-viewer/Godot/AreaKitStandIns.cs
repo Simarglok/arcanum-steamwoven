@@ -33,7 +33,52 @@ internal static class AreaKitStandIns
         for (var row = 0; row <= rows; row++) canvas.DrawLine(new Vector2(x * scale, (y + row * cell) * scale), new Vector2((x + columns * cell) * scale, (y + row * cell) * scale), colour, width);
     }
 
-    /// <summary>The own inventory and the identify and repair windows (arts 223 and 221): the pack's pit and its 10 × 12 grid, the five count pits, the name plate's pit, the doll's pit with its 10 × 9 equipment grid, and the two number plates at the bottom.</summary>
+    private static readonly Color Brass = new(.72f, .55f, .2f), Parchment = new(.8f, .74f, .58f), RedInk = new(.72f, .12f, .1f), Grey = new(.45f, .45f, .5f), DarkWood = new(.2f, .14f, .1f), Pale = new(.72f, .72f, .62f);
+
+    private static Vector2 P(float scale, float x, float y) => new(x * scale, y * scale);
+
+    private static void Disc(CanvasItem canvas, float scale, float x, float y, float r, Color fill) => canvas.DrawCircle(P(scale, x, y), r * scale, fill);
+
+    private static void Ring(CanvasItem canvas, float scale, float x, float y, float r, Color colour, float width = 2) => canvas.DrawArc(P(scale, x, y), r * scale, 0, Mathf.Tau, 48, colour, width * scale);
+
+    private static void Poly(CanvasItem canvas, float scale, Color colour, params (float X, float Y)[] points) => canvas.DrawColoredPolygon([.. points.Select(point => P(scale, point.X, point.Y))], colour);
+
+    private static void Segment(CanvasItem canvas, float scale, float x1, float y1, float x2, float y2, Color colour, float width = 1) => canvas.DrawLine(P(scale, x1, y1), P(scale, x2, y2), colour, Math.Max(1f, width * scale));
+
+    private static void Arrow(CanvasItem canvas, float scale, float x, float y, float length, float half, Color colour) =>
+        Poly(canvas, scale, colour, (x, y - half * .4f), (x + length * .55f, y - half * .4f), (x + length * .55f, y - half), (x + length, y), (x + length * .55f, y + half), (x + length * .55f, y + half * .4f), (x, y + half * .4f));
+
+    /// <summary>A toothed wheel: a disc with <paramref name="teeth"/> teeth of the radius <paramref name="r"/>.</summary>
+    private static void Gear(CanvasItem canvas, float scale, float x, float y, float r, Color colour, int teeth = 12)
+    {
+        var points = new List<(float, float)>();
+        for (var i = 0; i < teeth * 2; i++)
+        {
+            var (angle, radius) = (Mathf.Tau * i / (teeth * 2), i % 2 == 0 ? r : r * .8f);
+            points.Add((x + Mathf.Cos(angle) * radius, y + Mathf.Sin(angle) * radius));
+        }
+        Poly(canvas, scale, colour, [.. points]);
+        Disc(canvas, scale, x, y, r * .35f, DarkWood);
+    }
+
+    /// <summary>A filled quarter disc whose corner is (<paramref name="x"/>, <paramref name="y"/>) and which opens to the right (<paramref name="right"/> true) or to the left, with a brass arc: the frame round a weapon's or a shield's slot.</summary>
+    private static void QuarterFrame(CanvasItem canvas, float scale, float x, float y, float r, bool right, Color fill)
+    {
+        var points = new List<(float, float)> { (x, y) };
+        for (var i = 0; i <= 16; i++)
+        {
+            var angle = Mathf.Pi / 2 * i / 16;
+            points.Add((x + (right ? 1 : -1) * Mathf.Sin(angle) * r, y - Mathf.Cos(angle) * r));
+        }
+        Poly(canvas, scale, fill, [.. points]);
+        for (var i = 0; i < 16; i++)
+        {
+            var (a1, a2) = (Mathf.Pi / 2 * i / 16, Mathf.Pi / 2 * (i + 1) / 16);
+            Segment(canvas, scale, x + (right ? 1 : -1) * Mathf.Sin(a1) * r, y - Mathf.Cos(a1) * r, x + (right ? 1 : -1) * Mathf.Sin(a2) * r, y - Mathf.Cos(a2) * r, Brass, 3);
+        }
+    }
+
+    /// <summary>The own inventory and the identify and repair windows (arts 223 and 221): the pack's pit and its 10 × 12 grid, the five count pits, the name plate's pit, the doll's pit with its 10 × 9 equipment grid, the quarter-disc frames of the weapon's and the shield's slots at the bottom, and the picture row "dots, arrow, grid" (the arrange button's legend).</summary>
     internal static void Inventory(CanvasItem canvas, float scale)
     {
         Drawn.Add(SteamwovenKitWindow.Inventory);
@@ -43,43 +88,67 @@ internal static class AreaKitStandIns
         Field(canvas, scale, 124, 25, 223, 55);
         Field(canvas, scale, 18, 100, 330, 300);
         Lines(canvas, scale, 23, 107, 10, 9, 32, Edge);
-        Field(canvas, scale, 10, 303, 112, 97);
-        Field(canvas, scale, 244, 303, 114, 97);
+        QuarterFrame(canvas, scale, 10, 400, 97, true, new(.2f, .05f, .05f));
+        QuarterFrame(canvas, scale, 358, 400, 97, false, new(.04f, .05f, .2f));
+        // The arrange legend (690, 192, 78, 32): scattered dots, a red arrow, a small grid.
+        foreach (var (dx, dy) in new (float, float)[] { (0, 4), (6, 0), (6, 9), (12, 5), (14, 12), (19, 1), (20, 9) }) Field(canvas, scale, 693 + dx, 197 + dy, 4, 4, Pale, edge: false);
+        Arrow(canvas, scale, 721, 205, 17, 7, RedInk);
+        for (var gx = 0; gx < 4; gx++) for (var gy = 0; gy < 4; gy++) Field(canvas, scale, 741 + gx * 5, 197 + gy * 5, 4, 4, Pale, edge: false);
     }
 
-    /// <summary>The stat labels baked into art 22 (left and right column, top to bottom) and where each one's text starts: the sheet draws them with its own font over the stat ovals' stand-ins.</summary>
-    internal static IEnumerable<(string Text, int X, int Y)> StatLabels()
+    /// <summary>The words and numbers baked into art 22 that the sheet writes itself with its own font while the kit's background shows: text, where it starts, and the colour (the gold of the stat names, dark ink on the parchment of the dial and the ruler).</summary>
+    internal static IEnumerable<(string Text, int X, int Y, (byte R, byte G, byte B) Rgb)> SheetLabels()
     {
+        (byte, byte, byte) gold = (255, 210, 0), ink = (60, 45, 25);
         string[] left = ["ST", "CN", "DX", "BE"], right = ["IN", "WP", "PE", "CH"];
-        for (var r = 0; r < 4; r++) { yield return (left[r], 131, 115 + 40 * r); yield return (right[r], 263, 115 + 40 * r); }
+        for (var r = 0; r < 4; r++) { yield return (left[r], 131, 115 + 40 * r, gold); yield return (right[r], 263, 115 + 40 * r, gold); }
+        // The alignment dial's two ends (evil, good) and the magic-technology ruler's divisions: 75, 50, 25, 0, 25, 50, 75 at 32 units a step round the centre line (221).
+        yield return ("E", 38, 146, ink); yield return ("G", 66, 146, ink);
+        string[] steps = ["75", "50", "25", "0", "25", "50", "75"];
+        for (var i = 0; i < steps.Length; i++) yield return (steps[i], 766, 120 + 32 * i, ink);
     }
 
-    /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals with their labels (the letters are baked into the art), the health and fatigue discs, the alignment disc, the aptitude ruler and the derived-stats box.</summary>
+    /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals, the alignment dial with its needle's face, the health disc with its heart and the fatigue disc with its cross, the magic-technology ruler with its divisions and its two end signs, and the derived-stats box (the letters and the ruler's numbers are written by the sheet, <see cref="SheetLabels"/>).</summary>
     internal static void CharacterSheet(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Character);
         Field(canvas, 1, 119, 9, 360, 87);
         Field(canvas, 1, 24, 278, 452, 113);
-        Field(canvas, 1, 6, 131, 100, 100);
-        Field(canvas, 1, 411, 127, 76, 56);
-        Field(canvas, 1, 411, 197, 76, 56);
-        Field(canvas, 1, 747, 60, 46, 330);
         for (var r = 0; r < 4; r++)
         {
             Field(canvas, 1, 172, 111 + 40 * r, 70, 31);
             Field(canvas, 1, 315, 111 + 40 * r, 70, 31);
         }
+        // The alignment dial: a brass ring, a parchment half face with its tick marks, the number pit under the hub.
+        Disc(canvas, 1, 56, 181, 50, Brass);
+        Disc(canvas, 1, 56, 181, 45, Parchment);
+        for (var i = 0; i <= 12; i++)
+        {
+            var angle = Mathf.Pi + Mathf.Pi * i / 12;
+            Segment(canvas, 1, 56 + Mathf.Cos(angle) * 38, 181 + Mathf.Sin(angle) * 38, 56 + Mathf.Cos(angle) * 44, 181 + Mathf.Sin(angle) * 44, DarkWood);
+        }
+        Field(canvas, 1, 6, 181, 100, 50, Brass, edge: false);
+        Disc(canvas, 1, 56, 181, 8, Black);
+        Field(canvas, 1, 40, 198, 34, 17);
+        // The health disc (a heart) and the fatigue disc (a cross): black discs in brass rings.
+        Disc(canvas, 1, 449, 155, 24, Black); Ring(canvas, 1, 449, 155, 25, Brass, 3);
+        Disc(canvas, 1, 442, 150, 7, RedInk); Disc(canvas, 1, 456, 150, 7, RedInk); Poly(canvas, 1, RedInk, (435, 153), (463, 153), (449, 170));
+        Disc(canvas, 1, 449, 225, 24, Black); Ring(canvas, 1, 449, 225, 25, Brass, 3);
+        var blue = new Color(.1f, .1f, .8f);
+        Field(canvas, 1, 443, 209, 13, 29, blue, edge: false); Field(canvas, 1, 435, 217, 29, 13, blue, edge: false);
+        // The magic-technology ruler: a parchment strip, a tick every 6.4 units and a long one at each division, the magic sign (blue) on top, the technology gear (orange) at the bottom, the two number pits.
+        Field(canvas, 1, 750, 62, 40, 324, Parchment, edge: false);
+        for (var i = -17; i <= 17; i++)
+        {
+            var y = 223 + i * 6.4f;
+            Segment(canvas, 1, 756, y, i % 5 == 0 ? 768 : 762, y, DarkWood);
+        }
+        Ring(canvas, 1, 771, 95, 12, new(.1f, .15f, .6f), 3); Disc(canvas, 1, 771, 95, 4, new(.1f, .15f, .6f));
+        Gear(canvas, 1, 771, 352, 12, new(.8f, .5f, .05f), 8);
+        Field(canvas, 1, 756, 66, 30, 16); Field(canvas, 1, 756, 366, 30, 17);
     }
 
-    /// <summary>The world map (art 138): the two readout pits the pointer's notes and coordinates are written in.</summary>
-    internal static void WorldMap(CanvasItem canvas)
-    {
-        Drawn.Add(SteamwovenKitWindow.WorldMap);
-        Field(canvas, 1, 680, 157, 94, 22);
-        Field(canvas, 1, 680, 189, 94, 22);
-    }
-
-    /// <summary>The schematic window (art 365): the blueprint page (paper ruled every 32 from 227, 22), the two component slot boxes and the assemble channel.</summary>
+    /// <summary>The schematic window (art 365): the blueprint page (paper ruled every 32 from 227, 22), the two component slot boxes, the assemble channel and the two list buttons' legends (a gear with a mortarboard, a gear with a scroll).</summary>
     internal static void Schematic(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Schematic);
@@ -89,6 +158,11 @@ internal static class AreaKitStandIns
         Field(canvas, 1, 577, 179, 103, 71, Paper);
         Field(canvas, 1, 577, 275, 103, 71, Paper);
         Field(canvas, 1, 39, 334, 126, 30);
+        // The legends: a dark oval, a gear and its sign (the mortarboard of the learned list, the scroll of the found list).
+        Disc(canvas, 1, 117, 179, 35, DarkWood); Gear(canvas, 1, 117, 179, 30, Grey);
+        Poly(canvas, 1, new(.25f, .25f, .28f), (92, 173), (118, 162), (146, 173), (120, 184)); Poly(canvas, 1, new(.2f, .2f, .23f), (104, 178), (104, 192), (120, 198), (136, 192), (136, 178), (120, 184));
+        Disc(canvas, 1, 119, 267, 35, DarkWood); Gear(canvas, 1, 119, 267, 30, Grey);
+        Field(canvas, 1, 92, 261, 56, 15, new(.85f, .78f, .6f), edge: false); Disc(canvas, 1, 93, 268, 8, new(.8f, .72f, .55f)); Disc(canvas, 1, 147, 268, 8, new(.8f, .72f, .55f));
     }
 
     /// <summary>The logbook (arts 264 and 260): nothing the kit's two pieces do not carry (the pages are the book's own picture); only the mark for the smoke.</summary>

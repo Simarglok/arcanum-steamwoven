@@ -294,7 +294,7 @@ public partial class AreaCharacterSheetArtView : Control
             AreaKitStandIns.CharacterSheet(this);
             // The stat names are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet writes them itself, in its own font.
             var labelFace = fonts.For(AreaSheetFont.Cloister);
-            foreach (var (label, x, y) in AreaKitStandIns.StatLabels()) AreaArtTextDraw.Text(this, labelFace, label, x, y, AreaCharacterSheetArtLayout.Rgb(AreaSheetColour.Gold));
+            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels()) AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb);
         }
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
         if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
