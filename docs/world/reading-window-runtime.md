@@ -108,10 +108,11 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   Close button close it (PROJECT keys: the original's window takes no key and closes by its frame hotspot or a mode change); a book's
   Previous and Next, Left/Right or Page Up/Down turn two pages. Sounds: open 3008, a book's page 3010, close 3009 by the player
   (a teardown is silent).
-- **Handheld text rule (ARC-UI-1428, [handheld UI scale](../input/handheld-ui-scale.md#reading-windows-the-text-only-factor-arc-ui-1428-issue-1428)):**
+- **Handheld text rule (ARC-UI-1428, [handheld UI scale](../input/handheld-ui-scale.md#reading-windows-the-text-only-factor-and-garmond9-arc-ui-1428-arc-ui-1462)):**
   every text of the panel has an explicit size (none under 9 px); the header lines (a telegram's form in Courier10, a newspaper's masthead in its
   fonts) are one label each at their original font's size with the text-only whole factor for a font under 9 px (Garmond8 → 16 px, Garmond6 → 12 px:
   `AreaReadingText.HeaderLinePx`, `AreaUiScale.TextOnlyFactor`; `AreaReadingView.HeaderFonts`). Tests `AreaReadingTextTests`, `AreaUiScaleTests`.
+  This is the fallback panel's rule; the original-look window below uses Garmond9 instead (ARC-UI-1462).
 - **Original look (ARC-UI-1877, ledger WR17–WR23):** when the window's art and fonts read (the arts 494, 231, 477, 489, 487, 491, 633, 495, 496 and the fonts 479–485 and 497, all or nothing; a markup font that did not read draws in 497) the
   window is the original's: 800 × 399 docked under the top strip at the nearest whole number of the fit of the 800 × 600 screen to the display, capped by the view's width and the window's 440 rows (2 on 1920 × 1080; with the HD interface pack the fit itself, fractional, 1.8 there; ARC-UI-2314), the frame 494 at (0, 0), the background art of the kind at (132, 0) (a picture's own art; 817 for the
   alternate newspaper prototype), the hero's round view in the lens (art 231 over (25, 24, 89 × 89); a left release inside it closes the window) and a book's previous and next buttons (arts 495 and
@@ -119,7 +120,11 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   (227, 57) and (476, 57) by pixel height (the fit test 0x56C800: a message that does not fit is cut at its last fitting break and goes on on the next page, at most 100 pages), a note in
   (349, 49, 215 × 300), a telegram's eleven form lines at their points with its body in (327, 126, 250 × 240), a newspaper's masthead, headline and four columns with the fillers, a plaque (white) in
   (269, 40, 428 × 327). Code: `AreaReadingArtLayout` and `AreaReadingFlow` (Godot-free, `AreaReadingArt.cs`), `AreaReadingArtView` and the loading in `TerrainViewerAreaReadingArt.cs`. PROJECT: the
-  wheel, Left/Right, Page Up/Down and the menu directions turn a book's pages too; the picture art is read when first shown. Each frame is drawn through the interface art route, so an HD pack's
+  wheel, Left/Right, Page Up/Down and the menu directions turn a book's pages too; the picture art is read when first shown. **Handheld text (ARC-UI-1462):** a line of Garmond8 (the newspaper masthead's "Price" lines and tagline, message 2, 3 or 5) that would be under 9 px at the screen factor is drawn with Garmond9 (art 483, loaded beside the
+  other fonts and optional: without it the line keeps its glyphs; `AreaReadingText.ShownFont`), its layout measured with that font's glyphs and laid out again when the window's screen factor changes (`AreaReadingArtView.Compose`);
+  at screen factor 2 and up nothing changes. Garmond6 (481, the telegram's printed legend and fine print) keeps its own 6 px glyphs by owner decision: its boxes are printed for it (`AreaReadingText.PrintedLegendFont`). The text-only
+  factor of the fallback panel was tried on the real art and does not fit the printed masthead band or the telegram's boxes ([handheld UI scale](../input/handheld-ui-scale.md#reading-windows-the-text-only-factor-and-garmond9-arc-ui-1428-arc-ui-1462)).
+  Each frame is drawn through the interface art route, so an HD pack's
   frames of these arts apply as to any window; the Generated recipes are [slice S14](../rendering/hd-interface-density.md#viewer-slice-s14-arc-ui-1201) of the Generated windows plan (ARC-UI-1201).
 - **Diagnostic layout (PROJECT, NOT_VERIFIED for parity):** the fallback when the art or a font did not read and in the synthetic self-tests: a plain panel instead of the original's background, frame
   and page art and its fonts; the header line names the kind and the arts; a newspaper's masthead is one centred label per entry and three filler messages follow the body; a picture names its art
@@ -141,8 +146,8 @@ smoke reads a newspaper template (the first readable prototype with text and no 
 
 - The item-spell path, the 4 action points in a round (also charged when the use script stops the use), action 94, the trap check
   the original's script call makes at attachment point 1, a teleport from an item's use script.
-- The original's art, fonts, pixel layout, newspaper columns and picture drawing; a scenery click that reads in place (the
-  original has none: plaques on maps come through scripts, WR16).
+- A scenery click that reads in place (the original has none: plaques on maps come through scripts, WR16). The original's art, fonts, pixel layout, newspaper columns and picture drawing are
+  drawn since ARC-UI-1877 (the Original look above).
 
 ## Where the player gets a newspaper (ARC-UI-1739)
 
