@@ -152,9 +152,12 @@ public partial class TerrainViewerApp
             var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
             TextFontsForSelfTest = new AreaTextFonts(new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()), new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()));
             clock += .3; SyncControllerPrompts();
+            try
+            {
             Require(PromptStripDrawnForSelfTest && PromptArtForSelfTest is { Items.Count: 1 } && PromptArtForSelfTest.Items[0].Lines.Sum(line => line.Glyphs.Count) > 10
                 && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal), "the strip draws art text with the font: " + PromptStripForSelfTest);
-            TextFontsForSelfTest = null;
+            }
+            finally { TextFontsForSelfTest = null; }
             clock += .3; SyncControllerPrompts();
             Require(!PromptStripDrawnForSelfTest && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal), "without the font the strip draws nothing");
             panel.ChangeForSelfTest(6, 1);

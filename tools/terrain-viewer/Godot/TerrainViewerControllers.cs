@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
     private AreaArtTextBlock? _promptArt;
     private static readonly (byte R, byte G, byte B) PromptColour = (232, 232, 232);
     private string _promptShown = string.Empty;
-    private bool _promptFonts;
+    private AreaTextFonts? _promptFonts;
     /// <summary>A test's clock in seconds (the hysteresis and the pointer-from-pad windows need time to pass).</summary>
     private Func<double>? _controllerClockForSelfTest;
     private Func<int, PadIdentity>? _padIdentityForSelfTest;
@@ -54,7 +54,7 @@ public partial class TerrainViewerApp
     private void ResetControllersForSelfTest()
     {
         _controllers = null; _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
-        _promptShown = string.Empty; _promptFonts = false;
+        _promptShown = string.Empty; _promptFonts = null; _textFontsForSelfTest = null;
         if (_promptPanel is not null) _promptPanel.Visible = false;
     }
 
@@ -89,8 +89,8 @@ public partial class TerrainViewerApp
         var text = controllers.Strip(context);
         // The fonts are read once a module and only when a strip shows (a start with the mouse in hand reads nothing).
         var fonts = text.Length == 0 ? null : TextFonts();
-        if (text == _promptShown && (fonts is not null) == _promptFonts) return;
-        (_promptShown, _promptFonts) = (text, fonts is not null);
+        if (text == _promptShown && ReferenceEquals(fonts, _promptFonts)) return;
+        (_promptShown, _promptFonts) = (text, fonts);
         if (text.Length == 0) { if (_promptPanel is not null) _promptPanel.Visible = false; return; }
         EnsurePromptStrip();
         if (fonts is null) { _promptArt!.Set([]); _promptPanel!.Visible = false; return; }

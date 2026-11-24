@@ -329,7 +329,11 @@ public partial class AreaMainMenuPanel : CanvasLayer
         // ARC-UI-058: outside the original's screen the window is black, as the original's 800 × 600 screen has no margin.
         _backdrop.Color = art ? Colors.Black : DiagnosticBackdrop;
         // ARC-UI-2968: the art menus show the refusal's text only; the developer's "Not offered" list stays in the diagnostic window's note.
-        _artNote.SetText(art ? menu.Notice ?? "" : "", NoteColour);
+        // The character editor and the opening shop show it in the bottom message window as the original does (the refusal posts of 0x550750, ML4 text rectangle),
+        // white; the other art menus keep it at the top.
+        _noteAtBottom = shopWindow;
+        (_artNote.WrapWidth, _artNote.Room) = _noteAtBottom ? (NoteBox.Width, NoteBox.Height) : (NoteScreenWidth - 2 * NoteMargin, 1 << 20);
+        _artNote.SetText(art ? menu.Notice ?? "" : "", _noteAtBottom ? NoteBoxColour : NoteColour);
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
                 : shopping ? "the kit the shop made for the character (the original's item_generate_inventory); Accept or Return starts the game "
                     + "with it, Back or Escape returns to the character editor, where every point is still free; item names from the game when loaded"
@@ -499,7 +503,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
             // At the top, away from the build line at the bottom right, on the scale of the plate the visible art stands on.
             Control plate = _art.Visible ? _art : _premadeArt.Visible ? _premadeArt : _newCharacterArt.Visible ? _newCharacterArt : _shopArt;
             _noteScreen.Scale = plate.Scale; _noteScreen.Position = plate.Position;
-            _artNote.Position = new(_artNote.LineCount == 1 ? (NoteScreenWidth - _artNote.FirstLineWidth) / 2f : NoteMargin, NoteTop);
+            _artNote.Position = _noteAtBottom ? new(NoteBox.X, NoteBox.Y)
+                : new(_artNote.LineCount == 1 ? (NoteScreenWidth - _artNote.FirstLineWidth) / 2f : NoteMargin, NoteTop);
         }
         var width = Math.Max(1, Math.Min(560, size.X - 48));
         _panel.Size = new(width, 0);
@@ -520,7 +525,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     private const int NoteScreenWidth = 800, NoteMargin = 24, NoteTop = 8;
     private static readonly (byte R, byte G, byte B) NoteColour = (224, 214, 190);
-    private bool _dockedBelow, _optionsArt;
+    private static readonly (byte R, byte G, byte B) NoteBoxColour = (255, 255, 255);
+    private static readonly (int X, int Y, int Width, int Height) NoteBox = (290, 504, 291, 78);
+    private bool _dockedBelow, _optionsArt, _noteAtBottom;
 
     /// <summary>ARC-UI-2968: the original's text font (art 229) for the art menus' note; without it the note draws nothing.</summary>
     public void SetNoteFonts(AreaTextFonts? fonts) => _artNote.SetFonts(fonts);
