@@ -79,6 +79,12 @@ public partial class AreaSchematicWindowView : Control
     internal Vector2 PointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     internal int? HoveredForSelfTest => _hovered is { } hit ? (int)hit.Kind * 100 + hit.A : null;
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+
+    public override void _ExitTree() => AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
+
+    private static bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Schematic;
+
     public override void _Ready()
     {
         Name = "SchematicWindowArt";
@@ -263,6 +269,8 @@ public partial class AreaSchematicWindowView : Control
     // The window art; with the round view under it the lens's square is left out.
     private void DrawWindow()
     {
+        // ARC-UI-3037: over the kit's schematic background the base art 365 is not drawn (tabs, slots, arrows, lens art and text stay).
+        if (KitBackgroundShown) { AreaKitStandIns.Schematic(this); return; }
         if (Art(AreaSchematicWindowLayout.BackgroundArt) is not { } window) return;
         float width = window.GetWidth(), height = window.GetHeight();
         if (!_lensCut) { DrawTextureRect(window, new Rect2(0, 0, width, height), false); return; }
