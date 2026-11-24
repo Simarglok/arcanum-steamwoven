@@ -847,8 +847,8 @@ def portrait_entry(path: str, rel: str, body: bytes) -> dict:
             "portrait": {"path": path}, "legacy": {"width": 2, "height": 2, "rgbaSha256": hashlib.sha256(path.encode()).hexdigest()}, "review": "unreviewed"}
 
 
-class PortraitTests(unittest.TestCase):
-    """ARC-UI-2865: portrait entries (kind portrait, keyed by the original bitmap's path) through plan, apply, verify, mirror and rollback, and the portrait plan."""
+class BitmapPackFixture(unittest.TestCase):
+    """An installed pack with a layout map and one button, an empty staging folder, and the helpers of the bitmap-entry tests (portraits, ARC-UI-2865; world maps, ARC-RENDER-3079)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -872,13 +872,6 @@ class PortraitTests(unittest.TestCase):
         self.stage = self.tmp / "local" / "res095" / "pack-out" / "interface-portraits"
         self.stage.mkdir(parents=True)
         (self.stage / "interface").mkdir()
-        entries = []
-        for path, stem in (("portrait/hum1_b.bmp", "hum1_b"), ("portrait/npcdog.bmp", "npcdog")):
-            body = png(8, 8) + fake(stem)
-            rel = f"interface/portrait-{stem}-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
-            (self.stage / rel).write_bytes(body)
-            entries.append(portrait_entry(path, rel, body))
-        self.write_pack(self.stage, entries)
 
     @staticmethod
     def write_pack(root: Path, entries: list) -> None:
@@ -893,6 +886,20 @@ class PortraitTests(unittest.TestCase):
 
     def apply(self, *extra):
         return run("apply", "--installed", self.inst, "--staged", self.stage, "--backup-root", self.backups, "--task", "ARC-TEST-2865", "--no-base-check", "--add-new", *extra)
+
+
+class PortraitTests(BitmapPackFixture):
+    """ARC-UI-2865: portrait entries (kind portrait, keyed by the original bitmap's path) through plan, apply, verify, mirror and rollback, and the portrait plan."""
+
+    def setUp(self):
+        super().setUp()
+        entries = []
+        for path, stem in (("portrait/hum1_b.bmp", "hum1_b"), ("portrait/npcdog.bmp", "npcdog")):
+            body = png(8, 8) + fake(stem)
+            rel = f"interface/portrait-{stem}-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
+            (self.stage / rel).write_bytes(body)
+            entries.append(portrait_entry(path, rel, body))
+        self.write_pack(self.stage, entries)
 
     def test_the_key_of_a_portrait_is_its_bitmap_path(self):
         a = portrait_entry("portrait/hum1_b.bmp", "interface/x.png", b"a")
@@ -969,6 +976,106 @@ class PortraitTests(unittest.TestCase):
         (hero / "small" / "hum1.png").unlink()
         self.assertEqual(run("portraits-plan", "--hero", hero, "--out", out)[0], 2)
         self.assertEqual(run("portraits-plan", "--out", out)[0], 2)
+
+
+def map_entry(kind: str, path: str, rel: str, body: bytes) -> dict:
+    side = 365 if kind == "map-zoomed" else 250
+    return {"kind": kind, "file": rel, "sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body), "slice": "interface",
+            kind: {"path": path}, "legacy": {"width": side, "height": side, "rgbaSha256": hashlib.sha256(path.encode()).hexdigest()}, "review": "unreviewed"}
+
+
+class WorldMapTests(BitmapPackFixture):
+    """ARC-RENDER-3079: `worldmap` and `map-zoomed` entries (keyed by the original bitmap's path) through plan (dry run first), apply, verify and rollback, and the world-map plan.
+    The staging build of the portrait tests is replaced by one tile and the continent picture."""
+
+    def setUp(self):
+        super().setUp()
+        entries = []
+        for kind, path, stem in (("worldmap", "worldmap/smallmapchunks001.bmp", "smallmapchunks001"), ("map-zoomed", "worldmap/map_zoomed.bmp", "map_zoomed")):
+            body = png(8, 8) + fake(stem)
+            rel = f"interface/{kind}-{stem}-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
+            (self.stage / rel).write_bytes(body)
+            entries.append(map_entry(kind, path, rel, body))
+        self.write_pack(self.stage, entries)
+
+    def test_the_key_of_a_map_entry_is_its_kind_and_bitmap_path(self):
+        a = map_entry("worldmap", "worldmap/smallmapchunks001.bmp", "interface/x.png", b"a")
+        b = map_entry("map-zoomed", "worldmap/map_zoomed.bmp", "interface/y.png", b"b")
+        self.assertEqual(hp.entry_key(a), ("worldmap", "worldmap/smallmapchunks001.bmp"))
+        self.assertEqual(hp.entry_key(b), ("map-zoomed", "worldmap/map_zoomed.bmp"))
+        self.assertEqual(len(hp.keyed({"entries": [a, b]}, "t")), 2)
+
+    def test_apply_adds_map_entries_by_default_rows_and_rolls_back(self):
+        before = tree(self.inst)
+        rc, out, err = self.apply("--dry-run")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertIn("2 new entries are placed by it", out)
+        rc, out, err = self.apply()
+        self.assertEqual(rc, 0, out + err)
+        files = {e["file"] for e in self.manifest()["entries"]}
+        self.assertEqual(files, {"interface/window-a/buttons/btn-f000.png", "interface/world-map/maps/worldmap-smallmapchunks001-f000.png", "interface/world-map/maps/map-zoomed-map_zoomed-f000.png"})
+        rows = (self.inst / "layout-map.tsv").read_text()
+        self.assertIn("worldmap-smallmapchunks001\tworld-map\tmaps\t0", rows)
+        self.assertIn("map-zoomed-map_zoomed\tworld-map\tmaps\t0", rows)
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--add-new")
+        self.assertIn("staged-only entries: 0", out)
+        backup = next(self.backups.iterdir())
+        rc, out, err = run("rollback", backup, "--installed", self.inst)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+
+    def test_a_changed_tile_replaces_only_that_entry(self):
+        self.assertEqual(self.apply()[0], 0)
+        stage = {e["kind"]: e for e in json.loads((self.stage / "manifest.json").read_text())["entries"]}
+        new = png(8, 8) + fake("tile v2")
+        rel = f"interface/worldmap-smallmapchunks001-f0-{hashlib.sha256(new).hexdigest()[:8]}.png"
+        (self.stage / rel).write_bytes(new)
+        self.write_pack(self.stage, [map_entry("worldmap", "worldmap/smallmapchunks001.bmp", rel, new), stage["map-zoomed"]])
+        rc, out, err = run("plan", "--installed", self.inst, "--staged", self.stage, "--add-new")
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("1 interface entries differ", out)
+        self.assertIn("replace interface/world-map/maps/worldmap-smallmapchunks001-f000.png", out)
+
+    def test_maps_plan_checks_names_sizes_sums_and_completeness(self):
+        local = self.tmp / "local"
+        maps = local / "maps"
+        maps.mkdir(parents=True)
+        (self.tmp / ".git").mkdir()  # local/ must sit beside a .git
+        out = local / "plans" / "m.json"
+        for n in range(1, 65):
+            (maps / f"smallmapchunks{n:03d}.png").write_bytes(png(1000, 1000, ctype=2) + fake(str(n)))
+        (maps / "map_zoomed.png").write_bytes(png(1460, 1460, ctype=6) + fake("z"))
+        rc, text, err = run("maps-plan", "--maps", maps, "--out", out, "--dry-run")
+        self.assertEqual(rc, 0, text + err)
+        self.assertIn("tiles: 64 images", text)
+        self.assertIn("DRY-RUN", text)
+        self.assertFalse(out.exists())
+        rc, text, err = run("maps-plan", "--maps", maps, "--out", out)
+        self.assertEqual(rc, 0, text + err)
+        plan = json.loads(out.read_text())
+        self.assertEqual((plan["kind"], plan["scale"], len(plan["items"])), (hp.MAP_PLAN_KIND, 4, 65))
+        self.assertIn({"bmp": "worldmap/map_zoomed.bmp", "image": "../maps/map_zoomed.png"}, plan["items"])
+        self.assertEqual(plan["items"][0]["bmp"], "worldmap/smallmapchunks001.bmp")
+        # a delivery with a sums file that no longer matches, a wrong size, a missing tile and a stray name are refused
+        (maps / "SHA256SUMS.txt").write_text("".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  ./{p.name}\n" for p in sorted(maps.glob("*.png"))))
+        self.assertEqual(run("maps-plan", "--maps", maps, "--out", out, "--dry-run")[0], 0)
+        (maps / "smallmapchunks010.png").write_bytes(png(1000, 1000, ctype=2) + b"changed")
+        self.assertEqual(run("maps-plan", "--maps", maps, "--out", out, "--dry-run")[0], 2)
+        (maps / "SHA256SUMS.txt").unlink()
+        (maps / "smallmapchunks010.png").write_bytes(png(500, 500, ctype=2))
+        rc, _, err = run("maps-plan", "--maps", maps, "--out", out, "--dry-run")
+        self.assertEqual(rc, 2)
+        self.assertIn("expected 1000x1000", err)
+        self.assertEqual(run("maps-plan", "--maps", maps, "--out", out, "--scale", "2", "--dry-run")[0], 2)
+        (maps / "smallmapchunks010.png").unlink()
+        rc, _, err = run("maps-plan", "--maps", maps, "--out", out, "--dry-run")
+        self.assertEqual(rc, 2)
+        self.assertIn("missing [10]", err)
+        self.assertEqual(run("maps-plan", "--maps", maps, "--out", out, "--partial", "--dry-run")[0], 0)
+        (maps / "extra.png").write_bytes(png(1000, 1000, ctype=2))
+        self.assertEqual(run("maps-plan", "--maps", maps, "--out", out, "--partial", "--dry-run")[0], 2)
 
 
 if __name__ == "__main__":
