@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -11,6 +12,9 @@ namespace Arcanum.TerrainViewer;
 /// window opens (0x5446F0 sets the flag to 0). The name field is an art-less button: 3026 when the pointer enters it, 3027 on its
 /// press, acting on a release over it, as the menu's text buttons (MW27). A press elsewhere than the field ends the name's typing
 /// first (NW8). PROJECT: the controller's focus row lights its buttons until the pointer moves.
+/// ARC-UI-3040 (census M08, BD-G): over a complete kit (<see cref="SteamwovenKitScreen.NewCharacter"/>: <c>board.charcreatetopbar</c>, <c>backdrop.createcharacterbase</c>, <c>board.charcreatebottombar</c> of the baked set, <see cref="AreaKitTwoStripLayer"/>)
+/// the screen draws none of the original's arts 336, 335 and 765 (<see cref="SteamwovenKitComposer.OwnBackdropArts"/>) and the kit's three parts instead, in the plate's device rectangles; the character draw (it fills its fields black itself), the
+/// name field and the buttons are as before. A part the set lacks, holds at another size or does not load gives the screen's own art whole.
 /// </summary>
 public partial class AreaNewCharacterArtView : Control
 {
@@ -28,6 +32,9 @@ public partial class AreaNewCharacterArtView : Control
     private AreaNewCharacterArtButton? _hovered, _pressed;
     private bool _overName, _pressedName;
     private AreaNewCharacterHover _hover;
+    // ARC-UI-3040: the kit's three parts of the screen and the original arts the last draw painted as its backdrop.
+    private readonly AreaKitTwoStripLayer _kit = new(SteamwovenKitScreen.NewCharacter, "twostrip-newcharacter");
+    private IReadOnlyList<int> _ownBackdropDrawn = [];
 
     /// <summary>A button released over itself after its press.</summary>
     public event Action<AreaNewCharacterArtButton>? ButtonPressed;
@@ -45,6 +52,14 @@ public partial class AreaNewCharacterArtView : Control
     /// <summary>ARC-UI-2865: the portrait texture the window draws (the HD smoke reads whether it is the pack's redraw).</summary>
     internal Texture2D? PortraitTextureForSelfTest => _portrait;
     internal AreaCharacterDescription? DescriptionForSelfTest => Visible && _view is { } view ? AreaNewCharacterArtLayout.Description(view, _hover) : null;
+    /// <summary>ARC-UI-3040: the kit's three draws of the screen as of the last draw (top strip, body, bottom strip), null while the screen draws its own art.</summary>
+    internal IReadOnlyList<SteamwovenKitDraw>? KitScreenForSelfTest => _kit.DrawsForSelfTest;
+    /// <summary>ARC-UI-3040: the original arts drawn as the backdrop in the last draw (336, 335, 765 as far as the pack has them; none over the kit).</summary>
+    internal IReadOnlyList<int> OwnBackdropDrawnForSelfTest => _ownBackdropDrawn;
+    /// <summary>ARC-UI-3040: true when the kit part drawn for <paramref name="index"/> (0 top, 1 body, 2 bottom) is sampled nearest (its draw is exact).</summary>
+    internal bool KitSampledNearestForSelfTest(int index) => _kit.SampledNearestForSelfTest(index);
+    /// <summary>The art frames the view holds, by number.</summary>
+    internal IReadOnlyDictionary<int, Texture2D[]> TexturesForSelfTest => _art;
     internal int FrameForSelfTest(AreaNewCharacterArtButton button) => Frame(button);
     /// <summary>ARC-UI-2924: the button the pointer lights now, or null.</summary>
     internal AreaNewCharacterArtButton? HoveredForSelfTest => _hovered;
@@ -88,6 +103,9 @@ public partial class AreaNewCharacterArtView : Control
     {
         Visible = false;
         (_hovered, _pressed, _overName, _pressedName, _hover, _view, _portrait) = (null, null, false, false, AreaNewCharacterHover.None, null, null);
+        // ARC-UI-3040 (SWI-RUN-5): the body part goes with the screen.
+        _kit.Release();
+        _ownBackdropDrawn = [];
     }
 
     /// <summary>The screen at the bars' whole factor, centred in the viewport.</summary>
@@ -121,7 +139,9 @@ public partial class AreaNewCharacterArtView : Control
         // ARC-UI-2575: the art is shared among the screens of the pre-made family, so the view on screen claims its frames at every draw (only while the Steamwoven layout places it).
         if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
         if (_fonts is not { } fonts || _view is not { } view) return;
-        AreaCharacterArtDraw.Window(this, _art, AreaNewCharacterArtLayout.BackgroundArt);
+        // ARC-UI-3040: over a complete kit the strips and the body are the kit's and the original's arts 336, 335 and 765 are not drawn.
+        _kit.Compose(_zoned, GetViewportRect().Size);
+        _ownBackdropDrawn = AreaCharacterArtDraw.Window(this, _art, AreaNewCharacterArtLayout.BackgroundArt, (_kit, Position, Scale));
         AreaCharacterArtDraw.Character(this, fonts, view.Character, _portrait, AreaNewCharacterArtLayout.Description(view, _hover));
         // The redraw 0x5447B0: the name field over the character draw.
         var field = AreaPremadeBrowserArtLayout.Name;
@@ -150,6 +170,8 @@ public partial class AreaNewCharacterArtView : Control
 
     public override void _Notification(int what)
     {
+        // ARC-UI-3040 (SWI-RUN-5): a view hidden by any route (not only CloseView) lets the kit's body go.
+        if (what == NotificationVisibilityChanged && !IsVisibleInTree()) _kit.Release();
         if (what != NotificationMouseExit || (_hovered is null && !_overName && _hover == AreaNewCharacterHover.None)) return;
         (_hovered, _overName, _hover) = (null, false, AreaNewCharacterHover.None);
         QueueRedraw();

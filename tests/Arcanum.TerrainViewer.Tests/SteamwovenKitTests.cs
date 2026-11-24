@@ -565,6 +565,53 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(2560, 1440, SteamwovenStep.TwoThirds)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(1280, 1024, SteamwovenStep.Third)]
+    public void The_new_character_screen_is_the_same_two_strips_around_its_own_create_body_tiling_the_plate(int width, int height, SteamwovenStep step)
+    {
+        // ARC-UI-3040 (census M08): the strips are the creation family's (shared with the save and pre-made screens), the body is the new character background.
+        var plan = Screen(width, height);
+        var composed = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.NewCharacter);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        CollectionAssert.AreEqual(new[] { "board.charcreatetopbar", "backdrop.createcharacterbase", "board.charcreatebottombar" }, screen.Draws.Select(draw => draw.PartId).ToArray());
+        Assert.AreEqual(plan.Zone.Y, screen.Top.Rect.Y); Assert.AreEqual(plan.Zone.Bottom, screen.Bottom.Rect.Bottom);
+        Assert.AreEqual(screen.Top.Rect.Bottom, screen.Body.Rect.Y); Assert.AreEqual(screen.Body.Rect.Bottom, screen.Bottom.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(41 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(441 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Bottom);
+        // The pre-made browser's plan over the same set differs only in the body part.
+        var premade = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.PremadeBrowser).Value!;
+        Assert.AreEqual(premade.Top, screen.Top); Assert.AreEqual(premade.Bottom, screen.Bottom);
+        Assert.AreEqual(premade.Body.Rect, screen.Body.Rect); Assert.AreNotEqual(premade.Body.PartId, screen.Body.PartId);
+    }
+
+    [TestMethod]
+    [DataRow("board.charcreatetopbar")]
+    [DataRow("backdrop.createcharacterbase")]
+    [DataRow("board.charcreatebottombar")]
+    public void The_new_character_screen_with_any_part_missing_has_no_kit_screen_and_names_the_part(string missingPart)
+    {
+        var plan = Screen(1920, 1080);
+        var set = Full(SteamwovenStep.Half, missingPart);
+        var result = SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.NewCharacter);
+        Assert.IsFalse(result.Complete);
+        CollectionAssert.AreEqual(new[] { missingPart }, result.Missing.ToArray());
+        // The pre-made browser and the save screen are held back only by a strip they share, not by the new character body.
+        foreach (var other in new[] { SteamwovenKitScreen.PremadeBrowser, SteamwovenKitScreen.SaveLoad })
+            Assert.AreEqual(missingPart == "backdrop.createcharacterbase", SteamwovenKitComposer.Screen(plan, set, other).Complete);
+    }
+
+    [TestMethod]
+    public void The_new_character_screen_draws_none_of_its_own_backdrop_arts_over_a_kit_screen_and_all_three_without()
+    {
+        CollectionAssert.AreEquivalent(new[] { 336, 335, 765 }, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.NewCharacter, false).ToArray());
+        Assert.AreEqual(0, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.NewCharacter, true).Count);
+        CollectionAssert.AreEquivalent(new[] { AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt }, SteamwovenKitTable.Screens[SteamwovenKitScreen.NewCharacter].OwnArts.ToArray());
+    }
+
+    [TestMethod]
     public void The_save_screen_s_message_box_is_the_bottom_strip_below_the_middle_window_s_47_rows()
     {
         var box = AreaSaveListArtLayout.MessageBox;
