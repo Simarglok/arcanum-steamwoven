@@ -938,6 +938,13 @@ test places the pointer. The hotkey bar smoke checks
 the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
 every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
 
+The bar smoke's first button hover (the Character button, `ARC-UI-018 bar smoke FAIL hover: '' frame 0` once in a rolling
+run, ARC-UI-3108) no longer trusts the hover state read right after the move: it waits up to 30 more frames, pushing the same
+motion again (nudged by a pixel and back), and prints `ARC-UI-3108 bar smoke Character hover seen after N extra frames`.
+The top bar HD check prints its own failing sentence (`ARC-UI-116 top bar HD smoke FAIL ...`) instead of the frontier
+fault's `(withheld)` (ARC-DEV-3093; the kit/Steamwoven bar smoke passes with the installed `interface-redraw-4x`, which
+carries the top bar frames, 2026-11-24).
+
 Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
 (mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.
 

@@ -287,9 +287,18 @@ public partial class TerrainViewerApp
             // log, drawn only 3 s after the last stored entry (the new game may have posted one).
             _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
             var character = panel.ButtonCentreForSelfTest(AreaBarButton.Character);
+            // ARC-UI-3108: the Control's mouse-enter is seen on the viewport's own timing, so the check waits for the hover state (up to 30 frames,
+            // the same motion pushed again, nudged by a pixel and back so a motion at an unchanged point is not dropped) instead of reading it at once.
             await Move(character);
+            var hoverWaited = 0;
+            while (hoverWaited < 30 && !(panel.HoverTextForSelfTest == "Character Editor" && panel.FrameForSelfTest(AreaBarButton.Character) == 2))
+            {
+                hoverWaited++;
+                await Move(character + new Vector2(hoverWaited % 2 == 0 ? 0 : 1, 0));
+            }
+            GD.Print($"ARC-UI-3108 bar smoke Character hover seen after {hoverWaited} extra frames");
             Require(panel.HoverTextForSelfTest == "Character Editor" && panel.FrameForSelfTest(AreaBarButton.Character) == 2,
-                $"hover: '{panel.HoverTextForSelfTest}' frame {panel.FrameForSelfTest(AreaBarButton.Character)}");
+                $"hover: '{panel.HoverTextForSelfTest}' frame {panel.FrameForSelfTest(AreaBarButton.Character)} after {hoverWaited} extra frames");
             _gameBarSoundsForSelfTest.Clear();
             await Button(character, true);
             Require(panel.FrameForSelfTest(AreaBarButton.Character) == 1 && Sounded(AreaGameBarLayout.PressSound) && !SheetOpen, "down: frame 1, 3000, nothing opened yet");
