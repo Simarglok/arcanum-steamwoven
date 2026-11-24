@@ -247,7 +247,7 @@ python3 -B tools/hd_pack/hd_pack.py verify --deep && python3 -B tools/hd_pack/hd
 
 The HD world map (the 64 tiles and `Map_Zoomed`, upscaled without a generator, [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065)) enters the installed pack as entries of kind
 `worldmap` and `map-zoomed` ([format](../formats/hd-pack.md#world-map-entries-arc-render-3079)), built into their own staging pack and added with `apply --add-new`, like the portraits. The pictures stay
-under `local/` (never in git). Dry run first at every step:
+under `local/` (never in git). The pictures come from `python3 -B tools/hd_pack/world_map_upscale.py blend` and `cut` ([recipe](../rendering/hd-world-town-map.md#world-map-one-picture-non-generative-upscale-ac3); installed 2026-11-24, ARC-RENDER-3065, backup `ARC-UI-3065-<sha12>`). Dry run first at every step:
 
 ```sh
 python3 -B tools/hd_pack/hd_pack.py maps-plan --maps local/hd-maps/ARC-RENDER-3065/pictures --out local/hd-maps/ARC-RENDER-3065/maps-plan.json --dry-run
