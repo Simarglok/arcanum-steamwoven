@@ -260,7 +260,6 @@ public partial class TerrainViewerApp
     {
         var pack = InterfaceHd.Pack;
         var enabled = InterfaceHd.Enabled;
-        var generated = InterfaceHd.Generated;
         var verify = System.Environment.GetEnvironmentVariable("ARC_SAVE_HD_VERIFY") == "1";
         try
         {
@@ -278,7 +277,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            InterfaceHd.Configure(pack, enabled, generated);
+            InterfaceHd.Configure(pack, enabled);
             _saveListPanel!.ArtForSelfTest.QueueRedraw();
         }
     }

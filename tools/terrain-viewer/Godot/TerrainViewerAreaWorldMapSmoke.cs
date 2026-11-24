@@ -36,7 +36,6 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         var savedInterfaceHd = _gameSettings.HdInterface;
-        var savedGeneratedInterface = _gameSettings.GeneratedInterface;
         // ARC-UI-2306: the bars stay up under the window (the note entry runs on the bottom strip), so the stage runs with them, as the game does.
         var savedBars = _gameBarForSelfTest;
         _gameBarForSelfTest = true;
@@ -45,11 +44,11 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 1200 && !(_gameBarPanel is { Visible: true } && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(_gameBarPanel is { Visible: true } && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }, "the bars and art 200 read");
             // ARC-UI-126: ARC_AREA_WORLDMAP_HD_VERIFY=1 runs the stage with the HD interface art of ARC_HD_PACK (the bar and sheet smokes' switch), for a native look.
-            // ARC-UI-2993: ARC_AREA_WORLDMAP_HD_VERIFY=generated also turns the generated interface on, which is the Steamwoven layout (the composition's scale) the HD option plays with.
+            // ARC-UI-2993, ARC-UI-3143: the HD option is the Steamwoven layout (the composition's scale); the old value "generated" reads as 1.
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") is "1" or "generated")
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
-                _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = _gameSettings.GeneratedInterface || System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") == "generated" };
+                _gameSettings = _gameSettings with { HdInterface = true };
                 SyncInterfaceHd();
                 Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
             }
@@ -546,14 +545,13 @@ public partial class TerrainViewerApp
             _worldMapPanel?.ArtView.SetPixelsPerUnitForSelfTest(null);
             _gameBarForSelfTest = savedBars;
             _worldMapTownGateOffForSmoke = false;
-            if (_gameSettings.HdInterface != savedInterfaceHd || _gameSettings.GeneratedInterface != savedGeneratedInterface) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGeneratedInterface }; SyncInterfaceHd(); }
+            if (_gameSettings.HdInterface != savedInterfaceHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }
 
-    // ARC-UI-1197: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the open window's frame (art 138, the one the world map and the town map draw) and, since ARC-UI-1810, its buttons and the lens are checked in
-    // the generated interface at the window's own device scale (the whole factor of the free area: 1 in a 1280 x 800 window, 2 in a 1920 x 1080 one), checked again after a resize and
-    // captured as PREFIX-worldmap|townmap-MODE[-STAGE].png (ARC_AREA_WINDOW_CAPTURE, local).
+    // ARC-UI-1197, ARC-UI-3143: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the open window's frame (art 138, the one the world map and the town map draw) and, since ARC-UI-1810, its buttons and the lens are read
+    // in the Legacy and the HD look and captured as PREFIX-worldmap|townmap-MODE[-STAGE].png (ARC_AREA_WINDOW_CAPTURE, local).
     private async Task WorldMapWindowArtAsync(string window, AreaWorldMapArtView view)
     {
         if (!WindowArtSmokeRequested) return;

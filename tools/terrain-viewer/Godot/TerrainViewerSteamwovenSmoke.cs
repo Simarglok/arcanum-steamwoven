@@ -11,9 +11,9 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-UI-2452: opt-in part of the native bar smoke (ARC_AREA_BAR_STEAMWOVEN=1, with ARC_HD_PACK: the generated interface runs the HD path). The play screen is laid out by the
+    // ARC-UI-2452: opt-in part of the native bar smoke (ARC_AREA_BAR_STEAMWOVEN=1, with ARC_HD_PACK: the HD option runs the HD path, ARC-UI-3143). The play screen is laid out by the
     // Steamwoven layout model (the column, ARC-UI-2926: the full-width layout and its variants are gone) at each size of ARC_STEAMWOVEN_SIZES (default: the TRD's verification sizes, SWI-VER-6) for each variant of
-    // ARC_STEAMWOVEN_VARIANTS (default "column": the fitted column of ARC-UI-2890; "column-wood" is the unfitted one), with and without an open menu. The window takes the size's width, not its height (a Mac screen may be smaller than 3840 x 2160; ARC-UI-2696, FitWindowToRenderTargetAsync): the root
+    // ARC_STEAMWOVEN_VARIANTS (default "column": the fitted column of ARC-UI-2890; "kit" is the kit runtime on a synthetic kit; "legacy" the Original look), with and without an open menu. The window takes the size's width, not its height (a Mac screen may be smaller than 3840 x 2160; ARC-UI-2696, FitWindowToRenderTargetAsync): the root
     // viewport is given the size as its logical render target (content scale mode Viewport), so the captures have exactly the requested size.
     // ARC_AREA_BAR_CAPTURE=PREFIX saves PREFIX-hud-steamwoven-VARIANT-WxH[-menu].png (local, never in git).
     // ARC-DEV-2672: the variant "legacy" is the Original look (the HD option off: Legacy textures, no plan) at the same sizes and windows, for side-by-side comparison with the Steamwoven
@@ -34,9 +34,9 @@ public partial class TerrainViewerApp
         var list = new List<(string, SteamwovenLayoutOptions)>();
         foreach (var name in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            // ARC-UI-2890: "column" is the fitted column mode and "column-wood" the unfitted one (the original's strip width, k = 1, the world at the sides); "legacy" is the Original look (its pass takes no layout checks).
-            var options = name switch { "column" or "kit" or "legacy" => SteamwovenLayoutOptions.ColumnFitted, "column-wood" => SteamwovenLayoutOptions.ColumnOriginal, _ => null };
-            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not column, column-wood, kit or legacy");
+            // ARC-UI-2890: "column" is the fitted column mode; "legacy" is the Original look (its pass takes no layout checks). ARC-UI-3143: the unfitted variant "column-wood" went with the generated wood.
+            var options = name switch { "column" or "kit" or "legacy" => SteamwovenLayoutOptions.ColumnFitted, _ => null };
+            if (options is null) throw new InvalidOperationException($"ARC-UI-2452 steamwoven smoke: ARC_STEAMWOVEN_VARIANTS entry '{name}' is not column, kit or legacy");
             list.Add((name, options));
         }
         return list;
@@ -44,9 +44,8 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-UI-2696: gives the window the render target's width, so the viewport's stretch is 1 across (the content scale mode Viewport draws the logical target at the window's size: a window narrower than the target, the
-    /// default 1280 wide for a 2560 target, has the stretch 0.5, and every generated texture (the strips', the windows') is painted at the real window's scale, clamped to 1 unit per Legacy pixel, and drawn up
-    /// again, softer than the boards beside them, which are painted at the logical scale; the captures then showed two woods). The height is the operating system's to limit (a Mac's screen is lower than
-    /// 2160 or 1440), the stretch along it does not matter to the paint (it reads the stretch across).
+    /// default 1280 wide for a 2560 target, has the stretch 0.5, and a pack frame resampled for the real window's scale is clamped to 1 unit per Legacy pixel and drawn up again, softer than it shows at the target).
+    /// The height is the operating system's to limit (a Mac's screen is lower than 2160 or 1440), the stretch along it does not matter to the resample (it reads the stretch across).
     /// </summary>
     private async Task FitWindowToRenderTargetAsync(AreaGameBarPanel panel, Window window, Vector2I size, Func<int, Task> frames, Action<bool, string> require)
     {
@@ -68,7 +67,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-2452 steamwoven smoke FAIL " + why);
             throw new InvalidOperationException("ARC-UI-2452 steamwoven smoke: " + why);
         }
-        Require(InterfaceHd.Generated && InterfaceHd.Enabled, "the HD option with the generated interface is on");
+        Require(InterfaceHd.Enabled, "the HD option is on");
         var window = GetWindow();
         var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
         var savedWindowSize = window.Size;
@@ -106,11 +105,7 @@ public partial class TerrainViewerApp
                     await frames(2);
                     var tag = $"{variant}-{size.X}x{size.Y}";
                     var expected = SteamwovenHud.Plan(size.X, size.Y, options);
-                    async Task WaitPaintedAsync()
-                    {
-                        for (var wait = 0; wait < 1800 && (InterfaceHd.GeneratedPending > 0 || panel.BoardsPendingForSelfTest || !AllStripArtGenerated(panel)); wait++) await frames(1);
-                        await frames(2);
-                    }
+                    async Task WaitPaintedAsync() => await WaitFramesResampledAsync(frames);
                     await WaitPaintedAsync();
                     var plan = panel.PlanForSelfTest;
                     Require(expected is not null && plan is not null && plan.Layout == expected.Layout && plan.StripLeft == expected.StripLeft, $"[{tag}] the panel is laid out by the plan");
@@ -118,11 +113,6 @@ public partial class TerrainViewerApp
                     if (variant == "column") await VerifySteamwovenWorldZoomAsync(tag, size, plan.StripScale, frames, Require);
                     // The strips: one scale, placed by the plan; the insets are the middle band's, so every docked window lies in it.
                     Require(Math.Abs(panel.StripScale - (float)plan.StripScale) < 1e-4f, $"[{tag}] both strips are drawn at the plan's scale {plan.StripScale:F4} (got {panel.StripScale})");
-                    // ARC-UI-2696: the strips' generated wood is painted at the scale it is drawn at, as the boards' is (one texel per device pixel): else the strips' wood is softer than the boards' beside it.
-                    var woodAtScale = InterfaceHd.FractionalScale is { } paintedScale && Math.Abs(InterfaceHd.PaintScale(paintedScale) - InterfaceHd.PaintScale(plan.StripScale)) < 0.002; // a generated frame is painted at one pixel per unit at least (PaintScale), so a strip scale under 1 (1280 x 800 at k = 0.8: 0.96) is drawn down from 1
-                    var woodNote = $"[{tag}] the strips' wood is painted at the scale it is drawn at, {plan.StripScale:F4} (painted at {InterfaceHd.FractionalScale}, viewport stretch {GetViewport().GetFinalTransform().Scale})";
-                    if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_FIT_WINDOW") == "0") GD.Print("ARC-UI-2696 steamwoven " + woodNote + (woodAtScale ? " yes" : " NO (the window is not fitted)"));
-                    else Require(woodAtScale, woodNote);
                     Require(panel.StripRectForSelfTest(AreaBarStrip.Top).Position == new Vector2(plan.StripLeft, plan.TopStripY)
                         && panel.StripRectForSelfTest(AreaBarStrip.Bottom).Position == new Vector2(plan.StripLeft, plan.BottomStripY), $"[{tag}] the strips stand where the plan says");
                     Require(AreaGameBarPanel.TopInset == layout.Middle.Y && AreaGameBarPanel.BottomInset == size.Y - layout.Middle.Bottom
@@ -130,15 +120,6 @@ public partial class TerrainViewerApp
                     // The top band's art ends on the board's edge and the bottom band's starts on it: each strip lies inside its own band (the bottom one may hang over the frame's bottom edge by under 3 px · f).
                     Require(plan.TopStripY >= layout.Top.Y && plan.TopStripY + (int)Math.Round(41 * plan.StripScale) == layout.Top.Bottom, $"[{tag}] the top strip stands on its band's lower edge");
                     Require(plan.BottomStripY == layout.Bottom.Y, $"[{tag}] the bottom strip hangs from its band's upper edge");
-                    // ARC-UI-2767: the Fate Points and Sleep balls stand in the middle of the ring the strip draws round their hole (the ring's centre is read from the strip's Legacy hole, the ball's from its node).
-                    foreach (var ball in new[] { AreaBarButton.FatePoints, AreaBarButton.Sleep })
-                    {
-                        var ring = panel.RingCentreForSelfTest(ball);
-                        Require(ring is not null, $"[{tag}] the {ball} button has a ring round its hole");
-                        var off = panel.BallCentreForSelfTest(ball) - ring!.Value;
-                        GD.Print($"ARC-UI-2767 steamwoven [{tag}] {ball} ball centre minus ring centre: ({off.X:F3}, {off.Y:F3}) px");
-                        Require(Math.Abs(off.X) <= 0.01f && Math.Abs(off.Y) <= 0.01f, $"[{tag}] the {ball} ball is centred in its ring (off by {off} px)");
-                    }
                     await CheckSteamwovenColumnPlayAsync(tag, plan, size, panel, WaitPaintedAsync, frames, Require);
                     await VerifySteamwovenWindowsAsync(tag, plan, panel, frames, WaitPaintedAsync, Require);
                     checkedSizes++;
@@ -157,22 +138,8 @@ public partial class TerrainViewerApp
             panel.Relayout();
             await frames(3);
         }
-        // With the generated interface off (the HD option still on) the whole-factor layout is back: no plan, the strips at the whole factor, the old insets.
-        _gameSettings = _gameSettings with { GeneratedInterface = false };
-        SyncInterfaceHd();
-        SteamwovenHud.Suspended = false; panel.Relayout();
-        await frames(3);
-        Require(panel.PlanForSelfTest is null && !panel.BoardsShownForSelfTest && Math.Abs(panel.StripScale - panel.Factor) < 1e-4f && InterfaceHd.FractionalScale is null
-            && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * panel.Factor && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * panel.Factor,
-            "without the generated interface the whole-factor layout stands");
-        Require(AreaGameBarPanel.TopScreen is null && AreaGameBarPanel.FreeLeft == 0 && AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size).Size.X == GetViewport().GetVisibleRect().Size.X,
-            "without the layout the screen is the whole-factor one and the free width is the whole window's (ARC-UI-2510)");
-        Require(AreaGameBarPanel.FreeRect(GetViewport().GetVisibleRect().Size) == new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size), "without the layout the bubbles' view is the whole window (ARC-UI-2603)");
-        _gameSettings = _gameSettings with { GeneratedInterface = true };
-        SyncInterfaceHd();
         SteamwovenHud.Suspended = true; panel.Relayout();
         await frames(3);
-        await WaitBarArtGeneratedAsync(panel, frames);
         GD.Print($"ARC-UI-2452 native steamwoven layout PASS sizes={checkedSizes}");
     }
 
@@ -191,21 +158,16 @@ public partial class TerrainViewerApp
 
     private async Task CaptureSteamwovenLegacyAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
-        var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        var (savedHd, savedSuspended) = (_gameSettings.HdInterface, SteamwovenHud.Suspended);
         var (savedMode, savedAspect, savedContentSize, savedContentFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
         try
         {
-            // As the settings stand with the HD option off: the generated interface goes with it (GeneratedInterface && HdInterface).
-            _gameSettings = _gameSettings with { HdInterface = false, GeneratedInterface = false };
+            _gameSettings = _gameSettings with { HdInterface = false };
             SteamwovenHud.Suspended = false;
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            async Task WaitSettledAsync()
-            {
-                for (var wait = 0; wait < 1800 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
-                await frames(2);
-            }
+            async Task WaitSettledAsync() => await WaitFramesResampledAsync(frames);
             async Task EnterCompositionAsync(Vector2I size, bool composition)
             {
                 _originalCompositionForced = composition; _originalCompositionTarget = composition ? size : null;
@@ -233,8 +195,8 @@ public partial class TerrainViewerApp
                 var tag = $"legacy-{size.X}x{size.Y}";
                 var whole = OriginalComposition.WholeFactor(size.X, size.Y);
                 var (virtualWidth, virtualHeight) = OriginalComposition.VirtualSize(size.X, size.Y);
-                // AC1: the HD option is off (Legacy textures, no plan, no boards); one scale: the virtual screen is 800 n x 600 n and the strips stand at the whole factor n with the original's insets.
-                require(!InterfaceHd.Enabled && !AreaGameBarPanel.SteamwovenOn && panel.PlanForSelfTest is null && !panel.BoardsShownForSelfTest && InterfaceHd.FractionalScale is null,
+                // AC1: the HD option is off (Legacy textures, no plan, no bars); one scale: the virtual screen is 800 n x 600 n and the strips stand at the whole factor n with the original's insets.
+                require(!InterfaceHd.Enabled && !AreaGameBarPanel.SteamwovenOn && panel.PlanForSelfTest is null && !panel.BarsShownForSelfTest,
                     $"[{tag}] the HD option is off: no Steamwoven layout, no plan");
                 require(OriginalCompositionFactor == whole && panel.Factor == whole, $"[{tag}] the composition's whole factor is {whole}, got {OriginalCompositionFactor} (strips {panel.Factor})");
                 require(Math.Abs(panel.StripScale - whole) < 1e-4f && AreaGameBarPanel.TopInset == AreaGameBarLayout.TopHeight * whole && AreaGameBarPanel.BottomInset == AreaGameBarLayout.BottomHeight * whole,
@@ -271,15 +233,14 @@ public partial class TerrainViewerApp
             _originalCompositionForced = null; _originalCompositionTarget = null;
             SyncOriginalComposition();
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleFactor = savedContentFactor; window.ContentScaleSize = savedContentSize;
-            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            _gameSettings = _gameSettings with { HdInterface = savedHd };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
             panel.Relayout();
             await frames(3);
-            for (var wait = 0; wait < 1800 && (InterfaceHd.GeneratedPending > 0 || panel.BoardsPendingForSelfTest || !AllStripArtGenerated(panel)); wait++) await frames(1);
-            await frames(2);
+            await WaitFramesResampledAsync(frames);
         }
-        require(InterfaceHd.Enabled && InterfaceHd.Generated, "[legacy] the HD option is back on after the Original-look pass");
+        require(InterfaceHd.Enabled == savedHd, "[legacy] the HD option is back as it was after the Original-look pass");
     }
 
     /// <summary>AC2 (ARC-UI-2936): at a whole composition scale the virtual screen is shown as it is, so the Legacy strips are drawn with nearest pixels: each whole x whole block of the two strips is one colour. The art's smooth
@@ -350,9 +311,9 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-3058 steamwoven {tag} bottom button states captured held={_gameBar.Held} skills-on={_gameBar.IsOn(AreaBarButton.Skills)} spells-on={_gameBar.IsOn(AreaBarButton.Spells)} combat={HeroInCombatMode}");
     }
 
-    // ARC-UI-2890 (AC2, AC3, AC4): the play screen of the column mode. The strips stand in the column (the original's width at the strips' scale), no wood sides are drawn (the only board is the sliver above the top strip),
-    // the generated end caps stand on the strips' outer ends, the world is drawn over the whole frame; the edge elements (spell pane, combat list, bubbles) are placed against the frame's edges and the follower group stays in the column (ARC-UI-2925); an open menu
-    // takes the column's window zone, the wood of the gaps and the dimmed, desaturated world at the sides (read back: its mean brightness falls).
+    // ARC-UI-2890 (AC2, AC3, AC4), ARC-UI-3143: the play screen of the column mode. The strips stand in the column (the original's width at the strips' scale) as the pack's art (no generated board or cap), the world is drawn over the whole frame;
+    // the edge elements (spell pane, combat list, bubbles) are placed against the frame's edges and the follower group stays in the column (ARC-UI-2925); an open menu
+    // takes the column's window zone and the dimmed, desaturated world at the sides (read back: its mean brightness falls).
     private async Task CheckSteamwovenColumnPlayAsync(string tag, SteamwovenHudPlan plan, Vector2I size, AreaGameBarPanel panel, Func<Task> waitPainted, Func<int, Task> frames, Action<bool, string> require)
     {
         var column = plan.Column;
@@ -365,34 +326,25 @@ public partial class TerrainViewerApp
         var (freeTop, free) = AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y));
         require(free.X == column.Column.Width && AreaGameBarPanel.FreeLeft == column.Column.X && freeTop == plan.TopInset && free.Y == layout.Middle.Height,
             $"[{tag}] the windows' free area is the column's {column.Column.Width} wide at {column.Column.X} between the strips (got {free} at {AreaGameBarPanel.FreeLeft})");
-        // No wood sides: the only board is the sliver above the top strip's art.
-        var (topBoard, backdropShown) = panel.BoardsForSelfTest;
-        require(!backdropShown && panel.DimmedWorldForSelfTest.Count == 0, $"[{tag}] no backdrop and no dimmed world with no menu");
-        var sliver = plan.TopStripY - column.TopStrip.Y;
-        require(topBoard.Visible == sliver > 0, $"[{tag}] the top board shows only for the sliver above the strip ({sliver} px)");
-        if (topBoard.Visible)
-            require(topBoard.Position == new Vector2(column.Column.X, column.TopStrip.Y) && topBoard.PixelSizeForSelfTest.X == column.Column.Width && topBoard.PixelSizeForSelfTest.Y == Math.Min(sliver + 1, column.TopStrip.Height),
-                $"[{tag}] the top board is the sliver {topBoard.PixelSizeForSelfTest} at {topBoard.Position}, as wide as the column");
+        require(!panel.BackdropShownForSelfTest && panel.DimmedWorldForSelfTest.Count == 0, $"[{tag}] no menu layer and no dimmed world with no menu");
+        // ARC-UI-3143 (SWI-RUN-3): with no kit the two strips are the pack's art (the Legacy art where the pack has none), whole: no kit part is drawn.
+        require(panel.KitForSelfTest is { Top: null, Bottom: null, Background.Count: 0 }
+            && new[] { AreaBarStrip.Top, AreaBarStrip.Bottom }.All(strip => panel.GetNode<TextureRect>($"{strip}Strip/Art") is { Visible: true, Texture: HdInterfaceTexture { IsHd: true } }),
+            $"[{tag}] with no kit both strips are the pack's art, whole");
         long barArea = panel.BarsForSelfTest.Where(bar => bar.Visible).Sum(bar => (long)bar.Size.X * (long)bar.Size.Y);
         require(barArea + (long)frame.Width * frame.Height == (long)size.X * size.Y, $"[{tag}] the bars ({barArea}) and the frame {frame} fill the window");
-        require(panel.CapsForSelfTest.SequenceEqual(SteamwovenColumnEdges.Parts(plan, false)) && panel.CapsForSelfTest.Count == 2, $"[{tag}] the end caps stand on the two strips ({panel.CapsForSelfTest.Count} parts)");
         await CheckSteamwovenColumnPartsAsync(tag, plan, size, frames, require);
         await CaptureSteamwovenPartsAsync(tag, frames);
         await CaptureHudAsync("steamwoven-" + tag, frames);
         await CaptureBottomButtonStatesAsync(tag, panel, frames, require);
-        // Read back: the brass edge of the top strip's end, and the world's brightness at the sides for the dimming comparison below.
+        // Read back the world's brightness at the sides for the dimming comparison below.
         double worldBefore;
         using (var image = GetViewport().GetTexture().GetImage())
         {
             require(image is not null && image.GetSize() == new Vector2I(layout.WindowWidth, layout.WindowHeight), $"[{tag}] the viewport read back at the window's size");
-            var third = Math.Max(1, SteamwovenColumnEdges.BrassWidth(plan) / 3);
-            var brass = image!.GetPixel(column.Column.X + third + third / 2, column.TopStrip.Y + column.TopStrip.Height / 2);
-            require(brass.R > 0.5f && brass.R > brass.B + 0.15f, $"[{tag}] the brass edge of the top strip's end is brass ({brass})");
-            var brassRight = image.GetPixel(column.Column.Right - 1 - third - third / 2, column.TopStrip.Y + column.TopStrip.Height / 2);
-            require(brassRight.R > 0.5f && brassRight.R > brassRight.B + 0.15f, $"[{tag}] the brass edge of the top strip's right end is brass ({brassRight})");
-            worldBefore = MeanLuma(image, column.WorldLeft, column.WorldRight);
+            worldBefore = MeanLuma(image!, column.WorldLeft, column.WorldRight);
         }
-        // An open menu: the window in the column's zone, the wood of the gaps, the middle band's end caps and the dimmed world at both sides.
+        // An open menu: the window in the column's zone and the dimmed world at both sides.
         OpenInventory();
         await frames(3);
         require(InventoryOpen, $"[{tag}] the inventory opened");
@@ -401,7 +353,6 @@ public partial class TerrainViewerApp
         var dimmed = panel.DimmedWorldForSelfTest;
         var worlds = SteamwovenColumnEdges.DimmedWorld(plan);
         require(dimmed.Count == worlds.Count && dimmed.Zip(worlds).All(pair => pair.First == new Rect2(pair.Second.X, pair.Second.Y, pair.Second.Width, pair.Second.Height)), $"[{tag}] the world left and right of the column is dimmed ({dimmed.Count} rectangles, expected {worlds.Count})");
-        require(panel.CapsForSelfTest.SequenceEqual(SteamwovenColumnEdges.Parts(plan, true)) && panel.CapsForSelfTest.Count == 3, $"[{tag}] the end caps stand on the middle band too while a menu is open");
         await frames(2);
         await CaptureHudAsync("steamwoven-" + tag + "-menu", frames);
         using (var image = GetViewport().GetTexture().GetImage())
@@ -413,7 +364,7 @@ public partial class TerrainViewerApp
         }
         EndInventory();
         await frames(3);
-        require(!panel.BoardsForSelfTest.BackdropShown && panel.DimmedWorldForSelfTest.Count == 0 && panel.CapsForSelfTest.Count == 2, $"[{tag}] the backdrop, the dimming and the middle caps go with the menu");
+        require(!panel.BackdropShownForSelfTest && panel.DimmedWorldForSelfTest.Count == 0, $"[{tag}] the menu layer and the dimming go with the menu");
     }
 
     // The mean brightness (0..1) of the pixels of the given rectangles, every eighth pixel each way.
@@ -476,7 +427,7 @@ public partial class TerrainViewerApp
             // The button stands on the bottom strip's top left corner: its left edge is the column's, its bottom edge the strip's top (unit 441, AreaGameBarLayout.BottomTop), at every window size.
             require(portraits.ButtonScreenRectForSelfTest("toggle") is { } corner && Math.Abs(corner.Position.X - column.Column.X) <= 1.01f && Math.Abs(corner.End.Y - plan.BottomStripY) <= 1.01f,
                 $"[{tag}] the show/hide button stands on the bottom strip's top left corner (x {column.Column.X}, bottom {plan.BottomStripY}); got {portraits.ButtonScreenRectForSelfTest("toggle")}");
-            for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+            await WaitFramesResampledAsync(frames);
             await CaptureHudAsync("steamwoven-" + tag + "-followers", frames);
             require(Math.Abs(portraits.OriginForSelfTest.X - column.Column.X) <= 1e-3f, $"[{tag}] the follower group's left edge is the column's at {column.Column.X} (got {portraits.OriginForSelfTest.X})");
             sleep.Place(); fate.Place();
@@ -632,77 +583,32 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-UI-2576, ARC-UI-2890: the open menu window has the wood of its family (the census's) in the gaps of the unfitted column: the pieces of SteamwovenBackdrops, the two parts of a two-part window meeting at
-    // the split, each drawn at its own rectangle with its texels one to one (the fitted column has no gap and no piece); a window with no family (the save list, whose screen hides the bars) has none. On the viewport read back, the join at
-    // the top and bottom edge of the window zone has the seam ratio of SWI-VER-5 (the mean neighbour difference in a ±8 px band at the join over the one beside it, R ≤ 1.5); a join with no room for the bands outside it is skipped.
-    // The ratios are printed (ARC-UI-2576 seam) so a capture's numbers can be read; the gate is R ≤ SteamwovenSeam.Limit.
+    // ARC-UI-2576, ARC-UI-3143: the open menu window of a family has the menu layer (the dim of the world beside the column) and, with no kit, no background piece: the window draws its own pack art over the middle band (the fitted column
+    // has no gap, so nothing else is laid under it); a window with no family (the save list, whose screen hides the bars) has no layer. A window with a lens (the round view of the hero, the logbook's, the schematics', the reading
+    // window's, the inventory's) shows the game view in its square: the layer leaves the square out (nothing is laid under the lens), and the lens stands at the window's own place (the pack art's: the common place is the kit's, ARC-UI-2714).
     private void CheckBackdrop(string tag, string name, SteamwovenBackdropFamily? family, SteamwovenHudPlan plan, AreaGameBarPanel panel, Action<bool, string> require)
     {
         var (shownFamily, shown) = panel.BackdropForSelfTest;
-        var shownLayer = panel.BoardsForSelfTest.BackdropShown;
+        var shownLayer = panel.BackdropShownForSelfTest;
         if (family is not { } expectedFamily)
         {
-            require(shownFamily is null && !shownLayer, $"[{tag}] the {name} window has no backdrop (family {shownFamily}, layer shown {shownLayer})");
+            require(shownFamily is null && !shownLayer, $"[{tag}] the {name} window has no menu layer (family {shownFamily}, layer shown {shownLayer})");
             return;
         }
-        var pieces = SteamwovenBackdrops.Pieces(expectedFamily, plan);
-        require(shownFamily == expectedFamily && shownLayer && shown.Count == pieces.Count, $"[{tag}] the {name} window has the backdrop of {expectedFamily} in {pieces.Count} piece(s) (family {shownFamily}, shown {shown.Count}, layer {shownLayer})");
-        for (var i = 0; i < pieces.Count; i++)
-            require(shown[i].Position == new Vector2(pieces[i].Rect.X, pieces[i].Rect.Y) && shown[i].Pixels == new Vector2I(pieces[i].Rect.Width, pieces[i].Rect.Height),
-                $"[{tag}] the {name} backdrop piece {i} fills {pieces[i].Rect} one texel per pixel (at {shown[i].Position}, pixels {shown[i].Pixels})");
-        // A window with a lens (the round view of the hero, the logbook's, the schematics', the reading window's, the inventory's) shows the game view in its square: the backdrop leaves the square out (it lies above the
-        // round view's copy of the world), so the lens does not show wood.
+        require(shownFamily == expectedFamily && shownLayer && shown.Count == 0, $"[{tag}] the {name} window has the menu layer of {expectedFamily} and no kit piece (family {shownFamily}, shown {shown.Count}, layer {shownLayer})");
         var lenses = AreaRoundView.VisibleRects();
-        require(panel.BackdropHolesForSelfTest == Math.Min(2, lenses.Count), $"[{tag}] the {name} backdrop leaves out the {lenses.Count} round-view square(s) (got {panel.BackdropHolesForSelfTest})");
         var unit = SteamwovenWindowZone.UnitScale(plan);
         var places = string.Join(" ", lenses.Select(rect => $"({(rect.Position.X - plan.WindowZone.X) / unit:F2},{(rect.Position.Y - plan.WindowZone.Y) / unit:F2},{rect.Size.X / unit:F2})"));
         // ARC-UI-2694: every lens is the same 89 units square (the cover art 198's) within a device pixel, at the same scale as the window.
         foreach (var rect in lenses) require(Math.Abs(rect.Size.X - 89 * unit) <= 1 && Math.Abs(rect.Size.Y - 89 * unit) <= 1, $"[{tag}] the {name} lens is 89 units square ({rect.Size.X / unit:F2} x {rect.Size.Y / unit:F2})");
-        // ARC-UI-2714: every lens of the generated interface stands at the one common place (within a unit: the reading window's origin is a fraction of a unit off the zone's).
-        foreach (var rect in lenses)
-        {
-            var (lensX, lensY) = ((rect.Position.X - plan.WindowZone.X) / unit, (rect.Position.Y - plan.WindowZone.Y) / unit);
-            require(Math.Abs(lensX - AreaLensPlace.X) <= 1 / unit && Math.Abs(lensY - AreaLensPlace.Y) <= 1 / unit, $"[{tag}] the {name} lens stands at the common place ({AreaLensPlace.X}, {AreaLensPlace.Y}) (at {lensX:F2}, {lensY:F2})");
-        }
+        require(!AreaLensPlace.Unified, $"[{tag}] with no kit background the lens place is the window's own, not the kit's common place");
         GD.Print($"ARC-UI-2576 lens [{tag}] {name} round views={lenses.Count} places(units from the zone corner)={places}");
-        using var captured = GetViewport().GetTexture().GetImage();
-        if (captured is null) return;
-        captured.Convert(Image.Format.Rgba8);
-        var rgba = captured.GetData();
-        var (width, height) = (captured.GetWidth(), captured.GetHeight());
-        var zone = plan.WindowZone;
-        var band = plan.Layout.Middle;
-        // ARC-UI-2890: the zone's left and right edges border the world (dimmed), not wood, so only its top and bottom edges join the wood of the gaps.
-        // The interior band beside a join lies on the backdrop inside the middle band (never on a strip or the world), clear of the join's own band; where there is no room it is skipped.
-        int? Reference(int join, int low, int high)
-        {
-            var wanted = join + Math.Sign(low - join + high - join) * (3 * SteamwovenSeam.Band + 16);
-            var (lo, hi) = (low + SteamwovenSeam.Band + 1, high - SteamwovenSeam.Band - 1);
-            if (wanted < join) { hi = Math.Min(hi, join - 2 * SteamwovenSeam.Band); return lo <= hi ? Math.Clamp(wanted, lo, hi) : null; }
-            lo = Math.Max(lo, join + 2 * SteamwovenSeam.Band);
-            return lo <= hi ? Math.Clamp(wanted, lo, hi) : null;
-        }
-        var seams = new (string Edge, double? Ratio)[]
-        {
-            ("top", Reference(zone.Y, band.Y, zone.Y) is { } top ? SteamwovenSeam.RowRatio(rgba, width, height, zone.Y, zone.X, zone.Right, top) : null),
-            ("bottom", Reference(zone.Bottom, zone.Bottom, band.Bottom) is { } bottom ? SteamwovenSeam.RowRatio(rgba, width, height, zone.Bottom, zone.X, zone.Right, bottom) : null),
-        };
-        foreach (var (edge, ratio) in seams)
-        {
-            GD.Print($"ARC-UI-2576 seam [{tag}] {name} {edge} R={(ratio is { } r ? r.ToString("F2") : "n/a")} zone={zone} band={band}");
-            // The windows' own look switch ("Diagnostic view", a wide button with a border; debug-only since ARC-UI-2764) lay just below the zone's bottom edge, so that edge is printed and not gated.
-            if (ratio is { } measured && edge != "bottom") require(measured <= SteamwovenSeam.Limit, $"[{tag}] the {name} window's {edge} join of the zone has seam ratio {measured:F2} > {SteamwovenSeam.Limit}");
-        }
     }
 
-    // Both strips and every frame of every bar button draw generated chrome (asking for it paints it on a worker).
-    private static bool AllStripArtGenerated(AreaGameBarPanel panel) =>
-        new[] { AreaBarStrip.Top, AreaBarStrip.Bottom }.All(strip => panel.GetNode<TextureRect>($"{strip}Strip/Art").Texture is HdInterfaceTexture { IsGenerated: true })
-        && AreaGameBarLayout.Buttons.All(spec => (panel.ArtFrames(spec.Art) ?? []).OfType<HdInterfaceTexture>().All(texture => texture.IsGenerated));
-
-    private static async Task WaitBarArtGeneratedAsync(AreaGameBarPanel panel, Func<int, Task> frames)
+    /// <summary>ARC-UI-3143: waits until no pack frame is being resampled to a device scale on a worker (a pack frame draws the mip chain meanwhile), then two frames.</summary>
+    private static async Task WaitFramesResampledAsync(Func<int, Task> frames)
     {
-        for (var wait = 0; wait < 1800 && (InterfaceHd.GeneratedPending > 0 || !AllStripArtGenerated(panel)); wait++) await frames(1);
+        for (var wait = 0; wait < 1800 && InterfaceHd.DirectPending > 0; wait++) await frames(1);
         await frames(2);
     }
 }

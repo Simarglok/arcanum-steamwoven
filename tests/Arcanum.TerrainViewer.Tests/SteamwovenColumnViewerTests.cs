@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-2890: the viewer's column mode, as plain numbers: the window hook, the wood of the gaps, the end caps and the dimmed world (the Godot side draws these rectangles).</summary>
+/// <summary>ARC-UI-2890: the viewer's column mode, as plain numbers: the window hook and the dimmed world (the Godot side draws these rectangles). ARC-UI-3143: the wood of the gaps and the end caps are retired with the generated chrome.</summary>
 [TestClass]
 public sealed class SteamwovenColumnViewerTests
 {
@@ -46,89 +46,6 @@ public sealed class SteamwovenColumnViewerTests
             var screen = SteamwovenWindowZone.Screen(plan, 41);
             Assert.AreEqual(zone.X, screen.X, 1.0, label);
             Assert.IsTrue(screen.Y >= plan.Layout.Frame.Y - 1 && screen.Y + 600 * screen.Scale <= plan.Layout.Frame.Bottom + 1 || 600 * screen.Scale > plan.Layout.Frame.Height, label);
-        }
-    }
-
-    [TestMethod]
-    public void The_gaps_take_the_family_s_wood_and_tile_with_the_window_zone_to_the_column()
-    {
-        foreach (var options in new[] { SteamwovenLayoutOptions.ColumnOriginal, SteamwovenLayoutOptions.ColumnFitted })
-        foreach (var (w, h) in Sizes)
-        foreach (var family in Enum.GetValues<SteamwovenBackdropFamily>())
-        {
-            var plan = Plan(w, h, options);
-            var column = plan.Column;
-            var pieces = SteamwovenBackdrops.Pieces(family, plan);
-            var label = $"{w}x{h} k={options.Column.K} {family}";
-            // The pieces cover the two gaps exactly: area equals, no overlap with the zone, all inside the column.
-            long area = pieces.Sum(piece => (long)piece.Rect.Width * piece.Rect.Height);
-            Assert.AreEqual((long)column.Window.GapAbove.Width * column.Window.GapAbove.Height + (long)column.Window.GapBelow.Width * column.Window.GapBelow.Height, area, label);
-            foreach (var piece in pieces)
-            {
-                Assert.IsTrue(piece.Rect.X >= column.Column.X && piece.Rect.Right <= column.Column.Right, $"{label}: inside the column's width");
-                Assert.IsTrue(piece.Rect.Bottom <= column.Window.Zone.Y || piece.Rect.Y >= column.Window.Zone.Bottom, $"{label}: not over the window");
-                Assert.AreEqual(ChromeMaterial.Wood, piece.Material, label);
-            }
-            Assert.IsTrue(pieces.Count <= 4, label);
-            // Where the window zone fills the middle band (16:9 at k = 1) there is no gap and no piece.
-            if (column.Window.GapAbove.Height <= 0 && column.Window.GapBelow.Height <= 0) Assert.AreEqual(0, pieces.Count, label);
-        }
-    }
-
-    [TestMethod]
-    public void The_wood_of_a_gap_continues_the_window_art_s_grain_from_its_top_left()
-    {
-        // 2560 x 1600 at k = 1: 80 px above and below the 960 px zone; the grain of the upper gap starts 80 px (2.5 / 0.5... units) above the zone's top left.
-        var plan = Plan(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal);
-        var unit = plan.Column.UnitScale;
-        var zone = plan.Column.Window.Zone;
-        var pieces = SteamwovenBackdrops.Pieces(SteamwovenBackdropFamily.CharacterSheet, plan);
-        Assert.AreEqual(2, pieces.Count);
-        Assert.AreEqual(0.0, pieces[0].OriginX, 1e-9);
-        Assert.AreEqual((plan.Column.Window.GapAbove.Y - zone.Y) / unit, pieces[0].OriginY, 1e-9);
-        Assert.AreEqual(0.0, pieces[1].OriginX, 1e-9);
-        Assert.AreEqual((plan.Column.Window.GapBelow.Y - zone.Y) / unit, pieces[1].OriginY, 1e-9);
-        Assert.IsTrue(pieces[0].OriginY < 0 && pieces[1].OriginY > 0, "above the window's top is negative, below it is positive");
-    }
-
-    [TestMethod]
-    public void A_two_part_family_splits_each_gap_at_the_zone_s_split()
-    {
-        var plan = Plan(2560, 1600, SteamwovenLayoutOptions.ColumnOriginal);
-        var zone = plan.Column.Window.Zone;
-        foreach (var (family, units) in new[] { (SteamwovenBackdropFamily.Inventory, 358), (SteamwovenBackdropFamily.Logbook, 165), (SteamwovenBackdropFamily.Reading, 132) })
-        {
-            var split = zone.X + (int)Math.Round(units * plan.Column.UnitScale, MidpointRounding.AwayFromZero);
-            Assert.AreEqual(split, SteamwovenBackdrops.SplitX(family, plan), family.ToString());
-            var pieces = SteamwovenBackdrops.Pieces(family, plan);
-            Assert.AreEqual(4, pieces.Count, family.ToString());
-            Assert.AreEqual(split, pieces[0].Rect.Right);
-            Assert.AreEqual(split, pieces[1].Rect.X);
-            Assert.AreEqual(plan.Column.Column.X, pieces[0].Rect.X);
-            Assert.AreEqual(plan.Column.Column.Right, pieces[1].Rect.Right);
-            // The tone art follows the part, not the list index: above-left, above-right, below-left, below-right are parts 0, 1, 0, 1.
-            CollectionAssert.AreEqual(new[] { 0, 1, 0, 1 }, pieces.Select(piece => piece.Part).ToArray(), family.ToString());
-        }
-        // A one-piece family is not split.
-        Assert.IsNull(SteamwovenBackdrops.SplitX(SteamwovenBackdropFamily.WorldMap, plan));
-    }
-
-    [TestMethod]
-    public void The_end_caps_stand_on_the_strips_and_on_the_middle_band_only_while_a_menu_is_open()
-    {
-        foreach (var (w, h) in Sizes)
-        {
-            var plan = Plan(w, h, SteamwovenLayoutOptions.ColumnOriginal);
-            var column = plan.Column;
-            var play = SteamwovenColumnEdges.Parts(plan, false);
-            Assert.AreEqual(2, play.Count, $"{w}x{h}");
-            Assert.AreEqual(column.TopStrip, play[0]);
-            Assert.AreEqual(column.BottomStrip, play[1]);
-            var menu = SteamwovenColumnEdges.Parts(plan, true);
-            Assert.AreEqual(3, menu.Count);
-            Assert.AreEqual(column.TopStrip.Bottom, menu[1].Y, "the middle band shares the strips' edges");
-            Assert.AreEqual(column.BottomStrip.Y, menu[1].Bottom);
-            Assert.IsTrue(SteamwovenColumnEdges.BrassWidth(plan) >= 2 && SteamwovenColumnEdges.ShadowWidth(plan) > SteamwovenColumnEdges.BrassWidth(plan));
         }
     }
 

@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 /// kit's background shows. <b>ARC-UI-3098:</b> each such element is a kit part (<see cref="AreaKitFixtures"/>, <c>fixture.*</c> in kit.json) drawn at its place when the set holds it at the table's size; the plain stand-in below is
 /// drawn only for an element whose part the set lacks (one element at a time), so a half-made kit still reads. Only the elements the owner marked
 /// as required are here (the TRD's table "Elements the old arts held"); the decorative ones (compass rose, gears, tab sockets, rivets, brass rims) are left to the kit. Coordinates are the window's units (800 × 400), from the recipes
-/// of <c>InterfaceChrome</c>; <c>scale</c> is the device pixels of one unit where the node is not itself scaled by it (the inventory's frame), else 1. A stand-in is plain: black fields with a grey-blue edge, paper for the blueprint.
+/// of the retired generated chrome (ARC-UI-3143; the table is in the TRD); <c>scale</c> is the device pixels of one unit where the node is not itself scaled by it (the inventory's frame), else 1. A stand-in is plain: black fields with a grey-blue edge, paper for the blueprint.
 /// </summary>
 internal static class AreaKitStandIns
 {

@@ -46,7 +46,8 @@ public static class ViewerSettingsConfig
     public const string Hd = "hd";
     /// <summary>The line the HD setting had before ARC-UI-2174; read only when <see cref="Hd"/> is absent, never written.</summary>
     public const string HdInterface = "hd interface";
-    public const string GeneratedInterface = "generated interface";
+    /// <summary>The line of the removed generated-interface choice (ARC-UI-140, removed by ARC-UI-3142: HD On is the Steamwoven interface): no longer read or written; an old file keeps it.</summary>
+    public const string GeneratedInterfaceLine = "generated interface";
     /// <summary>The line of the removed interface layout choice (ARC-UI-2890, removed by ARC-UI-2926: the column is the only layout): no longer read or written; an old file keeps it.</summary>
     public const string InterfaceLayoutLine = "interface layout";
     /// <summary>ARC-UI-3059: the Steamwoven world zoom: <c>auto</c> or a whole step 1 to 4 (a missing or unknown value reads as <c>auto</c>).</summary>
@@ -59,7 +60,7 @@ public static class ViewerSettingsConfig
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, GeneratedInterface, WorldZoom, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, WorldZoom, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -118,8 +119,6 @@ public static class ViewerSettingsConfig
             AutoSwitchWeapons = Flag(read, AutoSwitch) ?? defaults.AutoSwitchWeapons,
             FollowerSkills = Flag(read, FollowerSkills) ?? defaults.FollowerSkills,
             HdInterface = hdInterface,
-            // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
-            GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
             WorldZoomStep = read.Get(WorldZoom) is { } zoomText && int.TryParse(zoomText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var zoomStep) && zoomStep is >= 1 and <= SteamwovenWorldZoom.MaxStep ? zoomStep : SteamwovenWorldZoom.Automatic,
             HdPackSource = HdPackSourceResolver.TryParseMode(read.Get(HdPack)?.ToLowerInvariant(), out var mode) ? mode : defaults.HdPackSource,
             HdPackPath = folder,
@@ -140,7 +139,7 @@ public static class ViewerSettingsConfig
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
             new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)), new(AutoSwitch, Flag(settings.AutoSwitchWeapons)), new(FollowerSkills, Flag(settings.FollowerSkills)),
             new(ViolenceFilter, Flag(settings.ViolenceFilter)), new(Brightness, Number(settings.Brightness)), new(TextDuration, Number(settings.TextDuration)),
-            new(Hd, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
+            new(Hd, Flag(settings.HdInterface)),
             new(WorldZoom, settings.WorldZoomStep is >= 1 and <= SteamwovenWorldZoom.MaxStep ? Number(settings.WorldZoomStep) : "auto"),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
             new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),
