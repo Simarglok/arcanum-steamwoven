@@ -755,7 +755,7 @@ public partial class AreaInventoryGridArea : Control
         var face = AreaFallbackLook.Fonts?.Invoke()?.Text;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
         void Label(Rect2 rect, string label) =>
-            Line(face, label, ((int)MathF.Round(rect.Position.X / _scale) + 2, (int)MathF.Round(rect.Position.Y / _scale) + 1, Math.Max(1, (int)(rect.Size.X / _scale) - 4), Math.Max(1, (int)(rect.Size.Y / _scale) - 2)), middle: false);
+            Block(face, label, ((int)MathF.Round(rect.Position.X / _scale) + 2, (int)MathF.Round(rect.Position.Y / _scale) + 1, Math.Max(1, (int)(rect.Size.X / _scale) - 4), Math.Max(1, (int)(rect.Size.Y / _scale) - 2)));
         foreach (var (slot, r) in AreaInventoryDrag.SlotRects)
         {
             var rect = Scaled(r.X, r.Y, r.Width, r.Height);
@@ -1162,5 +1162,4 @@ public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Ar
     /// <summary>ARC-UI-2795: the original's text fonts (art 27 for the merchant's name, 229 for the lines and quotes, 171 for the counts, 486 for the PC's ratings); null draws no window text.</summary>
     public AreaTextFonts? Fonts { get; init; }
 
-    /// <summary>PROJECT: the colour of the diagnostic look's texts and of an item's name when its art did not read (the windows' own texts are white, in the original's fonts).</summary>
 }

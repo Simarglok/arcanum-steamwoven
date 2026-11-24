@@ -20,9 +20,11 @@ public partial class TerrainViewerApp
             AreaArtTip.Set(button, Hint);
             require(AreaArtTip.Get(button) == Hint && button.TooltipText.Length == 0, "the hint is the control's own and Godot's tooltip text stays empty");
             AreaArtTipPopup.Enter(button);
-            for (var i = 0; i < 20; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            require(AreaArtTip.ShownForSelfTest(GetTree()).Length == 0, "the hint waits for its delay");
-            for (var i = 0; i < 600 && AreaArtTip.ShownForSelfTest(GetTree()).Length == 0; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            // Time, not frames: the popup counts the frames' delta (0.5 s), and an automated host runs at any rate.
+            var start = Time.GetTicksMsec();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            require(Time.GetTicksMsec() - start > 400 || AreaArtTip.ShownForSelfTest(GetTree()).Length == 0, "the hint waits for its delay");
+            while (Time.GetTicksMsec() - start < 5000 && AreaArtTip.ShownForSelfTest(GetTree()).Length == 0) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             require(AreaArtTip.ShownForSelfTest(GetTree()) == Hint, "the hint shows after the delay: '" + AreaArtTip.ShownForSelfTest(GetTree()) + "'");
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_HOVER_WINDOW_CAPTURE");
             if (!string.IsNullOrWhiteSpace(capture))

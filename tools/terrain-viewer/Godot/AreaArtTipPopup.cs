@@ -59,6 +59,8 @@ public partial class AreaArtTipPopup : CanvasLayer
     {
         if (_target is null) return;
         if (!IsInstanceValid(_target) || !_target.IsVisibleInTree()) { Stop(); return; }
+        // A press ends the hint, as Godot's tooltip did; entering the control again brings it back.
+        if (Input.IsMouseButtonPressed(MouseButton.Left) || Input.IsMouseButtonPressed(MouseButton.Right)) { Stop(); return; }
         var hint = AreaArtTip.Get(_target);
         var fonts = AreaFallbackLook.Fonts?.Invoke();
         if (hint.Length == 0 || fonts is null) { _panel.Visible = false; return; }
