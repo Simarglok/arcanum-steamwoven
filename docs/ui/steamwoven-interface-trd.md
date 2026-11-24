@@ -299,6 +299,7 @@ Part kinds:
   (pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058)); (4) seams at the strip joins not worse than the original's (1.82 and 1.73), the target is at most 1.8
   (SWI-VER-5 below keeps its own gate); (5) wood tone: mean L\* and contrast (and chroma) fitted to the original by the wood mask, random dark specks removed, the original's rows of dots kept.
   Method note and numbers: [steamwoven-surface-method-study.md](steamwoven-surface-method-study.md).
+  **As built (ARC-UI-3100):** the composition is a pipeline step, `surface_compose.py build` ([study page](steamwoven-surface-method-study.md#production-pipeline-step-arc-ui-3100), [toolchain](../workflow/toolchain.md#steamwoven-surface-pipeline-arc-ui-3100)): a zone spec per screen (tone-mask screen, joins, bevel band, chip boxes, text erase boxes, kit parts), a record `provenance/surface/<zone id>.json` with the hashes of the inputs and the result, the wood numbers, the seams and the tone check, and two gates (every join at most 1.8, the screen's tone check passing). Until a kit part exists the original's pixels stay as the stand-in; a kit part is laid over it by the spec; text the game draws is erased by a box of the spec.
 - **SWI-GEN-6** Every generated image has a provenance record: generator and version, date, prompt id and the hash of
   its text, reference ids and hashes, who ran it. The batch runner (SWI-GEN-7) also records the Codex thread id, the pixel size, the
   outcome and the refusal text.

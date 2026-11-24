@@ -26,7 +26,7 @@ TILE_W, TILE_H = 1560, 1080          # 4:3, about 1.7 MP (the generator keeps ab
 TILE_COLUMNS, TILE_ROWS = 2, 2
 ZONE_BATCH, TILE_BATCH = "surface-aspect", "surface-tiles"
 ZONE_BODY = """SURFACE STUDY - WHOLE PIECE AT AN EXTREME ASPECT
-Size: {w} x {h} (aspect {aspect}:1). References: ORIGINAL ({what} of the inventory screen, upscaled to 2880 px wide: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
+Size: {w} x {h} (aspect {aspect}:1). References: ORIGINAL ({what} of the {screen_name} screen, upscaled to 2880 px wide: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
 
 Refine the whole piece in one image at exactly this aspect, {w}:{h}. The picture fills the whole frame edge to edge: do not letterbox it, do not pad it, do not add bars, borders or margins, do not crop it and do not change its aspect. Keep every element where it is in the ORIGINAL, the same wood tone, grain scale and streaks, the same brass and iron. Add no ornament, no shine and no new detail; only resolution and surface texture.
 Goal: a window or strip background made whole at the master width, to be compared with other methods by seam, repetition and sharpness.
@@ -89,8 +89,8 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def write_batch(inbox: Path, batch: str, items: list[dict]) -> None:
-    (inbox / "batch.json").write_text(json.dumps({"batch": batch, "after": "the upscaled ORIGINAL of the inventory screen", "items": items}, indent=2) + "\n", encoding="utf-8")
+def write_batch(inbox: Path, batch: str, items: list[dict], screen_name: str = "inventory") -> None:
+    (inbox / "batch.json").write_text(json.dumps({"batch": batch, "after": f"the upscaled ORIGINAL of the {screen_name} screen", "items": items}, indent=2) + "\n", encoding="utf-8")
 
 
 def add_item(inbox: Path, batch: str, original: Path, item_id: str, title: str, body: str, rect: tuple[int, int, int, int]) -> dict:
@@ -106,14 +106,33 @@ def add_item(inbox: Path, batch: str, original: Path, item_id: str, title: str, 
             "size": [w, h], "references": [{"slot": "original", "file": f"refs/{item_id}/original.png", "sha256": sha256_file(ref)}], "outbox_file": f"outbox/{batch}/{item_id}.png"}
 
 
-def zones_inbox(original: Path, local_root: Path) -> dict:
-    inbox = local_root / "inbox" / ZONE_BATCH
+def zones_inbox(original: Path, local_root: Path, batch: str = ZONE_BATCH, zones: tuple[str, ...] | None = None, screen_name: str = "inventory") -> dict:
+    """The inbox of method A zones (ARC-UI-3100: for any screen, any subset of the zones: the strips are made once from the HUD screen, a window zone per family)."""
+    unknown = [z for z in (zones or ()) if z not in ZONES]
+    if unknown:
+        raise StudyError(f"unknown zones {unknown}; the zones are {list(ZONES)}")
+    inbox = local_root / "inbox" / batch
     items = []
     for zone, (x, y, w, h, what) in ZONES.items():
-        body = ZONE_BODY.format(w=w, h=h, aspect=f"{w / h:.1f}", what=what)
-        items.append(add_item(inbox, ZONE_BATCH, original, zone, f"Method A: {zone} as one image ({w / h:.1f}:1)", body, (x, y, w, h)))
-    write_batch(inbox, ZONE_BATCH, items)
+        if zones and zone not in zones:
+            continue
+        body = ZONE_BODY.format(w=w, h=h, aspect=f"{w / h:.1f}", what=what.replace("inventory", screen_name), screen_name=screen_name)
+        items.append(add_item(inbox, batch, original, zone, f"Method A: {zone} of the {screen_name} screen as one image ({w / h:.1f}:1)", body, (x, y, w, h)))
+    write_batch(inbox, batch, items, screen_name)
     return {"inbox": str(inbox), "items": len(items)}
+
+
+def assemble(zone_files: dict[str, Path], out: Path) -> dict:
+    """Method A assembled: each zone image resized (Lanczos) to its rectangle and placed in the 2880 x 2160 composition; every zone is needed (the strips of one
+    screen's A are the same in every family, so the files may come from different batches)."""
+    missing = [z for z in ZONES if z not in zone_files]
+    if missing:
+        raise StudyError(f"zones missing: {missing}")
+    command = ["magick", "-size", f"{MASTER[0]}x{MASTER[1]}", "xc:black"]
+    for zone, (x, y, w, h, _) in ZONES.items():
+        command += ["(", str(zone_files[zone]), "-alpha", "off", "-filter", "Lanczos", "-resize", f"{w}x{h}!", ")", "-geometry", f"+{x}+{y}", "-composite"]
+    run(command + ["-alpha", "off", str(out)])
+    return {"out": str(out), "zones": len(ZONES)}
 
 
 def tiles_inbox(original: Path, local_root: Path) -> dict:
@@ -148,16 +167,29 @@ def blend(original: Path, results: Path, out: Path, work: Path) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("zones-inbox", "tiles-inbox", "blend"):
+    for name in ("zones-inbox", "tiles-inbox", "blend", "assemble"):
         p = sub.add_parser(name)
+        if name == "assemble":
+            p.add_argument("--zone", action="append", required=True, metavar="ZONE=FILE", help=f"a zone result ({', '.join(ZONES)}); all three are needed")
+            p.add_argument("--out", type=Path, required=True)
+            continue
         p.add_argument("--original", type=Path, required=True, help="the ORIGINAL upscaled to 2880 x 2160")
         p.add_argument("--local-root", type=Path)
+        if name == "zones-inbox":
+            p.add_argument("--batch", default=ZONE_BATCH, help="the batch (inbox folder) name")
+            p.add_argument("--zones", help="comma-separated subset of the zones (default all three)")
+            p.add_argument("--screen-name", default="inventory", help="the screen's name in the prompt text (ASCII)")
         if name == "blend":
             p.add_argument("--results", type=Path, help=f"default local/steamwoven-ui/outbox/{TILE_BATCH}")
             p.add_argument("--out", type=Path, required=True)
             p.add_argument("--work", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "assemble":
+            pairs = dict(item.partition("=")[::2] for item in args.zone)
+            info = assemble({zone: Path(file) for zone, file in pairs.items()}, args.out)
+            print(f"ASSEMBLE wrote {info['out']} from {info['zones']} zones")
+            return 0
         local = args.local_root or default_local_root()
         size = subprocess.run(["magick", "identify", "-format", "%wx%h", str(args.original)], capture_output=True, text=True).stdout.strip()
         if size != f"{MASTER[0]}x{MASTER[1]}":
@@ -165,8 +197,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "blend":
             info = blend(args.original, args.results or local / "outbox" / TILE_BATCH, args.out, args.work)
             print(f"BLEND wrote {info['out']} from {info['tiles']} tiles")
+        elif args.command == "zones-inbox":
+            info = zones_inbox(args.original, local, args.batch, tuple(args.zones.split(",")) if args.zones else None, args.screen_name)
+            print(f"INBOX {info['inbox']}: {info['items']} items")
         else:
-            info = (zones_inbox if args.command == "zones-inbox" else tiles_inbox)(args.original, local)
+            info = tiles_inbox(args.original, local)
             print(f"INBOX {info['inbox']}: {info['items']} items")
     except (StudyError, OSError, KeyError) as error:
         print(f"SURFACE STUDY ERROR: {error!r}", file=sys.stderr)

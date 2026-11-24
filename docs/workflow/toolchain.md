@@ -1288,6 +1288,16 @@ python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeou
 python3 -B tools/steamwoven_ui/codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz PERCENT]   # one padded strip canvas to its band (ARC-UI-3083, ImageMagick)
 ```
 
+## Steamwoven surface pipeline (ARC-UI-3100)
+
+Method A ([SWI-GEN-5](../ui/steamwoven-interface-trd.md), [study](../ui/steamwoven-surface-method-study.md)) as a pipeline step: `tools/steamwoven_ui/surface_study.py` builds the zone inbox of any screen
+(`zones-inbox --batch B --zones window --screen-name NAME`) and puts the zone results together (`assemble --zone top-strip=F --zone window=F --zone bottom-strip=F --out A.png`), and
+`tools/steamwoven_ui/surface_compose.py build --original O.png --a A.png --out OUT.png --work DIR [--spec SPEC.json] [--provenance FILE]` composes the wood of the Codex result over the
+original (the original's pixels are the stand-in for the non-wood parts), lays the kit parts of the spec over it, erases the boxes the game draws text into, measures the joins and the tone, and writes the record
+`local/steamwoven-ui/provenance/surface/<zone id>.json` ([fields and gates](../ui/steamwoven-surface-method-study.md#production-pipeline-step-arc-ui-3100)); exit 0 = both gates hold, 1 = a gate failed (the picture and the record are still written), 2 = an error.
+Standard-library Python plus ImageMagick (`magick`), no Godot and no `dotnet`, so no launch queue; the tests (`python3 -B -m unittest tools.steamwoven_ui.test_surface_compose tools.steamwoven_ui.test_surface_study`, about 3 s) run in the batched `tools/local_dev/run_tests.py`;
+a real inventory screen takes about 3 minutes. All images stay under `local/steamwoven-ui/`.
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the

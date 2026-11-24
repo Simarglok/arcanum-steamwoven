@@ -9,17 +9,22 @@ ORIGINAL's wood (mean L*, contrast, chroma). Needs ImageMagick (`magick`). Local
 from __future__ import annotations
 
 import argparse
+import datetime
+import hashlib
+import json
 import subprocess
 import sys
 from bisect import bisect_left, bisect_right
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 try:
-    from . import method_c, pngio, tone_check
+    from . import method_c, pngio, surface_metrics, tone_check
 except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import method_c  # type: ignore
     import pngio  # type: ignore
+    import surface_metrics  # type: ignore
     import tone_check  # type: ignore
 
 SPECK_THRESHOLD = 12      # 0..255: a pixel this much darker than the median of its 9 px horizontal neighbours is a speck candidate
@@ -51,6 +56,58 @@ MASK_FEATHER = 3.0
 JOINS = (148, 1588)       # rows where the strips meet the window zone (surface_study.ZONES); the ORIGINAL's rows are kept there
 JOIN_KEEP = 6             # px each side of a join that are the ORIGINAL's (about 3 px fully, the rest blended by the soft edge)
 JOIN_FEATHER = 2.0
+SEAM_TARGET = 1.8         # owner condition 4 (2026-11-21): the seam at a strip join is at most this (the original's own are 1.82 and 1.73); SWI-VER-5's gate of 1.5 is recorded beside it
+SEAM_GATE = 1.5
+ERASE_RING = 2            # px: the ring just outside an erase box whose per-channel median fills it
+SCHEMA = "steamwoven-surface/1"
+
+
+@dataclass(frozen=True)
+class ZoneSpec:
+    """One composition of method A (ARC-UI-3100): a whole screen of the master size (2880 x 2160 for the contexts), its tone-mask screen, the strip joins, the band
+    of the light bevel lines, the chip boxes (inventory only), `erase_boxes` (x0, y0, x1, y1: baked text or counters the game draws over the surface; filled by the median
+    of the ring outside the box) and `kit_parts` (dicts `id`, `file`, `x`, `y`: a kit master laid over the result at master pixels, replacing the original's stand-in)."""
+    id: str
+    screen: str = method_c.SCREEN
+    joins: tuple[int, ...] = JOINS
+    bevel_band: tuple[int, int] | None = BEVEL_BAND
+    chip_boxes: tuple[tuple[int, int, int, int], ...] = ()
+    erase_boxes: tuple[tuple[int, int, int, int], ...] = ()
+    kit_parts: tuple[dict, ...] = ()
+
+
+INVENTORY = ZoneSpec(id="ctx-inventory", chip_boxes=CHIP_BOXES)
+
+
+def load_spec(path: Path) -> ZoneSpec:
+    """A zone spec from JSON: `id` and `screen` are required; the rest default as `ZoneSpec` (no chip boxes, no erase boxes, no kit parts)."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ComposeError(f"cannot read the spec {path}: {error}") from error
+    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts"}
+    if unknown or "id" not in raw or "screen" not in raw:
+        raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
+    def boxes(name: str) -> tuple:
+        out = []
+        for box in raw.get(name, []):
+            if not (isinstance(box, list) and len(box) == 4 and all(isinstance(v, int) for v in box) and box[0] < box[2] and box[1] < box[3] and min(box) >= 0):
+                raise ComposeError(f"spec {path}: {name} entries are [x0, y0, x1, y1] with x0 < x1, y0 < y1")
+            out.append(tuple(box))
+        return tuple(out)
+    parts = []
+    for part in raw.get("kit_parts", []):
+        if not (isinstance(part, dict) and set(part) == {"id", "file", "x", "y"} and isinstance(part["x"], int) and isinstance(part["y"], int) and part["x"] >= 0 and part["y"] >= 0):
+            raise ComposeError(f"spec {path}: kit_parts entries are {{id, file, x, y}} with x, y >= 0")
+        parts.append(dict(part))
+    band = raw.get("bevel_band", list(BEVEL_BAND))
+    if band is not None and not (isinstance(band, list) and len(band) == 2 and 0 <= band[0] < band[1]):
+        raise ComposeError(f"spec {path}: bevel_band is [top, bottom] or null")
+    joins = raw.get("joins", list(JOINS))
+    if not (isinstance(joins, list) and all(isinstance(j, int) and j > 0 for j in joins)):
+        raise ComposeError(f"spec {path}: joins are rows (positive integers)")
+    return ZoneSpec(id=str(raw["id"]), screen=str(raw["screen"]), joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
+                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts))
 
 
 class ComposeError(Exception):
@@ -280,11 +337,11 @@ def apply_fit(image: "pngio.Image", weight: "pngio.Image", numbers: dict) -> "pn
     return pngio.Image(image.w, image.h, out)
 
 
-def keep_joins(solid: Path, out: Path, width: int, height: int) -> None:
+def keep_joins(solid: Path, out: Path, width: int, height: int, joins: tuple[int, ...] = JOINS) -> None:
     """The wood weight with the rows around each strip join set to 0 (softly), so the join is the ORIGINAL's designed edge and the Codex wood is not cut
     by two independently generated zones."""
     draw = []
-    for j in JOINS:
+    for j in joins:
         draw += ["-draw", f"rectangle 0,{j - JOIN_KEEP} {width - 1},{j + JOIN_KEEP - 1}"]
     keep = solid.with_name("join-keep.png")
     run(["magick", "-size", f"{width}x{height}", "xc:white", "-fill", "black", *draw, "-blur", f"0x{JOIN_FEATHER}", "-colorspace", "Gray", str(keep)])
@@ -297,7 +354,7 @@ def fill_notches(solid: Path, out: Path) -> None:
     run(["magick", str(solid), "-morphology", "Close", f"Disk:{NOTCH_RADIUS}", str(out)])
 
 
-def bevel_weight(original: Path, solid: Path, work: Path, width: int, height: int, grow: int = BEVEL_GROW) -> tuple[Path, int]:
+def bevel_weight(original: Path, solid: Path, work: Path, width: int, height: int, grow: int = BEVEL_GROW, band: tuple[int, int] | None = BEVEL_BAND) -> tuple[Path, int]:
     """A weight image (white = the ORIGINAL's pixels) over the light vertical bevel lines of the top strip's wood: tall thin components of pixels lighter than
     their surround, grown by BEVEL_GROW px. The Codex wood draws that line thinner (the wood weight is blurred and eroded, so a 5 px line is replaced) and
     loses the original's width. Returns the weight and the number of lines found."""
@@ -309,7 +366,7 @@ def bevel_weight(original: Path, solid: Path, work: Path, width: int, height: in
          "-morphology", "Close", "Rectangle:1x5", "-morphology", "Open", f"Rectangle:1x{BEVEL_OPEN}", str(light)])  # vertical runs only: the bottom bevel is not taken
     lit = gray_bytes(light)
     wood = gray_bytes(solid)
-    top, bottom = BEVEL_BAND
+    top, bottom = band or (0, 0)
     points = {i for i, b in enumerate(lit) if b and wood[i] > 128 and top <= i // width < bottom}
     keep = bytearray(width * height)
     lines = 0
@@ -329,7 +386,7 @@ def bevel_weight(original: Path, solid: Path, work: Path, width: int, height: in
     return out, lines
 
 
-def remove_chips(image: "pngio.Image") -> int:
+def remove_chips(image: "pngio.Image", boxes: tuple | None = None) -> int:
     """In each CHIP_BOXES box, per row, the longest run of bright pixels (luma >= CHIP_LUMA), grown 2 px to the left, takes the darkest values of the CHIP_REACH
     pixels to its right (the plate's dark metal). Returns the number of pixels changed."""
     changed = 0
@@ -337,7 +394,7 @@ def remove_chips(image: "pngio.Image") -> int:
     d = image.data
     if (image.w, image.h) != CHIP_MASTER:
         return 0
-    for x0, y0, x1, y1 in CHIP_BOXES:
+    for x0, y0, x1, y1 in (CHIP_BOXES if boxes is None else boxes):
         for y in range(y0, y1):
             runs: list[list[int]] = []
             for x in range(x0, x1):
@@ -364,7 +421,61 @@ def remove_chips(image: "pngio.Image") -> int:
     return changed
 
 
-def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BEVEL_MODE) -> dict:
+def erase_boxes(image: "pngio.Image", boxes: tuple) -> int:
+    """Each box (x0, y0, x1, y1; x1, y1 exclusive) is filled with the per-channel median of the ERASE_RING px ring just outside it (inside the image): baked text or
+    counters the game draws over the surface (condition 1). Returns the number of pixels filled; a box outside the image is an error."""
+    filled = 0
+    w, h, d = image.w, image.h, image.data
+    for x0, y0, x1, y1 in boxes:
+        if x1 > w or y1 > h:
+            raise ComposeError(f"erase box {(x0, y0, x1, y1)} is outside the {w} x {h} px image")
+        ring = [(x, y) for y in range(max(0, y0 - ERASE_RING), min(h, y1 + ERASE_RING)) for x in range(max(0, x0 - ERASE_RING), min(w, x1 + ERASE_RING))
+                if not (x0 <= x < x1 and y0 <= y < y1)]
+        if not ring:
+            raise ComposeError(f"erase box {(x0, y0, x1, y1)} has no ring to take a fill from")
+        fill = [sorted(d[(y * w + x) * 4 + c] for x, y in ring)[len(ring) // 2] for c in range(3)]
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                i = (y * w + x) * 4
+                d[i:i + 3] = bytes(fill)
+                d[i + 3] = 255
+        filled += (x1 - x0) * (y1 - y0)
+    return filled
+
+
+def lay_kit_parts(image: "pngio.Image", parts: tuple, base: Path | None = None) -> list[dict]:
+    """The kit masters of `parts` (dicts id, file, x, y) laid over the image, straight alpha 'over', at master pixels; condition 3: the metal parts come from the kit
+    and replace the original's stand-ins. A part that leaves the image, or is not RGBA-readable, is an error. Returns one record per part (id, file hash, size, place)."""
+    records = []
+    for part in parts:
+        path = Path(part["file"])
+        path = path if path.is_absolute() or base is None else base / path
+        try:
+            img = pngio.read(path)
+        except (OSError, pngio.PngError) as error:
+            raise ComposeError(f"kit part {part['id']}: cannot read {path}: {error}") from error
+        x0, y0 = part["x"], part["y"]
+        if x0 + img.w > image.w or y0 + img.h > image.h:
+            raise ComposeError(f"kit part {part['id']} ({img.w} x {img.h} at {x0}, {y0}) leaves the {image.w} x {image.h} px image")
+        for y in range(img.h):
+            for x in range(img.w):
+                s_i = (y * img.w + x) * 4
+                a = img.data[s_i + 3]
+                if a == 0:
+                    continue
+                d_i = ((y0 + y) * image.w + x0 + x) * 4
+                for c in range(3):
+                    image.data[d_i + c] = (img.data[s_i + c] * a + image.data[d_i + c] * (255 - a) + 127) // 255
+                image.data[d_i + 3] = 255
+        records.append({"id": part["id"], "file": str(path), "sha256": sha256_file(path), "size": [img.w, img.h], "at": [x0, y0]})
+    return records
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BEVEL_MODE, spec: ZoneSpec = INVENTORY, kit_base: Path | None = None) -> dict:
     if bevel_mode not in ("lighten", "original"):
         raise ComposeError(f"unknown bevel mode {bevel_mode!r}")
     work.mkdir(parents=True, exist_ok=True)
@@ -374,14 +485,14 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
         raise ComposeError("the original and the Codex result must have the same size")
     masks = tone_check.load_masks()
     solid, raw = work / "wood-solid.png", work / "wood-class.png"
-    method_c.write_mask(original, solid, feather=MASK_FEATHER, solid=True)
-    method_c.write_mask(original, raw)
+    method_c.write_mask(original, solid, feather=MASK_FEATHER, solid=True, screen_id=spec.screen)
+    method_c.write_mask(original, raw, screen_id=spec.screen)
     fill_notches(solid, solid)
-    keep_joins(solid, solid, w, h)
+    keep_joins(solid, solid, w, h, spec.joins)
     clean = work / "a-clean.png"
     specks = despeckle(a, clean, work, w, h)
     dots, dot_count = original_dots(original, raw, work, w, h)
-    mask, coverage, cells = wood_cells(img_o, masks)
+    mask, coverage, cells = wood_cells(img_o, masks, spec.screen)
     target = wood_stats(img_o, mask, coverage, cells)
     before = wood_stats(pngio.read(clean), mask, coverage, cells)
     numbers = fit_numbers(target, before)
@@ -389,7 +500,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     fitted = work / "a-fitted.png"
     pngio.write(fitted, fitted_img)
     # the Codex wood where the ORIGINAL is wood (soft edge); the ORIGINAL's rows of dots on top
-    bevel, bevel_lines = bevel_weight(original, solid, work, w, h, BEVEL_GROW_LIGHTEN if bevel_mode == "lighten" else BEVEL_GROW)
+    bevel, bevel_lines = bevel_weight(original, solid, work, w, h, BEVEL_GROW_LIGHTEN if bevel_mode == "lighten" else BEVEL_GROW, spec.bevel_band)
     run(["magick", str(original), "-alpha", "off", str(fitted), str(solid), "-composite", str(original), str(dots), "-composite", str(out)])
     if bevel_mode == "lighten":   # the Codex line stays sharp on top of the original's band: the lighter of the two per channel
         base = work / "bevel-base.png"
@@ -404,10 +515,56 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     else:                         # the original's band replaces the Codex line
         run(["magick", str(out), str(original), str(bevel), "-composite", str(out)])
     result = pngio.read(out)
-    chip_pixels = remove_chips(result)
+    chip_pixels = remove_chips(result, spec.chip_boxes)
+    erased = erase_boxes(result, spec.erase_boxes)
+    kit = lay_kit_parts(result, spec.kit_parts, kit_base)
     pngio.write(out, result)
     after = wood_stats(pngio.read(out), mask, coverage, cells)
-    return {"out": str(out), "speck_components": specks, "dots_kept": dot_count, "bevel_lines": bevel_lines, "chip_pixels": chip_pixels, "fit": numbers, "wood_target": target, "wood_before": before, "wood_after": after}
+    return {"out": str(out), "speck_components": specks, "dots_kept": dot_count, "bevel_lines": bevel_lines, "chip_pixels": chip_pixels, "erased_pixels": erased, "kit_parts": kit,
+            "fit": numbers, "wood_target": target, "wood_before": before, "wood_after": after}
+
+
+def evaluate_gates(seams: list[dict], tone: dict) -> dict:
+    """The gates of a production surface: every join's seam ratio at most SEAM_TARGET (owner condition 4; SWI-VER-5's SEAM_GATE is recorded beside it, not a gate here:
+    the original's own joins are 1.82 and 1.73) and the tone check of the whole screen (`tone_check.compare_screen`) passing."""
+    seam_pass = all(s["ratio"] <= SEAM_TARGET for s in seams)
+    return {"seam_target": SEAM_TARGET, "seams_pass": seam_pass, "seams_within_swi_ver_5": all(s["ratio"] <= SEAM_GATE for s in seams),
+            "tone_pass": bool(tone["pass"]), "tone_failed": list(tone["failed"]), "passed": seam_pass and bool(tone["pass"])}
+
+
+def provenance_record(spec: ZoneSpec, original: Path, a: Path, out: Path, info: dict, seams: list[dict], tone: dict, bevel_mode: str, when: datetime.datetime) -> dict:
+    """The record of one composition (`provenance/surface/<zone id>.json`, local): hashes of the inputs and the result, the spec, what was kept, removed, erased and
+    replaced by kit parts, the wood numbers, the seams, the tone check and the gates. It holds no pixels."""
+    regions = {name: {"pass": r["pass"], "values": r.get("values")} for name, r in tone["regions"].items() if "absent" not in r}
+    spec_dict = asdict(spec)
+    return {"schema": SCHEMA, "tool": "surface_compose.py build", "date": when.strftime("%Y-%m-%dT%H:%M:%SZ"), "zone": spec.id, "spec": spec_dict, "bevel_mode": bevel_mode,
+            "inputs": {"original": {"file": original.name, "sha256": sha256_file(original)}, "method_a": {"file": a.name, "sha256": sha256_file(a)}},
+            "result": {"file": out.name, "sha256": sha256_file(out)},
+            "counts": {"speck_components": info["speck_components"], "dots_kept": info["dots_kept"], "bevel_lines": info["bevel_lines"], "chip_pixels": info["chip_pixels"],
+                       "erased_pixels": info["erased_pixels"]},
+            "kit_parts": info["kit_parts"], "wood": {"target": info["wood_target"], "before": info["wood_before"], "after": info["wood_after"], "fit": info["fit"]},
+            "seams": seams, "tone": {"screen": spec.screen, "pass": tone["pass"], "failed": tone["failed"], "regions": regions}, "gates": evaluate_gates(seams, tone)}
+
+
+def build(original: Path, a: Path, out: Path, work: Path, provenance: Path, spec: ZoneSpec = INVENTORY, bevel_mode: str = BEVEL_MODE, kit_base: Path | None = None) -> dict:
+    """The pipeline step: compose, measure the joins and the tone, write the record. The record is written whatever the gates say (`gates.passed`); the caller decides."""
+    info = compose(original, a, out, work, bevel_mode, spec, kit_base)
+    image = pngio.read(out)
+    seams = [{"join": f"y={j}", "ratio": surface_metrics.join_seam(image, "y", j)} for j in spec.joins]
+    tone = tone_check.compare_screen_files(spec.screen, original, out)
+    record = provenance_record(spec, original, a, out, info, seams, tone, bevel_mode, datetime.datetime.now(datetime.timezone.utc))
+    provenance.parent.mkdir(parents=True, exist_ok=True)
+    provenance.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return record
+
+
+def describe_build(record: dict, path: Path) -> str:
+    g = record["gates"]
+    seams = ", ".join(f"{s['join']} {s['ratio']:.2f}" for s in record["seams"]) or "none"
+    w = record["wood"]
+    return (f"SURFACE {'PASS' if g['passed'] else 'FAIL'} {record['zone']}: seams {seams} (target {g['seam_target']}, SWI-VER-5 1.5 {'met' if g['seams_within_swi_ver_5'] else 'not met'}); "
+            f"tone {'PASS' if g['tone_pass'] else 'FAIL ' + ','.join(g['tone_failed'])}; wood L* {w['after']['mean_l']:.2f} (original {w['target']['mean_l']:.2f}), "
+            f"contrast {w['after']['std_l']:.2f} ({w['target']['std_l']:.2f}); {record['counts']['erased_pixels']} px erased, {len(record['kit_parts'])} kit parts; record {path}")
 
 
 def describe(info: dict) -> str:
@@ -420,20 +577,35 @@ def describe(info: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("compose")
-    p.add_argument("--original", type=Path, required=True)
-    p.add_argument("--a", type=Path, required=True, help="method A assembled to the master size (2880 x 2160)")
-    p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--work", type=Path, required=True)
-    p.add_argument("--bevel", choices=("lighten", "original"), default=BEVEL_MODE, help="how the original's light vertical bevel lines are put back")
+    for name in ("compose", "build"):
+        p = sub.add_parser(name)
+        p.add_argument("--original", type=Path, required=True)
+        p.add_argument("--a", type=Path, required=True, help="method A assembled to the master size (2880 x 2160)")
+        p.add_argument("--out", type=Path, required=True)
+        p.add_argument("--work", type=Path, required=True)
+        p.add_argument("--bevel", choices=("lighten", "original"), default=BEVEL_MODE, help="how the original's light vertical bevel lines are put back")
+        p.add_argument("--spec", type=Path, help="a zone spec (JSON); default the inventory screen")
+        p.add_argument("--kit-base", type=Path, help="the folder relative kit part files are read from")
+        if name == "build":
+            p.add_argument("--provenance", type=Path, help="the record to write; default local/steamwoven-ui/provenance/surface/<zone id>.json")
     args = parser.parse_args(argv)
     try:
-        info = compose(args.original, args.a, args.out, args.work, args.bevel)
-    except (ComposeError, method_c.MethodCError, tone_check.ToneError, pngio.PngError, KeyError, OSError) as error:
+        spec = load_spec(args.spec) if args.spec else INVENTORY
+        if args.command == "compose":
+            print(describe(compose(args.original, args.a, args.out, args.work, args.bevel, spec, args.kit_base)))
+            return 0
+        provenance = args.provenance or default_provenance_path(spec)
+        record = build(args.original, args.a, args.out, args.work, provenance, spec, args.bevel, args.kit_base)
+    except (ComposeError, method_c.MethodCError, tone_check.ToneError, surface_metrics.MetricError, pngio.PngError, KeyError, OSError) as error:
         print(f"SURFACE COMPOSE ERROR: {error!r}", file=sys.stderr)
         return 2
-    print(describe(info))
-    return 0
+    print(describe_build(record, provenance))
+    return 0 if record["gates"]["passed"] else 1
+
+
+def default_provenance_path(spec: ZoneSpec) -> Path:
+    from prompt_library import default_local_root  # noqa: PLC0415  (found by the script's own folder; see the import block)
+    return default_local_root() / "provenance" / "surface" / f"{spec.id}.json"
 
 
 if __name__ == "__main__":

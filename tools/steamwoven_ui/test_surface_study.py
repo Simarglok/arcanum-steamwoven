@@ -1,6 +1,10 @@
 """ARC-RES-2457: tests of the surface study planners and command builders (no ImageMagick run, no art)."""
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -44,12 +48,43 @@ class SurfaceStudyTests(unittest.TestCase):
         self.assertIn("1", none)
 
     def test_prompts_are_ascii_and_have_the_size(self):
-        zone = surface_study.ZONE_BODY.format(w=2880, h=148, aspect="19.5", what="the top strip")
+        zone = surface_study.ZONE_BODY.format(w=2880, h=148, aspect="19.5", what="the top strip", screen_name="inventory")
         tile = surface_study.TILE_BODY.format(w=1560, h=1080)
         for text in (zone, tile, surface_study.COMMON.read_text(encoding="utf-8")):
             text.encode("ascii")
         self.assertIn("2880 x 148", zone)
         self.assertIn("1560 x 1080", tile)
+
+    def test_zones_inbox_refuses_an_unknown_zone(self):
+        with self.assertRaises(surface_study.StudyError):
+            surface_study.zones_inbox(Path("o.png"), Path("local"), zones=("middle",))
+
+    def test_assemble_needs_every_zone(self):
+        with self.assertRaises(surface_study.StudyError):
+            surface_study.assemble({"window": Path("w.png")}, Path("out.png"))
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_zones_inbox_takes_a_subset_and_names_the_screen_and_assemble_places_the_zones(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["magick", "-size", "2880x2160", "xc:gray50", str(root / "o.png")], check=True)
+            info = surface_study.zones_inbox(root / "o.png", root, batch="fam-test", zones=("window",), screen_name="logbook")
+            self.assertEqual(info["items"], 1)
+            batch = json.loads((root / "inbox" / "fam-test" / "batch.json").read_text(encoding="utf-8"))
+            self.assertEqual([i["id"] for i in batch["items"]], ["window"])
+            self.assertEqual(batch["after"], "the upscaled ORIGINAL of the logbook screen")
+            prompt = (root / "inbox" / "fam-test" / "prompts" / "window.txt").read_text(encoding="utf-8")
+            self.assertIn("logbook", prompt)
+            self.assertNotIn("inventory", prompt)
+            for name, colour, size in (("top", "red", "2103x107"), ("win", "green", "1774x887"), ("bot", "blue", "2103x417")):
+                subprocess.run(["magick", "-size", size, f"xc:{colour}", str(root / f"{name}.png")], check=True)
+            out = root / "a.png"
+            surface_study.assemble({"top-strip": root / "top.png", "window": root / "win.png", "bottom-strip": root / "bot.png"}, out)
+            read = lambda x, y: subprocess.run(["magick", str(out), "-format", f"%[pixel:p{{{x},{y}}}]", "info:"], capture_output=True, text=True).stdout
+            self.assertEqual(subprocess.run(["magick", "identify", "-format", "%wx%h", str(out)], capture_output=True, text=True).stdout, "2880x2160")
+            self.assertEqual(read(100, 10), "srgb(255,0,0)")
+            self.assertEqual(read(100, 600), "srgb(0,128,0)")
+            self.assertEqual(read(100, 2000), "srgb(0,0,255)")
 
     def test_method_c_commands(self):
         tile = method_c.tile_command(Path("t.png"), 432, (2880, 2160), Path("o.png"))

@@ -47,10 +47,10 @@ def blend_command(original: Path, detailed: Path, mask: Path, out: Path) -> list
     return ["magick", str(original), str(detailed), str(mask), "-composite", str(out)]
 
 
-def wood_mask(original: "pngio.Image", masks: dict | None = None) -> "pngio.Image":
-    """The wood class of the ORIGINAL at 800 x 600 (tone_check's own class mask) as a grey image."""
+def wood_mask(original: "pngio.Image", masks: dict | None = None, screen_id: str = SCREEN) -> "pngio.Image":
+    """The wood class of the ORIGINAL at 800 x 600 (tone_check's own class mask) as a grey image; `screen_id` is the screen of `prompts/tone_masks.json` (default the inventory)."""
     masks = masks or tone_check.load_masks()
-    screen = masks["screens"][SCREEN]
+    screen = masks["screens"][screen_id]
     lab = tone_check.to_lab(tone_check.reduce_to_800x600(original))
     mask = tone_check.material_masks({**screen, "materials": {"wood": screen["materials"]["wood"]}}, masks["strip_counters"], lab)["wood"]
     grey = bytearray()
@@ -66,13 +66,13 @@ def run(command: list[str]) -> None:
         raise MethodCError(f"{command[0]} failed: {result.stderr.strip()[:300]}")
 
 
-def write_mask(original: Path, out: Path, feather: float = 0.0, size: tuple[int, int] | None = None, solid: bool = False) -> None:
+def write_mask(original: Path, out: Path, feather: float = 0.0, size: tuple[int, int] | None = None, solid: bool = False, screen_id: str = SCREEN) -> None:
     """The wood mask of the original, at the original's size (or `size`), as a grey PNG. `solid`: the speckled class mask made into solid regions (a blur,
     a majority threshold and a small erosion), for the metrics that read only wood."""
     image = pngio.read(original)
     work = Path(tempfile.mkdtemp(prefix="method-c-mask-"))
     small = work / "mask-800.png"
-    pngio.write(small, wood_mask(image))
+    pngio.write(small, wood_mask(image, screen_id=screen_id))
     w, h = size or (image.w, image.h)
     command = ["magick", str(small), "-filter", "Triangle", "-resize", f"{w}x{h}!"]
     if solid:
