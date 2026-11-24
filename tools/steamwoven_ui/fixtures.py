@@ -2,7 +2,7 @@
 """ARC-UI-3098: the kit's fixtures, the required parts that the old window arts painted into themselves (pits, fields, dials, discs, ruler, gears, signs, cell wells).
 
     python3 -B tools/steamwoven_ui/fixtures.py list
-    python3 -B tools/steamwoven_ui/fixtures.py build [--out DIR] [--variant flat|brass] [--only ID,...]
+    python3 -B tools/steamwoven_ui/fixtures.py build [--out DIR] [--variant brass|flat] [--only ID,...]
     python3 -B tools/steamwoven_ui/fixtures.py self-test
 
 Owner decision 2026-11-24 (#3098, option A): these parts are kit parts, not a layer of the window's old art. Their shapes follow the original's (the place, the size and the sign of each, TRD "Elements the old arts held") and
@@ -10,7 +10,8 @@ are drawn here by rule, deterministically, with no generator and no pixel of the
 size (the unit size x 3.6 on the 6 px grid, `kit_check.snap`), to `local/steamwoven-ui/masters/<id>.png` (ignored by git), ready for `bake.py`. The viewer's table of the same parts is `SteamwovenKitTable.FixtureUnits`
 (`tools/terrain-viewer/Core/SteamwovenKitComposer.cs`); a test pins it to `FIXTURES` through `kit.json`.
 
-`flat` is the look decided for the cells (no bevel): black wells and thin grey-blue lines; `brass` adds a brass trim to the pits and boxes. Both draw the same shapes at the same places. Standard library only, on `pngio`.
+`brass` is the default (owner decision 2026-11-24): the original's grids, fields and doll frame have a thin gold trim, so the pits and boxes get a brass trim; `flat` (black wells, thin grey-blue lines) is the look decided for the button glyphs' cells only. Both draw the same shapes at the same places.
+The synthetic signs (the hat, the scroll, the heart, the cross, the five count icons) are stand-in drawings: in production their shapes are taken from the original's mask by the pilot's glyph rule (#3058), not redrawn. Standard library only, on `pngio`.
 """
 from __future__ import annotations
 
@@ -348,7 +349,7 @@ def _gear_sign(c: Canvas, cx_u: float, hat: bool) -> None:
         c.disc(cx + 28 * c.s, cy, c.s * 3, (110, 80, 50))
 
 
-def draw(ident: str, variant: str = "flat") -> pngio.Image:
+def draw(ident: str, variant: str = "brass") -> pngio.Image:
     """The master of one fixture. Raises KeyError for an unknown id."""
     fixture = BY_ID[ident]
     width, height = fixture.master
@@ -454,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("list")
     build_parser = sub.add_parser("build")
     build_parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    build_parser.add_argument("--variant", choices=VARIANTS, default="flat")
+    build_parser.add_argument("--variant", choices=VARIANTS, default="brass")
     build_parser.add_argument("--only", default="")
     sub.add_parser("self-test")
     args = parser.parse_args(argv)

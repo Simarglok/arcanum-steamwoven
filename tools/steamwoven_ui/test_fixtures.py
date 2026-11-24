@@ -39,6 +39,10 @@ class FixtureTests(unittest.TestCase):
                 self.assertTrue(any(first.data[3::4]), f"{fixture.ident} {variant}: nothing drawn")
                 self.assertEqual(first.data, fixtures.draw(fixture.ident, variant).data, f"{fixture.ident} {variant}: not deterministic")
 
+    def test_brass_is_the_default_look(self) -> None:
+        self.assertEqual(fixtures.draw("fixture.count_pit").data, fixtures.draw("fixture.count_pit", "brass").data)
+        self.assertNotEqual(fixtures.draw("fixture.count_pit").data, fixtures.draw("fixture.count_pit", "flat").data)
+
     def test_the_two_looks_differ_in_the_trim_only(self) -> None:
         flat, brass = fixtures.draw("fixture.pack_pit", "flat"), fixtures.draw("fixture.pack_pit", "brass")
         self.assertNotEqual(flat.data, brass.data)
