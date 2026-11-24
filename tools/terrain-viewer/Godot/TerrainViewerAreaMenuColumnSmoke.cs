@@ -313,7 +313,7 @@ public partial class TerrainViewerApp
     /// are put back at the end (the screen is open the whole time, so the views place themselves at each size). Opt-in: ARC_AREA_MENU_COLUMN=1.
     /// </summary>
     private async Task TwoStripScreenColumnForSmoke(string name, Func<(Vector2 Position, float Scale)> plate, Func<Vector2> body, Func<string?> hovered, IReadOnlyList<(string Name, int X, int Y)> spots,
-        Action<bool, string> require, Func<int, Task> frames)
+        Action<bool, string> require, Func<int, Task> frames, Func<KitWindowScreenView>? kitView = null)
     {
         var panel = _mainMenuPanel!;
         var window = GetWindow();
@@ -323,6 +323,7 @@ public partial class TerrainViewerApp
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         string? syntheticKit = null;
         var cases = 0;
+        var kitCases = 0;
         try
         {
             _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
@@ -354,6 +355,8 @@ public partial class TerrainViewerApp
                 var (bx, by) = layout.ToDevice(0, AreaShopArtLayout.Window.Y);
                 require(Math.Abs(body().X - bx) <= 1.01 && Math.Abs(body().Y - by) <= 1.01, $"[{tag}] the body stands at ({bx:F1}, {by:F1}), got {body()}");
                 await CheckTwoStripHitsAsync(tag, layout, spots, hovered, frames, require);
+                // ARC-UI-3041: with the synthetic kit the editor and the shop draw their two strips and their window's kit background.
+                if (syntheticKit is not null && kitView is not null) { await CheckKitWindowScreenAsync(tag, layout, kitView(), kitCases == 0, syntheticKit, frames, require); kitCases++; }
                 if (capture is not null)
                 {
                     await frames(2);
@@ -363,6 +366,7 @@ public partial class TerrainViewerApp
                 cases++;
             }
             GD.Print($"ARC-UI-2924 native-smoke {name} column PASS cases={cases}");
+            if (syntheticKit is not null && kitView is not null) GD.Print($"ARC-UI-3041 native-smoke {name} kit PASS cases={kitCases}");
         }
         finally
         {

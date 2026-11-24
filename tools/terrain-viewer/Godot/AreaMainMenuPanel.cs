@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -90,6 +91,14 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-069: the opening shop's art is set (its strips and buttons read), so the shop can be drawn in the original's look.</summary>
     public bool ShopArtSet => _shopArt.ArtSet;
     internal AreaShopArtView ShopArtForSelfTest => _shopArt;
+    /// <summary>ARC-UI-3041: the kit's body window of the opening shop or the creation editor (the barter window, the character sheet), or null while the screen draws its own art.</summary>
+    internal SteamwovenKitWindow? ShopKitWindow => _shopArt.KitBodyWindow;
+    /// <summary>ARC-UI-3041: the overlays the shop's barter frame takes from the kit's body, or null.</summary>
+    internal AreaKitBackdrop? ShopKitBackdrop => _shopArt.KitBackdrop;
+    /// <summary>ARC-UI-3041: the kit's body of the shop or the editor began, stopped or changed variant.</summary>
+    internal event Action? ShopKitChanged;
+    /// <summary>ARC-UI-3041: the merchant background art of the shop's barter window (235 or 825), which picks the kit piece of its side.</summary>
+    internal void SetShopBarterBackground(int art) => _shopArt.SetBarterBackground(art);
     /// <summary>ARC-UI-068: a press in the new-character art not on the name field.</summary>
     public event Action? PressedOutsideName;
     /// <summary>The diagnostic window is shown (ARC-UI-066: the browser's, when its art is not drawn).</summary>
@@ -157,6 +166,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _shopArt = new AreaShopArtView();
         _shopArt.ButtonPressed += button => (button == AreaShopArtButton.Accept ? AcceptRequested : BackRequested)?.Invoke();
         _shopArt.SoundRequested += id => SoundRequested?.Invoke(id);
+        _shopArt.KitBodyChanged += () => ShopKitChanged?.Invoke();
         AddChild(_shopArt);
         _artNote = new Label { Name = "MainMenuArtNote", Visible = false, Modulate = new Color(.75f, .7f, .6f), HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.WordSmart, MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -275,7 +285,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         art |= newCharacter;
         var editing = menu.Window == AreaMenuWindow.CharacterEditor && !quitPanel;
         var shopWindow = (shopping && shopArt || editing && editorArt) && _shopArt.ArtSet;
-        if (shopWindow) _shopArt.Render(menu.Focus);
+        if (shopWindow) _shopArt.Render(menu.Focus, editing);
         else _shopArt.CloseView();
         art |= shopWindow;
         // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).

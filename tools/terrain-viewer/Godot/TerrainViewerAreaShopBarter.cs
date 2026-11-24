@@ -181,7 +181,7 @@ public partial class TerrainViewerApp
         // ARC-UI-2924: in the column layout the shop stands in the fitted plate: its place, the black beside it, the strips' buttons and the barter window at the screen's (0, 41), per size.
         if (ColumnMenuSmokeOn())
             await TwoStripScreenColumnForSmoke("shop", () => (art.Position, art.Scale.X), () => _barterPanel!.GridAreaForSelfTest.GetGlobalRect().Position,
-                () => art.HoveredForSelfTest?.ToString(), ShopStripSpots(), require, Frames);
+                () => art.HoveredForSelfTest?.ToString(), ShopStripSpots(), require, Frames, KitShopView);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_SHOP_CAPTURE") is { Length: > 0 } capture)
         {
             using var image = GetViewport().GetTexture().GetImage();
