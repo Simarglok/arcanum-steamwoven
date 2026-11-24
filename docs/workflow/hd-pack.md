@@ -399,6 +399,38 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
   without a pack gives the original-look reference) saves the windows for a labelled before/after composite (local, never in git). Applied on 2026-11-15 with the owner's go: manifest 175a19a0fed1 to a39a9dfef966 (3370 to 5599 entries, `interface/fonts` 2228 to 4457), `verify --deep` PASS, `mirror` 2233 files; the backup is `ARC-UI-2309-175a19a0fed1`, so the next base is its `staged-manifest.json`. Garmond6 and Garmond8 were not in that update; they followed in ARC-UI-2329 (next bullet).
 - **Garmond8 and Garmond6 (ARC-UI-2329, 2026-11-16, owner-run Codex delivery, generated like the nine Codex fonts).** Each font is its own staging pack (62 generated Latin letters and digits, the other 161 frames the cap 0.5 trace; 223 keys each) with the saved base manifest of the ARC-UI-2309 backup. Dry-run on the current pack: `0 interface entries differ`, `staged-only entries: 223`, no CONFLICT. Applied one after the other with the owner's go, game closed: `apply --add-new --map layout-additions.tsv`, manifest a39a9dfef966 to a31b8f3f9c32 (Garmond8, 482, backup `ARC-UI-2329-a39a9dfef966`) to 9292e4afa87d (Garmond6, 481, backup `ARC-UI-2329-a31b8f3f9c32`), 5599 to 6045 entries (`interface/fonts` 4457 to 4903), `verify --deep` PASS after each, `mirror` 450 files. The next base of this line is the `staged-manifest.json` of `ARC-UI-2329-a31b8f3f9c32`. Rollback is these two backups, newest first. The newspaper masthead (482) and the telegram form lines (481) are the reading-window callers (ledger WR8, WR20); the owner's brief said some masthead/legend text already uses Garmond9, which is unverified here, so installing these frames changes only the callers that still ask for 481/482. Garmond6 stays tiny at 1x and its spacing follows the original advances.
 
+## Kit-assembled frames in the pack (ARC-UI-3077)
+
+The frames of the Steamwoven kit assembly tool ([`assemble.py`](../ui/steamwoven-kit-assembly.md), TRD [pipeline](../ui/steamwoven-interface-trd.md#generation-pipeline) row 6b) are
+`<art>-fNNN.png` files plus `<art>.assembly.json`. `tools/steamwoven_ui/pack_plan.py` (row 6c) turns them into the importer plan, so nobody writes a plan or a mask by hand.
+All of it is local: the plan names original ART files and the frames are derived from them, so the tool refuses an output folder inside the checkout other than `local/`.
+A worktree has its own empty `local/`: give the commands the **main checkout's** `local/` paths. Run every command with `--dry-run` first where it has one:
+
+```sh
+python3 -B tools/steamwoven_ui/assemble.py LAYOUT.json --out local/steamwoven-ui/assembled/<batch>        # the frames and their records
+python3 -B tools/steamwoven_ui/pack_plan.py local/steamwoven-ui/assembled/<batch> --dry-run               # the art map, nothing written
+python3 -B tools/steamwoven_ui/pack_plan.py local/steamwoven-ui/assembled/<batch>                         # plan.json and masks/ next to the frames
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/steamwoven-ui/assembled/<batch>/plan.json --staging local/res095/pack-out/interface-redraw-4x --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/steamwoven-ui/assembled/<batch>/plan.json --staging local/res095/pack-out/interface-redraw-4x --fresh
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-redraw-4x --base INSTALLED
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-redraw-4x --base INSTALLED --task ARC-XXX-NNN --dry-run
+```
+
+`INSTALLED` is the installed pack folder, as for the fonts above. The real `apply` (then `verify --deep`, then `mirror`) is the owner's to allow, with the game closed.
+
+- **What it writes.** Per assembled frame one `ready` item (`"lock": false`: an assembled frame is final, the importer's shading lock would pull it back to the original's tone) whose tile
+  names the ART file as `interface.mes` gives it (`Schematics_Button.ART`); image and mask paths are relative to the plan file. A frame assembled in the `masked` alpha mode (a plate
+  that must not keep the original frame's rim and corners) also gets an `alphaMask`: the frame's own alpha as an 8-bit grey PNG of the HD frame's size in `masks/` (the importer takes
+  such a mask as the alpha itself, cut to the Legacy-opaque texels, and writes the entry as `"alpha": "masked"`, [format](../formats/hd-pack.md#interface-art-arc-dev-242)). A `legacy` or
+  `legacySmooth` frame gets none, since the importer's own Legacy alpha is the rule the assembly already followed; `--masks always|never` overrides, and a record written before the
+  record carried `alphaMode` gets masks.
+- **The art map.** The tool prints `art -> ART file` for every art (`470 -> Combat_Button.ART (3 frames of 156x156, alpha masks; name from census)`). A number is looked up in the census
+  (`docs/ui/steamwoven-interface-census-arts.tsv`) and the frame count and size are checked against its row; another identifier is taken as the file's own name; `--art-name 471=Schematics_Button.ART`
+  names an art the census does not. It refuses two arts naming one ART file, different scales in one plan, a frame that differs from its record, and a frame with nothing visible to mask.
+- `--pack-id` (default `interface-redraw-4x`) is the staging pack's id. The plan is replaced only when the existing `plan.json` is an importer plan.
+- Frames the staging build replaces in the installed pack show in `plan` as differing entries; frames the installed pack lacks need `--add-new`. The plan must name exactly the frames the assembly wrote.
+- Checks: `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan` (synthetic frames only; also in the batched `tools/local_dev/run_tests.py`).
+
 ## Producing and repairing art (who does what)
 
 Generation is the owner's (or Codex's, in the owner's account): no Claude thread has an image model, API or local model

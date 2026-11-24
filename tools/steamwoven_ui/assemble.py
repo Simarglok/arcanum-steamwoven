@@ -565,6 +565,8 @@ class Report:
     frames: list[FrameReport]
     images: dict[int, Image] = field(default_factory=dict)
     written: list[str] = field(default_factory=list)
+    alpha_mode: str | None = None  # the layout's alpha rule: pack_plan.py writes an alpha mask only for a `masked` frame
+    part: str | None = None
 
     @property
     def boxes(self) -> list[Box]:
@@ -573,6 +575,7 @@ class Report:
 
     def to_json(self) -> dict:
         return {"art": self.art, "scale": self.scale, "masterCanvas": list(self.canvas),
+                **({"alphaMode": self.alpha_mode} if self.alpha_mode else {}), **({"part": self.part} if self.part else {}),
                 "frames": [{"frame": f.frame, "state": f.state, "file": f.file, "size": list(f.size), "alphaFallbackToExact": f.alpha_fallback,
                             "placements": [{"id": b.ident, "detail": b.detail, "x": b.x, "y": b.y, "w": b.w, "h": b.h} for b in f.boxes]}
                            for f in self.frames]}
@@ -663,7 +666,7 @@ def assemble(layout: Layout, out_dir: Path | None = None, manifest: dict[str, di
         report.alpha_fallback = fallback
         frames.append(report)
         images[index] = baked
-    result = Report(layout.art, layout.scale, (cw, ch), frames, images)
+    result = Report(layout.art, layout.scale, (cw, ch), frames, images, alpha_mode=layout.alpha_mode, part=layout.part)
     if out_dir is not None:
         try:
             out_dir.mkdir(parents=True, exist_ok=True)

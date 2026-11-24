@@ -110,6 +110,20 @@ PNG, 8 bit, not interlaced.
 A three-frame button is the same file with `"frames": [{"state": "idle"}, {"state": "pressed"}, {"state": "hover"}]` and `images` maps on the
 base and the glyph.
 
+## From assembled frames to the pack (ARC-UI-3077)
+
+`assemble.py` stops at the frames. The next command is `pack_plan.py`, which reads the `<art>.assembly.json` records beside the frames and writes the pack importer's plan and the
+alpha masks next to them ([#3077](https://github.com/Simarglok/arcanum-steamwoven/issues/3077), requirement FR-UI-007, status unchanged):
+
+```sh
+python3 -B tools/steamwoven_ui/pack_plan.py DIR [--out PLANDIR] [--pack-id ID] [--masks auto|always|never] [--art-name ART=File.ART] [--dry-run]
+```
+
+It prints the **art map** (`470 -> Combat_Button.ART`, the name from the census or `--art-name`) and then the `hd_pack.py stage` command that follows. Per frame one `ready` item with `lock` false;
+a `masked` frame also gets a grey `alphaMask` of the HD frame's size, made from the frame's alpha; the record therefore carries `alphaMode` (and `part`) since this change. The whole route
+(`stage`, `plan`, `apply`) and the refusals are in the [HD pack workflow](../workflow/hd-pack.md#kit-assembled-frames-in-the-pack-arc-ui-3077). On the four buttons of the pilot
+([#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058)) it writes the same plan and the same twelve masks the pilot made by hand (a local comparison, 2026-11-24).
+
 ## Checks and limits
 
 - Tests: `python3 -B -m unittest tools.steamwoven_ui.test_assemble` (synthetic pictures only: PNG round trip, exact unit-to-pixel maps,
