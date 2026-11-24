@@ -395,6 +395,8 @@ public partial class TerrainCanvas
         var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight, _areaRing, HideCritters);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
+        // ARC-RENDER-3126: with the timing probe on, the rebuild's milliseconds (what a pushed lighting view costs at the next draw) are counted.
+        var rebuildStart = PerfProbe.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
         using var lap = _areaPerfView && PerfProbe.Enabled ? PerfProbe.Lap("canvas.view") : null;
         _areaPerfView = false;
         lap?.Step("cull");
@@ -526,6 +528,7 @@ public partial class TerrainCanvas
         AreaVisibleCommands = Array.AsReadOnly(logical.Where(command => command.Identity != ActorSentinel).ToArray());
         AreaVisibleCount = AreaVisibleCommands.Count;
         _areaView = state;
+        if (rebuildStart != 0) LightAnimationProbe.Shared.Rebuild(System.Diagnostics.Stopwatch.GetElapsedTime(rebuildStart).TotalMilliseconds);
     }
     // ARC-RES-1978: the carried lights as they stand now, merged with the map's, for the relit shaders (nothing while the relit look is off).
     private void UploadRelightLights()
