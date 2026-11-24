@@ -219,7 +219,7 @@ picture itself. A low-strength re-detail pass was **not** tested (the owner rule
 filter, 5.2 with Lanczos). The same downscale of the upscaled picture gives 7.1 (box), so deriving it from the big picture keeps the two views
 consistent as well as the original does. The original scales a `Map_Zoomed` of another size to its 365 rectangle (ledger row WM53), but our viewer draws the texture at its
 own size and keeps 365 constants for the dots and the hover box (`AreaWorldMapArt.cs`, `AreaWorldMapArtView.cs`), so a larger `Map_Zoomed` (x4 = 1460 × 1460) needs a
-draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079)); the black margins of 68 pixels are added by the window.
+draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079), done: the texture of a tile or of `Map_Zoomed` keeps the bitmap's own size, 250 or 365, and draws the pack's picture into that rectangle, so the dots, the hover box and the clicks stay in the original's coordinates; [format](../formats/hd-pack.md#world-map-entries-arc-render-3079)); the black margins of 68 pixels are added by the window.
 
 **Cut back.** The 8000 × 8000 picture was cut into 64 tiles of 1000 × 1000 (about 112 MB as PNG for the whole set; the single 8000 × 8000 picture is 164 MB as PNG); the cut took
 6 s. A single large picture is equally possible; the tile split only follows the original's file layout.
@@ -260,7 +260,7 @@ super-resolution tool installed), x2 or x3 variants, test-time augmentation, a c
    the scale in the pack entry. Ship it as a follow-up task (#2952 was decided on 2026-11-21).
 2. **World map: Blend A (the edge-masked blend above), the tile split and the derived `Map_Zoomed`**, picked by the owner on the crops (2026-11-21); plain Lanczos is the
    fallback, the original pixels stay the stopgap of #2993. Do not use the `x4plus` models. A re-detail pass stays an option only if
-   the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079).
+   the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079) (done, ARC-RENDER-3079).
 3. **Both** are local derived bitmaps of the player's own installation: never in git or distributed ([hard rules](../../CLAUDE.md)); the pack holds
    them.
 

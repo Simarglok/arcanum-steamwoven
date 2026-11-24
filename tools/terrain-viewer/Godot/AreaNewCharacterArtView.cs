@@ -46,6 +46,8 @@ public partial class AreaNewCharacterArtView : Control
     internal Texture2D? PortraitTextureForSelfTest => _portrait;
     internal AreaCharacterDescription? DescriptionForSelfTest => Visible && _view is { } view ? AreaNewCharacterArtLayout.Description(view, _hover) : null;
     internal int FrameForSelfTest(AreaNewCharacterArtButton button) => Frame(button);
+    /// <summary>ARC-UI-2924: the button the pointer lights now, or null.</summary>
+    internal AreaNewCharacterArtButton? HoveredForSelfTest => _hovered;
     /// <summary>The window position of a screen point of the 800 × 600 screen.</summary>
     internal Vector2 ScreenPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 
