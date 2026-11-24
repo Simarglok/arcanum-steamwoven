@@ -150,6 +150,17 @@ public partial class TerrainViewerApp
                 if (artLook.Zoomed is not null) CheckMapTexture("continent picture", artLook.Zoomed, AreaWorldMapArtLayout.ZoomedSize);
                 Require(mapHdProblems.Count == 0, "the world-map bitmaps keep their sizes and draw HD where the pack has an entry: " + string.Join("; ", mapHdProblems.Take(4)));
                 GD.Print($"ARC-RENDER-3079 native-smoke worldmap-hd PASS tiles={artLook.Tiles.Count} hd-capable={mapHdTextures} drawing-hd={mapHdDrawing} hd={InterfaceHd.Enabled} pack={(InterfaceHd.Pack?.Id ?? "-")}");
+                // ARC-UI-3154: the window's own picture scale. With the HD world map (the HD option on and a pack redraw for every tile) the tiles draw at the composition's scale, so the picture
+                // scale is 1 and the view shows the original's part of the map; otherwise the stopgap of ARC-UI-2993 stays (1:1 device pixels in the Steamwoven layout, 1 in the original look).
+                artView.SetPixelsPerUnitForSelfTest(null);
+                var tilesHdCount = artLook.Tiles.Count(t => InterfaceHd.Enabled && InterfaceHd.Pack is { } tilePack && WorldMapHd.Check(t, tilePack, AreaWorldMapArtLayout.TileSize) is (true, "HD"));
+                var expectHdTiles = artLook.Tiles.Count > 0 && tilesHdCount == artLook.Tiles.Count;
+                var expectUnit = !expectHdTiles && AreaGameBarPanel.SteamwovenOn ? Math.Max(.25, artView.DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit;
+                Require(artView.HdTilesDrawn == expectHdTiles && Math.Abs(artView.PixelsPerUnit - expectUnit) < 1e-9,
+                    $"the window's picture scale follows the HD world map: hd-tiles={artView.HdTilesDrawn} (expected {expectHdTiles}, {tilesHdCount}/{artLook.Tiles.Count} tiles HD) pixels per unit {artView.PixelsPerUnit:0.###} (expected {expectUnit:0.###}) steamwoven={AreaGameBarPanel.SteamwovenOn}");
+                GD.Print($"ARC-UI-3154 native-smoke worldmap-scale PASS hd-tiles={artView.HdTilesDrawn} pixels-per-unit={artView.PixelsPerUnit:0.###} steamwoven={AreaGameBarPanel.SteamwovenOn}");
+                artView.SetPixelsPerUnitForSelfTest(1);
+                _worldMapPanel.CentreOnParty();
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
                 await WorldMapWindowArtAsync("worldmap", artView);
                 // ARC-UI-133 (WM36): through the real pointer route (so an input layer over the hole would be seen), a left release in the PC lens closes the
@@ -250,15 +261,16 @@ public partial class TerrainViewerApp
                     image.SavePng(path);
                 }
                 var shot = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } path ? path : null;
-                // ARC-UI-2993: a local capture of the map view for the owner. ARC_WORLDMAP_SMOKE_SIZE=WIDTHxHEIGHT sets the display; ARC_WORLDMAP_SMOKE_PICTURE=before draws the picture in window units
-                // (scaled with the window, the earlier look), anything else draws the window's own picture scale (1:1 device pixels under the HD option); the view is centred on the marked area.
+                // ARC-UI-2993, ARC-UI-3154: a local capture of the map view for the owner. ARC_WORLDMAP_SMOKE_SIZE=WIDTHxHEIGHT sets the display; ARC_WORLDMAP_SMOKE_PICTURE=before draws the picture of
+                // the stopgap (1:1 in device pixels, the view shows more of the map), anything else draws the window's own picture scale (with the HD world map the tiles at the composition's
+                // scale, the original's view area); the view is centred on the marked area.
                 if (shot is not null)
                 {
                     var captureSizeText = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SIZE")?.Split('x');
                     var picked = captureSizeText is [var cw, var ch] && int.TryParse(cw, out var captureWidth) && int.TryParse(ch, out var captureHeight) && captureWidth >= 800 && captureHeight >= 600 ? new Vector2I(captureWidth, captureHeight) : (Vector2I?)null;
                     var displayBefore = DisplayServer.WindowGetSize();
                     if (picked is { } pickedSize) { await SetSmokeWindowSizeAsync(pickedSize); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
-                    artView.SetPixelsPerUnitForSelfTest(System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_PICTURE") == "before" ? 1 : null);
+                    artView.SetPixelsPerUnitForSelfTest(System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_PICTURE") == "before" ? Math.Max(.25, artView.DeviceScale()) : null);
                     artView.SetOffsetForSelfTest(AreaWorldMapArtLayout.CentreOn(markedPixel.X, markedPixel.Y, artView.MaxOffset, artView.PixelsPerUnit));
                     GD.Print($"ARC-UI-2993 world-map capture display {GetViewport().GetVisibleRect().Size} window scale {artView.Scale.X:0.###} pixels per unit {artView.PixelsPerUnit:0.###}");
                     await Shot(shot);
