@@ -1271,7 +1271,8 @@ queue; it pins the model `gpt-6.1-sol` at reasoning effort `medium` on every cal
 python3 -B -m unittest tools.steamwoven_ui.test_codex_batch                          # task check: fake codex, no quota
 python3 -B tools/steamwoven_ui/codex_batch.py check                                  # codex version, image_generation on, subscription login
 python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]     # the commands, nothing is sent
-python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite]
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite] [--crop-band]
+python3 -B tools/steamwoven_ui/codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz PERCENT]   # one padded strip canvas to its band (ARC-UI-3083, ImageMagick)
 ```
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
