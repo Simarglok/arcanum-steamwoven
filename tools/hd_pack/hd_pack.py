@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -72,9 +73,15 @@ def load_manifest(pack: Path) -> tuple[dict, str]:
     return manifest, hashlib.sha256(raw).hexdigest()
 
 
+MAP_KINDS = ("worldmap", "map-zoomed")  # ARC-RENDER-3079: the entry kinds of the world map's 64 tiles and of Map_Zoomed
+MAP_ROW = ("world-map", "maps", False)  # their default layout row: interface/world-map/maps/<art>-f000.png
+
+
 def entry_key(e: dict) -> tuple:
     if e.get("kind") == "portrait":  # ARC-UI-2865: a portrait redraw is keyed by the original bitmap's path (docs/formats/hd-pack.md#portrait-entries)
         return ("portrait", e["portrait"]["path"])
+    if e.get("kind") in MAP_KINDS:  # ARC-RENDER-3079: a world-map bitmap redraw is keyed by the original bitmap's path too (docs/formats/hd-pack.md#world-map-entries)
+        return (e["kind"], e[e["kind"]]["path"])
     return (e["art"]["sha256"], e["group"], e["frame"], e["palette"])
 
 
@@ -301,6 +308,18 @@ def portrait_rows(keyed_entries: dict) -> dict:
     return rows
 
 
+def map_rows(keyed_entries: dict) -> dict:
+    """ARC-RENDER-3079: the default layout row (screen `world-map`, kind `maps`) of every `worldmap` and `map-zoomed` entry among `keyed_entries`, by the ART name `art_of` finds in its staged file."""
+    rows = {}
+    for e in keyed_entries.values():
+        if e.get("kind") in MAP_KINDS:
+            try:
+                rows[layout.art_of(e["file"])] = MAP_ROW
+            except layout.LayoutError as err:
+                raise PackError(str(err)) from err
+    return rows
+
+
 def place_entry(e: dict, lm: "layout.LayoutMap") -> str:
     try:
         return layout.place(layout.art_of(e["file"]), e, lm)
@@ -376,7 +395,7 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
         raise PackError("--map only applies to a pack with a layout-map.tsv (run relayout first)")
     pack_rows = dict(lm.rows) if lm is not None else {}
     if lm is not None:  # ARC-UI-2865: a staged portrait needs no row in the map: it goes to interface/portraits/<heroes|npcs>/ and apply appends the row
-        lm = layout.LayoutMap({**portrait_rows(ks), **lm.rows})
+        lm = layout.LayoutMap({**portrait_rows(ks), **map_rows(ks), **lm.rows})  # ARC-RENDER-3079: a staged world-map bitmap likewise goes to interface/world-map/maps/
     if lm is not None and extra_map is not None:  # the pack's own rows win; the file only adds ARTs the pack's map lacks
         lm = layout.LayoutMap({**{a: r for a, r in extra_map.rows.items() if a not in lm.rows}, **lm.rows})
 
@@ -1122,6 +1141,88 @@ def cmd_portraits_plan(a) -> int:
     return 0
 
 
+MAP_PLAN_KIND = "arcanum-steamwoven-hd-map-plan"
+TILE_SIDE, ZOOMED_SIDE, TILE_COUNT = 250, 365, 64  # the original's world-map bitmaps (docs/formats/hd-pack.md#world-map-entries)
+_TILE_NAME = re.compile(r"^(?P<base>[a-z0-9_-]*?)(?P<n>\d{3})$")
+
+
+def map_plan(maps: Path, out: Path, pack_id: str, scale: int, zoomed_name: str, partial: bool) -> tuple[dict, dict]:
+    """ARC-RENDER-3079: the importer plan for a delivery of HD world-map pictures: `<base>001.png` .. `<base>064.png` (the 64 tiles, `250 x scale` square) and `<zoomed_name>.png`
+    (`365 x scale`, optional). Every file used is a plain PNG (8-bit RGB or RGBA, not interlaced) of exactly that size, checked against SHA256SUMS.txt when the folder has one; the 64 tiles
+    must be there with one base name and no gap unless `partial`. The plan names the original bitmaps `worldmap/<name>.bmp`; the importer checks each size against the bitmap it
+    reads from the game. Image paths are relative to OUT."""
+    if scale not in (2, 4):
+        raise PackError(f"scale {scale} is not an accepted pack scale (2 or 4)")
+    sums = read_sums(maps) if (maps / "SHA256SUMS.txt").is_file() else None
+    items, tiles, bases = [], {}, set()
+
+    def add(png: Path, bmp: str, side: int) -> None:
+        if not png.is_file() or png.is_symlink():
+            raise PackError(f"{png} is missing or not a plain file")
+        if sums is not None and sums.get(png.name) != sha256(png):
+            raise PackError(f"{png} is not listed in {maps}/SHA256SUMS.txt or differs from it; the delivery changed after it was packed")
+        w, h, depth, ctype, interlace = png_header(png)
+        expect = side * scale
+        if (w, h) != (expect, expect) or depth != 8 or ctype not in (2, 6) or interlace:
+            raise PackError(f"{png}: {w}x{h}, depth {depth}, colour type {ctype}; expected {expect}x{expect}, 8-bit RGB or RGBA, not interlaced")
+        items.append({"bmp": bmp, "image": os.path.relpath(png, out.parent).replace(os.sep, "/")})
+
+    for png in sorted(maps.glob("*.png")):
+        if png.stem == zoomed_name:
+            continue
+        m = _TILE_NAME.match(png.stem)
+        if not m:
+            raise PackError(f"{png.name}: not a tile name (<base>NNN.png) nor the continent picture ({zoomed_name}.png)")
+        bases.add(m["base"])
+        tiles[int(m["n"])] = png
+    if len(bases) > 1:
+        raise PackError(f"{maps}: the tiles carry more than one base name ({sorted(bases)})")
+    if not partial and sorted(tiles) != list(range(1, TILE_COUNT + 1)):
+        missing = [n for n in range(1, TILE_COUNT + 1) if n not in tiles]
+        raise PackError(f"{maps}: expected the {TILE_COUNT} tiles 001..{TILE_COUNT:03d}, missing {missing[:8]}{'...' if len(missing) > 8 else ''} (--partial stages what is there)")
+    for n, png in sorted(tiles.items()):
+        if not 1 <= n <= TILE_COUNT:
+            raise PackError(f"{png.name}: tile number {n} is outside 001..{TILE_COUNT:03d}")
+        add(png, f"worldmap/{png.stem}.bmp", TILE_SIDE)
+    zoomed = maps / f"{zoomed_name}.png"
+    if zoomed.exists():
+        add(zoomed, f"worldmap/{zoomed_name}.bmp", ZOOMED_SIDE)
+    if not items:
+        raise PackError(f"no world-map picture in {maps}")
+    for it in items:
+        if not all(c.islower() or c.isdigit() or c in "_-/." for c in it["bmp"]):
+            raise PackError(f"{it['bmp']} is not a lowercase world-map bitmap name")
+    return {"schema": 1, "kind": MAP_PLAN_KIND, "packId": pack_id, "scale": scale, "items": items}, {"tiles": len(tiles), "map-zoomed": 1 if zoomed.exists() else 0}
+
+
+def cmd_maps_plan(a) -> int:
+    out = a.out
+    real = out.resolve()
+    anchored = any(p.name == "local" and (p.parent / ".git").exists() for p in real.parents)
+    if out.is_symlink() or not anchored or GAME_SUPPORT.resolve() in (real, *real.parents) \
+            or {"hd-packs", "hd_pack", "pack-out"} & set(real.parts):
+        raise PackError(f"{out} must be a plain file under a checkout's local/ directory, never inside an installed pack, a staging pack or a pack collection")
+    if out.suffix != ".json":
+        raise PackError(f"{out} must be a .json file")
+    if out.exists():
+        try:
+            if json.loads(out.read_text()).get("kind") != MAP_PLAN_KIND:
+                raise ValueError("not a world-map plan")
+        except (OSError, ValueError, AttributeError) as e:
+            raise PackError(f"{out} exists and is not a world-map plan of this tool; refusing to overwrite it ({e})") from e
+    plan, counts = map_plan(a.maps.resolve(), real, a.pack_id, a.scale, a.zoomed_name, a.partial)
+    for group, n in sorted(counts.items()):
+        print(f"  {group}: {n} images")
+    print(f"plan {out}: {len(plan['items'])} world-map bitmaps, scale {a.scale}x, pack id {plan['packId']}")
+    if a.dry_run:
+        print("DRY-RUN: nothing written")
+        return 0
+    real.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(real, (json.dumps(plan, indent=1) + "\n").encode())
+    print(f"PASS maps-plan; next: stage --plan {out} --staging local/res095/pack-out/{a.pack_id} --dry-run")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="hd_pack.py", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1179,6 +1280,14 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--npc", type=Path, help="the NPC portrait delivery folder (<id>.png 256, SHA256SUMS.txt)")
     s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
     s.add_argument("--pack-id", default="interface-portraits", help="id of the staging pack the plan builds (default interface-portraits)")
+    s.add_argument("--dry-run", action="store_true", help="read and check the images, print the counts, write nothing")
+    s = add("maps-plan", cmd_maps_plan, "write the importer plan for HD world-map pictures (ARC-RENDER-3079)")
+    s.add_argument("--maps", type=Path, required=True, help="the delivery folder: <base>001.png .. <base>064.png (250 x scale) and the continent picture (365 x scale), SHA256SUMS.txt optional")
+    s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
+    s.add_argument("--pack-id", default="interface-maps", help="id of the staging pack the plan builds (default interface-maps)")
+    s.add_argument("--scale", type=int, default=4, help="the pack scale the pictures are drawn at (2 or 4; default 4)")
+    s.add_argument("--zoomed-name", default="map_zoomed", help="the continent picture's file stem, the original's ZoomedName lowercased (default map_zoomed)")
+    s.add_argument("--partial", action="store_true", help="accept fewer than the 64 tiles")
     s.add_argument("--dry-run", action="store_true", help="read and check the images, print the counts, write nothing")
     return p
 

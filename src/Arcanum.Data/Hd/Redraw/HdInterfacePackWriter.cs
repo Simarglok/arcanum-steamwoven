@@ -9,6 +9,11 @@ namespace Arcanum.Data.Hd;
 /// decoded pixels (<paramref name="Width"/> × <paramref name="Height"/>), <paramref name="Rgba"/> the opaque redraw at exactly the pack's scale times that size.</summary>
 public sealed record HdBuiltPortrait(string Path, int Width, int Height, byte[] LegacyRgba, byte[] Rgba);
 
+/// <summary>ARC-RENDER-3079: one world-map redraw ready to write: <paramref name="Kind"/> is <see cref="HdEntryKind.WorldMap"/> (a tile, 250 × 250) or <see cref="HdEntryKind.MapZoomed"/> (365 × 365),
+/// <paramref name="Path"/> the original's bitmap (<c>worldmap/smallmapchunks001.bmp</c>), <paramref name="LegacyRgba"/> its decoded pixels (<paramref name="Width"/> × <paramref name="Height"/>),
+/// <paramref name="Rgba"/> the opaque redraw at exactly the pack's scale times that size.</summary>
+public sealed record HdBuiltMapBitmap(HdEntryKind Kind, string Path, int Width, int Height, byte[] LegacyRgba, byte[] Rgba);
+
 public enum HdInterfaceWriteStatus { Written, InvalidPack, RecipeConflict, WriteFailed, VerifyFailed }
 
 /// <param name="Detail">The refusal's reason, or the pack's identity on success.</param>
@@ -31,13 +36,15 @@ public static class HdInterfacePackWriter
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static HdInterfaceWriteResult Write(string directory, string packId, int scale, IReadOnlyList<HdBuiltInterfaceFrame> frames, DateTimeOffset now,
-        IReadOnlyList<HdBuiltPortrait>? portraits = null)
+        IReadOnlyList<HdBuiltPortrait>? portraits = null, IReadOnlyList<HdBuiltMapBitmap>? maps = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory); ArgumentNullException.ThrowIfNull(frames);
-        portraits ??= [];
+        portraits ??= []; maps ??= [];
         // ARC-UI-2865: a write of interface frames replaces the pack's interface sprites and leaves its portraits; a write of portraits replaces only the portraits it names (by path)
         // and leaves the sprites and every other portrait.
+        // ARC-RENDER-3079: a write of world-map bitmaps likewise replaces only the ones it names, and a write of frames or portraits leaves them.
         var portraitPaths = portraits.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
+        var mapPaths = maps.Select(m => m.Path).ToHashSet(StringComparer.Ordinal);
         if (!new HdPackOptions().Scales.Contains(scale)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"scale {scale} is not an accepted pack scale");
         var manifestPath = Path.Combine(directory, HdPack.ManifestFile);
         var written = new List<string>();
@@ -80,8 +87,14 @@ public static class HdInterfacePackWriter
             var oldFiles = new List<string>(); var replaced = 0;
             for (var i = entries.Count - 1; i >= 0; i--)
             {
-                var isPortrait = (string?)entries[i]!["kind"] == "portrait";
-                if ((string?)entries[i]!["slice"] == SliceName && (isPortrait ? portraitPaths.Contains((string?)entries[i]!["portrait"]?["path"] ?? "") : frames.Count > 0 || portraits.Count == 0))
+                var entryKind = (string?)entries[i]!["kind"];
+                var remove = entryKind switch
+                {
+                    "portrait" => portraitPaths.Contains((string?)entries[i]!["portrait"]?["path"] ?? ""),
+                    "worldmap" or "map-zoomed" => mapPaths.Contains((string?)entries[i]![entryKind]?["path"] ?? ""),
+                    _ => frames.Count > 0 || (portraits.Count == 0 && maps.Count == 0),
+                };
+                if ((string?)entries[i]!["slice"] == SliceName && remove)
                 { oldFiles.Add((string)entries[i]!["file"]!); entries.RemoveAt(i); replaced++; }
             }
             var keys = new HashSet<(string, int)>(); var files = new List<(string File, byte[] Png, JsonObject Entry)>();
@@ -121,6 +134,30 @@ public static class HdInterfacePackWriter
                     ["review"] = "unreviewed",
                 }));
             }
+            var mapKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var map in maps.OrderBy(m => m.Path, StringComparer.Ordinal))
+            {
+                if (map.Kind is not (HdEntryKind.WorldMap or HdEntryKind.MapZoomed)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{map.Path} is not a world-map entry kind");
+                if (!HdMapKey.TryPath(map.Path, out var path) || path != map.Path) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{map.Path} is not an acceptable world-map bitmap path");
+                if (!mapKeys.Add(path)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} is given twice");
+                var side = HdMapKey.LegacySide(map.Kind);
+                if (map.Width != side || map.Height != side) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} is {map.Width}x{map.Height}, expected {side}x{side}");
+                if (map.Rgba.Length != (long)map.Width * scale * map.Height * scale * 4 || map.LegacyRgba.Length != map.Width * map.Height * 4)
+                    return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} has the wrong pixel count for scale {scale}");
+                for (var i = 3; i < map.Rgba.Length; i += 4)
+                    if (map.Rgba[i] != byte.MaxValue) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{path} is not opaque");
+                var png = HdPng.EncodeRgba(map.Width * scale, map.Height * scale, map.Rgba);
+                var sha = HdPackPath.Sha256(png);
+                var property = map.Kind == HdEntryKind.WorldMap ? "worldmap" : "map-zoomed";
+                var file = $"interface/{property}-{Sanitise(path[HdMapKey.Folder.Length..^4])}-f0-{sha[..8]}.png";
+                files.Add((file, png, new JsonObject
+                {
+                    ["kind"] = property, ["file"] = file, ["sha256"] = sha, ["bytes"] = png.Length, ["slice"] = SliceName,
+                    [property] = new JsonObject { ["path"] = path },
+                    ["legacy"] = new JsonObject { ["width"] = map.Width, ["height"] = map.Height, ["rgbaSha256"] = HdPackPath.Sha256(map.LegacyRgba) },
+                    ["review"] = "unreviewed",
+                }));
+            }
             var taken = new HashSet<string>(entries.Select(e => (string)e!["file"]!), StringComparer.Ordinal);
             var fresh = new HashSet<string>(StringComparer.Ordinal);
             if (files.Any(f => taken.Contains(f.File) || !fresh.Add(f.File))) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, "two interface frames would be written to one file");
@@ -154,11 +191,11 @@ public static class HdInterfacePackWriter
                 try { File.Delete(HdPackPath.Full(directory, old)); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
             var check = HdPack.Open(directory);
-            if (check.Status != HdPackOpenStatus.Opened) return new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count, replaced, $"{check.Status} {check.Detail}");
+            if (check.Status != HdPackOpenStatus.Opened) return new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count + maps.Count, replaced, $"{check.Status} {check.Detail}");
             var integrity = check.Pack!.VerifyIntegrity();
             return integrity.Intact
-                ? new(HdInterfaceWriteStatus.Written, frames.Count + portraits.Count, replaced, $"{check.Pack.Id} {check.Pack.Scale}x manifest {check.Pack.Identity.ManifestSha256}")
-                : new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count, replaced, $"{integrity.Valid}/{integrity.Entries} entries intact");
+                ? new(HdInterfaceWriteStatus.Written, frames.Count + portraits.Count + maps.Count, replaced, $"{check.Pack.Id} {check.Pack.Scale}x manifest {check.Pack.Identity.ManifestSha256}")
+                : new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count + maps.Count, replaced, $"{integrity.Valid}/{integrity.Entries} entries intact");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {

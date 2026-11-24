@@ -110,21 +110,19 @@ public partial class TerrainViewerApp
         // The font's glyph frames stay as they are for the art text draw, not as textures.
         var art = content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0 && load.Number != AreaWorldMapArtLayout.FontArt)
             .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: load.Number != AreaWorldMapArtLayout.BackgroundArt)).ToArray());
+        // ARC-RENDER-3079: a tile or the continent picture is a texture of the bitmap's own size that draws the pack's redraw (HD option on, entry present) into the same rectangle.
         var tiles = new List<Texture2D>();
-        foreach (var bytes in content.Tiles)
+        for (var index = 0; index < content.Tiles.Count; index++)
         {
-            var image = new Image();
-            if (image.LoadBmpFromBuffer(bytes!) != Error.Ok) { GD.Print("ARC-UI-073 world-map tile did not decode"); return null; }
-            image.Convert(Image.Format.Rgba8);
-            tiles.Add(ImageTexture.CreateFromImage(image));
+            if (WorldMapHd.Texture(content.TilePathOf(index), content.Tiles[index]!) is not { } tile) { GD.Print("ARC-UI-073 world-map tile did not decode"); return null; }
+            tiles.Add(tile);
         }
         // The continent picture is optional (WM62): without it the window refuses only its view.
-        ImageTexture? zoomedTexture = null;
+        Texture2D? zoomedTexture = null;
         if (content.Zoomed is { } zoomedBytes)
         {
-            var zoomed = new Image();
-            if (zoomed.LoadBmpFromBuffer(zoomedBytes) == Error.Ok) { zoomed.Convert(Image.Format.Rgba8); zoomedTexture = ImageTexture.CreateFromImage(zoomed); }
-            else GD.Print("ARC-UI-083 world-map continent picture did not decode");
+            zoomedTexture = WorldMapHd.Texture(content.ZoomedPath, zoomedBytes);
+            if (zoomedTexture is null) GD.Print("ARC-UI-083 world-map continent picture did not decode");
         }
         _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content) { MessageFont = TextFonts()?.Text };
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
