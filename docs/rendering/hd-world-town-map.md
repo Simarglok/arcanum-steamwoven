@@ -10,8 +10,8 @@ Context: the [gap census](hd-pack-gap-census.md#world-map-and-town-map-screen-tr
 the HD pack has no entry kind for (the 64 map tiles of 250 × 250, `Map_Zoomed` 365 × 365, and 57,522 + 6,677 town-map tiles of 64 × 32). The owner
 decided on 2026-11-19 that none of them is redrawn by a generator (a redraw moves coasts, rivers and roads that the route and the markers depend
 on). Two ideas were tested: render the town maps with our own engine, and upscale the world map as one picture with a non-generative model. The
-entry kind for these bitmaps is the question of [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952); this note hands it its inputs
-(the last section).
+entry kinds for these bitmaps were the question of [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952); this note handed it its inputs
+(the last section), and the owner approved them on 2026-11-21 ([decisions](../architecture/decisions.md)).
 
 ## Verdicts
 
@@ -123,7 +123,7 @@ to 1.8 and 1.0 gives 0.9, which is native at 4K. 0.5 is enough up to about 1080p
 | Total render time for 125 towns | order of hours on the Mac (extrapolated from two towns; most towns are far smaller than Tarant and Ashbury) |
 
 Larger tiles at 8 bits would force a 256-colour quantisation of a 1:1 render, which loses colour at 1.0; a pack entry could store 24-bit PNG tiles
-instead, which needs the loader change above (a format decision for #2952). A render at 0.5 or 1.0 is not a decimation of the 1:1 capture by 4 but by 2 or 1 (nearest at phase 1 or 0, or the
+instead, which needs the loader change above (a format decision of #2952, approved 2026-11-21). A render at 0.5 or 1.0 is not a decimation of the 1:1 capture by 4 but by 2 or 1 (nearest at phase 1 or 0, or the
 1:1 capture itself): that choice is not measured here.
 
 **What the render path needs (smallest design).** A viewer run per 3 × 3 sector window at zoom 1 with: the area's own light (fixed hour), roofs forced
@@ -257,14 +257,16 @@ super-resolution tool installed), x2 or x3 variants, test-time augmentation, a c
 
 1. **Town maps: render with our engine.** The tiles are a pure render, so a larger one is a render at a larger scale, not a redraw; no generator is
    involved. Start with 0.5 and decide 1.0 after the owner's look at one town; keep the `.tmi` layout and the fog and marker logic unchanged and carry
-   the scale in the pack entry. Ship it as a follow-up task after the owner decides #2952.
+   the scale in the pack entry. Ship it as a follow-up task (#2952 was decided on 2026-11-21).
 2. **World map: Blend A (the edge-masked blend above), the tile split and the derived `Map_Zoomed`**, picked by the owner on the crops (2026-11-21); plain Lanczos is the
    fallback, the original pixels stay the stopgap of #2993. Do not use the `x4plus` models. A re-detail pass stays an option only if
    the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079).
 3. **Both** are local derived bitmaps of the player's own installation: never in git or distributed ([hard rules](../../CLAUDE.md)); the pack holds
    them.
 
-## Questions handed to #2952 (the entry kind for bitmaps)
+## Questions handed to #2952 (the entry kind for bitmaps; approved)
+
+Approved as written by the owner on 2026-11-21 ([decisions](../architecture/decisions.md)); slides and splash are outside this note and stay out of HD for now (2026-11-24).
 
 - A kind for one-per-file bitmaps `worldmap` (64 tiles named as in the original, any size multiple of 250 and an integer ratio recorded) and
   `map-zoomed` (one picture), so the loader draws them at their own size.

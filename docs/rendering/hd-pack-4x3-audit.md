@@ -135,8 +135,8 @@ its middle would be magnified at every size from 1920 × 1080 up (× 1.15 at 192
   strokes are uneven until [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939).
 - **Portraits:** all 126 are in the pack; drawn trilinear, they lose 1 to 4 dB against the area result (table above). Their place in the follower
   group at the window's left edge is [#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925).
-- **Illustrations:** the 63 schematic record pictures are direct frames inside the schematic window (as panels). Slides, world-map bitmaps and the
-  splash have no pack entry kind ([#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952)).
+- **Illustrations:** the 63 schematic record pictures are direct frames inside the schematic window (as panels). Slides and the splash stay
+  outside the HD scope for now, and the world-map bitmaps get entry kinds ([#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952), owner decisions of 2026-11-21 and 2026-11-24, [decisions](../architecture/decisions.md)).
 
 ## Kit master scale: 3.6 or 4 px per unit
 
