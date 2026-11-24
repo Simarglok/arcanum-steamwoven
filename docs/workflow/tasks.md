@@ -308,6 +308,9 @@ narrowed the same day in ARC-DEV-061):
 - `container-click` and `walk` check a sample unless `--all` (ARC-DEV-395, owner
   decision 2026-11-11); run them with `--all` when the change touches what the
   sample no longer proves ([sampled stages](toolchain.md#smoke-runner-arc-dev-061)).
+  `slides` (ARC-DEV-3116, owner decision 2026-11-24) ends each installed movie by the
+  key skip once its checks are done in a PR run (about 90 s instead of about 230 s); the
+  complete run and the daily build play every movie to its own end (`--all` does too).
 - A stage that also fails on clean main is not this PR's failure: name it in
   the PR and go on; do not investigate it in the task thread.
   The runner prints `known on main, not this PR` for the failures listed in

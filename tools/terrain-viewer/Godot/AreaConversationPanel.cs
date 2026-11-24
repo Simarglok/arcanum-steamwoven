@@ -577,7 +577,7 @@ public partial class AreaConversationPanel : CanvasLayer
         _band.Visible = _originalRows && _buttons.Count > 0;
         _panel.Visible = !_originalRows || new Control[] { _header, _headerArt, _outcome, _outcomeArt, _effects, _effectsArt, _hint, _hintArt, _leave }.Any(control => control.Visible);
         var size = GetViewport().GetVisibleRect().Size;
-        // ARC-UI-2510: the panel lies in the frame's width (a window wider than the Steamwoven frame has pillarbox bars on its sides).
+        // ARC-UI-2510: the panel lies in the column's width (the free width of the windows).
         var (_, free) = AreaGameBarPanel.FreeArea(size);
         var width = Math.Max(1, Math.Min(960, free.X - 48));
         var content = Math.Max(1, (int)width - 2 * ContentMargin);

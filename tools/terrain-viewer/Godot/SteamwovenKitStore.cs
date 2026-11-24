@@ -121,13 +121,13 @@ internal static class SteamwovenKitStore
         return texture;
     }
 
-    /// <summary>SWI-RUN-5: <paramref name="owner"/> (the open window's background, the open menu's plate) says which <c>backdrop.</c> parts of <paramref name="set"/> it holds now; every <c>backdrop.</c> texture no owner holds is released.</summary>
+    /// <summary>SWI-RUN-5: <paramref name="owner"/> (the open window's background, the open menu's plate) says which <c>backdrop.</c> and <c>sheet.</c> parts (ARC-UI-3035: the character sheet's page sheets) of <paramref name="set"/> it holds now; every such texture no owner holds is released.</summary>
     public static void Retain(string owner, SteamwovenKitSet set, IReadOnlyCollection<string> ids)
     {
         Retained[owner] = [.. ids];
         foreach (var id in set.Ids)
         {
-            if (!id.StartsWith("backdrop.", StringComparison.Ordinal) || Retained.Values.Any(held => held.Contains(id))) continue;
+            if (!(id.StartsWith("backdrop.", StringComparison.Ordinal) || id.StartsWith("sheet.", StringComparison.Ordinal)) || Retained.Values.Any(held => held.Contains(id))) continue;
             Drop(Key(set, id));
         }
     }

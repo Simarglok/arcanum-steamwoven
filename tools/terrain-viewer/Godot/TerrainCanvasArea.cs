@@ -88,7 +88,7 @@ public partial class TerrainCanvas
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
     public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,
-        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks, int Moving, AreaObjectKey? Highlight, AreaHoverRingDraw? Ring)? _areaView;
+        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks, int Moving, AreaObjectKey? Highlight, AreaHoverRingDraw? Ring, bool HideCritters)? _areaView;
 
     /// <summary>ARC-UI-057 (ledger OH2, OH3): the hovered portal, container, scenery or item, drawn once more after the bodies and before the
     /// roofs, additive with the constant colour (200, 200, 200) and unlit, without its alpha modes (0x43C690 masks them off); null none.</summary>
@@ -385,11 +385,14 @@ public partial class TerrainCanvas
     }
     // ARC-DEV-380: set by a publication of a new plan; the first full view after it is timed (canvas.view.NAME).
     private bool _areaPerfView;
+    /// <summary>ARC-RENDER-3063: the town-map render draws no critter body (NPCs and monsters, fallen ones included); scenery, doors and items stay.</summary>
+    internal bool HideCritters { get => _hideCritters; set { if (_hideCritters == value) return; _hideCritters = value; _areaView = null; QueueRedraw(); } }
+    private bool _hideCritters;
     private void UpdateAreaVisible()
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
         var view = GetViewport().GetVisibleRect(); var inverse = GetViewport().GetCanvasTransform().AffineInverse();
-        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight, _areaRing);
+        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight, _areaRing, HideCritters);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
         using var lap = _areaPerfView && PerfProbe.Enabled ? PerfProbe.Lap("canvas.view") : null;
@@ -411,7 +414,7 @@ public partial class TerrainCanvas
         // ARC-RENDER-033: flat moved bodies (an item lying where no T0 body stood) join the flat commands in plan order.
         var flatCommands = flat.Select(index => _areaFlat[index]);
         var ordered = (_areaMoving is { Count: > 0 } ? AreaScenePlan.WithMovingFlat(flatCommands, _areaMoving, _areaMovingKeys) : flatCommands).Concat(upright);
-        var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || (_showStatics && !AreaHiddenOf(command)))).ToArray();
+        var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || (_showStatics && !AreaHiddenOf(command) && !(HideCritters && command.ArtClass is 2 or 12 or 13 or 14)))).ToArray();
         // ARC-MAGIC-045: a body a spell hid (don't-draw, invisible to the player) is not drawn nor picked; a translucent or shrunk one is drawn so (the original's draw list builder and blit set-up).
         if (_areaBodyStyles is not null || _actorBodyStyle is not null)
             visible = visible.Where(command => BodyStyleOf(command) is not { Drawn: false }).Select(command => BodyStyleOf(command) is { } style ? AreaBodyStyleRules.Apply(command, style) : command).ToArray();
