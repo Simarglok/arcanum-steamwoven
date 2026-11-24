@@ -48,6 +48,9 @@ public static class AreaReadingArtLayout
     /// window loads it with the others and draws the original's Pepper20 note when it did not read.</summary>
     public const int NoteBodyFont = 840;
 
+    /// <summary>ARC-UI-2765 (owner decision 2026-11-24): the readable faces a letter tries in order, <see cref="NoteBodyFont"/> then 301 (Nick16, smaller) for a letter NewTimes16 does not hold; one neither holds keeps Pepper20.</summary>
+    public static IReadOnlyList<int> NoteBodyFonts { get; } = [NoteBodyFont, 301];
+
     public static IReadOnlyList<int> FixedFontArts { get; } = [TelegramNameFont, TelegramBodyFont, TelegramFormFont, MastheadLineFont, MastheadSideFont, MastheadFont, NoteFont, WrittenTexts.NewspaperAlternateFont];
 
     /// <summary>The arts without which the window is not drawn in the original's look (the alternate newspaper's 817 and 815 are optional).</summary>
@@ -96,7 +99,7 @@ public static class AreaReadingArtLayout
     public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
     /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts.</summary>
-    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Append(NoteBodyFont).Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
+    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(NoteBodyFonts).Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
 }
 
 /// <summary>
@@ -311,34 +314,41 @@ public static class AreaReadingFlow
     }
 
     /// <summary>ARC-UI-2765: a note's body. The original's draw (Pepper20, a handwriting face) unless <paramref name="readable"/> (the generated interface with the face loaded): then the address (first line, ending in a comma) and
-    /// the signature (<see cref="AreaReadingNoteRule"/>) stay in Pepper20 and the body between them is in <see cref="AreaReadingArtLayout.NoteBodyFont"/>; a letter that does not fit the rule is drawn whole in the readable face;
-    /// a letter the readable face does not hold in the note's rectangle keeps the original's draw.</summary>
+    /// the signature (<see cref="AreaReadingNoteRule"/>) stay in Pepper20 and the body between them is in the first of <see cref="AreaReadingArtLayout.NoteBodyFonts"/> that holds the letter; a letter that does not fit the rule is drawn whole in the readable face;
+    /// a letter no readable face holds in the note's rectangle keeps the original's draw.</summary>
     public static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, bool readable)
     {
         var rect = AreaReadingArtLayout.NoteText;
-        var (pepper, face) = (AreaReadingArtLayout.NoteFont, AreaReadingArtLayout.NoteBodyFont);
+        var pepper = AreaReadingArtLayout.NoteFont;
         var text = document.Joined;
-        if (!readable) return Draw(fontOf(pepper), pepper, text, rect, false);
-        var (pepperFont, bodyFont) = (fontOf(pepper), fontOf(face));
-        if (AreaReadingNoteRule.Split(text) is { } parts)
+        var pepperFont = fontOf(pepper);
+        if (!readable) return Draw(pepperFont, pepper, text, rect, false);
+        var rule = AreaReadingNoteRule.Split(text);
+        foreach (var face in AreaReadingArtLayout.NoteBodyFonts)
         {
-            // The text's own blank lines are the gaps; a body that begins or ends on text gets a small one.
-            int gapAbove = parts.Body.StartsWith('\n') ? 0 : 6, gapBelow = parts.Body.EndsWith('\n') ? 0 : 6;
-            int headingHeight = Height(pepperFont, parts.Heading, rect.Width), bodyHeight = Height(bodyFont, parts.Body, rect.Width), signatureHeight = Height(pepperFont, parts.Signature, rect.Width);
-            if (headingHeight > 0 && bodyHeight > 0 && signatureHeight > 0 && headingHeight + gapAbove + bodyHeight + gapBelow + signatureHeight <= rect.Height)
+            var bodyFont = fontOf(face);
+            if (rule is { } parts)
             {
-                var widest = parts.Signature.Split('\n').Max(line => pepperFont.Measure(line).Width);
-                var indent = Math.Max(0, rect.Width - widest - 4 - AreaPremadeBrowserArtLayout.TabAdvance * parts.Signature.Count(c => c == '\t'));
-                return
-                [
-                    .. Draw(pepperFont, pepper, parts.Heading, rect with { Height = headingHeight }, false),
-                    .. Draw(bodyFont, face, parts.Body, new(rect.X, rect.Y + headingHeight + gapAbove, rect.Width, bodyHeight), false),
-                    .. Draw(pepperFont, pepper, parts.Signature, new(rect.X + indent, rect.Y + headingHeight + gapAbove + bodyHeight + gapBelow, rect.Width - indent, signatureHeight), false),
-                ];
+                // The text's own blank lines are the gaps; a body that begins or ends on text gets a small one.
+                int gapAbove = parts.Body.StartsWith('\n') ? 0 : 6, gapBelow = parts.Body.EndsWith('\n') ? 0 : 6;
+                int headingHeight = Height(pepperFont, parts.Heading, rect.Width), bodyHeight = Height(bodyFont, parts.Body, rect.Width), signatureHeight = Height(pepperFont, parts.Signature, rect.Width);
+                if (headingHeight > 0 && bodyHeight > 0 && signatureHeight > 0 && headingHeight + gapAbove + bodyHeight + gapBelow + signatureHeight <= rect.Height)
+                {
+                    var widest = parts.Signature.Split('\n').Max(line => pepperFont.Measure(line).Width);
+                    var indent = Math.Max(0, rect.Width - widest - 4 - AreaPremadeBrowserArtLayout.TabAdvance * parts.Signature.Count(c => c == '\t'));
+                    return
+                    [
+                        .. Draw(pepperFont, pepper, parts.Heading, rect with { Height = headingHeight }, false),
+                        .. Draw(bodyFont, face, parts.Body, new(rect.X, rect.Y + headingHeight + gapAbove, rect.Width, bodyHeight), false),
+                        // Laid out at the full width (as measured) and moved right, so the draw breaks the lines where Height counted them.
+                        .. Draw(pepperFont, pepper, parts.Signature, new(rect.X, rect.Y + headingHeight + gapAbove + bodyHeight + gapBelow, rect.Width, signatureHeight), false).Select(line => line with { X = line.X + indent }),
+                    ];
+                }
             }
+            // A word wider than the rectangle measures 0 high and would count as a fit that stops the draw there: no fit.
+            if (FitText(bodyFont, face, text, false, rect) is { Whole: true, Amount: > 0 } whole) return whole.Lines;
         }
-        // A word wider than the rectangle measures 0 high and would count as a fit that stops the draw there: no fit.
-        return FitText(bodyFont, face, text, false, rect) is { Whole: true, Amount: > 0 } whole ? whole.Lines : Draw(pepperFont, pepper, text, rect, false);
+        return Draw(pepperFont, pepper, text, rect, false);
     }
 
     /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none); a note takes <see cref="Note"/>'s draw (<paramref name="readableNote"/>, ARC-UI-2765).</summary>

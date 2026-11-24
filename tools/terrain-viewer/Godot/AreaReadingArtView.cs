@@ -116,7 +116,7 @@ public partial class AreaReadingArtView : Control
         _picture = document.Subtype == WrittenSubtype.Picture ? Picture?.Invoke(document.BackgroundArt)?.FirstOrDefault() : null;
         Watch(_picture);
         if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
-        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf, InterfaceHd.Generated && _faces.ContainsKey(AreaReadingArtLayout.NoteBodyFont)); }
+        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf, InterfaceHd.Generated && AreaReadingArtLayout.NoteBodyFonts.All(_faces.ContainsKey)); }
         Visible = true;
         Place();
         QueueRedraw();

@@ -252,11 +252,11 @@ public sealed class AreaReadingArtTests
         Assert.AreEqual("no-body", AreaReadingNoteRule.Check("Dear X,\n\n\n   \nY").Reason, "blank lines are not a body");
     }
 
-    /// <summary>ARC-UI-2765: a note's body on synthetic frames: Pepper20 (497) 10 high, the readable face (840) 8 high, every glyph advancing 6.</summary>
+    /// <summary>ARC-UI-2765: a note's body on synthetic frames: Pepper20 (497) 10 high, NewTimes16 (840) 8 high, Nick16 (301) 5 high, every glyph advancing 6.</summary>
     [TestMethod]
     public void A_note_body_is_drawn_in_the_readable_face_between_a_handwritten_address_and_signature()
     {
-        AreaArtFont FontOf(int art) => art == 840 ? Font(8) : Font(10);
+        AreaArtFont FontOf(int art) => art == 840 ? Font(8) : art == 301 ? Font(5) : Font(10);
         AreaReadingArtDocument Note(string text) => new(WrittenSubtype.Note, 489, false, [], [Message(text)], [], text);
         var letter = Note("Dear X,\nbody body body\nYours, Y");
         Assert.IsTrue(AreaReadingFlow.Single(letter, FontOf).All(line => line.Font == 497), "the original's look draws Pepper20");
@@ -268,8 +268,12 @@ public sealed class AreaReadingArtTests
         // A letter that does not fit the rule is drawn whole in the readable face.
         var plain = AreaReadingFlow.Single(Note("one line only"), FontOf, readableNote: true);
         Assert.IsTrue(plain.Count == 1 && plain[0].Font == 840);
-        // Too long for the readable face: the original's draw. A word wider than the rectangle is no fit.
-        Assert.IsTrue(AreaReadingFlow.Single(Note(string.Join(' ', Enumerable.Repeat("word", 400))), FontOf, readableNote: true).All(line => line.Font == 497));
+        // Too long for NewTimes16: Nick16 (the rule's address and signature stay Pepper20); too long for both: the original's draw. A word wider than the rectangle is no fit.
+        var long400 = AreaReadingFlow.Single(Note(string.Join(' ', Enumerable.Repeat("word", 400))), FontOf, readableNote: true);
+        Assert.IsTrue(long400.Count > 0 && long400.All(line => line.Font == 301), "Nick16 holds what NewTimes16 does not");
+        var longMixed = AreaReadingFlow.Single(Note("Dear X,\n" + string.Join(' ', Enumerable.Repeat("word", 350)) + "\nYours, Y"), FontOf, readableNote: true);
+        Assert.IsTrue(longMixed[0].Font == 497 && longMixed[^1].Font == 497 && longMixed.Count(line => line.Font == 301) > 10, "address and signature in Pepper20 around a Nick16 body");
+        Assert.IsTrue(AreaReadingFlow.Single(Note(string.Join(' ', Enumerable.Repeat("word", 1000))), FontOf, readableNote: true).All(line => line.Font == 497));
         Assert.IsTrue(AreaReadingFlow.Single(Note("a " + new string('w', 40) + " b"), FontOf, readableNote: true).All(line => line.Font == 497), "an unbreakable word keeps the original's draw");
         // Other kinds ignore the flag.
         Assert.AreEqual(0, AreaReadingFlow.Single(new(WrittenSubtype.Picture, 700, false, [], [], [], ""), FontOf, readableNote: true).Count);
@@ -337,6 +341,6 @@ public sealed class AreaReadingArtTests
     {
         var texts = WrittenTexts.Create(Mes("{100}{12 A}{101}{1c B}{102}{12 C}{103}{Plain}"), Mes("{200}{9 note}"), Mes("{0}{482 x}{1}{5 y}"), null, Mes("{500}{40c p}"));
         CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 482 }, texts.MarkupFonts().ToArray(), "the note's file has no markup; a message with no prefix is font 0 and left out");
-        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 479, 480, 481, 482, 484, 485, 497, 815, 840 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 301, 479, 480, 481, 482, 484, 485, 497, 815, 840 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
     }
 }
