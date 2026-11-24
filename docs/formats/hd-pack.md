@@ -509,7 +509,7 @@ and a tile the pack cannot serve draws the BMP. A tile of a town that is gone is
 Import: `hd_pack.py townmap-plan` writes the plan (kind `arcanum-steamwoven-hd-townmap-plan`) from the folder of one town's rendered tiles (`<Town>NNNNNN.png` at `64 × scale` by `32 × scale`, `--expect` the town's
 tile count), the importer (`hd-interface-import --plan`) checks each picture against the tile it reads from the game and writes the entries into a staging pack (a town plan replaces only the tiles it names; the pack's sprites,
 portraits, maps and other towns stay), and the update goes in with `apply --add-new`; each town is one plan ([workflow](../workflow/hd-pack.md#town-map-tiles-arc-render-3106)). A staged tile needs no row in
-`layout-map.tsv`: it is placed at `interface/town-map/<town>/` (the town with every character outside `[a-z0-9_-]` turned into `-`) as `townmap-<town>-NNNNNN-f000.png` and `apply` appends its row.
+`layout-map.tsv`: it is placed at `interface/town-map/<town>/` (the town with every character outside `[a-z0-9_-]` turned into `-`); a town name longer than 33 such characters keeps its first 26 and `-` and 6 hex of the SHA-256 of the whole name (the staging file name `townmap-<town>-NNNNNN-f0-<hash>.png` must fit a 64-character path segment; ARC-RENDER-3107) as `townmap-<town>-NNNNNN-f000.png` and `apply` appends its row.
 
 ## Device budget file
 

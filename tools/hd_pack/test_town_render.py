@@ -80,6 +80,93 @@ class TownRenderTests(unittest.TestCase):
             for shot in shots:
                 self.assertRegex(shot["name"], r"^r\d+c\d+$")
 
+    def test_void_grey_is_filler_only_in_regions_not_single_pixels(self):
+        image = np.zeros((20, 20, 3), np.uint8)
+        image[2:12, 2:12] = tr.VOID_GREY                      # a grey region: filler
+        image[15, 15] = tr.VOID_GREY                          # one grey pixel of a texture: content
+        image[2:4, 16:19] = tr.VOID_GREY                      # a strip thinner than 5 pixels: content
+        void = tr.grey_void(image)
+        self.assertTrue(void[2:12, 2:12].all())
+        self.assertFalse(void[15, 15])
+        self.assertFalse(void[2:4, 16:19].any())
+        self.assertFalse(tr.grey_void(np.zeros((8, 8, 3), np.uint8)).any())
+
+    def test_a_whole_map_is_one_window_without_a_sector(self):
+        # ARC-RENDER-3107: a map that loads whole has no window edge, so one run holds every shot and the stitch takes every pixel from it
+        tiles = list(range(1, 400))
+        needed, windows = tr.plan_windows(TMI, tiles, whole=True)
+        self.assertEqual(list(windows), [(None, None)])
+        self.assertEqual(tr.window_name((None, None)), "whole")
+        self.assertEqual(tr.window_name((504, 976)), "504_976")
+        self.assertTrue(windows[(None, None)])
+        _, lattice = tr.plan_windows(TMI, tiles)
+        self.assertEqual(sum(len(s) for s in windows.values()) <= sum(len(s) for s in lattice.values()), True)
+
+    def test_the_map_is_the_one_whose_sectors_lie_nearest_the_origin(self):
+        # a town map number can sit on two maps (one town of the module): the origin location of the .tmi decides
+        tmi = {"originX": 1498 * 64 + 5, "originY": 1443 * 64 + 5}
+        main = {"map": "arcanum1-024-fixed", "min_x": "1496", "min_y": "1441", "max_x": "1499", "max_y": "1442", "sectors": "8"}
+        interior = {"map": "k'na tha", "min_x": "5", "min_y": "11", "max_x": "8", "max_y": "14", "sectors": "16"}
+        best, distance = tr.pick_map(tmi, [interior, main])
+        self.assertEqual(best["map"], "arcanum1-024-fixed")
+        self.assertEqual(distance, 1.0)
+        best, _ = tr.pick_map({"originX": 6 * 64, "originY": 12 * 64}, [main, interior])
+        self.assertEqual(best["map"], "k'na tha")
+
+    def test_town_table_and_results_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scan = Path(tmp)
+            (scan / "tiles-all").mkdir()
+            (scan / "tmi-all.tsv").write_text("number\tname\twidth\theight\tcolumns\trows\toriginX\toriginY\tscale\n"
+                                              "7\tInner Room\t5120\t2560\t20\t20\t96\t96\t0.25\n8\tLost\t5120\t2560\t20\t20\t96\t96\t0.25\n")
+            (scan / "tiles-all" / "7.txt").write_text("\n".join(str(i) for i in range(0, 60)) + "\n")
+            (scan / "tiles-all" / "8.txt").write_text("0\n")
+            (scan / "townmap-sectors.tsv").write_text("map\ttownmap\tsectors\tmin_x\tmin_y\tmax_x\tmax_y\ninner\t7\t1\t1\t1\t1\t1\n")
+            table = scan / "towns.tsv"
+            tr.cmd_towns(type("A", (), {"scan": str(scan), "module": "Arcanum", "out": str(table)})())
+            rows = {r["name"]: r for r in tr.read_tsv(table)}
+            self.assertEqual((rows["Inner Room"]["map"], rows["Inner Room"]["kind"], rows["Inner Room"]["status"]), ("inner", "whole", "render"))
+            self.assertEqual(rows["Inner Room"]["origin_sector"], "1,1")
+            self.assertEqual(rows["Lost"]["status"], "no-map")                  # no sector carries its number: listed, never rendered
+            out = scan / "town"
+            out.mkdir()
+            (out / "render.json").write_text('{"stitch_seconds": 2.5, "bytes": 99, "against_original_0.25": {"mean_error": 1.5, "worst_64x64_windows": [{"mean_error": 3.0}]}}')
+            (out / "capture.json").write_text('{"windows": 1, "shots": 2, "seconds": 20.0}')
+            result = tr.town_result(out, rows["Inner Room"], "pass")
+            self.assertEqual((result["capture_s"], result["worst_window"], result["bytes"], result["result"]), (20.0, 3.0, 99, "pass"))
+
+    def test_a_failed_run_keeps_no_numbers_of_an_earlier_run_and_a_town_without_a_checked_window_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "render.json").write_text('{"stitch_seconds": 2.5, "bytes": 99, "against_original_0.25": {"mean_error": 1.5, "windows_checked": 0, "worst_64x64_windows": [{"mean_error": 0.0}]}}')
+            (out / "capture.json").write_text('{"windows": 1, "shots": 2, "seconds": 20.0}')
+            town = {"module": "Arcanum", "number": "7", "name": "Tiny", "map": "m", "kind": "whole", "tiles": "2"}
+            failed = tr.town_result(out, town, "capture-error: boom")
+            self.assertEqual((failed["bytes"], failed["capture_s"], failed["mean_error"]), ("", "", ""))
+            passed = tr.town_result(out, town, "pass")
+            self.assertEqual(passed["worst_window"], "")
+            self.assertIn("no 64 x 64 window", passed["classification"])
+
+    def test_all_resumes_a_town_with_its_plan_and_refuses_a_number_that_is_not_in_the_table(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            towns = Path(tmp) / "towns.tsv"
+            header = "\t".join(tr.TOWN_COLUMNS)
+            towns.write_text(header + "\n" + "\t".join(["Arcanum", "7", "Tiny", "2", "5120x2560", "m", "whole", "1,1", "", "", "1", "1", "1", "render", ""]) + "\n")
+            args = type("A", (), {"towns": str(towns), "scan": "s", "originals": tmp, "out": str(root), "only": None, "redo": False, "stitch_only": False})()
+            out = root / "007-tiny"
+            out.mkdir(parents=True)
+            (out / "plan.json").write_text("{}")                          # an earlier plan: kept, so the captures it holds are kept too
+            with mock.patch.object(tr, "cmd_plan") as plan, mock.patch.object(tr, "cmd_capture") as capture, mock.patch.object(tr, "cmd_stitch"):
+                tr.cmd_all(args)
+            plan.assert_not_called(); capture.assert_called_once()
+            rows = tr.read_tsv(root / "results.tsv")
+            self.assertEqual([(r["module"], r["number"], r["result"]) for r in rows], [("Arcanum", "7", "pass")])
+            args.only = "99"
+            with self.assertRaises(SystemExit):
+                tr.cmd_all(args)
+
 
 if __name__ == "__main__":
     unittest.main()

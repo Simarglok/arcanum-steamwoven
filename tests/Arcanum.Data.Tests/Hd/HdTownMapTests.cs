@@ -70,6 +70,14 @@ public sealed class HdTownMapTests
         Assert.AreNotEqual(HdTownMapKey.Key("townmap/hum1/hum1000001.bmp"), HdMapKey.Key("worldmap/hum1.bmp"));
         Assert.AreEqual(0, HdTownMapKey.Key("townmap/ashbury/ashbury000001.bmp").View);
         Assert.AreEqual("ashbury-crematorium---lev-1", HdTownMapKey.FileTown("ashbury crematorium - lev 1"));
+        // ARC-RENDER-3107: a name that would make the pack file name longer than a path segment keeps 26 characters and a hash of the whole name, so two long names stay apart
+        var longA = HdTownMapKey.FileTown("void-kerghans castle lev final chamber");
+        var longB = HdTownMapKey.FileTown("void-kerghans castle lev final chamber 2");
+        Assert.AreEqual(HdTownMapKey.MaxFileTown, longA.Length);
+        StringAssert.StartsWith(longA, "void-kerghans-castle-lev-f-");
+        Assert.AreNotEqual(longA, longB);
+        Assert.AreEqual(33, HdTownMapKey.FileTown(new string('a', 33)).Length);
+        Assert.AreEqual(33, HdTownMapKey.FileTown(new string('a', 34)).Length);
         Assert.ThrowsExactly<ArgumentException>(() => HdTownMapKey.Query("townmap/ashbury/ashbury000001.bmp", 250, 250, new byte[250 * 250 * 4]));
     }
 

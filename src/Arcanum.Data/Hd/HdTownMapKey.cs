@@ -60,7 +60,15 @@ public static class HdTownMapKey
     }
 
     /// <summary>The town part of a pack file name for a tile: the town with every character outside <c>[a-z0-9_-]</c> turned into <c>-</c> (the pack's path segments).</summary>
-    public static string FileTown(string town) => new([.. town.Select(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-' ? c : '-')]);
+    public static string FileTown(string town)
+    {
+        var mapped = new string([.. town.Select(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-' ? c : '-')]);
+        // ARC-RENDER-3107: a pack path segment is at most 64 characters and the file name adds 31 (`townmap-`, the index, `-f0-`, 8 hex, `.png`): a longer town keeps its first 26 characters and 6 hex of the SHA-256 of its name.
+        return mapped.Length <= MaxFileTown ? mapped : mapped[..(MaxFileTown - 7)] + "-" + HdPackPath.Sha256(Encoding.ASCII.GetBytes(town))[..6];
+    }
+
+    /// <summary>The longest town part of a pack file name (ARC-RENDER-3107).</summary>
+    public const int MaxFileTown = 33;
 
     /// <summary>SHA-256 (lowercase hex) of the path as ASCII bytes: the entry's <see cref="HdPackEntry.NameSha256"/> (a path with a non-ASCII character is not acceptable, so ASCII is exact).</summary>
     public static string NameSha256(string path) => HdPackPath.Sha256(Encoding.ASCII.GetBytes(path));
