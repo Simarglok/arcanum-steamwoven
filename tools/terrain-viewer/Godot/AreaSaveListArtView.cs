@@ -129,14 +129,16 @@ public partial class AreaSaveListArtView : Control
         Visible = false;
         (_hovered, _pressed, _preview, _portrait, _info) = (null, null, null, null, null);
         ReleaseKit();
+        _ownBackdropDrawn = [];
     }
 
-    /// <summary>ARC-UI-3038 (SWI-RUN-5): the screen is closed or draws its own art: the body part is no longer held, so it goes with the screen.</summary>
-    private void ReleaseKit()
+    /// <summary>ARC-UI-3038 (SWI-RUN-5): the screen is closed or draws its own art: the body part is no longer held, so it goes with the screen. <paramref name="loaded"/> is the set a failed composition had already loaded parts of
+    /// (a part that did not load after the body did leaves the body unowned unless it is released here).</summary>
+    private void ReleaseKit(SteamwovenKitSet? loaded = null)
     {
         _kitScreen = null;
         _kitSampled.Clear();
-        if (_kitHeld is { } held) SteamwovenKitStore.Retain(KitOwner, held, []);
+        if ((loaded ?? _kitHeld) is { } held) SteamwovenKitStore.Retain(KitOwner, held, []);
         _kitHeld = null;
     }
 
@@ -153,11 +155,13 @@ public partial class AreaSaveListArtView : Control
         var loaded = new List<(Texture2D, SteamwovenKitDraw)>(3);
         foreach (var draw in composed.Draws)
         {
-            if (SteamwovenKitStore.Texture(set, draw.PartId) is not { } texture) { ReleaseKit(); return null; }
+            if (SteamwovenKitStore.Texture(set, draw.PartId) is not { } texture) { ReleaseKit(set); return null; }
             loaded.Add((texture, draw));
         }
         SteamwovenKitStore.Retain(KitOwner, set, [composed.Body.PartId]);
         _kitHeld = set;
+        // The sampled copies follow the textures drawn now (a rebaked set or another step gives new ones).
+        foreach (var stale in _kitSampled.Keys.Where(key => loaded.All(item => !ReferenceEquals(item.Item1, key))).ToList()) _kitSampled.Remove(stale);
         return loaded;
     }
 

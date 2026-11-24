@@ -449,6 +449,7 @@ public sealed class SteamwovenKitTests
     public void A_two_strip_screen_is_the_top_strip_the_body_and_the_bottom_strip_tiling_the_plate_with_the_body_exactly_its_400_units(int width, int height, SteamwovenStep step)
     {
         var plan = Screen(width, height);
+        Assert.AreEqual(step, plan.Layout.Step, "the set is the step the plan picks for this size");
         var set = Full(step);
         var composed = SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.SaveLoad);
         Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
@@ -497,6 +498,8 @@ public sealed class SteamwovenKitTests
         var narrow = SteamwovenKitComposer.Screen(plan, Set(1000, 720), SteamwovenKitScreen.SaveLoad);
         Assert.IsFalse(narrow.Complete);
         Assert.IsTrue(narrow.Missing.Single().Contains("board.charcreatetopbar") && narrow.Missing.Single().Contains("not 2880 px wide"));
+        var narrowBottom = SteamwovenKitComposer.Screen(plan, SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("board.charcreatetopbar", 1440, 75), new("board.charcreatebottombar", 700, 285), new("backdrop.saveloadbackground", 1440, 720)]), SteamwovenKitScreen.SaveLoad);
+        Assert.IsTrue(!narrowBottom.Complete && narrowBottom.Missing.Single().Contains("board.charcreatebottombar") && narrowBottom.Missing.Single().Contains("not 2880 px wide"));
         var low = SteamwovenKitComposer.Screen(plan, Set(1440, 700), SteamwovenKitScreen.SaveLoad);
         Assert.IsFalse(low.Complete);
         Assert.IsTrue(low.Missing.Single().Contains("backdrop.saveloadbackground") && low.Missing.Single().Contains("wrong size"));

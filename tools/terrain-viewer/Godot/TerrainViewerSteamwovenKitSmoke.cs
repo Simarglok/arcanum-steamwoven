@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-UI-3038 (census M05, M06; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the save window's column pass, <c>SaveListColumnForSmoke</c>): the real save or load window over the synthetic kit's three parts. At each size the view draws the composer's
     /// plan (the top strip, the body and the bottom strip tiling the plate, the body sampled nearest exactly where its draw is exact), none of the original's arts 336, 335 and 745, the preview's black stand-in, and the pixels read back are the kit's
-    /// colours in each of the three rows and across both seams. With <paramref name="firstSize"/> it also checks the fallback (a set without the body gives the screen's own three arts whole and no resident backdrop; the kit is back when the set is)
+    /// colours in each of the three rows and across both seams. With <paramref name="firstSize"/> it also checks the fallback (a set whose bottom strip does not load, after the body did, gives the screen's own three arts whole and no resident backdrop; the kit is back when the set is)
     /// and the HD option off (no kit at all); the body part goes with the screen (SWI-RUN-5) at the caller's close.
     /// </summary>
     private async Task CheckKitSaveScreenAsync(string tag, SteamwovenFullScreenPlan plan, AreaSaveListArtView art, bool firstSize, string kitRoot, Func<int, Task> frames, Action<bool, string> require)
@@ -116,23 +116,26 @@ public partial class TerrainViewerApp
             require(message.R8 + message.G8 + message.B8 < 12, $"[{tag}] the bottom strip's message box is a black field (got {message})");
         }
         if (!firstSize) return;
-        // Fallback: a set without the body part gives the screen's own arts whole (strips and background), and nothing of the kit stays resident; the same set with the body is the kit again.
-        var without = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-save-without-").FullName;
+        // Fallback: a set whose bottom strip file is another size than its manifest says (the body loads first, then the strip does not) gives the screen's own arts whole, and the body stays resident with no owner (SWI-RUN-5);
+        // the same set whole is the kit again.
+        var broken = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-save-broken-").FullName;
         try
         {
-            WriteSyntheticKitSet(without, plan.Layout.Step, "backdrop.saveloadbackground");
-            SteamwovenKitStore.UseRoot(without);
+            WriteSyntheticKitSet(broken, plan.Layout.Step);
+            using (var wrong = Image.CreateEmpty(10, 10, false, Image.Format.Rgba8))
+                require(wrong.SavePng(System.IO.Path.Combine(broken, SteamwovenKitSet.FolderName(plan.Layout.Step), "board.charcreatebottombar.png")) == Error.Ok, $"[{tag}] the broken strip file written");
+            SteamwovenKitStore.UseRoot(broken);
             art.QueueRedraw();
             await frames(3);
             var ownArts = new[] { AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt }.Where(number => art.TexturesForSelfTest.ContainsKey(number)).ToArray();
             require(art.KitScreenForSelfTest is null && art.OwnBackdropDrawnForSelfTest.SequenceEqual(ownArts) && ownArts.Length > 0,
-                $"[{tag}] a set without the body: the screen draws its own arts whole (kit {(art.KitScreenForSelfTest is null ? "none" : "drawn")}, own {string.Join(",", art.OwnBackdropDrawnForSelfTest)} of {string.Join(",", ownArts)})");
-            require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] a set without the body leaves no kit backdrop resident");
+                $"[{tag}] a strip that does not load: the screen draws its own arts whole (kit {(art.KitScreenForSelfTest is null ? "none" : "drawn")}, own {string.Join(",", art.OwnBackdropDrawnForSelfTest)} of {string.Join(",", ownArts)})");
+            require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] a strip that does not load leaves no kit backdrop resident (the body was loaded first)");
         }
         finally
         {
             SteamwovenKitStore.UseRoot(kitRoot);
-            try { System.IO.Directory.Delete(without, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3038 kit smoke: temporary folder not removed: " + exception.Message); }
+            try { System.IO.Directory.Delete(broken, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3038 kit smoke: temporary folder not removed: " + exception.Message); }
         }
         art.QueueRedraw();
         await frames(3);
