@@ -42,6 +42,9 @@ public static class AreaSaveListArtLayout
     public static (int X, int Y, int Width, int Height) List { get; } = (42, WindowTop + 120, 145, 213);
     /// <summary>The preview's rectangle (0x5C46C0, the window's (281, 55, 468 × 300)) on the screen.</summary>
     public static (int X, int Y, int Width, int Height) Preview { get; } = (281, WindowTop + 55, 468, 300);
+    /// <summary>ARC-UI-3038: the message box in the middle of the bottom strip on the screen: the screen's black below the 47 rows the strip art draws there (the bottom strip's middle window, <see cref="BottomStripParts"/>); the panel writes the selected save's details
+    /// and the overwrite and delete questions on it (PROJECT), so over the kit's bottom strip it stands as a black field (<see cref="AreaKitStandIns"/>).</summary>
+    public static (int X, int Y, int Width, int Height) MessageBox { get; } = (200, BottomStripTop + 47, 400, BottomStripHeight - 47);
     /// <summary>The scroll bar's rectangle (0x5C4798, the window's (213, 111, 12 × 232)) and the rectangle its wheel acts on
     /// (0x64C274: the window's (34, 110, 195 × 232)) on the screen.</summary>
     public static (int X, int Y, int Width, int Height) ScrollBar { get; } = (213, WindowTop + 111, 12, 232);
