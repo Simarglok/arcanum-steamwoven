@@ -141,6 +141,7 @@ public sealed class SessionSpellCasterAiTests
         var cast = caster.CastByAi(Mage, 15, Hero);
         Assert.AreEqual(SpellCastAttemptOutcome.Refused, cast.Outcome);
         Assert.IsNull(cast.Run, "the perform's own check refused before any run");
+        Assert.AreEqual(Arcanum.Simulation.Magic.SpellInvocationRefusal.OutOfRange, cast.Refusal, "ARC-MAGIC-1835: the attempt names the check's refusal");
         Assert.AreEqual(0, owner.QuerySpellRuns().Count);
         Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByAi(Mage, 15, "oid:nobody").Outcome);
         Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByAi(Mage, 99, Hero).Outcome);

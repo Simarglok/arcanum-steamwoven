@@ -60,6 +60,7 @@ public partial class TerrainViewerApp
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalBodies = []; _lockpickPending = null; _lockpickTrying = false;
             if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
+            _areaPortals.UnlockScripts = PortalUnlockScript;
             _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroScript = HeroDoorScript, HeroNotice = HeroDoorNotice, OpenerScript = OpenerDoorScript };
             DisarmLockpicks();
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
@@ -130,7 +131,7 @@ public partial class TerrainViewerApp
     /// (goal 8), turns into the door goals 11 or 49 and 12 or 50 at its node 6, and starts the door's own run (goals 70 and 71, S7). The hero's open attempt, its 2 action points (<see cref="HeroDoorUse"/>) and the
     /// refusals are the goals' (<see cref="AreaDoorHost"/> reports them). Armed lockpicks (the skill, S12) keep the old intent: a pick in range now, or after a walk. Returns true when the click was on a portal.
     /// </summary>
-    private bool TryAreaPortalUse(Vector2 screen, bool alt = false)
+    private bool TryAreaPortalUse(Vector2 screen, bool alt = false, bool shift = false)
     {
         // Armed lockpicks go to this press: on a portal they pick its lock, elsewhere the pick is cancelled.
         // The press pops the item target mode (SA51: every outcome after the dead and unconscious test pops).
@@ -146,7 +147,7 @@ public partial class TerrainViewerApp
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it"); CancelAreaUseApproach("a use click replaced it");
         if (pick is null)
         {
-            var request = HeroRequests.Apply(new ObjectClickRequest(portal.Entity, Alt: alt && HeroInCombatMode));
+            var request = HeroRequests.Apply(new ObjectClickRequest(portal.Entity, Alt: alt && HeroInCombatMode, Shift: shift));
             _portalNotice = request.Click != HeroClickGoal.UseObject ? $"{PortalName(portal)}: the click does nothing here ({request.Click})"
                 : request.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: using, goal 38 started" : $"{PortalName(portal)}: the use was refused";
             GD.Print($"ARC-DEV-176 portal-click outcome={request.Outcome} goal={request.Click}");
@@ -155,7 +156,7 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-185 (MIG13 S12e): armed lockpicks on a door or window are the skill goal 33 with skill 14: the hero walks within range 1 (goal 8), turns, and the pick is made at the frame's next safe point (goal 67).
         // ARC-COMBAT-1777 (0x571CB0 → 0x4C9050): the better follower picks instead of the hero unless the option is off or Ctrl is held.
-        if (HandOverLockpick(portal.Entity, pick, PortalName(portal))) return true;
+        if (HandOverLockpick(portal.Entity, PortalName(portal))) return true;
         var lock_ = HeroRequests.Apply(new LockpickRequest(portal.Entity, pick));
         _portalNotice = lock_.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: picking the lock" : $"{PortalName(portal)}: the pick was refused";
         _lockpickTrying = lock_.Outcome == HeroRequestOutcome.Done;
@@ -166,6 +167,21 @@ public partial class TerrainViewerApp
 
     /// <summary>Goal 67's node asked for the pick: it is made at the next safe point.</summary>
     internal void HeroPickLockAsked(string target, string item) => _lockpickPending = (target, item);
+
+    /// <summary>
+    /// ARC-SCRIPT-2860 (TQ11, 0x4AEB70 → 0x441980 point 3): the portal's unlock script through the shown map's use-script host, the opener (the hero is "pc") the triggerer; its effects are applied as a use's are (awards, floats, the printed lines to the message window).
+    /// True when the script answered 0 (the open attempt refuses), false when it has none or answered "run default", null when the run did not finish (<see cref="AreaUseScriptHost.UnlockRefused"/>): the portal then keeps its old refusal.
+    /// </summary>
+    private bool? PortalUnlockScript(string entity, string opener)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return null;
+        var who = opener == AreaHeroRunsHost.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CompanionHomeMap(opener) ?? CurrentAreaMap, opener);
+        var ran = Awarded(host, host.RunUnlock(entity, who, session.Rules.Scripts));
+        if (ran.Run is not null)
+            GD.Print($"ARC-SCRIPT-2860 unlock-script entity={entity} opener={opener} outcome={ran.Outcome} run={ran.Run.Outcome} detail={ran.Detail}");
+        foreach (var line in ScriptLineEntries(ran.Printed)) PostMessage(line, "unlock script line");
+        return AreaUseScriptHost.UnlockRefused(ran);
+    }
 
     /// <summary>ARC-WORLD-1469, ARC-WORLD-1668 (TT18, TT7): the use node of goal 12 for an NPC or a companion opener (0x428A10 → 0x441980, the opener the triggerer and the extra object): the door's trap meets the opener first (it is the trap's triggerer),
     /// then the door's own use script runs (<see cref="DoorUseScriptStops"/>); true when the use stops and the opener's run ends.</summary>
@@ -225,7 +241,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-176: what the hero's door goals did, for the status line and the locked sound (the original makes no sound for a refusal, GT39; the viewer keeps the locked sound, the player's only feedback).</summary>
     private void HeroDoorNotice(AreaPortal portal, AreaPortalUse use)
     {
-        if (use is AreaPortalUse.Locked or AreaPortalUse.Jammed or AreaPortalUse.MagicallyHeld) PlayPortalSound(portal, OpenableSoundAction.Locked);
+        if (use is AreaPortalUse.Locked or AreaPortalUse.Jammed or AreaPortalUse.MagicallyHeld or AreaPortalUse.ScriptRefused) PlayPortalSound(portal, OpenableSoundAction.Locked);
         _portalNotice = $"{PortalName(portal)}: {use}";
         GD.Print($"ARC-WORLD-051 portal use entity={portal.Entity} result={use} goal={_areaDoors?.GoalOf(portal)}");
         RefreshAreaStatus();

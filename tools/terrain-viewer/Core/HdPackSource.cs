@@ -42,7 +42,7 @@ public sealed record HdPackAvailability(int Files, int Local, int Missing, int W
         return parts.Count == 0 ? "the pack has no files" : string.Join("; ", parts);
     }
 
-    /// <summary>Checks every manifest file, the recipe and the unlisted main-menu picture (when the folder has one).</summary>
+    /// <summary>Checks every manifest file and the recipe.</summary>
     public static HdPackAvailability Check(HdPack pack, IHdFileProbe probe)
     {
         ArgumentNullException.ThrowIfNull(pack);
@@ -62,9 +62,6 @@ public sealed record HdPackAvailability(int Files, int Local, int Missing, int W
         }
         foreach (var entry in pack.Entries) Count(probe.Probe(HdPackFiles.Full(pack.Directory, entry.File), entry.Bytes));
         Count(probe.Probe(HdPackFiles.Full(pack.Directory, pack.RecipeFile), -1));
-        // The menu picture is outside the manifest: it only counts when the folder has it (or a placeholder of it).
-        var menu = probe.Probe(HdPackFiles.Full(pack.Directory, "main-menu-16x9.png"), -1);
-        if (menu != HdFileState.Missing) Count(menu);
         return new(files, local, missing, wrong, online, unverified);
     }
 }

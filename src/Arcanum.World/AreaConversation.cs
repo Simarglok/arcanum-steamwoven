@@ -60,6 +60,14 @@ public enum AreaConversationStartStatus
     DialogRefused,
 }
 
+/// <summary>
+/// ARC-AI-1640: a line the host floated over a speaker (a follower comment or an order line) with the voice the original starts with it (0x568540 → 0x5688D0).
+/// </summary>
+/// <param name="Text">The floated text.</param>
+/// <param name="Voice">The voice identity (the override record's, see <see cref="AreaGreeting.OverrideVoice"/>), or -1 for a line without a voice (the viewer then leaves a playing voice alone).</param>
+/// <param name="ListenerGender">The gender of the line's listener, whose stat 26 picks the voice file (0x5688D0: a female voice first, the male file when it is missing); null when the line has no listener.</param>
+public sealed record AreaSaidLine(string Text, int Voice, DialogPcGender? ListenerGender);
+
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
 /// <see cref="SessionDialogPartyPort.LastRefusal"/> names a refused JO/UW), else null.</param>
 /// <param name="Document">ARC-UI-043: the DLG the conversation runs on (its NPC lines' condition fields name their voices).</param>
@@ -75,9 +83,7 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
     public int VoiceIdentity(DialogNpcLine? line) => line?.Origin switch
     {
         // ARC-WORLD-058: an override line speaks with its own record's voice (0x418870); generated and reputation lines have none.
-        { Kind: DialogLineOriginKind.Override } origin => Greeting?.Overrides is { } overrides && Greeting.OverrideScriptNumber is { } script
-            && overrides.TryGetRecord(origin.Number, out var own) && own is not null
-            ? SoundCatalog.SpeechIdentity(script, SoundCatalog.SpeechConditionField(own.Condition.Bytes)) : -1,
+        { Kind: DialogLineOriginKind.Override } origin => Greeting?.OverrideVoice(origin) ?? -1,
         not null => -1,
         _ => Document is null || line is null || !Document.TryGetRecord(line.Node.Value, out var record) || record is null ? -1
             : SoundCatalog.SpeechIdentity(DialogScript, SoundCatalog.SpeechConditionField(record.Condition.Bytes)),
@@ -261,6 +267,7 @@ public sealed class AreaConversationHost
         host.Scripts.HeroTeleportRefusal = Scripts.HeroTeleportRefusal;
         host.Scripts.RequestHeroTeleport = Scripts.RequestHeroTeleport;
         host.GoldKindSource = GoldKindSource;
+        host.NpcName = NpcName;
         host.HeroAttack = HeroAttack;
         host.SpreadOutStart = SpreadOutStart;
         host.HeroAttackAvailable = HeroAttackAvailable;
@@ -278,6 +285,14 @@ public sealed class AreaConversationHost
     public bool InventoryWired => _inventory is not null;
 
     public AreaConversationProfile Profile { get; }
+
+    /// <summary>ARC-SCRIPT-2787: where a speaker's shown name comes from for <c>@npcname@</c> (<see cref="AreaDialogNames.NpcNameSource"/>); null: the profile's
+    /// placeholder (tests). It also serves the host's script host (a printed line a dialog script floats).</summary>
+    public Func<AreaObjectRecord, string?>? NpcName { get => _npcName; set { _npcName = value; Scripts.NpcName = value; } }
+    private Func<AreaObjectRecord, string?>? _npcName;
+
+    /// <summary>ARC-SCRIPT-2787 (ledger NM1–NM5): the names a line of <paramref name="speaker"/> prints: the hero's player name and the speaker's shown name.</summary>
+    internal DialogSpeakerNames NamesFor(AreaSpeaker speaker) => AreaDialogNames.For(_session, Profile.Names, AreaDialogNames.NpcName(_npcName, speaker.Row));
     /// <summary>The map's dialog NPCs in object order, then the companions carried here (<see cref="AdmitVisitor"/>): a speaker's index is its
     /// position, and means something only in this host (its dialog state is indexed by it).</summary>
     public IReadOnlyList<AreaSpeaker> Speakers => _speakers;
@@ -379,11 +394,12 @@ public sealed class AreaConversationHost
     /// ARC-WORLD-039: runs a deferred SCR call the session's event pass hands over (<see cref="ISessionScriptWorld.RunScriptCall"/>)
     /// through the SCR dispatcher with this area's script host and the session's current rules, and applies its effects.
     /// False, with the reason, when the content is missing or changed, the run is refused, the session refuses an effect,
-    /// or the run would start a conversation (the viewer opens talks only on the player's request; nothing is applied).
+    /// or the run starts a conversation with an object that is no dialog NPC of this host (nothing is applied); a conversation it starts is <see cref="LastCallDialog"/> (ARC-WORLD-2358).
     /// </summary>
     public bool RunCall(SessionScriptCall call, out string detail)
     {
         ArgumentNullException.ThrowIfNull(call);
+        LastCallDialog = null;
         if (_content is null) { detail = _contentDetail; return false; }
         if (!_content.VerifySeen()) { detail = "a script or dialog file changed since it was first read"; return false; }
         var result = ScrDispatcher.RunCall(new(call.Script, call.Line, Scripts.Local(call.Triggerer), Scripts.Local(call.Attachee)), Scripts,
@@ -396,11 +412,30 @@ public sealed class AreaConversationHost
             return false;
         }
         if (result.Stop == ScrStop.NotModelled) { detail = $"script {call.Script}: NotModelled (a question the host cannot answer: get area on the start map GA3, or the vitals of an object it does not know VT1, VT2)"; return false; }
-        if (result.Effects.Dialog is not null) { detail = $"script {call.Script}: a call that starts a conversation is not run by the viewer"; return false; }
-        if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
-        detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}";
+        // ARC-WORLD-2358 (ledger TT20): the dialog action opens the dialog inside the run (0x567460) and ends it, so the conversation is the run's last effect. It goes to an NPC of this host (a speaker of the shown map or a carried companion) or the run
+        // is left unapplied whole, as a tile script's is (AreaUseScriptHost); the caller opens it after the run applied (LastCallDialog), with the speaker rules of any scripted talk start.
+        if (result.Effects.Dialog is { } dialog)
+        {
+            if (dialog.Npc is not { } talker || !Speakers.Any(speaker => AreaConversationState.EntityId(speaker.Row) == talker.Code))
+            { detail = $"script {call.Script}: a conversation of script {dialog.Script} with {dialog.Npc?.Code ?? "no NPC"}, which is no dialog NPC here, is not modelled"; return false; }
+        }
+        // ARC-WORLD-2382: the dialog action stores the run's changed flags or counters into the speaker's use slot (0x447282, point 1); Apply writes it through the shown map's use host, and refuses the run whole where that host cannot place it.
+        if (!Scripts.Apply(result.Effects))
+        {
+            detail = result.Effects.Dialog is not null && result.Effects.Writeback is { Point: ScrPoint.Use }
+                ? $"script {call.Script} {result.Stop}: the session refused its effects (the speaker's use-slot write needs the shown map's use host and an object of it with a use slot)"
+                : $"script {call.Script} {result.Stop}: the session refused its effects";
+            return false;
+        }
+        // The speaker destroyed by this very run has no view to talk in (ARC-SCRIPT-052 for a tile run): the run stands, the conversation is not offered.
+        LastCallDialog = result.Effects.Dialog is { Npc: { } speaking } start
+            && !result.Effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Destroy && r.Object == speaking) ? start : null;
+        detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}" + (LastCallDialog is { } offered ? $": conversation of script {offered.Script} node {offered.Node}" : "");
         return true;
     }
+
+    /// <summary>ARC-WORLD-2358: the conversation the last applied <see cref="RunCall"/> started with its dialog action (null when it started none); the caller opens it as a scripted talk start (the viewer's <c>BeginScriptedConversation</c>).</summary>
+    public ScrDialogStart? LastCallDialog { get; private set; }
 
     /// <summary>
     /// ARC-WORLD-043: closes the reaction conversation slot a started conversation opened (the original's dialog end, 0x413280,
@@ -488,6 +523,17 @@ public sealed class AreaConversationHost
             if (loaded.Status == AreaConversationStartStatus.SourceChanged) return new(loaded.Status, null, speaker, loaded.Detail);
         }
         token.ThrowIfCancellationRequested();
+        // ARC-SCRIPT-2760 (0x447220 case 4 -> 0x567460, ledger X11): the dialog action's attachee is the NPC the conversation opens with, which is the NPC whose script ran the action. A resumed
+        // script that called another NPC's dialog point (Virgil's whisper at the Crash Site: the agent's 1714 calls Virgil's point 9) opens with that NPC, not with the one whose conversation just
+        // closed; the resume that follows then runs the new speaker's slot. A named attachee that is no speaker of this host leaves the run unapplied whole (as RunCall's), none keeps the caller's.
+        var talker = speaker;
+        if (result.Effects.Dialog is { Npc: { } named })
+        {
+            if (named.Code == AreaConversationState.EntityId(speaker.Row)) talker = speaker;
+            else if (Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == named.Code) is not { } found)
+                return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {result.Script}: a conversation of script {result.Effects.Dialog.Script} with {named.Code}, which is no dialog NPC of this host, is not modelled");
+            else talker = found;
+        }
         if (!Scripts.Apply(result.Effects))
             return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
         if (result.Effects.Dialog is not { } dialog)
@@ -498,9 +544,11 @@ public sealed class AreaConversationHost
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         // ARC-SCRIPT-1598 (X11, SU11): the dialog action stores the slot and then calls the start (0x567460), which refuses a dead or unconscious PC and an NPC that cannot speak (a damage action of the same run may have
         // killed either): silent, the run's earlier effects stay.
-        if (startRefused?.Invoke(speaker) == true) return new(AreaConversationStartStatus.DialogStartRefused, null, speaker, $"script {result.Script}: the dialog start refused after the run's effects");
-        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
-        return Open(speaker, dialog, loaded.Document!);
+        if (startRefused?.Invoke(talker) == true) return new(AreaConversationStartStatus.DialogStartRefused, null, talker, $"script {result.Script}: the dialog start refused after the run's effects");
+        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, talker, loaded.Detail);
+        // The new speaker's local flags and counters (its dialog slot, as the run's call left them) are the ones the DLG's LF and LC read.
+        if (!ReferenceEquals(talker, speaker)) State.Bind(talker.Index, AreaScriptHost.LoadedSlot(talker)?.LocalFlags ?? 0, AreaScriptHost.LoadedSlot(talker)?.Counters ?? 0);
+        return Open(talker, dialog, loaded.Document!);
     }
 
     // ARC-DEV-324 (B24, GT219): a talk request whose dialog point ran default shows the generic greeting: the greeting builder's line over the NPC as a floating line (0x57CC70
@@ -518,7 +566,7 @@ public sealed class AreaConversationHost
         {
             var greeting = Greeting(speaker);
             if (greeting is null) return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + " (the generic greeting's texts did not load: nothing said)");
-            said = DialogGenericGreeting.Say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant), Profile.Names,
+            said = DialogGenericGreeting.Say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant), NamesFor(speaker),
                 DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes);
         }
         // The greeting is a courtesy of the talk, not its gate: a texts, facts or session failure says nothing and never escapes the host (typed failure at the boundary).
@@ -535,15 +583,16 @@ public sealed class AreaConversationHost
     /// ARC-AI-1527 (FR-DIALOG-003, VB4-1, VB4-2, VB4-4): a follower's comment line (the combat taunt 0x413F50, the upset line 0x414370, the near-death line 0x414490): a random line of <paramref name="lines"/> of the plain NPC files,
     /// the speaker's own override line first (<see cref="DialogFollowerComment.Say"/>), floated over the speaker as a script's float line (<see cref="AreaScriptHost.TakeFloats"/>, the original's callback 0x5F8488). The
     /// text is read from the player's generated files and never stored. Returns the line said, or null when nothing was said (a speaker this host does not hold, texts that did not load, a range without an entry, a refused roll).
-    /// No voice is played. The can-speak test is the caller's. ARC-UI-2079 (ledger TB28): <paramref name="listener"/> is the object the speech display turns the speaker to (an entity code; the PC by default, as for a follower's comment;
+    /// The line's voice rides with it (<see cref="AreaSaidLine.Voice"/>, the override record's, else -1); the viewer plays it. The can-speak test is the caller's. ARC-UI-2079 (ledger TB28): <paramref name="listener"/> is the object the speech display turns the speaker to (an entity code; the PC by default, as for a follower's comment;
     /// null: none).
     /// </summary>
-    public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines, string? listener = AreaScriptHost.PcCode)
+    public AreaSaidLine? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines, string? listener = AreaScriptHost.PcCode)
     {
-        var text = SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
-            DialogConversationOptions.HardMaxTextBytes, null), ListenerFacts(listener));
-        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
-        return text;
+        var facts = ListenerFacts(listener);
+        var said = SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, NamesFor(speaker), DialogTextEncoding.Windows1252,
+            DialogConversationOptions.HardMaxTextBytes, null), facts, listener is null ? null : facts.Gender);
+        if (said is not null) Scripts.Float(Scripts.Object(speaker), said.Text, listener is null ? null : Scripts.Entity(listener));
+        return said;
     }
 
     /// <summary>
@@ -553,15 +602,15 @@ public sealed class AreaConversationHost
     /// did not load, a range without an entry, a refused roll). The line pick draws one random number of the session generator. ARC-UI-1765: <paramref name="price"/> fills the line's first <c>%d</c>.
     /// </summary>
     public string? PickLine(AreaSpeaker speaker, LoyaltyLines lines, int? price = null) =>
-        SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
-            DialogConversationOptions.HardMaxTextBytes, price));
+        SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, NamesFor(speaker), DialogTextEncoding.Windows1252,
+            DialogConversationOptions.HardMaxTextBytes, price))?.Text;
 
     /// <summary>
     /// ARC-UI-1765 (0x413910 → 0x418480): the speaker's class line of <paramref name="group"/> (the item identify and repair windows' "no money" line is group 2000), its own override line first
     /// (<see cref="DialogFollowerComment.SayClass"/>), not floated; same rules and failures as <see cref="PickLine"/>.
     /// </summary>
     public string? PickClassLine(AreaSpeaker speaker, int group) =>
-        SayLine(speaker, (greeting, query) => DialogFollowerComment.SayClass(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
+        SayLine(speaker, (greeting, query) => DialogFollowerComment.SayClass(greeting, query, group, NamesFor(speaker), DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes))?.Text;
 
     /// <summary>
     /// ARC-UI-2085: the speaker's race line of <paramref name="group"/> (the curse order's insult is group 1000, the builder 0x413D40 over the race generator), its own override line first (<see cref="DialogFollowerComment.SayRace"/>),
@@ -569,11 +618,13 @@ public sealed class AreaConversationHost
     /// a refused roll). The can-speak test is the caller's.
     /// </summary>
     [OriginalFunction(0x413D40, OriginalFunctionScope.Partial)]
-    public string? SayRaceLine(AreaSpeaker speaker, int group, string? listener = AreaScriptHost.PcCode)
+    public AreaSaidLine? SayRaceLine(AreaSpeaker speaker, int group, string? listener = AreaScriptHost.PcCode)
     {
-        var text = SayLine(speaker, (greeting, query) => DialogFollowerComment.SayRace(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
-        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
-        return text;
+        var facts = ListenerFacts(listener);
+        var said = SayLine(speaker, (greeting, query) => DialogFollowerComment.SayRace(greeting, query, group, NamesFor(speaker), DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes),
+            facts, listener is null ? null : facts.Gender);
+        if (said is not null) Scripts.Float(Scripts.Object(speaker), said.Text, listener is null ? null : Scripts.Entity(listener));
+        return said;
     }
 
     // ARC-AI-2114 (0x418780): the line's listener facts when the listener is an NPC speaker of this host (its gender and race, from its written fields), else the PC's.
@@ -587,23 +638,25 @@ public sealed class AreaConversationHost
         return listener is null || listener == AreaScriptHost.PcCode ? pc : AreaGreeting.ListenerFacts(fieldsOf(listener)) ?? pc;
     }
 
-    private string? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say, DialogPcFacts? listener = null)
+    private AreaSaidLine? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say, DialogPcFacts? listener = null, DialogPcGender? gender = null)
     {
         ArgumentNullException.ThrowIfNull(speaker);
         if (!Speakers.Contains(speaker)) return null;
         DialogGenericGreetingResult said;
+        var voice = -1;
         try
         {
             var greeting = Greeting(speaker, listener);
             if (greeting is null) return null;
             said = say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant));
+            voice = greeting.OverrideVoice(said.Origin);
         }
         // A comment is a courtesy of the fight, not its gate: a texts, facts or session failure says nothing and never escapes the host (typed failure at the boundary).
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return null;
         }
-        return said.Status == DialogGenericGreetingStatus.Said ? said.Text : null;
+        return said.Status == DialogGenericGreetingStatus.Said ? new AreaSaidLine(said.Text, voice, gender) : null;
     }
 
     /// <summary>
@@ -654,7 +707,7 @@ public sealed class AreaConversationHost
         _reactionOpen = speaker.Index;
         var greeting = Greeting(speaker);
         var conversation = DialogConversation.Start(document,
-            new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
+            new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, NamesFor(speaker)),
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
                 _session.QueryHero() is null ? null : new SessionDialogSkillPort(_session, AreaConversationState.PcParticipant), State,
@@ -1397,9 +1450,13 @@ public static class AreaConversationText
             _ when option.Text.Length > 0 => option.Text,
             _ => "[no reply qualifies: generated farewell; generic text not loaded]",
         };
-        var block = option.Block is { } blocked ? $"  (not supported here: {blocked.Kind}{Where(blocked.Source)})" : string.Empty;
-        return numbered ? $"{option.Number}. {text}{block}" : $"{text}{block}";
+        // ARC-UI-2791: the reply row is the reply's own text only; the reason a reply cannot run is BlockReason (log, tooltip), never part of the row.
+        return numbered ? $"{option.Number}. {text}" : text;
     }
+
+    /// <summary>ARC-UI-2791: why the runtime cannot run this reply (a project diagnostic for the log and the Steamwoven tooltip), or null when it runs.</summary>
+    public static string? BlockReason(DialogOption option) =>
+        option.Block is { } blocked ? $"not supported here: {blocked.Kind}{Where(blocked.Source)}" : null;
 
     /// <summary>ARC-UI-2028 (ledger DF1–DF3): the dialog ended with the NPC's last line (a final line, the last words after an insult, a refusal to talk on): the original says it as a
     /// bubble and closes the dialog at once, so no window shows it.</summary>

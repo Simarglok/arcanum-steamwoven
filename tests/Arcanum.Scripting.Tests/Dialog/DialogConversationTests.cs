@@ -452,6 +452,96 @@ public sealed class DialogConversationTests
     }
 
     [TestMethod]
+    public void Final_line_to_a_node_missing_from_the_dialog_stays_offered_and_ends_with_a_blank_line()
+    {
+        // ARC-SCRIPT-2790 (0x415BA0 case 3, 0x413A30, 0x416840, 0x416AB0): the lookup of the node fails, no error: the line is a single space with no voice and the talk ends;
+        // the string's other operations still run. A node that is a Player record is used the same way (the test below).
+        var document = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: "20", action: "lf 3 1, fl 99") + Record("20", "unused"));
+        var ports = new Ports();
+        var conversation = Start(document, ports, Owner(), world: new World());
+        Assert.IsNull(conversation.Options[0].Block);
+        Assert.AreEqual(DialogOptionTransition.FinalLine, conversation.Options[0].Transition);
+        Assert.IsNull(conversation.Options[0].Target);
+
+        Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options[0].Token).Status);
+        Assert.AreEqual(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null), conversation.End);
+        Assert.AreEqual(new DialogNpcLine(new DialogNodeId(99), string.Empty), conversation.NpcLine);
+        CollectionAssert.AreEqual(new[] { "LF:3:1:900" }, ports.Commands);
+    }
+
+    [TestMethod]
+    public void A_dialog_transfer_in_the_action_skips_the_response_record_of_the_reply()
+    {
+        // ARC-SCRIPT-2807 (ledger FLM3, 0x413130): the response transition after a JO/UW/FL/ET is skipped, so a response number that names no record (99) or a Player record (11)
+        // never fails the step for a reply whose action holds one. The plain reply with the same response still fails (MissingTarget above).
+        foreach (var response in new[] { "99", "11" })
+        {
+            // A final line to a node of the DLG, to a missing node, to a Player record.
+            foreach (var node in new[] { "40", "98", "31" })
+            {
+                var document = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: response, action: $"lf 3 1, fl {node}") + Record("20", "unused")
+                    + Record("30", "?") + Record("31", "Words.", iq: "2", response: "20") + Record("40", "Farewell, @pcname@."));
+                var ports = new Ports();
+                var conversation = Start(document, ports, Owner(), world: new World());
+                var label = $"response {response}, fl {node}";
+                Assert.IsNull(conversation.Failure, label);
+                Assert.IsNull(conversation.Options[0].Block, label);
+                Assert.AreEqual(DialogOptionTransition.FinalLine, conversation.Options[0].Transition, label);
+                Assert.AreEqual(node == "98" ? null : new DialogNodeId(int.Parse(node, System.Globalization.CultureInfo.InvariantCulture)), conversation.Options[0].Target, label);
+                Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options[0].Token).Status, label);
+                Assert.AreEqual(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null), conversation.End, label);
+                CollectionAssert.AreEqual(new[] { "LF:3:1:900" }, ports.Commands, label);
+            }
+        }
+
+        // A join (a node of the DLG) with a missing response is offered as a join; its own bad node is still the transfer's failure.
+        var join = Read(Record("10", "?") + Record("11", "Come.", iq: "1", response: "99", action: "jo 0 40") + Record("40", "Yes."));
+        Assert.AreEqual(DialogOptionTransition.Join, Start(join, new Ports(), Owner(), world: new World()).Options[0].Transition);
+        var badJoin = Read(Record("10", "?") + Record("11", "Come.", iq: "1", response: "99", action: "jo 0 98") + Record("40", "Yes."));
+        Assert.AreEqual(DialogOptionBlockKind.TargetInvalid, Start(badJoin, new Ports(), Owner(), world: new World()).Options[0].Block?.Kind);
+
+        // Without a transfer in the action the missing response still fails the step.
+        var plain = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: "99", action: "lf 3 1"));
+        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, Start(plain, new Ports(), Owner(), world: new World()).Failure!.Kind);
+    }
+
+    [TestMethod]
+    public void Final_line_to_a_player_record_shows_its_text_runs_its_action_and_ends_the_talk()
+    {
+        // ARC-SCRIPT-2804 (ledger FLM2; 0x416AB0 tests existence only, 0x416840 reads the record in the NPC layout): record 31 is a Player record (IQ 2), used as the final line:
+        // its text is the NPC's line, its action runs after the reply's, and the talk ends. A female PC gets the same text (its gender slot holds a number, not text).
+        foreach (var gender in new[] { DialogPcGender.Male, DialogPcGender.Female })
+        {
+            var document = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: "20", action: "lf 3 1, fl 31") + Record("20", "unused")
+                + Record("30", "?") + Record("31", "Farewell, @pcname@.", iq: "2", response: "20", action: "lf 4 1"));
+            var ports = new Ports();
+            var conversation = Start(document, ports, Owner(), gender: gender, world: new World());
+            Assert.IsNull(conversation.Options[0].Block, gender.ToString());
+            Assert.AreEqual(DialogOptionTransition.FinalLine, conversation.Options[0].Transition, gender.ToString());
+            Assert.AreEqual(new DialogNodeId(31), conversation.Options[0].Target, gender.ToString());
+
+            Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options[0].Token).Status, gender.ToString());
+            Assert.AreEqual(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null), conversation.End, gender.ToString());
+            Assert.AreEqual(new DialogNpcLine(new DialogNodeId(31), "Farewell, Ada."), conversation.NpcLine, gender.ToString());
+            CollectionAssert.AreEqual(new[] { "LF:3:1:900", "LF:4:1:900" }, ports.Commands, gender.ToString());
+        }
+
+        // The Player record's own action must be one an NPC line runs: a dialog transfer inside it (jo, fl) is outside the subset, so the reply stays refused (4 installed replies, #2981).
+        foreach (var inner in new[] { "fl 31", "jo 0 20" })
+        {
+            var refused = Read(Record("10", "?") + Record("11", "Bye.", iq: "1", response: "20", action: "fl 31") + Record("20", "unused")
+                + Record("30", "?") + Record("31", "Words.", iq: "2", response: "20", action: inner));
+            var blocked = Start(refused, new Ports(), Owner(), world: new World());
+            Assert.AreEqual(DialogOptionBlockKind.TargetUnsupported, blocked.Options[0].Block?.Kind, inner);
+        }
+
+        // A join still needs an NPC node (only the final line takes any record).
+        var join = Start(Read(Record("10", "?") + Record("11", "Go.", iq: "1", response: "20", action: "jo 0 31") + Record("20", "unused") + Record("30", "?") + Record("31", "Words.", iq: "2", response: "20")),
+            new Ports(), Owner(), world: new World());
+        Assert.AreEqual(DialogOptionBlockKind.TargetInvalid, join.Options[0].Block?.Kind);
+    }
+
+    [TestMethod]
     public void Unadmitted_world_forms_are_blocked_or_invalid()
     {
         foreach (var (action, kind) in new[]
@@ -463,8 +553,7 @@ public sealed class DialogConversationTests
             ("IN 801", DialogOptionBlockKind.UnsupportedOperation),
             ("IN 0", DialogOptionBlockKind.UnsupportedOperation),
             ("JO 2 30", DialogOptionBlockKind.UnsupportedOperation),
-            ("FL 11", DialogOptionBlockKind.TargetInvalid),
-            ("FL 99", DialogOptionBlockKind.TargetInvalid),
+            ("FL 11", DialogOptionBlockKind.TargetUnsupported), // the Player record itself: its own action "FL 11" is a transfer, which an NPC line does not run (#2804)
             ("MM -1", DialogOptionBlockKind.InvalidOperation),
             ("FL 0", DialogOptionBlockKind.InvalidOperation),
             ("JO 0,30", DialogOptionBlockKind.UnsupportedOperation),

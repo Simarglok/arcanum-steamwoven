@@ -30,6 +30,9 @@ public partial class TerrainViewerApp
     private readonly Dictionary<(AreaEntryIdentity Entry, int Palette, int Animation, int Weapon, int Shield), AreaBodyArmedLoad> _armedArts = [];
     private int _npcAttackDraws, _npcArmedStandDraws, _npcArmedWalkDraws;
     private readonly HashSet<AreaFrameKey> _npcAttackFrames = [];
+    // ARC-COMBAT-2769: the attack frames drawn per entity (smoke observation), and the companions that stood turned to a target (one that never walked keeps that facing after the swing, not its map art's).
+    private readonly Dictionary<string, HashSet<AreaFrameKey>> _npcAttackFramesOf = [];
+    private readonly HashSet<AreaObjectKey> _swungCompanions = [];
     // ARC-RENDER-038: what the last AI mover drawing showed armed (a weapon shown or put away is drawn once).
     private long _aiArmedDrawn;
 
@@ -50,15 +53,19 @@ public partial class TerrainViewerApp
                 || !companion.Template.Visuals.TryGetValue(command.Visual, out var visual)) { drawn.Add(command); continue; }
             var state = DiagnosticGridActor.RenderState(companion.Grid.State);
             var companionGrid = companion.Grid;
-            // A companion that has not moved keeps the facing of its map art (as AnimateBody keeps its T0 frame).
+            // A companion that has not moved keeps the facing of its map art (as AnimateBody keeps its T0 frame); one swinging at a target stands turned to it (the host's FaceTo, ARC-COMBAT-2769).
+            // ARC-COMBAT-2769: a companion's attack animation plays like an NPC's (the AI host's play for the entity), not only its armed stand.
+            // The host's attack plays run on its own clock (the frame step's world milliseconds), as the movers' do (AiMoverCommands).
+            var swinging = host?.AttackPose(companion.Entity, host.NowMs) is { Play.Art: not null };
+            if (swinging) _swungCompanions.Add(companion.Key);
             if (host is not null && state.Action == ActorDiagnosticAction.Idle
-                && ArmedBody(host, companion.Entity, companion.Speaker.Row, command, visual, companion.Cycle.Moved ? state.Facing : visual.NominalFacing, now, attacks: false) is { } armed)
+                && ArmedBody(host, companion.Entity, companion.Speaker.Row, command, visual, companion.Cycle.Moved || _swungCompanions.Contains(companion.Key) ? state.Facing : visual.NominalFacing, host.NowMs) is { } armed)
             {
                 companion.Cycle.Observe(state.Action, now); drawn.Add(armed); continue;
             }
             drawn.Add(AnimateBody(command, companion.Speaker.Row, visual, state.Action, state.Facing, now, companion.Cycle, keepT0Until: true,
                 gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, WorldCellCoord(companionGrid)),
-                walkArt: host is not null && state.Action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? ArmedWalk(host, companion.Entity, visual) : null));
+                walkArt: host is not null && state.Action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? ArmedWalk(host, companion.Entity, visual) : null));
         }
         return drawn.AsReadOnly();
     }
@@ -116,13 +123,13 @@ public partial class TerrainViewerApp
             // ARC-DEV-370: a created critter's visual is not in the map's own (TryBodyVisual).
             if (command.Identity is not { } key || _fallenBodies.ContainsKey(key) || host.Scene.Npcs.FirstOrDefault(n => n.Row.Key == key) is not { } npc
                 || host.Movers.Of(npc.Entity) is not { } mover || !TryBodyVisual(command.Visual, out var visual)) { drawn.Add(command); continue; }
-            var action = mover.Stepping(now) ? mover.Running ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk : ActorDiagnosticAction.Idle;
+            var action = mover.Stepping(now) ? mover.Running ? ActorDiagnosticAction.Run : mover.Sneaking ? ActorDiagnosticAction.Sneak : ActorDiagnosticAction.Walk : ActorDiagnosticAction.Idle;
             if (!_bodyCycles.TryGetValue(key, out var cycle)) _bodyCycles[key] = cycle = new AreaBodyCycle();
             var octant = DiagnosticGridActor.Octant(mover.Facing);
             if (action == ActorDiagnosticAction.Idle && ArmedBody(host, npc.Entity, npc.Row, command, visual, octant, now) is { } armed) { cycle.Observe(action, now); drawn.Add(armed); continue; }
             var cell = mover.Cell;
             drawn.Add(AnimateBody(command, npc.Row, visual, action, octant, now, cycle, keepT0Until: false, gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, cell),
-                walkArt: action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? ArmedWalk(host, npc.Entity, visual) : null));
+                walkArt: action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? ArmedWalk(host, npc.Entity, visual) : null));
         }
         return drawn.AsReadOnly();
     }
@@ -132,7 +139,9 @@ public partial class TerrainViewerApp
     private bool AiMoversAnimating(AreaAiHost host, long now)
     {
         // ARC-RENDER-038: an attack animation plays like a step; a weapon shown or put away (combat mode) is drawn once.
-        var stepping = host.Movers.All.Any(m => m.Stepping(now) || host.AttackPose(m.Entity, now) is { Play.Art: not null });
+        var stepping = host.Movers.All.Any(m => m.Stepping(now) || host.AttackPose(m.Entity, now) is { Play.Art: not null })
+            // ARC-COMBAT-2769: a companion's attack animation redraws it as well (it is no mover).
+            || _areaCompanions is { } swingers && swingers.Companions.Any(c => host.AttackPose(c.Entity, now) is { Play.Art: not null });
         var armed = host.Movers.All.Aggregate(17L, (hash, m) => hash * 31 + host.ShownWeapon(m.Entity).GetHashCode());
         // ARC-RENDER-1544: the re-wielded or armed NPCs that stand where the map puts them are drawn again when the weapon they show changes.
         armed = UnmovedArmedNpcs(host).Aggregate(armed, (hash, n) => hash * 31 + host.ShownWeapon(n.Entity).GetHashCode());
@@ -170,7 +179,7 @@ public partial class TerrainViewerApp
         {
             if (AreaBodyMoveArt.Pose(command, row, visual, read, octant, frame) is not { } posed) return null;
             ((AreaFrameOverlay)AreaFrames()).Add(posed.Pose.Key, posed.Pose.Frame);
-            if (attack) { _npcAttackDraws++; _npcAttackFrames.Add(posed.Pose.Key); } else _npcArmedStandDraws++;
+            if (attack) { _npcAttackDraws++; _npcAttackFrames.Add(posed.Pose.Key); if (!_npcAttackFramesOf.TryGetValue(entity, out var own)) _npcAttackFramesOf[entity] = own = []; own.Add(posed.Pose.Key); } else _npcArmedStandDraws++;
             return posed.Command;
         }
         catch (Exception error) when (error is Arcanum.Data.ArtException or ArgumentException or InvalidOperationException)
@@ -212,18 +221,25 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-RENDER-038: the AI host's attack ART of an NPC's body (<see cref="AreaAiScene.AttackArt"/>), or null when the shown
-    /// map's overlay does not hold its body or the ART does not read.</summary>
+    /// map's overlay does not hold its body or the ART does not read; <see cref="AreaAiAttackArt.NoFile"/> when no file exists.</summary>
     private AreaAiAttackArt? NpcAttackArt(AreaAiNpc npc, AreaAiAttackArtRequest wanted)
     {
         if (_readyArea is not { } area) return null;
         AreaFrames();
-        if (NpcT0Body(npc.Row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) return null;
+        AreaVisualRecord? visual = null;
+        if (NpcT0Body(npc.Row.Key) is { } command && TryBodyVisual(command.Visual, out var own)) visual = own;
+        // ARC-COMBAT-2769: a companion's body is its template's (a visitor of another home map has none among the shown map's), as the drawing reads it (AnimateCompanions).
+        else if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == npc.Entity) is { } companion
+            && companion.Template.Commands.FirstOrDefault(c => c.Identity == companion.Key) is { } body && companion.Template.Visuals.TryGetValue(body.Visual, out var templated)) visual = templated;
+        if (visual is null) return null;
         var load = ArmedArt(area, visual, npc.Entity, wanted.Animation, wanted.Weapon, wanted.Shield);
+        // ARC-COMBAT-1932: a file that exists nowhere (after the repair and the fallbacks) fails the attack's start; an unreadable one keeps the fixed timing.
+        if (load.Status == AreaBodyMoveStatus.ArtMissing) return AreaAiAttackArt.NoFile(wanted);
         return load.Art is { } art ? new(load.Animation, load.Weapon, load.Shield, art.FramesPerGroup, art.ActionFrame, art.FramesPerSecond) : null;
     }
 
     /// <summary>Drops the move ARTs and the NPCs' gait clocks with the frame overlay they were drawn into.</summary>
-    private void ResetBodyMoves() { _bodyMoves.Clear(); _bodyCycles.Clear(); _bodyWalkFrames.Clear(); _armedArts.Clear(); _npcAttackFrames.Clear(); }
+    private void ResetBodyMoves() { _bodyMoves.Clear(); _bodyCycles.Clear(); _bodyWalkFrames.Clear(); _armedArts.Clear(); _npcAttackFrames.Clear(); _npcAttackFramesOf.Clear(); _swungCompanions.Clear(); }
 
     // One body: its gait clock, then its pose (a companion that has not moved yet keeps its T0 frame and facing, as before it joined).
     private AreaDrawCommand AnimateBody(AreaDrawCommand command, AreaObjectRecord row, AreaVisualRecord visual, ActorDiagnosticAction action,
@@ -240,7 +256,7 @@ public partial class TerrainViewerApp
         }
         // ARC-RENDER-1485: the walk of the weapon the NPC shows (the move ARTs kept are the body's own).
         // A run the body has no ART for is drawn as its walk (MA1), so the armed walk too.
-        var drawnMoves = walkArt is not null && moves.Status == AreaBodyMoveStatus.Ready && (action == ActorDiagnosticAction.Walk || action == ActorDiagnosticAction.Run && moves.Run is null)
+        var drawnMoves = walkArt is not null && moves.Status == AreaBodyMoveStatus.Ready && (action == ActorDiagnosticAction.Walk || action == ActorDiagnosticAction.Run && moves.Run is null || action == ActorDiagnosticAction.Sneak && moves.Sneak is null)
             ? moves with { Walk = walkArt } : moves;
         // ARC-RENDER-1126 (0x4305D0): the walk or run frame the cycle is on, for the footsteps (frames 3 and 8).
         if (gait is not null && moves.Status == AreaBodyMoveStatus.Ready && drawnMoves.For(action) is { } gaitArt)

@@ -46,7 +46,7 @@ LABELS = ("bug", "type:dev", "status:ready")
 DEFAULT_AREA = "area:scene"
 # The first failing stage's area label: the first row whose word is in the stage name wins.
 AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("area:combat-magic-tech", ("cast", "spell", "turn-based", "knockdown", "ranged", "grenade", "tech", "shot", "burn", "magic", "combat")),
+    ("area:combat-magic-tech", ("cast", "spell", "turn-based", "knockdown", "ranged", "grenade", "tech", "shot", "burn", "magic", "combat", "blow")),
     ("area:items-economy", ("barter", "loot", "inv", "container", "junk", "pickpocket", "item", "disarm", "bed")),
     ("area:story-social-ai", ("ai", "npc", "premade", "opening", "follower", "companion", "dialog", "healer", "talk", "life")),
     ("area:world-travel-runtime", ("transfer", "worldmap", "travel", "roundtrip", "stream", "resident", "teleport", "saved-runs",
@@ -290,7 +290,7 @@ def main_smoke(*, root: Path, folder: Path, fetch: bool, force: bool, keep_work:
     playing = run_queue.playing_state()  # ARC-DEV-2272: the core smoke opens windows; --force does not override the owner
     if playing is not None and not dry_run:
         say(f"SKIP owner is playing ({run_queue.playing_text(playing)}): the smoke opens windows, so it was not run and nothing "
-            "is recorded (no green, no red); it runs when the mode has ended (./arcanum queue --not-playing)")
+            f"is recorded (no green, no red); it runs when the mode has ended ({run_queue.playing_hint(playing)})")
         return PASS
     if dry_run:
         say(f"dry run: would check out {sha[:10]} into a fresh worktree and run there (limit {SMOKE_MINUTES:g} minutes): "

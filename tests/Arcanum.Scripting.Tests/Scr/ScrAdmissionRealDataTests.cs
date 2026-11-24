@@ -113,6 +113,6 @@ public sealed class ScrAdmissionRealDataTests
         }
         Console.WriteLine($"scripts with 14 {conditions[14]}, 35 {conditions[35]}, 48 {conditions[48]}, 49 {conditions[49]}, action 112 {mastery}; S30 admits {s30}, S31 {s31}");
         Assert.AreEqual((22, 6, 16, 16, 2), (conditions[14], conditions[35], conditions[48], conditions[49], mastery));
-        Assert.AreEqual((1640, 1660), (s30, s31), "the spell conditions and the mastery action admit 20 more installed scripts whole");
+        Assert.AreEqual((1642, 1662), (s30, s31), "the spell conditions and the mastery action admit 20 more installed scripts whole (1642 and 1662 since ARC-SCRIPT-3005 admitted scripts 1537 and 1539, a literal goto beyond the end)");
     }
 }

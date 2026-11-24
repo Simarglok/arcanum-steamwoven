@@ -104,11 +104,9 @@ public partial class TerrainViewerApp
         var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog, WindowRecognition(host.Speakers[speaker].Row)) ?? "merchant";
         if (AreaBarterMerchant.From(entity, name, fields, data, session) is not { } merchant) return Refuse("the speaker is not an NPC");
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
-        // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).
-        var talker = host.Speakers[speaker];
+        // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it stands now (BT4, ARC-WORLD-2245: the live cell, as the talk reach's).
         if (substitute)
-            merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
-                new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
+            merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity), host.Speakers[speaker], SpeakerCell, data);
         var state = host.State;
         return (new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
             delta => session.AdjustReaction(session.Version, entity, state.NpcFacts(), state.PcFactsFor(speaker), delta).Disposition == GameSessionDisposition.Changed,
@@ -153,7 +151,7 @@ public partial class TerrainViewerApp
         _barter = barter;
         if (_barterPanel is null)
         {
-            _barterPanel = new AreaBarterPanel(); AddChild(_barterPanel);
+            _barterPanel = new AreaBarterPanel(); AddChild(_barterPanel); _barterPanel.DiagnosticSwitch = DebugMode;
             _barterPanel.CloseRequested += CloseBarterByPlayer;
             _barterPanel.SellRequested += SellToMerchant;
             _barterPanel.BuyRequested += BuyFromMerchant;
@@ -165,10 +163,13 @@ public partial class TerrainViewerApp
             _barterPanel.CycleRequested += BarterCycle;
             _barterPanel.SoundRequested += id => PlayInterfaceSound(id, "barter arrange button");
             _barterPanel.HolderView = InventoryHolderView;
+            _barterPanel.PortraitTextures = HolderPortraitTexture;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _barterMessage = null; _barterStatus = null; _barterSession = session; _barterInShop = shop;
+        // ARC-SCRIPT-2855: a line the merchant's container piles' insert-item scripts printed at the open is the window's first message.
+        if (opened.Messages.Count > 0) _barterMessage = string.Join(" ", opened.Messages.Select(message => message.Text.Trim()));
         // ARC-DEV-339: the arrange button's layout flag is cleared at every open (ledger IW37).
         _arrangeLayout = InventoryArrangeLayout.Horizontal;
         _barterPanel.Docked = shop;
@@ -261,7 +262,7 @@ public partial class TerrainViewerApp
         if (_barterInShop) return ShopBarterArt(view);
         if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
         var merchant = view.Merchant;
-        var inventory = WithMerchantDoll(InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) },
+        var inventory = WithMerchantDoll(InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity), HolderPortrait = _inventoryHost.HolderPortrait(session, CurrentAreaMap, merchant.Entity) },
             merchant.Container is null ? null : InventoryView(merchant.Entity));
         var frame = new AreaBarterFrame(AreaBarterArtLayout.Background(merchant.Follower, session.QueryParty().Followers.Count), merchant.Name, _barterMessage ?? string.Empty);
         return (inventory, frame);

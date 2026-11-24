@@ -8,8 +8,8 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-1877: the reading window in the original's look (<see cref="AreaReadingArtLayout"/>, ledger WR17–WR23): the frame art 494 at (0, 0), the subtype's background art at (132, 0), the lens
 /// (art 231 over the round view of the hero, set by the panel) whose rectangle closes the window on a left release, a book's previous and next buttons (arts 495 and 496, shown only when there is
-/// such a page) and the text laid out as the original's draw lays it out (<see cref="AreaReadingFlow"/>). The control is the window's 800 × 399 in art pixels, scaled by the bars' whole factor and
-/// docked at the screen's (0, 41); what falls outside the window is clipped as the original's blit clips it. A picture's art is asked of <see cref="Picture"/> (it is the written item's own
+/// such a page) and the text laid out as the original's draw lays it out (<see cref="AreaReadingFlow"/>). The control is the window's 800 × 399 in art pixels, scaled and docked at the screen's (0, 41)
+/// (the original's 800 × 600 screen fitted to the display, ARC-UI-2314: in HD fractional, in Legacy the nearest whole number); what falls outside the window is clipped as the original's blit clips it. A picture's art is asked of <see cref="Picture"/> (it is the written item's own
 /// number). PROJECT: Left/Right and Page Up/Down turn a book's pages too (the original has the two buttons only).
 /// </summary>
 public partial class AreaReadingArtView : Control
@@ -158,12 +158,15 @@ public partial class AreaReadingArtView : Control
         return true;
     }
 
-    /// <summary>The window at the bars' whole factor, docked at the screen's (0, 41) under the top strip.</summary>
+    /// <summary>
+    /// ARC-UI-2314: the window as the original shows it, its 800 × 600 screen stretched to the display. With the HD interface pack the screen fits the display at the art's exact
+    /// (fractional) scale, centred, and the window stands at the screen's (0, 41) under it (1.8 on 1920 × 1080); the original's bitmaps take the nearest whole number of that fit (2 on 1920 × 1080), docked at the
+    /// screen's (0, 41 × scale) under the top strip (the original's 800 × 600 gives 1). The window's own scale is <see cref="ReadingScale"/>.
+    /// </summary>
     public void Place()
     {
         var size = GetViewportRect().Size;
         var factor = AreaGameBarPanel.ScreenFactor(size);
-        Scale = new Vector2(factor, factor);
         // ARC-UI-1462: a new screen factor changes which fonts are under 9 px, so the text is laid out again (a book keeps its spread where it still exists).
         if (_view?.Art is { } document && factor != _factor)
         {
@@ -172,9 +175,30 @@ public partial class AreaReadingArtView : Control
             _spread = Math.Clamp(_spread, 0, Spreads - 1);
             QueueRedraw();
         }
-        Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), AreaReadingArtLayout.Window.Y * factor);
+        var (scale, position) = ReadingScale(size, InterfaceHd.Enabled && InterfaceHd.Pack is not null);
+        Scale = new Vector2(scale, scale);
+        Position = position;
         // A new device scale (the window or the stretch changed) asks the textures for frames at it.
         if (IsInsideTree() && _view is not null && MathF.Abs(DeviceScale() - _drawnScale) > 0.001f) QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-2314: the scale and position of the reading window in a viewport of <paramref name="size"/>. The original stretches its 800 × 600 screen to the display, so the fit is
+    /// <c>min(width / 800, height / 600)</c>: with the HD interface pack it is the scale itself (fractional, never below the whole factor of the bars) and the window stands at the centred screen's
+    /// (0, 41); the original's bitmaps take the nearest whole number of it (owner decision 2026-11-15: crisp pixels, 2 on 1920 × 1080 and 2560 × 1440, 4 on 3840 × 2160), never wider than the view
+    /// nor taller than it with the window's 41 + 399 rows, and the window stands at (0, 41 × scale).</summary>
+    internal static (float Scale, Vector2 Position) ReadingScale(Vector2 size, bool hd)
+    {
+        // ARC-UI-2714: with the Steamwoven layout the window stands in the window zone like every other menu window (its top at the zone's 800 × 400 body's top, not at the 800 × 600 screen's body, which at
+        // 16:9 lies up to 12.5 units above the zone), so that the lens, the same everywhere, does not jump when the window changes.
+        if (AreaGameBarPanel.ZoneWindow(size, AreaReadingArtLayout.Window.Width, AreaReadingArtLayout.Window.Height + 1) is { } zone)
+            return ((float)zone.Scale, new Vector2((float)zone.X, (float)zone.Y));
+        var fit = MathF.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight);
+        var factor = AreaGameBarPanel.ScreenFactor(size);
+        var whole = MathF.Min(MathF.Round(fit, MidpointRounding.AwayFromZero), MathF.Min(MathF.Floor(size.X / AreaGameBarLayout.ScreenWidth), MathF.Floor(size.Y / (AreaReadingArtLayout.Window.Y + AreaReadingArtLayout.Window.Height))));
+        var scale = hd ? MathF.Max(factor, fit) : MathF.Max(factor, whole);
+        var left = MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * scale) / 2);
+        var top = hd ? MathF.Round((size.Y - AreaGameBarLayout.ScreenHeight * scale) / 2) : 0;
+        return (scale, new Vector2(left, MathF.Round(top + AreaReadingArtLayout.Window.Y * scale)));
     }
 
     private Texture2D? Texture(int art, int frame = 0) => AreaCharacterArtDraw.Art(_art, art, frame);

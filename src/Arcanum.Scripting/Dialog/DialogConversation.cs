@@ -198,7 +198,18 @@ public sealed partial class DialogConversation
                 return Result();
             case DialogOptionTransition.FinalLine:
                 Turn++;
-                CurrentNode = new DialogNodeId(plan!.Target!.Npc.Id);
+                if (plan!.Target is null)
+                {
+                    // ARC-SCRIPT-2790 (FLM1): the node is not in the DLG; the blank final line has no text and no action (the original shows a single space and ends the talk). The talk ends here, so the turn limit (which Admit tests only for a next step) is not checked.
+                    CurrentNode = new DialogNodeId(plan.Reply.Action!.OfType<ConversationFinalLine>().Last().Node);
+                    NpcLine = new DialogNpcLine(CurrentNode, string.Empty);
+                    if (replyCombat is not { } missingCombat || StartCombat(missingCombat))
+                    {
+                        Finish(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null));
+                    }
+                    return Result();
+                }
+                CurrentNode = new DialogNodeId(plan.Target.Npc.Id);
                 NpcLine = new DialogNpcLine(CurrentNode, plan.Target.NpcText);
                 if (Execute(plan.Target.Action) && (replyCombat is not { } finalCombat || StartCombat(finalCombat)))
                 {
@@ -1474,7 +1485,8 @@ public sealed partial class DialogConversation
                 return null;
             }
             // The NPC line addresses the PC: the alternate field is its female-PC variant.
-            var bytes = _request.Pc.Gender == DialogPcGender.Male ? npc.Text : npc.AlternateText;
+            // A Player record used as a final line has no female-PC text: its slot holds a gender number, which the original takes as the text (ARC-SCRIPT-2804, FLM2), so its own text is shown.
+            var bytes = _request.Pc.Gender == DialogPcGender.Male || npc.Role == DlgRecordRole.Player ? npc.Text : npc.AlternateText;
             var textFailure = DialogText.Decode(bytes.Bytes, _request.Encoding, _options.MaxTextBytes, out var text);
             if (textFailure != DialogTextFailureKind.None)
             {
@@ -1822,17 +1834,19 @@ public sealed partial class DialogConversation
                     exception.OperationSource);
             }
         }
+        // The dialog transfer of the action, if any: the grammar lets only a co follow it, after an FL (ARC-DEV-190).
+        var transfer = action?.LastOrDefault(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher);
         if (targetFailure is not null)
         {
-            if (block is not null || action?.Any(OpensWindow) != true)
+            // ARC-SCRIPT-2807 (ledger FLM3, 0x413130): a dialog transfer in the action (JO/UW/FL/ET) makes the source skip the response transition, so the reply's own
+            // response record is never looked up for it; a missing or non-NPC response record is no failure then (the transfer's own node check follows below).
+            if (block is not null || action?.Any(OpensWindow) != true && transfer is null)
             {
                 failure = targetFailure;
                 return null;
             }
             target = null;
         }
-        // The dialog transfer of the action, if any: the grammar lets only a co follow it, after an FL (ARC-DEV-190).
-        var transfer = action?.LastOrDefault(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher);
         if (block is null && insult is not null)
         {
             if (_ports.World is null)
@@ -1861,8 +1875,18 @@ public sealed partial class DialogConversation
                 ConversationExpertTeacher teacher => teacher.Node,
                 _ => ((ConversationFinalLine)transfer).Node,
             };
-            if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
+            if (transfer is ConversationFinalLine && (!_document.TryGetRecord(continuation, out var absent) || absent is null))
             {
+                // ARC-SCRIPT-2790 (0x415BA0 case 3, 0x413A30, 0x416840, 0x416AB0; ledger FLM1): an FL whose node is not in the DLG is no error in the original:
+                // the line lookup fails, the line stays a single space with no voice, and the string goes on (a co still runs); the dialog ends with that blank
+                // final line. The reply stays offered, with no target (the select step reads the node from the action).
+                transition = DialogOptionTransition.FinalLine;
+                target = null;
+                line = null;
+            }
+            else if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc && transfer is not ConversationFinalLine)
+            {
+                // A final line takes any record of the DLG, a Player record too (ARC-SCRIPT-2804, ledger FLM2); a join, an unwait and an expert teacher still need an NPC node.
                 block = new DialogOptionBlock(DialogOptionBlockKind.TargetInvalid, transfer.Source);
             }
             else

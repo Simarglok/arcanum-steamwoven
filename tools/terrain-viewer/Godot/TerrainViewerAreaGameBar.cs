@@ -37,8 +37,10 @@ public partial class TerrainViewerApp
     /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
+    // ARC-UI-2576: in the Steamwoven layout the barter, identify and repair and reading windows keep the bars (every menu window of the middle band has its family's backdrop between them, SWI-BDR-1; the original hides the
+    // bars for these three); the screens with their own strips (the main menu, the save list) and the palette still hide them.
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && !SaveListOpen && !PaletteOpen && (AreaGameBarPanel.SteamwovenOn || !BarterOpen && !ItemServiceOpen && !ReadingOpen);
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -58,8 +60,11 @@ public partial class TerrainViewerApp
             }
             HideHotkeyBar();
             HideSpellBar();
+            HideWeaponBar();
             HideSkillBar();
             HideQuantityPane();
+            HideOrderLine();
+            HideMapNoteEntry();
             return;
         }
         if (_gameBarPanel is null)
@@ -89,8 +94,9 @@ public partial class TerrainViewerApp
             if (spells) _gameBar.SetOn(AreaBarButton.Skills, false);
             _gameBarPanel.Render();
         }
-        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8).
-        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills);
+        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8); ARC-UI-2304: bar mode 8 holds it too.
+        // The diagnostic pane's weapon mode (no strip art) holds the window only while the spell pane is open, as before.
+        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills) || (_itemPaneItem is not null && WeaponPaneInStrip);
         var paneMode = pane ? MessagePaneMode : 0;
         if (pane && _messagePaneShown && paneMode != _messagePaneMode) ClearMessagePaneName();
         _messagePaneMode = paneMode;
@@ -101,6 +107,16 @@ public partial class TerrainViewerApp
             _gameBarPanel.MessageLog.Render();
         }
         _gameBarPanel.Visible = true;
+        // ARC-UI-2452, ARC-UI-2576: the Steamwoven layout fills the middle band with the generated backdrop of the family of the window on top of the interface mode stack while a menu window is open
+        // (SteamwovenBackdrops; the dialog and sleep views keep the world in view, so they have none; nothing otherwise).
+        var menuOpen = AreaGameBarPanel.SteamwovenOn && AnyWindowOpen;
+        // ARC-UI-2461: the covered windows also name their kit background (the family's generated backdrop stays where the kit has none).
+        // The kit smoke shows a window's kit background with no window over it (the window's own art would hide it): its override stands in for the open window.
+        if (_smokeKitBackdrop is { } smoke) _gameBarPanel.SetMenuBackdrop(smoke.Family, smoke.Window);
+        else _gameBarPanel.SetMenuBackdrop(menuOpen ? SteamwovenBackdrops.FamilyOf(_interfaceWindows.Stack.Modes) : null,
+            menuOpen ? SteamwovenKitComposer.WindowOf(_interfaceWindows.Stack.Modes, _barterPanel?.KitState) : null);
+        // ARC-UI-3033: the barter window's frame draws no background art of its own while the kit's background of its window shows under it (the kit smoke's own override has no barter frame).
+        _barterPanel?.SetKitBackdrop(menuOpen && _smokeKitBackdrop is null ? _gameBarPanel.KitWindowBackdrop : null);
         _gameBarPanel.SetClock(_gameClock.Face);
         // ARC-UI-1365 (GB13): the experience strip follows the hero's progress toward the next level (null without a hero or experience data).
         _gameBarPanel.SetExperience(_areaSession?.QueryHeroExperience()?.Progress);
@@ -108,8 +124,12 @@ public partial class TerrainViewerApp
         SyncHotkeyBar();
         SyncMaintainBar();
         SyncSpellBar();
+        SyncWeaponBar();
+        SyncBarCounters();
         SyncSkillBar();
         SyncQuantityPane();
+        SyncOrderLine();
+        SyncMapNoteEntry();
     }
 
     private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>
@@ -180,7 +200,7 @@ public partial class TerrainViewerApp
                 break;
             case AreaBarButton.Skills:
                 // ARC-UI-2024 (DB2): consumed without effect while the dialog's hook is set; the pair is given back as it was.
-                if (ConversationOpen)
+                if (ConversationOpen || WorldMapOpen)
                 {
                     _gameBarNotice = "skills: ignored while another window owns input";
                     _gameBar.SetOn(AreaBarButton.Skills, !_gameBar.IsOn(AreaBarButton.Skills));
@@ -203,7 +223,7 @@ public partial class TerrainViewerApp
                 // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).
                 if (!SleepActive) _gameBarNotice = "sleep: not available here";
                 else if (SleepOpen) OpenSleep(); // the same decision as the key: a dead hero gets nothing, even the close
-                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) _gameBarNotice = "sleep: ignored while another window owns input";
+                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen || WorldMapOpen) _gameBarNotice = "sleep: ignored while another window owns input";
                 else OpenSleep();
                 break;
         }
@@ -244,7 +264,8 @@ public partial class TerrainViewerApp
     private bool BarSpells()
     {
         var on = _gameBar.IsOn(AreaBarButton.Spells);
-        if (!on) { _spellPane?.HidePane(); _spellNotice = null; return true; }
+        // ARC-UI-2304: the spells mode's end leaves no weapon pane behind (the diagnostic pane opens it only inside the spell pane).
+        if (!on) { _spellPane?.HidePane(); _spellNotice = null; _itemPaneItem = null; _weaponPaneCache = null; return true; }
         if (!SpellMapActive || _areaSession?.QueryHero() is null) _gameBarNotice = "spells: needs a hero on a map";
         else if (WorldModal) _gameBarNotice = "spells: ignored while a window is open";
         else { ShowSpellPane(); return true; }

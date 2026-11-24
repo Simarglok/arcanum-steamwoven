@@ -159,7 +159,8 @@ public partial class TerrainViewerApp
         public bool RunUseScript(string user, string item, string? target)
         {
             if (!facts.UseScript) return true;
-            if (app.ItemUseScript(item, reading: false, target: target) is not { } stopped) return true;
+            // ARC-SCRIPT-2789: a written item's use (the use icon, a double click) is its reading, so a refused script lets it go on as the Read button does.
+            if (app.ItemUseScript(item, reading: facts.Type == AreaItemUseFacts.WrittenType, target: target) is not { } stopped) return true;
             Message = stopped;
             // ARC-SCRIPT-1481: a use script that ate the item itself (the food script 30282 destroys it and heals) used it, though its answer stops the original's tail.
             if (app._areaSession!.IsItemDestroyed(item)) Message = "used: its use script used the item up";
@@ -215,8 +216,10 @@ public partial class TerrainViewerApp
             // The magic branch's cast host already spent a used food or scroll; a use that could not run spends nothing.
             var session = app._areaSession!;
             if (Aborted || session.IsItemDestroyed(item)) return;
-            var spent = session.DestroyUsedItem(session.Version, item);
+            // ARC-SCRIPT-2881: the spend's removal runs the item's remove-item script (28) through the shown map's item script host, and the lines it printed are posted as any script's.
+            var spent = session.DestroyUsedItemWithLines(session.Version, item, app._inventoryHost?.ItemScripts(session));
             if (spent.Disposition == GameSessionDisposition.Rejected) Message = $"not spent: {spent.Failure}";
+            else app.PostScriptLines(spent.Messages);
         }
 
         public bool InRound => app.InTurnBasedRound;

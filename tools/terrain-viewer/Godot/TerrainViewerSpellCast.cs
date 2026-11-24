@@ -131,9 +131,11 @@ public partial class TerrainViewerApp
             AreaDropMapNow);
         // ARC-AI-2124 (GW9): a spell's damage on an object runs its hit steps (damage line, break, guard witnesses) inside that damage step, as the original's damage end does, not when the cast log is flushed.
         map.ObjectHitMade = LogObjectHits;
+        // ARC-COMBAT-1934 (0x4ADE00): an NPC caster's line of fire starts at its pixel offset, as the AI host reads it for sight.
+        map.ParentOffset = id => _aiHost?.ShooterOffset(id) ?? (0, 0);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
-            id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
+            id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id) ?? _combatHost.ContainerItemSpells(owner, id));
         // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
         var castCombat = new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts);
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, castCombat);
@@ -153,6 +155,8 @@ public partial class TerrainViewerApp
         _spellCaster.AiNotice = (attacker, victim) => _aiHost?.SpellAttacked(attacker, victim);
         // ARC-DEV-292: and a damage that took effect on an NPC gives it its immediate AI pass (0x4B52FC), after the life step.
         _spellCaster.AiStruck = victim => _aiHost?.Struck(victim);
+        // ARC-AI-2402: a worn mana store drained to 0 drops the payer's slot of the AI list cache (0x4CCC40), as the original's payment does.
+        _spellCaster.ManaStoreEmptied = (payer, item) => _aiHost?.ManaStoreEmptied(payer, item);
         // ARC-TECHNOLOGY-1635 (TT15): a trap's shot flies as a projectile and strikes where it meets the victim.
         _spellCaster.LaunchTrapShot = LaunchTrapShotFlight;
         // ARC-MAGIC-035 (MA-4): the social and AI flags (charm and mind control's reactions and peace, fear's flight) run through the AI host.
@@ -276,8 +280,10 @@ public partial class TerrainViewerApp
             _spellPane.ItemDragStarted += HotkeyWeaponPaneDrag;
         }
         AdoptSpellData();
+        // ARC-UI-2304: the spells mode replaces bar mode 8 (0x5506C0 with 1).
+        _itemPaneItem = null; _weaponPaneCache = null;
         _spellPane.ListInStrip = SpellListInStrip;
-        _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), WeaponPaneNow());
+        _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), DiagnosticWeaponPane());
         _spellNotice = _spellData?.Data is null ? "spell data loading" : null;
     }
 
@@ -301,7 +307,7 @@ public partial class TerrainViewerApp
         if (_spellPane?.Shown == true)
         {
             if (!SpellMapActive || _areaSession?.QueryHero() is null) _spellPane.HidePane();
-            else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), WeaponPaneNow());
+            else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), DiagnosticWeaponPane());
         }
         if (_spellTargeting is not null && (!SpellMapActive || TargetsDroppedByModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
         // Another map, actor or session rebuilds the host, which ends the goal through its own host first; no host ends it too.
@@ -577,14 +583,17 @@ public partial class TerrainViewerApp
         return pane;
     }
 
-    /// <summary>The weapon button (0x556EA0 with no object: the wielded weapon; 0x5506C0: a second press returns to mode 0).</summary>
+    /// <summary>ARC-UI-2304: the diagnostic pane's weapon button and pane only while the bottom strip does not draw them.</summary>
+    private AreaWeaponSpellPane? DiagnosticWeaponPane() => WeaponPaneInStrip ? null : WeaponPaneNow();
+
+    /// <summary>The diagnostic pane's weapon button (0x556EA0 with no object: the wielded weapon; 0x5506C0: a second press returns to mode 0).</summary>
     private void ToggleWeaponPane()
     {
         if (_itemPaneItem is not null) _itemPaneItem = null;
         else if (WeaponPaneNow() is { ButtonShown: true } pane) _itemPaneItem = pane.Item;
         ClearMessagePaneName();
         GD.Print($"ARC-UI-016 item-pane open={_itemPaneItem ?? "no"}");
-        if (_spellPane?.Shown == true && _areaSession is { } owner) _spellPane.Show(AreaSpellCasting.Known(owner, _spellData?.Data), WeaponPaneNow());
+        if (_spellPane?.Shown == true && _areaSession is { } owner) _spellPane.Show(AreaSpellCasting.Known(owner, _spellData?.Data), DiagnosticWeaponPane());
         RefreshAreaStatus();
     }
 
@@ -645,19 +654,21 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-MAGIC-1128 (0x57BC70, SU3): an activation whose BEGIN area has the inventory bit opens the caster's own inventory first: a loot or steal window leaves (the original leaves a loot window open and
-    /// closes the barter and steal ones, 0x573440; the viewer picks items of the own window only), and the window opens unless another one is open, which refuses it (the spell pane is a bar panel, the other windows replace it).
+    /// ARC-MAGIC-1128 (0x57BC70, SU3): an activation whose BEGIN area has the inventory bit opens the caster's own inventory first. ARC-MAGIC-1336 (read again in 0x57BC70): the barter (4) and steal (0xB) windows are
+    /// closed first (0x573440), a loot window (10) is kept and the cursor stands over it (its holder's items and the hero's are the targets), and the own window opens unless an inventory window is open
+    /// then; another window of the stack (the spell pane is a bar panel, the other windows replace it) refuses.
     /// </summary>
     private bool OpenInventoryForSpell()
     {
         if (!InventoryActive) { _spellNotice = "a spell on an inventory item needs the hero's inventory here"; return false; }
-        if (InventoryOpen && !WindowOpen(InterfaceMode.Inventory)) EndInventory();
+        if (WindowOpen(InterfaceMode.Barter)) EndBarter();
+        if (WindowOpen(InterfaceMode.Steal)) EndInventory();
         if (!InventoryOpen)
         {
             if (AnyWindowOpen) { _spellNotice = "targeting cancelled: a window is open"; GD.Print("ARC-MAGIC-1128 inventory-target not opened: a window is open"); return false; }
             OpenInventory();
         }
-        if (WindowOpen(InterfaceMode.Inventory)) return true;
+        if (WindowOpen(InterfaceMode.Inventory) || WindowOpen(InterfaceMode.Loot)) return true;
         _spellNotice = "the inventory did not open";
         return false;
     }
@@ -700,7 +711,11 @@ public partial class TerrainViewerApp
     private void CancelSpellTargeting(string? why)
     {
         if (_spellTargeting is null) return;
+        // ARC-MAGIC-1336: a cursor over a loot window takes the window with it when it leaves (SA38); the stack only hides the panel, so the loot window's close runs here (the lid, the junk pile, the theft).
+        var lootHolder = WindowOpen(InterfaceMode.Loot) ? _inventoryPanel?.Holder : null;
+        var lootOpen = WindowOpen(InterfaceMode.Loot);
         CloseTargetMode(InterfaceMode.SpellTarget);
+        if (lootOpen && !WindowOpen(InterfaceMode.Loot)) FinishInventoryClose(lootHolder);
         if (why is not null) { _spellNotice = "targeting cancelled: " + why; GD.Print("ARC-MAGIC-015 targeting-cancel " + why); }
     }
 
@@ -978,6 +993,8 @@ public partial class TerrainViewerApp
                     FloatObjectDamage(hit.Id, row, AreaCombatFloaters.Of(hit));
                     RunObjectBreakSteps(row, hit.Host, false, false);
                 }
+                // ARC-SCRIPT-2722: an item with no map row has no break steps to run; show the destroy point's run its gate left (the host runs the point only for an item of the shown map's rows, so this is rare and drains a stale run).
+                else if (_readyArea is { } itemArea && UseScriptHost(itemArea.Snapshot) is { } itemHost) ShowDestroyPointRuns(itemHost, hit.Id);
             }
         }
         if (!any) return;

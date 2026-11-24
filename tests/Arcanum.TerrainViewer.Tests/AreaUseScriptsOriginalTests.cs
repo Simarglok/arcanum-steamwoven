@@ -171,6 +171,27 @@ public sealed class AreaUseScriptsOriginalTests
         Assert.AreEqual(SessionQuestState.Accepted, session.QueryQuest(1103)!.Value.State, "the PC does not hold item 2021");
     }
 
+    // ARC-SCRIPT-2789: Joachim's note to Virgil (use script 1567) loops over everyone near the note and calls Virgil's script on him; the run was refused at its line 4 (the vicinity focus kind) and the whole reading was lost.
+    // With nobody near, the loop is empty and the script runs to its run-default end, with its flag and rumor in the session. The item row is synthetic.
+    [TestMethod, TestCategory("RealData")]
+    public void The_use_script_of_joachims_note_with_its_loop_over_the_vicinity_lets_the_reading_go_on()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        using var session = ConversationSessionFixture.Create();
+        var key = new AreaObjectKey(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 1, 100L, new string('b', 64), 100);
+        var row = new AreaObjectRecord(key, 0, 13, 0, "p", "p", "r", "s", AreaScope.Core, null, 11, 20,
+            Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null,
+                [new AreaSparseElement(1, [0, 0, 1567])], null)], true, true, true);
+        var note = "oid:" + key.ObjectIdSha256;
+        var items = new AreaInventoryMap(1, new([], [new(note, new(new(SessionItemType.Written, 14086, 0, 0), 1, 0, 0, null, [1]), new CellCoord(11, 20))]),
+            new Dictionary<string, AreaObjectRecord> { [note] = row });
+        var host = new AreaUseScriptHost(session, 1, [], [items], content);
+        var read = host.RunItemUse(1, note, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (read.Outcome, read.Run!.Outcome), read.Detail);
+        Assert.IsTrue(host.GlobalFlag(1100), "line 0 sets global flag 1100");
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void Every_guarded_use_site_and_every_tile_and_sector_script_runs_or_is_refused_by_its_set()
     {
@@ -236,6 +257,9 @@ public sealed class AreaUseScriptsOriginalTests
         // run to their teleport (136 teleports and 1,077 refused) and the last refused sector script runs (20 without a teleport, none refused).
         // Since ARC-SCRIPT-1772 (the critter getters, toggle invulnerability and rename of set S56) 44 more tile scripts run without a teleport and 44 fewer are refused (1,665 and 1,033); the teleports, the rejected effects and the sector counts do not move.
         // Re-measured on 2026-11-14 on main after ARC-SCRIPT-1772 (commit 77723e2ea): 91 more tile scripts run than the 1,665 just above (1,756 without a teleport, 942 refused; 135 more than the 1,621 of ARC-SCRIPT-1294, the 44 of S56 included); the teleports (136), the rejected effects (178) and the sector counts (20) did not move.
+        // Re-measured on 2026-11-16 (ARC-SCRIPT-2321, set S64): 1,768 without a teleport and 930 refused before the focus kind any scenery in the vicinity (16); its 20 tile sites of script 2561 on the k'na tha map run now (1,788 and 910), and the group kinds
+        // (ARC-SCRIPT-2319, S61) and toggle state in the use set (ARC-SCRIPT-2248) 5 more (1,793 and 905), the container kinds (ARC-SCRIPT-2322, S62) 3 more (1,796 and 902); the 12 more runs than the 1,756 above came with the portal focus kind 19 of ARC-SCRIPT-2041. The teleports (136), the rejected effects (178) and the sector counts (20) did not move.
+        // Re-measured on 2026-11-16 with ARC-SCRIPT-2320 (set S65, the follower focus kinds, ledger FK1–FK7): 13 more tile scripts run without a teleport (1,809 and 889 refused); the teleports (136), the rejected effects (178) and the sector counts (20) did not move. The pinned counts of the other opt-in admission checks (loop break, NPC state, attack, spell state, story and time, world object) moved with the follower kinds the same way.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         // Since ARC-SCRIPT-1165 (set S34: the story and time commands) the 62 exit tiles of script 2698 on the Tulla battle interiors run to their teleport too.
         static bool IsTullaExit(string t) => t.StartsWith("tulla interior - battle - ", StringComparison.Ordinal) && t.EndsWith(":2698", StringComparison.Ordinal);
@@ -245,7 +269,7 @@ public sealed class AreaUseScriptsOriginalTests
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t) && !IsVoidExit(t)).ToArray(), string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1756), ((tile, AreaScriptedUseOutcome.Refused), 942),
+            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1809), ((tile, AreaScriptedUseOutcome.Refused), 889),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 20),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }

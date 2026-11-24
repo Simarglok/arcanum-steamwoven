@@ -100,27 +100,57 @@ public sealed partial class GameSessionOwner
     /// session's lists show it, a dressed NPC's record over its map data), a full durability
     /// budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision.
     /// </summary>
-    public InventoryMutationResult RemoveItemFromNpc(GameSessionVersion expected, string npc, string item)
+    public InventoryMutationResult RemoveItemFromNpc(GameSessionVersion expected, string npc, string item, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item))
             return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (NpcItemRemovalRefusalCore(npc, item) is { } refusal) return RejectItem(refusal);
+        if (scripts is null && NpcItemPoints(npc, item).Contains(SessionScriptPoint.RemoveItem)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the NPC as the triggerer, made and prepared before anything applies and committed with the deletion.
+        var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(item, npc, NpcItemPoints(npc, item), scripts);
+        if (removal.Done is { } refused) return refused;
+        removal.Runs?.Commit();
+        DestroyObject(item);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item, null, Version) { Scripts = removal.Runs?.Runs ?? [], Messages = removal.Runs?.Messages ?? [] };
+    }
+
+    /// <summary>ARC-SCRIPT-1590: why <see cref="RemoveItemFromNpc"/> would refuse the item of the NPC, ignoring the version (an unknown holder, an item not in its current list, a worn item, a full durability budget, the revision), or null when it would delete it;
+    /// changes nothing. A use script an NPC runs for its own item checks it before it applies any effect, as <see cref="UsedItemDestructionRefusal"/> does for the hero.</summary>
+    public GameSessionFailure? NpcItemRemovalRefusal(string npc, string item, ISessionItemScriptHost? scripts = null)
+    {
+        ThrowIfDisposed();
+        if (NpcItemRemovalRefusalCore(npc, item) is { } refusal) return refusal;
+        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
+        // Without one an item with a remove-item script is refused, never deleted with the script skipped (the spell path's spent scroll or food: #2881).
+        if (scripts is null && NpcItemPoints(npc, item).Contains(SessionScriptPoint.RemoveItem)) return GameSessionFailure.ItemScriptUnsupported;
+        if (scripts is not null && RunRemovalScript(item, npc, NpcItemPoints(npc, item), scripts).Done is { } dry) return dry.Failure;
+        return null;
+    }
+
+    // The refusals of the deletion that no script decides.
+    private GameSessionFailure? NpcItemRemovalRefusalCore(string npc, string item)
+    {
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item)) return GameSessionFailure.InvalidItem;
+        if (!KnownNpc(npc)) return GameSessionFailure.UnknownHolder;
         if (_inventory.NpcOf(item) != npc)
         {
             var listed = SeedListing(npc, item);
-            if (listed is null) return RejectItem(GameSessionFailure.ItemNotAvailable);
-            if (NpcWears(npc, item, listed.Facts)) return RejectItem(GameSessionFailure.WornItemUnsupported);
+            if (listed is null) return GameSessionFailure.ItemNotAvailable;
+            if (NpcWears(npc, item, listed.Facts)) return GameSessionFailure.WornItemUnsupported;
         }
         // ARC-WORLD-103: a made item a regeneration's wield put on.
-        else if (NpcWears(npc, item, InventoryDomain.MadeFacts(default))) return RejectItem(GameSessionFailure.WornItemUnsupported);
-        if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
-        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        DestroyObject(item);
-        Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item, null, Version);
+        else if (NpcWears(npc, item, InventoryDomain.MadeFacts(default))) return GameSessionFailure.WornItemUnsupported;
+        if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
+        if (_revision == long.MaxValue) return GameSessionFailure.RevisionExhausted;
+        return null;
     }
+
+    // The script points the session knows of an item in an NPC's current list (its seed row's, the slots kept or inherited); empty for an item not listed.
+    private IReadOnlyList<int> NpcItemPoints(string npc, string item) =>
+        QueryHolderItems(npc)?.FirstOrDefault(listed => listed.Entity == item) is { } found ? KnownScriptPoints(item, found.Facts) : [];
 
     /// <summary>An NPC holder of an attached seed, a party record, or an NPC holding added items (ARC-WORLD-090: not a container).</summary>
     private bool KnownNpc(string npc) => _inventory.Lists.HasList(npc) && !_inventory.Lists.IsContainer(npc) || _party.Records.ContainsKey(npc) ||

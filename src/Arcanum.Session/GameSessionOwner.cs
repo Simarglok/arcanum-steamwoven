@@ -745,22 +745,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!Enum.IsDefined(requested)) return Reject(GameSessionFailure.InvalidQuestState);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _story.Quests.TryGetValue(quest, out var record) ? record : new SessionQuest(quest, SessionQuestState.Unknown, false, 0);
-        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched ||
-            current.Effective >= requested) return NoChange();
-        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-
-        var shared = _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted);
-        var state = requested;
-        if (shared == SessionQuestState.Accepted)
-        {
-            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
-            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
-        }
-        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
         var timestamp = _clock.QueryClockSnapshot().GameTimestampMs;
-        var next = state == SessionQuestState.Botched
-            ? current with { Botched = true, TimestampMs = timestamp }
-            : new SessionQuest(quest, state, false, timestamp);
+        if (QuestStep(current, _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted), requested, timestamp) is not { } step) return NoChange();
+        var (next, shared) = step;
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The source gives the experience for the request, before the shared state can turn it into OtherCompleted.
         var award = requested == SessionQuestState.Completed && _hero is not null && _experience.Rules is { } rules
             ? Give(rules.QuestExperience(rules.QuestLevel(quest))) : null;
@@ -774,6 +762,26 @@ public sealed partial class GameSessionOwner : IDisposable
             experience = award.Award;
         }
         return Changed();
+    }
+
+    /// <summary>
+    /// The state step of <see cref="SetQuestState(GameSessionVersion, int, SessionQuestState, out SessionExperienceAward?)"/> over one PC record and the quest's shared state, without a write: null when the request changes
+    /// nothing (an ended quest, a request not above the current state), else the PC's next record and the quest's shared state after it. ARC-SCRIPT-2374: the item set's runs plan their quest writes with it (the move commits them).
+    /// </summary>
+    internal static (SessionQuest Next, SessionQuestState Shared)? QuestStep(SessionQuest current, SessionQuestState shared, SessionQuestState requested, long timestamp)
+    {
+        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched || current.Effective >= requested) return null;
+        var state = requested;
+        if (shared == SessionQuestState.Accepted)
+        {
+            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
+            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
+        }
+        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
+        var next = state == SessionQuestState.Botched
+            ? current with { Botched = true, TimestampMs = timestamp }
+            : new SessionQuest(current.Quest, state, false, timestamp);
+        return (next, shared);
     }
 
     /// <summary>
@@ -1152,6 +1160,9 @@ public sealed partial class GameSessionOwner : IDisposable
             ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)) : null;
     }
 
+    /// <summary>ARC-SCRIPT-2020: how often the attached map seeds changed (an attach, a window move, a created holder); a seed change moves no revision, so a reader that caches a <see cref="QueryMapInventory"/> view keys it by this too.</summary>
+    public long QueryInventorySeedGeneration() { ThrowIfDisposed(); return _inventory.SeedGeneration; }
+
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
     /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
@@ -1271,7 +1282,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         // ARC-DEV-087 (MIG6e): the holder is the NPC's wherever it stands: a companion carried here lists on its home map's seed.
         if (!NpcHolderSeed(npc, out var map, out var seed, out var row)) return RejectItem(UnseededHolder());
-        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
+        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => QueryItemName(entry.Entity, entry.Facts.Kind.Name) == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
         // ARC-WORLD-1131: the dialog's IN runs the room test like every take; an item the insert check refuses (room, weight, Technophobia) is laid on the PC's tile (0x415BA0).
@@ -1486,6 +1497,16 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, level));
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1593 (VT3, heal poison with a negative amount): the original's setter takes the level minus the amount, so a negative amount raises the level by its size. The level read now
+    /// plus <paramref name="amount"/> goes through <see cref="SetPoisonLevel"/>'s write (clamped to 0..1000, 0 for a constitution of 20 or more, the timers of every positive write).
+    /// </summary>
+    public SessionLifeResult RaisePoisonLevel(GameSessionVersion expected, SessionLifeTarget target, long amount)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, state.PoisonLevel + amount));
     }
 
     /// <summary>The stun animation ended or could not start (<see cref="LifeRules.ClearStun"/>).</summary>
@@ -1750,7 +1771,8 @@ public sealed partial class GameSessionOwner : IDisposable
                     (_, after) => after.PoisonLevel > 0 ? [LifeTimer.PoisonRecovery] : [], map, recoveryCopies: 2);
                 break;
             case LifeTimer.Resting:
-                if (hero || dead || _party.Get(target.Entity!).LedByPc) return GameEventHandlerOutcome.Completed;
+                // ARC-COMBAT-1927 (VC21): the original's gate walks the whole leader chain (0x45DDA0), so an NPC that follows a follower of the hero is not healed here either.
+                if (hero || dead || PcLeads(target.Entity!)) return GameEventHandlerOutcome.Completed;
                 result = Life(Version, target, scheduledAt <= now,
                     (s, f, _) => LifeRules.RestHeal(s, f, LifeRules.RestingHours(scheduledAt, now)),
                     (before, after) => RestingWrites(before, after), map);
@@ -1800,7 +1822,9 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         if (to == _actor.Map) return GameSessionFailure.None;
         var followers = (travelling ?? _party.Order).ToHashSet(StringComparer.Ordinal);
-        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure;
+        // ARC-MAGIC-2400 (BC10, TL33): the recharge events of the items that travel with the PC go too; the others stay parked on the map left.
+        var items = TravellingRechargeItems(followers);
+        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code) || items.Contains(entity.Code)).Failure;
         // ARC-SCRIPT-010: a deferred call's player and follower roles travel one by one (the original keeps their handles
         // across maps), its other roles stay where they were. Both steps refuse only during a pass, which the first one
         // already reports, so the rewrite cannot fail after the relocation moved anything.
@@ -2209,6 +2233,29 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, on every map, in placing order.</summary>
     public IReadOnlyList<SessionPlacedItem> QueryPlacedItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Placed.ToArray()); }
 
+    /// <summary>
+    /// ARC-SCRIPT-2594 (ledger IV8): the tile the item last lay on after the session dropped it (or a script created it on the ground) and a pickup took it up again, or null when it never did (an item still on the ground reads
+    /// its placed cell, <see cref="QueryPlacedItems"/>). In the original a held item keeps this stale location field; an insert-item script's vicinity scans and distance between centre on it. A read of the current state, in no revision.
+    /// </summary>
+    public Arcanum.Simulation.Movement.CellCoord? QueryItemLastDrop(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return _inventory.Hero.LastDrops.TryGetValue(entity, out var cell) ? cell : null;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2701 (ledger IV8): the tile a map-data item of the hero's map lies loose on now when that is not the tile its map data holds (a spilled container's, where a critical dropped it or a push left it), or null for an item on its own
+    /// data tile, held, taken, destroyed, in flight or not on the map's ground. Before its pickup commits this is the item's location field the insert-item run's scans centre on. A read of the current state, in no revision.
+    /// </summary>
+    public Arcanum.Simulation.Movement.CellCoord? QueryItemLooseCell(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
+        return _inventory.Seeds.TryGetValue(_actor.Map, out var seed) && seed.Items.TryGetValue(entity, out var row) && LooseCell(_actor.Map, seed, entity) is { } cell && cell != row.Cell ? cell : null;
+    }
+
     // The insertion (0x466640): since ARC-WORLD-066 its merge of ammunition into a held stack of the same prototype. ARC-SCRIPT-041:
     // the item events of the two transfers in the original's order (ledger IE1–IE4): from the ground (0x461810) the item's get
     // script, which can cancel, then the insert check, then the insertion's insert-item script; from a holder (0x461CA0) the
@@ -2367,6 +2414,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         else
         {
+            // ARC-SCRIPT-2701 (IV8): a map-data item that lay loose on another tile than its data holds (an NPC's critical drop, a spill, a throw's landing, a push) keeps that tile as its location field.
+            if (seed.Items.TryGetValue(item.Entity, out var seeded) && LooseCell(origin, seed, item.Entity) is { } lying && lying != seeded.Cell) _inventory.Hero.NoteLastDrop(item.Entity, lying);
             _inventory.Add(new SessionPcItem(item.Entity, origin, facts.Kind));
             // ARC-WORLD-085: the item keeps its seed's weight facts wherever it goes.
             _inventory.SetWeight(item.Entity, facts.WeightFacts);
@@ -2526,6 +2575,14 @@ public sealed partial class GameSessionOwner : IDisposable
                 inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
             inventory.Hero.AddPlaced(item);
             inventory.Taken.Add(item.Entity);
+        }
+        // ARC-SCRIPT-2594 (IV8): a last-drop tile names an item that exists, is off the ground now and is held by the hero or an NPC (or still taken), within the bound.
+        if (saved.LastDrops.Count > HeroLists.MaxLastDrops) return GameSessionFailure.BudgetExceeded;
+        foreach (var drop in saved.LastDrops)
+        {
+            if (!SessionValidation.Entity(drop.Entity) || !DropCellFits(drop.Cell) || destroyed.Contains(drop.Entity) || inventory.PlacedItem(drop.Entity) is not null ||
+                inventory.Hero.PlaceOf(drop.Entity) is null && inventory.NpcOf(drop.Entity) is null && !inventory.Taken.Contains(drop.Entity)) return GameSessionFailure.InvalidSnapshot;
+            if (!inventory.Hero.RestoreLastDrop(drop.Entity, drop.Cell)) return GameSessionFailure.InvalidSnapshot;
         }
         // ARC-WORLD-071: every given item is in an NPC's list, and a given kit item lies within the kit's numbers; a pile record names no
         // item of the hero's (a seed pile, or a made pile in an NPC's list).
@@ -2848,6 +2905,9 @@ public sealed partial class GameSessionOwner : IDisposable
     private bool IsPending(string kind, string? entity) =>
         _events.Any(kind, e => entity is null || e.Payload.Entities[0].Code == entity);
 
+    private static bool RechargePayload(System.Collections.Immutable.ImmutableArray<GameEventEntity> entities, System.Collections.Immutable.ImmutableArray<long> values) =>
+        values.Length == 2 && values[0] >= 0 && values[1] is >= int.MinValue and <= int.MaxValue && SessionValidation.Entity(entities[0].Code) && entities[0].Code != SessionEventKinds.AbsentRole;
+
     private static LifeTimer TimerOf(string kind) => kind switch
     {
         SessionEventKinds.HeroFatigue or SessionEventKinds.NpcFatigue => LifeTimer.Fatigue,
@@ -2986,6 +3046,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.ItemRecharge)
+            {
+                // A recharge event of a worn mana store (ARC-MAGIC-2371): one item, set no later than the saved clock, the fixed delay before its deadline (a merge keeps the first stamp and deadline). Whether the item
+                // still has a store copy is asked when it fires. Scoped to the map it was scheduled on or parked on (ARC-MAGIC-2400).
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 ||
+                    !RechargePayload(pending.Entities, pending.Values) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + SessionEventKinds.ItemRechargeDelayMs)
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.Restock)
             {
                 // A restock event (ARC-WORLD-094): one NPC or container on a map, set no later than the saved clock, a restock delay or
@@ -3096,6 +3166,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
+            converted.Count(e => e.Kind == SessionEventKinds.ItemRecharge) > SessionEventKinds.MaxItemRecharges ||
             converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.RandomEncounter) > SessionEventKinds.MaxRandomEncounters ||
             converted.Count(e => e.Kind == SessionEventKinds.Newspaper) > SessionEventKinds.MaxNewspapers ||

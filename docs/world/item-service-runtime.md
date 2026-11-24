@@ -36,7 +36,8 @@ inventory window in mode 5); `ri` opens the **item repair window** (mode 6). Wit
 
 ## Not modelled
 
-- The NPC's portrait rule of the image (IW27), the hover event of IS3 (the viewer's press is a substitute), the NPC's name (IS8: not drawn by the original in these modes either).
+- The hover event of IS3 (the viewer's press is a substitute), the NPC's name (IS8: not drawn by the original in these modes either).
+- ARC-UI-1908: the NPC's image follows the portrait rule of 0x553D10 (IW27): an NPC the hero leads (the leader chain reaches it, `QueryPcLeader`) that stores a portrait is drawn with it, 32 by 32 by 0x4CE680 at the image's corner (the art stays halved); the loot and barter windows draw it at its own size (`AreaInventoryView.HolderPortrait`, `AreaLootArtLayout.HolderPortrait`). ARC-UI-2444 (ledger PO10): the portrait number is the one 0x4CEB80 shows, `AreaLootArtLayout.ShownPortrait`: an NPC that stores the hero's own portrait shows the catalogue's next one for its base race and gender (a spell-written base stat wins over the stored one, ARC-UI-2492), else the previous, else none (the art decides); the host reads the catalogue through `AreaInventoryHost.PortraitCatalogueSource`.
 - The network branches (a client sends a request), the item refresh and the round view.
 - The repairer's own injuries (blindness, crippled arms): the effectiveness is read before the difficulty and the run is forced, so only the level and training count (RP5).
 - A payment the session refuses after the service ran (a full record store) leaves the service done, as the original leaves a moved item whose payment failed.

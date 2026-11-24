@@ -1,4 +1,6 @@
 using Arcanum.Data.Area;
+using Arcanum.Scripting.Scr;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -44,6 +46,7 @@ public partial class TerrainViewerApp
             _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell, FireBurnerFor(session));
             // ARC-RENDER-1781: the sceneries with a changed art get their loops before the loops start (the original starts a loop with the art the object has).
             SyncSceneryArt(_sceneryHost, newHost: true);
+            DropDestroyedSceneryLoops(session, _sceneryHost, area.Snapshot.RuntimeMap);
             var started = _sceneryHost.Start();
             // A restamp drops the old map's bodies from the canvas too, even when no loop has stepped yet.
             if (_sceneryBodies.Count > 0) { _sceneryBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }
@@ -55,6 +58,11 @@ public partial class TerrainViewerApp
         changed |= SyncSceneryArt(_sceneryHost, newHost: false);
         // A start that found the table held by a pass is tried again (the loops already running stay).
         if (_sceneryHost.StartPending) _sceneryHost.Start();
+        // ARC-SCRIPT-2646 (0x43F5F0 → 0x43D280 → 0x43F710): a scenery a break switched off and the respawn switched on gets its loop back.
+        var shownMap = new SessionMapId(area.Snapshot.RuntimeMap);
+        _sceneryHost.RestartBroken(entity => session.QueryObjectCondition(shownMap, entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Whole);
+        RetryPendingRunEnds();
+        if (_areaDoors is { } retryDoors && ReferenceEquals(retryDoors.Session, session)) retryDoors.RetryPending();
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
         SyncCreatedSceneryLoops(session, _sceneryHost);
         changed |= _sceneryHost.TakeChanged();
@@ -64,6 +72,76 @@ public partial class TerrainViewerApp
         if ((changed || _bedRevisionDrawn != _bedOccupancy.Revision) && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
         // A created scenery is a ground body drawn at its loop's frame: the ground is drawn again only when a created loop came, went or moved a frame.
         if (_sceneryHost.TakeCreatedChanged()) { _groundStamp = null; SyncAreaInventory(); }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2514 (ledger BS3c, 0x43CCA0 → 0x423FF0, 0x459740): a script destroyed a scenery or container of the shown map. Every goal run of the object ends (its loop, the eye-candy overlays and the hover: the scenery host does it with the loop,
+    /// the session's goal table alone for an object with no loop) and the spell runs aimed at or cast from it hear of the destroy in the cast host. An object of another map has no run in the shown session's table.
+    /// </summary>
+    private void EndDestroyedObjectRuns(ScrObjectRef obj)
+    {
+        if (_areaSession is not { } session || obj.Map != CurrentAreaMap) return;
+        var spells = SpellCasterNow();
+        var castId = spells?.CastIdOf(obj.Code);
+        bool ended;
+        if (ShownSceneryHost is { } host) ended = host.ObjectDestroyed(obj.Code, castId);
+        else
+        {
+            ended = false;
+            foreach (var owner in new[] { obj.Code, castId }.Where(o => o is not null).Distinct())
+                if (session.QueryGoals().RunsOf(owner!).Any(r => !r.Done)) ended |= EndRunsOfOwner(session, owner!, kill: true);
+        }
+        spells?.ObjectGone(castId!);
+        GD.Print($"ARC-SCRIPT-2514 object-destroyed object={obj.Code} runs-ended={ended} spell-runs-told={spells is not null}");
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2646 (ledger OD7, 0x43F1C0 → 0x424070 at level 5): a break of a container, scenery, trap, door or window of the shown map interrupts the object's goal runs before anything else of the break: a scenery's loop ends (the scenery host does it, and stops the voice),
+    /// its overlays stay (no-interrupt goals). An object of another map has no run in the shown session's table.
+    /// </summary>
+    private void InterruptBrokenObjectRuns(AreaObjectRecord row)
+    {
+        if (_areaSession is not { } session || ShownObjectRef(row) is not { } obj || obj.Map != CurrentAreaMap) return;
+        var castId = SpellCasterNow()?.CastIdOf(obj.Code);
+        bool ended;
+        // ARC-SCRIPT-2669: a door or window's runs (70, 71, 72) are the door host's: it interrupts them and runs the end nodes (a cut closing snaps the door shut).
+        if (_areaDoors is { } doors && ReferenceEquals(doors.Session, session) && doors.Owns(obj.Code)) ended = doors.ObjectBroken(obj.Code);
+        else if (ShownSceneryHost is { } host) ended = host.ObjectBroken(obj.Code, castId);
+        else
+        {
+            ended = false;
+            foreach (var owner in new[] { obj.Code, castId }.Where(o => o is not null).Distinct())
+                ended |= EndRunsOfOwner(session, owner!, kill: false);
+        }
+        GD.Print($"ARC-SCRIPT-2646 object-broken object={obj.Code} runs-ended={ended}");
+    }
+
+    // The scenery host's own retry is not there when the host belongs to a replaced session: a refusal for a pass in progress is tried again on the next frames.
+    private readonly List<(GameSessionOwner Session, string Owner, bool Kill)> _pendingRunEnds = [];
+
+    private bool EndRunsOfOwner(GameSessionOwner session, string owner, bool kill)
+    {
+        var change = kill ? session.KillGoals(owner) : session.InterruptGoals(owner, AreaSceneryHost.BreakInterruptLevel);
+        if (change.Failure == SessionGoalFailure.PassInProgress) { _pendingRunEnds.Add((session, owner, kill)); return false; }
+        return kill ? change.Succeeded : change.Ended.Any();
+    }
+
+    private void RetryPendingRunEnds()
+    {
+        if (_pendingRunEnds.Count == 0) return;
+        var due = _pendingRunEnds.ToArray();
+        _pendingRunEnds.Clear();
+        foreach (var (session, owner, kill) in due)
+            if (ReferenceEquals(session, _areaSession)) EndRunsOfOwner(session, owner, kill);
+    }
+
+    /// <summary>ARC-SCRIPT-2514: a scenery the session holds destroyed gets no loop on a host built for a window or map shown again (the original's lists do not hold a destroyed object, so no loop starts for it).</summary>
+    private void DropDestroyedSceneryLoops(GameSessionOwner session, AreaSceneryHost host, int map)
+    {
+        foreach (var loop in host.Animation.Loops.ToArray())
+            if (AreaUseScriptHost.Destroyed(session, map, loop.Entity)
+                || session.QueryObjectCondition(new SessionMapId(map), loop.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
+                host.ObjectDestroyed(loop.Entity);
     }
 
     /// <summary>Drops the loops, their runs and their bodies (the shown map is cleared).</summary>
@@ -82,7 +160,7 @@ public partial class TerrainViewerApp
             bodies[loop.Key] = AreaScenePlan.SceneryFrame(command, loop.Row, body, loop.Visual,
                 loop.Loop.OffsetX, loop.Loop.OffsetY);
         }
-        // ARC-RENDER-1781: a scenery with a changed art, on its loop's frame of that art or on frame 0 (a busted one's ground body wins in the draw order).
+        // ARC-RENDER-1781: a scenery with a changed art, on its loop's frame of that art or on frame 0 (a busted one with a destroyed art is a scenery art too, ARC-SCRIPT-2670; a busted body whose art did not read is the ground body).
         foreach (var (entity, art) in _sceneryArt)
             if (SceneryArtCommand(entity, art, _sceneryHost, overlay.Bodies, overlay.Visuals) is { } drawn) bodies[art.Row.Key] = drawn;
         AddOccupiedBeds(bodies, overlay.Bodies, overlay.Visuals);

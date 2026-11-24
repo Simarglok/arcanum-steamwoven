@@ -37,6 +37,24 @@ public sealed class AreaMapTransfersTests
     };
 
     // ARC-WORLD-1805 (TT18, TT20): a door or window is no use trigger of the map transfers; the door's use node queues the teleport its script asked for.
+    // ARC-WORLD-2261 (TT20): the hero's teleport of a dialog script or a deferred call is a script transfer (the viewer takes it with the dialog open); a door's is not.
+    [TestMethod]
+    public void A_dialog_or_call_teleport_of_the_hero_is_queued_as_a_script_transfer_and_a_doors_is_not()
+    {
+        var (map, row) = Load();
+        var transfers = new AreaMapTransfers(map, Set(map), Destinations(map));
+        var pc = new ScrObjectRef(map.RuntimeMap, "pc");
+        var queued = transfers.QueueScriptTeleport(new ScrTeleport(pc, 5076, 5, 6));
+        Assert.AreEqual(AreaUseOutcome.Accepted, queued.Outcome, queued.Reason);
+        Assert.IsTrue(transfers.Pending!.ByTalkScript);
+        // TR4: a second request while one is pending is dropped and leaves the first as it was.
+        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.QueueScriptTeleport(new ScrTeleport(pc, 5076, 7, 8)).Outcome);
+        Assert.AreEqual(new AreaStepCell(5, 6), transfers.Pending!.Arrival);
+        transfers.Clear();
+        Assert.AreEqual(AreaUseOutcome.Accepted, transfers.QueueDoorTeleport(row, 710, new ScrTeleport(pc, 5076, 5, 6)).Outcome);
+        Assert.IsFalse(transfers.Pending!.ByTalkScript);
+    }
+
     [TestMethod]
     public void A_door_is_no_use_trigger_and_its_scripts_teleport_is_queued_through_the_door_entry()
     {
@@ -231,6 +249,9 @@ public sealed class AreaMapTransfersTests
             return answer.Teleport is { } t && refuse(t) is { } refusal ? answer with { Outcome = AreaScriptedUseOutcome.TeleportRefused, Detail = refusal } : answer;
         };
         Assert.IsNull(transfers.EnterSector(new(cell.X + 1, cell.Y), cell), "a step inside the sector enters nothing");
+        // ARC-SCRIPT-2823 (TQ6): the hero's arrival (from == to) runs the sector script even on the same sector.
+        var arrived = transfers.EnterSector(cell, cell)!;
+        Assert.AreEqual((AreaUseOutcome.ScriptEnded, MapTransitionTrigger.SectorEntry), (arrived.Outcome, arrived.Site!.Trigger));
         var entered = transfers.EnterSector(new(sector.X * 64L - 1, cell.Y), cell)!;
         Assert.AreEqual((AreaUseOutcome.ScriptEnded, MapTransitionTrigger.SectorEntry, "line"), (entered.Outcome, entered.Site!.Trigger, transfers.LastScripted!.Lines.Single()));
         var stepped = transfers.Enter(cell).Single();
@@ -238,13 +259,13 @@ public sealed class AreaMapTransfersTests
         Assert.AreEqual((true, arrival, MapTransitionTrigger.TileEntry), (transfers.Pending!.SameMap, transfers.Pending.Arrival, transfers.Pending.Site.Trigger));
         // With a transfer pending the run still happens; only its teleport is dropped (TR4).
         Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.Enter(cell).Single().Outcome);
-        CollectionAssert.AreEqual(new[] { 601, 600, 600 }, ran);
+        CollectionAssert.AreEqual(new[] { 601, 601, 600, 600 }, ran);
         transfers.Clear();
         // ARC-DEV-351: the hero's arrival inside a same-map change of place runs the script, and its teleport is dropped, with nothing pending afterwards.
         var landed = transfers.Enter(cell, requestsRefused: true).Single();
         Assert.AreEqual((AreaUseOutcome.TransitionPending, "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE"), (landed.Outcome, landed.Reason));
         Assert.IsNull(transfers.Pending);
-        CollectionAssert.AreEqual(new[] { 601, 600, 600, 600 }, ran, "the script ran");
+        CollectionAssert.AreEqual(new[] { 601, 601, 600, 600, 600 }, ran, "the script ran");
 
         answers[600] = answers[600] with { Teleport = new(pc, 5001, 1, 1) };
         var refused = transfers.Enter(cell).Single();
@@ -321,5 +342,31 @@ public sealed class AreaMapTransfersTests
         answer = new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "guards held");
         Assert.AreEqual(AreaUseOutcome.ScriptEnded, transfers.Enter(other).Single().Outcome, "a run that happened decides, teleport or not");
         Assert.IsNull(transfers.Pending);
+    }
+
+    // ARC-WORLD-2358 (TT20): a tile script's hero teleport whose run also started a conversation is a script transfer (the dialog opens inside the run, the ping takes the request at the next frame with it open); one without a conversation is not.
+    [TestMethod]
+    public void A_tile_scripts_teleport_with_a_conversation_is_a_script_transfer()
+    {
+        var (map, row) = Load();
+        var cell = new AreaStepCell(row.WorldX!.Value, row.WorldY!.Value);
+        var sector = WorldSectorCoordinate.Containing(new(cell.X, cell.Y));
+        var arrival = map.Snapshot.Terrain.Select(t => new AreaStepCell(t.WorldX, t.WorldY)).First(c => map.Steps.IsAdmitted(c) && c != cell);
+        var placed = new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, 0, new(cell.X, cell.Y), 0, 0, 600);
+        var set = new MapTransitionSet(new WorldMap("test", new(2, 0, 64, 64), null, null, null, [], [], [], null, []), new(map.RuntimeMap + 4999, "test", null), [], [], [placed]);
+        var transfers = new AreaMapTransfers(map, set, Destinations(map));
+        var pc = new ScrObjectRef(map.RuntimeMap, "pc");
+        var teleport = new ScrTeleport(pc, map.RuntimeMap + 4999, (int)arrival.X, (int)arrival.Y);
+        var talk = new ScrDialogStart(pc, new ScrObjectRef(map.RuntimeMap, "npc"), 741, 0, 3);
+        var answer = new AreaScriptedUse(AreaScriptedUseOutcome.Teleport, teleport, [], null, "teleport") { Dialog = talk };
+        transfers.PlacedRunner = (_, _) => answer;
+
+        Assert.AreEqual(AreaUseOutcome.Accepted, transfers.Enter(cell).Single().Outcome);
+        Assert.IsTrue(transfers.Pending!.ByTalkScript);
+        Assert.AreEqual(talk, transfers.LastScripted!.Dialog, "the viewer opens the conversation after the run");
+        transfers.Clear();
+        answer = answer with { Dialog = null };
+        Assert.AreEqual(AreaUseOutcome.Accepted, transfers.Enter(cell).Single().Outcome);
+        Assert.IsFalse(transfers.Pending!.ByTalkScript);
     }
 }

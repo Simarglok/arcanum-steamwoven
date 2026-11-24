@@ -503,6 +503,36 @@ public sealed class WieldEventScriptTests
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, worn.TransferNamedItem(worn.Version, null, "virgil", 2851, Accept, wornHost).Failure);
     }
 
+    // ARC-MAGIC-2266: the plan's dry run asks the caller's real insert check, so a move that check refuses (no script runs after it) is not refused for the insert-item script it would never run.
+    [TestMethod]
+    public void The_plan_of_a_script_transfer_asks_the_real_insert_check()
+    {
+        var (owner, host) = HeroWithHolders();
+        using var _ = owner;
+        host.Slots[("boots", SessionScriptPoint.InsertItem)] = Unsupported;
+        SessionInsertCheck noRoom = _ => SessionInsertVerdict.NoRoom;
+        var revision = owner.Version.Revision;
+        // The check refuses before the insert-item run: no refusal for that run, and the move is refused by the check itself.
+        Assert.IsNull(owner.QueryNamedItemTransfer("corpse", null, 2807, host, noRoom).Refusal);
+        var refused = owner.TransferNamedItem(owner.Version, "corpse", null, 2807, noRoom, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, revision), (refused.Disposition, refused.Failure, owner.Version.Revision));
+        CollectionAssert.Contains(Listed(owner, "corpse"), "boots");
+        // An accepting check (and the default) reaches the run the session cannot apply: the plan refuses it.
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer("corpse", null, 2807, host, Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer("corpse", null, 2807, host).Failure);
+        Assert.AreEqual(revision, owner.Version.Revision, "the plan changed nothing");
+
+        // The hero's give (the check is its only gate): the remove-item run the session cannot apply is never reached when the check refuses.
+        var (worn, wornHost) = WornScriptedRing();
+        using var __ = worn;
+        wornHost.Slots[("kit:3", SessionScriptPoint.RemoveItem)] = Unsupported;
+        var ring = worn.Version.Revision;
+        Assert.IsNull(worn.QueryNamedItemTransfer(null, "virgil", 2851, wornHost, noRoom).Refusal);
+        var given = worn.TransferNamedItem(worn.Version, null, "virgil", 2851, noRoom, wornHost);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, ring), (given.Failure, worn.Version.Revision));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, worn.QueryNamedItemTransfer(null, "virgil", 2851, wornHost, Accept).Failure);
+    }
+
     [TestMethod]
     public void Equip_best_leaves_a_scripted_worn_item_in_its_slot()
     {
@@ -582,6 +612,29 @@ public sealed class WieldEventScriptTests
         // The call is saved with the game (the event queue's section) and a restored session still holds it.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual(owner.QueryScriptCalls().Single(), restored.QueryScriptCalls().Single());
+    }
+
+    [TestMethod]
+    public void A_wield_script_s_call_script_at_waits_until_the_operands_time_of_day_counted_from_the_start_hour()
+    {
+        // ARC-SCRIPT-2824 (ledger TQ17, TE2): the item run reads the session's clock; the delay is in game milliseconds with no factor 8.
+        foreach (var (ahead, expected) in new[] { (3600, 3_600_000L), (86_399, 86_399_000L), (0, 1L) })
+        {
+            var (owner, host) = Owner();
+            using var _ = owner;
+            var clock = owner.QueryClockSnapshot();
+            var secondsOfCycle = (int)((clock.MillisecondOfDay + 86_400_000L - clock.ProfileBinding.StartHour * 3_600_000L) / 1000 % 86_400);
+            host.Programs[Shield] = Program(
+                Do(C(ScrCatalogue.Action.RemoveScriptCall, N(Shield), (Attachee, 0))),
+                Do(C(ScrCatalogue.Action.CallScriptAt, N(Shield), N(3), (Triggerer, 0), (Attachee, 0), N((secondsOfCycle + ahead) % 86_400))),
+                Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+            host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = Shield;
+            var worn = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), SessionScriptPoint.WieldOn), Drawn, Accept, host);
+            Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"ahead {ahead}");
+            var call = owner.QueryScriptCalls().Single();
+            Assert.AreEqual(new SessionScriptCall(Shield, 3, Role(owner, SessionEventKinds.PlayerEntity), Role(owner, "kit:3")), call.Call);
+            Assert.AreEqual(expected, call.DeadlineMs - owner.QueryClockSnapshot().GameTimestampMs, $"ahead {ahead}");
+        }
     }
 
     [TestMethod]

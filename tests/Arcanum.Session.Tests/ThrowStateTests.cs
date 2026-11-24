@@ -87,6 +87,34 @@ public sealed class ThrowStateTests
             "nothing is wielded to throw now");
     }
 
+    // ARC-SCRIPT-2386 (IV15, 0x4B3C00 sets the off flag of the thrown item and 0x4B2690 clears it): the flight is the flag; the flight given up clears it too.
+    [TestMethod]
+    public void AThrownItemIsSwitchedOffWhileItFliesAndOnAgainWhenTheShotEnds()
+    {
+        using var owner = Owner();
+        var map = owner.QueryActor().Map;
+        Assert.IsFalse(owner.QueryItemOff(map, "kit:1", dataOff: false));
+        var shot = owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.IsTrue(owner.QueryItemOff(map, "kit:1", dataOff: false), "in flight: off");
+        Assert.IsNull(owner.QueryObjectChange(map, SessionItemOff.Key("kit:1")), "no record is written: the shot is the state");
+        Assert.IsTrue(owner.EndShot(shot.Shot!.Value));
+        Assert.IsFalse(owner.QueryItemOff(map, "kit:1", dataOff: false), "the end clears it");
+    }
+
+    // ARC-SCRIPT-2386 (IV15, throw node 0x42AB90 refuses an item whose flags & 3 is not 0): a switched-off weapon is not thrown, it stays in the hand.
+    [TestMethod]
+    public void ASwitchedOffWeaponIsNotThrown()
+    {
+        using var owner = Owner();
+        var map = owner.QueryActor().Map;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(map, SessionItemOff.Key("kit:1"), 1)]).Disposition);
+        var shot = owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+        Assert.IsTrue(Wields(owner), "the weapon stays in the hand");
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count, "nothing lies on the ground");
+        Assert.IsFalse(owner.QueryItemInFlight("kit:1"));
+    }
+
     // ARC-MAGIC-025 (IC12, IC14): the thrown item is the projectile's item of its location event; its strike is its end.
     [TestMethod]
     public void AThrownShotsLocationEventNamesTheThrownItemUntilItStrikes()
@@ -123,6 +151,19 @@ public sealed class ThrowStateTests
         Assert.IsTrue(heavy.Resolution!.Difficulty!.Range >= 1_000_000);
         Assert.IsFalse(heavy.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit);
         Assert.IsFalse(Wields(owner), "a missed throw leaves the hand too");
+    }
+
+    [TestMethod]
+    public void AHitOnACritterThatDiedInFlightDoesNoDamage()
+    {
+        // ARC-COMBAT-2392 (TW8): the landing's outcome step returns before the critter's hit points when it is dead by then; the hit stands, the shot is spent.
+        using var owner = Owner();
+        var rat = Rat();
+        var shot = ThrowUntil(owner, rat, hit: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, rat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var landed = owner.LandShot(owner.Version, shot.Shot!.Value, new(rat));
+        Assert.AreEqual((AttackRefusal.None, AttackOutcome.Hit, true), (landed.Resolution!.Refusal, landed.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit ? AttackOutcome.Hit : landed.Resolution.Outcome, landed.Resolution.Damage is null));
+        Assert.IsNull(landed.Life, "no damage to a corpse");
     }
 
     [TestMethod]
@@ -209,11 +250,11 @@ public sealed class ThrowStateTests
     {
         using var owner = Owner();
         var rat = Rat();
-        // The resolver refuses an attack on a dead target before any throw.
+        // ARC-COMBAT-2392 (TW8): the original's throw flies at a corpse too (a hit or miss roll, no damage).
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, rat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
         var corpse = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
-        Assert.AreEqual((GameSessionDisposition.NoChange, AttackRefusal.TargetDead, (SessionShot?)null), (corpse.Disposition, corpse.Resolution!.Refusal, corpse.Shot));
-        Assert.IsTrue(Wields(owner), "a refused attack throws nothing");
+        Assert.AreEqual((GameSessionDisposition.Changed, AttackRefusal.None, true, true), (corpse.Disposition, corpse.Resolution!.Refusal, corpse.Shot is not null, corpse.Resolution.Damage is null));
+        Assert.IsFalse(Wields(owner), "the dagger is thrown");
 
         using var archer = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
         var bow = new EquipmentItem
@@ -414,6 +455,73 @@ public sealed class ThrowStateTests
     {
         Assert.AreEqual(LandedDamage(CombatSkill.Bow, thrown: false, null), LandedDamage(CombatSkill.Bow, thrown: false, FromBehindUnseen),
             "a shot from behind deals the plain damage (0x4B2870 drops the builder's backstab flags)");
+    }
+
+    // ARC-COMBAT-1947 (0x54ED30 → 0x462930): the item thrown is the first other item of the wielded weapon's prototype the hero holds, so the hand keeps its weapon while spares last.
+    private static GameSessionOwner SpareOwner(int prototype)
+    {
+        var kind = Kit[0].Kind with { Prototype = prototype };
+        var hero = HalfElf() with { Kit = [new(kind), new(kind), new(kind), Kit[2]] };
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = hero }).Owner!;
+        var dagger = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(2, 6) }, SpeedFactor = 10, Range = 15 },
+        };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(kind, [], false, dagger), (_, _) => true, Accept).Failure);
+        return owner;
+    }
+
+    [TestMethod]
+    public void ASpareOfTheWieldedPrototypeIsThrownAndTheHandKeepsItsWeapon()
+    {
+        using var owner = SpareOwner(6072);
+        var rat = Rat();
+        var first = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (first.Disposition, first.Failure));
+        Assert.AreEqual("kit:1", owner.QueryEquipment().Worn.Single(w => w.Slot == EquipmentSlot.Weapon).Entity, "the hand keeps its dagger");
+        Assert.AreEqual("kit:2", owner.QueryThrownShot(first.Shot!.Value)!.Value.Item, "the first other item of the prototype leaves the list");
+        Assert.AreEqual("kit:2", owner.QueryPlacedItems().Single().Entity);
+        Assert.IsFalse(owner.QueryItemInFlight("kit:1"));
+        var second = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, second.Failure);
+        Assert.AreEqual("kit:3", owner.QueryThrownShot(second.Shot!.Value)!.Value.Item, "the next spare");
+        Assert.IsTrue(Wields(owner));
+        var third = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, third.Failure);
+        Assert.AreEqual("kit:1", owner.QueryThrownShot(third.Shot!.Value)!.Value.Item, "no spare left: the wielded dagger goes");
+        Assert.IsFalse(Wields(owner));
+    }
+
+    [TestMethod]
+    public void TheWieldedDaggerIsThrownForThePrototypeWhoseDescriptionIs0x3AD9()
+    {
+        using var owner = SpareOwner(15085);
+        var shot = owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+        Assert.AreEqual("kit:1", owner.QueryThrownShot(shot.Shot!.Value)!.Value.Item, "0x462930 looks for no other item of prototype 15085");
+        Assert.IsFalse(Wields(owner));
+    }
+
+    // ARC-COMBAT-2524 (RH2, TW1, TW11, 0x434B00): the click on a critter starts the throw goal at the critter's location with the item the session names (a spare of the prototype, else the wielded weapon).
+    [TestMethod]
+    public void TheDefaultThrowClickNamesTheSpareElseTheWieldedWeapon()
+    {
+        using var owner = SpareOwner(6072);
+        Assert.AreEqual("kit:2", owner.QueryDefaultThrowItem(Dagger), "the first other item of the wielded prototype");
+        using var noLookup = SpareOwner(15085);
+        Assert.AreEqual("kit:1", noLookup.QueryDefaultThrowItem(Dagger), "prototype 15085 has no spare lookup: the wielded weapon");
+        using var lone = Owner();
+        Assert.AreEqual("kit:1", lone.QueryDefaultThrowItem(Dagger), "no spare: the wielded dagger");
+    }
+
+    [TestMethod]
+    public void TheDefaultThrowClickLeavesTheWeaponInTheHandWhenNothingCanBeThrown()
+    {
+        using var owner = Owner();
+        Assert.IsNull(owner.QueryDefaultThrowItem(new(ThrowRules.MaxWeight + 1)), "a weight outside the thrown range table");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Unequip(owner.Version, EquipmentSlot.Weapon, Accept).Disposition);
+        Assert.IsNull(owner.QueryDefaultThrowItem(Dagger), "no wielded weapon");
     }
 
     // A map where every step leaves it.

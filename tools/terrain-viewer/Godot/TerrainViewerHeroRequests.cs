@@ -109,6 +109,13 @@ public partial class TerrainViewerApp
         // ARC-DEV-169: the click decision's facts for a press on a dialog NPC (the viewer's other object clicks are not requests yet).
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift)
         {
+            // ARC-COMBAT-1943: the hero's Body of Air and polymorph spell flags go with every click's facts.
+            var (air, polymorphed) = app.HeroClickSpells();
+            return ClickFactsOf(target, alt, shift) with { HeroBodyOfAir = air, HeroPolymorphed = polymorphed };
+        }
+
+        private HeroClickFacts ClickFactsOf(string target, bool alt, bool shift)
+        {
             var session = app._areaSession;
             // ARC-DEV-176: a door or window is a portal for the click rules (a use out of combat mode and in it).
             if (app._areaDoors?.PortalOf(target) is not null)
@@ -142,6 +149,23 @@ public partial class TerrainViewerApp
                 present ? HeroClickTarget.Critter : HeroClickTarget.Other, TargetDead: talksDead, TargetTalksDead: talksDead, Alt: alt, Shift: shift);
         }
 
+        // ARC-INPUT-1946 (0x4445A0): the Alt click out of combat mode moves a loose item or a dead NPC's body within one tile onto the hero's tile (no goal, no action points).
+        public HeroImmediateResult ImmediateAction(string target)
+        {
+            if (app._areaSession is not { } session || !IsInventoryTarget(target) || !app.InventoryActive || app.UseKeyOf(target) is not { } key
+                || app.AreaInventoryTargetOf(key) is not { } found || app.ActorCell() is not { } hero) return HeroImmediateResult.None;
+            var heroCell = new CellCoord((int)hero.X, (int)hero.Y);
+            switch (found.Kind)
+            {
+                case AreaInventoryTargetKind.GroundItem:
+                    return AreaHeroPull.PullItem(session, found.Entity, heroCell);
+                case AreaInventoryTargetKind.DeadNpc:
+                    return AreaHeroPull.PullBody(app._aiHost, found.Entity, heroCell);
+                default:
+                    return HeroImmediateResult.None;
+            }
+        }
+
         public bool StartTalk(string target, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host) return false;
@@ -152,12 +176,12 @@ public partial class TerrainViewerApp
             return host.Talk(target, run, noWalk);
         }
 
-        public bool StartPickup(string target, bool run)
+        public bool StartPickup(string target, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
             app.StopWorldRoute("ROUTE_REPLACED_BY_PICKUP");
             app._mapFarGoal = null;
-            return host.Pickup(target, run);
+            return host.Pickup(target, run, noWalk);
         }
 
         public bool StartAttack(string target, bool run)
@@ -220,15 +244,20 @@ public partial class TerrainViewerApp
             return host.Cast(run, target);
         }
 
-        public bool StartUse(string target, bool container, bool run)
+        public bool StartUse(string target, bool container, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
             app.StopWorldRoute("ROUTE_REPLACED_BY_USE");
             app._mapFarGoal = null;
-            return host.Use(target, container, run);
+            return host.Use(target, container, run, noWalk);
         }
 
-        public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun);
+        public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun, app._gameSettings.AutoAttack);
+
+        // ARC-COMBAT-1949 (VC62): the start branch's reads of the hero's runs, the repeated attack queued beneath the main run and the click's flags on the existing main run.
+        public HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null) => app.HeroRunsHost()?.StartContext(goal, target, item) ?? default;
+        public bool QueueGoal(HeroClickGoal goal, string target) => app.HeroRunsHost()?.QueueGoal(goal, target) == true;
+        public void ApplyClickFlags(bool shift, bool nearOccupied) => app.HeroRunsHost()?.ApplyClickFlags(shift, nearOccupied);
 
         public bool SetWalkTarget(CellCoord tile, bool run, bool held)
         {

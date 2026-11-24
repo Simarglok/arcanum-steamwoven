@@ -67,17 +67,10 @@ nothing. One pack is active at a time; the viewer chooses it (ARC-UI-006): `ARC_
 first pack that opened and is not rejected in `user://hd-packs/` and, in a source run, the checkout's
 `local/hd-packs/`.
 
-### Local widescreen main-menu art
+### Widescreen main-menu art (retired)
 
-The viewer can use an optional `main-menu-16x9.png` at the root of the active pack
-when HD interface art is on. This local file sits outside the sprite manifest. Use an
-opaque, non-interlaced 8-bit RGBA PNG, up to 3840 × 2160 and 40 MiB. Its middle
-75 percent of width must register with the original 800 × 600 menu frame. The viewer
-scales the background and the menu controls together and crops the side art on
-narrower screens. The same plate backs every menu window that draws the table scene (main menu,
-Single Player, New Game and the in-play menus; ARC-DEV-344); the options window and the other
-windows keep their own art. A missing or unusable file leaves the normal menu art available.
-Keep the source and generated art on the player's device (ARC-UI-122).
+An optional `main-menu-16x9.png` at the pack root used to back the table-scene menus (ARC-UI-122, ARC-DEV-344). Since ARC-UI-3003 (owner decision of
+[#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003), option C) the viewer does not read it: a full-screen menu is one centred 4:3 plate with black sides, and the pack's own 4× table-scene art stands at `s`. A pack that still has the file is valid; the file is ignored.
 
 ## manifest.json
 
@@ -419,6 +412,36 @@ frame (NCC, scale, offset); a weak fit (a sheet whose pictures the generator dre
 registered otherwise. An existing pack gets the slice added or its interface entries replaced (every other entry, the pack's review and
 its recipe method stay; the manifest is a new identity), a missing one is created; frame files are written first, the manifest last,
 and the pack is opened and verified again. The image reader takes 8- and 16-bit grey, grey+alpha, RGB and RGBA, no palette or interlace.
+
+## Portrait entries (ARC-UI-2865)
+
+The original draws a portrait from one bitmap of its `portrait\` folder: 64 × 64 `<stem>.bmp` (character sheet, save and load list, hover panel, loot and
+barter windows, follower frames at 32, identify and repair) and 128 × 128 `<stem>_b.bmp` (character creation and the premade browser; a stem without a large
+bitmap draws the small one). The HD pack redraws such a bitmap as an entry of kind `portrait` (4× → 256 × 256 and 512 × 512):
+
+```json
+{ "kind": "portrait", "file": "interface/portraits/heroes/portrait-hum1_b-f000.png", "sha256": "<png sha256>", "bytes": 12345,
+  "slice": "interface", "portrait": { "path": "portrait/hum1_b.bmp" },
+  "legacy": { "width": 128, "height": 128, "rgbaSha256": "<Legacy RGBA sha256>" }, "review": "unreviewed" }
+```
+
+Owner decision (the owner's request of 2026-11-19 on #2865, as the coordinator relayed it: portraits go into the HD pack and are drawn from there). The format follows the
+rest of the pack, so nothing else changes:
+
+| Part | Rule |
+| --- | --- |
+| `kind` | `portrait`; the entry's exact properties are the common ones (`file`, `sha256`, `bytes`, `slice`, `legacy`, `review`) and `portrait`. An older reader refuses a pack that holds one (unknown kind), like `masked`. |
+| `portrait.path` | the original bitmap's path, lowercase, exactly `portrait/<name>.bmp` with `<name>` of `[a-z0-9_-]` and at most 48 characters. The key of the entry, unique in the pack (`HdPortraitKey`). A name outside the pattern has no HD entry and draws the BMP. |
+| `slice` | a slice whose kinds include `interface` (the pack's `interface` slice): a portrait is interface art, so the slice's Legacy alpha rule applies, and no new slice or recipe change is needed. |
+| `legacy` | the bitmap's decoded pixels as `Arcanum.Data.Characters.PortraitBitmap` reads them (uncompressed 1/4/8/24-bit Windows bitmap, top row first, alpha 255): width, height and the SHA-256 of the RGBA. The importer and the viewer hash the same decoder's pixels, so a bitmap another game version or a mod replaced is `SourceMismatch` and draws the BMP. |
+| HD file | the pack's one PNG profile (8-bit RGBA), exactly `Scale × Legacy size`, **fully opaque** (a portrait has no alpha; the importer writes alpha 255 and the slice's alpha check holds). Taken as it is: no registration or lock. |
+| key | carried as an `HdSpriteKey` (hash of the path, `View` 0, group, frame and palette 0), so the pack's lookup, file checks and the device cache serve portraits like frames (`HdPack.ResolveSprite`, `CheckPrepared`, `InterfaceSprites`); `HdEntryKind.Portrait`. The review tool (`HdReview`) lists sprites only and leaves portraits as they are. |
+
+The viewer (`PortraitHd.Texture`) makes every portrait texture from the bitmap's own pixels and keeps its size (64 or 128), so every draw site keeps its on-screen
+size and layout; with the HD setting on and an entry for that bitmap it draws the redraw (mipmapped and filtered down for the 32 × 32 follower frames), per file,
+otherwise the BMP. Import: `hd_pack.py portraits-plan` writes the plan (kind `arcanum-steamwoven-hd-portrait-plan`) from the delivered redraws, the importer
+(`hd-interface-import --plan`) checks each redraw against the bitmap it reads from the game and writes the entries into a staging pack (a portrait plan replaces only the portraits it names; the pack's sprites and other portraits stay), and the update goes in with `apply --add-new`
+([workflow](../workflow/hd-pack.md#portraits-arc-ui-2865)).
 
 ## Device budget file
 

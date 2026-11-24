@@ -88,6 +88,58 @@ class SummaryTests(unittest.TestCase):
         near = self.summary("ERROR: one\nERROR: two\n", 1)
         self.assertEqual(near[2:], ["ERROR: one", "ERROR: two"])  # the last error is already shown
 
+    def test_a_signal_after_pass_lines_and_shutdown_leaks_is_named_a_shutdown_crash(self) -> None:
+        text = ("ARC-UI-006 self-test app PASS ok\nARC-WORLD-001 self-test PASS combined\n"
+                "ERROR: Leaked unsafe reference to object: InputEventKey\n   at: finalize (csharp_script.cpp:179)\n"
+                "WARNING: 4 ObjectDB instances were leaked at exit\n")
+        lines = self.summary(text, -11)
+        self.assertEqual(lines[0], f"FAIL exit=-11 ran=3s lines=5 log={self.log}")
+        self.assertEqual(lines[1], "note: killed by SIGSEGV after the last PASS line (line 2) and Godot's shutdown leak "
+                                   "lines, with no other error line between them: looks like a crash at engine shutdown "
+                                   "(ARC-DEV-2360); retry once, a repeat is a real failure")
+        self.assertEqual(lines[2], "first error at line 3 of 5 (1 error line(s)):")  # the usual failure lines still follow
+        self.assertEqual(self.summary(text, 139)[1], lines[1])  # a wrapper's 128 + 11 is the same signal
+
+    def test_a_finalizer_thread_crash_of_godot_dotnet_is_named_an_engine_crash(self) -> None:  # ARC-DEV-2412
+        handler = ("ERROR: /root: The caller thread can't call the function `propagate_notification()` on this node.\n"
+                   "   C# backtrace (most recent call first):\n       [1] void Godot.StringName.Dispose(bool) (StringName.cs:39)\n"
+                   "       [2] void Godot.StringName.Finalize() (StringName.cs:24)\n"
+                   "handle_crash: Program crashed with signal 11\n")
+        text = "ARC-UI-006 smoke PASS ok\n" + handler
+        lines = self.summary(text, -6)
+        self.assertTrue(lines[1].startswith("note: killed by SIGABRT in a Godot type's Finalize on the .NET finalizer thread (ARC-DEV-2412"), lines[1])
+        self.assertTrue(run_log.engine_finalizer_crash(text.splitlines()))
+        # the .NET runtime's own fatal error, with the same backtrace
+        dotnet = ("Fatal error. System.AccessViolationException: Attempted to read or write protected memory.\n"
+                  "   at Godot.DisposablesTracker.UnregisterDisposable(System.WeakReference`1<System.IDisposable>)\n"
+                  "   at Godot.StringName.Finalize()\n")
+        self.assertTrue(run_log.engine_finalizer_crash(dotnet.splitlines()))
+        # a crash without a Godot Finalize, and a Finalize without a crash, are not this crash
+        self.assertFalse(run_log.engine_finalizer_crash("handle_crash: Program crashed with signal 11\n   at MyApp.Foo()\n".splitlines()))
+        self.assertFalse(run_log.engine_finalizer_crash("   at Godot.StringName.Finalize()\nARC-UI-006 smoke PASS ok\n".splitlines()))
+        # a failure the log printed before the crash is a real failure that crashed too
+        for failure in ("ARC-RENDER-007 frontier=InvalidOperationException", "ARC-X native-smoke failure mode=area stage=Upload", "ARC-X smoke FAIL cast"):
+            self.assertFalse(run_log.engine_finalizer_crash([failure] + text.splitlines()), failure)
+
+    def test_a_signal_note_claims_no_more_than_the_log_shows(self) -> None:
+        self.assertEqual(self.summary("start\nstage 1\n", -11)[1],
+                         "note: killed by SIGSEGV and the log has no PASS line: a crash, not a shutdown crash")
+        self.assertEqual(self.summary("stage PASS\nstage 2\n", -6)[1],
+                         "note: killed by SIGABRT after the last PASS line (line 1) with no shutdown leak line: "
+                         "read what follows it")
+        # an error line after the last PASS, or a leak line before it, is not a shutdown crash alone
+        self.assertEqual(self.summary("stage PASS\nERROR: boom\nERROR: Leaked unsafe reference to object: X\n", -11)[1],
+                         "note: killed by SIGSEGV; an error line follows the last PASS line (line 1), so this is not a "
+                         "shutdown crash alone: read it")
+        self.assertIn("no shutdown leak line",
+                      self.summary("ERROR: Leaked unsafe reference to object: X\nstage PASS\n", -11)[1])
+        # SIGKILL and an unknown number are not crashes; a plain failure gets no note
+        self.assertEqual(self.summary("stage PASS\n", -9)[1], "note: ended by SIGKILL, not a crash signal")
+        self.assertEqual(self.summary("stage PASS\n", -200)[1], "note: ended by signal 200, not a crash signal")
+        self.assertNotIn("note: killed", " ".join(self.summary("stage PASS\nERROR: boom\n", 1)))
+        self.assertIsNone(run_log.signal_note([], 124))
+        self.assertIsNone(run_log.signal_note([], 0))
+
     def test_a_failure_without_an_error_line_shows_the_tail(self) -> None:
         lines = self.summary("".join(f"line {number}\n" for number in range(60)), 124)
         self.assertEqual(lines[1], "no error line found; the last 40 lines:")

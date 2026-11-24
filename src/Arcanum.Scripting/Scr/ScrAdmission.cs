@@ -33,8 +33,6 @@ public enum ScrRefusalCode
     ScriptNumberOutOfRange,
     /// <summary>A literal goto below line 0 (a source reading takes −1..−4 as control codes, anomaly X6).</summary>
     NegativeGoto,
-    /// <summary>A literal goto past the line after the last one.</summary>
-    GotoBeyondEnd,
 }
 
 /// <summary>The first thing that keeps a script from being admitted: where it is and what it is.</summary>
@@ -101,10 +99,11 @@ public sealed class ScrAdmissionSet
         [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player]);
 
     /// <summary>The deferred-call set (ARC-SCRIPT-010): <see cref="S3"/> plus call script in (54) and remove script call
-    /// (125). Call script at (55) stays outside: one installed line uses it, none a run reaches (ARC-RES-045), and its
-    /// time-of-day arithmetic (TE2) is not settled.</summary>
+    /// (125). ARC-SCRIPT-2824 (ledger TQ17) adds call script at (55): the same deferred call, its delay the time to the operand's
+    /// time of day counted from the start hour (<see cref="ScrGameTime.SecondsSinceStartHour"/>); the host answers the clock
+    /// through <see cref="IScrTimeQueries"/> (one without it ends the run with <see cref="ScrStop.NotModelled"/>).</summary>
     public static ScrAdmissionSet S5 { get; } = new("S5", S3.Conditions,
-        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
+        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.CallScriptAt).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
 
     /// <summary>The print-line set (ARC-SCRIPT-013): <see cref="S5"/> plus print line (24), which hands a line of the running
     /// script's DLG and a number to the host as a <see cref="ScrPrintLine"/> effect (ledger IS1–IS3,
@@ -403,8 +402,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The loop-break set (ARC-SCRIPT-1166, plan slice E5-e, ledger PG15): <see cref="S38"/> plus loop break (20), which ends the run's running loop at once and goes on after the first loop end following the loop for (the same
-    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task. Call script at (55) is not part of the slice:
-    /// it stands on one line no run reaches.
+    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task.
     /// </summary>
     public static ScrAdmissionSet S40 { get; } = new("S40", S38.Conditions, S38.Actions.Append(ScrCatalogue.Action.LoopBreak), S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
 
@@ -492,9 +490,66 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The portal vicinity set (ARC-SCRIPT-2041, ledger PV1–PV4): <see cref="S59"/> plus the focus kind every portal in the vicinity (19), which the host answers through <see cref="IScrPortalQueries"/> (the loop for of the four ground
-    /// rune tile scripts). The interpreter runs at most S60.
+    /// rune tile scripts). The interpreter ran at most S60 until ARC-SCRIPT-2319.
     /// </summary>
     public static ScrAdmissionSet S60 { get; } = new("S60", S59.Conditions, S59.Actions, S59.ValueKinds, S59.FocusKinds.Append(ScrFocusKind.EveryPortalInVicinity), counterIndexWraps: true);
+
+    /// <summary>
+    /// The group set (ARC-SCRIPT-2319, ledger GF1–GF7): <see cref="S60"/> plus the focus kinds every one in the group (13) and anyone in the group (14), which the interpreter resolves to the triggerer's direct followers and then the
+    /// triggerer itself, the followers answered by the host through <see cref="IScrGroupQueries"/> (the group scripts of the installed hit, miss, dialog, taking-damage and critical-hit points). The interpreter ran at most S61 until ARC-SCRIPT-2322.
+    /// </summary>
+    public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]), counterIndexWraps: true);
+
+    /// <summary>The five guard conditions (PC quest state 6, has item named 17, is named 20, wields an item named 21, has a reputation 33; ledger SG1–SG6) whose object list the interpreter tests object by object.</summary>
+    public static IReadOnlySet<int> GuardConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
+
+    /// <summary>The actions of <see cref="S63"/> a host answers through <see cref="IScrCritterFieldQueries"/>: get armor (32, ARC-SCRIPT-2326).</summary>
+    public static IReadOnlyList<int> CritterArtActions { get; } = [ScrCatalogue.Action.GetArmor];
+
+    /// <summary>
+    /// The conditions the interpreter tests over the object list of operand 0 by the list rule of SG6 (the exe's list tail at 0x4455BD, shared by every list condition, ARC-SCRIPT-2326): the group focus kinds are admitted in their slot 0 besides
+    /// the five <see cref="GuardConditions"/>. Conditions that read the first object only (10, 18, 28, 29, 34, 36, 40, and 24, 32, 44 outside this catalogue) are not in it, and neither are the ones the interpreter reads as one object or counts differently (such as is identified, 47).
+    /// </summary>
+    public static IReadOnlySet<int> ListConditions { get; } = new HashSet<int>
+    {
+        ScrCatalogue.Condition.HasBlessing, ScrCatalogue.Condition.HasCurse, ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasBodySpell,
+        ScrCatalogue.Condition.IsInvisible, ScrCatalogue.Condition.HasMirrorImage, ScrCatalogue.Condition.MonsterOfType, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSurrendered, ScrCatalogue.Condition.IsInDialog,
+        ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.IsInvulnerable, ScrCatalogue.Condition.IsInCombat, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsUndead,
+        ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsProwling,
+    };
+
+    /// <summary>The focus kinds of <see cref="S61"/> and <see cref="S65"/> a host answers through <see cref="IScrGroupQueries"/>: the group kinds, and since ARC-SCRIPT-2320 the follower kinds (the same direct follower list).</summary>
+    public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind>
+        { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower };
+
+    /// <summary>
+    /// The container vicinity set (ARC-SCRIPT-2322, ledger CV1–CV7): <see cref="S61"/> plus the focus kinds every container in the vicinity (17) and any container in the vicinity (18, one list with 17), which the host answers
+    /// through <see cref="IScrContainerQueries"/> (8 installed roots on 10 sites). The interpreter ran at most S62 until ARC-SCRIPT-2326.
+    /// </summary>
+    public static ScrAdmissionSet S62 { get; } = new("S62", S61.Conditions, S61.Actions, S61.ValueKinds, S61.FocusKinds.Concat([ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]), counterIndexWraps: true);
+
+    /// <summary>
+    /// The armour set (ARC-SCRIPT-2326, ledger AR1–AR7): <see cref="S62"/> plus get armor (action 32), which stores the armour part of the first object's current art id (<see cref="CritterArtActions"/>, answered through <see cref="IScrCritterFieldQueries.ArmorOf"/>),
+    /// and the group focus kinds in slot 0 of every list condition (<see cref="ListConditions"/>: the exe's condition cases share one list tail, GF9 read again). The interpreter ran at most S63 until ARC-SCRIPT-2321.
+    /// </summary>
+    public static ScrAdmissionSet S63 { get; } = new("S63", S62.Conditions, S62.Actions.Concat(CritterArtActions), S62.ValueKinds, S62.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The any-scenery set (ARC-SCRIPT-2321, ledger AS1–AS6): <see cref="S63"/> plus the focus kind any scenery in the vicinity (16), the same list as kind 15 that a condition reads as "one is enough" (SG6). The interpreter runs at most S64.
+    /// </summary>
+    public static ScrAdmissionSet S64 { get; } = new("S64", S63.Conditions, S63.Actions, S63.ValueKinds, S63.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
+
+    /// <summary>
+    /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S64"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
+    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most <see cref="Latest"/>, which is this set now.
+    /// </summary>
+    public static ScrAdmissionSet S65 { get; } = new("S65", S64.Conditions, S64.Actions, S64.ValueKinds, S64.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
+
+    /// <summary>
+    /// The top of the admission chain (ARC-SCRIPT-1881): the one set the interpreter runs at most (<see cref="ScrRunOptions"/> refuses anything outside it) and that every host set is checked against. The chain S1 .. S65 is linear, each set a
+    /// superset of the one it is built on (<c>ScrAdmissionChainTests</c> holds that). A slice that adds a set builds it on the current <see cref="Latest"/> and moves this one line, so two slices landing in turn never fork the chain.
+    /// </summary>
+    public static ScrAdmissionSet Latest => S65;
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -536,7 +591,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
-        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
+        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
 
     /// <summary>The conditions of <see cref="S14"/> a host answers through <see cref="IScrItemQueries"/>.</summary>
     public static IReadOnlySet<int> ItemQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded };
@@ -598,10 +653,10 @@ public static class ScrAdmission
         ArgumentNullException.ThrowIfNull(set);
         foreach (var line in program.Lines)
         {
-            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set, program.Count)
-                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set, program.Count)
+            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set)
+                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set)
                 // The always-true condition never runs its false action, so its bytes are not read.
-                ?? (line.Condition.Type == ScrCatalogue.Condition.True ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, program.Count));
+                ?? (line.Condition.Type == ScrCatalogue.Condition.True ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set));
             if (refusal is not null) return ScrAdmissionResult.Of(refusal);
         }
         return ScrAdmissionResult.Of(new ScrAdmittedProgram(program, set));
@@ -629,9 +684,9 @@ public static class ScrAdmission
         {
             var line = program.Lines[at];
             var always = line.Condition.Type == ScrCatalogue.Condition.True;
-            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set, count)
-                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set, count)
-                ?? (always ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, count));
+            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set)
+                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set)
+                ?? (always ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set));
             if (refusal is not null) { refusals.Add(refusal); continue; }
             foreach (var action in always ? new[] { line.OnTrue } : [line.OnTrue, line.OnFalse])
                 foreach (var next in Successors(program, action, at))
@@ -684,7 +739,7 @@ public static class ScrAdmission
     private static readonly IReadOnlyList<ScrOperandRole> FloatHeadlineRoles = Array.AsReadOnly(new[]
         { ScrOperandRole.Unused, ScrOperandRole.Object, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused });
 
-    private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set, int count)
+    private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set)
     {
         var condition = side == ScrClauseSide.Condition;
         var type = clause.Type;
@@ -721,8 +776,10 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     // ARC-SCRIPT-047: a condition tests every object of a list focus kind (the "any" kinds some of them, SG6); the
                     // interpreter reads a condition's object operand as one object, so the critter vicinity kinds are admitted in
-                    // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list).
+                    // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list); ARC-SCRIPT-2319: the group kinds (13, 14) likewise (GF9).
                     if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
+                    // ARC-SCRIPT-2319 (GF9), ARC-SCRIPT-2320 (FK5): the group and follower kinds are admitted in a condition only as the list of a guard condition (SG1–SG6) or of a list condition (ARC-SCRIPT-2326, AR5: kind 14 the "any" form); the conditions that read the first object only (10, 18, 28, 29, 34, 36, 40) and the ones the interpreter reads as one object stay out.
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup or ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !(slot == 0 && (ScrAdmissionSet.GuardConditions.Contains(type) || ScrAdmissionSet.ListConditions.Contains(type)))) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).
@@ -747,6 +804,8 @@ public static class ScrAdmission
             if (!condition && type is ScrCatalogue.Action.GetHitPoints or ScrCatalogue.Action.GetFatiguePoints && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get social class, get origin and get faction store into their number operand 1 (ARC-SCRIPT-1772, CQ1–CQ3).
             if (!condition && type is ScrCatalogue.Action.GetSocialClass or ScrCatalogue.Action.GetOrigin or ScrCatalogue.Action.GetFaction && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get armor stores into its number operand 1 (ARC-SCRIPT-2326, AR1).
+            if (!condition && type == ScrCatalogue.Action.GetArmor && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
@@ -758,9 +817,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.Goto)
             {
                 if (!literal) return Refuse(ScrRefusalCode.ComputedGoto);
-                // A goto to exactly the line count is the end of the script: skip default, without auto-removal.
+                // A goto to the line count or beyond it is the end of the script, as the original's unsigned line read has it: skip default, without auto-removal (ledger E9; ARC-SCRIPT-3005 admits it, it was refused before).
                 if (value < 0) return Refuse(ScrRefusalCode.NegativeGoto, true);
-                if (value > count) return Refuse(ScrRefusalCode.GotoBeyondEnd, true);
             }
         }
         return null;

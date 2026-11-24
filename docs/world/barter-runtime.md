@@ -60,7 +60,7 @@ Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade
 for an item, a total past 32 bits, a payer with fewer coins than the total (`GoldShort`: the original's "not enough money" before the
 move, and its rolled-back stack payment after it), and the payment refusals that do not depend on the move (a pile past 32 bits, a full
 record budget, a full NPC item budget or list, a transfer script or insert-item script on the pile); the buy's item move runs the
-item's insert-item script through the host, as a loot does. A payment refused after the move (the host's insert check of a new pile for
+item's insert-item script through the host, as a loot does. ARC-UI-1824: the lines the move's scripts printed (`InventoryMutationResult.Messages`) follow the window's trade text (bought, sold, a sale onto a slot, refused, and a won or refused bet's text), as the loot window's do. A payment refused after the move (the host's insert check of a new pile for
 the merchant, an exhausted made number, or coins an insert-item script spent) leaves the item moved and reports the payment's failure,
 as the original leaves a moved item whose payment failed. The NPC list and budget checks for a new pile run before the move, so a
 merchant at exactly its list limit is refused one item early. `QueryHeroHaggle()` gives the hero's haggle effectiveness and training.
@@ -122,8 +122,7 @@ Decisions of this slice for sets (`SessionRestockSet`, the host's reading of `In
   list is cleared and nothing is generated, in both modes (technical bug, owner rule 2026-10-28).
 - `Unsupported`: the shapes the project refuses (`Malformed`, `InvalidText`; since ARC-DEV-161 only 1 of the 123 installed sets, set 94, is
   `Malformed`) are read partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So do a holder
-  the map's seed does not list as that kind, a spilled container, a holder with a transfer script (the session does not run it, so
-  every created item would be refused after the clear) and a container with flag 0x200 with a source whose seed facts the host
+  the map's seed does not list as that kind, a spilled container and a container with flag 0x200 with a source whose seed facts the host
   cannot give (ARC-WORLD-100: with them it draws seeded and is recorded as generated, [below](#session-generation-arc-world-100)).
 
 ARC-DEV-161 (B40, the empty Crash Site chest): `InventorySourceRules.Read` reads a pair as the loot-line parse does (0x4BF7B0, `strtok` on `:`, `,`
@@ -153,7 +152,7 @@ object and the merchant search: ledger [RK9](../research/ledger/items.md#merchan
 | Schedule | 0x5733A9 schedules the shown object 0x6813A8 at every open; in the barter mode 0x573042 sets it to the merchant's substitute container, or to the merchant when it has none (RK9) | `AreaRestockHost.Schedule` after every barter open the session accepted (the window's container, else the merchant) and every loot open (the looted holder), with the seed holder's T0 inventory source as `hasSource`; a junk pile or another object that is no seed holder of the actor's map asks nothing. Log `ARC-WORLD-096 restock schedule`. |
 | Holder facts | 0x4641A0, 0x45D8D0, 0x45DDA0, field 0x38 (RK1, RK3) | The seed holder's kind and its T0 source and container flags (`AreaInventoryMap.RestockSeed`), death (`QueryNpcDead`) and a PC at the top of its chain of leaders (`QueryPcLeader`, 0x45DDA0) from the session. |
 | Screen test | 0x43DFD0 against 0x5E8808..0x5E8814, strict on every side (RK3) | The union of the container's drawn T0 body rectangles (`TerrainCanvas.AreaBodyRect`) against the game window: the viewport's visible rectangle through the canvas transform, in area pixels (what the viewer shows at its zoom). A container of a map that is not shown is off screen. |
-| Merchant search | 0x440FC0 with the NPC mask, then 0x45F650 per NPC (RK3, RK9) | The tile rectangle that holds the tiles under the four corners of a window-sized screen rectangle centred on the container's tile (`AreaRestockHost.Vicinity`; about 26 × 26 tiles for 800 × 600 pixels; the window is the viewport's size at zoom 1, so a display zoom does not change it), the seed's NPCs in their T0 order and at their T0 cells, the first whose substitute container (T0 leader none and field 0x126, with no leader in the session (`QueryLeader`, 0x45F650), within 20 tiles) is the container. |
+| Merchant search | 0x440FC0 with the NPC mask, then 0x45F650 per NPC (RK3, RK9) | The tile rectangle that holds the tiles under the four corners of a window-sized screen rectangle centred on the container's tile (`AreaRestockHost.Vicinity`; about 26 × 26 tiles for 800 × 600 pixels; the window is the viewport's size at zoom 1, so a display zoom does not change it), the seed's NPCs in their seed order and at the cells the AI host has them on now (ARC-WORLD-2357; else their T0 cells), the first whose substitute container (T0 leader none and field 0x126, with no leader in the session (`QueryLeader`, 0x45F650), within 20 tiles) is the container. |
 | Persistent flag | item field 0x57, flag 0x2000 (RK5) | The seed item's flags (`AreaInventoryMap.Persistent`); an item the session made has none. |
 | Sets and items | 0x4BF5D0, 0x4ED8B0 (RK6, RK7) | `InventorySourceRules.Read` over the barter data: `Parsed` reads, `Emptied` reads the coin pair the loot-line parse read before it failed (the loot line is parsed before the buy line, BT8; `InventorySourceRules.LootCoins` over `InventorySourceBuyRules.LootLineCoins`: each side through `atoi`; a parse that failed before the pair is `Unreachable`, an overflowing side `Unsupported`), `Unreachable` stays, `Malformed` and `InvalidText` are `Unsupported`; a line's item is the prototype (basic + 20) the barter data read, with its type, name, description and an ammunition prototype's type and units; the pile is gold prototype 9076. |
 | Insert check | 0x466510 | The viewer's diagnostic check (every item fits), as the barter window's. |
@@ -202,7 +201,7 @@ event finds no source (`RestockRules.Fire` → nothing). The draws come from `Re
 
 | API | Original | Rule |
 | --- | --- | --- |
-| `GenerateContainerOnce(expected, container, world)` | partner setup 0x572640 (call site 0x572779) → 0x463E20, RK12 | The first open in loot mode, which the host calls before `ScheduleRestock` for a container of the actor's map. Without flag 0x200, or once generated, no change. Otherwise the clear (persistent items stay, RK5) and the seeded generation as at a restock event; with a source the container is then recorded as generated. Flag 0x200 with source 0 (none installed) is only cleared and keeps its flag. An unreachable set (RK7) clears, generates nothing and is recorded. A container the session cannot regenerate (a set it does not admit, a transfer script, no seed facts from the host) keeps its list: outcome `Unsupported`, no change. Refused before any effect: an invalid entity, the version, a host not ready yet (`RestockReady` false) or no seed for the map
+| `GenerateContainerOnce(expected, container, world)` | partner setup 0x572640 (call site 0x572779) → 0x463E20, RK12 | The first open in loot mode, which the host calls before `ScheduleRestock` for a container of the actor's map. Without flag 0x200, or once generated, no change. Otherwise the clear (persistent items stay, RK5) and the seeded generation as at a restock event; with a source the container is then recorded as generated. Flag 0x200 with source 0 (none installed) is only cleared and keeps its flag. An unreachable set (RK7) clears, generates nothing and is recorded. A container the session cannot regenerate (a set it does not admit, no seed facts from the host) keeps its list: outcome `Unsupported`; a holder's transfer script is no gate, ARC-SCRIPT-2857, no change. Refused before any effect: an invalid entity, the version, a host not ready yet (`RestockReady` false) or no seed for the map
 (`InventoryUnavailable`), a container the seed or the host does not list as one or a spilled one, a full record, list or generated budget (4096), the revision. One revision. |
 | `FireRestock` (event `inventory.restock`) | 0x464180 → 0x463C60 → 0x463E20, RK3, RK10 | A container with flag 0x200 that the decision regenerates (on its own with flag 0x400, or through its merchant) draws seeded and is recorded; the merchant's own regeneration before it keeps the session's draws. Without the host's seed facts it keeps its list (`Unsupported`, as before). |
 | `ISessionRestockWorld.GeneratedOnceFacts(map, container)` | 0x463E20 (field 2), 0x441B60 (field 0x10E) | The host's part of the seed: the container's tile x and the PC's player name bytes (the host's PC, else its prototype's; empty when unset). The default answers null (no seed facts). Asked only for a container with a source: flag 0x200 with source 0 is cleared without a seed. |
@@ -305,7 +304,7 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
   closes (only the session's do); the steal mode (3) and the second container view (4) do not exist in the viewer.
 
 - **Restock limits**: since ARC-WORLD-101 the loot window opens on containers too and schedules them; the steal mode and the window's
-  other partners do not. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
+  other partners do not. NPC positions in the merchant search are the cells the AI host has them on (ARC-WORLD-2357), else their T0 cells, and the order is the seed's, not the original's
   sector list order (it matters only for two merchants of one container). The screen test's game window is the viewer's whole view at its
   zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 runs in the session
   ([above](#session-generation-arc-world-100)) and at the viewer's first loot open ([above](#container-loot-window-arc-world-101)); the
@@ -319,7 +318,10 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
   (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the
   clear (not guarded).
 - **Substitute container limits** (ARC-WORLD-090): the host finds the container from the T0 data (the NPC's leader handle and field
-  0x126) and measures the 20 tiles between the T0 positions of the speaker and the container (the original measures where they are now);
+  0x126) and measures the 20 tiles between the speaker's live cell and the container's T0 cell (0x45F650 measures where they are now;
+  ARC-WORLD-2245: the speaker's cell is the talk reach's, `AreaSpeakerCells.Live`: a companion's committed cell, else the AI host's cell of the NPC,
+  else its T0 cell; a container does not move in the session, so its T0 cell is where it is; ARC-WORLD-2357: the dialog item-hold's substitute
+  and the restock host's merchant search measure the NPC from the same live cell, `AreaInventoryHost.NpcLiveCell`, else its T0 cell);
   a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container
   gold move is modelled). The items sales put into a container are not part of its spill when an attack breaks it: they stay in the
   session's store, shown nowhere (not modelled). A broken container is no substitute: the open refuses it and the viewer opens the

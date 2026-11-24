@@ -311,9 +311,10 @@ public sealed partial class GameSessionOwner
     /// one of the item's positive charges goes, from the session's count or else <paramref name="baseline"/> (the item's own field), and
     /// the item is marked magical (0x450420, ledger DV1). Refused for an invalid entity, a baseline outside 1..1,000,000 while the session
     /// holds no count
-    /// (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the session does not track or deleted
-    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. No charge left is NoChange (the payment refuses
-    /// that before it spends). One revision.
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the session deleted
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>), the 65,537th count (<see cref="GameSessionLimits.MaxItemCharges"/>, which no other record shares) and an exhausted revision counter.
+    /// ARC-MAGIC-2434: the original's payment always writes field 105 of the source it was given, so the spend needs no tracking: the host's item lookup names the item, whatever seed
+    /// the session has attached, and a full durability budget cannot lose it. No charge left is NoChange (the payment refuses that before it spends). One revision.
     /// </summary>
     public GameSessionMutationResult SpendItemCharge(GameSessionVersion expected, string entity, int baseline)
     {
@@ -323,10 +324,10 @@ public sealed partial class GameSessionOwner
         // The baseline matters only until the session holds a count.
         if (!recorded && baseline is < 1 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        if (IsItemDestroyed(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         var current = recorded ? left : baseline;
         if (current <= 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
-        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (!recorded && _durability.Charges.Count >= _limits.MaxItemCharges) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         _durability.Charges[entity] = current - 1;
         Revise();
@@ -337,7 +338,8 @@ public sealed partial class GameSessionOwner
     /// ARC-MAGIC-1146 (the Recharge component): the item's spell charges (field 0x69) grow by <paramref name="amount"/>, not above <paramref name="maximum"/> and only while they are below it: from the session's count
     /// or else <paramref name="baseline"/> (the item's own field), as <see cref="SpendItemCharge"/> keeps it. A count that already reaches the maximum is <see cref="GameSessionDisposition.NoChange"/>, as is a sum equal to it.
     /// Refused for an invalid entity, a baseline or a resulting count outside the saved bounds 0..1,000,000 (<see cref="GameSessionFailure.InvalidItem"/>; the original's negative count, unlimited charges, is not kept by the session),
-    /// a stale version, an item the session does not track or deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. One revision. Like a spent charge, a recorded count also marks the item magical
+    /// a stale version, an item the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), a full charge budget (<see cref="GameSessionLimits.MaxItemCharges"/>) and an exhausted revision counter. One revision.
+    /// ARC-MAGIC-2443: the original's handler always writes field 105 of an item target, so the recharge asks no tracked item: the host's item lookup names the item and its own field is the baseline, whatever map seed the session has attached (as <see cref="SpendItemCharge"/>, ARC-MAGIC-2434). Like a spent charge, a recorded count also marks the item magical
     /// when the host reads it (<see cref="QueryItemCharges"/>): the original's recharge writes the field only.
     /// </summary>
     public GameSessionMutationResult RechargeItemCharges(GameSessionVersion expected, string entity, int baseline, int amount, int maximum)
@@ -348,13 +350,13 @@ public sealed partial class GameSessionOwner
         var current = recorded ? left : baseline;
         if (current is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        if (IsItemDestroyed(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         // 0x454920: charges that already reach the maximum are left alone; below it the sum is clipped at the maximum.
         if (current >= maximum) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         var sum = (int)Math.Min((long)current + amount, maximum);
         if (sum is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (sum == current) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
-        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (!recorded && _durability.Charges.Count >= _limits.MaxItemCharges) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         _durability.Charges[entity] = sum;
         Revise();
@@ -369,23 +371,52 @@ public sealed partial class GameSessionOwner
     /// and a full durability budget (the deletion's record). The item's destroy script (point 2) is the host's; the session does not
     /// run it. One revision.
     /// </summary>
-    public GameSessionMutationResult DestroyUsedItem(GameSessionVersion expected, string entity)
+    public GameSessionMutationResult DestroyUsedItem(GameSessionVersion expected, string entity, ISessionItemScriptHost? scripts = null)
+    {
+        var destroyed = DestroyUsedItemWithLines(expected, entity, scripts);
+        return new(destroyed.Disposition, destroyed.Failure, destroyed.Version);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2881: <see cref="DestroyUsedItem"/> with the lines the removal's remove-item script (28) printed (<see cref="InventoryMutationResult.Messages"/>, in order, with the run summaries in
+    /// <see cref="InventoryMutationResult.Scripts"/>) for the host to post as it posts any script's printed line; the result's <see cref="InventoryMutationResult.Item"/> is the destroyed entity.
+    /// </summary>
+    public InventoryMutationResult DestroyUsedItemWithLines(GameSessionVersion expected, string entity, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
-        if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
-        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (UsedItemDestructionRefusal(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
-        if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        if (!SessionValidation.Entity(entity)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (UsedItemDestructionRefusalCore(entity) is { } refusal) return RejectItem(refusal);
+        if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) runs with the hero as the triggerer, made and prepared before anything applies and committed with the deletion.
+        var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(entity, null, HeroItemPoints(entity), scripts);
+        if (removal.Done is { } refused) return refused;
+        removal.Runs?.Commit();
         DestroyObject(entity);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, entity, null, Version) { Scripts = removal.Runs?.Runs ?? [], Messages = removal.Runs?.Messages ?? [] };
     }
+
+    // The script points the session knows of an item the hero holds (its seed row's, the slots kept or inherited).
+    private IReadOnlyList<int> HeroItemPoints(string entity) => HeldKind(entity) is { } kind ? HeroNamedItem(entity, kind).ScriptPoints : [];
 
     /// <summary>ARC-SCRIPT-1481: why <see cref="DestroyUsedItem"/> would refuse the item (not held or worn: <see cref="GameSessionFailure.ItemNotAvailable"/>; not food or a scroll: <see cref="GameSessionFailure.InventoryMismatch"/>;
     /// full durability budget: <see cref="GameSessionFailure.BudgetExceeded"/>), or null when it would destroy it; changes nothing. A use script run checks it before it applies any effect.</summary>
-    public GameSessionFailure? UsedItemDestructionRefusal(string entity)
+    public GameSessionFailure? UsedItemDestructionRefusal(string entity, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
+        if (UsedItemDestructionRefusalCore(entity) is { } refusal) return refusal;
+        // ARC-SCRIPT-2854: with a script host the dry run of the removal's remove-item script finds a run the session cannot apply before the calling script applies anything.
+        // Without one an item with a remove-item script is refused, never deleted with the script skipped (the spell path's spent scroll or food: #2881).
+        if (scripts is null && HeroItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)) return GameSessionFailure.ItemScriptUnsupported;
+        if (scripts is not null && RunRemovalScript(entity, null, HeroItemPoints(entity), scripts).Done is { } dry) return dry.Failure;
+        return null;
+    }
+
+    // The refusals of the destruction that no script decides.
+    private GameSessionFailure? UsedItemDestructionRefusalCore(string entity)
+    {
         if (!SessionValidation.Entity(entity)) return GameSessionFailure.InvalidItem;
         if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null) return GameSessionFailure.ItemNotAvailable;
         if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return GameSessionFailure.InventoryMismatch;
@@ -435,6 +466,13 @@ public sealed partial class GameSessionOwner
     public Func<SessionDyingRequest, bool>? DyingScript { get; set; }
 
     /// <summary>
+    /// ARC-SCRIPT-2859 (exe read 2026-11-19, LK1–LK3): the host's leader-killing script (attachment point 20, 0x14) of one follower of the killer's PC leader, asked in the kill step (0x45DA20) after the kill's experience award (and, on the attack paths, the kill log; the session has no kill alignment step): for each direct follower of the hero, in array order, when an NPC the hero or a follower the hero leads killed has died and its death was processed (a death the dying script stopped asks nothing). The request names the dead NPC
+    /// (the triggerer), the map the step ran on and the follower (the attachee); the PC leader is the extra object, always the hero. The answer is ignored, so the host returns nothing; a host that throws is not asked again for the other
+    /// followers of that death. None set: nothing runs. The host runs inside the damage step: it may write the session (the script's own stores) but not apply the same victim's life again.
+    /// </summary>
+    public Action<SessionLeaderKillingRequest>? LeaderKillingScript { get; set; }
+
+    /// <summary>
     /// ARC-COMBAT-1141 (GT198, GT210–GT212): the host's taking-damage script (attachment point 0x17) of an NPC whose damage the session applies from its own life calls that no hit path asks for: the script kill
     /// <see cref="GameSessionOwner.Kill"/> (0x45D900) and the poison damage tick (0x4B1170, <see cref="GameSessionOwner.PoisonDamageTick"/> and its event), both with no attacker. It is asked at the start of the damage apply, before the
     /// life step is computed; true is run default (the step goes on), false skip default: a vetoed kill takes no hit points and starts no death, and still pins the hit-point damage at 32000
@@ -442,6 +480,30 @@ public sealed partial class GameSessionOwner
     /// the life step: it may write the session (a version it moved is followed), but must not apply the same victim's life.
     /// </summary>
     public Func<SessionTakingDamageRequest, bool>? TakingDamageScript { get; set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2853 (exe read, ledger PI1, VP6, TQ19; 0x461AB0 → 0x441980): the host's drop script (attachment point 5) of an item that a critter drops through a critical, an arm hit or a spell's weapon drop, asked after the drop's distance is drawn and before the no-drop check:
+    /// the holder is the triggerer, the item the attachee. <see cref="SessionDropScriptAnswer.SkipDefault"/> refuses the drop (<see cref="SessionCriticalStepOutcome.Refused"/>, the item stays), <see cref="SessionDropScriptAnswer.NotModelled"/> leaves it unapplied
+    /// (<see cref="SessionCriticalStepOutcome.ScriptUnsupported"/>). The host may write the session (a version it moved is followed). A host that throws counts as not modelled. None set: an item with a drop script stays unapplied, as before. The body decay's drop runs no drop script (0x463860, ledger VP24).
+    /// </summary>
+    public Func<SessionDropScriptRequest, SessionDropScriptAnswer>? DropScript { get; set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2856 (exe read 0x467860, ledger PI2, VP1, TQ20): the host's item script context of an NPC as the wearer of the item event scripts its worn item's removal runs (<see cref="SessionNpcWieldScripts"/>: the item script host, the NPC's life target and
+    /// stored stats; null when the host does not know the NPC). A critter drop (a critical, an arm hit, a spell's weapon block) of an NPC's worn item that has a wield-off (25) or remove-item (28) script runs them with the NPC as the triggerer through it and applies their
+    /// changes with the drop; with none set, or for a script the session cannot apply, the item stays (<see cref="SessionCriticalStepOutcome.ScriptUnsupported"/>).
+    /// </summary>
+    public Func<string, SessionNpcWieldScripts?>? NpcWearerScripts { get; set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2886 (exe read 0x467860, ledger PI2, VP11, TQ20): the host's item script host of the hero as the wearer of the item event scripts its worn item's removal runs (null when the host has none). A critical drop of the hero's worn item (a critical, an arm hit,
+    /// a spell's weapon block) with a wield-off (25) or remove-item (28) script runs them with the hero as the triggerer through it and applies their changes with the drop; with none set, or for a script the session cannot apply, the item stays
+    /// (<see cref="SessionCriticalStepOutcome.ScriptUnsupported"/>). Printed lines and eye candy go to <see cref="ItemRunOutput"/>.
+    /// </summary>
+    public Func<ISessionItemScriptHost?>? HeroWearerScripts { get; set; }
+
+    /// <summary>ARC-SCRIPT-2856: where the host takes the printed lines and the eye candy requests of the item scripts a drop's removal ran (<see cref="NpcWearerScripts"/>), after their changes are applied; the drop's results carry no such lines.</summary>
+    public Action<IReadOnlyList<SessionScriptMessage>, IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy>>? ItemRunOutput { get; set; }
 
     /// <summary>
     /// ARC-AI-1530 (exe read 2026-11-13, ledger VB2-6): the host's enter-combat (slot 13, 0x4AAE29) and exit-combat (slot 14, 0x4AAF32) script of an NPC the danger setter 0x4AABE0 has just put into or taken out of FIGHT, the target (the

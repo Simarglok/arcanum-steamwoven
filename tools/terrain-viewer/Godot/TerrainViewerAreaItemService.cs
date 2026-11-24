@@ -99,13 +99,14 @@ public partial class TerrainViewerApp
 
     private AreaItemServicePanel CreateServicePanel()
     {
-        var panel = new AreaItemServicePanel(); AddChild(panel);
+        var panel = new AreaItemServicePanel(); AddChild(panel); panel.DiagnosticSwitch = DebugMode;
         panel.CloseRequested += EndItemService;
         panel.ItemClicked += ClickServiceItem;
         panel.ArrangeRequested += ServiceArrange;
         panel.StatRequested += ShowStatLines;
         panel.SoundRequested += id => PlayInterfaceSound(id, "item service arrange button");
         panel.HolderView = InventoryHolderView;
+        panel.PortraitTextures = HolderPortraitTexture;
         return panel;
     }
 
@@ -114,7 +115,8 @@ public partial class TerrainViewerApp
     private (AreaInventoryView Inventory, AreaServiceFrame Frame)? ServiceArt(AreaItemServiceView view)
     {
         if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_serviceSession, session) || _itemService is null) return null;
-        return (InventoryView(null), new AreaServiceFrame(_inventoryHost.HolderImage(CurrentAreaMap, _itemService.Merchant.Entity), view.Message, view.Selected));
+        return (InventoryView(null), new AreaServiceFrame(_inventoryHost.HolderImage(CurrentAreaMap, _itemService.Merchant.Entity), view.Message, view.Selected,
+            _inventoryHost.HolderPortrait(session, CurrentAreaMap, _itemService.Merchant.Entity)));
     }
 
     /// <summary>ARC-UI-1765 (IW37, IW40): the arrange button of the window lays the hero's items out as the own window's does.</summary>

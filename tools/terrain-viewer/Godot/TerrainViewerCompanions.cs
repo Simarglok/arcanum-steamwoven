@@ -51,6 +51,9 @@ public partial class TerrainViewerApp
         _areaCompanions.Dead = AreaCritterDeadNow;
         // ARC-WORLD-115: a companion the AI host holds while it fights walks only the host's steps.
         _areaCompanions.HeldByAi = entity => _aiHost?.Holds(entity) == true;
+        // ARC-RENDER-2564 (0x42EDC0): a concealed follower the host does not hold steps the stealth walk below prowling expert; its training is its own sheet's, none reads as untrained.
+        _areaCompanions.ProwlingTraining = entity => AreaFollowerSheet(entity) is { } sheet
+            ? session.QueryNpcSkills(sheet.Loaded, sheet.Modifiers)[Arcanum.Simulation.Skills.Skill.Prowling].Training : Arcanum.Simulation.Combat.SkillTraining.None;
         _areaCompanions.Extra = AiMoversOverlay;
         // ARC-MAGIC-1189 (TT10, SP2): a companion on its own follow walk checks each next tile for a trap with its own spot attempt, as the AI host's walkers do.
         _areaCompanions.StepTrap = (entity, cell) => _aiHost?.TrapSpottedOn(entity, cell) == true;
@@ -201,7 +204,7 @@ public partial class TerrainViewerApp
     private bool GroupHolds(string entity) => _areaCompanions?.Companions.Any(c => c.Entity == entity) == true;
 
     /// <summary>
-    /// ARC-WORLD-2161 (tail of #2132): the followers of the hero's change of place that the shown group holds no body for (a map NPC a companion leads whose body the scene does not draw or whose follow facts do not read,
+    /// ARC-WORLD-2161 (tail of #2132): the followers of the hero's change of place that the shown group holds no body for (a map NPC a companion leads whose follow facts do not read,
     /// a visitor whose body its home map could not give). The original's move list carries every object of the follower tree whole, so each is stood on the destination by the session's placement
     /// edits alone (<see cref="AreaCompanionGroup.Arrive(AreaBodylessFollower, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/>); one whose home the session cannot name stays behind and is said on the log.
     /// </summary>

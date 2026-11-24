@@ -12,6 +12,9 @@ namespace Arcanum.Session;
 public interface ISessionEventWorld
 {
     LifeFacts? CritterFacts(SessionMapId map, string entity);
+
+    /// <summary>ARC-SCRIPT-2879: the shown map's item script host, which the remove-item scripts (point 28) of the pass's removals (a restock's clear, a body's inventory walk) run through; null: none run (counted as skipped).</summary>
+    ISessionItemScriptHost? ItemScriptHost => null;
 }
 
 /// <summary>An object a deferred script call names (ARC-SCRIPT-010): the runtime map and the session entity id.</summary>
@@ -228,7 +231,7 @@ public static class SessionEventKinds
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the Decay Dead Bodies and Combat-Focus Wipe events (ARC-MAGIC-1146), the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 5 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxNewspapers + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxItemRecharges + MaxBodyDecays + MaxRandomEncounters + MaxNewspapers + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -264,6 +267,20 @@ public static class SessionEventKinds
     public const string ItemDecay = "item.decay";
     /// <summary>Pending Item Decay events a session holds (project policy; the original has no bound): a drop beyond it does not decay.</summary>
     public const int MaxItemDecays = 8192;
+    /// <summary>
+    /// The original's recharge event of a worn mana store (kind 0x17 = 23, saved, game time; ARC-MAGIC-2371, ledger BC10, PC11, 0x459590, handler 0x459680): a spell payment that drained an item's mana store (field 92)
+    /// schedules it 480 game seconds on, or adds the drained amount to the item's pending one (the earlier stamp and deadline stay). It restores min(pending, 2 × max(1, elapsed game seconds / 120)) into the store, with no cap at the
+    /// prototype's value, and sets itself up again for the rest. Scoped to a map as the original parks it (ARC-MAGIC-2400, ledger BC10, TL33): the event lives in memory, so it fires while the PC is on the map it was scheduled on;
+    /// when the PC changes map it travels with its item (an item of the PC, of a follower that goes with it or of that follower's followers, worn or carried) and any other stays parked in the old map's file and fires late on the
+    /// PC's return with the elapsed time (a larger refill). Any number, one per item per map (a payment merges only into the pending event of the map it is on, as 0x459590 finds only the events in memory).
+    /// Entity: the item, on the map the PC was on when the event was scheduled; values: the game time it was scheduled at (its stamp) and the pending amount. Added without a new registry version, as the kinds before it
+    /// (schema 104 gave the entity a real map: before it the entity named a placeholder map and the event was global).
+    /// </summary>
+    public const string ItemRecharge = "item.recharge";
+    /// <summary>The recharge event's delay: 60,000 ms × 8 = 480 game seconds (0x459590).</summary>
+    public const long ItemRechargeDelayMs = 480_000;
+    /// <summary>Pending recharge events a session holds (project policy; one per drained item): a drain beyond it is not recharged.</summary>
+    public const int MaxItemRecharges = 4096;
     /// <summary>
     /// The original's Decay Dead Bodies event (kind 24, saved, game time; ARC-WORLD-1158, ledger PO10): a dead NPC's body is removed one game day after its death (its inventory dropped, the critter destroyed;
     /// <see cref="Arcanum.Simulation.Combat.BodyDecayRules"/>). Scoped to the NPC's map, one per NPC (a new one replaces the earlier). Entity: the NPC; values: the game time it was scheduled at and its delay
@@ -404,6 +421,9 @@ public static class SessionEventKinds
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
             new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemDecayHandler(owner), Validate: DecayPayload),
+            new(ItemRecharge, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
+                new ItemRechargeHandler(owner), Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= int.MinValue and <= int.MaxValue
+                    && payload.Entities[0].Code != AbsentRole && SessionValidation.Entity(payload.Entities[0].Code), ChecksOwnEntities: true),
             new(BodyDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new BodyDecayHandler(owner), Validate: BodyDecayPayload),
             new(RandomEncounter, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0,
@@ -573,6 +593,12 @@ internal sealed class ItemDecayHandler(SessionEventSink sink) : IGameEventHandle
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireItemDecay(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class ItemRechargeHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireItemRecharge(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class BodyDecayHandler(SessionEventSink sink) : IGameEventHandler

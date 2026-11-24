@@ -138,7 +138,7 @@ public partial class TerrainViewerApp
             var stack = stacks[0];
             var units = stack.Item.Facts.Quantity ?? 0;
             var taken = stack.Holder is null ? _inventoryHost.PickUp(session, stack.Item.Entity)
-                : session.TakeAmmoFromNpc(session.Version, stack.Holder, stack.Item.Entity, units, stack.Item.Facts.Kind, _inventoryHost.InsertCheck);
+                : session.TakeAmmoFromNpc(session.Version, stack.Holder, stack.Item.Entity, units, stack.Item.Facts.Kind, _inventoryHost.InsertCheck, _inventoryHost!.ItemScripts(session));
             TechSmokeRequire(AreaInventoryHost.Moved(taken), $"the hero took the bullets ({units} from {stack.Holder ?? "the ground"}): {taken.Disposition} {taken.Failure}");
             var ammoBefore = session.QueryHeroAmmo().Where(a => a.AmmoType == ammoType).Sum(a => a.Units);
             const int MaxShots = 10;

@@ -25,14 +25,21 @@ public sealed class HeroRequestsTests
         public HeroClickFacts Click = new(true, false, false, false, false, HeroClickTarget.Critter);
         public bool TalkStarts = true;
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift) => Click with { Alt = alt, Shift = shift };
+        public HeroImmediateResult ImmediateResult = HeroImmediateResult.Moved;
+        public HeroImmediateResult ImmediateAction(string target) { Calls.Add("immediate " + target); return ImmediateResult; }
         public bool StartTalk(string target, bool run, bool noWalk) { Calls.Add($"talk {target} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
-        public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
-        public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
+        public bool StartUse(string target, bool container, bool run, bool noWalk) { Calls.Add($"use {target} container={container} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
+        public bool StartPickup(string target, bool run, bool noWalk) { Calls.Add($"pickup {target} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
         public bool StartAttemptAttack(string target) { Calls.Add($"attempt {target}"); return TalkStarts; }
         public bool StartLockpick(string portal, string item) { Calls.Add($"lockpick {portal} {item}"); return TalkStarts; }
         public bool StartPickPocket(string victim, string item, bool plant) { Calls.Add($"pickpocket {victim} {item} plant={plant}"); return TalkStarts; }
         public bool StartCast(int run, string? target) { Calls.Add($"cast {run} {target}"); return TalkStarts; }
+        public HeroStartContext Context;
+        public bool Queues = true;
+        public HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null) => Context;
+        public bool QueueGoal(HeroClickGoal goal, string target) { Calls.Add($"queue {goal} {target}"); return Queues; }
+        public void ApplyClickFlags(bool shift, bool nearOccupied) => Calls.Add($"flags shift={shift} near={nearOccupied}");
         public bool StartThrow(string item, CellCoord tile) { Calls.Add($"throw {item} {tile.X},{tile.Y}"); return TalkStarts; }
         public bool StartUseItem(string item, string target, bool run, bool noWalk) { Calls.Add($"use-item {item} {target} run={run} nowalk={noWalk}"); return TalkStarts; }
         public bool StartUseItemOnTile(string item, CellCoord tile) { Calls.Add($"use-item-tile {item} {tile.X},{tile.Y}"); return TalkStarts; }
@@ -59,6 +66,18 @@ public sealed class HeroRequestsTests
         var result = new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), false));
         Assert.AreEqual(HeroRequestOutcome.Unchanged, result.Outcome);
         Assert.AreEqual(HeroRequestOutcome.Done, new HeroRequestHost(new Hero()).Apply(new WalkRequest(new(12, 10), false)).Outcome);
+    }
+
+    [TestMethod]
+    public void AWalkRequestWithShiftHeldDoesNothing()
+    {
+        // ARC-INPUT-1936 (GT107, SA47): the tile press with a Shift key held returns before the walk starter and the held flag.
+        var hero = new Hero();
+        var result = new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), Ctrl: false, Shift: true));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(0, hero.Calls.Count, "no walk target, no interrupt");
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), Ctrl: true, Held: true, Shift: true)).Outcome, "a repeat is an ordinary press");
+        Assert.AreEqual(HeroRequestOutcome.Done, new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), Ctrl: false)).Outcome, "without Shift the walk starts");
     }
 
     [TestMethod]
@@ -225,6 +244,40 @@ public sealed class HeroRequestsTests
     }
 
     [TestMethod]
+    public void AShiftClickOnAContainerSceneryOrItemStartsTheGoalWithTheNoWalkFlagAndNoRunning()
+    {
+        // ARC-COMBAT-1948 (VC62, 0x54ED30 start tail): Shift sets run flag 0x100 in place of running for every goal the click builds, the use, loot and pickup goals too.
+        foreach (var (kind, expected) in new[]
+        {
+            (HeroClickTarget.Container, "use obj:1 container=True run=False nowalk"),
+            (HeroClickTarget.Scenery, "use obj:1 container=False run=False nowalk"),
+            (HeroClickTarget.Item, "pickup obj:1 run=False nowalk"),
+        })
+        {
+            var hero = new Hero { Click = new(true, false, false, false, false, kind), Input = new(AlwaysRunOption: true, NumLockRun: false) };
+            var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Shift: true));
+            Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome, kind.ToString());
+            Assert.IsFalse(result.Run, kind.ToString());
+            CollectionAssert.AreEqual(new[] { expected }, hero.Calls, kind.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void APlainClickOnAContainerOrItemStillRunsWithoutTheNoWalkFlag()
+    {
+        foreach (var (kind, expected) in new[]
+        {
+            (HeroClickTarget.Container, "use obj:1 container=True run=True"),
+            (HeroClickTarget.Item, "pickup obj:1 run=True"),
+        })
+        {
+            var hero = new Hero { Click = new(true, false, false, false, false, kind) };
+            new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1"));
+            CollectionAssert.AreEqual(new[] { expected }, hero.Calls, kind.ToString());
+        }
+    }
+
+    [TestMethod]
     public void AnObjectClickTheRulesRefuseStartsNothing()
     {
         var hero = new Hero { Click = new(false, false, false, false, false, HeroClickTarget.Critter) };
@@ -273,6 +326,95 @@ public sealed class HeroRequestsTests
         var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Alt: true));
         Assert.AreEqual(HeroClickGoal.Attack, result.Click);
         CollectionAssert.AreEqual(new[] { "attack obj:1 run=True" }, hero.Calls);
+    }
+
+    // ARC-COMBAT-2736 (tail of ARC-COMBAT-1941): Shift+Alt on a container or scenery in combat mode stays the attempt attack 19 with no running, through the request host as well as the rule table.
+    [TestMethod]
+    public void AShiftAltClickOnAContainerOrSceneryInCombatModeStaysTheAttemptAttack()
+    {
+        foreach (var kind in new[] { HeroClickTarget.Container, HeroClickTarget.Scenery })
+        {
+            var hero = new Hero { Click = new(true, false, false, false, true, kind, Alt: true, Shift: true) };
+            var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Alt: true, Shift: true));
+            Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome, kind.ToString());
+            Assert.AreEqual(HeroClickGoal.AttemptAttack, result.Click, kind.ToString());
+            Assert.IsFalse(result.Run, kind.ToString());
+            CollectionAssert.AreEqual(new[] { "attempt obj:1" }, hero.Calls, kind.ToString());
+        }
+    }
+
+    // ARC-COMBAT-1949 (VC62): the start branch of the click.
+    [TestMethod]
+    public void AnEqualClickIsIgnoredWithTheAutoAttackOptionOnAndChangesNoFlag()
+    {
+        var hero = new Hero { Input = new(false, false, true), Context = new(true, 1, false, false) };
+        hero.State = hero.State with { HighestRunPriority = 3 };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickStart.Ignored, result.Start);
+        Assert.AreEqual(0, hero.Calls.Count, "no start, no flag");
+    }
+
+    [TestMethod]
+    public void ARepeatedAttackIsQueuedBeneathTheRunningOneWithTheOptionOff()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter), Context = new(true, 1, false, false) };
+        hero.State = hero.State with { HighestRunPriority = 3 };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(HeroClickStart.QueueBeneath, result.Start);
+        CollectionAssert.AreEqual(new[] { "queue Attack npc:1" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnAttackThatCannotBeQueuedAddsNothingAndTurnsTheFlagsOnTheMainRun()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter), Context = new(true, 1, false, false), Queues = false };
+        hero.State = hero.State with { HighestRunPriority = 3 };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickStart.FlagsOnly, result.Start);
+        CollectionAssert.AreEqual(new[] { "queue Attack npc:1", "flags shift=False near=False" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnEqualTalkWithTheOptionOffRestartsAsBefore()
+    {
+        var hero = new Hero { Context = new(true, 1, false, false) };
+        hero.State = hero.State with { HighestRunPriority = 3 };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        CollectionAssert.AreEqual(new[] { "talk npc:1 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AUseClickInARoundBeneathAFidgetMainRunQueuesTheUseGoalNotAnAttack()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Scenery), Context = new(false, 1, false, true) };
+        hero.State = hero.State with { HighestRunPriority = 1, InRound = true };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1"));
+        Assert.AreEqual(HeroClickStart.QueueBeneath, result.Start);
+        CollectionAssert.AreEqual(new[] { "queue UseObject obj:1" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AClickInARoundWhoseMainRunGoesOnTurnsTheClicksFlagsOnThatRun()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter, Shift: true) };
+        hero.State = hero.State with { HighestRunPriority = 2, InRound = true };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1", Shift: true));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickStart.FlagsOnly, result.Start);
+        CollectionAssert.AreEqual(new[] { "flags shift=True near=False" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AUseClickWithADeepStackTurnsTheNearOccupiedFlagOn()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Scenery), Context = new(false, 4, false, false) };
+        hero.State = hero.State with { HighestRunPriority = 2, InRound = true };
+        new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1"));
+        CollectionAssert.AreEqual(new[] { "flags shift=False near=True" }, hero.Calls);
     }
 
     // ARC-DEV-182 (MIG13 S12b): the press with an item on the cursor.
@@ -391,6 +533,30 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(0, hero.Calls.Count);
         Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4", Alt: true)).Click, "with Alt it is looted");
     }
+
+    // ARC-INPUT-1946 (0x4445A0): the Alt click on a loose item or a body out of combat mode builds no goal and runs no start branch; the port moves the target.
+    [TestMethod]
+    public void AnAltClickOnAnItemOrABodyOutOfCombatModeIsTheImmediateActionAndStartsNoGoal()
+    {
+        foreach (var click in new[] { new HeroClickFacts(true, false, false, false, false, HeroClickTarget.Item), new(true, false, false, false, false, HeroClickTarget.Critter, TargetDead: true) })
+        {
+            var hero = new Hero { Click = click, Context = new(true, 3, false, false) };
+            var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("inv:5", Alt: true));
+            Assert.AreEqual((HeroRequestOutcome.Done, HeroClickGoal.Immediate, (HeroClickStart?)null), (result.Outcome, result.Click, result.Start));
+            CollectionAssert.AreEqual(new[] { "immediate inv:5" }, hero.Calls, "no goal, no queue, no flags, no interrupt");
+            hero.ImmediateResult = HeroImmediateResult.TooFar;
+            Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new ObjectClickRequest("inv:5", Alt: true)).Outcome, "out of reach: nothing moved");
+            hero.ImmediateResult = HeroImmediateResult.None;
+            Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new ObjectClickRequest("inv:5", Alt: true)).Outcome);
+        }
+        var inCombat = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Item) };
+        Assert.AreEqual(HeroClickGoal.Pickup, new HeroRequestHost(inCombat).Apply(new ObjectClickRequest("inv:5", Alt: true)).Click, "in combat mode Alt on an item still picks it up");
+        Assert.IsFalse(inCombat.Calls.Any(c => c.StartsWith("immediate")));
+        var plain = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Item) };
+        Assert.AreEqual(HeroClickGoal.Pickup, new HeroRequestHost(plain).ClickGoalOf("inv:5", alt: false, shift: false));
+        Assert.AreEqual(HeroClickGoal.Immediate, new HeroRequestHost(plain).ClickGoalOf("inv:5", alt: true, shift: false));
+    }
+
     // ---- ARC-DEV-365 (T-g): the item use goals 39 and 41 ----
 
     [TestMethod]

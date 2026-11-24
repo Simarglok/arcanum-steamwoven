@@ -21,7 +21,9 @@ public sealed class AreaCombatPointScriptTests
 {
     private const byte Attachee = 1, Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0, Extra = 12;
     private const int AttackerIsNpc = 2410, VictimIsPc = 2411, AttacheeIsWeapon = 2412, CritterHitsTriggererIsPc = 2413, SecondHit = 2414, CriticalSeen = 2415;
-    private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417;
+    private const int ArmourType = 7, ArmourIsArmour = 2420, ArmourAttackerIsNpc = 2421, ArmourVictimIsPc = 2422;
+    private const int DropHolderIsNpc = 2430, DropItemIsWeapon = 2431;
+    private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417, WallType = 0, WallSeen = 2418, WallDamaged = 2419;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
@@ -118,6 +120,8 @@ public sealed class AreaCombatPointScriptTests
             Write("scr/00914poison.scr", Program(Do(new(ScrCatalogue.Action.Damage, (Extra, 0), N(17), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 915: marks that the critical-hit point ran.
             Write("scr/00915critical.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, CriticalSeen), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2828: 931 (a worn armour piece's critical-hit script): the attachee is armour (type 7), the triggerer the attacker (an NPC) and the extra object the victim (the PC).
+            Write("scr/00931armour.scr", Program([.. FlagIfType(Attachee, ArmourType, ArmourIsArmour, 0), .. FlagIfType(Triggerer, NpcType, ArmourAttackerIsNpc, 3), .. FlagIfType(Extra, PcType, ArmourVictimIsPc, 6), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
             // ARC-SCRIPT-1562: the poison weapons' shape (the magick-tech adjustment 91, then get magick-tech adjustment 80 and the damage): 916 scales 100 by the cancel chance of the weapon, its wielder and the victim and deals the result as poison to the
             // victim; 917 scales 100 by the weapon's power ratio for the wielder and deals it; 918 plays eye candy 30 on the victim first.
             Write("scr/00916cancel.scr", Program(Do(new(ScrCatalogue.Action.GetMagickTechAdjustment, N(100), (Attachee, 0), (Triggerer, 0), (Extra, 0), (Local, 0))),
@@ -129,7 +133,16 @@ public sealed class AreaCombatPointScriptTests
             // ARC-SCRIPT-1661: 920 (an area weapon's test of the victim, as 30064's looped critter): sets a global flag when the extra object is in combat; 921 (the alignment weapon 30252's shape): the triggerer's alignment (stat 19) falls by 200.
             Write("scr/00920incombat.scr", Program(If(new(ScrCatalogue.Condition.IsInCombat, (Extra, 0)), new(ScrCatalogue.Action.Assign, (GlobalFlag, CombatSeen), N(1)), new(0)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00921alignment.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00927extra.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Extra, 0), N(300))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00922twice.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(50))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-COMBAT-1973: 923 (a weapon's test of the victim, as 911 for a wall): sets a flag when the extra object is a wall (object type 0); 924 (a wall's taking-damage script): marks that it ran and skips the default.
+            Write("scr/00923wall.scr", Program([.. FlagIfType(Extra, WallType, WallSeen, 0), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
+            Write("scr/00924walldamage.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, WallDamaged), N(1))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // ARC-SCRIPT-1704: 930 (an area weapon's shape, as 30064): damages every critter in the vicinity of the attachee (focus kind 8) by 5.
+            Write("scr/00930vicinity.scr", Program(Do(new(ScrCatalogue.Action.Damage, (8, 0), N(5), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2853: 932 (an item's drop script): the holder is the triggerer (an NPC), the attachee the item (a weapon), the run default ends it; 933 skips the default (a drop it refuses).
+            Write("scr/00932drop.scr", Program([.. FlagIfType(Triggerer, NpcType, DropHolderIsNpc, 0), .. FlagIfType(Attachee, WeaponType, DropItemIsWeapon, 3), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
+            Write("scr/00933dropskip.scr", Program(Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -168,6 +181,29 @@ public sealed class AreaCombatPointScriptTests
                 Assert.IsTrue(Flag(session, VictimIsPc), $"point {point}: the extra object is the victim");
                 Assert.IsTrue(Flag(session, AttacheeIsWeapon), $"point {point}: the attachee is the weapon");
             });
+    }
+
+    // ARC-SCRIPT-2828 (0x4B47F8, ledger TQ23): a critical damage step runs the critical-hit point of each worn armour piece (object type 7) with the attacker as the triggerer and the victim as the extra object; a worn weapon runs none.
+    [TestMethod]
+    public void The_armour_critical_run_asks_each_worn_armour_piece_in_order_with_the_attacker_as_triggerer_and_the_victim_as_extra_and_skips_a_weapon()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var helm = Row(1, ArmourType, 931, ScrPoint.CriticalHit);
+            var weapon = Row(2, WeaponType, 915, ScrPoint.CriticalHit);
+            var vest = Row(3, ArmourType, 915, ScrPoint.CriticalHit);
+            var bare = Row(4, ArmourType, 915, ScrPoint.Hit);
+            var attacker = Row(5, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, helm, weapon, vest, bare, attacker);
+            var runs = host.RunArmourCritical([Ref(helm), Ref(weapon), Ref(vest), Ref(bare)], Ref(attacker), host.Pc, session.Rules.Scripts);
+            Assert.AreEqual(3, runs.Count, "the weapon is asked no point; each armour piece is, whether it holds a script or not");
+            Assert.AreEqual((931, 915, null), (runs[0].Run?.Script, runs[1].Run?.Script, runs[2].Run?.Script), "in the order given; the piece with no slot at the point runs nothing");
+            Assert.IsTrue(Flag(session, ArmourIsArmour), "the attachee is the armour piece");
+            Assert.IsTrue(Flag(session, ArmourAttackerIsNpc), "the triggerer is the attacker");
+            Assert.IsTrue(Flag(session, ArmourVictimIsPc), "the extra object is the victim");
+            Assert.IsTrue(Flag(session, CriticalSeen), "the second armour piece's script ran");
+        });
     }
 
     // ARC-COMBAT-1719 (0x4B2870): the two ends of a flight run the weapon's hit (7) and miss (8) scripts, and for a critical weapon shot the critical-hit (34) and critical-miss (35) ones, as the swing's do.
@@ -256,6 +292,83 @@ public sealed class AreaCombatPointScriptTests
         });
     }
 
+    // ARC-COMBAT-1973 (ledger RH5): the hit on a wall offers the weapon's hit script with the wall as the extra object, and the wall's own taking-damage script (point 23) as any object's; a poison weapon's damage to the wall is a script
+    // damage of a wall, which the damage step leaves at once (the viewer's delegate answers it).
+    [TestMethod]
+    public void A_hit_on_a_wall_runs_the_weapon_s_hit_script_with_the_wall_as_the_extra_object_and_the_wall_s_taking_damage_script()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var weapon = Row(1, WeaponType, 923, ScrPoint.Hit);
+            var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var wall = Row(3, WallType, 924, ScrPoint.TakingDamage);
+            var host = Host(session, content, null, weapon, attacker, wall);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(wall), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(Flag(session, WallSeen), "the extra object is the wall");
+            // Negative control: with an NPC as the extra object the same script sets nothing (the flag is not the type's default value).
+            using var control = ConversationSessionFixture.Create();
+            var controlWeapon = Row(4, WeaponType, 923, ScrPoint.Hit);
+            var controlHost = Host(control, content, null, controlWeapon, attacker);
+            Assert.IsNotNull(controlHost.RunCombatPoint(ScrPoint.Hit, Ref(controlWeapon), Ref(attacker), Ref(attacker), control.Rules.Scripts).Run);
+            Assert.IsFalse(Flag(control, WallSeen), "an NPC is no wall");
+            var damage = host.RunTakingDamage(AreaUseScriptHost.EntityId(wall), host.Pc, session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.TakingDamageVetoes(damage), damage.Detail);
+            Assert.IsTrue(Flag(session, WallDamaged), "the wall's own taking-damage script ran");
+        });
+    }
+
+    [TestMethod]
+    public void A_poison_weapon_s_hit_script_on_a_wall_leaves_the_hit_going_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var weapon = Row(1, WeaponType, 914, ScrPoint.Hit);
+            var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var wall = Row(3, WallType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, damaged, weapon, attacker, wall);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), Ref(wall), session.Rules.Scripts);
+            // Whatever the host makes of the wall as a damage target, the run neither throws nor cancels anything (no answer of a combat point cancels the hit).
+            Assert.IsNotNull(ran.Run, ran.Detail);
+            Assert.AreEqual(0, damaged.Count, "a wall is no damage target of a script (the damage step leaves it at once)");
+        });
+    }
+
+    // ARC-SCRIPT-2853 (0x461AB0 → 0x441980, ledger PI1, TQ19): an item's drop script (point 5) runs with the holder as the triggerer and the item as the attachee; skip default refuses the drop, run default and an item with no script let it go on.
+    [TestMethod]
+    public void The_drop_script_is_the_item_s_with_the_holder_as_triggerer_and_skip_default_refuses_the_drop()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = Row(1, WeaponType, 932, ScrPoint.Drop);
+            var refused = Row(3, WeaponType, 933, ScrPoint.Drop);
+            var plain = Row(4, WeaponType, 0, ScrPoint.Hit);
+            var holder = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, item, refused, plain, holder);
+            var rules = session.Rules.Scripts;
+            var ran = host.RunItemDrop(Ref(item), Ref(holder), rules);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual((ScrOutcome.RunDefault, 932), (ran.Run!.Outcome, ran.Run.Script));
+            Assert.IsTrue(Flag(session, DropHolderIsNpc), "the triggerer is the holder");
+            Assert.IsTrue(Flag(session, DropItemIsWeapon), "the attachee is the item");
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(ran));
+            Assert.IsFalse(AreaUseScriptHost.ItemDropRefuses(ran), "run default lets the drop go on");
+            var skipped = host.RunItemDrop(Ref(refused), Ref(holder), rules);
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(skipped));
+            Assert.IsTrue(AreaUseScriptHost.ItemDropRefuses(skipped), "skip default refuses the drop");
+            var none = host.RunItemDrop(Ref(plain), Ref(holder), rules);
+            Assert.IsNull(none.Run, "no script at the point");
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(none));
+            Assert.IsFalse(AreaUseScriptHost.ItemDropRefuses(none));
+            // The hero's handle is the holder of a hero's drop.
+            Assert.IsTrue(AreaUseScriptHost.ItemDropModelled(host.RunItemDrop(Ref(item), host.Pc, rules)));
+        });
+    }
+
     [TestMethod]
     public void A_weapon_without_a_script_at_the_point_runs_nothing_and_each_point_reads_its_own_slot()
     {
@@ -298,7 +411,7 @@ public sealed class AreaCombatPointScriptTests
     {
         var set = AreaUseScriptHost.CombatPointAdmission;
         Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.IsSubsetOf(set), "everything the placed set runs");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), "the interpreter's largest set holds it");
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), "the interpreter's largest set holds it");
         foreach (var action in new[] { ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastFreeSpell,
             ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy })
             Assert.IsTrue(set.Actions.Contains(action), "action " + action);
@@ -520,6 +633,57 @@ public sealed class AreaCombatPointScriptTests
     }
 
     [TestMethod]
+    public void Adjust_stat_of_an_NPC_wielder_writes_its_stored_alignment_clamped_in_action_order_and_leaves_the_hero_s_alone()
+    {
+        // ARC-SCRIPT-1705 (CP12, 0x4B0980 for an NPC): 921 is -200 on the triggerer, 922 is -200 then +50; the entry is the written base stat 19 of the NPC (no follower arming, no change of the hero).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var twice = Row(4, WeaponType, 922, ScrPoint.Hit, 0);
+            var wielder = CritterRow(2, 0);
+            var victim = Row(3, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, twice, wielder, victim);
+            var entity = AreaUseScriptHost.EntityId(wielder);
+            var hero = session.QueryHeroStoredStat(19);
+            Assert.IsTrue(host.CanAdjustStat(Ref(wielder), 19));
+            Assert.IsFalse(host.CanAdjustStat(Ref(wielder), 0), "another stat is not modelled");
+            Assert.IsFalse(host.CanAdjustStat(Ref(victim), 19), "an NPC row without combat fields has no alignment to read");
+            int Alignment() => AreaWrittenCritterFields.Read(session, wielder)!.Critter!.BaseStats[19];
+            Assert.AreEqual(0, Alignment());
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(wielder), Ref(victim), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(-200, Alignment());
+            Assert.AreEqual(-200, session.QueryCritterIndexedWrites(entity).Stats[19]);
+            Assert.AreEqual(hero, session.QueryHeroStoredStat(19), "the hero's alignment is untouched");
+            foreach (var expected in new[] { -400, -600, -800, -1000, -1000 })
+            {
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(wielder), Ref(victim), session.Rules.Scripts).Outcome);
+                Assert.AreEqual(expected, Alignment(), "the setter clamps at -1000");
+            }
+            // 922 from -1000: -200 clamps to -1000, then +50 gives -950 (the sum -150 applied at once would give -1150 clamped to -1000).
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCombatPoint(ScrPoint.Hit, Ref(twice), Ref(wielder), Ref(victim), session.Rules.Scripts).Outcome);
+            Assert.AreEqual(-950, Alignment());
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_of_an_NPC_the_hero_hits_is_the_extra_object_s_stored_alignment_too()
+    {
+        // A script that names the extra object (the victim) instead of the triggerer: 927 raises the extra object's alignment by 300.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 927, ScrPoint.Hit, 0);
+            var victim = CritterRow(2, 0);
+            var host = Host(session, content, null, weapon, victim);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(victim), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(300, AreaWrittenCritterFields.Read(session, victim)!.Critter!.BaseStats[19]);
+        });
+    }
+
+    [TestMethod]
     public void Obj_is_in_combat_is_false_for_the_PC_of_a_session_without_a_hero()
     {
         WithContent(content =>
@@ -544,6 +708,44 @@ public sealed class AreaCombatPointScriptTests
             var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(victim), session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.AreEqual(-950, session.QueryHeroStoredStat(19), "−900 − 200 clamps to −1000, then + 50");
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_of_a_critter_created_at_run_time_or_of_an_NPC_of_another_loaded_map_writes_its_alignment_like_a_shown_map_NPC()
+    {
+        // ARC-SCRIPT-2574 (CP13 tail): 921 is -200 on the triggerer. A created critter (the world's CreatedRow answers its base record) and an NPC row of another given map are written as the shown map's NPC is (the entry npc.stat.19 by identity).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var victim = Row(3, NpcType, 0, ScrPoint.Heartbeat);
+            var created = CritterRow(5, 0);
+            var other = CritterRow(6, 0);
+            var otherEntity = AreaConversationState.EntityId(other);
+            var map = new AreaInventoryMap(2, new([new(otherEntity, SessionHolderKind.Npc, false, false, [], [])], []), new Dictionary<string, AreaObjectRecord> { [otherEntity] = other });
+            var host = new AreaUseScriptHost(session, 1, [weapon, victim], [map], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                CreatedRow: entity => entity == AreaUseScriptHost.EntityId(created) ? created : null));
+            var createdRef = Ref(created);
+            var otherRef = new ScrObjectRef(2, otherEntity);
+            Assert.IsTrue(host.CanAdjustStat(createdRef, 19));
+            Assert.IsTrue(host.CanAdjustStat(otherRef, 19));
+            Assert.IsFalse(host.CanAdjustStat(createdRef, 0), "another stat is not modelled");
+            Assert.IsFalse(host.CanAdjustStat(new ScrObjectRef(1, AreaUseScriptHost.EntityId(CritterRow(7, 0))), 19), "an object with no row here is unknown");
+            int Alignment(AreaObjectRecord row) => AreaWrittenCritterFields.Read(session, row)!.Critter!.BaseStats[19];
+            foreach (var (row, wielder) in new[] { (created, createdRef), (other, otherRef) })
+            {
+                Assert.AreEqual(0, Alignment(row));
+                var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), wielder, Ref(victim), session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                Assert.AreEqual(-200, Alignment(row));
+                Assert.AreEqual(-200, session.QueryCritterIndexedWrites(AreaConversationState.EntityId(row)).Stats[19]);
+                foreach (var expected in new[] { -400, -600, -800, -1000, -1000 })
+                {
+                    Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), wielder, Ref(victim), session.Rules.Scripts).Outcome);
+                    Assert.AreEqual(expected, Alignment(row), "the setter clamps at -1000");
+                }
+            }
         });
     }
 
@@ -584,6 +786,51 @@ public sealed class AreaCombatPointScriptTests
         Assert.IsFalse(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.AdjustStat));
         // ARC-SCRIPT-1733: obj is in combat and the critter-state conditions are in the placed set too since the set S53 (the three tail conditions since S54); adjust stat stays the combat points' alone.
         Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
+    }
+
+    // ARC-SCRIPT-1704 (CP14, IV2): the vicinity of a weapon is scanned around the weapon's own location field, never its holder's. A weapon row of the shown map (an NPC's) is centred on its row tile; the critters around it, not the far one, are damaged.
+    [TestMethod]
+    public void The_area_weapon_s_vicinity_is_the_tiles_around_the_weapon_s_own_location_not_the_holder_s()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var weapon = Row(1, WeaponType, 930, ScrPoint.Hit);   // tile (11, 20)
+            var near = Row(2, NpcType, 0, ScrPoint.Heartbeat);    // (12, 20)
+            var far = Row(20, NpcType, 0, ScrPoint.Heartbeat);    // (30, 20)
+            var holder = Row(21, NpcType, 0, ScrPoint.Heartbeat); // (31, 20): the wielder, far from the weapon's own location
+            var host = Host(session, content, damaged, weapon, near, far, holder);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(holder), Ref(near), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEquivalent(new[] { AreaUseScriptHost.EntityId(near) }, damaged.Select(d => d.Victim).ToArray(), "only the critter around the weapon's tile, not the far ones nor the holder");
+            // A critter centre keeps its own place: the near critter sees itself and no far one; the weapon's row centre sees the same critter.
+            CollectionAssert.AreEquivalent(new[] { Ref(near) }, host.CrittersInVicinity(Ref(near)).Where(o => o != host.Pc).ToArray());
+            CollectionAssert.AreEquivalent(new[] { Ref(near) }, host.CrittersInVicinity(Ref(weapon)).Where(o => o != host.Pc).ToArray());
+        });
+    }
+
+    // ARC-SCRIPT-1704: the hero's weapon is carried from the map it was taken on, so the combat point names it on that map (the viewer's weaponMap = the item's origin) while the run is on another shown map: the scan still centres on the row's stale tile
+    // and finds the critters of the shown map around it (the original scans the current map around the item's location field).
+    [TestMethod]
+    public void A_weapon_carried_from_another_map_scans_the_shown_map_around_its_own_location()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var weapon = Row(1, WeaponType, 930, ScrPoint.Hit);
+            var near = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var far = Row(20, NpcType, 0, ScrPoint.Heartbeat);
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ScriptDamage: (victim, amount, type, unresistable) => { damaged.Add((victim, amount, type)); return "damaged"; });
+            var host = new AreaUseScriptHost(session, 2, [near, far], [], content, world) { OtherMapRow = obj => obj.Map == 1 && obj.Code == AreaUseScriptHost.EntityId(weapon) ? weapon : null };
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(near), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, damaged.Select(d => d.Victim).ToArray());
+            // Outside the item's run an object of an unheld map has no centre (an empty scan), and a critter of another map is no centre either.
+            Assert.AreEqual(0, host.CrittersInVicinity(Ref(weapon)).Count);
+            Assert.AreEqual(0, host.CrittersInVicinity(Ref(near)).Count, "a critter named on another map than the shown one");
+        });
     }
 
     [TestMethod]

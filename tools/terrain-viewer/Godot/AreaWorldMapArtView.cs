@@ -8,7 +8,11 @@ namespace Arcanum.TerrainViewer;
 /// <summary>The world-map window's textures and texts: the interface art by number, the 64 map tiles (column + 8 × row), the continent picture, the
 /// markers' font and the texts of <c>mes/worldmap.mes</c> (ARC-UI-083).</summary>
 public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> Art, IReadOnlyList<Texture2D> Tiles, Texture2D? Zoomed, AreaArtFontFace Font,
-    AreaWorldMapArtContent Content);
+    AreaWorldMapArtContent Content)
+{
+    /// <summary>ARC-UI-2795: the font of the window's status note (art 229 <c>Flare12Font</c>, white: the original's message font, exe 0x64C498), null when it did not read.</summary>
+    public AreaArtFontFace? MessageFont { get; init; }
+}
 
 /// <summary>ARC-UI-084: the town map the window shows (kind 2): its files, its plan, the party's location and which tiles are revealed. A whole map
 /// (<c>[w:1]</c> of the list, WM77) shows every tile plainly; otherwise <see cref="CellRevealed"/> says which tile bits are set (the session's
@@ -38,7 +42,7 @@ public partial class AreaWorldMapArtView : Control
     private AreaWorldMap? _map;
     private Func<int, bool>? _known;
     private string _message = "";
-    private (int X, int Y) _offset, _max = AreaWorldMapArtLayout.MaxOffset();
+    private (int X, int Y) _offset;
     // ARC-UI-084: the town map (kind 2) with its own scroll offset (each kind keeps its own, WM62), the tile textures read so far and which tile files exist.
     private AreaTownMapShow? _town;
     private (int X, int Y) _townOffset, _townMax;
@@ -61,12 +65,14 @@ public partial class AreaWorldMapArtView : Control
     // The areas that carry a marker, in the original's order: the known ones from the last down to 1 at the open, later finds after them (WM11).
     private readonly List<int> _markers = [];
     private Control _canvas = null!, _chrome = null!, _note = null!;
-    // ARC-UI-106 (WM30, WM92; Steamwoven rules): the note quill, tool state 3 of the town map, and the one-line text entry it opens (a new note at a picture pixel,
-    // or the note at _editIndex).
-    private bool _quill;
-    private LineEdit _noteEdit = null!;
+    // ARC-UI-106 (WM30, WM92; Steamwoven rules): the note quill, tool state 3 of the town map, and the text entry it opens (a new note at a picture pixel, or the note at
+    // _editIndex). ARC-UI-2306 (BM4): the entry runs on the bottom strip (bar mode 6, the host's AreaMapNoteEntryView); this view holds what the note needs: the text the entry
+    // opened with (for the Cancel button and for leaving), the text it has now (the host mirrors it), and the marker type a new note was made with.
+    private bool _quill, _noteEntry;
     private int _editIndex = -1;
     private (int X, int Y) _editPixel;
+    private string _editSaved = "", _editText = "";
+    private int _editType = AreaTownNotes.QuestionType;
     // ARC-UI-110: the notes of the map view and of the continent view, lists owned by the host like the town's (null shows none and keeps the quill out of the view).
     private AreaTownNotes? _mapNotes, _continentNotes;
     // The note under the pointer in the map and continent views (an area marker, when one is under it, wins), -1 for none.
@@ -97,7 +103,30 @@ public partial class AreaWorldMapArtView : Control
     public Func<bool>? PollGate { get; set; }
 
     public (int X, int Y) Offset => _offset;
-    public (int X, int Y) MaxOffset => _max;
+    public (int X, int Y) MaxOffset => MapMax;
+
+    /// <summary>ARC-UI-2993 (stopgap of #2992): picture pixels per window unit of the map view. 1 in the original look; under the HD option (the Steamwoven layout) the window lies at the
+    /// composition's scale s and the picture is drawn at 1:1 device pixels, so it is the window's device scale: the view shows more of the continent, sharp, and the markers, labels,
+    /// route lines and the frame stay at s. The town map, the continent view and every rule read picture pixels as before.</summary>
+    public double PixelsPerUnit => _pixelsPerUnitForSelfTest ?? (AreaGameBarPanel.SteamwovenOn && IsInsideTree() ? Math.Max(.25, DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit);
+    private double? _pixelsPerUnitForSelfTest;
+    private double _fittedPixelsPerUnit = AreaWorldMapArtLayout.OriginalPixelsPerUnit;
+    private (int X, int Y) MapMax => _map is { } map ? AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width, PixelsPerUnit) : AreaWorldMapArtLayout.MaxOffset();
+
+    /// <summary>A check forces the picture scale (null gives the window's own); the view keeps its centre and redraws.</summary>
+    internal void SetPixelsPerUnitForSelfTest(double? value) { _pixelsPerUnitForSelfTest = value; FitPicture(); Redraw(); }
+
+    /// <summary>The picture scale changed (the window was placed at another scale, the option was switched): keep the picture point at the view's centre and the offset inside its limits.</summary>
+    private void FitPicture()
+    {
+        var now = PixelsPerUnit;
+        if (Math.Abs(now - _fittedPixelsPerUnit) < 1e-9) return;
+        var before = AreaWorldMapArtLayout.ViewPictureSize(_fittedPixelsPerUnit);
+        var centre = (X: _offset.X + before.Width / 2, Y: _offset.Y + before.Height / 2);
+        _fittedPixelsPerUnit = now;
+        if (_map is null) return;
+        _offset = AreaWorldMapArtLayout.CentreOn(centre.X, centre.Y, MapMax, now);
+    }
     public AreaWorldMapKind Kind => _kind;
     public (int X, int Y) TownOffset => _townOffset;
     public (int X, int Y) TownMaxOffset => _townMax;
@@ -121,12 +150,25 @@ public partial class AreaWorldMapArtView : Control
     internal AreaTownNotes? TownNotesForSelfTest => _town?.Notes;
     internal AreaTownNotes? NotesForSelfTest(AreaWorldMapKind kind) => kind == AreaWorldMapKind.Map ? _mapNotes : kind == AreaWorldMapKind.Continent ? _continentNotes : _town?.Notes;
     internal int HoverWorldNoteForSelfTest => _hoverNote;
+    /// <summary>ARC-UI-2445: the before look of the composite (the map view's notes without their labels).</summary>
+    internal bool NoteLabelsOffForSelfTest { get; set; }
+    internal void RedrawForSelfTest() => _canvas?.QueueRedraw();
+    private int NoteArtFor(AreaTownNote note) => AreaWorldMapArtLayout.NoteArtOf(note.Type);
     /// <summary>ARC-UI-106: the quill is the tool (town map only); its cursor is art 21 (WM30).</summary>
     public bool QuillActive => _quill;
     /// <summary>ARC-UI-106: the note text entry has the keyboard (typed keys go to it, not to the window's keys).</summary>
-    public bool EditingNote => _noteEdit is { Visible: true };
-    internal string NoteEditTextForSelfTest { get => _noteEdit.Text; set => _noteEdit.Text = value; }
+    public bool EditingNote => _noteEntry;
+    /// <summary>ARC-UI-2306: the text the open entry opened with (the entry's Cancel restores it).</summary>
+    public string NoteEntryOpenedText => _editSaved;
+    /// <summary>ARC-UI-2306: the host mirrors the entry's text here, so that leaving by the map closing or the Quill ending keeps what was typed (0x564070 leaves live edits).</summary>
+    public void SetNoteText(string text) { if (_noteEntry) _editText = text; }
+    /// <summary>ARC-UI-2306 (0x66D89C): the radio group's marker type (a function of the host), taken by a note made from now on.</summary>
+    public Func<int>? NoteMarkerType { get; set; }
+    /// <summary>ARC-UI-2306: whether the bottom strip can show the entry (the bars, art 200 and the font read; a function of the host). Without it a press starts no note, and says so.</summary>
+    public Func<bool>? NoteEntryAvailable { get; set; }
+    internal string NoteEditTextForSelfTest { get => _editText; set => _editText = value; }
     internal int NoteEditIndexForSelfTest => _editIndex;
+    internal int NoteEditTypeForSelfTest => _editType;
     internal int HoverNoteForSelfTest => _kind == AreaWorldMapKind.Town ? _hoverArea : -1;
     internal bool ArmedForSelfTest => _armed;
     internal bool DraggingForSelfTest => _dragging;
@@ -138,7 +180,7 @@ public partial class AreaWorldMapArtView : Control
     internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     /// <summary>A mouse move inside the view during a drag (the edge scroll of WM99).</summary>
     internal void DragForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; if (_dragging) DragEdgeScroll(windowPoint); }
-    internal void SetOffsetForSelfTest((int X, int Y) offset) { _offset = AreaWorldMapArtLayout.Clamp(offset, _max); Redraw(); }
+    internal void SetOffsetForSelfTest((int X, int Y) offset) { FitPicture(); _offset = AreaWorldMapArtLayout.Clamp(offset, MapMax); Redraw(); }
 
     public override void _Ready()
     {
@@ -153,28 +195,27 @@ public partial class AreaWorldMapArtView : Control
         // and colour under clear pixels, so every texture drawn on these two canvases is the premultiplied variant (ARC-UI-126; only the background, drawn by this node, is not).
         AreaArtTextDraw.Prepare(_canvas);
         AreaArtTextDraw.Prepare(_chrome);
-        // The diagnostic message is drawn with the engine's font, which the premultiplied material would spoil: it has a canvas of its own.
-        _note = new NoteCanvas { Host = this, Position = new Vector2(x, y), Size = new Vector2(width, height), MouseFilter = MouseFilterEnum.Ignore };
+        // The status note has a canvas of its own (ARC-UI-2795: drawn in the original's message font, art 229, with the art text draw's material; its dim strip is black).
+        _note = new NoteCanvas { Host = this, Position = new Vector2(x, y), Size = new Vector2(width, height), MouseFilter = MouseFilterEnum.Ignore, ClipContents = true };
+        AreaArtTextDraw.Prepare(_note);
         AddChild(_canvas);
         AddChild(_note);
         AddChild(_chrome);
-        // ARC-UI-106 (WM92): the note's text entry (the original runs it in the message window on a 250-byte buffer, 249 characters here).
-        _noteEdit = new LineEdit
-        {
-            Name = "NoteEdit", Visible = false, MaxLength = AreaTownNotes.MaxTextLength, FocusMode = FocusModeEnum.All,
-            PlaceholderText = "note (Enter keeps it, empty deletes it, Esc cancels)", Position = new Vector2(x + 12, y + height - 52), Size = new Vector2(width - 24, 26),
-        };
-        _noteEdit.TextSubmitted += _ => AcceptNoteEdit();
-        // Focus taken away from the field (Tab, a focus move) ends the entry as Escape does, so the window's keys never stay swallowed.
-        _noteEdit.FocusExited += CancelNoteEdit;
-        AddChild(_noteEdit);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
         Visible = false;
     }
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += RedrawForKit;
+
+    private void RedrawForKit() => Redraw();
+
+    /// <summary>ARC-UI-3036 (census G13, G14: the map view, the continent view and the town map are the one window, interface mode 5): the kit's <c>backdrop.mapmain</c> shows under this window (the bar panel drew it), so the window draws no frame art of its own (art 138); the view, the buttons, the compass, the lens art and the cover over the view stay.</summary>
+    internal bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.WorldMap;
+
     public override void _ExitTree()
     {
+        AreaGameBarPanel.KitBackgroundChanged -= RedrawForKit;
         AreaGameBarPanel.InsetsChanged -= Place;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
@@ -195,7 +236,7 @@ public partial class AreaWorldMapArtView : Control
     {
         if (_look is null) throw new InvalidOperationException("ARC-UI-073: the world-map art is not set");
         _map = map; _known = known; _message = ""; _teleportMode = teleportMode;
-        _max = AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width);
+        Place();
         (_hovered, _pressed, _compassDragged, _pressedInView) = (null, null, false, false);
         (_armed, _dragging) = (map.OnStartMap, false);
         _kind = AreaWorldMapKind.Map; _readoutPixel = null; _hoverArea = _hoverNote = -1;
@@ -266,7 +307,8 @@ public partial class AreaWorldMapArtView : Control
 
     private bool InView(WorldMapPixel pixel)
     {
-        var (x, y) = AreaWorldMapArtLayout.ToWindow(pixel.X, pixel.Y, _offset);
+        FitPicture();
+        var (x, y) = AreaWorldMapArtLayout.ToWindow(pixel.X, pixel.Y, _offset, PixelsPerUnit);
         var view = AreaWorldMapArtLayout.View;
         return x >= view.X && y >= view.Y && x < view.X + view.Width && y < view.Y + view.Height;
     }
@@ -282,7 +324,8 @@ public partial class AreaWorldMapArtView : Control
             return;
         }
         var at = map.OnStartMap ? map.Position : new WorldMapPixel(map.Data.Width / 2, map.Data.Width / 2);
-        _offset = AreaWorldMapArtLayout.CentreOn(at.X, at.Y, _max);
+        FitPicture();
+        _offset = AreaWorldMapArtLayout.CentreOn(at.X, at.Y, MapMax, PixelsPerUnit);
         Redraw();
     }
 
@@ -321,7 +364,8 @@ public partial class AreaWorldMapArtView : Control
             return true;
         }
         if (_kind != AreaWorldMapKind.Map) return false;
-        var next = AreaWorldMapArtLayout.Scroll(_offset, direction, step, _max);
+        FitPicture();
+        var next = AreaWorldMapArtLayout.Scroll(_offset, direction, AreaWorldMapArtLayout.StepPixels(step, PixelsPerUnit), MapMax);
         if (next == _offset) return false;
         _offset = next;
         Redraw();
@@ -361,13 +405,23 @@ public partial class AreaWorldMapArtView : Control
     /// <summary>The window between the bars at the largest whole factor that fits (at least a quarter when it cannot).</summary>
     public void Place()
     {
+        // ARC-UI-2575: with the Steamwoven layout the window lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneWindow(GetViewportRect().Size, AreaWorldMapArtLayout.WindowWidth, AreaWorldMapArtLayout.WindowHeight) is { } zone)
+        {
+            Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+            Position = new Vector2((float)zone.X, (float)zone.Y);
+            RedrawOnScaleChange();
+            FitPicture();
+            return;
+        }
         var (top, free) = AreaGameBarPanel.FreeArea(GetViewportRect().Size);
         var fit = MathF.Min(free.X / AreaWorldMapArtLayout.WindowWidth, free.Y / AreaWorldMapArtLayout.WindowHeight);
         var factor = fit >= 1 ? MathF.Floor(fit) : MathF.Max(.25f, fit);
         Scale = new Vector2(factor, factor);
-        Position = new Vector2(MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
+        Position = new Vector2(AreaGameBarPanel.FreeLeft + MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
             top + MathF.Round((free.Y - AreaWorldMapArtLayout.WindowHeight * factor) / 2));
         RedrawOnScaleChange();
+        FitPicture();
     }
 
     // ARC-UI-1197: a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the frame is drawn again at the new device scale.
@@ -470,8 +524,16 @@ public partial class AreaWorldMapArtView : Control
 
     // The picture pixel under a window point in the current kind (WM25, WM41).
     private (long X, long Y)? PixelAt(Vector2 at) => _map is null ? null
-        : _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset)
+        : _kind == AreaWorldMapKind.Map ? MapPixelAt(at)
         : _kind == AreaWorldMapKind.Town ? AreaTownMapLayout.ToPicture(at.X, at.Y, _townOffset) : AreaWorldMapArtLayout.ZoomedToPicture(at.X, at.Y, _map.Data.Width);
+
+    // A point on the black margin beside a picture smaller than the view (an HD window beyond 2000 picture pixels) is no picture pixel: no waypoint, note or readout.
+    private (long X, long Y)? MapPixelAt(Vector2 at)
+    {
+        FitPicture();
+        var width = _map?.Data.Width ?? AreaWorldMapArtLayout.PictureSize;
+        return AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset, PixelsPerUnit) is { } pixel && pixel.X >= 0 && pixel.Y >= 0 && pixel.X < width && pixel.Y < width ? pixel : null;
+    }
 
     private IReadOnlyList<(long X, long Y)> MarkerPixels()
     {
@@ -528,7 +590,7 @@ public partial class AreaWorldMapArtView : Control
         // ARC-UI-110: as in the town map (WM59) the hover works in tool state 0 only, not with the quill.
         if (!_quill && pixel is { } p && _map is not null && (_kind == AreaWorldMapKind.Continent || !Travelling))
         {
-            var half = _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.HoverHalf : AreaWorldMapArtLayout.ZoomedHoverHalf;
+            var half = _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf, PixelsPerUnit) : AreaWorldMapArtLayout.ZoomedHoverHalf;
             var index = AreaWorldMapArtLayout.HitMarker(MarkerPixels(), p.X, p.Y, half);
             hit = index < 0 ? -1 : _markers[index];
             // A note shows its text where no area marker is under the pointer (the newest note wins an overlap, WM58).
@@ -629,7 +691,8 @@ public partial class AreaWorldMapArtView : Control
             {
                 // WM34: a click in the continent view zooms in on the clicked point (not in a town-map sector).
                 _kind = AreaWorldMapKind.Map;
-                _offset = AreaWorldMapArtLayout.CentreOn(zoomTo.X, zoomTo.Y, _max);
+                FitPicture();
+                _offset = AreaWorldMapArtLayout.CentreOn(zoomTo.X, zoomTo.Y, MapMax, PixelsPerUnit);
                 ClearDescription();
             }
             _pressedInView = false;
@@ -722,35 +785,56 @@ public partial class AreaWorldMapArtView : Control
         var (pictureWidth, pictureHeight) = _kind == AreaWorldMapKind.Town ? (_town!.Plan.PictureWidth, _town.Plan.PictureHeight) : (_map!.Data.Width, _map.Data.Width);
         if (pixel.X < 0 || pixel.Y < 0 || pixel.X >= pictureWidth || pixel.Y >= pictureHeight) return;
         var hit = notes.Hit(pixel.X, pixel.Y, NoteHitHalf);
+        // 0x564360: a note with flag 2 (the ones a scenery marked) is not edited.
+        if (hit >= 0 && !notes.IsEditable(hit)) { _message = "This note cannot be edited."; Redraw(); return; }
         if (hit < 0 && notes.IsFull) { _message = "No more notes fit on this map."; Redraw(); return; }
+        if (NoteEntryAvailable?.Invoke() != true) { _message = "The note entry needs the bottom strip (art 200)."; Redraw(); return; }
         _message = "";
         _editIndex = hit;
         _editPixel = ((int)pixel.X, (int)pixel.Y);
-        _noteEdit.Text = hit < 0 ? "" : notes.Items[hit].Text;
-        _noteEdit.Visible = true;
-        _noteEdit.GrabFocus();
-        _noteEdit.CaretColumn = _noteEdit.Text.Length;
+        // 0x563F90: a new note takes the radio group's marker now; an edit keeps its own type (the accept never writes it).
+        _editType = hit < 0 ? NoteMarkerType?.Invoke() ?? AreaTownNotes.QuestionType : notes.Items[hit].Type;
+        _editSaved = _editText = hit < 0 ? "" : notes.Items[hit].Text;
+        _noteEntry = true;
         Redraw();
     }
 
     // The hit box of a note (WM58's marker box): ±9 picture pixels in the town and map views, where the art is drawn 1:1. In the continent view the picture is shrunk
-    // (365 px for the whole width) and art 143 is drawn at its full size, so the box is at least the marker's ±20 and at least the drawn art's half size in picture pixels.
+    // (365 px for the whole width) and the note arts are drawn at their full size, so the box is at least the marker's ±20 and at least the drawn art's half size in picture pixels.
     private int NoteHitHalf
     {
         get
         {
-            if (_kind != AreaWorldMapKind.Continent) return AreaWorldMapArtLayout.HoverHalf;
-            var artHalf = _look?.Art.TryGetValue(AreaWorldMapArtLayout.NoteArt, out var frames) == true && frames.Length > 0 ? Math.Max(frames[0].GetWidth(), frames[0].GetHeight()) / 2 : 0;
+            if (_kind != AreaWorldMapKind.Continent) return _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.PickHalf(AreaWorldMapArtLayout.HoverHalf, PixelsPerUnit) : AreaWorldMapArtLayout.HoverHalf;
+            // The largest of the four note arts, not the drawn note's own (a safe bound; the arts are about the same size).
+            var artHalf = 0;
+            foreach (var art in AreaWorldMapArtLayout.NoteTypeArts)
+                if (_look?.Art.TryGetValue(art, out var frames) == true && frames.Length > 0) artHalf = Math.Max(artHalf, Math.Max(frames[0].GetWidth(), frames[0].GetHeight()) / 2);
             return Math.Max(AreaWorldMapArtLayout.ZoomedHoverHalf, (int)(artHalf * (_map?.Data.Width ?? 0) / AreaWorldMapArtLayout.ZoomedSize));
         }
     }
 
-    /// <summary>Enter in the text entry: a text with something in it adds the note or keeps the edited one, an empty text deletes the edited note (0x564210), and the entry ends.</summary>
+    /// <summary>Enter or Done in the entry (0x5640C0): a text with something in it adds the note (with the marker the radio group gave when it was made) or keeps the edited
+    /// one, an empty text deletes the edited note (0x564210) and adds none, and the entry ends (the original leaves the strip in mode 6, unbound; what closes it is not read, F0).</summary>
     public void AcceptNoteEdit()
     {
         if (!EditingNote || ActiveNotes is not { } notes) return;
-        var text = _noteEdit.Text;
-        var changed = _editIndex < 0 ? notes.AddByQuill(_editPixel.X, _editPixel.Y, text) : notes.EditByQuill(_editIndex, text);
+        var text = _editText;
+        var changed = _editIndex < 0 ? notes.AddByQuill(_editPixel.X, _editPixel.Y, text, _editType) : notes.EditByQuill(_editIndex, text);
+        FinishNoteEdit(notes, changed);
+    }
+
+    /// <summary>Leaving the entry without accepting (Escape, the quill left, the window closing; 0x564070): a new note is dropped, and an edited note keeps what was typed, as the
+    /// original's entry works on the note's own text. A text with nothing in it keeps the text the entry opened with instead (the session stores no empty note).</summary>
+    public void CancelNoteEdit()
+    {
+        if (!EditingNote || ActiveNotes is not { } notes) { _noteEntry = false; return; }
+        var changed = _editIndex >= 0 && AreaTownNotes.IsNoteText(_editText) && notes.EditByQuill(_editIndex, _editText);
+        FinishNoteEdit(notes, changed);
+    }
+
+    private void FinishNoteEdit(AreaTownNotes notes, bool changed)
+    {
         CloseNoteEdit();
         if (changed)
         {
@@ -760,20 +844,11 @@ public partial class AreaWorldMapArtView : Control
         Redraw();
     }
 
-    /// <summary>Escape in the text entry (or leaving the quill): the entry ends and nothing changes.</summary>
-    public void CancelNoteEdit()
-    {
-        if (!EditingNote) return;
-        CloseNoteEdit();
-        Redraw();
-    }
-
     private void CloseNoteEdit()
     {
-        _noteEdit.Visible = false;
-        _noteEdit.ReleaseFocus();
-        _noteEdit.Text = "";
+        _noteEntry = false;
         _editIndex = -1;
+        _editSaved = _editText = "";
     }
 
     // WM85, WM87: an armed press on a town waypoint selects it, else adds one (message 611 at 6, 610 without a path); both disarm. There is no drag in the town map.
@@ -803,7 +878,7 @@ public partial class AreaWorldMapArtView : Control
         var map = _map!;
         var hit = -1;
         if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.AreaArt, out var frames) == true && frames.Length > 0)
-            hit = AreaWorldMapArtLayout.HitWaypoint([.. map.Waypoints.Select(w => (w.Pixel.X, w.Pixel.Y))], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight());
+            hit = AreaWorldMapArtLayout.HitWaypoint([.. map.Waypoints.Select(w => (w.Pixel.X, w.Pixel.Y))], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight(), PixelsPerUnit);
         if (hit >= 0) map.Select(hit);
         else
         {
@@ -834,7 +909,7 @@ public partial class AreaWorldMapArtView : Control
     {
         // The background; the view and the buttons are the children above it.
         ClaimScale();
-        if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.BackgroundArt, out var back) == true && back.Length > 0) DrawTexture(back[0], Vector2.Zero);
+        if (!KitBackgroundShown && _look?.Art.TryGetValue(AreaWorldMapArtLayout.BackgroundArt, out var back) == true && back.Length > 0) DrawTexture(back[0], Vector2.Zero);
     }
 
     // The view, in its own coordinates (the window's minus the view's origin).
@@ -843,7 +918,7 @@ public partial class AreaWorldMapArtView : Control
         var view = AreaWorldMapArtLayout.View;
         canvas.DrawRect(new Rect2(0, 0, view.Width, view.Height), Colors.Black);
         if (_look is null) return;
-        if (_kind == AreaWorldMapKind.Map) DrawMapView(canvas);
+        if (_kind == AreaWorldMapKind.Map) { FitPicture(); DrawMapView(canvas); }
         else if (_kind == AreaWorldMapKind.Town) DrawTownView(canvas);
         else DrawContinentView(canvas);
         // WM42: the cover over the view's bottom edge, drawn last in both views.
@@ -856,7 +931,9 @@ public partial class AreaWorldMapArtView : Control
         if (_message.Length == 0) return;
         var view = AreaWorldMapArtLayout.View;
         canvas.DrawRect(new Rect2(0, view.Height - 18, view.Width, 18), new Color(0, 0, 0, .7f));
-        canvas.DrawString(ThemeDB.FallbackFont, new Vector2(4, view.Height - 5), _message, HorizontalAlignment.Left, view.Width - 8, 12, new Color(1f, .85f, .5f));
+        // ARC-UI-2795: the original has no note strip inside the map (its messages go to the message window in art 229, white, WM60); the viewer's strip keeps that font.
+        if (_look?.MessageFont is { } face)
+            AreaArtTextDraw.Text(canvas, face, _message, 4, view.Height - 18 + (18 - AreaTextFontLayout.LineHeight(face.Frames)) / 2, (255, 255, 255));
     }
 
     // WM76–WM82: the black fill (done by the caller), the tiles, the party marker; the notes, the route and the followers follow in later slices.
@@ -883,9 +960,10 @@ public partial class AreaWorldMapArtView : Control
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
                     [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
             }
-        // WM79, WM82: the notes next, every one with the question art 143 centred on its pixel, whatever its type (no label: the text shows on hover, WM59).
+        // WM82: the notes next, each with the art of its type (ARC-UI-2330; the original's town map draws all with 143, WM79, WM142, but the scenery notes are the only ones it makes there) centred on its pixel
+        // (no label: the text shows on hover, WM59).
         if (town.Notes is { } notes)
-            foreach (var note in notes.Items) MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(note.PixelX - _townOffset.X, note.PixelY - _townOffset.Y));
+            foreach (var note in notes.Items) MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _townOffset.X, note.PixelY - _townOffset.Y));
         // WM80, WM104: the route from the party through the waypoints' icon pixels, in the colours of the map view.
         var from = new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y);
         for (var i = 0; i < town.Waypoints.Count; i++)
@@ -926,13 +1004,17 @@ public partial class AreaWorldMapArtView : Control
 
     private void DrawMapView(CanvasItem canvas)
     {
-        var (first, last, firstRow, lastRow) = AreaWorldMapArtLayout.VisibleTiles(_offset);
+        var unit = PixelsPerUnit;
+        var (first, last, firstRow, lastRow) = AreaWorldMapArtLayout.VisibleTiles(_offset, unit);
         for (var row = firstRow; row <= lastRow; row++)
             for (var column = first; column <= last; column++)
             {
                 var index = AreaWorldMapArtLayout.TileColumns * row + column;
                 if (index >= _look!.Tiles.Count) continue;
-                canvas.DrawTexture(_look.Tiles[index], new Vector2(AreaWorldMapArtLayout.TileSize * column - _offset.X, AreaWorldMapArtLayout.TileSize * row - _offset.Y));
+                var at = new Vector2(AreaWorldMapArtLayout.TileSize * column - _offset.X, AreaWorldMapArtLayout.TileSize * row - _offset.Y);
+                // ARC-UI-2993: under the HD option a tile covers 250 device pixels (250 / unit window units), so the picture stays 1:1 and sharp.
+                if (unit == AreaWorldMapArtLayout.OriginalPixelsPerUnit) canvas.DrawTexture(_look.Tiles[index], at);
+                else canvas.DrawTextureRect(_look.Tiles[index], new Rect2(at / (float)unit, new Vector2(AreaWorldMapArtLayout.TileSize, AreaWorldMapArtLayout.TileSize) / (float)unit), false);
             }
         if (_map is not { } map) return;
         var data = map.Data;
@@ -943,12 +1025,20 @@ public partial class AreaWorldMapArtView : Control
             var pixel = WorldTravelGeometry.Pixel(data.TravelAreas[area].Location, data.Width);
             Marker(canvas, AreaWorldMapArtLayout.AreaArt, pixel);
             var worldArea = data.Areas.Areas[area];
-            var (x, y) = AreaWorldMapArtLayout.LabelAt(pixel.X, pixel.Y, _offset, (int)worldArea.NameOffsetX, (int)worldArea.NameOffsetY);
+            var (x, y) = AreaWorldMapArtLayout.LabelAt(pixel.X, pixel.Y, _offset, (int)worldArea.NameOffsetX, (int)worldArea.NameOffsetY, unit);
             Label(canvas, worldArea.Name, x, y, colour);
         }
-        // ARC-UI-110: the map view's notes, every one with the question art 143 centred on its pixel (the text shows on hover).
+        // ARC-UI-110, ARC-UI-2330, ARC-UI-2445 (WM142, WM49): the map view's notes, each with the art of its type centred on its pixel, then its text beside it as an area
+        // marker's name is placed (no name offset: a note has none), in the colour of the type's font row. The text still shows on hover. NoteLabelsOffForSelfTest draws the
+        // earlier look (icons only) for the composite.
         if (_mapNotes is { } mapNotes)
-            foreach (var note in mapNotes.Items) MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(note.PixelX - _offset.X, note.PixelY - _offset.Y));
+            foreach (var note in mapNotes.Items)
+            {
+                MarkerAt(canvas, NoteArtFor(note), ViewPoint(new WorldMapPixel(note.PixelX, note.PixelY)));
+                if (NoteLabelsOffForSelfTest) continue;
+                var (x, y) = AreaWorldMapArtLayout.LabelAt(note.PixelX, note.PixelY, _offset, 0, 0, unit);
+                Label(canvas, note.Text, x, y, AreaWorldMapArtLayout.NoteLabelColourOf(note.Type));
+            }
         if (!map.OnStartMap) return;
         // WM80, WM104: a straight line from the party through each waypoint's icon pixel in turn; the one that ends at the selected waypoint is (50, 50, 110), the
         // others (160, 50, 50); each icon is drawn after its line, so the next line overdraws it.
@@ -978,9 +1068,9 @@ public partial class AreaWorldMapArtView : Control
             var dot = Dot(WorldTravelGeometry.Pixel(data.TravelAreas[area].Location, data.Width));
             canvas.DrawRect(new Rect2(dot.X, dot.Y, 2, 2), Rgb(AreaWorldMapArtLayout.ZoomedMarkerColour));
         }
-        // ARC-UI-110: the continent view's notes, art 143 centred on the note's point of the continent picture.
+        // ARC-UI-110, ARC-UI-2330: the continent view's notes, each with the art of its type centred on the note's point of the continent picture.
         if (_continentNotes is { } continentNotes)
-            foreach (var note in continentNotes.Items) { var dot = Dot(new WorldMapPixel(note.PixelX, note.PixelY)); MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(dot.X, dot.Y)); }
+            foreach (var note in continentNotes.Items) { var dot = Dot(new WorldMapPixel(note.PixelX, note.PixelY)); MarkerAt(canvas, NoteArtFor(note), new Vector2(dot.X, dot.Y)); }
         if (!map.OnStartMap) return;
         if (LastDiscovered(map) is { } newest)
         {
@@ -998,7 +1088,12 @@ public partial class AreaWorldMapArtView : Control
     private static int? LastDiscovered(AreaWorldMap map) =>
         map.Session.QueryLastDiscoveredArea() is > 0 and var area && area < map.Data.TravelAreas.Count ? area : null;
 
-    private Vector2 ViewPoint(WorldMapPixel pixel) => new(pixel.X - _offset.X, pixel.Y - _offset.Y);
+    // A picture pixel's place in the view, in window units (ARC-UI-2993: the markers, labels and route lines are anchored there at the composition's scale).
+    private Vector2 ViewPoint(WorldMapPixel pixel)
+    {
+        var unit = (float)PixelsPerUnit;
+        return new((pixel.X - _offset.X) / unit, (pixel.Y - _offset.Y) / unit);
+    }
 
     private void Marker(CanvasItem canvas, int art, WorldMapPixel pixel) => MarkerAt(canvas, art, ViewPoint(pixel));
 
@@ -1036,6 +1131,13 @@ public partial class AreaWorldMapArtView : Control
             var frame = AreaCharacterArtDraw.Frame(frames.Length, _pressed is not null, _pressed == button, _hovered == button);
             canvas.DrawTexture(frames[Math.Min(frame, frames.Length - 1)], new Vector2(x, y));
         }
+        // ARC-UI-3036: the kit's frame has no compass letters (census: drawn by font on the redrawn frame), so they are written at the places of the original's.
+        if (KitBackgroundShown)
+            foreach (var (letter, (cx, cy)) in AreaWorldMapArtLayout.CompassLetters)
+            {
+                var (width, height) = _look.Font.Font.Measure(letter);
+                AreaArtTextDraw.Text(canvas, _look.Font, letter, cx - width / 2, cy - height / 2, AreaWorldMapArtLayout.CompassLetterColour);
+            }
         // WM51: each box is filled black and its text written at its corner, in the white of the type 0 font with the shadow.
         if (_readoutPixel is { } pixel && _map is { } map)
         {

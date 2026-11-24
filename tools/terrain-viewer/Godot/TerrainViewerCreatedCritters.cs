@@ -120,7 +120,9 @@ public partial class TerrainViewerApp
     {
         foreach (var gone in host.TakeDestroyedCreated())
         {
-            var destroyed = session.DestroyCreatedObject(session.Version, gone);
+            // ARC-SCRIPT-2903: the remove-item scripts (28) of the items the critter drops run through the item script host, and the lines they print are shown.
+            var destroyed = session.DestroyCreatedObject(session.Version, gone, scripts: _inventoryHost?.ItemScripts(session));
+            PostScriptLines(destroyed.Messages);
             GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={gone} disposition={destroyed.Disposition} failure={destroyed.Failure}");
         }
     }
@@ -130,7 +132,8 @@ public partial class TerrainViewerApp
     {
         foreach (var made in session.QueryCreatedObjects(map).Where(o => o.Kind == SessionCreatedKind.Critter && (session.QueryObjectFlags(o.Entity).CritterSet & SessionCreatedObject.EncounterCritterFlag) != 0).ToArray())
         {
-            var destroyed = session.DestroyCreatedObject(session.Version, made.Entity);
+            var destroyed = session.DestroyCreatedObject(session.Version, made.Entity, scripts: _inventoryHost?.ItemScripts(session));
+            PostScriptLines(destroyed.Messages);
             GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={made.Entity} why={why} disposition={destroyed.Disposition} failure={destroyed.Failure}");
         }
     }

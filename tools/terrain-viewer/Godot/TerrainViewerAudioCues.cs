@@ -205,6 +205,16 @@ public partial class TerrainViewerApp
             PlayCueAt(bark, cell.X, cell.Y, PositionalSize.Large, "bark");
     }
 
+    /// <summary>
+    /// ARC-COMBAT-2698 (0x4B3170 → 0x4F0BF0 code 3, 0x41B930): the dispatcher's ammunition refusal plays the weapon's out-of-ammunition sound (its sound base + 7) once, on the thrower, and prints or floats no text
+    /// (the ledger's "message code 3" is this sound). <paramref name="weapon"/> is the refused weapon's sound fields, read before it left the thrower; nothing plays for an item without a sound base or without an audio backend.
+    /// </summary>
+    private void PlayAmmunitionRefusalSound(ObjectSoundFields? weapon, long x, long y)
+    {
+        if (_audio is null || weapon is null) return;
+        if (SoundCueRules.AttackStart(true, SessionSoundCues.Item(weapon)) is { } cue) PlayCueAt(cue.Cue, x, y, PositionalSize.Large, "out of ammunition");
+    }
+
     /// <summary>The attack's result sounds (critical bark on the target, hit, critical or miss on the hero) and the target's
     /// dying bark when it died.</summary>
     private void PlayAttackResultSounds(SessionAttackResult result, AreaObjectRecord targetRow, string targetEntity)

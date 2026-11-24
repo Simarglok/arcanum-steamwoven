@@ -11,7 +11,7 @@ the order part of [FR-SOCIAL-004](../requirements/story-social-ai.md#fr-social-0
 The combat orders (attack, back off/stop, curse) are the NPC AI's slice I9 (ARC-WORLD-091, [AI followers](ai-followers.md)) through
 the same entry.
 
-**NOT READY:** without the AI host (the AI off) the attack order is sent without a target (it does nothing) and no AI pass runs after an order; an attack order on a container or a ground item is ignored by the host's attack event, and on an object without a session entity (a door, scenery) it has no target (ARC-WORLD-117); there is no typed order text (Enter) and no keyword lookup of `mes\broadcast.mes`; the move order's "please move" goal
+**NOT READY:** without the AI host (the AI off) the attack order is sent without a target (it does nothing) and no AI pass runs after an order; an attack order on a container or a ground item is ignored by the host's attack event, and on an object without a session entity (a door, scenery) it has no target (ARC-WORLD-117); the typed order text is the bottom strip's order line ([ARC-UI-2305](#typed-order-line-arc-ui-2305)) without the sleeping transform and the no-name fallback (#2310); the move order's "please move" goal
 is not run by the viewer; lines are named by their message range, no line text or speech
 is loaded; the spread-out step is a project approximation (below). Owner decisions D1–D4 (2026-10-21): the Steamwoven setting fixes each
 bug, the Original setting keeps it. Parity of the viewer's goals NOT_VERIFIED.
@@ -78,7 +78,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   diagnostic layer.
 - **Follower portraits** (`AreaFollowerPortraits`; since ARC-UI-024 the original's frames down the left edge, [panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)): one frame per follower in the array (in its order, at most six; none for a waiting
   one), each opening, **on the right button's release** over it (ARC-DEV-280, B33, [OL34](../research/ledger/social.md)), the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode no attack yet: the original attacks with left Alt held). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
+  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode the attack goal with left Alt held, ARC-COMBAT-1945, nothing without). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
   health ([health and fatigue bars](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)). The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
   window's focus, which stops the PC's route and refuses the choice); a second right click or a left click on a portrait, a right release
   anywhere else, any key other than a bare modifier, or a press on the ground that the world accepts closes it (that press does nothing
@@ -90,8 +90,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   AI host the orders run each follower's AI pass ([AI host](ai-host.md#followers-in-combat-arc-world-115)); F2's target is the
   object under the pointer at the release. The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's rows draw the
-  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares (`AreaCompanionOrders.Label`) is still the viewer's own
-  lower-case word (the original joins the follower's name with the file's text).
+  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares is the same message (`AreaCompanionOrders.OrderLabel`,
+  ARC-UI-1975; the original joins the follower's name with the file's text, FP10): a row whose message is missing sends no order, and without the file the project's English words stand
+  in. `AreaCompanionOrders.Label` stays the viewer's own lower-case word for its notices and log only.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
   the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`. The PC side
   of both is the session hero with `--hero` (ARC-WORLD-067, [party runtime](party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)),
@@ -174,3 +175,7 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
 "$DOTNET" test tests/Arcanum.Session.Tests --no-build --filter "FullyQualifiedName~CompanionOrder"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests --no-build --filter "FullyQualifiedName~AreaCompanionOrder"
 ```
+
+## Typed order line (ARC-UI-2305)
+
+Enter in the world (the order-input gate of F1–F6 holds, the bars show, no quantity pane) opens the bottom strip's mode 7 (ledger BM5a–BM5g): art 291 over the strip, a black text rectangle (220, 503, 350 × 82) with the text in the entry's colour and a `*` mark after its end. The text is `OrderLine` (`Arcanum.Presentation.Hud`), the original's entry 0x566F00: up to 125 characters (typing at the end stops at 124), the caret by Home, Left, Right, Up and Down (±40), Insert, Delete and Backspace, no selection. Enter accepts: the hero says the text (a green bubble, OL2), `CompanionOrderAddressing.Text` reads it (`CompanionOrderRules.TypedReceivers`): a text starting with `#` reaches every follower within 10 tiles, any other the first follower whose known name prefixes it, and the rest after the name or `#` (spaces skipped) is looked up whole and case-insensitively in `BroadcastKeywords` (`mes\broadcast.mes` from 100 up, each with the type `Rules\BroadCastRules.mes` names; read from the player's game folder at the first Enter, never committed). A word that is no keyword is type none and the follower still gets its AI pass. The line carries the highlighted object (the attack target) and the pointer's tile (walk here) as F1–F6 do. Escape (the menu), a window, the bars hiding or a change of the strip's mode close it and drop the text; all hotkeys stand down while it is open. Open: the sleeping speech transform, the field 0x14F gate and the no-name fallback (#2310); no slide-in; the art's generated recipe is #1870's. Tests: `OrderLineTests`, `BroadcastKeywordsTests`, `AreaBroadcastKeywordsTests`, `CompanionOrderStateTests`; the `companion-click` stage's last part drives the line.

@@ -351,4 +351,30 @@ public sealed class ScrWorldTests
         Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S40).IsAdmitted);
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S38).Refusal!.Code);
     }
+
+    [TestMethod]
+    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_the_sets_from_S64_admit_it()
+    {
+        // ARC-SCRIPT-2321 (AS1, AS2): the original builds one list for 15 and 16 (0x44B4E0), so a loop creates next to every object and the first-object read is the list's first.
+        const byte AnyScenery = 16;
+        var program = Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.LoopFor, (AnyScenery, 0))),
+            Do(C(ScrCatalogue.Action.CreateObject, N(1), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.CreateObject, N(2), (AnyScenery, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        Assert.AreEqual(ScrRefusalCode.FocusKindNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S63).Refusal!.Code, "S63 refuses kind 16");
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S64).IsAdmitted);
+        Assert.IsTrue(ScrAdmissionSet.S63.IsSubsetOf(ScrAdmissionSet.S64) && !ScrAdmissionSet.S64.IsSubsetOf(ScrAdmissionSet.S63));
+        // The run uses S15 plus the kind (the full set needs every query interface of the host).
+        var set = new ScrAdmissionSet("s15+16", ScrAdmissionSet.S15.Conditions, ScrAdmissionSet.S15.Actions, ScrAdmissionSet.S15.ValueKinds, ScrAdmissionSet.S15.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
+        var host = Host();
+        host.Inner.Scripts[9] = ScrScriptLookup.Of(program);
+        var run = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = set });
+        CollectionAssert.AreEqual(new[] { Tree, Mark, Rock, Tree }, run.Effects.Creations.Select(c => c.Near).ToArray(), "three looped, then the first object of the list");
+        CollectionAssert.AreEqual(new[] { Pc }, host.Centres.Take(1).ToArray(), "the list is centred on the assigned attachee");
+        var original = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = set, Rules = ScrRuleProfile.Original });
+        Assert.AreEqual(4, original.Effects.Creations.Count);
+    }
 }

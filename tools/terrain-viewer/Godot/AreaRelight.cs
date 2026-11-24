@@ -108,6 +108,8 @@ internal static class AreaRelight
     /// <summary>Steps off, add, night, delight, off ... (the diagnostic palette action).</summary>
     internal static Mode Cycle() { _developerMode = (Mode)(((int)_developerMode + 1) % 4); return _developerMode; }
 
+    /// <summary>ARC-RENDER-2207: the map lights of the last push (world pixels), for the smoke.</summary>
+    internal static IReadOnlyList<Light> MapLightList => MapLights;
     internal static void SetMapLights(IEnumerable<Light> lights) { MapLights.Clear(); MapLights.AddRange(lights); }
     internal static void SetCarriedLights(IEnumerable<Light> lights) { CarriedLights.Clear(); CarriedLights.AddRange(lights); }
 
@@ -174,6 +176,8 @@ internal static class AreaRelight
         global uniform vec4 relight_params;
         global uniform vec4 relight_kinds;
         uniform int relight_kind = 0;
+        // ARC-RENDER-2298: the ambient the night weight reads: the item's Legacy ambient without the carried lights (the relit term takes those from the light list itself).
+        uniform vec3 relight_weight = vec3(1.0);
         uniform int relight_scale = 1;
         float rl_lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
         void rl_taps(sampler2D tex, ivec2 p, vec4 centre, int stride, out mat3 h, out mat3 a) {
@@ -204,7 +208,7 @@ internal static class AreaRelight
             return normalize(vec3(-dx * gain * 2.0 + ex * bevel, -dy * gain * 2.0 + ey * bevel, 1.0));
         }
         // The relit pixel: the Legacy colour (texel x the lattice tint) plus the normal-mapped diffuse term of the lights, per the mode.
-        // ambient is the item's own Legacy ambient (a uniform of the program), the night weight's measure of darkness.
+        // relight_weight is the item's Legacy ambient without the carried lights (a uniform of the program), the night weight's measure of darkness: a light's own carrier counts as dark, not as lit by its own light.
         vec4 relit_color(sampler2D tex, vec4 texel, ivec2 p, vec2 frag, float alpha) {
             vec3 tint = light_tint(frag);
             vec3 base = texel.rgb * tint;
@@ -233,7 +237,7 @@ internal static class AreaRelight
             if (!have) return vec4(base, texel.a * alpha);
             float w = relight_params.y;
             // Night weighting: a bright ambient (day) leaves the Legacy pixel, a dark one takes the full term.
-            if (mode >= 2) w *= clamp(1.0 - rl_lum(ambient), 0.0, 1.0);
+            if (mode >= 2) w *= clamp(1.0 - rl_lum(relight_weight), 0.0, 1.0);
             if (mode == 3) {
                 // Partial de-light: pull the baked shading towards the local mean luminance (contrast reduced by the set share).
                 float mean = 0.0;

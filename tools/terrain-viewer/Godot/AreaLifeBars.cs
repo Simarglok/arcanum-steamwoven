@@ -96,13 +96,14 @@ public partial class AreaVialGauge : Control
 /// ARC-UI-024: the original's compact panel (ledger PA4, PA5), shown while the interface bars are not drawn: a 49 × 102 window
 /// with a (9, 9, 9) outline and divider, the health column (red, green while poisoned) and the fatigue column (blue) filled by
 /// <see cref="LifeBarRules.CompactFill"/>, each number (<see cref="LifeBarRules.CompactNumber"/>) in white at its fill's top and
-/// a poisoned PC's poison level 40 rows lower. The original's font (art 229) is not drawn: Godot's default font stands in.
+/// a poisoned PC's poison level 40 rows lower. ARC-UI-2795: the numbers are drawn in the original's font (art 229 <c>Flare12Font</c>, white; the HD redraw with
+/// the HD interface on, <see cref="AreaArtLabel"/>), not Godot's default font.
 /// </summary>
 public partial class AreaCompactPanel : Control
 {
     private (int Top, int Rows) _health, _fatigue;
     private bool _poisoned;
-    private Label _healthNumber = null!, _fatigueNumber = null!, _poison = null!;
+    private AreaArtLabel _healthNumber = null!, _fatigueNumber = null!, _poison = null!;
 
     internal ((int Top, int Rows) Health, (int Top, int Rows) Fatigue, string HealthText, string FatigueText, string? PoisonText, bool Poisoned) ValuesForSelfTest =>
         (_health, _fatigue, _healthNumber.Text, _fatigueNumber.Text, _poison.Visible ? _poison.Text : null, _poisoned);
@@ -118,18 +119,20 @@ public partial class AreaCompactPanel : Control
         _healthNumber = Number("HealthNumber"); _fatigueNumber = Number("FatigueNumber"); _poison = Number("Poison");
     }
 
-    private Label Number(string name)
+    private AreaArtLabel Number(string name)
     {
-        var label = new Label
-        {
-            Name = name, MouseFilter = MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center, ClipText = false,
-            Size = new Vector2(AreaCompactPanelLayout.ColumnWidth, 12),
-        };
-        label.AddThemeColorOverride("font_color", Colors.White);
-        label.AddThemeFontSizeOverride("font_size", 9);
-        label.AddThemeConstantOverride("line_spacing", 0);
+        var label = new AreaArtLabel { Name = name, Align = AreaArtLabel.Alignment.Centre, Size = new Vector2(AreaCompactPanelLayout.ColumnWidth, 12), Face = _font };
         AddChild(label);
         return label;
+    }
+
+    private AreaArtFontFace? _font;
+
+    /// <summary>ARC-UI-2795: the number font (art 229); null draws no number.</summary>
+    public void SetFont(AreaArtFontFace? face)
+    {
+        _font = face;
+        foreach (var number in new[] { _healthNumber, _fatigueNumber, _poison }) if (number is not null) number.Face = face;
     }
 
     public void Set(AreaLife life)
@@ -174,15 +177,13 @@ public partial class AreaCompactPanel : Control
 /// </summary>
 public partial class AreaHeroGauges : CanvasLayer
 {
-    // The original's number slots (0x5C63F8: 0 health, 1 fatigue, 5 poison) in its 800 × 600 screen.
-    private static readonly Rect2 HealthNumber = new(15, 578, 29, 12), FatigueNumber = new(755, 578, 27, 12), PoisonNumber = new(15, 500, 29, 12);
     private Control _root = null!;
     private AreaVialGauge _health = null!;
     private AreaVialGauge _fatigue = null!;
     private AreaCompactPanel _compact = null!;
-    private Label _healthNumber = null!;
-    private Label _fatigueNumber = null!;
-    private Label _poison = null!;
+    private AreaBarNumber _healthNumber = null!;
+    private AreaBarNumber _fatigueNumber = null!;
+    private AreaBarNumber _poison = null!;
     private AreaGameBarPanel? _bars;
     private AreaLife _life;
 
@@ -216,13 +217,10 @@ public partial class AreaHeroGauges : CanvasLayer
         _health = new AreaVialGauge { Name = "HealthGauge" };
         _fatigue = new AreaVialGauge { Name = "FatigueGauge" };
         _compact = new AreaCompactPanel { Name = "CompactPanel" };
-        _healthNumber = Number("HealthNumber"); _fatigueNumber = Number("FatigueNumber"); _poison = Number("Poison");
-        _poison.AddThemeColorOverride("font_color", AreaLifeBar.PoisonedHealthColor);
-        _poison.AddThemeColorOverride("font_outline_color", Colors.Black);
-        _poison.AddThemeConstantOverride("outline_size", 3);
+        // ARC-UI-2368: the digit writer's slots (ledger BC5, BC9): black fill (not the poison's), white bar font with a shadow.
+        _healthNumber = Number("HealthNumber", BarNumberRules.Health); _fatigueNumber = Number("FatigueNumber", BarNumberRules.Fatigue); _poison = Number("Poison", BarNumberRules.Poison);
         _root.AddChild(_health); _root.AddChild(_fatigue); _root.AddChild(_compact);
         _root.AddChild(_healthNumber); _root.AddChild(_fatigueNumber); _root.AddChild(_poison);
-        foreach (var label in new[] { _healthNumber, _fatigueNumber, _poison }) label.AddThemeFontSizeOverride("font_size", 9);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
         Hide();
@@ -234,11 +232,20 @@ public partial class AreaHeroGauges : CanvasLayer
         AreaGameBarPanel.InsetsChanged -= Place;
     }
 
-    private static Label Number(string name) => new()
+    private static AreaBarNumber Number(string name, int slot)
     {
-        Name = name, MouseFilter = Control.MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment = VerticalAlignment.Center, ClipText = false,
-    };
+        var (x, y, width, height) = BarNumberRules.Slot(slot);
+        return new(BarNumberRules.Filled(slot)) { Name = name, MouseFilter = Control.MouseFilterEnum.Ignore, Position = new(x, y), Size = new(width, height) };
+    }
+
+    /// <summary>ARC-UI-2368: the bar font (art 171) the numbers are written in; null: the stand-in font.</summary>
+    public void SetFont(AreaArtFontFace? face) => _healthNumber.Face = _fatigueNumber.Face = _poison.Face = face;
+
+    /// <summary>ARC-UI-2795: the text font (art 229) the compact panel's numbers are written in.</summary>
+    public void SetCompactFont(AreaArtFontFace? face) => _compact.SetFont(face);
+
+    /// <summary>The bar font now drawing the numbers (null: the stand-in).</summary>
+    internal AreaArtFontFace? FontForSelfTest => _healthNumber.Face;
 
     /// <summary>Shows the PC's values, in the vials of <paramref name="bars"/> when given (shown), else in the compact panel; or
     /// hides the gauges (null life).</summary>
@@ -276,8 +283,10 @@ public partial class AreaHeroGauges : CanvasLayer
         _compact.Visible = !inBars;
         // The bars' own placement: the 800 × 600 screen centred at the whole factor, its bottom at the window's bottom.
         var factor = inBars ? _bars!.Factor : AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2452: in the Steamwoven layout the screen lies where the strips put it, at the strips' fractional scale.
+        var (origin, scale) = inBars ? _bars!.ScreenFrame(size) : (new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor), (float)factor);
+        _root.Position = origin;
+        _root.Scale = new(scale, scale);
         if (!inBars)
         {
             var (x, y, width, height) = AreaCompactPanelLayout.Window;
@@ -286,12 +295,6 @@ public partial class AreaHeroGauges : CanvasLayer
         }
         var (hx, hy, hw, hh) = AreaGameBarLayout.HealthGauge; var (fx, fy, fw, fh) = AreaGameBarLayout.FatigueGauge;
         Put(_health, new Rect2(hx, hy, hw, hh)); Put(_fatigue, new Rect2(fx, fy, fw, fh));
-        // A label is at least its line high: each grows around the middle of the original's 12 px slot.
-        foreach (var (label, slot) in new[] { (_healthNumber, HealthNumber), (_fatigueNumber, FatigueNumber), (_poison, PoisonNumber) })
-        {
-            var height = Math.Max(slot.Size.Y, label.GetCombinedMinimumSize().Y);
-            Put(label, new Rect2(slot.Position.X, slot.Position.Y + (slot.Size.Y - height) / 2, slot.Size.X, height));
-        }
     }
 }
 
@@ -303,8 +306,19 @@ public partial class AreaHoverLifeBars : VBoxContainer
     public const int BarWidth = 120;
     private AreaLifeBar _health = null!;
     private AreaLifeBar _fatigue = null!;
-    private Label _healthText = null!;
-    private Label _fatigueText = null!;
+    private AreaArtLabel _healthText = null!;
+    private AreaArtLabel _fatigueText = null!;
+    private AreaArtFontFace? _font;
+
+    /// <summary>ARC-UI-2940: the font of the two texts (art 229, the original's, white); null draws no text.</summary>
+    public void SetFont(AreaArtFontFace? face)
+    {
+        _font = face;
+        foreach (var text in new[] { _healthText, _fatigueText })
+            if (text is not null) { text.Face = face; Fit(text); }
+    }
+
+    private void Fit(AreaArtLabel text) => text.CustomMinimumSize = _font is { } face ? new Vector2(text.TextWidth, AreaTextFontLayout.LineHeight(face.Frames)) : Vector2.Zero;
 
     internal (int Health, string HealthText, int Fatigue, string FatigueText, bool Poisoned)? ValuesForSelfTest =>
         Visible ? (_health.Filled, _healthText.Text, _fatigue.Filled, _fatigueText.Text, _health.FillColor == AreaLifeBar.PoisonedHealthColor) : null;
@@ -318,12 +332,12 @@ public partial class AreaHoverLifeBars : VBoxContainer
         Visible = false;
     }
 
-    private (AreaLifeBar, Label) Pair(string name)
+    private (AreaLifeBar, AreaArtLabel) Pair(string name)
     {
         var row = new HBoxContainer { Name = name, MouseFilter = MouseFilterEnum.Ignore };
         row.AddThemeConstantOverride("separation", 6);
         var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = 8, SizeFlagsVertical = SizeFlags.ShrinkCenter };
-        var text = new Label { Name = name + "Text", MouseFilter = MouseFilterEnum.Ignore };
+        var text = new AreaArtLabel { Name = name + "Text", Face = _font, Colour = (255, 255, 255) };
         row.AddChild(bar); row.AddChild(text); AddChild(row);
         return (bar, text);
     }
@@ -337,22 +351,27 @@ public partial class AreaHoverLifeBars : VBoxContainer
         _fatigue.SetFill(LifeBarRules.HoverFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), BarWidth), AreaLifeBar.FatigueColor);
         _healthText.Text = LifeBarRules.HoverText(life.Health, life.MaxHealth, shown.PcSide);
         _fatigueText.Text = LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, shown.PcSide);
+        Fit(_healthText); Fit(_fatigueText);
         Visible = true;
     }
 }
 
 /// <summary>ARC-UI-057 (ledger CH8, OH7): the hovered critter's bars in the message window, in the bottom strip's own frame: health on the
-/// third line (290, 546) and fatigue on the fourth (290, 564), each 291 px long with its text (<see cref="LifeBarRules.HoverText"/>)
+/// third line (290, 546) and fatigue on the fourth (290, 564), each 235 px long (its art's width) with its text (<see cref="LifeBarRules.HoverText"/>)
 /// right-aligned on its line; the health bar takes the poisoned colour while the critter is poisoned. The original's bar art (463–466,
 /// 665, 666) is not drawn: the viewer's bar colours stand in.</summary>
 public partial class AreaWindowLifeBars : Control
 {
-    public const int BarWidth = 291, LineHeight = 18, BarThickness = 8;
+    /// <summary>ARC-UI-2795 (exe 0x554640): the bar is drawn at its art's own width, 235 (arts 463-466, 665, 666 are 235 × 11), not at its rectangle's 291; the text is right-aligned to the rectangle's right edge (flag 2, 0x550A10), so it stands beside the bar, not on it.</summary>
+    public const int BarWidth = 235, TextWidth = 291, LineHeight = 18, BarThickness = 8;
     public static readonly (int X, int Y) HealthLine = (290, 546), FatigueLine = (290, 564);
+    /// <summary>ARC-UI-2795 (exe 0x553F70): the health text is drawn in font 0x64C49C (art 229, red), the fatigue text in 0x64C500 (art 229, blue).</summary>
+    public static readonly (byte R, byte G, byte B) HealthTextColour = (255, 0, 0), FatigueTextColour = (0, 0, 255);
     private AreaLifeBar _health = null!;
     private AreaLifeBar _fatigue = null!;
-    private Label _healthText = null!;
-    private Label _fatigueText = null!;
+    private AreaArtLabel _healthText = null!;
+    private AreaArtLabel _fatigueText = null!;
+    private AreaArtFontFace? _font;
 
     internal (int Health, string HealthText, int Fatigue, string FatigueText, bool Poisoned)? ValuesForSelfTest =>
         Visible ? (_health.Filled, _healthText.Text, _fatigue.Filled, _fatigueText.Text, _health.FillColor == AreaLifeBar.PoisonedHealthColor) : null;
@@ -366,16 +385,23 @@ public partial class AreaWindowLifeBars : Control
         Visible = false;
     }
 
-    private (AreaLifeBar, Label) Line(string name, (int X, int Y) at)
+    /// <summary>ARC-UI-2795: the font of the two texts (art 229 <c>Flare12Font</c>; health in red, fatigue in blue, ledger IW47); null draws no text.</summary>
+    public void SetFont(AreaArtFontFace? face)
+    {
+        _font = face;
+        if (_healthText is not null) _healthText.Face = face;
+        if (_fatigueText is not null) _fatigueText.Face = face;
+    }
+
+    private (AreaLifeBar, AreaArtLabel) Line(string name, (int X, int Y) at)
     {
         var top = at.Y - AreaGameBarLayout.BottomTop;
-        var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = BarThickness, Position = new Vector2(at.X, top + (LineHeight - BarThickness) / 2) };
-        var text = new Label
+        var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = BarThickness, Position = new Vector2(at.X, top) }; // ARC-UI-2795: the bar and its text start at the rectangle's top (exe 0x554640, 0x550A10)
+        var text = new AreaArtLabel
         {
-            Name = name + "Text", MouseFilter = MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
-            Position = new Vector2(at.X, top), Size = new Vector2(BarWidth, LineHeight),
+            Name = name + "Text", Align = AreaArtLabel.Alignment.Right, Position = new Vector2(at.X, top), Size = new Vector2(TextWidth, LineHeight), Face = _font,
+            Colour = name == "Health" ? HealthTextColour : FatigueTextColour,
         };
-        text.AddThemeFontSizeOverride("font_size", 12);
         AddChild(bar); AddChild(text);
         return (bar, text);
     }

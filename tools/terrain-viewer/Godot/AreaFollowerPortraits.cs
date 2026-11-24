@@ -14,15 +14,37 @@ public partial class AreaArtBar : Control
 {
     private Texture2D? _art;
     private Color _fallback;
+    private Transform2D _drawnDevice;
     public int Filled { get; private set; }
     /// <summary>The art number drawn (null for the plain fallback).</summary>
     public int? Art { get; private set; }
     public Color FillColor => _fallback;
+    /// <summary>ARC-UI-3060: the rectangles the last draw made by code (<see cref="AreaThinBarCode"/>, under the HD option) instead of the art's pixels; 0 when it drew the art or nothing.</summary>
+    public int CodeRectsForSelfTest { get; private set; }
 
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
         Size = CustomMinimumSize = new Vector2(AreaFollowerFrameLayout.BarWidth, AreaFollowerFrameLayout.BarHeight);
+        // ARC-UI-3060: the code-drawn bar follows the HD option and the device scale (a parent's scale change draws nothing by itself).
+        SetNotifyTransform(true);
+    }
+
+    public override void _EnterTree()
+    {
+        InterfaceHd.Changed += QueueRedraw;
+        GetViewport().SizeChanged += QueueRedraw; // the stretch (a window resize) moves the device pixel grid without moving the bar's own transform
+    }
+
+    public override void _ExitTree()
+    {
+        InterfaceHd.Changed -= QueueRedraw;
+        if (GetViewport() is { } viewport) viewport.SizeChanged -= QueueRedraw;
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationTransformChanged && AreaThinBarDraw.Active && IsInsideTree() && AreaThinBarDraw.Device(this) != _drawnDevice) QueueRedraw();
     }
 
     public void Set(int filled, int art, Texture2D? texture, Color fallback)
@@ -36,9 +58,17 @@ public partial class AreaArtBar : Control
 
     public override void _Draw()
     {
+        CodeRectsForSelfTest = 0;
         if (Filled <= 0) return;
         var height = AreaFollowerFrameLayout.BarHeight;
         if (_art is null) { DrawRect(new Rect2(0, 0, Filled, height), _fallback); return; }
+        // ARC-UI-3060: the pack has no frame for the bars, so under the HD option they are fills by value, not Legacy pixels.
+        if (Art is { } art && AreaThinBarCode.Covers(art) && AreaThinBarDraw.Active)
+        {
+            _drawnDevice = AreaThinBarDraw.Device(this);
+            CodeRectsForSelfTest = AreaThinBarDraw.Draw(this, art, 0, 0, Filled);
+            return;
+        }
         var width = Math.Min(Filled, _art.GetWidth());
         DrawTextureRectRegion(_art, new Rect2(0, 0, width, Math.Min(height, _art.GetHeight())), new Rect2(0, 0, width, Math.Min(height, _art.GetHeight())));
     }
@@ -64,10 +94,29 @@ public partial class AreaArtBar : Control
 /// </summary>
 public partial class AreaFollowerPortraits : CanvasLayer
 {
-    private sealed record Entry(int Slot, Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, Label Initials, ColorRect Tint,
+    private sealed record Entry(int Slot, Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, AreaArtLabel Initials, ColorRect Tint,
         AreaArtBar Health, AreaArtBar Fatigue);
 
-    private static readonly Color MenuWhite = new(1, 1, 1), MenuGrey = new(.5f, .5f, .5f), MenuBright = new(0, 0xD2 / 255f, 1);
+    // ARC-UI-2795 (exe 0x56B970, fonts built at 0x56A4BD): the rows are art 229 (Flare12Font) in white, mid grey when greyed and (255, 210, 0) under the pointer (the font 0x67BB5C).
+    private static readonly (byte R, byte G, byte B) MenuWhite = (255, 255, 255), MenuGrey = (128, 128, 128), MenuBright = (255, 210, 0);
+
+    /// <summary>ARC-UI-2795: the menu rows' font (art 229); null draws no row text.</summary>
+    public AreaArtFontFace? MenuFont
+    {
+        get => _menuFont;
+        set
+        {
+            if (ReferenceEquals(_menuFont, value)) return;
+            _menuFont = value;
+            // ARC-UI-2940: the initials are drawn in this font too.
+            foreach (var entry in _entries.Values) entry.Initials.Face = value;
+            _chromeWords.RemoveAll(word => !IsInstanceValid(word));
+            foreach (var word in _chromeWords) word.Face = value;
+        }
+    }
+
+    private AreaArtFontFace? _menuFont;
+    private readonly List<AreaArtLabel> _chromeWords = [];
 
     private Control _root = null!;
     private Control _menu = null!;
@@ -122,6 +171,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _entries.TryGetValue(entity, out var entry)
             ? (entry.Health.Filled, entry.Fatigue.Filled, entry.Health.FillColor == AreaLifeBar.PoisonedHealthColor, entry.Tint.Visible)
             : null;
+    /// <summary>ARC-UI-3060: how many rectangles each of a follower frame's two bars made by code in its last draw (<see cref="AreaThinBarCode"/>, under the HD option); 0 when it drew its art or nothing.</summary>
+    internal (int Health, int Fatigue)? BarCodeRectsForSelfTest(string entity) =>
+        _entries.TryGetValue(entity, out var entry) ? (entry.Health.CodeRectsForSelfTest, entry.Fatigue.CodeRectsForSelfTest) : null;
     /// <summary>A follower frame's art: the frame art drawn, the portrait texture (null none), the bars' art numbers, and its and
     /// the portrait's window rectangles.</summary>
     internal (bool Frame, Texture2D? Portrait, int? HealthArt, int? FatigueArt, Rect2 Rect, Rect2 PortraitRect)? FrameForSelfTest(string entity) =>
@@ -138,7 +190,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _menuRows.Where(row => row.Item == item).Select(row => (FollowerMenuRowState?)(row.Greyed ? FollowerMenuRowState.Greyed : FollowerMenuRowState.Normal)).FirstOrDefault();
     /// <summary>ARC-UI-1786: the word an open menu's row draws, null when the row is not drawn (its message is missing).</summary>
     internal string? MenuRowTextForSelfTest(FollowerMenuItem item) =>
-        _menuRows.Where(row => row.Item == item).Select(row => row.Row.GetChildren().OfType<Label>().FirstOrDefault()?.Text).FirstOrDefault();
+        _menuRows.Where(row => row.Item == item).Select(row => row.Row.GetChildren().OfType<AreaArtLabel>().FirstOrDefault()?.Text).FirstOrDefault();
     /// <summary>ARC-UI-1736: a menu row's size in the menu's own pixels (FP8: 118 × 15).</summary>
     internal Vector2? MenuRowSizeForSelfTest(FollowerMenuItem item) => _menuRows.Where(row => row.Item == item).Select(row => (Vector2?)row.Row.Size).FirstOrDefault();
     /// <summary>ARC-UI-1736: the open menu's rectangle on the screen and its rows' count (FP7, FP8).</summary>
@@ -165,6 +217,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>The whole factor the panel is drawn at (the interface bars').</summary>
     internal float ScaleForSelfTest => _root.Scale.X;
+    /// <summary>ARC-UI-2510: the window position of the screen's top left the panel is drawn from (the self-test).</summary>
+    internal Vector2 OriginForSelfTest => _root.Position;
 
     // The screen rectangle and centre of a control under the panel's scale (Control.GetGlobalRect ignores the scale).
     private static Rect2 RectOf(Control control) { var transform = control.GetGlobalTransform(); return new(transform.Origin, transform.BasisXform(control.Size)); }
@@ -183,7 +237,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2069 (ledger DB1, DB2): the panel stays drawn (frames, portraits, bars) but takes no input: the original's follower handler 0x56A9D0 returns at once while
-    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, forgets the hover without a hover-exit (the original fires none, and the dialog start's description in the description area must stay) and drops the tooltips;
+    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, forgets the hover without a hover-exit (the original fires none, and the dialog start's description in the description area must stay);
     /// the buttons still consume the pointer (the dialog's hook consumes every record, 0x5517A0).
     /// </summary>
     public bool Inert
@@ -194,11 +248,10 @@ public partial class AreaFollowerPortraits : CanvasLayer
             if (_inert == value) return;
             _inert = value;
             if (value) { CloseMenu(); _hovered = null; }
-            foreach (var (entity, entry) in _entries) entry.Button.TooltipText = value ? "" : LabelOf(entity);
         }
     }
 
-    private string LabelOf(string entity) => _followers.FirstOrDefault(f => f.Entity == entity).Label ?? "";
+    public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += ScreenMoved;
 
     public override void _Ready()
     {
@@ -218,6 +271,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     }
 
     private void Resized() { CloseMenu(); Place(); EdgeChanged?.Invoke(); }
+
+    // ARC-UI-2510: the layout turned on or off, or the window was laid out again: the screen the portraits hang in moved (the bars place themselves after this panel's own resize handler may have run).
+    private void ScreenMoved() { if (_root is null) return; Place(); EdgeChanged?.Invoke(); }
 
     /// <summary>ARC-UI-1817: device pixels per Legacy pixel of this panel and its menu (what the generated frames are painted at): the scale of the panel's root, the canvas transform's
     /// and the viewport's stretch.</summary>
@@ -313,7 +369,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var (entity, label, _, portrait) = follower;
         var (x, y) = AreaFollowerFrameLayout.Slot(slot);
         var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
-        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = _inert ? "" : label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
+        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
         // ARC-DEV-280 (B33, 0x56A9D0): the order menu opens on the RIGHT button's release over the portrait (an open menu is closed by it
         // instead), and the left button's release is a click on the follower (a talk, 0x54EA80 -> 0x54ED30, or in a target mode the aim of the
         // spell, skill or item, FP6), which only closes an open menu (FP9).
@@ -338,12 +394,12 @@ public partial class AreaFollowerPortraits : CanvasLayer
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
             Texture = portrait, Visible = portrait is not null, Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        var initials = new Label
+        // ARC-UI-2940: the initials of a follower without a portrait in the original's text font (art 229; nothing without it), never Godot's default font.
+        var initials = new AreaArtLabel
         {
             Text = new string(label.Where(char.IsLetter).Take(3).ToArray()), Visible = portrait is null, Position = image.Position, Size = image.Size,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
+            Align = AreaArtLabel.Alignment.Centre, Middle = true, Face = MenuFont, Colour = MenuWhite,
         };
-        initials.AddThemeFontSizeOverride("font_size", 9);
         // The original adds pure red to the image's pixels (0x51E0A0).
         var tint = new ColorRect
         {
@@ -381,7 +437,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var barsDrawn = BarsDrawn;
         if (_root is null) return;
         // ARC-UI-2284: the strip's bottom is the window's bottom, so the buttons stand a table's distance above it, not at the table's y from the top.
-        var heightUnits = GetViewport().GetVisibleRect().Size.Y / _root.Scale.Y;
+        // ARC-UI-2510: in the Steamwoven layout the screen hangs from the top strip and ends at the bottom strip's bottom edge, not at the window's bottom.
+        var bottom = AreaGameBarPanel.TopScreen?.BottomEdge ?? GetViewport().GetVisibleRect().Size.Y;
+        var heightUnits = (bottom - _root.Position.Y) / _root.Scale.Y;
         foreach (var (button, rect) in new[] { (_toggle, AreaFollowerPanelRules.ToggleRectFor(barsDrawn)), (_up, AreaFollowerPanelRules.UpRectFor(barsDrawn)), (_down, AreaFollowerPanelRules.DownRectFor(barsDrawn)) })
             if (button is not null) button.Position = new Vector2(rect.X, AreaFollowerPanelRules.AnchoredY(rect.Y, heightUnits));
     }
@@ -401,8 +459,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         {
             // Without the art (no game folder): a dark plate with a word.
             button.AddChild(new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
-            var word = new Label { Text = fallback, Size = size, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
-            word.AddThemeFontSizeOverride("font_size", 9);
+            var word = new AreaArtLabel { Text = fallback, Size = size, Align = AreaArtLabel.Alignment.Centre, Middle = true, Face = MenuFont, Colour = MenuWhite };
+            _chromeWords.Add(word);
             button.AddChild(word);
         }
         // A release with a menu open is the menu's (FP9): it closes the menu and nothing else happens.
@@ -450,16 +508,15 @@ public partial class AreaFollowerPortraits : CanvasLayer
                 MouseFilter = Control.MouseFilterEnum.Stop, Position = new Vector2(x, y), Size = new Vector2(width, height), CustomMinimumSize = new Vector2(width, height), ClipContents = true,
             };
             // FP8: white, the bright colour under the pointer, mid grey when greyed (a greyed row has no pointer colour).
-            var word = new Label
+            var word = new AreaArtLabel
             {
-                Text = texts.Text(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
-                MouseFilter = Control.MouseFilterEnum.Ignore, LabelSettings = new LabelSettings { FontSize = 10, FontColor = greyed ? MenuGrey : MenuWhite },
+                Text = texts.Text(item) ?? "", Size = new Vector2(width, height), Middle = true, Face = MenuFont, Colour = greyed ? MenuGrey : MenuWhite,
             };
             row.AddChild(word);
             if (!greyed)
             {
-                row.MouseEntered += () => word.LabelSettings.FontColor = MenuBright;
-                row.MouseExited += () => word.LabelSettings.FontColor = MenuWhite;
+                row.MouseEntered += () => word.Colour = MenuBright;
+                row.MouseExited += () => word.Colour = MenuWhite;
             }
             // The release on a row runs it after the menu closes (FP9, code 1); a right release over a row, or a left one over a greyed row, is taken by no menu row: it closes the menu.
             row.GuiInput += input =>
@@ -491,15 +548,29 @@ public partial class AreaFollowerPortraits : CanvasLayer
     {
         GetViewport().SizeChanged -= Resized;
         AreaGameBarPanel.InsetsChanged -= PlaceChrome;
+        AreaGameBarPanel.TopScreenChanged -= ScreenMoved;
     }
 
     private void Place()
     {
         if (_root is null) return;
         var size = GetViewport().GetVisibleRect().Size;
-        var factor = AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2510: where the strips put the 800 × 600 screen (the Steamwoven layout: its top left under the top band's strip, at the strips' scale), else the whole factor centred at the window's top.
+        // ARC-UI-2925 (owner decision 2026-11-20): the whole follower group (portraits, scroll arrows, show/hide button) stays in the column on the original's places, counted from the composition's left edge at its scale, so the button
+        // stands at the top left corner of the bottom strip as in the original at every window size; nothing is carried to the window's edge.
+        if (AreaGameBarPanel.TopScreen is { } screen)
+        {
+            _root.Position = screen.Origin;
+            _root.Scale = new(screen.Scale, screen.Scale);
+            _root.TextureFilter = CanvasItem.TextureFilterEnum.Linear;
+        }
+        else
+        {
+            var factor = AreaGameBarPanel.ScreenFactor(size);
+            _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
+            _root.Scale = new(factor, factor);
+            _root.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+        }
         PlaceChrome();
         PlaceMenu();
     }
@@ -509,6 +580,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     {
         if (_menu is null) return;
         _menu.Scale = _root.Scale;
+        _menu.TextureFilter = _root.TextureFilter;
         _menu.Position = _root.Position + _menuOrigin * _root.Scale.X;
         if (IsInsideTree() && MathF.Abs(DeviceScale() - _drawnScale) > 0.001f) RedrawTextures();
     }

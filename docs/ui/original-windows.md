@@ -41,8 +41,8 @@ Read in the redraw 0x576520 and the open 0x572340; rows [IW20–IW25](../researc
 | Counts | font 0x68345C | (729, 70 + 23 × i), 58 × 20 | gold, arrows, bullets, charges, fuel |
 
 Done in the viewer: backgrounds, covers, item arts (inventory art everywhere, scaled down when larger than the
-item's place), boxes with their hover art, lines and counts in the project's font, the window at its place
-between the bars, the "Diagnostic view" switch below it. Barter and the other modes keep the diagnostic window;
+item's place), boxes with their hover art, lines, counts, names, quotes and ratings in the original's art fonts (ARC-UI-2795), the window at its place
+between the bars, the debug-only "Diagnostic view" switch below it (ARC-UI-2764: not drawn in play). Barter and the other modes keep the diagnostic window;
 the loot window is done by ARC-UI-052 and the steal window by ARC-UI-065 (below).
 
 Left for the next inventory slices (each its own task):
@@ -50,7 +50,7 @@ Left for the next inventory slices (each its own task):
 - ~~**Item sizes**~~: done by ARC-UI-055 (an item's grid size is its inventory art's frame in cells, 0x461780, ledger JP3;
   [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
-- **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
+- **Fonts** (exe 0x572060, draws in 0x576520; ARC-UI-2795): the merchant's or other party's name 0x682418 = art 27 `morph15font`; the weight, encumbrance and speed lines, the quote line, the item lines and the other party's rating 0x682C74 = art 229 `Flare12Font`; the gold and ammunition counts 0x68345C = **art 171** `Cloister18Font` with flag 0x10 (additive; the earlier reading "arts 226–230" was wrong); the PC's damage and armour ratings 0x681390 = art 486 `LatinXCN30Font`. All white. The viewer draws them through `AreaInventoryGridArea` (HD redraw with the HD interface on).
 - **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064, its merchant's doll view added by ARC-UI-1917; without the gamble, below), steal (done by ARC-UI-065, below); the hero's own doll toggle of modes 1 to 4 is done by ARC-UI-1918 (below, [IW45](../research/ledger/ui-audio.md#heros-own-doll-toggle-arc-ui-1918)).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
@@ -76,7 +76,7 @@ Done in the viewer: the backgrounds, the body's image, the body's items at their
 eight shown rows; a junk pile's items at their pile slots; PROJECT: an item the session keeps at no location, -1, at the first free
 place), the hero's grid, counts and boxes, the Take all button; a press on a body's item and its release on the hero's
 grid takes it (a gold pile or ammunition stack asks how many), on a box or elsewhere it goes back; the mouse wheel scrolls the
-body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the "Diagnostic view" switch shows the diagnostic
+body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the debug-only "Diagnostic view" switch shows the diagnostic
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
 
 ARC-UI-072 built the body's doll view and its toggles (the loot and steal windows of a critter: the worn items on 349 `Loot_PD` at (0, 134), toggles 338 / 339 at
@@ -128,12 +128,12 @@ interface mode 1 (a `b:` reply, BT7); the frame is the inventory window's.
 | Gamble box | 345 off, 344 on, 346 refused | (703, 236), hit area = art | on / refused by the gamble check 0x579840 while an item is held over it (BW3) |
 | Round view | 231 | (16, 17) | IW33–IW34 |
 
-Done in the viewer: the backgrounds, the image, the name and quote line in the project's font, the shown grid with its items' art and the
+Done in the viewer: the backgrounds, the image, the name and quote line in the original's fonts (ARC-UI-2795), the shown grid with its items' art and the
 wheel as its scroll (PROJECT: the scroll bar at (330, 168) is not drawn), the hero's grid, counts and boxes, the gamble box in its off art,
 the round view; a merchant's item released on the hero's grid is bought and a hero's item released on the merchant's grid sold through the
 session (PROJECT: into the hero's first free cells, a stack whole), and a right release on an item moves it to the other side the same
 way (IW36); the quote line shows a PROJECT quote text (`Buy NAME: N`) on a resting
-pointer and the trade messages; the "Diagnostic view" switch shows the diagnostic window. Since ARC-UI-069 the opening shop shows this
+pointer and the trade messages; the debug-only "Diagnostic view" switch shows the diagnostic window. Since ARC-UI-069 the opening shop shows this
 look too, docked at the screen's (0, 41) over window 15's strips, without the round view and its release (the main menu is up, IW33,
 IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 
@@ -143,7 +143,7 @@ boxes inside the barter window, the follower's weight lines, the scroll bar's ar
 
 ARC-UI-1917 built the merchant's doll view and its two toggles in the barter window (IW29, IW30): the buttons 338 and 339 at (8, 123) and (46, 123), the toggle clear at every open;
 with it set the window draws 337 `Barter_PD` at (0, 157) with the merchant's worn items in the nine rectangles of table 0x5CAD78 (the same rectangles as the loot windows' doll),
-a cover on each empty slot, the doll's two values and the weapon slot's fill (where the combat host covers the map; a body the session's lists do not show shows covers only), and hides the shown grid. ARC-UI-1926 built the buy of a worn item from the doll: a slot's rectangle is the location 1000 + slot of the merchant, a press lifts the worn item as a grid item is lifted, the hover quotes it, and a release on the hero's grid or a right release buys it through the buy rules (price 0, so refused, below Master haggle, or in a follower's window free; IW29, IW36). ARC-UI-2138 built the hero's item released on a slot of the merchant's doll: the wear test 0x464D20 for the merchant, then the sale onto the slot, which the merchant wears (a refusal, an occupied slot, or an item with move scripts or item spells goes back silently; IW35, BW5). Left for the next barter slices (each its own task): staking a worn item (issue #2139), the two hot spots of IW30. The generated look of 337 and of the doll cover 341 is ARC-UI-1750 ([S4](../rendering/hd-interface-density.md#viewer-slice-s4-arc-ui-1194)).
+a cover on each empty slot, the doll's two values and the weapon slot's fill (where the combat host covers the map; a body the session's lists do not show shows covers only), and hides the shown grid. ARC-UI-1926 built the buy of a worn item from the doll: a slot's rectangle is the location 1000 + slot of the merchant, a press lifts the worn item as a grid item is lifted, the hover quotes it, and a release on the hero's grid or a right release buys it through the buy rules (price 0, so refused, below Master haggle, or in a follower's window free; IW29, IW36). ARC-UI-2138 built the hero's item released on a slot of the merchant's doll: the wear test 0x464D20 for the merchant, then the sale onto the slot, which the merchant wears (a refusal, an occupied slot, the merchant's weight test, or an item with item spells goes back; an item with move scripts is worn with the merchant as the scripts' wearer, ARC-UI-2159; IW35, BW5). Left for the next barter slices (each its own task): staking a worn item (issue #2139), the two hot spots of IW30. The generated look of 337 and of the doll cover 341 is ARC-UI-1750 ([S4](../rendering/hd-interface-density.md#viewer-slice-s4-arc-ui-1194)).
 
 ## Character sheet
 
@@ -182,7 +182,7 @@ buttons, two columns, two titles, two page numbers).
 
 Done in the viewer (`AreaLogbookArtLayout`, `AreaLogbookArtView`): the backgrounds, the seven tab buttons with their frames, the page buttons,
 the titles and page numbers, the two columns with the original's spread layout and the entries in the original's colours and strike-through,
-the month names, state labels and titles from the player's `logbk_ui.mes`; the "Diagnostic view" switch shows the earlier list.
+the month names, state labels and titles from the player's `logbk_ui.mes`; the debug-only "Diagnostic view" switch shows the earlier list.
 Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stored order, each a date line over the name from
 `gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
 built, and so is the blessings and curses tab (the two lists merged oldest first, a blessing before a curse of the same time, blue and red, a date line over the name
@@ -271,7 +271,8 @@ WR17–WR23). The window is 800 × 399 at the screen's (0, 41): the frame art 49
 buttons (arts 495 and 496 at (213, 77) and (675, 77)) and the text in the original's fonts: a book's two pages of 200 × 290 at (227, 57) and (476, 57) paged by pixel height, a note in
 (349, 49, 215 × 300), a telegram's eleven form lines and body, a newspaper's masthead, headline and four columns, a plaque (white text) in (269, 40, 428 × 327). The viewer
 ([layout and text flow](../../tools/terrain-viewer/Core/AreaReadingArt.cs), [view](../../tools/terrain-viewer/Godot/AreaReadingArtView.cs)) draws it when the arts and fonts read and keeps the
-diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged.
+diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged. The original stretches its 800 × 600 screen to the display, so with the HD interface pack
+the window is drawn at the scale that fits that screen to the display (fractional, 1.8 on 1920 × 1080; ARC-UI-2314); Legacy takes the nearest whole number of that fit, not wider than the view nor taller than the window's 440 rows (2 on 1920 × 1080, 1 on 1440 × 900).
 
 ## Main menu (done: ARC-UI-058)
 

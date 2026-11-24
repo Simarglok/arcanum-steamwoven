@@ -198,7 +198,7 @@ posted in the project thread shows both rows for two facings (Legacy, relit, and
 
 **Finding (issue [#2298](https://github.com/Simarglok/arcanum-steamwoven/issues/2298)).** In the first version of the harness the hero wore its torch, as in the earlier smokes, and the relit term on the hero's own pixels was
 exactly zero (the strip of relit minus Legacy was black on the hero and bright on the ground), while an NPC outside the pool took the full term. The likely cause is the night weighting, which reads the item's own
-Legacy ambient, and a body's ambient is the lattice colour at its anchor, which includes the torch it carries. Not confirmed here; the harness avoids it with external lamps.
+Legacy ambient, and a body's ambient is the lattice colour at its anchor, which includes the torch it carries. Not confirmed here; the harness avoids it with external lamps. **Confirmed and fixed by ARC-RENDER-2298:** with the relight smoke (the Crash Site cave at night, the night-weighted look at the look's strength, the same two lamps lit in the relit list only, the hero's pixels being those that differ from the picture with the hero hidden) the term on the hero's 6008 pixels was nonzero on 0 of them with the torch worn and on 5120 (mean 0.0185 of full luminance) without it; the cause is as suspected. The weight now reads the item's Legacy ambient without the carried lights (the relit list adds those itself), and the same capture gives 4969 lit pixels (mean 0.0177) with the torch and 5120 (0.0185) without; the Legacy captures are byte-identical before and after. A companion body drawn from another map's plan keeps the weight it had (the moving-body path does not split out its carried light).
 
 **2. Frame times, with a stand-in for the Deck (AC2).** There is no Steam Deck at hand, so this is the stand-in the issue allows, with its limits stated. Machine: the owner's Mac (Apple M4 Pro, 20 GPU cores, Godot 4.7.2 .NET, OpenGL compatibility renderer), vsync off, exactly 1, 5 and 20
 lights (the smoke lights only its own lights, ringed round the hero, no carried or map light), Legacy and relit, at the window sizes 1280×800 (1.02 Mpx), 1920×1200 (2.3 Mpx) and 2560×1314 (3.36 Mpx; the screen limits the height); the view grows with the window, so a larger
@@ -249,9 +249,9 @@ The owner said go (night-weighted, under the HD option). Full coverage is these 
 
 1. **Category tuning** (open, optional polish: [#2208](https://github.com/Simarglok/arcanum-steamwoven/issues/2208)): ground, wall, scenery, item, critter and roof gains and blur, per light type (torch, lantern,
    spell); tuning rounds with the owner's eye. The shader already knows the kind of each item.
-2. **Light sources** (open: [#2207](https://github.com/Simarglok/arcanum-steamwoven/issues/2207)): the map's stationary lights and the carried lights are done; object lights of the main map's scenery
-   (ARC-RENDER-030), lit eye candy (ARC-MAGIC-1229) and animated lights would feed the same list, the radius cap (32 lights) and a
-   culling by view need a decision.
+2. **Light sources** (done, [#2207](https://github.com/Simarglok/arcanum-steamwoven/issues/2207), ARC-RENDER-2207): the relit list takes the map's sector and object lights of the shown hour (the night or day form of the
+   scenery's lights, ARC-RENDER-030) where their animation poses stand (ARC-RENDER-031), and the carried lights (hero, critters, recalculated lights, and lit eye candy, ARC-MAGIC-1229); the radius cap and the view culling are
+   decided: [relit look](../rendering/area-lighting.md#relit-look-light-sources-cap-and-culling-arc-render-2207).
 3. **HD frames**: **dropped** (owner decision 2026-11-15, #2063, #2173): HD sprites of the world are not made and are out of the plan until the owner reopens it, so world frames stay 1x under the HD option; the N× path is dormant, built (gain and bevel stride) and covered by the lab twin only.
 4. **Optional stored normals**: **deferred** (it needs HD world frames, which are out of the plan; owner decision 2026-11-15): only if per-pixel derivation proves too noisy or too slow on the Deck; the lab generator is the batch
    tool, about 168 ms per megapixel in Debug.

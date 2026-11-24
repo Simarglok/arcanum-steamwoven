@@ -71,6 +71,7 @@ public partial class TerrainViewerApp
         try
         {
             var read = LauncherSettingsRead();
+            ApplyStoredWindowMode(read.Settings.Display);
             var startup = GameFolderStartup.Resolve(read.Settings, _launcherPlatformForSelfTest ?? GameFolderPlatform.Current());
             if (startup.StoredCheck is { } stored) PrintGameFolder("stored", stored);
             foreach (var check in startup.Detection?.Checked ?? []) PrintGameFolder("candidate", check);
@@ -145,6 +146,7 @@ public partial class TerrainViewerApp
             // ARC-UI-143: the HD lines, saved at once in the settings files.
             _launcherPanel.HdRequested += LauncherHd;
             _launcherPanel.HdGeneratedRequested += LauncherHdGenerated;
+            _launcherPanel.HdWorldZoomRequested += LauncherHdWorldZoom;
             _launcherPanel.HdPackRequested += LauncherHdPack;
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
@@ -174,6 +176,7 @@ public partial class TerrainViewerApp
         launcher.ResetDone(status == LauncherSettingsSaveStatus.Saved);
         if (status == LauncherSettingsSaveStatus.Saved || path is null) _launcherSettings = defaults;
         GD.Print($"ARC-UI-014 launcher reset save={status?.ToString() ?? "skipped (automated run)"}");
+        ApplyStoredWindowMode(defaults.Display); // ARC-UI-2771: the reset display (fullscreen) is on the window too, as the file says
     }
 
     private GogInstallerUnpacker? FindUnpacker()
@@ -235,10 +238,37 @@ public partial class TerrainViewerApp
         _launcherPanel?.Render(launcher);
     }
 
+    /// <summary>ARC-UI-2771: the stored window mode applies at the start (fullscreen is the default of a first start). An automated run keeps its window as
+    /// it is, so a smoke never goes fullscreen.</summary>
+    private void ApplyStoredWindowMode(LauncherDisplay display)
+    {
+        if (ViewerAutomatedStorage.Automated) return;
+        var fullscreen = display.WindowMode == LauncherWindowMode.Fullscreen;
+        ViewerWindowMode.Set(GetWindow(), fullscreen);
+        GD.Print($"ARC-UI-2771 window mode applied={(fullscreen ? "fullscreen" : "windowed")} os={OS.GetName()} mode={GetWindow().Mode}");
+    }
+
+    /// <summary>ARC-UI-2771: F11 and Escape switch the window; the choice is stored as the display at the next start (the launcher has no line for it
+    /// yet). An automated run neither stores nor switches the player's file.</summary>
+    private void SwitchWindowMode(bool? fullscreen)
+    {
+        var window = GetWindow();
+        var now = fullscreen ?? !ViewerWindowMode.IsFullscreen(window);
+        ViewerWindowMode.Set(window, now);
+        if (ViewerAutomatedStorage.Automated || LauncherSettingsPath() is not { } path) return;
+        var display = _launcherSettings.Display with { WindowMode = now ? LauncherWindowMode.Fullscreen : LauncherWindowMode.Windowed };
+        // The file is read again, so another run's stored folder, rules and flags are kept (one field changes).
+        var saved = LauncherSettingsFile.Save(path, LauncherSettingsFile.Load(path).Settings with { Display = display });
+        GD.Print($"ARC-UI-2771 window mode stored={(now ? "fullscreen" : "windowed")} save={saved}");
+        if (saved == LauncherSettingsSaveStatus.Saved) _launcherSettings = _launcherSettings with { Display = display };
+    }
+
     private void LauncherPlay()
     {
         if (_launcher is not { } launcher) return;
         if (launcher.Play() is not { } settings) { _launcherPanel?.Render(launcher); return; }
+        // ARC-UI-2771: a window choice made with F11 while the screen was open is the player's latest; the screen's copy of the display is older.
+        settings = settings with { Display = settings.Display with { WindowMode = _launcherSettings.Display.WindowMode } };
         var path = LauncherSettingsPath();
         var saved = path is null ? null : (LauncherSettingsSaveStatus?)LauncherSettingsFile.Save(path, settings);
         // A refused or failed save does not stop the start: the chosen folder and rules apply to it.

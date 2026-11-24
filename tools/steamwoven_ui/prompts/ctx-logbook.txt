@@ -1,0 +1,9 @@
+CONTEXT IMAGE - LOGBOOK
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
+
+Redraw the whole composition with the logbook open: top strip, the two-part logbook window in the middle zone, bottom strip.
+- Left part (about 165 units wide): dark streaked wood side with a round portrait lens (empty glass, brass ring) at its top.
+- Right part (about 635 units wide): a wide open book lying on a desk of the same wood: two aged paper pages with a dark red cloth cover edge, a slight page curl at the centre fold and a soft shadow around the book. A stack of small paper index tabs with brass hinges and tiny pictogram tabs along the right edge of the book.
+- Pages are blank: no title, no lines of text, no page numbers.
+- Page paper: old, yellowed, warm cream-beige, the warm tone of the ORIGINAL pages with their text taken out (never grey, never white, never cool), with visible paper fibre, light mottling, small stains, edge wear and slight yellow-brown darkening towards the page edges and the fold; not smooth, not clean.
+Goal: style anchor for BD-C (logbook), paper and book surfaces, index tabs, and the desk wood.

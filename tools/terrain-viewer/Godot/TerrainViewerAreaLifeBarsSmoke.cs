@@ -79,6 +79,8 @@ public partial class TerrainViewerApp
                     $"{when}: the compact panel at the screen's bottom right {placed.Health} at factor {factor}");
             }
             CheckGauges("start");
+            // ARC-UI-2489 (H14): the hidden-interface compact UI: the bars are off, only the compact life panel stands (saved as PREFIX-compact.png).
+            await Capture("compact");
             var heroBefore = AreaLife.From(session.QueryHeroLife()!);
             var poisoned = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Poison = 12, Fatigue = 3 });
             Require(poisoned.Disposition != GameSessionDisposition.Rejected, "the poison packet landed: " + poisoned.Failure);
@@ -104,7 +106,7 @@ public partial class TerrainViewerApp
             // Its portrait's bars (CH9), then a hit-point packet that leaves it below 20 %: the red tint.
             // ARC-UI-024: the frame is the original's (art 503, bars 505/616 and 504) in slot 0 at 11, 50, with the follower's
             // stored portrait when it has one that reads.
-            var storedPortrait = AreaPortraits.Stored(companion!.Speaker.Row);
+            var storedPortrait = ShownPortrait(companion!.Speaker.Row);
             void CheckPortrait(string when, bool tinted)
             {
                 RefreshFollowerPortraits();

@@ -1,0 +1,440 @@
+{
+  "version": 1,
+  "note": "Text-only prompt library of the Steamwoven kit (TRD SWI-GEN-3). Each prompt id names a text file; the composed prompt is common.txt + the file with its placeholders filled; its sha256 goes into the provenance record (SWI-GEN-6). No pixels here.",
+  "common": "common.txt",
+  "placeholders": [
+    "part_id",
+    "part_note",
+    "width",
+    "height"
+  ],
+  "reference_slots": {
+    "original": "the original art of the screen or part, scaled to the master size, given as the image to edit and as the layout truth (original art is a Codex input, owner decision 2026-11-16)",
+    "context": "the approved context image (whole screen) or a crop of it that shows where the part is used",
+    "sheet": "the approved material sheet or the swatch of this part's material",
+    "plate": "the approved button plate that a state overlay belongs to"
+  },
+  "context_screens": [
+    "ctx-hud",
+    "ctx-inventory",
+    "ctx-character",
+    "ctx-logbook",
+    "ctx-schematic",
+    "ctx-reading",
+    "ctx-main-menu"
+  ],
+  "batches": {
+    "style-anchors-contexts": {
+      "prompts": [
+        "ctx-hud",
+        "ctx-inventory",
+        "ctx-character",
+        "ctx-logbook",
+        "ctx-schematic",
+        "ctx-reading",
+        "ctx-main-menu"
+      ],
+      "after": null
+    },
+    "style-anchors-sheet": {
+      "prompts": [
+        "mat-sheet"
+      ],
+      "after": "style-anchors-contexts approved by the owner"
+    }
+  },
+  "prompts": [
+    {
+      "id": "ctx-hud",
+      "group": "context",
+      "kind": null,
+      "title": "Play screen (HUD)",
+      "file": "ctx-hud.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "H",
+      "batch": "style-anchors-contexts",
+      "notes": "strips, vials, buttons; world area neutral"
+    },
+    {
+      "id": "ctx-inventory",
+      "group": "context",
+      "kind": null,
+      "title": "Inventory window",
+      "file": "ctx-inventory.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "G01",
+      "batch": "style-anchors-contexts",
+      "notes": "BD-A inventory family"
+    },
+    {
+      "id": "ctx-character",
+      "group": "context",
+      "kind": null,
+      "title": "Character sheet",
+      "file": "ctx-character.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "G05",
+      "batch": "style-anchors-contexts",
+      "notes": "BD-B character sheet"
+    },
+    {
+      "id": "ctx-logbook",
+      "group": "context",
+      "kind": null,
+      "title": "Logbook",
+      "file": "ctx-logbook.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "G11",
+      "batch": "style-anchors-contexts",
+      "notes": "BD-C logbook"
+    },
+    {
+      "id": "ctx-schematic",
+      "group": "context",
+      "kind": null,
+      "title": "Schematic window",
+      "file": "ctx-schematic.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "G15",
+      "batch": "style-anchors-contexts",
+      "notes": "BD-F schematic parchment"
+    },
+    {
+      "id": "ctx-reading",
+      "group": "context",
+      "kind": null,
+      "title": "Reading window (book)",
+      "file": "ctx-reading.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "G16",
+      "batch": "style-anchors-contexts",
+      "notes": "BD-D reading desk"
+    },
+    {
+      "id": "ctx-main-menu",
+      "group": "context",
+      "kind": null,
+      "title": "Main menu (full-screen plate)",
+      "file": "ctx-main-menu.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": "M01",
+      "batch": "style-anchors-contexts",
+      "notes": "BD-H full-screen plates"
+    },
+    {
+      "id": "mat-sheet",
+      "group": "material",
+      "kind": "material",
+      "title": "Material sheet",
+      "file": "mat-sheet.txt",
+      "size": [
+        3840,
+        2160
+      ],
+      "references": [
+        "context"
+      ],
+      "screen": null,
+      "batch": "style-anchors-sheet",
+      "notes": "12 swatches sampled from the approved context images; owner approves it (#2456)"
+    },
+    {
+      "id": "kind-material",
+      "group": "kind",
+      "kind": "material",
+      "title": "Seamless material surface",
+      "file": "kind-material.txt",
+      "size": null,
+      "references": [
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "size per part"
+    },
+    {
+      "id": "kind-board",
+      "group": "kind",
+      "kind": "board",
+      "title": "Strip art (top or bottom)",
+      "file": "kind-board.txt",
+      "size": [
+        2880,
+        null
+      ],
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "height 150 or 570 px (148 / 572), open question in the TRD"
+    },
+    {
+      "id": "kind-cap",
+      "group": "kind",
+      "kind": "cap",
+      "title": "Strip end cap",
+      "file": "kind-cap.txt",
+      "size": null,
+      "references": [
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "new part, no original art; the right cap is the mirror"
+    },
+    {
+      "id": "kind-backdrop-window",
+      "group": "kind",
+      "kind": "backdrop",
+      "title": "Window background",
+      "file": "kind-backdrop-window.txt",
+      "size": [
+        2880,
+        1440
+      ],
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "SWI-BDR-3"
+    },
+    {
+      "id": "kind-backdrop-half",
+      "group": "kind",
+      "kind": "backdrop",
+      "title": "Half of a two-part window",
+      "file": "kind-backdrop-half.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "SWI-BDR-5: split at 1290 px, so 1290 x 1440 and 1590 x 1440"
+    },
+    {
+      "id": "kind-backdrop-plate",
+      "group": "kind",
+      "kind": "backdrop",
+      "title": "Full-screen plate",
+      "file": "kind-backdrop-plate.txt",
+      "size": [
+        2880,
+        2160
+      ],
+      "references": [
+        "original",
+        "context",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "SWI-BDR-6"
+    },
+    {
+      "id": "kind-hardware",
+      "group": "kind",
+      "kind": "hardware",
+      "title": "Metal or frame piece",
+      "file": "kind-hardware.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-plate",
+      "group": "kind",
+      "kind": "plate",
+      "title": "Button plate",
+      "file": "kind-plate.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-glyph",
+      "group": "kind",
+      "kind": "glyph",
+      "title": "Symbol on transparent background",
+      "file": "kind-glyph.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-state",
+      "group": "kind",
+      "kind": "state",
+      "title": "Button state overlay",
+      "file": "kind-state.txt",
+      "size": null,
+      "references": [
+        "plate",
+        "original"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-sheet",
+      "group": "kind",
+      "kind": "sheet",
+      "title": "Document or panel over a backdrop",
+      "file": "kind-sheet.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-grid",
+      "group": "kind",
+      "kind": "grid",
+      "title": "Grid layer",
+      "file": "kind-grid.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-picture",
+      "group": "kind",
+      "kind": "picture",
+      "title": "Picture on transparent background",
+      "file": "kind-picture.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-gauge",
+      "group": "kind",
+      "kind": "gauge",
+      "title": "Gauge layer",
+      "file": "kind-gauge.txt",
+      "size": null,
+      "references": [
+        "original",
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    },
+    {
+      "id": "kind-decor",
+      "group": "kind",
+      "kind": "decor",
+      "title": "Ornament",
+      "file": "kind-decor.txt",
+      "size": null,
+      "references": [
+        "sheet",
+        "context"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": "new part, no original art"
+    },
+    {
+      "id": "kind-cursor",
+      "group": "kind",
+      "kind": "cursor",
+      "title": "Cursor",
+      "file": "kind-cursor.txt",
+      "size": null,
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": null,
+      "notes": ""
+    }
+  ]
+}

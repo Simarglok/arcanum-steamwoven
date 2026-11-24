@@ -36,12 +36,12 @@ public sealed class AreaAiHostObserverOffsetTests
 
     private static AreaFieldValue Offset(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
 
-    private static (AreaAiHostRebindTests.Fixture Fixture, AreaAiHost Host, Map Map) Setup(CellCoord hero, int offsetX = 0, int offsetY = 0)
+    private static (AreaAiHostRebindTests.Fixture Fixture, AreaAiHost Host, Map Map) Setup(CellCoord hero, int offsetX = 0, int offsetY = 0, Func<string, (int X, int Y)?>? step = null)
     {
         var f = AreaAiHostRebindTests.Open(perceptionA: 8);
         var row = f.RowA with { EffectiveFields = [.. f.RowA.EffectiveFields.Where(field => field.Slot is not (2 or 3)), Offset(2, offsetX), Offset(3, offsetY)] };
         var map = new Map(f.RowB);
-        var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f, row)]) with { HeroCell = () => hero, LineOfFire = () => map };
+        var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f, row)]) with { HeroCell = () => hero, LineOfFire = () => map, ObserverStep = step };
         return (f, f.Build(scene), map);
     }
 
@@ -108,5 +108,82 @@ public sealed class AreaAiHostObserverOffsetTests
         // At the end of the step the offset is the map data's own (0, 0) and the line starts at the next tile's centre.
         host.Frame(1400);
         Assert.AreEqual(new AwarenessResult(1, AwarenessReason.Blocked), host.SeeToward(f.A, Pc));
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1934 (0x4ADE00, ledger RA7, AW18, VC56): the line of fire an NPC's attack, throw or cast reads starts at the shooter's tile centre plus its pixel offset, as the sight line does.
+    /// </summary>
+    [TestMethod]
+    public void A_shooters_line_of_fire_starts_at_the_offset_of_its_map_data()
+    {
+        var hero = new CellCoord(62, 13);
+        var (f, host, map) = Setup(hero);
+        using var _ = f;
+        map.Crates.Add(new(62, 11));
+        map.Crates.Add(new(62, 12));
+        var straight = host.LineOfFire(f.A, Pc);
+        Assert.IsNotNull(straight.Blocker, "from the tile centre the crates are on the line");
+
+        var (g, shifted, gMap) = Setup(hero, StepX.X, StepX.Y);
+        using var __ = g;
+        gMap.Crates.Add(new(62, 11));
+        gMap.Crates.Add(new(62, 12));
+        Assert.AreEqual((StepX.X, StepX.Y), shifted.ShooterOffset(g.A));
+        var open = shifted.LineOfFire(g.A, Pc);
+        Assert.IsNull(open.Blocker, "a line that starts one tile to the side passes the crates");
+    }
+
+    [TestMethod]
+    public void A_shooters_offset_is_zero_for_the_hero_and_an_unknown_object()
+    {
+        var (f, host, _) = Setup(new CellCoord(62, 13), StepX.X, StepX.Y);
+        using var _ = f;
+        Assert.AreEqual((0, 0), host.ShooterOffset(Pc));
+        Assert.AreEqual((0, 0), host.ShooterOffset("npc:unknown"));
+    }
+
+    [TestMethod]
+    public void A_walking_shooter_starts_its_line_of_fire_where_its_body_is()
+    {
+        var (f, host, _) = Setup(new CellCoord(62, 13));
+        using var _ = f;
+        // The NPC steps +x at once and slides over 400 ms: at the start of the step its body is still on its old tile (the negative projection of the step), at the end the offset is the map data's own.
+        host.Frame(1000);
+        host.Movers.Step(f.A, f.RowA.Key, Observer, new CellCoord(63, 10), 1000, 400);
+        Assert.AreEqual((40, -20), host.ShooterOffset(f.A));
+        host.Frame(1400);
+        Assert.AreEqual((0, 0), host.ShooterOffset(f.A));
+    }
+
+    /// <summary>ARC-AI-1605 (ledger AW18, VBG9): the hero's and a companion's sight, sound and fire lines start at the rest of the step they are walking, which the scene reports; none reported (a critter at rest, or no provider) is (0, 0) as before.</summary>
+    [TestMethod]
+    public void The_hero_and_a_companion_start_their_lines_at_the_step_offset_the_scene_reports()
+    {
+        var hero = new CellCoord(62, 13);
+        var (f, host, map) = Setup(hero, step: id => id == Pc ? StepX : id == "companion:1" ? (40, -20) : null);
+        using var _ = f;
+        Assert.AreEqual(StepX, host.ShooterOffset(Pc));
+        Assert.AreEqual((40, -20), host.ShooterOffset("companion:1"));
+        Assert.AreEqual((0, 0), host.ShooterOffset("companion:2"), "a critter the scene does not track");
+        map.Crates.Add(new(62, 11));
+        map.Crates.Add(new(62, 12));
+        Assert.IsNull(host.LineOfFire(Pc, f.A).Blocker, "the hero's line starts one tile to the side and passes the crates");
+
+        var (g, still, gMap) = Setup(hero);
+        using var __ = g;
+        gMap.Crates.Add(new(62, 11));
+        gMap.Crates.Add(new(62, 12));
+        Assert.AreEqual((0, 0), still.ShooterOffset(Pc));
+        Assert.IsNotNull(still.LineOfFire(Pc, g.A).Blocker, "from the tile centre the crates are on the line");
+    }
+
+    [TestMethod]
+    public void The_step_offset_of_a_critter_is_the_projected_distance_of_its_anchor_from_the_committed_cell_centre()
+    {
+        var cell = new CellCoord(10, 20);
+        Assert.AreEqual((0, 0), AreaCritterLights.StepOffset(ExactScalar.Integer(10), ExactScalar.Integer(20), cell), "at rest on the centre");
+        Assert.AreEqual((-20, 10), AreaCritterLights.StepOffset(ExactScalar.Create(21, 2), ExactScalar.Integer(20), cell), "half a cell on in +x");
+        Assert.AreEqual((20, 10), AreaCritterLights.StepOffset(ExactScalar.Integer(10), ExactScalar.Create(41, 2), cell), "half a cell on in +y");
+        Assert.AreEqual((40, -20), AreaCritterLights.StepOffset(ExactScalar.Integer(10), ExactScalar.Integer(20), new CellCoord(11, 20)), "one cell short of the committed cell (the offset stands for the cell it has not left)");
     }
 }

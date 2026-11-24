@@ -49,10 +49,13 @@ public partial class AreaBarterPanel : CanvasLayer
     /// <summary>ARC-UI-064: the window's holder (the PC) on the screen for the round view: its foot point in canvas units and the game
     /// view's zoom; null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1908: the stored portraits' small images the frame draws where the original's image function answers a portrait.</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get => _area.PortraitTextures; set => _area.PortraitTextures = value; }
     // ARC-UI-064: the original look: the art, the owner's choice of the diagnostic view, the switch between them, the frame, the round
     // view, the panel's two backgrounds and the frame's view (the hero's side and the shown object's grid) with the window's own parts.
     private AreaInventoryArtLook? _look;
     private bool _diagnosticChosen;
+    private bool _diagnosticSwitch;
     private Button _lookToggle = null!;
     private AreaInventoryGridArea _area = null!;
     private AreaRoundView _roundView = null!;
@@ -71,7 +74,7 @@ public partial class AreaBarterPanel : CanvasLayer
     {
         get => _docked;
         // Above the menu's backdrop (layer 4), whichever panel the tree made first.
-        set { _docked = value; Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
+        set { _docked = value; if (value) _area?.SetKitBackdrop(null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
     }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;
@@ -79,7 +82,20 @@ public partial class AreaBarterPanel : CanvasLayer
     internal string MessageForSelfTest => _message.Text;
     internal string HeaderForSelfTest => _header.Text;
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
+
+    /// <summary>ARC-UI-3033: how the window stands for the kit: the merchant's background art, and whether the frame lies in the window zone (the original look undocked; the diagnostic look and the opening shop's docked frame keep their generated look).</summary>
+    internal SteamwovenKitBarterState KitState => new(_art?.Frame.Background ?? AreaBarterArtLayout.BarterArt, IsOpen && ArtMode && !_docked);
+
+    /// <summary>ARC-UI-3033: the kit background under the frame, or null (the frame draws its own art).</summary>
+    internal void SetKitBackdrop(AreaKitBackdrop? kit) => _area?.SetKitBackdrop(ArtMode && !_docked ? kit : null);
     internal Button LookToggleForSelfTest => _lookToggle;
+
+    /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
+    public bool DiagnosticSwitch
+    {
+        get => _diagnosticSwitch;
+        set { _diagnosticSwitch = value; if (!value) _diagnosticChosen = false; if (View is { } view && IsOpen) Render(view, _message.Text, _art); }
+    }
     internal bool RoundViewShown => _roundView.Visible;
 
     /// <summary>ARC-UI-064: the window shows the original barter window: the barter arts read, a shown object and the diagnostic view not
@@ -136,6 +152,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
         _lookToggle.Pressed += () => Callable.From(() =>
         {
+            if (!_diagnosticSwitch) return;
             _diagnosticChosen = !_diagnosticChosen;
             if (View is { } view) Render(view, _message.Text, _art);
         }).CallDeferred();
@@ -186,7 +203,7 @@ public partial class AreaBarterPanel : CanvasLayer
             + "PROJECT diagnostic window: no grid, paperdoll, count dialog or quote lines; original UI parity NOT_VERIFIED";
         ApplyLook();
         var enabled = Focusable();
-        enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
+        if (enabled.Count > 0) enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel(); UpdateRoundView();
     }
 
@@ -201,7 +218,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _hint }) control.Visible = !art;
         _close.Visible = !art && !_docked;
-        _lookToggle.Visible = _look is { BarterReady: true } && _art is not null && !_docked;
+        _lookToggle.Visible = _diagnosticSwitch && _look is { BarterReady: true } && _art is not null && !_docked;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
@@ -243,7 +260,7 @@ public partial class AreaBarterPanel : CanvasLayer
     private List<Button> Focusable()
     {
         // ARC-UI-064: in the original look the switch to the diagnostic buttons is the one focusable control.
-        if (ArtMode) return [_lookToggle];
+        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
         var list = _sellButtons.Concat(_buyButtons).Where(button => !button.Disabled).ToList();
         list.Add(_close);
         if (_lookToggle.Visible) list.Add(_lookToggle);
@@ -253,6 +270,7 @@ public partial class AreaBarterPanel : CanvasLayer
     public void Navigate(int direction)
     {
         var enabled = Focusable();
+        if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
     }
@@ -271,6 +289,15 @@ public partial class AreaBarterPanel : CanvasLayer
             // ARC-UI-069: the window's 800 × 400 at the screen's (0, 41) of the menu's 800 × 600 screen, at the bars' whole factor (as the
             // shop's strips, AreaShopArtView).
             var screen = GetViewport().GetVisibleRect().Size;
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
+            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            {
+                var unit = (float)zone.Scale;
+                _area.FitScale(unit);
+                _panel.Size = new(AreaShopArtLayout.Window.Width * unit, AreaInventoryDrag.FrameHeight * unit);
+                _panel.Position = new(MathF.Round((float)zone.X + AreaShopArtLayout.Window.X * unit), MathF.Round((float)zone.Y + AreaShopArtLayout.Window.Y * unit));
+                return;
+            }
             var factor = AreaGameBarPanel.ScreenFactor(screen);
             _area.FitScale(factor);
             var (wx, wy, ww, _) = AreaShopArtLayout.Window;
@@ -283,6 +310,7 @@ public partial class AreaBarterPanel : CanvasLayer
         {
             // ARC-UI-064: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it
             // (as the inventory window's original look).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
@@ -294,7 +322,7 @@ public partial class AreaBarterPanel : CanvasLayer
                 _panel.Size = new(frameWidth, 0);
             }
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, free.Y));
-            _panel.Position = new((free.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (free.X - frameWidth) / 2, top);
             return;
         }
         var size = GetViewport().GetVisibleRect().Size;

@@ -52,6 +52,8 @@ public partial class TerrainViewerApp
             _hotkeyBarView.SlotLeft += _ => HotkeyDescriptionLeft();
             _hotkeyBarView.RecentLeft += _ => HotkeyDescriptionLeft();
         }
+        _hotkeyBarView.CountFont = TextFonts()?.Title;
+        _hotkeyBarView.StandInFont = TextFonts()?.Text;
         var module = _arguments?.ModulePath;
         if (_hotkeyBarContent is null || module != _hotkeyBarModule)
         {
@@ -210,6 +212,7 @@ public partial class TerrainViewerApp
     private void HotkeySlotClicked(int entry)
     {
         // ARC-UI-2068 (DB2): the slot is not blocked under the dialog (0x57DC60 runs before the hook); the activation ends the dialog where the original pops it.
+        if (WorldMapOpen) return; // ARC-UI-2306: the bars stay up under the world map window, which owns input
         if (!HotkeysActive || _areaSession is not { } session) return;
         _hotkeyBarClicksForSelfTest++;
         switch (HotkeyBarRules.ClickEntry(_hotkeyDrag is not null, HotkeyItemHeld, session.QueryHotkeys().Entries[entry].IsEmpty))
@@ -226,6 +229,7 @@ public partial class TerrainViewerApp
     {
         if (!over) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "recent action");
+        if (WorldMapOpen) return; // ARC-UI-2306
         if (!HotkeysActive || _areaSession is not { } session) return;
         _hotkeyBarClicksForSelfTest++;
         var action = session.QueryHotkeys().Recent[index];

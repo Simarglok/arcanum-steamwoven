@@ -48,7 +48,8 @@ public sealed partial class GameSessionOwner
     /// <item>On a success the item moves (PP3): coins min(quantity, 100) of an NPC's gold pile, ammunition units min(quantity, 20), any
     /// other item whole, through <see cref="TakeGoldFromNpc"/>, <see cref="TakeAmmoFromNpc"/>, <see cref="TakeItemFromNpc"/>,
     /// <see cref="GiveAmmoToNpc"/> or <see cref="GiveItemToNpc"/>. A move the host's insert check refuses, or that an item script
-    /// declines, is a failure that is never noticed. A theft that moved something lowers the hero's stored alignment
+    /// declines, is a failure that is never noticed. ARC-DEV-1338 (PP12): an item the victim wears is stolen too: the move takes it off its slot as the loot of a body does (<c>unwield</c>: the insert check sees it
+    /// unwielded, wield-off 25 and remove-item 28 run with the victim as triggerer over <paramref name="npcWearer"/> when the host gives the victim's context, the victim's wear record drops it and it is marked to re-wield, flag 0x40). A theft that moved something lowers the hero's stored alignment
     /// (<see cref="PickPocketRules.AlignmentAfterTheft"/>, the followers armed as for any alignment change) unless the hero summoned the
     /// victim; a plant changes none.</item>
     /// <item>On a failed check nothing moves; the failure is noticed per <see cref="PickPocketRules.Detection"/>, an untrained hero's
@@ -62,8 +63,7 @@ public sealed partial class GameSessionOwner
     /// victim that is no NPC of the actor's map seed or is dead (<see cref="GameSessionFailure.InvalidPickPocketVictim"/>), the version, no
     /// seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), an item the victim (steal) or the hero (plant) does
     /// not hold, or the hero's coins (<see cref="GameSessionFailure.ItemNotAvailable"/>), a gold pile with an insert-item script
-    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item the victim wears (the original steals it; unequipping an NPC
-    /// is not modelled: <see cref="GameSessionFailure.WornItemUnsupported"/>), a key or key ring (<see cref="GameSessionFailure.ItemTypeUnsupported"/>),
+    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a key or key ring (<see cref="GameSessionFailure.ItemTypeUnsupported"/>),
     /// an ammunition move without an ammunition kind for a new stack
     /// (<see cref="GameSessionFailure.InvalidAmmo"/>). A move refused for any reason but the insert check (a script the session does not
     /// run, a budget, the revision) refuses the attempt after the charge, with nothing rolled or moved.
@@ -72,7 +72,7 @@ public sealed partial class GameSessionOwner
     [Arcanum.Simulation.OriginalFunction(0x575100, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionPickPocketResult PickPocket(GameSessionVersion expected, SessionPickPocketVictim victim, PickPocketDirection direction, string item,
         SessionItemKind newStackKind, SessionInsertCheck insertCheck, ISessionCombatWorld? world = null, ISessionItemScriptHost? scripts = null,
-        ISessionItemTriggers? triggers = null)
+        ISessionItemTriggers? triggers = null, SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(victim);
@@ -98,9 +98,8 @@ public sealed partial class GameSessionOwner
             if (holder.Items.FirstOrDefault(entry => entry.Entity == item) is not { } listed) return RejectPickPocket(GameSessionFailure.ItemNotAvailable);
             var facts = listed.Facts;
             kind = facts.Kind.Type == SessionItemType.Gold ? PickPocketItemKind.Gold : facts.AmmoType is not null ? PickPocketItemKind.Ammunition : PickPocketItemKind.Item;
-            if (kind == PickPocketItemKind.Gold && facts.HasScript(SessionScriptPoint.InsertItem)) return RejectPickPocket(GameSessionFailure.ItemScriptUnsupported);
-            // The original steals a worn item too (PP3, its slot only raises the difficulty); the session does not unequip an NPC.
-            if (facts.Worn) return RejectPickPocket(GameSessionFailure.WornItemUnsupported);
+            if (kind == PickPocketItemKind.Gold && facts.HasScript(SessionScriptPoint.InsertItem) && scripts is null) return RejectPickPocket(GameSessionFailure.ItemScriptUnsupported);
+            // ARC-DEV-1338 (PP12): the original steals a worn item too (PP3, its slot only raises the difficulty); the move takes it off its slot.
             // Keys and key rings are not modelled here: the steal inserts the item itself, and a stolen key would fold into the ring (ARC-WORLD-123, KY2) as a taken one does.
             if (kind == PickPocketItemKind.Item && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectPickPocket(GameSessionFailure.ItemTypeUnsupported);
             quantity = kind == PickPocketItemKind.Ammunition ? QueryAmmo(item)?.Units ?? facts.Quantity ?? 0 : facts.Quantity ?? 1;
@@ -132,12 +131,12 @@ public sealed partial class GameSessionOwner
             // Too few action points end the subturn and the check node does not run the check (0x42A359, PP11).
             if (charge.Charge == SessionActionPointUse.Refused) return RejectPickPocket(GameSessionFailure.PickPocketOutOfTurn) with { Charge = charge };
         }
-        return PickPocketStep(victim, direction, item, kind, quantity, location, width, height, newStackKind, insertCheck, scripts, triggers) with { Charge = charge };
+        return PickPocketStep(victim, direction, item, kind, quantity, location, width, height, newStackKind, insertCheck, scripts, triggers, npcWearer) with { Charge = charge };
     }
 
     private SessionPickPocketResult PickPocketStep(SessionPickPocketVictim victim, PickPocketDirection direction, string item, PickPocketItemKind kind,
         int quantity, int location, int width, int height, SessionItemKind newStackKind, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts,
-        ISessionItemTriggers? triggers)
+        ISessionItemTriggers? triggers, SessionNpcWieldScripts? npcWearer)
     {
         var hero = _hero!;
         var request = HeroSkillRequest(Skill.PickPocket, null);
@@ -191,10 +190,10 @@ public sealed partial class GameSessionOwner
             {
                 move = (direction, kind) switch
                 {
-                    (PickPocketDirection.Steal, PickPocketItemKind.Gold) => TakeGoldFromNpc(Version, npc, amount, item),
-                    (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck),
-                    (PickPocketDirection.Steal, _) => TakeItemFromNpc(Version, npc, item, insertCheck, scripts, triggers),
-                    (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck),
+                    (PickPocketDirection.Steal, PickPocketItemKind.Gold) => TakeGoldFromNpc(Version, npc, amount, item, scripts),
+                    (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck, scripts),
+                    (PickPocketDirection.Steal, _) => TakeItemFromNpc(Version, npc, item, insertCheck, scripts, triggers, unwield: true, npcWearer: npcWearer),
+                    (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck, scripts),
                     _ => GiveItemToNpc(Version, npc, item, insertCheck, triggers, scripts),
                 };
             }

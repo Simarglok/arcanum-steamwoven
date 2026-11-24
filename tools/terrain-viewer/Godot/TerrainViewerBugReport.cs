@@ -167,6 +167,7 @@ public partial class TerrainViewerApp
         other.Add(("Platform", $"{OS.GetName()} {OS.GetVersion()}, {Engine.GetArchitectureName()}, Godot {godot}, window {GetViewport().GetVisibleRect().Size}"));
         other.Add(("Debug mode", DebugMode ? "on (ARC-DEV-050)" : "off"));
         other.Add(("Report key", BugReportKeyName));
+        other.Add(("Resources", ResourceReportText())); // ARC-DEV-1398
         return new(build.IsPackage ? $"{build.Text} (commit {build.Commit})" : build.Text,
             session?.Rules.Mode.ToString() ?? "no game session",
             _readyArea is null ? "no map shown" : $"{SaveLocation()} (runtime map {CurrentAreaMap})", hero, combat, other);
@@ -207,16 +208,17 @@ public partial class TerrainViewerApp
     {
         try
         {
-            var file = BugReportCheck.FindActiveFile(
-                [BugReportLocation.LaunchFolder(OS.GetExecutablePath()), ProjectSettings.GlobalizePath("res://")],
-                ViewerAutomatedStorage.Automated, System.Environment.GetEnvironmentVariable(BugReportCheck.FileVariable));
-            return BugReportCheck.ReadActive(file, DateTime.UtcNow);
+            return BugReportCheck.ReadActive(BugReportActiveCheckFile(), DateTime.UtcNow);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
         {
             return null;
         }
     }
+
+    private static string? BugReportActiveCheckFile() => BugReportCheck.FindActiveFile(
+        [BugReportLocation.LaunchFolder(OS.GetExecutablePath()), ProjectSettings.GlobalizePath("res://")],
+        ViewerAutomatedStorage.Automated, System.Environment.GetEnvironmentVariable(BugReportCheck.FileVariable));
 
     private static BugReportPlaces BugReportPlacesNow()
     {
@@ -239,18 +241,42 @@ public partial class TerrainViewerApp
         }
         var result = WriteBugReportMoment(moment, text, check);
         _bugReport = null;
+        RecordTaggedBugReport(result, check);
         _bugReportPanel.ShowOutcome(result.Folder is null ? "The report could not be written: " + string.Join("; ", result.Failed)
             : (result.Saved ? "The report is saved in\n" : "The report is INCOMPLETE in\n") + result.Folder
               + (result.Fallback ? $"\n\nThe folder beside the game could not be used ({result.FallbackReason}), so it is in your user folder." : "")
+              + (result.LoadMenuSlot is { } slot ? $"\n\nAlso in Load Game as {slot}." : "")
               + (result.Failed.Count == 0 ? "" : "\n\nNot written: " + string.Join("; ", result.Failed)));
         _hud?.SetNotice(result.Status);
+    }
+
+    /// <summary>ARC-DEV-2768: a Ctrl+B report tagged with an owner check is recorded in the QA folder's results (the folder of the
+    /// active-check file), so the check counts as answered and leaves the active list. Best effort: nothing here fails a report.</summary>
+    private static void RecordTaggedBugReport(BugReportResult result, string? check)
+    {
+        if (check is null || result.Folder is null) return;
+        try
+        {
+            var file = BugReportActiveCheckFile();
+            var folder = file is null ? null : System.IO.Path.GetDirectoryName(file);
+            if (folder is null || !System.IO.Directory.Exists(folder)) return;
+            var build = ViewerBuild.Current;
+            var problem = OwnerQaFiles.RecordReportFor(folder, check, System.IO.Path.GetFileName(result.Folder.TrimEnd('/', '\\')), "", build.Commit ?? build.Text, DateTime.UtcNow);
+            if (problem is not null) GD.Print("ARC-DEV-2768 tagged report not recorded: " + problem);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException or System.IO.IOException)
+        {
+            GD.Print("ARC-DEV-2768 tagged report not recorded: " + error.Message);
+        }
     }
 
     /// <summary>Writes the report folder of a kept moment (ARC-DEV-2190: also the owner-checks overlay's Send) and remembers the result.</summary>
     private BugReportResult WriteBugReportMoment(BugReportMoment moment, string text, string? check)
     {
         var result = BugReportWriter.Write(new(text, moment.Facts, moment.Log, moment.Dropped, moment.TakenUtc, moment.TakenLocal, moment.Screenshot?.Png,
-            moment.ScreenshotMissing, moment.Save, moment.SaveMissing, check), BugReportPlacesNow());
+            moment.ScreenshotMissing, moment.Save, moment.SaveMissing, check), BugReportPlacesNow(),
+            // ARC-DEV-2947: the copy of the save goes into the list Load Game shows (an automated run's own folder, never the player's).
+            moment.Save is null ? null : SaveLibrary);
         _bugReportResult = result;
         GD.Print("ARC-DEV-051 bug report " + System.Text.Json.JsonSerializer.Serialize(new
         {
@@ -344,6 +370,14 @@ public partial class TerrainViewerApp
             Require(entry is { Details: GameSaveDetails.Present }, "the save is a listed save of the save list");
             using (var loaded = AreaQuickSave.Load(library.Slot(entry!.Name), _areaSession, _ => null).Owner)
                 Require(loaded is not null && loaded.QueryActor().Map.RuntimeMap == CurrentAreaMap, "the ordinary quick-load path loads the report's save");
+            // ARC-DEV-2947: the same save is also a new slot of the list Load Game shows, named with the report's first words.
+            var menuSlot = _bugReportResult.LoadMenuSlot;
+            var listed = menuSlot is null ? null : SaveLibrary.List().Entries.SingleOrDefault(row => row.Name == menuSlot);
+            Require(listed is { IsAuto: false, Details: GameSaveDetails.Present }, "the report's copy is a listed slot of the Load Game list: " + _bugReportResult.Status);
+            Require(listed!.DisplayDescription.StartsWith("Bug report ", StringComparison.Ordinal) && listed.DisplayDescription.EndsWith(" - Smoke: the report window works", StringComparison.Ordinal),
+                "the copy's row is named with the report text: " + listed.DisplayDescription);
+            using (var menuLoaded = AreaQuickSave.Load(SaveLibrary.Slot(menuSlot!), _areaSession, _ => null).Owner)
+                Require(menuLoaded is not null && menuLoaded.QueryActor().Map.RuntimeMap == CurrentAreaMap, "the ordinary load path loads the Load Game copy");
             // ARC_BUG_REPORT_CAPTURE: a folder to copy the written report into, for a look at it (the run's own folder is deleted at exit).
             if (System.Environment.GetEnvironmentVariable("ARC_BUG_REPORT_CAPTURE") is { Length: > 0 } capture)
                 foreach (var file in System.IO.Directory.GetFiles(folder, "*", System.IO.SearchOption.AllDirectories))

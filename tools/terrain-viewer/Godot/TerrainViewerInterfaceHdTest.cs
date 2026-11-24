@@ -227,24 +227,17 @@ public static partial class TerrainViewerSelfTest
         GD.Print("ARC-UI-089 self-test interface HD switch PASS");
     }
 
-    // ARC-UI-122: the same synthetic wide art follows viewport changes without moving input off the label.
+    // ARC-UI-3003 (owner decision of #3003, option C): the pack's main-menu-16x9.png is ignored. With a valid 16:9 file in the pack the table-scene
+    // menus keep the whole-factor plate of the bars (centred, the original's art, black or empty beside it), never a plate fitted to the window.
     private static async Task AssertMainMenuBackdropAsync(Node host, HdPack pack, bool native, Action<bool, string> require)
     {
         var path = System.IO.Path.Combine(pack.Directory, "main-menu-16x9.png");
-        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NoFile", Sha12: null }, "missing main-menu backdrop falls back");
-        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
-        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "WrongSize", Width: 16, Height: 10, Sha12.Length: 12 }, "main-menu backdrop rejects the wrong aspect");
         var rgba = new byte[16 * 9 * 4];
-        rgba[3] = 255;
-        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
-        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NotOpaque" }, "main-menu backdrop rejects transparency");
         for (var i = 0; i < rgba.Length; i += 4) { rgba[i + 1] = 160; rgba[i + 3] = 255; }
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
-
-        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 } && pack.ReadMainMenuBackdropReport() is { Status: "Used", Sha12.Length: 12 }, "valid main-menu backdrop opens");
         if (!native)
         {
-            GD.Print("ARC-UI-122 self-test main-menu backdrop file PASS (window checks skipped: headless)");
+            GD.Print("ARC-UI-3003 self-test main-menu plate ignored PASS (window checks skipped: headless)");
             return;
         }
 
@@ -283,15 +276,15 @@ public static partial class TerrainViewerSelfTest
                 var actualSize = viewport.GetVisibleRect().Size;
                 require(actualSize.IsEqualApprox(size), $"main viewport requested {size} and got {actualSize}");
                 menu.Render(AreaMenuWindow.Main, ["One", "Two"], 1);
-                var factor = size.Y / 600f;
-                var expectedPosition = new Vector2((size.X - 800 * factor) / 2, 0);
+                var factor = (float)AreaGameBarPanel.ScreenFactor(size);
+                var expectedPosition = new Vector2(AreaGameBarPanel.ScreenLeft(size, (int)factor), MathF.Round((size.Y - 600 * factor) / 2));
                 require(menu.Position.IsEqualApprox(expectedPosition) && menu.Scale.IsEqualApprox(new(factor, factor)),
-                    $"main-menu plate is centred with a uniform scale at {size}");
+                    $"main-menu plate keeps the whole-factor layout at {size}");
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var capture = viewport.GetTexture().GetImage();
                 require(capture.GetSize() == size, $"main-menu readback requested {size} and got {capture.GetSize()}");
-                require(capture.GetPixel(0, 0).G8 == 160 && capture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
-                    $"main-menu art covers opposite corners at {size}");
+                require(capture.GetPixel(size.X / 2, size.Y / 2).G8 != 160 && capture.GetPixel(0, 0).G8 != 160 && capture.GetPixel(size.X - 1, size.Y - 1).G8 != 160,
+                    $"the pack's 16:9 plate is not drawn at {size}");
                 var centre = menu.ButtonCentreForSelfTest(0)!.Value;
                 viewport.PushInput(new InputEventMouseMotion { Position = centre, GlobalPosition = centre }, inLocalCoords: true);
                 require(menu.HoveredForSelfTest == 0, $"main-menu hover at {size}");
@@ -300,18 +293,18 @@ public static partial class TerrainViewerSelfTest
                     viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down,
                         Position = centre, GlobalPosition = centre, ButtonMask = down ? MouseButtonMask.Left : 0 }, inLocalCoords: true);
                 require(clicked == 0 && menu.LabelsForSelfTest.SequenceEqual(["Back"]), $"main-menu click opens the sub-menu at {size}");
-                // ARC-DEV-344: the single-player window, drawn after the click, takes the same wide plate on the same transform.
+                // The single-player window, drawn after the click, stays on the same transform and the same art.
                 require(menu.Scale.IsEqualApprox(new(factor, factor)) && menu.Position.IsEqualApprox(expectedPosition),
-                    $"single-player menu keeps the wide plate transform at {size}");
+                    $"single-player menu keeps the whole-factor transform at {size}");
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var subCapture = viewport.GetTexture().GetImage();
-                require(subCapture.GetPixel(0, 0).G8 == 160 && subCapture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
-                    $"single-player menu art covers opposite corners at {size}");
+                require(subCapture.GetPixel(size.X / 2, size.Y / 2).G8 != 160 && subCapture.GetPixel(0, 0).G8 != 160,
+                    $"the pack's 16:9 plate is not drawn behind the single-player menu at {size}");
                 foreach (var window in new[] { AreaMenuWindow.NewGame, AreaMenuWindow.InPlay, AreaMenuWindow.InPlayLimited })
                 {
                     menu.Render(window, ["One"], 0);
                     require(menu.Scale.IsEqualApprox(new(factor, factor)) && menu.Position.IsEqualApprox(expectedPosition),
-                        $"{window} menu keeps the wide plate transform at {size}");
+                        $"{window} menu keeps the whole-factor transform at {size}");
                 }
                 // The options window has its own wooden board (556): it stays on the whole-factor layout.
                 menu.Render(AreaMenuWindow.Options, ["One"], 0);
@@ -336,7 +329,7 @@ public static partial class TerrainViewerSelfTest
             viewport.ContentScaleAspect = originalScaleAspect;
             viewport.ContentScaleFactor = originalScaleFactor;
         }
-        GD.Print("ARC-UI-122 self-test main-menu backdrop PASS (1920x1080, 2560x1440, 1600x1000)");
+        GD.Print("ARC-UI-3003 self-test main-menu plate ignored PASS (1920x1080, 2560x1440, 1600x1000)");
     }
 
     // ARC-UI-112: an HD interface frame drawn below its 4× scale is filtered (trilinear mips through its canvas texture) even under a parent
@@ -473,8 +466,31 @@ public static partial class TerrainViewerSelfTest
         InterfaceHd.Configure(pack, true);
         require(face.IsHd(Glyph) && face.Texture(Glyph, AreaArtTextBlend.Coverage) is CanvasTexture, "pack and switch on: the glyph with an entry is HD");
         require(!face.IsHd(NoEntry) && !face.IsHd(0), "a glyph without an entry and a frame without a key stay Legacy");
-        require(face.Texture(Glyph, AreaArtTextBlend.Additive) is not CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage blend takes the HD frame");
+        // ARC-UI-2795: the additive blend (the inventory counts' font flag 0x10) takes the HD frame too, as an added layer; the multiply blend stays Legacy.
+        require(face.Texture(Glyph, AreaArtTextBlend.Additive) is CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage and Additive blends take the HD frame");
         require(face.Texture(Glyph, AreaArtTextBlend.Coverage)!.GetWidth() == W * Scale, "the HD glyph texture is 4× the Legacy frame");
+        // ARC-RENDER-2939: below 0.4 of the 4× frame (a device scale of 1.2 and 1.5 per original px, the step x1/3) the glyph has an area copy at the exact device size; 1.6, 1.8, 2.4 and 3.6 and no scale keep the plain bilinear one.
+        var plainGlyph = face.Texture(Glyph, AreaArtTextBlend.Coverage);
+        foreach (var step in new[] { 3.6f, 2.4f, 1.8f, 1.6f, 0f }) require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step) is null, $"device scale {step}: no area copy");
+        require(plainGlyph is CanvasTexture { TextureFilter: CanvasItem.TextureFilterEnum.Linear }, "the plain glyph keeps the Linear filter without mipmaps (ARC-UI-145)");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Multiply, 1.2f) is null && face.AreaCopy(NoEntry, AreaArtTextBlend.Coverage, 1.2f) is null, "no copy for the multiply blend or a glyph without an HD entry");
+        foreach (var (step, width, height) in new[] { (1.2f, 7, 6), (1.5f, 9, 8) })
+        {
+            var copy = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step);
+            require(copy is { } c && c.Width == width && c.Height == height && c.Texture.GetWidth() == width && c.Texture.GetHeight() == height, $"device scale {step}: the copy is the Legacy size times the scale, {width} × {height}");
+            require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, step)!.Value.Texture == copy!.Value.Texture, "the copy is made once");
+            require(copy!.Value.Texture is CanvasTexture { TextureFilter: CanvasItem.TextureFilterEnum.Linear } && !((CanvasTexture)copy.Value.Texture).DiffuseTexture.GetImage().HasMipmaps(), "the copy is drawn 1:1 with no mip chain");
+        }
+        // The three most recently used scales are kept: 1.5 is the least recently used once 1.2 is touched again, so the fourth scale drops 1.5 and keeps 1.2.
+        var first = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture;
+        var second = face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture;
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f);
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.3f);
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture == second, "three scales are kept");
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f); face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.3f);
+        face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.4f);
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.2f)!.Value.Texture == first, "the scale in use stays when a fourth comes");
+        require(face.AreaCopy(Glyph, AreaArtTextBlend.Coverage, 1.5f)!.Value.Texture != second, "the least recently used of four scales is dropped");
 
         var viewport = new SubViewport { Size = new(W, H), TransparentBg = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var probe = new FontProbe(face) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };

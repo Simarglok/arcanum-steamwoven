@@ -24,6 +24,9 @@ public partial class TerrainViewerApp
             if (verifyHd)
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                // ARC-DEV-2923: the later pixel observers of the Crash Site smoke compare Legacy source pixels; an HD world profile (the relit look)
+                // would stop them with AREA_SOURCE_PIXEL_MISMATCH after minutes, so it is refused here at the start.
+                Require(_canvas!.VisualProfile == VisualProfile.Legacy, "HD verification runs with the Legacy world profile (drop ARC_VISUAL_PROFILE=hd): the Crash Site smoke's pixel observers compare Legacy pixels");
                 _gameSettings = _gameSettings with { HdInterface = true };
                 SyncInterfaceHd();
                 Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
@@ -49,13 +52,25 @@ public partial class TerrainViewerApp
             var art = _sheetPanel!.ArtViewForSelfTest!;
             if (verifyHd)
             {
+                // ARC-UI-2865: the hero's portrait is drawn at its bitmap's size, and from the pack's redraw when the pack holds that bitmap (the pack of this run
+                // may be an interface-only one: then the portrait stays Legacy and the line says so).
+                var packPortraits = _canvas!.HdSource!.Pack!.Entries.Count(e => e.Kind == Arcanum.Data.Hd.HdEntryKind.Portrait);
+                var (portraitOk, portraitDetail) = PortraitHd.Check(art.PortraitTextureForSelfTest, _canvas.HdSource.Pack, 64);
+                Require(portraitOk, "the sheet's portrait at 64 x 64: " + portraitDetail);
+                GD.Print($"ARC-UI-2865 native sheet portrait HD PASS packPortraits={packPortraits} {portraitDetail}");
                 var count = 0;
                 foreach (var load in _sheetArtContent!.Art.Values)
-                foreach (var frame in load.Frames.Where(f => f.Hd is not null))
                 {
-                    if (load.Number is 27 or 28 or 171 or 229 or 300 or 301 or 483) continue;
-                    Require(_canvas!.HdSource!.Pack!.ResolveSprite(frame.Hd!, frame.Rgba).Status == Arcanum.Data.Hd.HdFrameStatus.Hd, $"HD frame {load.Number}:{count} refused");
-                    count++;
+                    var frameIndex = -1;
+                    foreach (var frame in load.Frames)
+                    {
+                        frameIndex++;
+                        if (frame.Hd is null) continue;
+                        if (load.Number is 27 or 28 or 171 or 229 or 300 or 301 or 483) continue;
+                        var result = _canvas!.HdSource!.Pack!.ResolveSprite(frame.Hd, frame.Rgba);
+                        Require(result.Status == Arcanum.Data.Hd.HdFrameStatus.Hd, $"HD frame {load.Number}:{count} (art {load.Name}, frame {frameIndex}) refused ({result.Status})");
+                        count++;
+                    }
                 }
                 Require(count > 0, "character frames resolved");
                 GD.Print($"ARC-UI-114 native character HD frames PASS count={count}");

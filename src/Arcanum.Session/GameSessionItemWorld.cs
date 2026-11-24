@@ -1,0 +1,93 @@
+using Arcanum.Scripting.Scr;
+
+namespace Arcanum.Session;
+
+/// <summary>
+/// ARC-SCRIPT-2335 (ledger IV1–IV8): what a host adds for the item set's world commands, the container vicinity focus kinds (17, 18), the scenery and critter vicinity kinds (ARC-SCRIPT-2376, IV18), the name test on a looped object (condition 20) and change art number
+/// (action 59) of a point 21 (insert item) script. A host that does not implement it leaves each such question unanswerable, and the session then refuses the move as for any other thing it cannot answer
+/// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). It reads only.
+/// </summary>
+public interface ISessionItemWorldHost
+{
+    /// <summary>
+    /// The containers in the vicinity of <paramref name="item"/>, the attachee of the run: the scan around the item's own location field, which the original does not write at an insertion (IV2). Null when the host does not
+    /// know that location (an item made at run time, one the map data does not place): the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item);
+
+    /// <summary>
+    /// ARC-SCRIPT-2376 (IV25, PG3): the scenery in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds every and any scenery in the vicinity, 15 and 16): the same scan and centre as <see cref="ContainersInVicinity"/> with the scenery
+    /// type. Null when the host does not know the item's location: the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds everyone and anyone in the vicinity, 8 and 9), the hero and the dead included, around the same centre as
+    /// <see cref="ContainersInVicinity"/>. Null when the host does not know the item's location: the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2336 (FK8): the direct followers of <paramref name="leader"/>, the triggerer of the run (the focus kinds every follower and any follower, 0x44B4E0 over 0x4411C0): the hero's party followers for the hero, an NPC leader's session followers
+    /// for an NPC the host knows, none for any other object. Null when the host cannot answer (no shown map): the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader);
+
+    /// <summary>An object's name number (condition 20), or null for an object the host does not know.</summary>
+    int? NameOf(ScrObjectRef obj);
+
+    /// <summary>Whether the object is mind-controlled (condition 20 never takes such an object as named), or null for an object the host does not know.</summary>
+    bool? IsMindControlled(ScrObjectRef obj);
+
+    /// <summary>ARC-SCRIPT-2346 (IV9): whether the map data of the item stores its off flag (object flag 0x2) set, or null when the host has no row for it (an item made at run time has none: the host answers false for it); the session then refuses a toggle state on it.</summary>
+    bool? ItemOffInData(ScrObjectRef item);
+
+    /// <summary>
+    /// ARC-SCRIPT-2375 (IV30): the name number (object field 0x16) the map data gives <paramref name="item"/>, without any rename a script wrote (<see cref="ISessionItemWorldHost.NameOf"/> includes it), or null when the host has no row for it (an item made at run
+    /// time has none): the session then refuses a rename of it. A host that does not answer leaves a rename unanswerable.
+    /// </summary>
+    int? ItemNameInData(ScrObjectRef item) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2432 (IV40): the map changes that keep a run's change script (99) of an object that is not an item of the move: <paramref name="write"/> is the object's attachment point with the whole slot it ends in (the number replaced, the flags and
+    /// counters as the object held them). The shown map's use host plans it as a use run keeps a critter's slot (the loaded element under the session's map changes, a part back at its loaded value clears its record); null for an object it cannot keep (no
+    /// row, not a critter, no loaded element at the point, a point it does not keep): the session then refuses the move. The keys of the edits are the object's own.
+    /// </summary>
+    IReadOnlyList<MapChangeEdit>? PlanObjectSlot(ScrWriteback write) => null;
+
+    /// <summary>The plan of a change art number of the object to <paramref name="number"/> (the host's reading of the art files and of the object's lock identity); null when the host cannot plan it (the move is refused).</summary>
+    SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number);
+
+    /// <summary>
+    /// ARC-SCRIPT-2347 (IV13): the state of <paramref name="quest"/> the quest state condition (6) compares, as the use host reads it (SG1: the hero's own entry, 6 when it is botched; any other object the quest's global state), or null
+    /// when the host cannot answer (the move is refused). Only a read: the item set admits no quest write yet.
+    /// </summary>
+    int? QuestState(ScrObjectRef obj, int quest);
+
+    /// <summary>ARC-SCRIPT-2347 (IV13): an object's type field (get object type, OV3: 15 for the hero), or null for an object the host reads no row for.</summary>
+    int? ObjectType(ScrObjectRef obj);
+
+    /// <summary>ARC-SCRIPT-2347 (IV14, HW1): the obj is dead condition (22) as the use host reads it (the hero's death, an NPC's death as the session holds it), or null for any other object and one the host reads no row for (the move is refused).</summary>
+    bool? IsDead(ScrObjectRef obj);
+
+    /// <summary>
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): an object's location field (field 2, the tile) as distance between reads it from any object type, without a null test: a critter's live tile, the hero's cell, a placed object's tile and, for an item, the stale tile
+    /// of its own location field (IV2: where the map put it, or the tile a dropped item lies on; never the holder's). Null for an object the host cannot place: the session then refuses the move. The default places nothing.
+    /// </summary>
+    (long X, long Y)? LocationOf(ScrObjectRef obj) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2377 (IV45, CQ1): get social class (38): an NPC's social class (field 0x128, the map data's), 0 for the hero and any other object type, as the use host reads it. Null for an object the host reads no row for: the session then refuses the move.
+    /// The default answers nothing.
+    /// </summary>
+    int? SocialClassOf(ScrObjectRef obj) => null;
+
+    /// <summary>ARC-SCRIPT-2377 (IV45, CQ2): get origin (39): an NPC's origin as it is now (a dialog action's set origin over the map data's), 0 for the hero and any other object type. Null for an object the host reads no row for: the session then refuses the move.</summary>
+    int? OriginOf(ScrObjectRef obj) => null;
+}
+
+/// <summary>
+/// ARC-SCRIPT-2335 (IV5): what a change art number does to one object: the art id to write (<see cref="Art"/>; null: nothing changes) against the id its map data gives (<see cref="Baseline"/>, equal ids clear
+/// the record), and for a door, window or container the closed frame the action resets with the new id (<see cref="Openable"/>, <see cref="OpenableBaseline"/>).
+/// </summary>
+public sealed record SessionObjectArtPlan(SessionMapId Map, string Entity, uint? Art, uint Baseline, SessionOpenable? Openable = null, SessionOpenableBaseline? OpenableBaseline = null);

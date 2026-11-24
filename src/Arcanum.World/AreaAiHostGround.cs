@@ -60,6 +60,9 @@ public sealed partial class AreaAiHost
         _ => null,
     };
 
+    /// <summary>ARC-SCRIPT-2386 (IV15, hide mask 3 of the object lists 0x4407C0 and 0x440B40): whether the item is switched off (a script's toggle, a thrown item in flight, ARC-SCRIPT-2397 IV18: the map data's own bit): the pickup's source lists leave it out.</summary>
+    private bool ItemOff(SessionInventoryItem item) => _session.QueryItemOff(new SessionMapId(_scene.RuntimeMap), item.Entity, item.Facts.OffInData);
+
     private static bool InSquare(CellCoord center, CellCoord cell, int halfSize) =>
         Math.Abs((long)cell.X - center.X) <= halfSize && Math.Abs((long)cell.Y - center.Y) <= halfSize;
 
@@ -70,7 +73,7 @@ public sealed partial class AreaAiHost
         if (GroundView() is not { } view || Tile(npc) is not { } at) return [];
         var found = new List<AiGroundItem>();
         foreach (var ground in view.Ground)
-            if (KindOf(ground.Item.Facts.Kind.Type) == kind && InSquare(at, ground.Cell, halfSize) && !_session.QueryItemInFlight(ground.Item.Entity))
+            if (KindOf(ground.Item.Facts.Kind.Type) == kind && InSquare(at, ground.Cell, halfSize) && !ItemOff(ground.Item))
                 found.Add(Describe(npc, view, ground.Item, AiExecutorRules.Distance(at, ground.Cell), off: false));
         return found;
     }
@@ -108,7 +111,7 @@ public sealed partial class AreaAiHost
         }
         foreach (var item in found.Items)
             if (KindOf(item.Facts.Kind.Type) == kind)
-                return Describe(_searchNpc, view, item, 0, off: _session.QueryItemInFlight(item.Entity));
+                return Describe(_searchNpc, view, item, 0, off: ItemOff(item));
         return null;
     }
 
@@ -122,7 +125,7 @@ public sealed partial class AreaAiHost
     }
 
     // The insert check for an NPC (0x466510): the item's weight with the NPC as holder against its carry weight, then the room in its grid (ARC-AI-1654); the PC-only Technophobia does not apply to an NPC's list.
-    private SessionInsertVerdict NpcInsertVerdict(string npc, SessionMapInventory? view, SessionInventoryItem item)
+    private SessionInsertVerdict NpcInsertVerdict(string npc, SessionMapInventory? view, SessionInventoryItem item, bool room = true)
     {
         if (Build(npc) is not { } build || LifeState(npc) is not { } state) return SessionInsertVerdict.TooHeavy;
         var aptitude = Math.Clamp(build.EffectiveStat(CharacterStat.MagickTechAptitude, state), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
@@ -132,8 +135,15 @@ public sealed partial class AreaAiHost
         var total = CarryRules.TotalWeight(held.Select(CarriedBy), CarryHolder.Critter, aptitude);
         if (!CarryRules.Fits(total, CarryRules.ItemWeight(CarriedBy(item), CarryHolder.Critter, aptitude), carry)) return SessionInsertVerdict.TooHeavy;
         // ARC-AI-1654: then the room (code 2): a free place in the NPC's 10 x 12 grid, an ammunition stack of the same prototype needing none.
-        return _session.QueryHolderRoom(npc, item) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.NoRoom;
+        return !room || _session.QueryHolderRoom(npc, item) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.NoRoom;
     }
+
+    /// <summary>
+    /// ARC-UI-2159 (0x466510 for an item that goes onto a wear slot, executor 0x466640): the insert check of a barter sale onto a slot of the merchant's doll, which is the weight test alone (the item's weight with the merchant as holder against its effective carry weight,
+    /// code 1) and no grid room, as the NPC's wear takes none; null when the host holds no combat build or life state of the merchant (its carry weight is then unknown).
+    /// </summary>
+    public SessionInsertCheck? SlotInsertCheck(string npc) =>
+        Build(npc) is null || LifeState(npc) is null ? null : item => NpcInsertVerdict(npc, null, item, room: false);
 
     // An item as the weight reads it: the session's tracked weight facts first, else its listed facts; ammunition by its units.
     private CarriedItem CarriedBy(SessionInventoryItem item)

@@ -40,12 +40,12 @@ public sealed partial class GameSessionOwner
         {
             if (_hero is null) return null;
             foreach (var (entity, kind) in _inventory.Hero.PackKinds)
-                if (kind.Name == name) return HeroNamedItem(entity, kind);
+                if (QueryItemName(entity, kind.Name) == name) return HeroNamedItem(entity, kind);
             return null;
         }
         if (QueryHolderItems(holder) is not { } list) return null;
         foreach (var item in list)
-            if (item.Facts.Kind.Name == name) return new(item.Entity, item.Facts.Kind, item.Facts.Worn, KnownScriptPoints(item.Entity, item.Facts)) { KeyId = item.Facts.KeyId };
+            if (QueryItemName(item.Entity, item.Facts.Kind.Name) == name) return new(item.Entity, item.Facts.Kind, item.Facts.Worn, KnownScriptPoints(item.Entity, item.Facts)) { KeyId = item.Facts.KeyId };
         return null;
     }
 
@@ -74,15 +74,20 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-SCRIPT-1279 (WO7): what destroy item named would do to the first item of <paramref name="holder"/>'s list named <paramref name="name"/> (the destroy 0x43CCA0, the one destroy path of
-    /// <see cref="DestroyObject"/>): refused when the item has a destroy (2), remove-item (28) or, worn, wield-off (25) script, which the session does not run here (the destroy script can refuse the destroy and the
-    /// removal fires its event), or a spell run that names it as its source (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), or when the budget of deleted-item records is spent.
+    /// <see cref="DestroyObject"/>): refused when the item has a destroy (2), remove-item (28) or, worn by the hero, wield-off (25) script, which the session does not run here (an NPC's worn item runs 25 under a script host, ARC-SCRIPT-2885; the destroy script can refuse the destroy and the
+    /// removal fires its event; ARC-SCRIPT-2854: with <paramref name="scripts"/> the remove-item script is run by the destroy, so only a run the session cannot apply refuses), or a spell run that names it as its source (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), or when the budget of deleted-item records is spent.
     /// </summary>
-    public SessionNamedItemPlan QueryNamedItemDestroy(string? holder, int name)
+    public SessionNamedItemPlan QueryNamedItemDestroy(string? holder, int name, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (QueryNamedItem(holder, name) is not { } item) return new(null, null);
-        if (item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff))
+        // ARC-SCRIPT-2854 (IE3): with a script host the removal's remove-item script (28) is run (the dry run below finds a run the session cannot apply); without one an item with it is refused.
+        // ARC-SCRIPT-2885 (0x467860 → 0x467CB0): the wield-off script (25) of an item an NPC wears runs with the removal under a script host (RunRemovalScripts: no context for the NPC refuses it, as a run the session cannot apply); the hero's worn item stays refused.
+        var wornWieldOff = item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff) && (scripts is null || holder is null || !KnownNpc(holder));
+        if (scripts is null && item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || wornWieldOff)
             return new(item, $"destroy item named {name} would run a destroy, remove-item or wield-off script of {item.Entity}, which is not modelled", GameSessionFailure.ItemScriptUnsupported);
+        if (scripts is not null && RunRemovalScript(item.Entity, holder, item.ScriptPoints, scripts).Done is { } dry)
+            return new(item, $"destroy item named {name}: the wield-off or remove-item script of {item.Entity} cannot be applied ({dry.Failure})", dry.Failure);
         if (HasItemRuns(item.Entity) || item.Worn && item.ItemSpells)
             return new(item, $"destroy item named {name}: {item.Entity} is the source of a running spell or carries worn item spells", GameSessionFailure.ItemEffectUnsupported);
         if (_durability.Count >= _limits.MaxDurabilityRecords && !_durability.Records.ContainsKey(item.Entity))
@@ -95,18 +100,22 @@ public sealed partial class GameSessionOwner
     /// (<see cref="DestroyObject"/>: out of its slot and list, hidden from its seed, its records dropped, recorded as deleted); no such item changes nothing. One revision. Refused before any effect: the version, the checks of
     /// <see cref="QueryNamedItemDestroy"/> (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, <see cref="GameSessionFailure.ItemEffectUnsupported"/>, <see cref="GameSessionFailure.BudgetExceeded"/>), the revision.
     /// </summary>
-    public InventoryMutationResult DestroyNamedItem(GameSessionVersion expected, string? holder, int name)
+    public InventoryMutationResult DestroyNamedItem(GameSessionVersion expected, string? holder, int name, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (holder is not null && !SessionValidation.Entity(holder)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        var plan = QueryNamedItemDestroy(holder, name);
+        var plan = QueryNamedItemDestroy(holder, name, scripts);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (plan.Refusal is not null) return RejectItem(plan.Failure);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        // ARC-SCRIPT-2854 (IE3): the removal's remove-item script (28) with the holder as the triggerer, made and prepared before anything applies, committed with the destroy (the original destroys after the removal ran it).
+        var removal = scripts is null ? new RemovalScripted(null, null) : RunRemovalScript(item.Entity, holder, item.ScriptPoints, scripts);
+        if (removal.Done is { } refused) return refused;
+        removal.Runs?.Commit();
         DestroyObject(item.Entity);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version) { Scripts = removal.Runs?.Runs ?? [], Messages = removal.Runs?.Messages ?? [] };
     }
 
     /// <summary>
@@ -115,11 +124,14 @@ public sealed partial class GameSessionOwner
     /// two holders neither of which is the hero is refused, as is an item the move would run a script for (without <paramref name="itemScripts"/> the session runs no item script here; with it the move runs them, ARC-MAGIC-1823, ARC-MAGIC-2252; a hero's item counts the points of the seed row it came from and of its slot, an item of another map's NPC the points of its row), a worn
     /// item leaving an NPC or container or carrying item spells, an item that is the source of a running spell, a new holder with a transfer script (point 32), a container off the actor's map or spilled, a holder no attached
     /// map lists, and for a move to the hero a gold pile or a key the key ring cannot take. The item's insert check and the room and weight tests are answered when the move applies.
-    /// ARC-MAGIC-2252: with <paramref name="itemScripts"/> the plan also makes a dry run of the move (the item scripts and the hero's transfer script it would run, read from the host and applied nowhere, the insert check taken as accepting):
-    /// a run the session could not apply is the plan's refusal, so the calling script is not left half applied by a nested run found only when the move applies. The dry run reads the session as it is before the calling script's earlier
-    /// effects apply, so a nested run that only fails after them is still found when the move applies.
+    /// ARC-MAGIC-2252: with <paramref name="itemScripts"/> the plan also makes a dry run of the move (the item scripts and the hero's transfer script it would run, read from the host and applied nowhere):
+    /// a run the session could not apply is the plan's refusal, so the calling script is not left half applied by a nested run found only when the move applies. ARC-MAGIC-2266: the dry run asks the caller's real
+    /// <paramref name="insertCheck"/> (the host's, as <see cref="TransferNamedItem"/> will; accepting everything when null), so a move that check would refuse, which runs no item script after it, is
+    /// not refused for a script it would never run. The dry run reads the session as it is before the calling script's earlier
+    /// effects apply, so a nested run that only fails after them is still found when the move applies; likewise a verdict the check gives before the earlier effects (room or weight they free) can differ when the move applies,
+    /// and a refusal then passes the plan without its nested runs being tried (recorded limits).
     /// </summary>
-    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, ISessionItemScriptHost? itemScripts = null)
+    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, ISessionItemScriptHost? itemScripts = null, SessionInsertCheck? insertCheck = null)
     {
         ThrowIfDisposed();
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) throw new ArgumentException("Invalid entity id.");
@@ -149,8 +161,8 @@ public sealed partial class GameSessionOwner
         if (item.Worn && item.ItemSpells) return new(item, $"transfer item of {item.Entity}, worn with item spells, is not modelled", GameSessionFailure.ItemEffectUnsupported);
         if (to is not null)
         {
-            // 0x4617F0 starts with the new holder's transfer script (point 32), which the session does not run, and the removal ends the item's spell runs.
-            if (HolderHasScript(to, kind, SessionScriptPoint.Transfer)) return new(item, $"transfer item into {to}, which has a transfer script, is not modelled", GameSessionFailure.HolderScriptUnsupported);
+            // 0x4617F0 starts with the new holder's transfer script (point 32); ARC-SCRIPT-2827: with itemScripts the give runs it (GiveItemTo) and the dry run below finds a run the session cannot apply, without them it is not run. The removal ends the item's spell runs.
+            if (itemScripts is null && HolderHasScript(to, kind, SessionScriptPoint.Transfer)) return new(item, $"transfer item into {to}, which has a transfer script, is not modelled", GameSessionFailure.HolderScriptUnsupported);
             if (HasItemRuns(item.Entity)) return new(item, $"transfer item: {item.Entity} is the source of a running spell", GameSessionFailure.ItemEffectUnsupported);
         }
         else
@@ -170,7 +182,7 @@ public sealed partial class GameSessionOwner
         // ARC-MAGIC-2252: the dry run of the move through the host: the failures a script run can end the move with (the insert check's and the lists' budgets are no run's: the script command goes on after them).
         if (itemScripts is not null)
         {
-            var dry = DryRunTransfer(from, to, item.Entity, itemScripts);
+            var dry = DryRunTransfer(from, to, item.Entity, itemScripts, insertCheck);
             if (dry.Disposition == GameSessionDisposition.Rejected && dry.Failure is not (GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused))
                 return new(item, $"transfer item of {item.Entity}: its item scripts or the hero's transfer script cannot be applied ({dry.Failure})", dry.Failure);
         }
@@ -180,11 +192,11 @@ public sealed partial class GameSessionOwner
     // ARC-MAGIC-2252: set while a move is only tried (QueryNamedItemTransfer): the scripts are run and prepared as the move runs them and the move returns before anything applies.
     private bool _transferDryRun;
 
-    private InventoryMutationResult DryRunTransfer(string? from, string? to, string item, ISessionItemScriptHost scripts)
+    private InventoryMutationResult DryRunTransfer(string? from, string? to, string item, ISessionItemScriptHost scripts, SessionInsertCheck? insertCheck)
     {
         var before = _transferDryRun;
         _transferDryRun = true;
-        try { return MoveListedItem(Version, from, to, item, static _ => SessionInsertVerdict.Accepted, scripts); }
+        try { return MoveListedItem(Version, from, to, item, insertCheck ?? (static _ => SessionInsertVerdict.Accepted), scripts); }
         finally { _transferDryRun = before; }
     }
 
@@ -217,7 +229,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        var plan = QueryNamedItemTransfer(from, to, name, scripts);
+        var plan = QueryNamedItemTransfer(from, to, name, scripts, insertCheck);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (plan.Refusal is not null) return RejectItem(plan.Failure);
         return MoveListedItem(expected, from, to, item.Entity, insertCheck, scripts);

@@ -631,6 +631,34 @@ public static partial class GameSessionSnapshotCodec
         },
         // ARC-WORLD-1840 (schema 102): the party section gains the followers of NPC leaders. No older build made an NPC lead anyone (the hero was the one leader), so the list is empty.
         [101] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
+        // ARC-MAGIC-2371 (schema 103): the durability section gains the changed mana stores of worn items (field 92). No older build drained one (the stores were the prototype's), so the list is empty.
+        [102] = root => AddField(Section(root, "durability"), "$.durability", "manaStores", new JsonArray()),
+        // ARC-MAGIC-2400 (schema 104): a pending recharge event names the map it lives on. A schema 103 build named a placeholder map (1) and fired it on any map, so the step puts each such event on the map the PC was
+        // on when the save was made (the actor's map), where the events of the PC's own items were: the weapons of the party were drained there, and the original would have them in memory on that map.
+        [103] = root =>
+        {
+            var map = Section(root, "actor")["map"] ?? throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.actor.map");
+            if (Section(root, "events")["pending"] is not JsonArray pending) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.events.pending");
+            foreach (var node in pending)
+                if (node is JsonObject row && row["kind"]?.GetValue<string>() == SessionEventKinds.ItemRecharge && row["entities"] is JsonArray { Count: 1 } entities && entities[0] is JsonObject entity)
+                    entity["map"] = map.DeepClone();
+        },
+        // ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it and took it up again. An older save kept none, so the section starts empty (such an item keeps the tile its map data gives it, as before).
+        [104] = root => AddField(Section(root, "inventory"), "$.inventory", "lastDrops", new JsonArray()),
+        // ARC-AI-1578 (schema 106): the silent-move adjustments of worn armour (`silentMove`, `magicSilentMove` in a worn item's armor block). A schema 105 save did not hold them, so each worn armour gets 0, as the older load
+        // read it; putting the armour on again fills them from the item's data.
+        [105] = root =>
+        {
+            if (!root.TryGetPropertyValue("equipment", out var equipment)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.equipment");
+            if (equipment is not JsonArray worn) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.equipment");
+            for (var i = 0; i < worn.Count; i++)
+            {
+                if (worn[i] is not JsonObject row || row["item"] is not JsonObject item || item["armor"] is not JsonObject armor) continue;
+                var path = $"$.equipment[{i}].item.armor";
+                AddField(armor, path, "silentMove", JsonValue.Create(0L));
+                AddField(armor, path, "magicSilentMove", JsonValue.Create(0L));
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

@@ -131,7 +131,7 @@ public sealed partial class SessionSpellRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(NoBarLights, "").Replace(NoGamblingRoll, "").Replace(NoNpcLed, "}").Replace(NoHeroStoredKeys, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":102,\"world\"", "\"schemaVersion\":72,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(NoBarLights, "").Replace(NoGamblingRoll, "").Replace(NoManaStores, "").Replace(NoNpcLed, "}").Replace(NoHeroStoredKeys, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":106,\"world\"", "\"schemaVersion\":72,\"world\""));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells"), (twice.Failure, twice.Path));
     }
 

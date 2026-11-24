@@ -26,7 +26,7 @@ beyond S33 is not counted.
   object, a tile or a sector holding the script). 1,346 of them (5,118 sites, 65.9 %) are admitted
   by the production admission, whole with every script they call. 447 (2,529 sites, 32.6 %) are refused because a
   reachable clause has a type outside S33. 60 scripts have a *non-type* refusal (a computed
-  goto in 13, a goto beyond the end in 2, an object operand kind S33 does not admit in 45): 16 of
+  goto in 13, a goto beyond the end in 2 (admitted since ARC-SCRIPT-3005), an object operand kind S33 does not admit in 45): 16 of
   them have no refused type, 44 have both and are never freed by types alone (section "Refusals that are not types").
 - **Which types (D).** 79 types occur on a reachable line and are refused: 26 conditions and 53
   actions (table below). Nine more types occur only on lines no run reaches (second table).
@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59|S60|S61|S62] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
@@ -275,7 +275,7 @@ Scripts the production admission still refuses once every condition and action t
 | Refusal | Roots | Sites |
 | --- | ---: | ---: |
 | computed goto | 13 | 80 |
-| goto beyond the end | 2 | 2 |
+| goto beyond the end (admitted since ARC-SCRIPT-3005) | 2 | 2 |
 | object operand kind 13 (every one in group) | 12 | 62 |
 | object operand kind 14 (anyone in group) | 4 | 10 |
 | object operand kind 2 (every follower) | 9 | 22 |
@@ -525,3 +525,83 @@ The probe takes `--set S58` and `--set S59` too: **S58** is S56 plus queue slide
 The runs are on the owner's installation (module `Arcanum`, the same 1,809 roots and 7,766 placed sites as before). Under **S58** 1,723 attached scripts on 7,342 placed sites are admitted whole and 32 roots (177 sites) are refused for a type; under **S59** 1,732 scripts on 7,360
 sites are admitted (+9 scripts, +18 sites) and 23 roots (159 sites) are refused for a type. The two types are gone from the refused table (S58 had six): **a85** blocked 8 roots on 14 sites on 2 maps (the main map 13 sites, Caladon's sewers 1; attachment points 9, 12 and 19, and 9 tile or sector sites), each root alone, and **a86**
 blocked 1 root on 4 sites on one map at the first-heartbeat point 10, alone. What is left refused for a type under S59 is a32 (7 roots, 110 sites), a90 (14 roots, 47 sites), a70 and a111 (1 root each).
+
+## The refused focus kinds (ARC-RES-2262, 2026-11-15)
+
+Issue #2262, requirement [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002), no coverage row changes. The probe takes `--set S60` (and `--set S61` since ARC-SCRIPT-2322) (S59 plus the focus kind every portal in the vicinity, 19; [ledger PV5](ledger/scripts.md#the-portal-vicinity-focus-kind-arc-script-2041-the-loop-of-the-ground-rune-tile-scripts)) and its report has a new section `focus_kinds` (file `ScriptRefusalFocusKinds.cs`). The run is on the owner's installation (module `Arcanum`, the same 1,809 roots on 7,766 placed sites; two runs have SHA-256 `e91c3bfba868a52bad5e6fe53ae15e118949c08290540ec1db5c4e2216392569`).
+
+**Method.** For each root (an attached script run from line 0, calls followed) the probe records (a) its *first refusal* under S60, as the production `ScrAdmission.AdmitFrom` reports it: the root script's own entry first, then the other reached scripts by number and entry, each entry's lowest refused line; (b) every focus kind the reached lines name that S60 does not admit, read from the object operands and from the kind packed into the high 16 bits of a PC variable or PC flag operand (an "every" and an "any" kind are separate numbers, the two critter vicinity kinds 8 and 9 in a condition are never admitted whatever the set holds); (c) whether admitting a kind (group) frees the root: every reached entry admitted with every condition and action type open and the set's focus kinds plus the group. A kind *frees alone* when the root has no refused type and admits whole with that group only. Sites are counted as above (placed object, tile or sector; prototype defaults are not sites).
+
+**Result (D).** Under S60 1,740 attached scripts on 7,416 placed sites are admitted whole (+8 scripts, +56 sites against S59: the eight roots of kind 19, as the issue #2041 expected) and 69 roots are refused. For 36 of them (126 sites, 10 maps) the first refusal is a focus kind; 37 roots on 127 sites name a refused kind somewhere on a reached line, and 32 of those (116 sites) have no refused type, so a kind alone frees them. The other 5 (11 sites) are also blocked by action 32 (kind 13 one root, kind 14 four roots). Admitting all 14 refused kinds with every type open frees every one of the 37 roots: no installed root needs a kind the admission can never take (no root names kinds 8 or 9 in a condition).
+
+The first refusals of all 69 roots, with the attachment points of their placed sites (tile or sector sites in the last column):
+
+| First refusal | Roots | Sites | Maps | Points (sites) | Tile or sector |
+| --- | ---: | ---: | ---: | --- | ---: |
+| action 32 (a32) | 3 | 100 | 3 | 9 (1), 19 (1) | 98 |
+| computed goto | 12 | 71 | 3 | 1 (31), 9 (17) | 23 |
+| focus kind 13 every one in the group | 11 | 61 | 5 | 7 (19), 8 (1), 9 (21), 23 (15), 34 (5) | 0 |
+| action 90 (a90) | 14 | 47 | 2 | 19 (47) | 0 |
+| focus kind 16 any scenery in the vicinity | 2 | 22 | 2 | 2 (1), 30 (1) | 20 |
+| focus kind 2 every follower | 9 | 22 | 5 | 1 (2), 9 (2), 12 (1), 13 (1), 19 (2), 21 (1) | 13 |
+| focus kind 14 anyone in the group | 4 | 10 | 1 | 9 (10) | 0 |
+| focus kind 17 every container in the vicinity | 8 | 10 | 3 | 19 (2), 21 (5) | 3 |
+| goto beyond the end | 2 | 2 | 1 | 9 (2) | 0 |
+| action 111 (a111) | 1 | 1 | 1 | 32 (1) | 0 |
+| action 70 (a70) | 1 | 1 | 1 | 26 (1) | 0 |
+| focus kind 3 any follower | 1 | 1 | 1 | 9 (1) | 0 |
+| focus kind 22 every item in the vicinity | 1 | 0 | 0 | prototype default only | 0 |
+
+The table's sites sum to 348: the other 2 of the 350 sites S60 refuses belong to the two attached script numbers that have no file (`missing_roots`), which no admission can run.
+
+The refused kinds by use (roots naming the kind on a reached line; the root counts of the first-refusal and freed-alone columns are the roots, then their sites; "all scripts" counts every clause and script of the 2,399 decoded scripts, attached, reached or not):
+
+| Kind | Group | Roots | Sites | Maps | First refusal (roots) | Frees alone (roots / sites) | All scripts (clauses / scripts) | Points (sites) | Leading scripts (sites) |
+| ---: | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
+| 13 every one in the group | GROUP | 12 | 62 | 5 | 11 | 11 / 61 | 30 / 22 | 7 (19), 8 (1), 9 (21), 19 (1), 23 (15), 34 (5) | 1160 (15), 2350 (12), 2506 (11), 2507 (11), 1749 (4) |
+| 2 every follower | FOLLOWER | 9 | 22 | 5 | 9 | 9 / 22 | 12 / 10 | 1 (2), 9 (2), 12 (1), 13 (1), 19 (2), 21 (1), 13 tile or sector | 2341 (7), 2346 (6), 1355 (3), 1116, 1165 |
+| 16 any scenery in the vicinity | SCENERY | 2 | 22 | 2 | 2 | 2 / 22 | 2 / 2 | 2 (1), 30 (1), 20 tile or sector (k'na tha) | 2561 (20), 1734 (2) |
+| 17 every container in the vicinity | CONTAINER | 8 | 10 | 3 | 8 | 8 / 10 | 15 / 12 | 19 (2), 21 (5), 3 tile or sector | 1596 (3), 1191, 1434, 2782, 2947 |
+| 14 anyone in the group | GROUP | 4 | 10 | 1 | 4 | 0 / 0 (all four also a32) | 6 / 3 | 9 (10) | 2232 (3), 2234 (3), 2239 (3), 1750 (1) |
+| 3 any follower | FOLLOWER | 1 | 1 | 1 | 1 | 1 / 1 | 1 / 1 | 9 (1) | 1056 |
+| 22 every item in the vicinity | ITEM | 1 | 0 | 0 | 1 | 1 / 0 | 1 / 1 | none (prototype default) | 29019 |
+| 4, 5 party; 7 anyone in the team; 18 any container; 20 any portal; 23 any item | | 0 | 0 | 0 | 0 | none | 0 / 0 | none | none |
+| 6 every one in the team | TEAM | 0 | 0 | 0 | 0 | none | 1 / 1 | none (the one script is attached nowhere or not reached) | none |
+
+Where the kinds sit: the main map (`arcanum1-024-fixed`) carries 83 of the 127 sites, Kna Tha 20 (one tile script, kind 16), Bates mansion levels 2 and 1 7 and 5, the Caladon Panarrii temple 6, Arronax's interior 2.
+
+**What it means.** The kinds that no installed script needs at all are the party kinds (4, 5), any one in the team (7), any container (18), any portal (20) and any item (23): the issue's expectation that container 18 and item 23 come with their pair is right (one list, [PV1](ledger/scripts.md#the-portal-vicinity-focus-kind-arc-script-2041-the-loop-of-the-ground-rune-tile-scripts)), but no script waits on them. Kind 6 occurs in one unreached script. The order that frees the most placed sites among the 32 roots without a refused type (greedy, sites): **group (13, 14)** 11 roots, 61 sites; **follower (2, 3)** 10 roots, 23 sites; **any scenery (16)** 2 roots, 22 sites (20 of them one tile script on one map); **container (17, 18)** 8 roots, 10 sites; **item (22, 23)** 1 root, 0 placed sites, cumulative 116. The four kind-14 roots (10 sites) wait on action 32 as well.
+
+**Follow-up issues (AC2).** One for each group that frees at least one installed script: [#2319](https://github.com/Simarglok/arcanum-steamwoven/issues/2319) group 13 and 14, [#2320](https://github.com/Simarglok/arcanum-steamwoven/issues/2320) follower 2 and 3, [#2321](https://github.com/Simarglok/arcanum-steamwoven/issues/2321) any scenery 16, [#2322](https://github.com/Simarglok/arcanum-steamwoven/issues/2322) container 17 (and 18; done by ARC-SCRIPT-2322, set S62, ledger [CV1–CV7](ledger/scripts.md#the-container-vicinity-focus-kinds-arc-script-2322-every-and-any-container-in-the-vicinity)), [#2323](https://github.com/Simarglok/arcanum-steamwoven/issues/2323) item 22 (and 23; no placed site, low priority). The party, team and portal 20 kinds free nothing and get no issue. The census counts what a set admits whole; each host admits its own subset, so a host may need further types for a root the set frees (the same limit as the sections above).
+
+**Follow-up (ARC-SCRIPT-2319).** The focus kinds 13 and 14 are admitted since set S61 (ledger [GF1–GF8](ledger/scripts.md#the-group-focus-kinds-arc-script-2319-everyone-and-anyone-in-the-group)): kind 13 frees the five lead roots 1160, 2350, 2506, 2507 and 1749 under the sets of their hosts (the opt-in `ScriptTriggerCensusTests` reads them); the kind-14 roots 2232, 2234 and 2239 are still refused: they ask the group in the is undead condition (38; the admission takes a group kind in a condition only for the five guard conditions, GF9) and need action 32 (get armor), issue #2326. The probe takes `--set S61`. The container kinds 17 and 18 (8 roots, 10 sites) are admitted since set S62 (ARC-SCRIPT-2322); the probe takes `--set S62`.
+
+**Follow-up (ARC-SCRIPT-2326).** Get armor (action 32) and the group kinds in the list conditions are admitted since set S63 (ledger [AR1–AR7](ledger/scripts.md#get-armor-and-the-group-in-list-conditions-arc-script-2326)): the probe's `--set S63` against `--set S61` on the owner's installation admits 1,766 roots on 7,597 placed sites whole (1,759 on 7,487): +7 roots, +110 sites, the seven roots and 110 sites of a32 (98 tile or sector sites on three maps); the kind-14 roots 2232, 2234 and 2239 run whole under the talk set. What is left refused for a type is a90 (14 roots, 47 sites; 13 roots on 38 sites alone), a111 and a70 (1 root each). The probe takes `--set S63`.
+
+**After the any-scenery kind (ARC-SCRIPT-2321, 2026-11-16).** [#2321](https://github.com/Simarglok/arcanum-steamwoven/issues/2321) is built: set S64 is S63 plus focus kind 16 ([ledger AS1–AS6](ledger/scripts.md#the-any-scenery-focus-kind-arc-script-2321-the-tile-script-of-the-kna-tha-map-and-the-bust-script-1734)). The probe takes `--set S64`; the 20 tile sites of script 2561 on the k'na tha map now run, and script 1734 no longer waits on the kind.
+
+**Follow-up (ARC-SCRIPT-2335).** The item set of point 21 (insert item) admits the container vicinity kinds 17 and 18 with the loop for, the name condition and change art number (no new numbered set; [ledger IV1–IV8](ledger/scripts.md#the-item-sets-world-commands-arc-script-2335-point-21-insert-item-container-vicinity-name-and-change-art-number)): 6 of the 28 point 21 rows on the shown maps' windows (3 before). The census counts what a set admits; the item host answers only through the shown map's use-script host, so a move whose answer the host lacks is still refused. The probe takes no new set.
+
+**Follow-up (ARC-SCRIPT-2347).** The item set of point 21 also admits the quest state condition (6), obj is dead (22), monster generator disabled (46), assign object (15), get object type (34) and the object variable focus kind (11) ([ledger IV13–IV17](ledger/scripts.md#the-item-sets-read-commands-arc-script-2347-point-21-insert-item-quest-state-object-type-assign-object-is-dead-generator-test)): 23 of the 28 point 21 rows on the shown maps' windows (22 after ARC-SCRIPT-2346). The 5 left stop on toggle monster generator (110, [#2378](https://github.com/Simarglok/arcanum-steamwoven/issues/2378)), set PC quest state (16, [#2374](https://github.com/Simarglok/arcanum-steamwoven/issues/2374)), get story state (42, [#2375](https://github.com/Simarglok/arcanum-steamwoven/issues/2375)) and the scenery and critter vicinity kinds (15, 8, [#2376](https://github.com/Simarglok/arcanum-steamwoven/issues/2376)), one row each.
+
+**Follow-up (ARC-SCRIPT-2374).** The item set of point 21 also admits set PC quest state (16) and give quest experience (63) ([ledger IV18–IV21](ledger/scripts.md#the-item-sets-quest-writes-arc-script-2374-point-21-set-pc-quest-state-and-give-quest-experience)): 24 of the 28 point 21 rows on the shown maps' windows (23 after ARC-SCRIPT-2347). The 4 left stop on toggle monster generator (110, [#2378](https://github.com/Simarglok/arcanum-steamwoven/issues/2378)), get story state (42, [#2375](https://github.com/Simarglok/arcanum-steamwoven/issues/2375)) and the scenery and critter vicinity kinds (15, 8, [#2376](https://github.com/Simarglok/arcanum-steamwoven/issues/2376)), one row each.
+
+**Follow-up (ARC-SCRIPT-2376).** The item set of point 21 also admits the scenery and critter vicinity kinds (15, 16, 8, 9) around the item's own tile, with call script in kept ([ledger IV25–IV27](ledger/scripts.md#the-item-sets-critter-and-scenery-vicinity-kinds-arc-script-2376-point-21-insert-item)): 26 of the 28 point 21 rows on the shown maps' windows (24 after ARC-SCRIPT-2374). The 2 left stop on toggle monster generator (110, [#2378](https://github.com/Simarglok/arcanum-steamwoven/issues/2378)) and get story state (42, [#2375](https://github.com/Simarglok/arcanum-steamwoven/issues/2375)), one row each.
+
+**Follow-up (ARC-SCRIPT-2377).** The item set of point 21 also admits random (37), get social class and get origin (38, 39) and grant fate point (117) ([ledger IV44–IV50](ledger/scripts.md#the-item-sets-random-social-class-origin-and-fate-point-arc-script-2377-point-21-insert-item)); the count stays 28 of the 28 point 21 rows on the shown maps' windows (none of them uses these commands). Destroy (68) stays out.
+
+**Update (ARC-SCRIPT-2320, 2026-11-15).** The follower kinds 2 and 3 are admitted: the probe takes `--set S61` (S60 plus the two kinds, [ledger FK1–FK7](ledger/scripts.md#follower-focus-kinds-arc-script-2320)). Under S65 1,778 attached scripts on 7,642 placed sites are admitted whole (+10 scripts, +23 sites against S64: the 9 roots of kind 2 and script 1056 of kind 3, exactly as this census counted), and no root is left that the two kinds alone refused. The use, placed, heartbeat, combat-point and dying sets of the use host admit them; the item event host (point 21, 1 site) is [#2336](https://github.com/Simarglok/arcanum-steamwoven/issues/2336).
+
+**Follow-up (ARC-SCRIPT-2789, 2026-11-19): item use scripts.** The owner's report of Joachim's note to Virgil (use script 1567, refused at its line 4: a loop for over everyone in the vicinity, focus kind 8) shows the use click's set (`AreaUseScriptHost.Admission`) lacked the two vicinity kinds that the placed set has. Since this item the run of an item's use script (`RunItemUse`) takes `AreaUseScriptHost.ItemUseAdmission` (the use set plus kinds 8 and 9 in actions; a door's or scenery's use keeps its own set). The census below is a scratch walk over the installed module (not kept as a probe mode): every placed object and prototype default of item type (5..14) with a script at point 1 (use), the script and the scripts it calls by `call script` or `call script in` run through `ScrAdmission.Admit`. A call script in only schedules its callee (it runs later through the session's script calls), so a refused callee there is a separate question (below).
+
+| Items with a use script | Sites | Scripts | Refused before | Refused after (top-level run) |
+| --- | ---: | ---: | --- | --- |
+| Written items (type 13), placed | 72 | 35 | 4 scripts, 8 sites: 1567, 1698, 1700 (focus kind 8 at line 4, 3, 3) and 1614 (distance between, line 4) | 1 script, 2 sites: 1614 |
+| Written items, prototype defaults | 2 | 2 | none | none |
+| Other items, placed | 1,512 | 14 | 7 scripts, 36 sites: 2942 (20 sites, focus kind 8 and then obj is dead at line 5) and six single-command ones | 7 scripts, 36 sites (2942 now stops at its line 5, condition 22) |
+| Other items, prototype defaults | 20 | 14 | 3 scripts, 3 sites | 3 scripts, 3 sites |
+
+- **The three notes of the loop's shape** (1567 with 1687 for Virgil, 1698 with 1697, 1700 with 1699) read now; their scripts end with run default (or loop over nobody near), apply their flags and rumor, and schedule the callee. Whether the callee (each has a dialog action, type 4, which the use set does not admit) runs when the call fires is not checked here: [#2806](https://github.com/Simarglok/arcanum-steamwoven/issues/2806).
+- **What the original does with a script that cannot run.** Nothing: its interpreter runs every script to an end and answers skip or run default (0x441980); "refused" is a gap of this model. A refused run applies nothing, so for a *reading* the use goes on without the script's effects (`AreaUseScriptHost.ReadingGoesOn`, as a door's use and a bed's rest hook go on); a use that consumes the item (food, a potion) stays stopped, because its effects are the use. Effects the host rejected, a changed script file and a refused teleport keep stopping the reading.
+- **The still refused written item** is script 1614 (2 sites, `distance between`, action 71); the other readable scripts need nothing more. The other items' refusals are the VIT, critter-state and cast slices of this census (2942: [section above](#answer)).
+

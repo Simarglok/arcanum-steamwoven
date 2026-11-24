@@ -18,6 +18,10 @@ public sealed record AreaMapTransfer(MapTransitionSite Site, int FromMap, AreaMa
     /// <summary>ARC-DEV-113: the extras of a script's fade-and-teleport (action 102, ledger TR2), or null for a jump point, a plain
     /// teleport (action 44) and an unconditional site, which request with flags 0 (TR1, TR3).</summary>
     public ScrTeleportFade? Fade { get; init; }
+
+    /// <summary>ARC-WORLD-2261 (ledger TT20): the hero's teleport a dialog script or a deferred call asked for (<see cref="AreaMapTransfers.QueueScriptTeleport"/>). The original's ping (0x4D3330) runs the slot at the next frame under every
+    /// interface mode, so such a transfer applies while the conversation the same run opened is open, and a change of map ends that conversation (0x4D3E20 → 0x4601D0 → 0x568830 → 0x5678D0).</summary>
+    public bool ByTalkScript { get; init; }
 }
 
 /// <summary>The answer to one map-mode use of an object or entry of a tile.</summary>
@@ -154,7 +158,9 @@ public sealed class AreaMapTransfers
         LastScripted = null;
         var site = ScriptSite();
         if (Pending is not null) return new(AreaUseOutcome.TransitionPending, Teleported(site, teleport), 0, "TRANSITION_PENDING");
-        return Queue(Teleported(site, teleport), null, 0, teleport.Fade);
+        var queued = Queue(Teleported(site, teleport), null, 0, teleport.Fade);
+        if (Pending is { } pending) Pending = pending with { ByTalkScript = true };
+        return queued;
     }
 
     /// <summary>Why the teleport of a dialog script or a deferred call cannot be queued (<see cref="Refusal"/> of its resolved site), or null; a pending transfer drops it instead (<see cref="QueueScriptTeleport"/>), so it is no refusal.</summary>
@@ -278,14 +284,30 @@ public sealed class AreaMapTransfers
 
     /// <summary>ARC-SCRIPT-017: the player stepped from <paramref name="from"/> into <paramref name="to"/>; when that enters
     /// another sector whose script exists, the script runs (with a <see cref="PlacedRunner"/>), as the original runs a
-    /// sector script when the player enters its sector. Null otherwise.</summary>
+    /// sector script when the player enters its sector. ARC-SCRIPT-2823 (TQ6): the hero's arrival (a map change or a teleport
+    /// landing, <paramref name="from"/> equal to <paramref name="to"/>) is a mode-2 location change too (the original's mode 2), so
+    /// it runs the destination sector's script even though the sector did not change. Null otherwise.</summary>
     public AreaMapUseResult? EnterSector(AreaStepCell from, AreaStepCell to)
     {
         var sector = WorldSectorCoordinate.Containing(new(to.X, to.Y));
-        if (PlacedRunner is null || sector == WorldSectorCoordinate.Containing(new(from.X, from.Y)) || !_sectors.TryGetValue(sector, out var placed)) return null;
+        var arrival = from == to;
+        if (PlacedRunner is null || (!arrival && sector == WorldSectorCoordinate.Containing(new(from.X, from.Y))) || !_sectors.TryGetValue(sector, out var placed)) return null;
         LastScripted = null;
         return RunPlaced(placed);
     }
+
+    /// <summary>ARC-SCRIPT-2822: whether a step from <paramref name="from"/> to <paramref name="to"/> enters another sector (the hero's mode-2 location change, the sector entry of the original).</summary>
+    public static bool CrossesSector(AreaStepCell from, AreaStepCell to) =>
+        WorldSectorCoordinate.Containing(new(to.X, to.Y)) != WorldSectorCoordinate.Containing(new(from.X, from.Y));
+
+    /// <summary>
+    /// ARC-SCRIPT-2957 (ledger TQ7, TQ33): whether the hero's entered tile runs the followers' new-sector script (point 27), which the sector entry (addresses in the ledger) runs for the local PC's mode-2 location change only: a step that crosses a sector
+    /// border, and an arrival (<paramref name="from"/> equal to <paramref name="to"/>: map change, same-map teleport landing, push and path-walk relocation); a step inside one sector (mode 1) and a tile of the spell path walk
+    /// (<paramref name="tileScriptOnly"/>, no sector entry) run none. A game load (no location-change call for the PC at all), a window move of the shown map (not a location change) and the new-game placement (no followers; the sector script
+    /// there is #2850) never queue a step, so they run none.
+    /// </summary>
+    public static bool RunsFollowerNewSector(AreaStepCell from, AreaStepCell to, bool tileScriptOnly) =>
+        !tileScriptOnly && (from == to || CrossesSector(from, to));
 
     private AreaMapUseResult RunPlaced(MapPlacedScript placed, bool requestsRefused = false)
     {
@@ -298,11 +320,20 @@ public sealed class AreaMapTransfers
         return ran.Outcome switch
         {
             AreaScriptedUseOutcome.Teleport when dropped => new(AreaUseOutcome.TransitionPending, Teleported(site, ran.Teleport!), 0, requestsRefused ? "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE" : "TRANSITION_PENDING"),
-            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), null, 0, ran.Teleport!.Fade),
+            AreaScriptedUseOutcome.Teleport => QueuePlaced(Teleported(site, ran.Teleport!), ran),
             AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), 0, ran.Detail),
             AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, site, 0, ran.Detail),
             _ => new(AreaUseOutcome.ScriptRefused, site, 0, ran.Detail),
         };
+    }
+
+    /// <summary>ARC-WORLD-2358 (ledger TT20): a tile or sector script's hero teleport, queued as the transfer; one whose run also started a conversation (<see cref="AreaScriptedUse.Dialog"/>) is a <see cref="AreaMapTransfer.ByTalkScript"/> transfer,
+    /// since the dialog opens inside the run and the ping takes the request at the next frame with the dialog open.</summary>
+    private AreaMapUseResult QueuePlaced(MapTransitionSite site, AreaScriptedUse ran)
+    {
+        var queued = Queue(site, null, 0, ran.Teleport!.Fade);
+        if (ran.Dialog is not null && Pending is { } pending) Pending = pending with { ByTalkScript = true };
+        return queued;
     }
 
     /// <summary>The site as the script's teleport resolved it: its destination and arrival (a runtime −1 keeps this map, as a

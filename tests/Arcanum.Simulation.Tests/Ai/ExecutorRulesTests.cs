@@ -141,7 +141,8 @@ public sealed class ExecutorRulesTests
         public int Unconceal(string id) { Calls.Add("unconceal"); Movers[id] = Mover(id) with { Concealed = false }; return 200; }
         public void Face(string id, string toward) => Calls.Add($"face {toward}");
         public void PlaySound(string id, int sound) => Calls.Add($"sound {sound}");
-        public AiAttackSwing BeginAttack(string id, string target) { Calls.Add($"swing {target}"); return new(400, 600); }
+        public bool AttackArtMissing;
+        public AiAttackSwing BeginAttack(string id, string target) { Calls.Add($"swing {target}"); return AttackArtMissing ? AiAttackSwing.NoArt : new(400, 600); }
         public void Hit(string id, string target) => Calls.Add($"hit {target}");
         public void SetNoFlee(string id) => Calls.Add("no-flee");
         public AiCastGoalStart StartCast(string id, int run) => throw new AssertFailedException("no cast here");
@@ -154,6 +155,7 @@ public sealed class ExecutorRulesTests
         public AiActionSwing BeginAction(string id, AiActionAnimation animation) => new(AiActionStart.Started, 300, 300);
         public bool AttemptSkill(string id, string target, int skill, string? item) => false;
         public void AttemptPickLocks(string id, string target, string? item) { }
+        public void AttemptSkillWithItem(string id, string target, string? item, int skill, int modifier) { }
         public bool ThrowItem(string id, string item, CellCoord tile) => true;
         public void PickUp(string id, string item) { }
         public string? ItemHolder(string item) => null;
@@ -319,6 +321,18 @@ public sealed class ExecutorRulesTests
         CollectionAssert.AreEqual(new[] { 400, 600, 0 }, steps.Select(s => s.DelayMs).ToArray());
         Assert.AreEqual(AiRunEnd.Finished, steps[^1].End);
         Assert.AreEqual(AiExecutorReason.AttackHit, steps[^1].Reason);
+    }
+
+    [TestMethod]
+    public void AnAttackStartThatFailsForAMissingArtEndsTheGoalWithNoHit()
+    {
+        // ARC-COMBAT-1932 (0x42B9C0): the node fails when the attack ART exists in no file; the goal ends, no action frame and no hit step.
+        var world = Arena(1);
+        world.AttackArtMissing = true;
+        var steps = Drive(AttackRun(), world, Steamwoven);
+        CollectionAssert.AreEqual(new[] { "swing pc" }, world.Calls, "the start was asked, no hit followed");
+        Assert.AreEqual(AiExecutorReason.AttackNoArt, steps[^1].Reason);
+        Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End);
     }
 
     [TestMethod]
@@ -523,6 +537,30 @@ public sealed class ExecutorRulesTests
         world.Movers[Npc] = new(Encumbrance: 4, Fatigue: 20, MaxFatigue: 20);
         Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         Assert.IsTrue(world.Calls.Where(c => c.StartsWith("step", StringComparison.Ordinal)).All(c => !c.EndsWith(" run", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void AFlaggedNpcRunsOnlyAsAProwlingMaster()
+    {
+        // ARC-AI-1711 (0x42EDC0, 0x42E9B0): a critter whose concealment flag is set sneaks or walks below master and runs as a master; an unflagged one is not asked.
+        foreach (var (flagged, training, runs) in new[] { (true, SkillTraining.None, false), (true, SkillTraining.Apprentice, false), (true, SkillTraining.Expert, false), (true, SkillTraining.Master, true), (false, SkillTraining.None, true) })
+        {
+            var world = Arena(1);
+            world.Movers[Npc] = new(Prowling: flagged, ProwlingTraining: training, Fatigue: 20, MaxFatigue: 20);
+            Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
+            var steps = world.Calls.Where(c => c.StartsWith("step", StringComparison.Ordinal)).ToArray();
+            Assert.IsTrue(steps.Length > 0);
+            Assert.AreEqual(runs, steps.All(c => c.EndsWith(" run", StringComparison.Ordinal)), $"flagged {flagged}, {training}");
+        }
+        Assert.IsTrue(AiExecutorRules.RunPermitted(new(Pc: true, Prowling: true)), "the PC's stealth gait is the viewer's");
+        // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk; an expert walks, a master runs; an unflagged one and the PC never sneak.
+        Assert.IsTrue(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.None)));
+        Assert.IsTrue(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.Apprentice)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.Expert)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.Master)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Prowling: false, ProwlingTraining: SkillTraining.None)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Pc: true, Prowling: true, ProwlingTraining: SkillTraining.None)));
+        Assert.IsFalse(AiExecutorRules.RunPermitted(new(Encumbrance: 4, Prowling: true, ProwlingTraining: SkillTraining.Master)));
     }
 
     [TestMethod]

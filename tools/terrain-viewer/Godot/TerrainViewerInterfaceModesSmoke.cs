@@ -62,9 +62,14 @@ public partial class TerrainViewerApp
             InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
             await Frames();
             Require(MainMenuOpen && LogbookOpen, "the Escape release opened the menu over the logbook: " + State());
-            await Press(Key.Escape);
-            Require(!MainMenuOpen && LogbookOpen, "Escape pressed and released closed the menu and the release did not reopen it: " + State());
-            steps.Add("Escape acts on the release");
+            // ARC-INPUT-2647 (menu handler 0x546EE0, key up): the menu's own Escape press keeps it open; the release continues play.
+            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+            await Frames();
+            Require(MainMenuOpen && LogbookOpen, "the menu's own Escape press closed it: " + State());
+            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
+            await Frames();
+            Require(!MainMenuOpen && LogbookOpen, "the menu's Escape release closed the menu and did not reopen it: " + State());
+            steps.Add("Escape acts on the release (the in-play route and the menu's own)");
 
             // Escape opens the menu over the logbook, which stays; Continue returns to it (0x541180, 0x5412D0).
             await Press(Key.Escape);
@@ -318,11 +323,11 @@ public partial class TerrainViewerApp
                 Require(LogbookOpen && StackText() == "Game>Logbook", "a Ctrl+right press on the bar pops nothing: " + State());
                 await Press(Key.L);
                 Require(!AnyWindowOpen, "L closed the logbook: " + State());
-                // The world map hides the bars here, but the original tests the strips' coordinates: a press there pops it all the same.
+                // The world map lies between the strips with the bars up (ARC-UI-2306): a right press on the strip pops it, as the original tests the strips' coordinates.
                 if (WorldMapActive)
                 {
                     await Press(Key.W);
-                    Require(WorldMapOpen && StackText() == "Game>WorldMap" && AreaGameBarPanel.BottomInset == 0, "W opened the world map, which hides the bars: " + State());
+                    Require(WorldMapOpen && StackText() == "Game>WorldMap", "W opened the world map: " + State());
                     var factor = AreaGameBarPanel.ScreenFactor(size);
                     await Right(new Vector2(size.X / 2, size.Y - AreaGameBarLayout.BottomHeight * factor / 2));
                     Require(!WorldMapOpen && StackText() == "Game", "a right press on the bottom strip popped the world map: " + State());

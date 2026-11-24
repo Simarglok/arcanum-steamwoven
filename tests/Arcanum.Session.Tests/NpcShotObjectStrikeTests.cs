@@ -137,6 +137,29 @@ public sealed class NpcShotObjectStrikeTests
     }
 
     [TestMethod]
+    public void AnNpcsHitOnAWallOffersTheWeaponsHitScriptsAndTheWallsTakingDamageScript()
+    {
+        // ARC-COMBAT-2538 (ledger RH5): as the hero's (ARC-COMBAT-1973), the hit step offers the weapon's hit script and the damage step the wall's taking-damage script before it leaves for a wall; the answer changes nothing.
+        using var owner = Owner();
+        var archer = Combat(Archer, BowFields());
+        var heard = new List<SessionHitScriptEvent>();
+        var asked = 0;
+        // An attack that lands at once offers both once.
+        var now = owner.AttackObjectByNpc(owner.Version, Aim(archer, null, flight: false, wall: true) with { HitScripts = heard.Add, TakingDamage = () => { asked++; return false; } });
+        Assert.AreEqual(DamagePrevention.Wall, now.Resolution!.Damage!.Prevented);
+        Assert.AreEqual((1, 1), (heard.Count, asked), "both scripts are offered once");
+        Assert.IsFalse(heard[0].Critical || heard[0].Projectile);
+        Assert.IsFalse(now.Vetoed, "a wall takes nothing whatever the script says");
+        // An arrow that flies asks neither at the shot, both at its strike (a projectile hit).
+        var flying = owner.AttackObjectByNpc(owner.Version, Aim(archer, null, wall: true) with { HitScripts = heard.Add, TakingDamage = () => { asked++; return true; } });
+        Assert.AreEqual((1, 1, 1), (flying.Shots.Count, heard.Count, asked), "nothing is asked at the shot");
+        var landed = owner.LandNpcShotOnObject(owner.Version, flying.Shot!.Value, Aim(archer, null, wall: true, distance: 1) with { HitScripts = heard.Add, TakingDamage = () => { asked++; return true; } });
+        Assert.AreEqual(GameSessionFailure.None, landed.Failure);
+        Assert.AreEqual((2, 2), (heard.Count, asked));
+        Assert.IsTrue(heard[1].Projectile);
+    }
+
+    [TestMethod]
     public void AShotThatIsNoNpcArrowOrAnotherShootersOrBadTargetsAreRefused()
     {
         using var owner = Owner();

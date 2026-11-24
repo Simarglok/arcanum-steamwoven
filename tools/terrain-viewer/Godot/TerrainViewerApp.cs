@@ -93,6 +93,8 @@ public partial class TerrainViewerApp : Node
         try
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
+            // ARC-UI-2461: an automated run reads the Steamwoven kit only where it is told to (ARC_STEAMWOVEN_KIT or a smoke's own folder), never from the checkout's baked sets.
+            SteamwovenKitStore.AutomatedRun = AutomatedVisualRun;
             // ARC-UI-014: --launcher opens the launcher screen of a start without inputs.
             var launcher = args.Remove("--launcher");
             // ARC-DEV-050: --debug-mode turns the debug mode on for either kind of start.
@@ -120,6 +122,8 @@ public partial class TerrainViewerApp : Node
         _arguments = _launchArguments = arguments;
         // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
+        // ARC-DEV-2279: the soak run's counters (ARC_SOAK_LOG), when asked for.
+        StartSoak();
         // ARC-DEV-372: the viewer's readers share one index of the game folder per run (a self-test has no game folder and reads none).
         Arcanum.Data.Content.ContentStack.EnableSharing(!SelfTestBootstrap);
         // ARC-DEV-350: the game settings come first, the HD pack source is one of them.
@@ -249,6 +253,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("placement-census") == true) await RunAreaPlacementCensusSmokeAsync(result);
                                 // ARC-DEV-301 (triage T1): only when named, an NPC's death and its loss of consciousness end the spell runs it casts and take their eye candy off the hero (AI on, Crash Site window, --hero).
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
+                                // ARC-MAGIC-1835 (E1-f follow-up): only when named, one pass of the NPC cast over every spell with an AI list entry, each compared with the hero's cast of it (AI on, Crash Site window, --hero).
+                                if (only?.Contains("ai-cast-pass") == true) await RunAreaAiCastPassSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
                                 // ARC-DEV-1148 (magic audit leftover): only when named, spells 30 and 77 on the hero and 46 and 76 on an NPC add their effects, move the stats and take them off at the END (--hero, Crash Site).
@@ -263,6 +269,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("eye-light") == true) await RunAreaEyeLightSmokeAsync(result);
                                 // ARC-SCRIPT-1592 (FR-SCRIPT-002): only when named, the installed void exit tile script 2549 plays script eye candy (action 120) on the hero: the use host keeps the request, the viewer starts the entry of the script list as an overlay run and draws it (--hero, the main map).
                                 if (only?.Contains("script-eye-candy") == true) await RunAreaScriptEyeCandyStageAsync(result);
+                                // ARC-DEV-2816 (epic #2814): only when named, the trigger guard: the opening heartbeat and talk, the admitted tile scripts (hero and NPC) and the written items' use scripts must run, none refused (AI on, start map, --hero).
+                                if (only?.Contains("script-triggers") == true) await RunAreaScriptTriggersStageAsync(result);
                                 // ARC-RENDER-1990 (FR-COMBAT-006): only when named, the attack end of a hit on the hero asks the weapon's own hit effect first: the Tesla Rod's and Bronwyck's Gun's entry of the weapon list plays instead of the blood (--hero, a map window).
                                 if (only?.Contains("weapon-hit") == true) await RunAreaWeaponHitStageAsync(result);
                                 // ARC-DEV-353 (V7d second part): only when named, an NPC's light is carried with the NPC (AI on, a lit map with an NPC that carries a light).
@@ -279,14 +287,20 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
                                 if (only?.Contains("perf-menu") == true) await RunAreaPerfMenuSmokeAsync();
+                                // ARC-DEV-1398: only when named, the soak: windows, quick save and load and map exits in a loop for ARC_SOAK_STAGE_MINUTES, the resource counters watched for growth (--hero, a sector with a map exit).
+                                if (only?.Contains("soak") == true) await RunAreaSoakSmokeAsync();
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-SCRIPT-1790 (HLR1-HLR11): only when named, an installed healer's talk (the h: reply) buys a spell: the quote is paid to the NPC, the cast starts through the AI host (free flag exactly when no PC leads it) and the hero's hit points rise with the talk open (--hero, the Crash Site).
                                 if (only?.Contains("healer-talk") == true) await RunAreaHealerTalkSmokeAsync(result);
+                                // ARC-SCRIPT-2504: only when named, a real conversation with Kerghan (dialog script 1105) on his castle map (--hero).
+                                if (only?.Contains("kerghan-talk") == true) await RunAreaKerghanTalkSmokeAsync(result);
                                 // ARC-WORLD-1160 (E3-a): only when named, the sleep window on the hero (--hero): a rest of one hour, until healed and until morning jumps the clock and heals him, the window closes at the end, the screen fades and the key toggles it.
                                 if (only?.Contains("sleep") == true) await RunAreaSleepSmokeAsync();
                                 // ARC-WORLD-1162 (E3-d): only when named, the beds of the Crash Site cave (--hero, the cave): a bed with no script refuses the hero (message 8), an occupied one (10), the scripted bed seats him in a sleep window that heals twice the ground and empties on the close.
                                 if (only?.Contains("bed") == true) await RunAreaBedSmokeAsync();
+                                // ARC-COMBAT-2167: only when named, the hero's blow on an occupied bed (--hero, the Crash Site cave): the sleeper leaves the bed and is struck with the check modifier -30, the next blow strikes the empty bed.
+                                if (only?.Contains("bed-blow") == true) await RunAreaBedBlowSmokeAsync();
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
                                 // ARC-SCRIPT-1735 (E5-a tail): only when named, a scenery takes another art id the way change art number writes it: kept by the session, drawn from the new art, saved, cleared by the data's id (--hero).
@@ -350,13 +364,17 @@ public partial class TerrainViewerApp : Node
                                 // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).
                                 if (only?.Contains("altar") == true) await RunAreaAltarTileSmokeAsync();
                                 // ARC-DEV-138: a used door closes by itself after the original's interval and the Esc menu stops it (SM10; the map battery runs it after the portal stage).
-                                if (Stage("door-close")) RunAreaDoorCloseSmoke();
+                                // ARC-RENDER-3063: the town-map render's capture (ARC_TOWNCAP names its job; the door-close stage selects the run).
+                                if (TownCaptureJob(only!) is { } towncap) await RunTownCaptureAsync(towncap);
+                                if (Stage("door-close") && !_townCaptured) RunAreaDoorCloseSmoke();
                                 // ARC-UI-057: the hovered object's highlight and message-window description alone (the map battery runs it too).
                                 if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
                                 if (Stage("report")) { await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); await RunAreaQuitSmokeAsync(); }
                                 // ARC-DEV-209 (MIG14 S3, GT49): only when named, an NPC the AI host walks across a closed door opens it first, and it runs last of the window stages because it leaves a door open (AI on, --hero, --sector 1409,1314).
                                 if (only?.Contains("npc-door") == true) await RunAreaNpcDoorSmokeAsync();
+                                // ARC-WORLD-2792: only when named, the roof covers an AI-walked NPC by the tile it stands on now (main map, --sector 1450,1323).
+                                if (only?.Contains("npc-roof") == true) await RunAreaNpcRoofSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);
@@ -397,6 +415,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("follower-far") == true) await RunAreaFollowerFarSmokeAsync();
                         // ARC-MAGIC-1147 (MT16, TP6-TP9): only when named (with --hero), the same companion carried by a Teleportation cast's pick on the world map.
                         if (_readyMapName is not null && only?.Contains("teleport-follow") == true) await RunAreaFollowerFarSmokeAsync(viaSpell: true);
+                        // ARC-WORLD-2261 (TT20): only when named (with --hero, the town), the hero's teleport from a deferred call, with a conversation open and without: queued as a script transfer, applied at the next frame.
+                        if (_readyMapName is not null && only?.Contains("talk-teleport") == true) await RunAreaTalkTeleportSmokeAsync();
                         // ARC-DEV-305 (B01, B36): only when named (with --debug-mode and --hero), what the hero took and made survives the window move and a quick load (SM02).
                         if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
@@ -1180,6 +1200,9 @@ public partial class TerrainViewerApp : Node
         ObserveControllerInput(@event);
         // ARC-DEV-2270: while the quit question asks, the game behind it takes no event (its panel answers keys and clicks).
         if (QuitAsking) return;
+        // ARC-UI-2936 (SWI-ORG-5): in the Original look the black sides are not part of the picture; a press there (the window delivers it with a position outside the virtual screen) is dropped, so it never
+        // reaches the world as a click on an unseen cell.
+        if (OriginalCompositionFactor > 0 && @event is InputEventMouseButton { Pressed: true } sidePress && !GetViewport().GetVisibleRect().HasPoint(sidePress.Position)) { GetViewport().SetInputAsHandled(); return; }
         if (IsWorld) { InputWorld(@event); return; }
         var before = _camera?.State;
         if (@event is InputEventMouseButton button)
@@ -1199,8 +1222,8 @@ public partial class TerrainViewerApp : Node
                 GD.Print("ARC-RENDER-004 input=L reload");
                 _lastLoad = StartLoadAsync(_arguments, false);
             }
-            else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
-            else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
+            else if (key.Keycode == Key.F11) SwitchWindowMode(null);
+            else if (key.Keycode == Key.Escape && ViewerWindowMode.IsFullscreen(GetWindow())) SwitchWindowMode(false);
             else if (_readyActorInput is not null && key.Keycode == Key.Key1) SelectActorAction(ActorDiagnosticAction.Idle);
             else if (_readyActorInput is not null && key.Keycode == Key.Key2) SelectActorAction(ActorDiagnosticAction.Walk);
             else if (_readyActorInput is not null && key.Keycode == Key.Bracketleft) SelectActorFacing(-1);

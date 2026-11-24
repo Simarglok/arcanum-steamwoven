@@ -305,8 +305,8 @@ public sealed class AreaScriptEyeCandyTests
         Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done), "the tagged run stays");
     }
 
-    // ARC-SCRIPT-1828 (WE12): the 22 installed scripts that stop a script eye candy (the ground rune tile scripts 2210 to 2230 and the heartbeat 2231 of the main map) are admitted whole where their other commands are: the use and placed sets admit 18 of them (ARC-SCRIPT-2041: 21, with the focus kind of the loop for of 2213, 2217 and 2225, every portal in the vicinity, 19) and the dying set all 22; the use and placed sets
-    // still refuse 2221 at line 18 for toggle state (56), which the heartbeat and dying sets hold (the dialog set, which no installed stop script is attached to, admits none of them).
+    // ARC-SCRIPT-1828 (WE12): the 22 installed scripts that stop a script eye candy (the ground rune tile scripts 2210 to 2230 and the heartbeat 2231 of the main map) are admitted whole where their other commands are: the use and placed sets admit 18 of them (ARC-SCRIPT-2041: 21, with the focus kind of the loop for of 2213, 2217 and 2225, every portal in the vicinity, 19; ARC-SCRIPT-2248: all 22, with toggle state, 56, of 2221 at line 18) and the dying set all 22
+    // (the dialog set, which no installed stop script is attached to, admits none of them).
     [TestMethod, TestCategory("RealData")]
     public void The_installed_scripts_that_stop_script_eye_candy_are_admitted_whole_where_their_other_commands_are()
     {
@@ -337,8 +337,74 @@ public sealed class AreaScriptEyeCandyTests
         }
         Console.WriteLine($"STOP-EYE-CANDY-ADMISSION|scripts {withStop.Count}|admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")) + "|use refused: " + string.Join(" ", refusedByUse));
         Assert.AreEqual(22, withStop.Count);
-        Assert.AreEqual((0, 21, 21, 22), (counts["dialog"], counts["use"], counts["placed"], counts["dying"]));
+        Assert.AreEqual((0, 22, 22, 22), (counts["dialog"], counts["use"], counts["placed"], counts["dying"]));
         CollectionAssert.AreEqual(new[] { 2231 }, heartbeat);
-        CollectionAssert.AreEqual(new[] { "2221:ActionNotAdmitted@18/56" }, refusedByUse.Select(r => string.Join('/', r.Split('/').Take(2))).ToArray());
+        Assert.AreEqual(0, refusedByUse.Count, "the use set refuses none of them: " + string.Join(" ", refusedByUse));
+    }
+
+    // ARC-SCRIPT-2321 (AS3, issue #2321 census of #2262): the two installed roots that wait on the focus kind any scenery in the vicinity (16): the tile script 2561 (20 tile sites on the k'na tha map) is admitted whole by the
+    // placed set; the script 1734 (the destroy point 2 and the bust point 30 of the main map) is admitted whole by the heartbeat and dying sets' own focus kinds with the commands of S64, and the heartbeat set
+    // still refuses it for a command (set PC quest state, 16) that only the bust host's own set holds (ARC-SCRIPT-2338).
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_scripts_that_loop_over_any_scenery_are_freed_by_the_focus_kind_in_the_hosts_that_run_them()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in any-scenery check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        static ScrAdmissionSet WithS64Types(ScrAdmissionSet host) => new(host.Id + "+S64-types", ScrAdmissionSet.S64.Conditions, ScrAdmissionSet.S64.Actions, host.ValueKinds, host.FocusKinds, counterIndexWraps: true);
+        foreach (var (number, name, set) in new (int, string, ScrAdmissionSet)[] { (2561, "placed", AreaUseScriptHost.PlacedAdmission), (1734, "heartbeat", WithS64Types(AreaUseScriptHost.HeartbeatAdmission)), (1734, "dying", WithS64Types(AreaUseScriptHost.DyingAdmission)) })
+        {
+            Assert.IsTrue(content.Script(number) is { Status: ScriptContentStatus.Read, Program: { } }, $"script {number} is installed");
+            var program = content.Script(number).Program!;
+            var result = ScrAdmission.Admit(program, set);
+            Console.WriteLine($"ANY-SCENERY-ADMISSION|script {number}|{name}|admitted {result.IsAdmitted}|" + (result.Refusal is { } r ? $"{r.Code}@{r.Line}/{r.Type}/{r.Kind}" : "-"));
+            Assert.IsTrue(result.IsAdmitted, $"{number} by the {name} set: {result.Refusal?.Code}@{result.Refusal?.Line}/{result.Refusal?.Type}/{result.Refusal?.Kind}");
+            Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted, $"{number} is refused without kind 16");
+        }
+        // ARC-SCRIPT-2338 (BS1): the heartbeat set as built still refuses it for set PC quest state (16), not for the focus kind; the bust host's own set admits it whole.
+        var heartbeat = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.HeartbeatAdmission);
+        Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|heartbeat as built|{heartbeat.Refusal?.Code}@{heartbeat.Refusal?.Line}/{heartbeat.Refusal?.Type}/{heartbeat.Refusal?.Kind}");
+        Assert.AreEqual((ScrRefusalCode.ActionNotAdmitted, 0, ScrCatalogue.Action.SetPcQuestState), (heartbeat.Refusal?.Code, heartbeat.Refusal?.Line, heartbeat.Refusal?.Type), "the quest state, not the kind, stops the heartbeat set");
+        var bust = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.BustAdmission);
+        Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|bust|admitted {bust.IsAdmitted}|{bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
+        Assert.IsTrue(bust.IsAdmitted, $"1734 by the bust set: {bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
+        // ARC-SCRIPT-2501 (BS3): the destroy points (2) of the four installed sceneries that carry one (1734, 1194, 2403, 2560) under the destroy-point set (2560 stops on the focus kind 19, the k'na tha map's own); the container
+        // script 2092 (points 2 and 30, destroys the sceneries it loops over) is admitted whole by the bust set, which holds destroy (68).
+        foreach (var number in new[] { 1734, 1194, 2403 })
+        {
+            Assert.IsTrue(content.Script(number) is { Status: ScriptContentStatus.Read, Program: { } }, $"script {number} is installed");
+            var point = ScrAdmission.Admit(content.Script(number).Program!, AreaUseScriptHost.DestroyPointAdmission);
+            Console.WriteLine($"SCENERY-DESTROY-ADMISSION|script {number}|destroy point|admitted {point.IsAdmitted}|{point.Refusal?.Code}@{point.Refusal?.Line}/{point.Refusal?.Type}/{point.Refusal?.Kind}");
+            Assert.IsTrue(point.IsAdmitted, $"{number} by the destroy-point set: {point.Refusal?.Code}@{point.Refusal?.Line}/{point.Refusal?.Type}/{point.Refusal?.Kind}");
+        }
+        var container = ScrAdmission.Admit(content.Script(2092).Program!, AreaUseScriptHost.BustAdmission);
+        Console.WriteLine($"SCENERY-DESTROY-ADMISSION|script 2092|bust|admitted {container.IsAdmitted}|{container.Refusal?.Code}@{container.Refusal?.Line}/{container.Refusal?.Type}/{container.Refusal?.Kind}");
+        Assert.IsTrue(container.IsAdmitted, $"2092 by the bust set: {container.Refusal?.Code}@{container.Refusal?.Line}/{container.Refusal?.Type}/{container.Refusal?.Kind}");
+    }
+
+    // ARC-SCRIPT-2513 (ledger BS3d, issue #2513 of #2501): the container script 2827 (taking-damage point 23, 1 main-map site) loops over every scenery, destroys those that pass condition 20 and attacks the everyone loop. The heartbeat set
+    // the taking-damage point ran under refused it (play script eye candy, destroy); the taking-damage set of its own admits it whole.
+    [TestMethod, TestCategory("RealData")]
+    public void The_container_taking_damage_script_2827_is_admitted_whole_by_the_taking_damage_set()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in taking-damage check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        Assert.IsTrue(content.Script(2827) is { Status: ScriptContentStatus.Read, Program: { } }, "script 2827 is installed");
+        var program = content.Script(2827).Program!;
+        var heartbeat = ScrAdmission.Admit(program, AreaUseScriptHost.HeartbeatAdmission);
+        Console.WriteLine($"TAKING-DAMAGE-ADMISSION|script 2827|heartbeat|admitted {heartbeat.IsAdmitted}|{heartbeat.Refusal?.Code}@{heartbeat.Refusal?.Line}/{heartbeat.Refusal?.Type}/{heartbeat.Refusal?.Kind}");
+        var taking = ScrAdmission.Admit(program, AreaUseScriptHost.TakingDamageAdmission);
+        Console.WriteLine($"TAKING-DAMAGE-ADMISSION|script 2827|taking damage|admitted {taking.IsAdmitted}|{taking.Refusal?.Code}@{taking.Refusal?.Line}/{taking.Refusal?.Type}/{taking.Refusal?.Kind}");
+        Assert.IsFalse(heartbeat.IsAdmitted, "the heartbeat set still refuses it");
+        Assert.IsTrue(taking.IsAdmitted, $"2827 by the taking-damage set: {taking.Refusal?.Code}@{taking.Refusal?.Line}/{taking.Refusal?.Type}/{taking.Refusal?.Kind}");
     }
 }

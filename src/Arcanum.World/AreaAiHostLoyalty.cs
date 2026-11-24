@@ -34,7 +34,7 @@ public sealed partial class AreaAiHost
 
     /// <summary>
     /// The step itself: the follow check of <paramref name="npc"/> against the NPC <paramref name="leader"/> (<see cref="NpcLedConsent"/>); a refusal gives the unforced leave
-    /// (<see cref="LeaveUnforced"/>: an extraordinary-charisma leader refuses it, and so would a mind-control controller record, which the host holds none of yet, and the step goes on as if accepted); a leave that went through sets JILTED
+    /// (<see cref="LeaveUnforced"/>: an extraordinary-charisma leader refuses it, and so does a mind-control controller record, <see cref="MindController"/>: any controller refuses, whoever it is, 0x45DFC0 via 0x459040; the step goes on as if accepted); a leave that went through sets JILTED
     /// (the session's) and, when the NPC is active and a line callback exists, says the refusal line of its reason (<see cref="CompanionLoyaltyRules.RefusalLines"/>, 0x413A90). Returns the consent, or
     /// null when the leader or the NPC could not be read here (nothing ran).
     /// </summary>
@@ -50,8 +50,8 @@ public sealed partial class AreaAiHost
 
     /// <summary>
     /// The follow check (0x4AD950, <see cref="FollowConsentRules.Evaluate"/>) of <paramref name="npc"/> against its NPC <paramref name="leader"/>, the limit ignored: mind control accepts when the controller is the leader
-    /// or, with no controller record (the host holds none yet: <see cref="MindController"/> answers null), a PC leads the NPC up its chain (0x45DDA0); the leader's Persuasion training, alignment and level are its own; the reaction is <see cref="NpcLeaderReaction"/> (0 for a
-    /// leader in the NPC's enemy list); the follow thresholds are the NPC's AI row fields 5 to 8; the forced bit is the link's. The alignment is the stat getter's value (<see cref="AlignmentOf"/>: the stored base with TraitIdx writes laid over it, then the effect list's changes of the stat); the level is the stored one (TraitIdx writes laid over), without the effect list's modifiers (NOT READY, as the hostility facts, #2155). Never "already in group" (the leader is the NPC's own). Null when the leader's or the NPC's stats
+    /// or, with no controller record (<see cref="MindController"/> answers null: the spell run that sets the flag holds the NPC, ARC-WORLD-2144), a PC leads the NPC up its chain (0x45DDA0); the leader's Persuasion training, alignment and level are its own; the reaction is <see cref="NpcLeaderReaction"/> (0 for a
+    /// leader in the NPC's enemy list); the follow thresholds are the NPC's AI row fields 5 to 8; the forced bit is the link's. The alignment is the stat getter's value (<see cref="AlignmentOf"/>: the stored base with TraitIdx writes laid over it, then the effect list's changes of the stat); the level is <see cref="LevelOf"/> (the stat getter's value, effects included, #2155). Never "already in group" (the leader is the NPC's own). Null when the leader's or the NPC's stats
     /// or AI row are not readable here.
     /// </summary>
     internal FollowConsent? NpcLedConsent(string npc, string leader, bool forced)
@@ -59,12 +59,11 @@ public sealed partial class AreaAiHost
         if (Fields(npc)?.Critter is null || Build(npc) is not { } build || Row(npc) is not { } row) return null;
         if (CharismaOf(leader) is not { } charisma || Fields(leader)?.Critter is null || Build(leader) is not { } leaderBuild) return null;
         var controller = MindController(npc);
-        var mindControlled = (SpellFlagsOf(npc, Fields(npc)!.Object.SpellFlags) & MindControlledSpell) != 0
-            && (controller is null ? PcLeader(npc) is not null : controller == leader);
+        var mindControlled = MindControlAcceptance((SpellFlagsOf(npc, Fields(npc)!.Object.SpellFlags) & MindControlledSpell) != 0, controller, leader, () => PcLeader(npc) is not null).First;
         var persuasion = (PersuasionTraining)(int)(NpcSkill(leader, Skill.Persuasion)?.Training ?? SkillTraining.None);
         var reaction = _session.QueryDanger(npc).Enemies.Contains(SessionCombatant.Critter(leader)) ? 0 : NpcLeaderReaction;
-        return FollowConsentRules.Evaluate(new(mindControlled, persuasion, charisma, AlignmentOf(leader) ?? 0, AreaAdvancement.Level(_session, leader, leaderBuild.Level), OtherLeaderCharisma: null,
-            forced, reaction, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap), AlignmentOf(npc) ?? 0, AreaAdvancement.Level(_session, npc, build.Level),
+        return FollowConsentRules.Evaluate(new(mindControlled, persuasion, charisma, AlignmentOf(leader) ?? 0, LevelOf(leader) ?? leaderBuild.Level, OtherLeaderCharisma: null,
+            forced, reaction, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap), AlignmentOf(npc) ?? 0, LevelOf(npc) ?? build.Level,
             MaxFollowers: 0, NonForcedFollowers: 0, IgnoreCharismaLimit: true));
     }
 
@@ -73,22 +72,45 @@ public sealed partial class AreaAiHost
     /// <see cref="AreaCombatHost.Fields(string)"/>), then every change of stat 19 in the effect list the session holds for it (or the loaded one), as the getter aggregates them (0x4EA6C0), clamped to the
     /// stat's range. Null when the NPC's fields do not read here.
     /// </summary>
-    internal int? AlignmentOf(string npc)
+    internal int? AlignmentOf(string npc) => AlignmentOf(npc, EffectsOf(npc));
+
+    // The same with the NPC's effect list already read (a caller that reads level and alignment together reads the list once).
+    internal int? AlignmentOf(string npc, SessionNpcEffectsView? effects)
     {
         if (Fields(npc)?.Critter is not { } critter) return null;
         var stored = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0;
+        return Math.Clamp(EffectModifiers.Apply(stored, EffectChangesOf(effects, AreaCompanionData.AlignmentStat)), AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
+    }
+
+    /// <summary>
+    /// ARC-AI-2155 (0x4B0490 for stat 0x11, read in the executable): the NPC's level as every hostility, flee and follow reader gets it, through the stat getter: the level the session's advancement record
+    /// holds when it levelled the NPC, else the stored one (<see cref="SessionCritterCombat.Level"/>; the value a TraitIdx spell wrote lies over the stored one of an NPC the session has not levelled), then every change of
+    /// stat 17 in the effect list the session holds for it (or the loaded one), clamped to the level range. Null when the NPC's build does not read here.
+    /// </summary>
+    internal int? LevelOf(string npc) => LevelOf(npc, EffectsOf(npc));
+
+    internal int? LevelOf(string npc, SessionNpcEffectsView? effects)
+    {
+        if (RawBuild(npc) is not { } build) return null;
+        return Math.Clamp(EffectModifiers.Apply(AreaAdvancement.Level(_session, npc, build.Level), EffectChangesOf(effects, AreaCompanionData.LevelStat)), AreaCompanionData.MinLevel, AreaCompanionData.MaxLevel);
+    }
+
+    // The NPC's effect list as the session holds it (else the loaded one); null for an NPC whose build does not read here.
+    internal SessionNpcEffectsView? EffectsOf(string npc) => RawBuild(npc) is { } build ? _session.QueryNpcEffects(build.Target) : null;
+
+    // The changes of one stat over an effect list in list order; an entry without a rule changes nothing.
+    private static List<EffectModifier> EffectChangesOf(SessionNpcEffectsView? view, int stat)
+    {
         var changes = new List<EffectModifier>();
-        if (RawBuild(npc) is { } build && _session.QueryNpcEffects(build.Target) is { } view)
+        if (view is null || view.Entries.Count == 0) return changes;
+        var rules = view.Definitions.ToDictionary(definition => definition.Number);
+        foreach (var entry in view.Entries)
         {
-            var rules = view.Definitions.ToDictionary(definition => definition.Number);
-            foreach (var entry in view.Entries)
-            {
-                if (!rules.TryGetValue(entry.Number, out var rule)) continue;
-                foreach (var change in rule.Changes)
-                    if (change.Kind == EffectAttributeKind.Stat && change.Attribute == AreaCompanionData.AlignmentStat)
-                        changes.Add(new(AreaCompanionData.Operator(change.Operator), change.Value));
-            }
+            if (!rules.TryGetValue(entry.Number, out var rule)) continue;
+            foreach (var change in rule.Changes)
+                if (change.Kind == EffectAttributeKind.Stat && change.Attribute == stat)
+                    changes.Add(new(AreaCompanionData.Operator(change.Operator), change.Value));
         }
-        return Math.Clamp(EffectModifiers.Apply(stored, changes), AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
+        return changes;
     }
 }

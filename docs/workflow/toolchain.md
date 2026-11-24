@@ -3,6 +3,11 @@
 Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `8.0.425` with roll-forward disabled; [Directory.Build.props](../../Directory.Build.props) targets `net8.0`; [Directory.Packages.props](../../Directory.Packages.props) centralizes package versions. Godot adapters/labs use `Godot.NET.Sdk/4.7.2`, Godot **4.7.2 .NET** and matching .NET export templates. Development currently targets macOS. Version changes require a separate scoped decision; do not replace retained shared installations implicitly.
 
 The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
+The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. These three are task checks, run by a change to the manifest, the census tables or these tools, and are not in the root check list. It holds identifiers, sizes and verdicts only, never pixels.
+The Steamwoven context tone check (ARC-RES-2455, `tools/steamwoven_ui/tone_check.py`, [SWI-GEN-9](../ui/steamwoven-interface-trd.md); masks `tools/steamwoven_ui/prompts/tone_masks.json`) is standard library only: `python3 -B tools/steamwoven_ui/tone_check.py batch --originals local/steamwoven-ui/refs --results local/steamwoven-ui/outbox/style-anchors-contexts` (about 5 s per screen; exit 1 = a region over a limit) and `... fit SCREEN ORIGINAL RESULT OUTPUT --material paper`; tests `python3 -B -m unittest tools.steamwoven_ui.test_tone_check` (about 55 s, a task check, not in `run_tests.py`).
+The Steamwoven material cut-outs and tiles (ARC-RES-2455, `tools/steamwoven_ui/cutouts.py`, [SWI-GEN-10](../ui/steamwoven-interface-trd.md); list `tools/steamwoven_ui/prompts/cutouts.json`) are standard library only: `check`, `cut` (the cut-outs, the context crop of each small one, the provenance record), `tiles-inbox` (then `codex_batch.py run style-anchors-tiles`) and `tile-check`; tests `python3 -B -m unittest tools.steamwoven_ui.test_cutouts` (task check, under a second).
+The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`. Its sibling `tools/steamwoven_ui/pack_plan.py` (ARC-UI-3077, standard library only, tests `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan`, batched the same way) writes the pack importer's plan and alpha masks from the assembled frames ([workflow](hd-pack.md#kit-assembled-frames-in-the-pack-arc-ui-3077)).
+The Steamwoven kit fit tool (ARC-DEV-2459, `tools/steamwoven_ui/fit.py`, [section](#steamwoven-kit-fit-arc-dev-2459)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_fit` (about 5 s) also run in the batched `tools/local_dev/run_tests.py`.
 
 ## Process-local environment
 
@@ -134,7 +139,7 @@ history held about 500 runs of such copies of one template).
   they would not under the Dummy driver. `--env ARC_SMOKE_SOUND=1` on a smoke lets it be heard.
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
-- **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
+- **Sampled stages (ARC-DEV-395, owner decision 2026-11-11; `slides` since ARC-DEV-3116, 2026-11-24).** `container-click` and `walk` took 675 s and 525 s of the
   one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) (ARC-DEV-384, deleted; the result is in this section), so by default they check a
   sample; `--all` (on `pr` and `map`, with a run of one of them by `--stages` or its zone; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
   full stage; the nightly `complete` run and `--zones complete` always run both in full. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
@@ -145,7 +150,7 @@ history held about 500 runs of such copies of one template).
   holds for the sampled bins); for `walk`, the walk's tail (the 60 or so window moves after the tenth, the arrival at
   the town, the planner on the full 88-sector route). Run `--all` when a change touches picking, containers or the click
   path (`container-click`), or the route planner, the follower, the window loader or the far end of the route (`walk`),
-  and before reporting a stage that failed as sampled as fixed. The sampled run reads the same zones: `--auto` selects the `walk` and `container-click` zones as before and they run as a sample unless `--all`.
+  and before reporting a stage that failed as sampled as fixed. The sampled run reads the same zones: `--auto` selects the `walk` and `container-click` zones as before and they run as a sample unless `--all`. `slides` is the third sampled stage (ARC-DEV-3116, owner decision 2026-11-24: the installed endings' movies play 148 s of its 230 s in real time): its PR run ends each installed movie by the real key-skip path of the movie cover once the movie's checks are done (frames drawn, clocks frozen, audio, frame size), about 90 s; it still asserts the queue, the end game, the slides and the reset, and the movies count as skipped, none as failed. With `--all`, `--env ARC_SMOKE_ALL=1`, the nightly `complete` run and so `./arcanum daily`, every movie plays to its own last frame and the stage asserts they ended by themselves (played, none skipped, none failed), about 230 s. The stage prints `slides smoke mode skip|full|movies passed over` and its PASS line carries `Mode`. What the skip run no longer proves: the movie's last frames and its natural end (the full run does). Without ffmpeg the movies are passed over in both modes, as before.
 - **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
   `MapSmokeStageNames` before anything waits for the queue) on `--map` and `--sector` when given, else on the
@@ -190,6 +195,13 @@ history held about 500 runs of such copies of one template).
   (`AREA_WALL_FADE_NOT_OBSERVED ... unstable=7200 unstable-box=490,770-789,793`): the 300x24 block was the controller prompt strip, an
   overlay on its own canvas layer that follows the device in hand after a hysteresis on the host's clock, so it appeared or went away between
   the check's three captures when frames ran slow. The check now hides that layer (as it hides the HUD) and reports the box of unstable pixels.
+  A third way (ARC-DEV-2294, from 2026-11-15, after the relit look of ARC-RES-2000 and the HD profile in the stage) failed on every run with the same numbers
+  (`unstable=92006 unstable-box=17,313-601,799`: 92006 pixels of lit terrain, inside a 584x486 box, a few levels apart, `outside` 0 or 90480 with the third capture
+  differing from the first only there): the stage runs the check right after the switch to HD, while the HD frames of the terrain chunks were still
+  decoding, so the first capture drew the Legacy chunks and the third the HD ones; a Legacy run, or an HD run whose decodes had ended, passed (so it looked like a
+  time of day). Each capture of the check now waits for the visual switch and every HD decode to end (the wait of the HD smokes, printed as
+  `ARC-DEV-2294 wall capture waited N frames for HD decodes`; `AREA_WALL_HD_NOT_SETTLED` after 1800 frames) and is taken once two consecutive captures are
+  identical; a failing fade compare (`AREA_WALL_FADE_NOT_OBSERVED`) with `ARC_AREA_TRANSITION_CAPTURE` set saves the three captures as `-walls-fail-faded|opaque|again.png`.
 - **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
   time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
   (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
@@ -210,6 +222,11 @@ history held about 500 runs of such copies of one template).
   change to one stage. `placement-census` also leaves out an NPC that follows the hero (a companion body is not an NPC the host places).
   `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the reset off, to tell a leak from a stage's own failure; `=narrow` selects the narrow
   reset only. A process stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it.
+  **The test clock (ARC-DEV-2259).** The reset does not clear the test clock (`_worldTestTime`): a stage that runs frames itself (`life` and others) leaves it set, and
+  while it is set a native smoke's `ProcessWorld` returns at once, so no per-frame step runs between a stage's own frames (the scenery step, which builds the
+  loaded session's host and reads the art fields, among them). `object-art` failed only in the `stages-main-alone` chain for that reason (`the view draws
+  the new art where the T0 body stood`); the stage now calls `ProcessAreaSceneryAnimation` itself in its settle, as the scenery smokes and `barter`
+  do (ARC-DEV-2042). A stage that reads the result of a per-frame viewer step must drive that step itself, never rely on `ProcessWorld` running.
 - **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
   still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
   counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
@@ -230,8 +247,8 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `npc-wander`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `npc-object`, `npc-throw`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `healer-talk`, `sleep`, `bed`, `created-scenery`, `object-art`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
-  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `healer-talk` (ARC-SCRIPT-1790; the Crash Site, `--hero`) talks to the start window's installed healer (Virgil) through the AREA conversation host: the DLG is opened at his h: hub node as a script's dialog action opens it, the healer menu, spell 60 and its paid quote follow, the cast starts through the AI host with the free flag (no PC leads him) and the hero's hit points rise while the talk is still open. A second pass (ARC-SCRIPT-1996) joins Virgil to the hero and opens the same node again: the h: reply is offered for a companion, the pick of the spell casts at once with no price screen, no gold paid and no free flag, and the hit points rise. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `bed` (ARC-WORLD-1162) runs on the cave (`./arcanum smoke map "crash site cave" --stages bed --hero human-male`): the cave's beds counted by script, a bed with no script refuses (message 8), an occupied one (10), the scripted bed seats the hero and a one-hour rest in it heals twice the ground's, the close empties the bed. `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), throws an assembled Explosives degree-1 grenade (record 219) at the cave NPC (a flight that lands off the tile is aimed again, up to three grenades; the item event starts the run and a cave NPC is damaged or resists), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. `disarm` (ARC-SKILLS-1156, E6-a second half) arms the hotkey bar's Disarm traps entry (skill cursor, interface mode 2), presses a container the stage makes trapped (the native script 30001 written as a map change) with the trap unknown (nothing rolled) and known (a fated press removes it); it needs a hero and a map with a container drawn in its window (NONE without one, or when the content's script 30001 is no trap script). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `script-triggers`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-roof`, `npc-tile`, `npc-wander`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `npc-object`, `npc-throw`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `ai-cast-pass`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `healer-talk`, `kerghan-talk`, `sleep`, `bed`, `bed-blow`, `created-scenery`, `object-art`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
+  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `healer-talk` (ARC-SCRIPT-1790; the Crash Site, `--hero`) talks to the start window's installed healer (Virgil) through the AREA conversation host: the DLG is opened at his h: hub node as a script's dialog action opens it, the healer menu, spell 60 and its paid quote follow, the cast starts through the AI host with the free flag (no PC leads him) and the hero's hit points rise while the talk is still open. A second pass (ARC-SCRIPT-1996) joins Virgil to the hero and opens the same node again: the h: reply is offered for a companion, the pick of the spell casts at once with no price screen, no gold paid and no free flag, and the hit points rise. `kerghan-talk` (ARC-SCRIPT-2504; own process on Kerghan's castle map around his sector, `./arcanum smoke pr --stages kerghan-talk --hero human-male` runs `void-kerghans castle --sector 1,10`) talks to the installed Kerghan (dialog script 1105) through the AREA conversation host: the story talk opens at his greeting and seven replies, taken by response id, end on script line 100; the window closes at once in the Original setting (the diagnostic chrome keeps Close, ARC-SCRIPT-2761) and the script resumes there, the game clock moves by 10,800 s and movie 6 plays through the real decoder when ffmpeg is installed (a key ends it) or is passed over, said so, when it is not; the talk after the task is opened at DLG node 618 (the stage sets global flag 2674 as node 612's reply 614 does; that reply needs an item named 5616) and its four replies end on script line 80: the close runs the change of shape (Kerghan destroyed, a created critter of prototype 27368 on his tile held by the AI host, the deferred call of line 86 waiting and naming it), the clock moves to the call's due time and the call asks for movie 3 (checked when the decoder plays it) and for the end of the game (the stage ends there; the ending is `slides`' business). `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `bed` (ARC-WORLD-1162) runs on the cave (`./arcanum smoke map "crash site cave" --stages bed --hero human-male`): the cave's beds counted by script, a bed with no script refuses (message 8), an occupied one (10), the scripted bed seats the hero and a one-hour rest in it heals twice the ground's, the close empties the bed. `bed-blow` (ARC-COMBAT-2167, `./arcanum smoke map "crash site cave" --stages bed-blow --hero human-male`) seats the cave's living non-companion NPC with the most hit points in a drawn, pickable, attackable cave bed (the occupancy seat and the sleeping flags, as the host's standpoint seat writes them), has the hero in combat mode Alt-click the bed from a neighbouring cell, and checks the hero's first blow takes the sleeper out of the bed (the occupied frame goes) and strikes it through the combat path with the check modifier -30, then that the next blow goes the object path on the empty bed (no second critter strike, the goal goes on; the bed's damage changes unless the data makes it invulnerable, as the cave's is, where the object path itself is all that is observed); NONE without a reachable bed or a living NPC with combat values. `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), throws an assembled Explosives degree-1 grenade (record 219) at the cave NPC (a flight that lands off the tile is aimed again, up to three grenades; the item event starts the run and a cave NPC is damaged or resists), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. `disarm` (ARC-SKILLS-1156, E6-a second half) arms the hotkey bar's Disarm traps entry (skill cursor, interface mode 2), presses a container the stage makes trapped (the native script 30001 written as a map change) with the trap unknown (nothing rolled) and known (a fated press removes it); it needs a hero and a map with a container drawn in its window (NONE without one, or when the content's script 30001 is no trap script). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
   debug mode at launch, so only stages with the same configuration share a process. `STAGE_NEEDS` in
@@ -243,7 +260,7 @@ history held about 500 runs of such copies of one template).
   are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
   `created-*`, `summon-*`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
   the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
-  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `inv-carry`) each get a process of
+  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `talk-teleport`, `inv-carry`) each get a process of
   their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned
   value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
   1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
@@ -342,6 +359,20 @@ history held about 500 runs of such copies of one template).
   environment, and Godot starts as `godot_canonical` does (the sentinel, the pinned SDK, a plain `PATH`). `--env
   NAME=VALUE` adds one variable (a capture or probe switch) to the stages' smoke (not `PATH`, `DOTNET_ROOT`, `HOME`,
   `GODOT`, the stage list or the settings paths).
+- **Census captures** (ARC-UI-2489, the windows of the [Steamwoven interface census](../ui/steamwoven-interface-census.md#screenshots); each is a
+  local PNG through `--env`, never committed; run with `--env ARC_AREA_WINDOW_ART=legacy` and the HD option off for the Original look; all but
+  the cursor sheet read the viewport, so the smoke's diagnostic text overlay is in the frame):
+
+  | Window | Switch | Stage and configuration | File |
+  | --- | --- | --- | --- |
+  | H10 load indicator (clock art 601 on the load screen) | `ARC_AREA_LOAD_SCREEN_CAPTURE=PATH.png` | `transfer` (hero, main map); saves only while the load is still going, else prints `load screen capture skipped` | `PATH.png` |
+  | H13 cursors | `ARC_AREA_CURSOR_CAPTURE=PATH.png` | `hover` (hero, main map); the cursor art sheet composed from the game's art (the framebuffer holds no cursors): one row per art, its frames left to right, a red cross on each hot point; prints `cursor sheet NONE` without the game folder | `PATH.png` |
+  | H14 hidden-interface compact UI | `ARC_AREA_LIFE_CAPTURE=PREFIX` | `life` (hero, main map); the bars off, only the compact life panel | `PREFIX-compact.png` |
+  | G04 See Contents (mode 4) | `ARC_AREA_CONTENTS_CAPTURE=PATH.png` | `item-aim` (hero, `--sector 1409,1314`, the town); the Identify-container step; nothing saved, silently, when the town has no container or the window is not in the art look (run with `ARC_AREA_WINDOW_ART=legacy`) | `PATH.png` |
+  | G10 NPC character sheet of the dialog | `ARC_AREA_SHEET_CAPTURE=PATH.png` | `map` (hero, main map; not together with `bar`, which reads the same variable as a folder) | `PATH-npc.png`, `PATH-npc-spells.png`, `PATH-npc-schemes.png` |
+  | M02 single-player menu, M03 new-game menu | `ARC_AREA_MENU_CAPTURE=PATH.png` | `menu` (`--main-menu`, main map) | `PATH.png` (main window), `PATH-before.png`, `PATH-single.png`, `PATH-newgame.png` |
+  | M11 quit box | `ARC_AREA_QUIT_CAPTURE=PATH.png` | `scene` (`--main-menu`, `--map "crematorium-lev 1"`) | `PATH.png` |
+
 - **Limits.** A whole map battery (`full`, `map` without `--stages`) may run 60 minutes, any other step the queue's
   default for its kind (30 for a smoke).
 - **Result.** A failed smoke does not stop the chain; a failed build or import, or a stopped run, does. Each step
@@ -410,6 +441,17 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   (the load's lines are the load); `M`, the spell pane, is not on the interface stack and has no `window.open` span; a headless run prints `NONE` (no frame is drawn).
 - **`perf-menu`** (a menu stage, `--main-menu`): `startup` to the main menu's first frame (`start-to-menu`) and a new game from the
   menu. `./arcanum smoke pr --stages perf-menu --main-menu`.
+- **`soak`** (ARC-DEV-1398, a hero stage, own run, the zone `soak`; like `perf` it needs a window with a map exit:
+  `./arcanum smoke pr --zones soak` or `--stages soak`; the stage pins the town sector 1409,1314 itself, so no `--sector`): a leak check. One cycle opens and closes the windows I C L T W M and S
+  (the sleep window may refuse, which is counted, not a failure), takes a quick save (F7) and loads it (F8), then leaves the map by an exit and
+  comes back (two whole map loads); the cycles go on for `ARC_SOAK_STAGE_MINUTES` (6 by default, 4 to 120, so the verdict has readings after the 120 s warm-up; set it with `--stages soak --env ARC_SOAK_STAGE_MINUTES=30`, the only way: a shell variable
+  is dropped and `--env` does not go with `--zones`; the step's timeout and estimate follow it). Before each cycle a full collection runs and the counters are read (the same reading as the viewer's resource line, below);
+  at the end the stage prints `ARC-DEV-2279 soak summary: ...` (each counter's first and last reading after the first 120 s, the change, and the maximum)
+  and fails when a counter grew past its allowance (`ViewerSoakLimits` in `tools/terrain-viewer/Core/ViewerSoak.cs`: live .NET heap and Godot static memory
+  48 MiB, render textures and video memory 64 MiB, working set 256 MiB, objects 2000, resources and nodes 400, orphan nodes 20, threads 6, open files 16; loose on
+  purpose, the numbers to tune). The zone runs only when named: a diff never selects it and `complete` (the daily build) leaves it out. Window moves of the
+  main map are not in the loop (the `walk` stage walks them). A headless run prints `NONE`. The viewer's own log carries the resource line in every run
+  ([diagnosis](mac-crash-forensics.md#resource-line-in-the-log-and-the-bug-report-arc-dev-1398)).
 - **Resident art across map loads (ARC-DEV-375).** A map load keeps decoded frames and visual records for the next one ([design](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
   The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
   (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
@@ -457,7 +499,7 @@ before it. It replaces the earlier
     ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
     ./arcanum queue --playing [--for MIN]   # the owner is playing: no window run starts until --not-playing or the limit (default 4 h; ARC-DEV-2272)
-    ./arcanum queue --not-playing
+    ./arcanum queue --not-playing   # (the packaged game running turns the mode on by itself: ARC-DEV-2291)
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
     ./arcanum queue --wait [RUN_ID | --all] [--timeout MIN]   # block until that run (or the whole queue) has ended (ARC-DEV-1983)
 
@@ -551,11 +593,24 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
   A wrapper of another checkout from **before this change** does not know the flag and reads it as a running exclusive Godot run, so
   it holds back every Godot kind (`window`, `headless`, `export`) of that checkout, but not `dotnet` or `quick` runs, and also the
   owner's own launches from that checkout, until that checkout has merged main. Nothing else is needed for the mode to hold there.
-- **Not built:** detecting the packaged game by its process and turning the mode on and off by itself (the manual switch and its limit
-  are the rule; the automatic variant is filed as a follow-up).
+- **Automatic mode (ARC-DEV-2291).** While a process of the packaged game runs, the queue treats the mode as on, and releases it when
+  the game quits: start `artifacts/packages/macos/Arcanum Steamwoven.app` and a queued window run says
+  `waiting-for=owner playing (game running for ...; no window run starts, headless/quick/dotnet go on; quit the game)`; quit the game and it
+  starts within a few seconds (a minute at most). The game is any process whose program lies under the main checkout's
+  `artifacts/packages/macos` (also from a worktree: the main checkout is read from the `.git` file), found through libproc
+  (`proc_listpids`, `proc_pidpath`, no process spawned: about 3 ms, cached 2 s per process). The rule is the same as the manual
+  switch's: window runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
+  print `SKIP owner is playing (game running ...)`. The state is the game's process itself, so nothing is written to the queue folder and
+  no limit applies; it counts once beside a manual switch (which keeps its limit and its `--not-playing`). `--not-playing` does not end it
+  (the command says so); quit the game. `ARCANUM_QUEUE_AUTO_PLAYING=0` turns it off for a command or wrapper it is set on, and
+  `ARCANUM_QUEUE_GAME_ROOTS` (a `:` list of folders) names other game folders; both are for tests and rare cases. Under
+  `ARCANUM_LOCAL_HOME` (the tests' own queue folder) the mode reads nothing unless the roots are named. The menu-bar app reads the
+  same process (`--game-root`, given by `menubar.py` and `queue --app`; the roots are fixed when the app starts) and shows `OWNER PLAYING (game running)` (its menu item does nothing while only the game holds the mode); `ArcanumQueue --game-root DIR --game-status`
+  prints `game since <epoch>` or `no game`. A game started from another path (a copy, another machine) is not seen: use the manual switch.
+  A wrapper from before this change does not see the automatic mode (it is in memory, not a file) and runs window runs as before.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (`playing` tests: admission rule, real wrappers, the command, the
-limit), `test_smoke`, `test_daily`, `test_main_smoke`; the app: `ArcanumQueue --set-playing` / `--clear-playing` do what its menu item does.
+limit, the automatic game mode with a stand-in game built by clang), `test_smoke`, `test_daily`, `test_main_smoke`, `test_menubar`; the app: `ArcanumQueue --set-playing` / `--clear-playing` do what its menu item does.
 
 ### Queue menu-bar app (ARC-DEV-1344)
 
@@ -648,6 +703,12 @@ library only). It lists the steps of [the owner re-check list](owner-checks.md) 
   player's, is unchanged. The game appends its results to the same `results.jsonl` in the same format plus `build` (the build's
   commit) and `src: game`; the running page creates the issue of a new `differs` every 20 s (a failed attempt waits for `qa sync`),
   and `qa sync` does it on demand, once per step either way. See the [viewer](../rendering/terrain-viewer.md#owner-checks-overlay-arc-dev-2190).
+- **Answered checks (ARC-DEV-2768).** A step is answered when its status is not `open` (a mark, or the list's own), or a report folder is
+  recorded in its result (the overlay's Send, or a Ctrl+B report tagged with the step, which the game records in `results.jsonl` with the
+  status the step shows), or a report whose `Check:` line names it is in the reports folder (a report sent while no QA folder was found).
+  The page lists the answered steps in a collapsed "Answered (n)" group at the end, each with the day of the mark or report; the
+  progress bars and the open count count them as checked. **Reopen** (button or `o`) appends an `open` result with `"reopen":true`,
+  no report and the note kept: the step is listed again, and reports older than that event no longer answer it. `POST /api/reopen`.
 - **Later.** The write-back of statuses to the list works from the same results file.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_qa` (synthetic list, fake `gh`, a real localhost socket); the page itself is
@@ -951,6 +1012,42 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   `dotnet` `error CS…`/`MSB…`/`NU…`/`NETSDK…`, failed tests and non-zero error counts, Python tracebacks and
   `…Error:` lines, .NET exceptions, `fatal:`/`error:` lines, `command not found`, `Segmentation fault`, `FAIL`/`FAILED`
   markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; counts of zero errors are not.
+- **Killed by a signal (ARC-DEV-2360).** A command a signal ended has the exit code `-N` when the command itself died
+  on it (`-11` is SIGSEGV) and `128+N` when a shell or wrapper passes its child's status on (139). For a crash signal
+  (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE) the summary adds a `note:` line after `FAIL` with the signal's name and the
+  last `PASS` line's number, and says so when only Godot's shutdown leak lines (`Leaked unsafe reference`,
+  `ObjectDB instances were leaked`) follow it: this looks like a crash at engine shutdown. It never says the checks
+  passed (the log may hold an earlier failed stage); an error line after the last `PASS` line, no `PASS` line or no leak
+  line gets its own wording, and another signal (SIGKILL, SIGTERM, SIGINT) is "not a crash signal". The exit code stays
+  as it was and the run is still red: retry once, and a repeat is a real failure. Seen once in 31 headless
+  self-tests (2026-11-16, run #30494; the Mac was busy with other Godot runs); 12 reruns in a busy queue passed. The
+  cause is not found: that log held two leaked `InputEventKey` objects (F8, the self-test's quick-key route) reported
+  by the mono module at exit and none of the 30 other logs did, which fits a Godot shutdown crash but is a
+  hypothesis, so the issue is recorded as not reproducible.
+- **Godot finalizer-thread crash (ARC-DEV-2412).** Godot 4.7.2 .NET sometimes dies on the .NET finalizer thread inside a
+  Godot type's `Finalize` (the log's C# backtrace ends `Godot.StringName.Dispose` / `Godot.StringName.Finalize`, once with
+  `Godot.DisposablesTracker.UnregisterDisposable` after a fatal `System.AccessViolationException`), as `handle_crash:
+  Program crashed with signal 11` and exit `-6`. It was seen once in a `pr --auto` run on the cave stage (#2405 merge,
+  2026-11-16), then reproduced: the cave stage (`./arcanum smoke map "crash site cave" --stages tile-ghost,route-barrel,
+  grenade`) alone passed 10 of 10, and with four such loops running at once it crashed in 5 of 16 runs, then in 3 of
+  16 and 3 of 10 in later batches (at different points of the stage, from 26 s to 80 s in; the stage's checks are not at
+  fault). The line `The caller thread can't call the function propagate_notification() on this node` that precedes the
+  crash comes from the engine's crash handler (the crash handler line follows it in every such log, and the backtrace of the crashing
+  thread is the finalizer thread's; by the engine's design the handler notifies the scene tree from the crashing thread); no viewer code calls the scene tree off the main thread (the viewer's background work is the HD frame decode,
+  the chunk composes and the window art warm-up, all plain managed code or Godot `Image` objects). The viewer has no
+  `unsafe` code and creates no `StringName` itself (every one is the implicit string conversion of an engine call). The
+  .NET settings that did not remove it in the same stress: a one-gigabyte first-generation budget
+  (`DOTNET_GCgen0size`), `DOTNET_gcConcurrent=0`, `DOTNET_TieredPGO=0`, `DOTNET_TieredCompilation=0` (each 0 to 1 crash in
+  8 to 16 runs against about 3 in 10 without it, too few runs to tell a small effect). Note that .NET reads
+  `DOTNET_*` names case-sensitively (`DOTNET_GCgen0size`, not `DOTNET_GCGEN0SIZE`), and `smoke --env` accepts upper-case names
+  only (`parse_env` in `tools/local_dev/smoke.py`), so an upper-case form of such a name is ignored without a message. The root cause is in the engine or the .NET
+  runtime, so the smoke runner works around it: a step whose log shows a crash (the crash handler's line or a fatal
+  `AccessViolationException`) together with a Godot type's `Finalize` in the backtrace is run once more, says so as
+  `engine crash: STEP died in Godot's finalizer thread ... and ran once more: PASS|FAIL` in the summary, and a second crash
+  is a failure like any other (no per-stage retry of that step follows it). A log that printed a failure of its own before the
+  crash (`FAIL`, `failure mode=`, `..._FAILED`, `frontier=`), a stopped run and a timeout are not rerun. The run summary's `note:` line also names this crash. Reproduce it with four parallel
+  loops of the stage command above (`--no-build` after the first run), and keep the stage's own checks as the failing
+  evidence: a crash without a Godot `Finalize` in its backtrace is not retried.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
 - **`--verbose`** streams the command's output to the terminal as before, with no log file, no summary and no
@@ -1087,6 +1184,95 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 
 ```sh
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
+```
+
+## Steamwoven prompt library (ARC-RES-2455)
+
+[`tools/steamwoven_ui/prompt_library.py`](../../tools/steamwoven_ui/prompt_library.py), the prompts in `tools/steamwoven_ui/prompts/` (text only; design in the
+[TRD](../ui/steamwoven-interface-trd.md#prompt-library-and-handoff-arc-res-2455)). Standard-library Python (ImageMagick `magick` only for `refs`); it runs no
+Godot and no `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main checkout (a worktree has no `local/`),
+never git.
+
+```sh
+python3 -B tools/steamwoven_ui/prompt_library.py check        # task check: library, files, kinds against the TRD
+python3 -B tools/steamwoven_ui/prompt_library.py self-test    # task check: synthetic inbox and provenance
+python3 -B -m unittest tools.steamwoven_ui.test_prompt_library
+python3 -B tools/steamwoven_ui/prompt_library.py refs         # 800 x 600 layout references from the census screenshots
+python3 -B tools/steamwoven_ui/prompt_library.py inbox style-anchors-contexts
+python3 -B tools/steamwoven_ui/prompt_library.py provenance style-anchors-contexts --generator NAME --generator-version V
+```
+
+## Steamwoven kit bake (ARC-DEV-2460)
+
+[`tools/steamwoven_ui/bake.py`](../../tools/steamwoven_ui/bake.py) makes the four step sets (x1, x2/3, x1/2, x1/3; folder names `x1`, `x2-3`, `x1-2`, `x1-3`) from the kit masters
+([TRD SWI-RUN-1](../ui/steamwoven-interface-trd.md#bake-and-runtime)); the standard-library PNG reader and writer is [`pngio.py`](../../tools/steamwoven_ui/pngio.py), shared with the assembly tool (8-bit RGBA masters only; canonical output).
+No numpy, Godot or `dotnet`, so it does not use the launch queue. It reads and writes `local/steamwoven-ui/` of the main
+checkout, never git.
+
+- **Where things live:** masters `local/steamwoven-ui/masters/<part id>.png` (the fit tool's output, #2459); baked sets `local/steamwoven-ui/baked/<step>/<part id>.png` with
+  `<step>/manifest.json` (per part: master size and SHA-256, baked size, bytes, file SHA-256 and a SHA-256 of the raw pixels; plus a hash of the part list).
+  `baked/` is derived and fully reproducible from `masters/`, so it is **not backed up**: a changed master is rebaked, a part whose
+  master hash is unchanged is reused (`unchanged` in the log), and `--prune` removes only baked files this tool wrote whose master is gone.
+- **Backup** (a convention set by this page; no tool does it, the owner or an agent copies by hand; same spirit as the [HD pack](hd-pack.md) rules, kit decision SWI-PRV-1): the masters (and the prompt library's provenance records beside them) are the work that nothing
+  reproduces, so they are copied, never moved, to a folder **outside** `hd-packs/`, next to the HD backups: `~/Library/Application Support/Arcanum Steamwoven Game/steamwoven-ui-backups/<date>/`.
+  After a copy to another device, rebake there and compare the `pixels_sha256` values of the manifests (they do not depend on the zlib build; the file hashes do).
+- **Install:** the tool writes nothing outside `local/steamwoven-ui/baked/`. The runtime reads the sets in place (viewer of the owner's checkout); where a packaged game on a
+  player's own device keeps them is `user://steamwoven-ui/baked` (beside `user://hd-packs`; the player bakes or copies their own, the kit is never shipped or committed, SWI-PRV-2); the viewer's lookup order and the smoke that checks it are in the [TRD](../ui/steamwoven-interface-trd.md#the-kit-runtime-arc-ui-2461) (ARC-UI-2461).
+- **Exactness:** a master side must be a multiple of 6 px (so of 2 and 3); every baked length is the master length times the step, exactly; x1 is the master copied pixel for pixel; each
+  other pixel is the exact area average of the master pixels it covers in integer weights, taken in linear light (16-bit table) with premultiplied alpha, so no dark fringe and no
+  colour from transparent pixels; a fully transparent result has colour 0 (not at x1, which is the master unchanged). Two runs give identical bytes. Speed: pure Python, under a minute for all four sets of one 2880 x 2160 master (a full-screen plate); a
+  second bake reuses what is unchanged.
+- **Checks** against `kit.json`: the id must be a manifest part and a master of `units` size basis must have the manifest size (`provisional` only warns; `--no-kit` skips this for scratch masters).
+
+```sh
+python3 -B tools/steamwoven_ui/bake.py bake --dry-run          # plan: what would be baked, nothing written
+python3 -B tools/steamwoven_ui/bake.py bake [--steps x1-2,x1-3] [--only ID,...] [--prune]
+python3 -B tools/steamwoven_ui/bake.py verify                   # files, hashes and sizes of the sets against the manifests and masters
+python3 -B tools/steamwoven_ui/bake.py self-test                # task check: synthetic master, no file
+python3 -B -m unittest tools.steamwoven_ui.test_bake            # task check (also in the batched run_tests.py set)
+```
+
+## Steamwoven kit fit (ARC-DEV-2459)
+
+[`tools/steamwoven_ui/fit.py`](../../tools/steamwoven_ui/fit.py) makes the kit master of a manifest part from a generated image ([TRD SWI-GEN-4](../ui/steamwoven-interface-trd.md), SWI-KIT-2, SWI-KIT-4, SWI-VER-3):
+the crop and scale to the part's master size, the alpha (real alpha, or a keyed flat background), the edge decontamination, the alpha clean-up, the low-frequency colour lock to the approved material sheet and the
+provenance record. Standard library only (`pngio.py`), so no launch queue; it reads and writes `local/steamwoven-ui/` of the main checkout, never git. Same inputs, same bytes. The steps, limits and the two metrics
+(edge halo, high-frequency energy) are in the module text of `fit.py`; the numbers are `HALO_MEAN_DE` 3, `HALO_P95_DE` 6 (CIE76 against the nearest opaque interior), `HF_TOLERANCE` 10 % (in L\*a\*b\*), `LOCK_MAX_DE` 15.
+
+```sh
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass --dry-run   # plan and gates; writes nothing (always first)
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass [--key border|#RRGGBB] [--crop X,Y,W,H] [--size WxH] [--replace]
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --source FILE --provenance FILE      # a file from outside the outbox (or --no-provenance for a hand-made source)
+python3 -B tools/steamwoven_ui/fit.py self-test                                         # task check: synthetic disc, no file
+python3 -B -m unittest tools.steamwoven_ui.test_fit                                     # task check (also in the batched run_tests.py set)
+```
+
+- **Inputs:** `--batch/--prompt` read `outbox/<batch>/<prompt>.png` and its generator record `provenance/<batch>/<prompt>.json` (the record's `image_sha256` must match the file, SWI-GEN-6); `--source` takes any PNG with `--provenance FILE`.
+  The part must be a manifest row; its `size` is the master size (a part with an open size takes `--size`, a different `--size` for a sized part is refused); sides are multiples of 6 px. The source has the master's aspect within 1 % (SWI-GEN-8) or `--crop X,Y,W,H` (source pixels) says what to take.
+- **Alpha:** a source with real alpha keeps it (the requested form, TRD common rule 7). `--key border` keys a flat background (colour = median of the border, refused when the border is not flat) and `--key #RRGGBB` a given colour; without either an alpha-less source stays opaque.
+  The keyed edge zone takes the colour of the nearest interior pixels and an alpha from its mix with the background; edge pixels of any source take the colour of the nearest opaque pixels when they are farther than 3 dE from it, so no colour of the generator's matte stays;
+  alpha of 252 or more counts as opaque art; fully transparent pixels are stored as 0 0 0 0, as the bake does. A part that touches the border cannot be keyed.
+- **Colour lock:** `--material` names materials of the approved sheet (`wood`, `black`, `paper`, `parchment`, `cloth`, `brass`, `iron`, `glass`: the `material` of the cut-outs in `cutouts.provenance.json`). The sheet's sha256 must be the approved one (TRD SWI-GEN-11, constant `APPROVED_SHEET_SHA256` in `fit.py`;
+  a new approval changes both). A part of two or more materials is locked region by region. A shift above 15 dE is a wrong generation (regenerate; `--force-lock` overrides); `--lock-strength 0..1` scales the shift.
+- **Outputs and gates:** `masters/<part id>.png` (default `local/steamwoven-ui/masters`, what `bake.py` reads; an existing master needs `--replace`) and `provenance/fit/<part id>.json` (SWI-GEN-6: the generator record, source hash and crop, keying, lock with the sheet hash, metrics, master hash).
+  A master is written only when the size, the halo gate (measured before the final safety net, `halo_final` is reported beside it), the orphan share (10 %), a non-empty master (0.1 % opaque) and the high-frequency gate hold (exit 1, nothing written, the report says which). Exit 2 = an input could not be used. The manifest's `status` and `provenance` fields of the part (`fit:<part id>`) are set by the part's batch PR, not by the tool.
+- **Speed:** pure Python; a part at 1000 x 1000 takes seconds, a full 2880 x 2160 screen from a 1448 x 1086 generation with a two-material lock about 70 s; the dry run costs the same as the real run.
+
+## Steamwoven Codex batch runner (ARC-DEV-3001)
+
+[`tools/steamwoven_ui/codex_batch.py`](../../tools/steamwoven_ui/codex_batch.py) runs one inbox batch of the Steamwoven kit through the owner's subscription
+Codex CLI on the Mac (`codex exec` for the first item, `codex exec resume <thread_id>` for the rest, one session per batch) and writes
+`local/steamwoven-ui/outbox/<batch>/` with a provenance record per image; design, `batch.json` format and rules:
+[TRD](../ui/steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001). Standard-library Python; it runs no Godot and no `dotnet`, so it does not use the launch
+queue; it pins the model `gpt-6.1-sol` at reasoning effort `medium` on every call (owner decision 2026-11-20, [#3043](https://github.com/Simarglok/arcanum-steamwoven/issues/3043); `--model` overrides only with the owner's approval); it spends the owner's Codex subscription quota, so a real run needs the task's or the owner's word (the skill
+[`steamwoven-codex-images`](../../.claude/skills/steamwoven-codex-images/SKILL.md) says how). Its tests use a fake `codex` and run in the batched `tools/local_dev/run_tests.py`.
+
+```sh
+python3 -B -m unittest tools.steamwoven_ui.test_codex_batch                          # task check: fake codex, no quota
+python3 -B tools/steamwoven_ui/codex_batch.py check                                  # codex version, image_generation on, subscription login
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]     # the commands, nothing is sent
+python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite] [--crop-band]
+python3 -B tools/steamwoven_ui/codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz PERCENT]   # one padded strip canvas to its band (ARC-UI-3083, ImageMagick)
 ```
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
@@ -1226,7 +1412,7 @@ Limits, each checked and settled:
 The original's Bink movies play through an external `ffmpeg` (owner decision 2026-11-12, [Bink movies](../research/bink-movies.md) option O1): nothing of FFmpeg is linked, shipped or committed, and no decoded frame or sound is written to disk. The viewer finds `ffmpeg` and `ffprobe` through `ARC_FFMPEG` (the path of the `ffmpeg` program, its `ffprobe` is looked for beside it), then the search path, then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/snap/bin`. Install it with `brew install ffmpeg` on a Mac. Without it the main menu hides View Intro with the reason, a new game starts without its two movies and the viewer says so in one log line; nothing waits and nothing blacks out.
 
 - **Where movies play:** only in the game build (`./arcanum package mac|win`: an assembly stamped with its package commit) and in the smoke stage `movies`; the source viewer (`./arcanum area|map`) and every other automated run play none, and the main menu then hides View Intro with the reason "movies play in the game build only" (owner 2026-11-12, ARC-RENDER-1242). In the game build the calls are the original's: the start-up before the first menu (the Sierra and the Troika logo by path, then movie 8), View Intro and a new game's start (movies 1 and 7). A key press ends a movie. There is no switch for the source viewer; to see a movie while developing, run the `movies` stage with `ARC_AREA_MOVIE_CAPTURE` or build the package.
-- **Checks:** the player's unit tests (`MoviePlaybackTests`, `FfmpegMovieSourceTests`; the ffmpeg ones generate a pattern file with ffmpeg itself and report `Inconclusive`, not a pass, without it), the opt-in real-data tests (`DAT_ROOT`, category `RealData`: `AreaMovieTableTests` finds the eight files, `FfmpegMovieSourceTests` opens them with the header numbers of the research), and the smoke stage `movies` (`./arcanum smoke pr --stages movies`, with `--hero` by default): it plays two generated test movies on the movie screen and checks the covering, the frozen clocks, the key skip, the finish and the failures that must not hang; it prints `NONE` without ffmpeg. `--env ARC_AREA_MOVIE_CAPTURE=FOLDER` saves a `before.png` and an `after.png` of the installed movie 8 for a graphics report (never committed). The smoke stage `slides` (ARC-RENDER-1879; `./arcanum smoke pr --stages slides`, its own `--main-menu true` process, about 80 s) walks the ending on the installed data: Kerghan's dying script 2863 through the dying run, its movies 2 and 5 through the real decoder (the movies are passed over without ffmpeg, said in the log), the end-game show of script 997's queue with the installed pictures, then the reset and the menu fade-in; `--env ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a PNG of each movie, slide and the reopened menu (never committed); the opt-in test `AreaEndingScriptsRealDataTests` (`DAT_ROOT`, terrain viewer tests, `FullyQualifiedName~AreaEndingScriptsRealDataTests`) checks the dying scripts 2863 and 3061 without a window.
+- **Checks:** the player's unit tests (`MoviePlaybackTests`, `FfmpegMovieSourceTests`; the ffmpeg ones generate a pattern file with ffmpeg itself and report `Inconclusive`, not a pass, without it), the opt-in real-data tests (`DAT_ROOT`, category `RealData`: `AreaMovieTableTests` finds the eight files, `FfmpegMovieSourceTests` opens them with the header numbers of the research), and the smoke stage `movies` (`./arcanum smoke pr --stages movies`, with `--hero` by default): it plays two generated test movies on the movie screen and checks the covering, the frozen clocks, the key skip, the finish and the failures that must not hang; it prints `NONE` without ffmpeg. `--env ARC_AREA_MOVIE_CAPTURE=FOLDER` saves a `before.png` and an `after.png` of the installed movie 8 for a graphics report (never committed). The smoke stage `slides` (ARC-RENDER-1879, ARC-RENDER-2197, ARC-DEV-3116; `./arcanum smoke pr --stages slides`, its own `--main-menu true` process, about 90 s with each movie ended by the key skip after its checks; `--all` or the complete run plays every movie to its end, about 230 s, and asserts it ended by itself) walks four endings on the installed data, each from a new game of its own: Kerghan's dying script 2863 through the dying run, its movies 2 and 5 through the real decoder (the movies are passed over without ffmpeg, said in the log), the end-game show of script 997's queue with the installed pictures, then the reset and the menu fade-in; the Vendigroth underground's use script 2862 used with the item it names (movies 3 and 5, flag 2053: slide 3); and the end game asked for with flag 2632 (slide 1) and flag 2050 (slide 4); `--env ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a PNG of each movie, slide and the reopened menu (never committed); the opt-in tests `AreaEndingScriptsRealDataTests` (`DAT_ROOT`, terrain viewer tests, `FullyQualifiedName~AreaEndingScriptsRealDataTests`: the dying scripts 2863 and 3061 and the use script 2862 without a window) and `AreaEndingQueuesRealDataTests` (the slides script 997 and the scripts under it queue for fifteen flag and quest-state sets) pin the queues.
 
 ## Function oracle
 
@@ -1260,6 +1446,15 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | --- | --- | --- |
 | Executable interpreter | `ARCANUM_EXE`; the replays also the oracle files of 0x4A6980 and 0x4A68B0 (`ARCANUM_ORACLE_DIR`, default `research-private/oracle`) | Executable project, `TestCategory=OriginalExe`; [contract](../project/components/Arcanum.Executable.md#verification) |
 | Prototype builder | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (the installed game folder; inconclusive without it); the comparison also `ARCANUM_ORIGINAL_PROTO` (a folder of the 1,423 files the original wrote); `ARCANUM_PROTO_OUT` writes the built files for a look (refused inside a git repository) | Executable project, `FullyQualifiedName~PrototypeBuilderRealData`, `TestCategory=OriginalExe`; about one minute in Release (`-c Release`: Debug is several times slower), the builds run in parallel; [contract](../project/components/Arcanum.Executable.md#the-prototype-builder) |
+| Attack ART census (ARC-COMBAT-1932) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~AttackArtCensusRealDataTests&TestCategory=RealData` (seconds); the installed critter, monster and unique NPC body ARTs by the attack animations (20, 21, throw 14) their files name, per weapon slot; names only; a failure means the counts changed: update [ledger VCG11](../research/ledger/combat.md) |
+| NPC art armour part census (ARC-SCRIPT-2351) | `DAT_ROOT` = the installed game folder | Terrain viewer tests, `FullyQualifiedName~AreaBodyArmorArtCensusTests&TestCategory=RealData` (about 3 min); the installed NPC rows by the armour part of their stored art against the body armour their map data lists; a failure prints the changed counts to paste into the test; [ledger AR8](../research/ledger/scripts.md#get-armor-and-the-group-in-list-conditions-arc-script-2326) |
+| Script trigger refusal baseline (ARC-DEV-2816, epic [#2814](https://github.com/Simarglok/arcanum-steamwoven/issues/2814)) | `DAT_ROOT` = the installed game folder; `ARC_SCRIPT_REFUSAL_BASELINE_WRITE` = a file the current rows are written to (to refresh the baseline) | Terrain viewer tests, `FullyQualifiedName~Refused_installed_scripts_per_trigger_kind&TestCategory=RealData` (about 2 min); the installed scripts of every hosted trigger kind (object points the hosts run, tile, sector) read against their host's admission set; the scripts refused are pinned in `tests/Arcanum.TerrainViewer.Tests/ScriptTriggerRefusalBaseline.txt` (kind, script, first refusal; [#2835](https://github.com/Simarglok/arcanum-steamwoven/issues/2835) shrinks it); a script refused at a kind the file does not name, or admitted now while the file names it, fails the test naming the kind and the script: fix the host or add the row with its gap issue, remove rows a fix frees. Its smoke half is the stage `script-triggers` (`./arcanum smoke pr --stages script-triggers`, `--hero` by default, the Crash Site, its own process, about 20 s): Virgil's opening heartbeat and talk, the window's tile scripts the placed set admits (up to twelve scripts for the hero, four of them for one NPC) and the written items' use scripts must run, none Refused, EffectsRejected or ContentUnavailable; [conditions TQ1–TQ28](../research/script-trigger-conditions.md) |
+| Call script at census (ARC-SCRIPT-2824) | `DAT_ROOT` = the installed game folder; `ARC_CALL_AT_REPORT` = a file the rows are written to | Terrain viewer tests, `FullyQualifiedName~CallScriptAtCensusRealDataTests&TestCategory=RealData` (about 20 s); the installed lines of call script at (55; one, script 1405 line 4) and call script in (54; 304); a failure means the counts changed: update [ledger TQ17](../research/ledger/scripts.md) |
+| Toggle state census (ARC-SCRIPT-2324) | `DAT_ROOT` = the installed game folder; `ARC_TOGGLE_STATE_REPORT` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~ToggleStateCensusRealData&TestCategory=RealData` (about 4 min); every installed script that runs toggle state by the focus kind of its object operand, the placed attachments of the 79 maps' windows that run one, and the static rows the map data stores off; [ledger OT8–OT9](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221) |
+| Toggled scenery lights survey (ARC-SCRIPT-2585) | `DAT_ROOT` = the installed game folder; `ARC_SCENERY_LIGHT_REPORT` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~SceneryToggleLightCensusRealData&TestCategory=RealData` (about 2 min); the sceneries of the 79 maps that carry a light, and the ones the scripts 1179 and 2407 toggle (named 1609 and 1668); [ledger OT10](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221) |
+| Armour critical points census (ARC-SCRIPT-2828) | `DAT_ROOT` = the installed game folder | Terrain viewer tests, `FullyQualifiedName~The_installed_critical_points_are_counted&TestCategory=RealData` (about 2 min); the installed critical-hit (34) and critical-miss (35) attachments by object type over the placed rows of the 81 maps and over every item prototype (2 weapon and 2 armour rows at 34, 2 weapon rows at 35, no prototype), and the armour scripts read against the combat-point set; script numbers only; `ARC_ARMOUR_CRITICAL_CENSUS` = a text file the report is written to (optional); a failure means the counts changed: update [trigger conditions TQ23](../research/script-trigger-conditions.md) |
+| Self-hit scripts census (ARC-SCRIPT-2841) | `DAT_ROOT` = the installed game folder; `ARC_SELF_HIT_CENSUS` = a text file the rows are written to (optional) | Terrain viewer tests, `FullyQualifiedName~The_installed_weapons_with_hit_and_critical_hit_scripts&TestCategory=RealData` (about 4 min); the installed hit (7), critical-hit (34) and critter-hits (26) attachments by object type over the placed rows of the 81 maps and every item prototype (26 placed weapon rows at 7, 2 at 34, 4 weapon prototypes at 7, 18 placed critter rows and 9 critter prototypes at 26); [ledger TQ31](../research/ledger/scripts.md) |
+| Generator held items census (ARC-WORLD-1707) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~GeneratorItemCensusRealDataTests&TestCategory=RealData` (seconds); the 83 items of the 27 installed monster generators against their prototypes (instance overrides, the item and object flags the session reads); counts only; a failure means the counts changed: update [ledger GS5](../research/ledger/npc-ai.md) |
 | Art number census (ARC-SCRIPT-1780) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~ObjectArtCensusRealData&TestCategory=RealData` (about 1 min); the art classes of the NPC prototypes and placed rows (787 placed unique NPCs) and the object each use of change art number names (none an NPC); [ledger AN16–AN17](../research/ledger/scripts.md#change-art-number-arc-script-1735-e5-a-tail) |
 | Hero sight and dialog scripts (ARC-SCRIPT-1863) | `DAT_ROOT` = the installed game folder | Scripting project, `FullyQualifiedName~ScrHeroSightCensusRealData&TestCategory=RealData` (the installed clauses of conditions 26, 28, 29); terrain viewer tests, `FullyQualifiedName~AreaHeroSightScriptRealData&TestCategory=RealData` (scripts 2602 and 1130 run under the use host; under a second each); [ledger CS17](../research/ledger/scripts.md) |
 | Bed census (ARC-WORLD-1162) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~BedCensusRealData&TestCategory=RealData` (about 1 min); the placed beds of the 80 whole maps with their use scripts, pinned (191, 19 scripted), and the main map's, read sector by sector (ARC-WORLD-1262: 275 beds, 32 scripted, 1556 NPC rows with a route, 150 on a bed); [sleep window](../world/sleep-window-runtime.md#the-bed-arc-world-1162-ledger-swb1-swb3-swb5-swb14swb16) |

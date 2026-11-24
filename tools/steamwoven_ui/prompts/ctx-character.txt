@@ -1,0 +1,8 @@
+CONTEXT IMAGE - CHARACTER SHEET
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
+
+Redraw the whole composition with the character sheet open: top strip, the one-piece sheet window in the middle zone, bottom strip.
+- Main page: dark streaked wood with brass. At the top left a round embossed brass medallion (a Celtic knot pattern); below it a round brass gauge dial with a small empty counter. A black plaque with brass scrollwork corners and a portrait frame (empty) at the top centre. Two columns of four round stat boxes (a black oval in a brass ring with small round plus and minus buttons), a heart-shaped dial and a round blue dial at the right of them. A large black plaque with brass scrollwork for derived values at the bottom (empty). Three round brass buttons (gear, arrows) at the top right.
+- Right panel: a pitted iron plate with riveted brass rows, four round coloured buttons in a row at its top (red, green, blue, orange), four skill rows each with a black tube bar framed in brass and round plus and minus buttons. A tall parchment thermometer-like scale with a brass gear at its foot at the far right.
+Keep every text and number field empty.
+Goal: style anchor for BD-B (character sheet), iron panels, round brass buttons, gauges and stat boxes.

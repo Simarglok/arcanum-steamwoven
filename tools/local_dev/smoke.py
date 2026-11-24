@@ -27,7 +27,7 @@ import sys
 import tempfile
 from typing import Callable, Mapping, Sequence
 
-from . import config, focus_guard, launch, red_flag, run_queue, smoke_history, smoke_zones, start_check
+from . import config, focus_guard, launch, red_flag, run_log, run_queue, smoke_history, smoke_zones, start_check
 
 ROOT = Path(__file__).resolve().parents[2]
 VIEWER = Path("tools/terrain-viewer/Godot")
@@ -63,7 +63,9 @@ def settings_file(name: str) -> str:
 
 
 # ARC-DEV-395: the stages that check a sample unless --all (the viewer reads ALL_ENV: docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
-SAMPLED_STAGES = frozenset({"container-click", "walk"})
+# ARC-DEV-3116: `slides` is one of them: it ends each installed movie by the key skip after its checks, and plays every movie to its end with --all
+# (the complete run and the daily build always do).
+SAMPLED_STAGES = frozenset({"container-click", "slides", "walk"})
 ALL_ENV = "ARC_SMOKE_ALL"
 # The owner's opt-in data, smoke and settings variables never reach a smoke (as in the player package); the queue's stay.
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_", "ALWAYS_RUN_",
@@ -81,6 +83,7 @@ BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minut
 # 525 s (72 window moves) and `container-click` on the town 675 s in full, and about a fifth of that as a sample (ARC-DEV-395:
 # the default; the sampled figures are estimates, not measured); `census` is every map of the catalogue and was not
 # measured: an assumption.
+SLIDES_SKIP_SECONDS = 90.0  # ARC-DEV-3116: `slides` with the movies ended by the key skip (measured 89 s; about 232 s with every movie played to its end)
 RUN_SECONDS = 20.0  # a viewer run with no stage on top of it
 STAGE_SECONDS = 3.0  # each cheap stage, with room for the dearer ones (opening 13 s, perf 16 s)
 BATTERY_SECONDS = 60.0  # the whole map battery with its load
@@ -88,8 +91,8 @@ CRASH_SITE_SECONDS = 110.0
 SELF_TEST_SECONDS = {"window": 30.0, "quick": 15.0}
 BUILD_SECONDS, IMPORT_SECONDS = 30.0, 5.0
 IMPORT_MINUTES = 30.0  # a first import of a new checkout is not the warm 3 s (the limit the headless run had)
-SLOW_STAGES = {"walk": 540.0, "container-click": 700.0, "census": 900.0}  # in full (--all)
-SAMPLED_SLOW_SECONDS = {"walk": 100.0, "container-click": 120.0}  # as the sample they run by default
+SLOW_STAGES = {"walk": 540.0, "container-click": 700.0, "census": 900.0, "soak": 420.0, "slides": 260.0}  # in full (--all); `soak` at its default 6 minutes (ARC-DEV-1398)
+SAMPLED_SLOW_SECONDS = {"walk": 100.0, "container-click": 120.0, "slides": SLIDES_SKIP_SECONDS}  # as the sample they run by default
 
 
 def estimate(stages: Sequence[str], full: bool = False) -> float:
@@ -118,17 +121,17 @@ STAGE_PASS = {
     "scene": "ARC-UI-012 native-smoke scene flow PASS", "options": "ARC-UI-013 native-smoke options PASS",
     "plants": "ARC-WORLD-081 native-smoke plants PASS", "bar": "ARC-UI-018 native-smoke bar PASS",
     "ai": "ARC-WORLD-092 native-smoke ai PASS", "ai-turn-based": "ARC-WORLD-095 native-smoke ai-turn-based PASS",
-    "ai-cast": "ARC-WORLD-102 native-smoke ai-cast PASS", "ai-follower": "ARC-WORLD-115 native-smoke ai-follower PASS",
+    "ai-cast": "ARC-WORLD-102 native-smoke ai-cast PASS", "ai-cast-pass": "ARC-MAGIC-1835 native-smoke ai-cast-pass PASS", "ai-follower": "ARC-WORLD-115 native-smoke ai-follower PASS",
     "premade": "ARC-WORLD-114 native-smoke premade PASS", "opening": "ARC-SCRIPT-047 native-smoke opening PASS",
     "life": "ARC-UI-020 native-smoke life PASS", "floaters": "ARC-UI-021 native-smoke floaters PASS",
     "death": "ARC-UI-026 native-smoke death PASS", "slides": "ARC-RENDER-1879 native-smoke slides PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS", "loot-worn": "ARC-DEV-202 native-smoke loot-worn PASS", "inv-arrange": "ARC-DEV-339 native-smoke inv-arrange PASS", "loot-room": "ARC-DEV-333 native-smoke loot-room PASS",
     "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "altar": "ARC-SCRIPT-052 altar smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
     "report": "ARC-DEV-051 native-smoke bug report PASS", "hover": "ARC-UI-057 native-smoke hover-window PASS",
     "dead-window": "ARC-COMBAT-024 native-smoke dead-window PASS", "inv-ui": "ARC-DEV-111 native-smoke inv-ui PASS",
-    "follower-home": "ARC-DEV-351 native-smoke follower-return PASS", "follower-far": "ARC-DEV-170 native-smoke follower-far PASS", "teleport-follow": "ARC-MAGIC-1147 native-smoke teleport-follow PASS", "npc-resident": "ARC-DEV-170 native-smoke npc-resident PASS", "saved-runs": "ARC-DEV-208 native-smoke saved-runs PASS", "npc-door": "ARC-DEV-209 native-smoke npc-door PASS", "npc-tile": "ARC-DEV-206 native-smoke npc-tile PASS", "npc-wander": "ARC-AI-1313 native-smoke npc-wander PASS", "door-close": "ARC-DEV-138 native-smoke door-close PASS",
+    "follower-home": "ARC-DEV-351 native-smoke follower-return PASS", "follower-far": "ARC-DEV-170 native-smoke follower-far PASS", "teleport-follow": "ARC-MAGIC-1147 native-smoke teleport-follow PASS", "talk-teleport": "ARC-WORLD-2261 native-smoke talk-teleport PASS", "npc-resident": "ARC-DEV-170 native-smoke npc-resident PASS", "saved-runs": "ARC-DEV-208 native-smoke saved-runs PASS", "npc-door": "ARC-DEV-209 native-smoke npc-door PASS", "npc-roof": "ARC-WORLD-2792 native-smoke npc-roof PASS", "npc-tile": "ARC-DEV-206 native-smoke npc-tile PASS", "npc-wander": "ARC-AI-1313 native-smoke npc-wander PASS", "door-close": "ARC-DEV-138 native-smoke door-close PASS",
     "tile-ghost": "ARC-DEV-298 native-smoke tile-ghost PASS", "container-click": "ARC-DEV-299 native-smoke container-click PASS", "fire-order": "ARC-DEV-203 native-smoke fire-order PASS", "indoor-fade": "ARC-DEV-203 native-smoke indoor-fade PASS",
-    "route-barrel": "ARC-DEV-247 native-smoke route-barrel PASS", "critter-fall": "ARC-DEV-248 native-smoke critter-fall PASS", "save-resume": "ARC-DEV-325 native-smoke save-resume PASS", "cast-multi": "ARC-DEV-250 native-smoke cast-multi PASS", "companion-click": "ARC-DEV-263 native-smoke companion-click PASS", "grenade": "ARC-DEV-249 native-smoke grenade PASS", "please-move": "ARC-AI-1315 native-smoke please-move PASS", "ai-react": "ARC-DEV-264 native-smoke ai-react PASS", "npc-shot": "ARC-DEV-282 native-smoke npc-shot PASS", "npc-object": "ARC-AI-1757 native-smoke npc-object PASS", "npc-throw": "ARC-DEV-1762 native-smoke npc-throw PASS", "placement-census": "ARC-DEV-308 native-smoke placement-census PASS", "inv-carry": "ARC-DEV-305 native-smoke inv-carry PASS", "spell-end": "ARC-DEV-301 native-smoke spell-end PASS", "hold-hero": "ARC-DEV-304 native-smoke hold-hero PASS", "spirit-talk": "ARC-DEV-304 native-smoke spirit-talk PASS", "healer-talk": "ARC-SCRIPT-1790 native-smoke healer-talk PASS", "sleep": "ARC-WORLD-1160 native-smoke sleep PASS", "bed": "ARC-WORLD-1162 native-smoke bed PASS", "spell-effects": "ARC-DEV-1148 native-smoke spell-effects PASS", "created-scenery": "ARC-DEV-347 native-smoke created-scenery PASS", "object-art": "ARC-SCRIPT-1735 native-smoke object-art PASS", "created-critter": "ARC-DEV-370 native-smoke created-critter PASS", "script-critters": "ARC-DEV-371 native-smoke script-critters PASS", "script-eye-candy": "ARC-SCRIPT-1592 native-smoke script-eye-candy PASS", "weapon-hit": "ARC-RENDER-1990 native-smoke weapon-hit PASS", "encounters": "ARC-WORLD-1159 native-smoke encounters PASS", "worn-light": "ARC-DEV-335 native-smoke worn-light PASS", "critter-light": "ARC-DEV-353 native-smoke critter-light PASS", "eye-light": "ARC-MAGIC-1229 native-smoke eye-light PASS", "summon-flash": "ARC-DEV-352 native-smoke summon-flash PASS", "summon-wall": "ARC-DEV-352 native-smoke summon-wall PASS", "summon-undead": "ARC-MAGIC-053 native-smoke summon-undead PASS", "tech-craft": "ARC-DEV-362 native-smoke tech-craft PASS", "tech-products": "ARC-MAGIC-051 native-smoke tech-products PASS", "item-aim": "ARC-DEV-365 native-smoke item-aim PASS", "disarm": "ARC-SKILLS-1156 native-smoke disarm PASS",
-    "perf": "ARC-DEV-367 native-smoke perf PASS", "relight": "ARC-RES-1978 native-smoke relight PASS", "movies": "ARC-RENDER-1170 native-smoke movies PASS", "movement": "ARC-MAGIC-036 native-smoke movement PASS", "creature-item": "ARC-MAGIC-042 native-smoke creature-item PASS", "trait-body": "ARC-MAGIC-046 native-smoke trait-body PASS", "weapon-art": "ARC-RENDER-1544 native-smoke weapon-art PASS", "body-styles": "ARC-MAGIC-045 native-smoke body-styles PASS", "perf-menu": "ARC-DEV-367 native-smoke perf-menu PASS",
+    "route-barrel": "ARC-DEV-247 native-smoke route-barrel PASS", "critter-fall": "ARC-DEV-248 native-smoke critter-fall PASS", "save-resume": "ARC-DEV-325 native-smoke save-resume PASS", "cast-multi": "ARC-DEV-250 native-smoke cast-multi PASS", "companion-click": "ARC-DEV-263 native-smoke companion-click PASS", "grenade": "ARC-DEV-249 native-smoke grenade PASS", "please-move": "ARC-AI-1315 native-smoke please-move PASS", "ai-react": "ARC-DEV-264 native-smoke ai-react PASS", "npc-shot": "ARC-DEV-282 native-smoke npc-shot PASS", "npc-object": "ARC-AI-1757 native-smoke npc-object PASS", "npc-throw": "ARC-DEV-1762 native-smoke npc-throw PASS", "placement-census": "ARC-DEV-308 native-smoke placement-census PASS", "inv-carry": "ARC-DEV-305 native-smoke inv-carry PASS", "spell-end": "ARC-DEV-301 native-smoke spell-end PASS", "hold-hero": "ARC-DEV-304 native-smoke hold-hero PASS", "spirit-talk": "ARC-DEV-304 native-smoke spirit-talk PASS", "healer-talk": "ARC-SCRIPT-1790 native-smoke healer-talk PASS", "kerghan-talk": "ARC-SCRIPT-2504 native-smoke kerghan-talk PASS", "sleep": "ARC-WORLD-1160 native-smoke sleep PASS", "bed": "ARC-WORLD-1162 native-smoke bed PASS", "bed-blow": "ARC-COMBAT-2167 native-smoke bed-blow PASS", "spell-effects": "ARC-DEV-1148 native-smoke spell-effects PASS", "created-scenery": "ARC-DEV-347 native-smoke created-scenery PASS", "object-art": "ARC-SCRIPT-1735 native-smoke object-art PASS", "created-critter": "ARC-DEV-370 native-smoke created-critter PASS", "script-critters": "ARC-DEV-371 native-smoke script-critters PASS", "script-eye-candy": "ARC-SCRIPT-1592 native-smoke script-eye-candy PASS", "script-triggers": "ARC-DEV-2816 native-smoke script-triggers PASS", "weapon-hit": "ARC-RENDER-1990 native-smoke weapon-hit PASS", "encounters": "ARC-WORLD-1159 native-smoke encounters PASS", "worn-light": "ARC-DEV-335 native-smoke worn-light PASS", "critter-light": "ARC-DEV-353 native-smoke critter-light PASS", "eye-light": "ARC-MAGIC-1229 native-smoke eye-light PASS", "summon-flash": "ARC-DEV-352 native-smoke summon-flash PASS", "summon-wall": "ARC-DEV-352 native-smoke summon-wall PASS", "summon-undead": "ARC-MAGIC-053 native-smoke summon-undead PASS", "tech-craft": "ARC-DEV-362 native-smoke tech-craft PASS", "tech-products": "ARC-MAGIC-051 native-smoke tech-products PASS", "item-aim": "ARC-DEV-365 native-smoke item-aim PASS", "disarm": "ARC-SKILLS-1156 native-smoke disarm PASS",
+    "perf": "ARC-DEV-367 native-smoke perf PASS", "soak": "ARC-DEV-1398 native-smoke soak PASS", "relight": "ARC-RES-1978 native-smoke relight PASS", "movies": "ARC-RENDER-1170 native-smoke movies PASS", "movement": "ARC-MAGIC-036 native-smoke movement PASS", "creature-item": "ARC-MAGIC-042 native-smoke creature-item PASS", "trait-body": "ARC-MAGIC-046 native-smoke trait-body PASS", "weapon-art": "ARC-RENDER-1544 native-smoke weapon-art PASS", "body-styles": "ARC-MAGIC-045 native-smoke body-styles PASS", "perf-menu": "ARC-DEV-367 native-smoke perf-menu PASS",
 }
 # ARC-DEV-1556: a stage whose own PASS line is not the whole check: the lines that must also be in the log. `transfer` runs the
 # visitor-fight sub-check after its own PASS line; with a hero (HERO_STAGES) the Crash Site start and the town both print its PASS
@@ -143,12 +146,12 @@ BATTERY_STAGES = ("map", "resources")
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...). `transfer` is one (ARC-DEV-1547): its visitor-fight
 # sub-check prints NONE without a hero while the stage's own PASS line still comes, so only a hero runs it whole; STAGE_ALSO_PASS makes the runner require its PASS line (ARC-DEV-1556).
 HERO_STAGES = frozenset({"relight", "map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "barter", "life",
-                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "transfer", "follower-home", "follower-far", "teleport-follow", "npc-resident", "saved-runs", "npc-door", "npc-tile", "please-move", "npc-wander", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "npc-object", "npc-throw", "ai-react", "placement-census", "inv-carry", "worldmap", "spell-end", "hold-hero", "spell-effects", "movement", "creature-item", "movies", "spirit-talk", "healer-talk", "sleep", "bed", "created-scenery", "object-art", "created-critter", "script-critters", "script-eye-candy", "weapon-hit", "encounters", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "trait-body", "weapon-art", "body-styles", "perf"})
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "transfer", "follower-home", "follower-far", "teleport-follow", "talk-teleport", "npc-resident", "saved-runs", "npc-door", "npc-roof", "npc-tile", "please-move", "npc-wander", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "npc-object", "npc-throw", "ai-react", "placement-census", "inv-carry", "worldmap", "spell-end", "ai-cast-pass", "hold-hero", "spell-effects", "movement", "creature-item", "movies", "spirit-talk", "healer-talk", "kerghan-talk", "sleep", "bed", "bed-blow", "created-scenery", "object-art", "created-critter", "script-critters", "script-eye-candy", "script-triggers", "weapon-hit", "encounters", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "trait-body", "weapon-art", "body-styles", "perf", "soak"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "slides", "ai",
-                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "wreck", "altar", "inv-ui", "npc-resident", "saved-runs", "npc-door", "npc-tile", "please-move", "npc-wander", "tile-ghost", "container-click", "fire-order", "indoor-fade", "critter-fall", "save-resume", "cast-multi", "companion-click", "ai-react", "placement-census", "spell-end", "hold-hero", "spell-effects", "movement", "spirit-talk", "healer-talk", "sleep", "bed", "created-scenery", "object-art", "created-critter", "script-critters", "script-eye-candy", "weapon-hit", "encounters", "relight", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "trait-body", "weapon-art", "body-styles", "perf", "perf-menu"})
+                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "wreck", "altar", "inv-ui", "npc-resident", "saved-runs", "npc-door", "npc-roof", "npc-tile", "please-move", "npc-wander", "tile-ghost", "container-click", "fire-order", "indoor-fade", "critter-fall", "save-resume", "cast-multi", "companion-click", "ai-react", "placement-census", "spell-end", "ai-cast-pass", "hold-hero", "spell-effects", "movement", "spirit-talk", "healer-talk", "kerghan-talk", "sleep", "bed", "bed-blow", "created-scenery", "object-art", "created-critter", "script-critters", "script-eye-candy", "script-triggers", "weapon-hit", "encounters", "relight", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "trait-body", "weapon-art", "body-styles", "perf", "perf-menu", "soak"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report", "door-close"})
 SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|NO-TARGET|SAME-MAP-ONLY)\b")
 
@@ -159,10 +162,13 @@ SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|NO-TARGET|SAME-MAP-O
 # lines and the smoke speed diagnosis (ARC-DEV-384, deleted; the result is in docs/workflow/toolchain.md). The hero is HERO_STAGES.
 TOWN = "1409,1314"  # the town sector
 WILD = "1384,239"  # the generated wilderness sector (`plants`)
+FARKHUS = "1450,1323"  # the shack of Farkhus (`npc-roof`)
 SHRINE = "1452,1291"  # Virgil's altar sector (`altar`, `npc-tile`)
 FIRE = "1410,1315"  # the town's brick fireplaces (`fire-order`)
 CAVE = "crash site cave"
 RUINS = "elven ruins"
+KERGHAN_SECTOR = "1,10"  # the sector of Kerghan's castle map where he stands (cell 93,667; the map's own start is far from him)
+KERGHAN = "void-kerghans castle"  # Kerghan's castle: his dialog script 1105 (`kerghan-talk`)
 LIGHT_MAP = "tulla interior - battle - conveyance"  # an NPC there carries a light (`critter-light`; NONE on the main map, town, ruins, cave)
 SCENE_MAP = "crematorium-lev 1"  # a map that is not the start map: `scene` offers a new game only there
 
@@ -238,8 +244,10 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "dead-window": _needs(**_MAIN_ONLY, only_sector=True, own=True),  # leaves the hero dead; NONE after `stream`
     "follower-far": _needs(**_MAIN_ONLY, debug=True, own=True),
     "teleport-follow": _needs(**_MAIN_ONLY, own=True),
+    "talk-teleport": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # moves the hero to K'na Tha and back (ARC-WORLD-2261)
     "npc-resident": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
     "saved-runs": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
+    "npc-roof": _needs(**_MAIN_ONLY, sector=FARKHUS, only_sector=True, own=True),
     "npc-door": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # NONE after the other town stages, passes alone
     "npc-tile": _needs(**_MAIN_ONLY, sector=SHRINE, only_sector=True),
     "npc-wander": _needs(**_MAIN_ONLY, sector=SHRINE, only_sector=True),
@@ -253,16 +261,19 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "npc-object": _needs(sector=TOWN, own=True), "npc-throw": _needs(sector=TOWN, own=True), "ai-react": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True), "please-move": _needs(),
     "placement-census": _needs(),  # passes after the other AI stages (ARC-DEV-1187: baseline loads at the stage boundaries, a companion is no NPC row)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
-    "spell-end": _needs(), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "healer-talk": _needs(), "sleep": _needs(sector=WILD, own=True),  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
+    "spell-end": _needs(), "ai-cast-pass": _needs(own=True), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "healer-talk": _needs(), "sleep": _needs(sector=WILD, own=True),  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
+    "kerghan-talk": _needs(map=KERGHAN, sector=KERGHAN_SECTOR, only_map=True, only_sector=True, own=True),  # a real conversation with Kerghan on his own map (ARC-SCRIPT-2504)
+    "bed-blow": _needs(map=CAVE, only_map=True, own=True),  # ARC-COMBAT-2167: a cave NPC seated in a bed, the hero's blow on it; moves the clock
     "bed": _needs(map=CAVE, only_map=True, own=True),  # the cave's one scripted bed: the sleep window through it, kind-2 heal; moves the clock
     "created-scenery": _needs(portable=True), "object-art": _needs(portable=True), "created-critter": _needs(portable=True),
-    "script-critters": _needs(**_MAIN_ONLY), "script-eye-candy": _needs(**_MAIN_ONLY), "weapon-hit": _needs(**_MAIN_ONLY), "encounters": _needs(sector=WILD, own=True),  # moves the clock by days and ends with the hero landed elsewhere; the wilderness sector has no named area or town map
+    "script-critters": _needs(**_MAIN_ONLY), "script-eye-candy": _needs(**_MAIN_ONLY), "script-triggers": _needs(own=True, **_MAIN_ONLY), "weapon-hit": _needs(**_MAIN_ONLY), "encounters": _needs(sector=WILD, own=True),  # moves the clock by days and ends with the hero landed elsewhere; the wilderness sector has no named area or town map
     "worn-light": _needs(), "relight": _needs(map=CAVE, own=True), "critter-light": _needs(map=LIGHT_MAP), "eye-light": _needs(),
     "summon-flash": _needs(portable=True), "summon-wall": _needs(portable=True), "summon-undead": _needs(portable=True),
     "tech-craft": _needs(map=CAVE, only_map=True, own=True),  # needs the cave's bullets; F8 replaces the session
     "tech-products": _needs(map=CAVE, only_map=True, own=True),  # a living NPC of the cave for the poison; F8 replaces the session
     "item-aim": _needs(sector=TOWN), "disarm": _needs(), "creature-item": _needs(), "movies": _needs(), "trait-body": _needs(), "weapon-art": _needs(), "body-styles": _needs(),
     "perf": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # needs a map exit in the window
+    "soak": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # ARC-DEV-1398: windows, quick save/load and map exits in a loop; needs a map exit in the window
 }
 # The stages that run from the main menu (--main-menu, which starts without a hero).
 MENU_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.menu)
@@ -365,15 +376,40 @@ def crash_site_step(inputs: dict, conf: dict, prefs_root: Path, environ: Mapping
                 start_line(None), settings="crash-site", estimate=CRASH_SITE_SECONDS)
 
 
+SOAK_STAGE_MINUTES = "ARC_SOAK_STAGE_MINUTES"
+SOAK_DEFAULT_MINUTES = 6
+SOAK_TAIL_MINUTES = 15.0  # the loads, the last cycle and the exit on top of the stage's own minutes
+
+
+def soak_timeout(stages: Sequence[str], extra: Sequence[tuple[str, str]]) -> float | None:
+    """ARC-DEV-1398: the `soak` stage runs ARC_SOAK_STAGE_MINUTES (6 by default, `--env` changes it), so its viewer run may last
+    longer than the queue's window default (30 minutes) once `--env` raises the length; every other stage list keeps the default (None). An unreadable value leaves the
+    default: the viewer refuses it by itself."""
+    if "soak" not in stages:
+        return None
+    value = dict(extra).get(SOAK_STAGE_MINUTES)
+    try:
+        minutes = float(int(value)) if value is not None else float(SOAK_DEFAULT_MINUTES)
+    except ValueError:
+        return None
+    return minutes + SOAK_TAIL_MINUTES
+
+
+def soak_estimate(stages: Sequence[str], extra: Sequence[tuple[str, str]], base: float) -> float:
+    """ARC-DEV-1398: the declared seconds of a run with `soak` follow its minutes (`--env ARC_SOAK_STAGE_MINUTES`); other runs keep `base`."""
+    timeout = soak_timeout(stages, extra)
+    return base if timeout is None else max(base, (timeout - SOAK_TAIL_MINUTES) * 60.0 + RUN_SECONDS)
+
+
 def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, str], godot: str, map_name: str, *,
              hero: str | None, sector: str | None, stages: Sequence[str] = (), main_menu: bool = False,
              extra: Sequence[tuple[str, str]] = ()) -> Step:
     viewer = ["--native-smoke", *launch.map_arguments(inputs, map_name, hero=hero, sector=sector, main_menu=main_menu,
                                                       debug_mode=any(stage in DEBUG_STAGES for stage in stages))]
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
-                start_line(map_name, main_menu), settings=name, timeout=None if stages else BATTERY_MINUTES,
+                start_line(map_name, main_menu), settings=name, timeout=soak_timeout(stages, extra) if stages else BATTERY_MINUTES,
                 requires=tuple(stages) or BATTERY_STAGES,
-                estimate=estimate(stages, full=any(name == ALL_ENV for name, _ in extra)))
+                estimate=soak_estimate(stages, extra, estimate(stages, full=any(name == ALL_ENV for name, _ in extra))))
 
 
 @dataclass(frozen=True)
@@ -442,7 +478,8 @@ def refused(wanted: Sequence[str], pins: Pins, *, battery: bool = False, checked
 def stage_config(needs: StageNeeds, pins: Pins) -> Config:
     """The configuration a stage runs in: what the request fixes, else the stage's own default."""
     map_name = pins.map or needs.map
-    sector = pins.sector if pins.sector is not None else (needs.sector if map_name.casefold() == MAIN_MAP.casefold() else None)
+    # A sector is a window of the main map; a stage that only runs on its own other map may also name the sector that map opens around (`kerghan-talk`).
+    sector = pins.sector if pins.sector is not None else (needs.sector if map_name.casefold() == MAIN_MAP.casefold() or (needs.only_map and needs.only_sector) else None)
     return Config(map_name, sector, needs.menu or pins.menu, needs.debug)
 
 
@@ -650,6 +687,14 @@ def shown(command: Sequence[str]) -> str:
                     for part in command)
 
 
+def run_log_crash(log: Path) -> bool:
+    """ARC-DEV-2412: whether the step's log ends in the finalizer-thread crash of Godot's .NET runtime."""
+    try:
+        return run_log.engine_finalizer_crash(log.read_text(errors="replace").splitlines())
+    except OSError:
+        return False
+
+
 def stages_not_run(log: Path | None, stages: Sequence[str]) -> tuple[list[str], list[str]]:
     """The requested stages whose PASS line (or an also-required line, STAGE_ALSO_PASS) the log lacks, and up to three NONE/SKIP lines of the log (the viewer's
     reasons), those with a missing stage's task code first."""
@@ -734,7 +779,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             playing = run_queue.playing_state()
             if playing is not None:
                 say(f"SMOKE waiting: owner is playing ({run_queue.playing_text(playing)}); the window starts when it ends: "
-                    "./arcanum queue --not-playing")
+                    + run_queue.playing_hint(playing))
         before = smoke_history.work_tree()  # ARC-DEV-2223: the files the step starts on (an edit while it waits or runs is not covered)
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
@@ -777,17 +822,30 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         return code, logs[-1] if logs else None
 
     order_dependent: dict[str, list[str]] = {}  # ARC-DEV-396: a failed group whose every unfinished stage passed alone
+    engine_retried: list[tuple[str, int, int]] = []  # ARC-DEV-2412: (step, first exit, exit of the one more run)
     done = 0
     for step in steps:
         code, log = run_step(step)
         done += 1
+        # ARC-DEV-2412: a step that died in the finalizer thread of Godot's .NET runtime (an engine crash under load, none of
+        # its stages failed) runs once more; the summary names it, and a second crash is a failure like any other.
+        crashed_twice = False
+        if 0 != code < STOPPED and code != run_queue.TIMEOUT_EXIT and log is not None and run_log_crash(log):
+            say(f"  {step.name}: Godot crashed in a type's Finalize on the .NET finalizer thread (ARC-DEV-2412, exit={code}); running the step once more")
+            results.pop()  # the first run's result is replaced by the second's (its record stays in the history and the times)
+            if step.name in only_known:
+                only_known.remove(step.name)
+            first = code
+            code, log = run_step(step)
+            engine_retried.append((step.name, first, code))
+            crashed_twice = code != 0 and log is not None and run_log_crash(log)  # a second crash is the step's result: no per-stage retry hides it as order dependence
         if code >= STOPPED or (code != 0 and step.gate):
             break
         # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
         # passes alone may fail only after the others (state it leaves behind). The unfinished stages run one to a process.
         if code == start_check.FAILED_START_EXIT and step.again is not None:
             say("  not retried one to a process: the viewer did not start, which says nothing about its stages")
-        elif code != 0 and step.again is not None:
+        elif code != 0 and step.again is not None and not crashed_twice:
             unfinished = stages_not_run(log, step.requires)[0]
             if unfinished:
                 say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")
@@ -809,6 +867,9 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     say("SMOKE summary")
     for name, code in results:
         say(f"  {name:<{width}}  {'ORDER' if name in order_dependent else 'PASS' if code == 0 else 'FAIL'} exit={code}")
+    for name, first, again_code in engine_retried:  # ARC-DEV-2412: said in the summary, never hidden
+        say(f"  engine crash: {name} died in Godot's finalizer thread (exit={first}, ARC-DEV-2412) and ran once more: "
+            + ("PASS" if again_code == 0 else f"FAIL exit={again_code}"))
     for name, stages in order_dependent.items():  # a warning, not a failure: every stage passed alone (owner decision 2026-11-12)
         say(f"  order-dependent: {name} (fails only after other stages of its process; each of {', '.join(stages)} passes alone)")
     skipped = [step.name for step in steps[done:]]

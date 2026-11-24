@@ -28,7 +28,7 @@ public partial class AreaCharacterSheetArtView : Control
     private readonly record struct Hit(Kind Kind, int Index);
 
     /// <summary>The close rectangle in the modes 1 and 2 (struct 0x5C8930: art 198 PCWinCvr; a mouse-up inside it closes the sheet).</summary>
-    public static (int X, int Y, int Width, int Height) CloseRectangle { get; } = (12, 10, 89, 89);
+    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89, 89); // ARC-UI-2714: the common place with the generated interface
 
     private static readonly Hit[] Hits =
     [
@@ -76,6 +76,8 @@ public partial class AreaCharacterSheetArtView : Control
     internal AreaCharacterSheetView? ViewForSelfTest => Visible ? _view : null;
     internal int? RegionForSelfTest => _region;
     internal bool PortraitForSelfTest => Visible && _portrait is not null;
+    /// <summary>ARC-UI-2865: the portrait texture the sheet draws (the HD smoke reads whether it is the pack's redraw).</summary>
+    internal Texture2D? PortraitTextureForSelfTest => _portrait;
     /// <summary>ARC-UI-1791: whether the icon art of the view is held (the slot then shows it).</summary>
     internal bool IconForSelfTest => Visible && _portrait is null && _view?.IconArt is { } icon && Art(icon) is not null;
     internal IReadOnlyList<AreaSheetText> TextsForSelfTest => _view is { } view && _fonts is { } fonts
@@ -126,9 +128,29 @@ public partial class AreaCharacterSheetArtView : Control
         _tab = tab; QueueRedraw();
     }
 
+    // ARC-UI-2694: the lens shows the round view of the game under the window, so the window art leaves its square out (the original's copy replaces it, 0x550DA0 mode 1).
+    private bool _lensCut;
+
+    /// <summary>The lens's rectangle on the screen (the window's rectangle scaled and moved): the round view's square.</summary>
+    internal (Vector2 Origin, float Side) LensOnScreen
+    {
+        get
+        {
+            var (x, y, side) = AreaCharacterSheetArtLayout.Lens;
+            return (GetGlobalTransform() * new Vector2(x, y), side * GetGlobalTransform().Scale.X);
+        }
+    }
+
+    /// <summary>The round view is shown under the window: the window art leaves the lens's square out.</summary>
+    internal bool LensCut
+    {
+        get => _lensCut;
+        set { if (_lensCut == value) return; _lensCut = value; QueueRedraw(); }
+    }
+
     public void CloseView()
     {
-        Visible = false;
+        Visible = false; _lensCut = false;
         (_hovered, _pressed, _region, _view, _portrait) = (null, null, null, null, null);
     }
 
@@ -147,6 +169,14 @@ public partial class AreaCharacterSheetArtView : Control
         {
             // ARC-UI-147: the menu's 800 × 600 screen at the bars' whole factor, centred; the window under the top strip (as AreaShopArtLayout.Window).
             var screen = GetViewportRect().Size;
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
+            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            {
+                Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+                Position = new Vector2((float)zone.X, (float)Math.Round(zone.Y + AreaShopArtLayout.Window.Y * zone.Scale));
+                RedrawOnScaleChange();
+                return;
+            }
             var factor = AreaGameBarPanel.ScreenFactor(screen);
             Scale = new Vector2(factor, factor);
             Position = new Vector2(AreaGameBarPanel.ScreenLeft(screen, factor),
@@ -225,8 +255,11 @@ public partial class AreaCharacterSheetArtView : Control
             }
     }
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+
     public override void _ExitTree()
     {
+        AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -235,11 +268,37 @@ public partial class AreaCharacterSheetArtView : Control
     internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
+    /// <summary>ARC-UI-3037: the kit's character background shows under this window (never on the new-character screen, which has no kit).</summary>
+    private bool KitBackgroundShown => !MenuScreen && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
+
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
         ClaimScale();
-        if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window) DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
+        // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
+        if (!KitBackgroundShown && Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
+        {
+            float width = window.GetWidth(), height = window.GetHeight();
+            if (!_lensCut) DrawTextureRect(window, new Rect2(0, 0, width, height), false);
+            else
+            {
+                // The lens's square is left out, so the round view under the window shows through (the four pieces around it).
+                var (lx, ly, edge) = AreaCharacterSheetArtLayout.Lens;
+                foreach (var (px, py, pw, ph) in new[] { (0f, 0f, width, (float)ly), (0f, ly + (float)edge, width, height - ly - edge), (0f, (float)ly, (float)lx, (float)edge),
+                    (lx + (float)edge, (float)ly, width - lx - edge, (float)edge) })
+                    if (pw > 0 && ph > 0) DrawTextureRectRegion(window, new Rect2(px, py, pw, ph), new Rect2(px, py, pw, ph));
+            }
+        }
+        if (KitBackgroundShown)
+        {
+            AreaKitStandIns.CharacterSheet(this);
+            // The stat names are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet writes them itself, in its own font.
+            var labelFace = fonts.For(AreaSheetFont.Cloister);
+            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels()) AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb);
+        }
+        // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
+        if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
+            DrawTextureRect(lens, new Rect2(AreaCharacterSheetArtLayout.Lens.X, AreaCharacterSheetArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);
         // ARC-UI-1791 (ledger CHW25): an NPC without a portrait to show has its icon blitted at the same place at its own size (0x559ABC); the hero never has one.

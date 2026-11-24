@@ -60,6 +60,30 @@ public sealed class ItemMoveStateTests
         CollectionAssert.AreEqual(new[] { Stone }, owner.QueryMapInventory(Exterior)!.Ground.Select(g => g.Item.Entity).ToArray());
     }
 
+    // ARC-SCRIPT-2701 (ledger IV8): a map-data item lying on another tile than its data holds reads that tile as its location field, before its pickup (the insert-item run of the pickup) and after (the stale field of the held item).
+    [TestMethod]
+    public void APushedItemKeepsTheCellItLayOnAsItsLocationFieldBeforeAndAfterThePickup()
+    {
+        using var owner = Owner();
+        Assert.IsNull(owner.QueryItemLooseCell(Apple), "on its own data tile the map data answers");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveGroundItem(owner.Version, Apple, There).Disposition);
+        Assert.AreEqual(There, owner.QueryItemLooseCell(Apple));
+        Assert.IsNull(owner.QueryItemLooseCell(Sword), "held by the guard");
+        Assert.IsNull(owner.QueryItemLastDrop(Apple), "not taken yet");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, Apple, Accept).Disposition);
+        Assert.IsNull(owner.QueryItemLooseCell(Apple), "taken: no longer loose");
+        Assert.AreEqual(There, owner.QueryItemLastDrop(Apple));
+        Assert.AreEqual(1, owner.Capture().Inventory.LastDrops.Count);
+        // An item taken from its own data tile leaves no record.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, Stone, Accept).Disposition);
+        Assert.IsNull(owner.QueryItemLastDrop(Stone));
+        Assert.AreEqual(1, owner.Capture().Inventory.LastDrops.Count);
+        // The hero drops it again: its placed cell answers and the record goes.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, Apple,
+            new(owner.QueryPcInventory().Single(item => item.Entity == Apple).Kind, false, [])).Disposition);
+        Assert.IsNull(owner.QueryItemLastDrop(Apple));
+    }
+
     [TestMethod]
     public void APushBackOntoTheDataCellRemovesTheRecordAndATakenItemKeepsNoGround()
     {

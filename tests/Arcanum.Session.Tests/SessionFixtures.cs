@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":102," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":106," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -109,7 +109,7 @@ internal static class SessionFixtures
     // ARC-WORLD-1840 (schema 102): the party section ends with the followers of NPC leaders (none).
     internal const string NoNpcLed = ",\"npcLed\":[]}";
     internal const string NoHero = ",\"hero\":null";
-    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
+    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[],\"lastDrops\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
     internal const string FreshRandom = ",\"random\":{\"seed\":\"0000000000000000\",\"draws\":0}";
     internal const string NoLife = ",\"life\":{\"hero\":null,\"critters\":[]}";
     internal const string NoReactions = ",\"reactions\":{\"records\":[]}";
@@ -125,7 +125,9 @@ internal static class SessionFixtures
     internal const string NoSound = ",\"sound\":{\"slots\":[0,0],\"restorePending\":false,\"restore\":[0,0],\"combatMusic\":false,\"preCombat\":[0,0]}";
     internal const string NoEquipment = ",\"equipment\":[]";
     internal const string NoSchematics = ",\"schematics\":{\"found\":[]}";
-    internal const string NoDurability = ",\"durability\":{\"items\":[],\"destroyed\":[],\"uses\":[],\"charges\":[]}";
+    // ARC-MAGIC-2371 (schema 103): the durability section ends with the changed mana stores of worn items (none).
+    internal const string NoManaStores = ",\"manaStores\":[]";
+    internal const string NoDurability = ",\"durability\":{\"items\":[],\"destroyed\":[],\"uses\":[],\"charges\":[]" + NoManaStores + "}";
     internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[],\"blessings\":[],\"curses\":[],\"critters\":[]}";
     /// <summary>ARC-DEV-348 (schema 87): the effects section's empty list of NPC effect lists, at its end.</summary>
     internal const string NoCritterEffects = ",\"critters\":[]";

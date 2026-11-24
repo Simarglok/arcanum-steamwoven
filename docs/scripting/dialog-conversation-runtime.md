@@ -87,10 +87,10 @@ Source references are the function addresses listed under [Provenance](#provenan
 5. **Selection** consumes the token before the first effect, runs the reply action, then:
    positive response → next NPC node (new turn); `0` → `Ended(ReturnToScript, caller+1)`;
    negative `-n` → `Ended(ReturnToScript, n)`; an insult (below) first runs its rule; a trailing `JO 0 node` (or, with a party port,
-   `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`.
+   `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`; an `FL` node absent from the DLG shows a blank line and ends the same way ([FLM1](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)); an `FL` node that is a Player record is used the same way (its text is the line, its action runs; [FLM2](../research/ledger/scripts.md#final-line-to-a-node-the-dlg-lacks-arc-script-2790)).
    SCR continuation is reported, never executed.
 
-Text: NPC lines use the record text for a male PC and the alternate field for a female PC.
+Text: NPC lines use the record text for a male PC and the alternate field for a female PC (a Player record used as a final line has no female text, so its own text is shown for either PC, FLM2).
 `@pcname@`/`@npcname@` (ASCII case-insensitive) take host-supplied names; any other token is a
 frontier and an unterminated `@` is a failure. Code page is explicit
 (`DialogTextEncoding.Windows1252`, data-observed for the selected English installation:
@@ -129,7 +129,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | PC stats (stat port) | `CH n`, `PE n`, `LE n`, `AL n`, `MA n` (the signed rule on charisma, perception, level, alignment, aptitude), `TA n` (on the negated aptitude), `NA n` (alignment ≥ −n for n ≥ 0, ≤ n for n < 0) as Player conditions; n is signed, no `+` |
 | Item holdings (item-hold port) | `IN n`, `NI n` as Player conditions (n ≥ 0: the PC or a follower holds an item named n; n < 0: the NPC or its substitute container holds an item named −n; `NI` the negation); n is signed, no `+`, not −2³¹ |
 | Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
-| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). |
+| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). An `FL node` whose node is missing from the DLG is offered with no target: blank final line, the other operations and the `CO` event run, the talk ends (ARC-SCRIPT-2790, FLM1); a node that is a Player record is used the same way (ARC-SCRIPT-2804, FLM2): its text is the line, its action runs after the reply's (the NPC action grammar, so a nested `fl`/`jo` inside it stays refused, #2981) and the talk ends; a reply whose action holds any of these transfers ignores its own response number, so a response naming no NPC record is no failure for it (ARC-SCRIPT-2807, FLM3); a join, an unwait and an expert teacher still need an NPC node. |
 
 Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN` as an action, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
@@ -314,7 +314,7 @@ With the optional `IDialogStatPort` (`DialogConversationPorts.Stats`) Player con
   `int.MinValue` and a `+` sign are damage here.
 - **Port.** `Stat(pc, stat number)` answers the PC's stat as the original's getter does (null when the owner does not hold the stat: the conversation fails with `InvalidQueryResult`; a
   throwing port fails it with `QueryException`). `SessionDialogStatPort` over `QueryHeroScriptStat` (strength to charisma and the aptitude with the life's poison and crippled
-  legs, the stored level and alignment); the AREA viewer offers it only with a session hero (the diagnostic PC has no stats), like the skill gates.
+  legs, the level and alignment with the hero's effect list laid over the stored values); the AREA viewer offers it only with a session hero (the diagnostic PC has no stats), like the skill gates.
 - **Limits.** The getter's other effects (Tempus Fugit, the follower bonus, the background adjustments) are not modelled in the session (ledger row 0x4B0490), so a condition
   can differ from the original where they matter.
 - **Installed data.** `CH` 478, `MA` 418, `TA` 88, `NA` 69, `LE` 44, `AL` 31 and `PE` 11 Player condition fields; all parse, none stops on these codes. Both rule settings behave
@@ -501,7 +501,7 @@ C library's atoi) is a skill the NPC would use on the PC. The original asks the 
 - **Skill 10 (heal) is offered when the NPC may heal the PC** (the host's `DialogHealerFacts.SkillAllowed` for skill 10: a healing item in the NPC's pack and a healer that is neither undead nor mechanical); **any other number passes the test** and is offered (a text whose atoi is 0 is skill 0).
   The option text is the PC line 900..999 with the skill's name (empty for a number without one). Both need the healer menu's ports (`Healer`, `Greeting`, `World`, `Gold` and `Purse` or `Trainer`); without them the reply stays a frontier, as before.
 - **The pick** runs the reply's action, then offers the skill as the healer menu's option does (ledger HLR7, HLR9, HLR10; states 0xE then 0x10): a follower of the PC (its leader is the PC) is served at once and free, anyone else is quoted `(level + 2) × (tier + 1)` of the NPC's *named* skill on the reaction scale, paid
-  and then served by the NPC's skill goal 33 on the PC (tool: the healing item for skill 10, none for other skills, 0x4C91F0). The host starts the goal for any of the 16 skills; the attempt goal of a skill other than heal and pick pocket is not built in the AI host (`AttemptSkill`: nothing happens and the goal ends), so a
+  and then served by the NPC's skill goal 33 on the PC (tool: the healing item for skill 10, none for other skills, 0x4C91F0). The host starts the goal for any of the 16 skills; the attempt goal of gambling (ARC-AI-2623) and repair, on an item (ARC-AI-2622), is built in the AI host, and pick locks has its own goal 67 (`AttemptSkill`: for any other case nothing happens and the goal ends; the other skills roll the shared check, ARC-AI-1854), so a
   `u:N` other than 10 and 5 (pick pocket: the NPC tries to steal the PC's gold) pays and does nothing yet (no installed reply has one). A number outside the 16 skills starts nothing.
 - **`z:N` (a spell sold for gold)** has no filter: the option text is the PC line 1000..1099 with the spell's name, the pick sells spell N for 100 on the reaction scale (free for a follower), and the NPC casts it on the PC (ledger HLR8, HLR11, DSV3). No installed reply uses it. Without the healer menu's ports it stays an offered blocked reply.
 
@@ -750,7 +750,8 @@ map's own snapshot, and the consequences stay in the session the map carries
 
 `AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
 human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
-`[PC]`/`[NPC]`, follow requests accepted. No item, party, map or AI simulation runs. The
+`[PC]`/`[NPC]` (kept for tests only: a host with a session hero prints the hero's player name, and a host with an NPC-name source the speaker's shown name, see
+[names in lines](#names-in-lines-arc-script-2787)), follow requests accepted. No item, party, map or AI simulation runs. The
 panel shows typed identifiers in its effect ledger, never raw operations.
 
 Since ARC-WORLD-043 the host opens the speaker's reaction conversation slot right before each conversation starts and
@@ -973,3 +974,11 @@ diagnostic profile are project policy. Unknown: original parser edge cases, the
 prefix markers' phrases, all other operations, reaction/alignment modifiers, item transfer outcomes,
 follower rules and the SCR continuation after the dialog.
 
+## Names in lines (ARC-SCRIPT-2787)
+
+`@pcname@` is the session hero's player name (the original's string field 0x10E, the bytes up to the first zero decoded as the game's texts are; an unset name prints
+empty) and `@npcname@` the speaker's shown name taken as a recognized NPC (the speaker is its own observer in 0x416B00, ledger
+[NM1–NM5](../research/ledger/social.md#names-in-dialog-lines-arc-script-2787)), through `AreaDialogNames`. `AreaConversationHost.NamesFor(speaker)` builds the pair for the
+conversation, the generic greeting and the follower, class and race lines; `AreaConversationHost.NpcName` (the viewer wires `AreaDialogNames.NpcNameSource` over the loaded description tables) and the
+host's script host give the same names to a floated line. A session without a hero keeps the profile's placeholder names, and a host without an NPC-name source keeps `[NPC]` (tests). The shop merchant's bet lines use the
+shop's merchant name. The use host's printed lines take the attachee of the run for `@npcname@` and its floated lines the float's speaker (else the attachee); `@pcname@` there is always the hero's name, although the original names an NPC triggerer by its not-yet-met description (not read yet), and the shop merchant's bet lines use the shop window's merchant name (taken as an unmet NPC, NM3 differs for a merchant the hero has not met).

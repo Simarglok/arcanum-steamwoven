@@ -126,12 +126,13 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-017: the throw of the wielded weapon when it "default throws" (weapon flag 0x200, ledger RH2), with its stored
     /// weight: the smoke's lent one, else the wielded kit item's; null for a weapon that stays in the hand.</summary>
-    private SessionThrow? HeroThrow(AttackGoal goal)
-    {
-        var weight = _lentThrowWeightForSelfTest ?? (WieldedKitNumber() is { } number && _areaKitThrowWeight is { } kit && number <= kit.Count ? kit[number - 1] : null);
+    private SessionThrow? HeroThrow(AttackGoal goal) =>
         // ARC-COMBAT-018: the throw's target location is the goal target's tile, from which a missed throw scatters (TW1, RH2).
-        return weight is { } w ? new(w) { Target = GoalTile(goal) } : null;
-    }
+        HeroDefaultThrowWeight() is { } w ? new(w) { Target = GoalTile(goal) } : null;
+
+    /// <summary>ARC-COMBAT-2524: the stored weight of the wielded weapon when it "default throws" (the smoke's lent one, else the wielded kit item's); null for a weapon that stays in the hand.</summary>
+    private int? HeroDefaultThrowWeight() =>
+        _lentThrowWeightForSelfTest ?? (WieldedKitNumber() is { } number && _areaKitThrowWeight is { } kit && number <= kit.Count ? kit[number - 1] : null);
 
     /// <summary>ARC-COMBAT-1930 (VCG9): the loudness of an attack event of the hero's wielded weapon (loud for weapon flag 0x1, silent for 0x2, else normal; bare hands and a non-weapon are normal). Asked before the attack,
     /// as a thrown weapon leaves the hand at it.</summary>
@@ -166,9 +167,9 @@ public partial class TerrainViewerApp
     /// start, and lands where it ends.
     /// </summary>
     private void LaunchProjectile(AttackGoal goal, SessionShot shot, (int Art, int Range) weapon, AttackResolution resolution, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter) =>
+        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter, int? weaponPrototype) =>
         FlyShot(shot, scatter ?? GoalTile(goal), unchecked((uint)weapon.Art), false, weapon.Range,
-            resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, target, critter, obj, scatter is not null);
+            resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, target, critter, obj, scatter is not null, weaponPrototype: weaponPrototype);
 
     /// <summary>
     /// The flight of one shot from the hero's cell to <paramref name="destination"/> (<see cref="LaunchProjectile"/>'s; ARC-UI-063: the
@@ -179,7 +180,7 @@ public partial class TerrainViewerApp
     /// a created object whose run, goal 36, builds the line itself; a shot whose destination is its own tile pops at once (no flight).
     /// </summary>
     private void FlyShot(SessionShot shot, CellCoord destination, uint? art, bool unfacedArt, int range, bool hit, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless, bool sizeArc = false)
+        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless, bool sizeArc = false, int? weaponPrototype = null)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
@@ -192,7 +193,7 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
             Flight = new(start, start, [(0, 0)], 1, start, 0, 0, 0), State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
-            Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc,
+            Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc, StepsPerTick = WeaponFlightSteps(weaponPrototype),
             Launched = new(ProjectileRowEntity(target), critter is not null, critter is null && obj is not null, null, null),
         };
         if (!ProjectileHost().Launch(projectile, start, critter?.Entity ?? obj?.Entity))
@@ -205,6 +206,7 @@ public partial class TerrainViewerApp
             + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}"
             + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : "") + (targetless ? " scattered" : "")
             + (owner.QueryShotReturns(shot) ? $" boomerang range={range}" : ""));
+        RecordForSelfTest(ProjectileStepsForSelfTest, projectile.StepsPerTick);
         SyncAreaProjectileBodies();
     }
 
@@ -232,6 +234,11 @@ public partial class TerrainViewerApp
         AiFlyShot(shooter, blocker.Type == 0 ? $"wall:{blocker.Key.SourceIndex}" : ObjectTargets()?.EntityOfKey(blocker.Key) ?? $"{blocker.Key.Kind}:{blocker.Key.SourceIndex}", blocker,
             blocker.Type == 0 || _areaSession is not { } owner ? null : ObjectTargets()?.Target(owner, blocker.Key, AreaTrapped), shot, from, destination);
 
+    /// <summary>ARC-RENDER-2035: the prototype number of the weapon an NPC wields now (its weapon-slot item), null for none; the fallback when the AI host names none (a launch outside its attack); its attack hands the weapon read before the strike (<see cref="AreaAiHost.LaunchingWeapon"/>).</summary>
+    private int? NpcWieldedWeaponPrototype(GameSessionOwner owner, string npc) =>
+        _combatHost?.Worn(owner, CurrentAreaMap, npc)?.FirstOrDefault(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && item.Entity is not null) is { Entity: not null } weapon
+            ? weapon.Fields.Object.Prototype : null;
+
     private bool AiFlyShot(string shooter, string target, AreaObjectRecord targetRow, AreaObjectAttackTarget? obj, SessionShot shot, CellCoord from, CellCoord destination)
     {
         if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(shooter, out var shooterRow)
@@ -244,6 +251,8 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Object = obj, Shooter = shooterRow, Destination = destination, Art = faced,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(facts.Hit, false, facts.Range),
+            // ARC-RENDER-2035 (PF4): the shot's pace is the launcher's projectile-speed entry of the weapon list.
+            StepsPerTick = WeaponFlightSteps(_aiHost?.LaunchingWeapon is { } launching && launching.Shooter == shooter ? launching.Weapon : NpcWieldedWeaponPrototype(owner, shooter)),
             Launched = new(atObject && obj is null ? null : target, false, obj is not null, shooter, null),
         };
         _npcShotLaunching = shot.Id;
@@ -258,6 +267,7 @@ public partial class TerrainViewerApp
         _npcShotLaunchesForSelfTest.Add((shot.Id, facts.Hit, shooter));
         GD.Print($"ARC-DEV-282 npc-shot-launch shot={shot.Id} entity={projectile.Entity} shooter={shooter} target={target} hit={facts.Hit} range={facts.Range} from={from.X},{from.Y}"
             + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}");
+        RecordForSelfTest(ProjectileStepsForSelfTest, projectile.StepsPerTick);
         SyncAreaProjectileBodies();
         return true;
     }
@@ -282,24 +292,32 @@ public partial class TerrainViewerApp
         art = owner.QueryObjectArt(new SessionMapId(CurrentAreaMap), thrown.Item) ?? art;
         // ARC-COMBAT-1717: a thrown weapon carries the check decided at the throw; the hit's target is the struck critter (the hero, or an NPC of the shown map).
         var decided = owner.QueryNpcShot(shot);
+        // ARC-COMBAT-2693: a grenade's flight carries its check too (a stray strike), but its parent item is no weapon: it keeps the size arc and its own art.
+        var generic = decided is { Generic: true };
         var weapon = decided is not null;
         // An unchecked flight of a weapon (a throw at a location) is no size arc either: its parent item is a weapon (PF11).
-        var isWeapon = weapon || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
+        var isWeapon = weapon && !generic || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
         var hit = decided is { Hit: true };
-        var aimedId = hit ? decided!.Value.Target == SessionNpcShotFacts.HeroTarget ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : decided.Value.Target : null;
+        // ARC-COMBAT-2523 (TW11): a thrown weapon decided a hit at a location names no struck critter: it flies to the location and strikes nothing (the targetless hit shot, ProjectileRules.Cross).
+        var aimedId = hit && decided!.Value.Target != SessionNpcShotFacts.LocationTarget
+            ? decided.Value.Target == SessionNpcShotFacts.HeroTarget ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : decided.Value.Target : null;
+        var targetless = !hit || aimedId is null;
         var aimed = row;
         if (aimedId is not null && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc && !map.TryGetRow(aimedId, out aimed!)) return false;
         if (aimedId == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) aimed = HeroRow;
         // PF14: the weapon's projectile art is a scenery art faced in the flight's direction (the hero's thrown dagger flies so); without one the item's own art flies as it lies.
-        if (weapon && decided!.Value.ThrownArt is { } missile) art = ProjectileRules.FacedArt(missile, direction) ?? art;
+        if (weapon && !generic && decided!.Value.ThrownArt is { } missile) art = ProjectileRules.FacedArt(missile, direction) ?? art;
         var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = aimed, Thrower = row, Shooter = weapon ? row : null, Destination = destination, Art = art,
-            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, !hit, thrown.Range), Thrown = thrown, Targetless = !hit, SizeArc = !isWeapon,
+            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, targetless, thrown.Range), Thrown = thrown, Targetless = targetless, SizeArc = !isWeapon,
+            // ARC-RENDER-2035 (PF4): a thrown weapon (type 5) flies at the pace of its own projectile-speed entry; any other thrown item at the default.
+            StepsPerTick = WeaponFlightSteps(!isWeapon ? null : map.TryGetRow(thrown.Item, out var paced) ? paced.Type == 5 ? paced.PrototypeNumber : null
+                : AreaMadeItems.Kind(owner, thrown.Item, thrower) is { Type: SessionItemType.Weapon } made ? made.Prototype : null),
             Launched = new(aimedId ?? thrower, false, false, weapon ? thrower : null, thrower),
         };
         // A weapon's refused launch leaves its shot to the AI host (the hit strikes at once, the item lands); a generic item's ends it (the item stays on the thrower's cell).
-        _npcShotLaunching = weapon ? shot.Id : null;
+        _npcShotLaunching = weapon && !generic ? shot.Id : null;
         bool launched;
         try { launched = ProjectileHost().Launch(projectile, from, hit && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? aimedId : null); }
         finally { _npcShotLaunching = null; }
@@ -312,6 +330,7 @@ public partial class TerrainViewerApp
             + $" art={(art is { } a ? $"0x{a:X8}" : "none")}" + (weapon ? $" weapon check={(hit ? "hit " + aimedId : "miss")}" : ""));
         _npcThrowLaunchesForSelfTest.Add((shot.Id, thrown.Item, hit, thrower, from, destination, owner.QueryItemInFlight(thrown.Item),
             owner.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.FirstOrDefault(ground => ground.Item.Entity == thrown.Item)?.Cell));
+        RecordForSelfTest(ProjectileStepsForSelfTest, projectile.StepsPerTick);
         SyncAreaProjectileBodies();
         return true;
     }
@@ -537,8 +556,9 @@ public partial class TerrainViewerApp
             return ProjectileCrossResult.Ended;
         }
         ProjectileCrossResult end;
-        if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
-                : _combatHost!.Target(owner, map, struck.Key) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
+        // ARC-COMBAT-2568 (RH6, 0x4B2F60): a companion the shot meets is struck like any critter (its identity, its live cell).
+        if ((struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
+                : (IsAreaCompanion(struck.Key) ? AreaTargetOf(struck.Key) : _combatHost!.Target(owner, map, struck.Key)) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
         {
             var result = owner.LandShot(owner.Version, projectile.Shot, CritterAttack(goal, 1, null));
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
@@ -555,7 +575,7 @@ public partial class TerrainViewerApp
         {
             if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero), HitScripts = HeroHitScripts(target.Entity) });
+                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero), HitScripts = HeroHitScripts(target.Entity), ArmourScripts = HeroArmourScripts(target.Entity) });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
             end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, target.Entity);
@@ -564,9 +584,15 @@ public partial class TerrainViewerApp
         else if (struck.Type == 0)
         {
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
+                new SessionObjectAttack
+                {
+                    Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
+                    // ARC-COMBAT-1973 (RH5): the strike offers the weapon's hit scripts and the wall's taking-damage script as any object's.
+                    TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(struck), SessionSpellCaster.Hero), HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(struck)), ArmourScripts = HeroArmourScripts(AreaUseScriptHost.EntityId(struck)),
+                });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
-            end = StruckEnd(projectile);
+            // ARC-COMBAT-1973 (RH5): a wall is hit without a roll, so a thrown item's hit script (not its miss script) ends the flight, with the wall as the target.
+            end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, AreaUseScriptHost.EntityId(struck));
             if (result.Disposition != GameSessionDisposition.Rejected)
             {
                 _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
@@ -597,7 +623,7 @@ public partial class TerrainViewerApp
         var owner = projectile.Owner;
         if (struck.Type == 0)
         {
-            var result = ai.LandShotOnObject(shooterId, projectile.Shot, null, wall: true);
+            var result = ai.LandShotOnObject(shooterId, projectile.Shot, null, wall: true, wallRow: struck);
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"an NPC's shot on a wall: disposition={result?.Disposition} failure={result?.Failure} prevented={result?.Resolution?.Damage?.Prevented}");
             _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, $"wall:{struck.Key.SourceIndex}", result?.Disposition ?? GameSessionDisposition.Rejected, null));
             if (result is { Disposition: not GameSessionDisposition.Rejected }) NpcObjectHit(shooterId, struck, null, result);
@@ -833,7 +859,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The shown map as a projectile crosses it: the shot's target where it stands (an NPC at its map cell, a companion at
     /// its live cell, an object at its cell), the living PCs and NPCs on a tile (the hero, the companions and the map's living NPCs in
-    /// row order), and the obstruction of a free flight's step (the line of fire's step cost, <see cref="LineOfFireRules.StepCost{T}"/>).</summary>
+    /// row order), and the obstruction of a free flight's step (the step cost with the projectile's flags 0x0D: the line of fire's step plus a closed portal stopping it, <see cref="LineOfFireRules.StepCost{T}"/>).</summary>
     private sealed class ProjectileMap(TerrainViewerApp app, GameSessionOwner owner, AreaProjectile projectile, AreaLineOfFire lineMap) : IProjectileMap<AreaObjectRecord>
     {
         public CellCoord? TargetTile => app.LiveCell(owner, projectile.Target);
@@ -861,7 +887,7 @@ public partial class TerrainViewerApp
         private AreaObjectRecord Same(AreaObjectRecord row) => row.Key == projectile.Target.Key ? projectile.Target : row;
 
         public AreaObjectRecord? Obstruction(CellCoord from, int rotation) =>
-            LineOfFireRules.StepCost(from, rotation, false, lineMap, owner.Rules.Combat).Blocker;
+            LineOfFireRules.StepCost(from, rotation, false, lineMap, owner.Rules.Combat, portalsBlock: true).Blocker;
     }
 
     private CellCoord HeroCellNow(AreaGridSession session)

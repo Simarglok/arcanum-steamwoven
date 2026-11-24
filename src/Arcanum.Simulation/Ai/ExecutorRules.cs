@@ -26,7 +26,7 @@ public static partial class AiExecutorRules
     [
         GoalType.RunToTile, GoalType.MoveNearTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.MoveNear, GoalType.PickupItem, GoalType.AttemptPickup, GoalType.Attack,
         GoalType.AttemptAttack, GoalType.Follow, GoalType.Flee, GoalType.CastSpell, GoalType.AttemptSpell, GoalType.UseSkill, GoalType.AttemptSkill,
-        GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
+        GoalType.ThrowItem, GoalType.UseItem, GoalType.UseItemWithSkill, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
         GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile, GoalType.Animate, GoalType.AnimateKneelMagicHands, GoalType.AnimateReverse,
         GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor, GoalType.PleaseMove,
@@ -338,7 +338,17 @@ public static partial class AiExecutorRules
         world.RunsOf(npc) is { Count: > 0 } all ? all : current is null ? [] : [current];
 
     private static GoalRunFlags Gait(IAiGoalWorld world, string id, GoalRunFlags flags) =>
-        world.Mover(id).Encumbrance >= RunRefusedEncumbrance ? flags & ~GoalRunFlags.Running : flags;
+        !RunPermitted(world.Mover(id)) ? flags & ~GoalRunFlags.Running : flags;
+
+    // Whether the object may run (the gait function's run test with the encumbrance refusal): a critter whose concealment flag is set runs only with the prowling training master
+    // (an apprentice or untrained one sneaks, an expert walks); an unflagged one, and the PC (whose stealth gait the viewer owns), run unless the encumbrance level is
+    // RunRefusedEncumbrance (ARC-AI-1711, ledger VBG19).
+    // ARC-RENDER-2539 (the gait function 0x42EDC0): whether the step is the stealth walk (animation 3): the concealment flag is set and the prowling training (skill 6) is below expert;
+    // a run wanted is ignored then, an expert walks. The PC's stealth gait is the viewer's (as for RunPermitted).
+    public static bool Sneaks(AiMoverFacts mover) => !mover.Pc && mover.Prowling && mover.ProwlingTraining < SkillTraining.Expert;
+
+    public static bool RunPermitted(AiMoverFacts mover) =>
+        mover.Encumbrance < RunRefusedEncumbrance && (mover.Pc || !mover.Prowling || mover.ProwlingTraining >= SkillTraining.Master);
 
     // ---- the goal machine ----
 
@@ -447,6 +457,7 @@ public static partial class AiExecutorRules
         GoalType.AttemptPickLocks => AttemptPickLocksNode(owner, top, world),
         GoalType.ThrowItem => ThrowItemNode(owner, top, world),
         GoalType.UseItem => UseItemNode(owner, top, world),
+        GoalType.UseItemWithSkill => UseItemWithSkillNode(owner, top, world),
         GoalType.PickupItem => PickupNode(owner, top, world),
         GoalType.AttemptPickup => AttemptPickupNode(owner, top, world),
         GoalType.AnimateStunned => StunNode(owner, top, world),
@@ -559,6 +570,7 @@ public static partial class AiExecutorRules
                 if (!Check(world, owner, cost)) return new(Move.Kill, Reason: AiExecutorReason.Unpaid);
                 Consume(world, owner, cost);
                 var swing = world.BeginAttack(owner, target);
+                if (swing.Failed) return End(AiExecutorReason.AttackNoArt);
                 return Next(2, Math.Max(swing.ActionFrameMs, 1)) with { Top = goal with { RestMs = Math.Max(swing.RestMs, 0) } };
             case 2:
                 // The action frame: in reach → the hit step; out of reach → no hit, the action points are spent.
@@ -658,7 +670,7 @@ public static partial class AiExecutorRules
         switch (goal.Node)
         {
             case 1:
-                var running = world.Mover(owner).Encumbrance < RunRefusedEncumbrance;
+                var running = RunPermitted(world.Mover(owner));
                 return new(Move.Next, 2, Flags: running ? flags | GoalRunFlags.Running : flags & ~GoalRunFlags.Running);
             case 2:
                 return new(Move.Next, 3, Top: goal with { Range = FleeRange });
@@ -769,7 +781,7 @@ public static partial class AiExecutorRules
         // The run near runs unless encumbered; the walk near keeps the run's gait (an item-use run an NPC above 8 fatigue started
         // runs, AG16; a follower's walks; a spread-out run walks near running after a run near).
         var runNear = goal.Goal == GoalType.RunNear;
-        var running = runNear ? world.Mover(owner).Encumbrance < RunRefusedEncumbrance : Running(world, owner, flags);
+        var running = runNear ? RunPermitted(world.Mover(owner)) : Running(world, owner, flags);
         var gait = runNear ? running ? flags | GoalRunFlags.Running : flags & ~GoalRunFlags.Running : flags;
         var path = Plan(world, owner, new(AiPathKind.Near, leader, null, goal.Range, false, running) { NearOccupied = (flags & GoalRunFlags.NearOccupied) != 0 });
         if (path is null) return NoPath(owner, world, AiExecutorReason.NoPath);
@@ -806,7 +818,7 @@ public static partial class AiExecutorRules
         target is not null && world.Tile(target) is { } there && world.Tile(owner) is { } at && Distance(at, there) <= range;
 
     private static bool Running(IAiGoalWorld world, string owner, GoalRunFlags flags) =>
-        (flags & GoalRunFlags.Running) != 0 && world.Mover(owner).Encumbrance < RunRefusedEncumbrance;
+        (flags & GoalRunFlags.Running) != 0 && RunPermitted(world.Mover(owner));
 
     // ---- action points ----
 

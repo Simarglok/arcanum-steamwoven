@@ -59,19 +59,21 @@ public sealed class SessionDialogItemTakePort(
         var held = _session.QueryHeroKit().Select(item => (item.Entity, item.Kind))
             .Concat(_session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(_session.QueryMadeItems().Select(item => (item.Entity, item.Kind)))
-            .FirstOrDefault(item => item.Kind.Name == command.ItemName);
+            .FirstOrDefault(item => _session.QueryItemName(item.Entity, item.Kind.Name) == command.ItemName);
         if (held.Entity is not null)
         {
             var result = _session.GiveItemToNpc(_session.Version, npc, held.Entity, _insertCheck, scripts: scripts);
             LastResult = result;
             // ARC-WORLD-1283: the item's remove check (the no-drop flag) fails the transfer too, before the insert check; the original's fallback is the same (0x416091).
             if (result.Disposition == GameSessionDisposition.Rejected && result.Failure is GameSessionFailure.InsertRefused or GameSessionFailure.ItemNotDroppable) return Settle(npc, held.Entity);
+            // ARC-SCRIPT-2827: the recipient's transfer script declined the item (0x461CA0 returns 0, as for a refused insert): the same fallback.
+            if (result.DeclinedBy is not null) return Settle(npc, held.Entity);
             return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
         }
         foreach (var follower in _session.QueryParty().Followers)
         {
             prepare?.Invoke(follower.Entity);
-            if (_session.QueryHolderItems(follower.Entity)?.Any(item => item.Facts.Kind.Name == command.ItemName) == true)
+            if (_session.QueryHolderItems(follower.Entity)?.Any(item => _session.QueryItemName(item.Entity, item.Facts.Kind.Name) == command.ItemName) == true)
                 return follower.Entity == npc ? DialogCommandResult.Applied : DialogCommandResult.Rejected; // the NPC itself is the first holder: the item is already with it
         }
         return DialogCommandResult.Applied;

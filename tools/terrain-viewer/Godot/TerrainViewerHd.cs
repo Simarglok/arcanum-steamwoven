@@ -1,5 +1,6 @@
 using Arcanum.Data.Hd;
 using Arcanum.Input;
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session.Settings;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -51,6 +52,9 @@ public partial class TerrainViewerApp
         _visualStore = new VisualProfileSettingsStore(AutomatedVisualRun);
         var packPath = System.Environment.GetEnvironmentVariable("ARC_HD_PACK");
         var requested = System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")?.Trim().ToLowerInvariant();
+        // ARC-DEV-2923: the sheet HD check (ARC_AREA_SHEET_HD_VERIFY=1 with ARC_HD_PACK) turns the interface HD for itself and the Crash Site smoke's
+        // later pixel observers compare Legacy source pixels, so a smoke run with that check takes the Legacy world profile unless the run names one.
+        if (string.IsNullOrEmpty(requested) && _nativeSmoke && System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_HD_VERIFY") == "1") requested = "legacy";
         VisualProfile profile;
         if (!string.IsNullOrEmpty(requested) || !string.IsNullOrWhiteSpace(packPath))
         {
@@ -66,7 +70,8 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-2174: the one HD setting is the profile (the interface and the relit look follow it); the game settings hold it, like any start.
             profile = _gameSettings.HdInterface ? VisualProfile.Hd : VisualProfile.Legacy;
-            _visualOrigin = !_visualStore.Persistent ? "default (automated run)" : _visualStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
+            // ARC-UI-2221: the profile comes from the game settings, so the origin is theirs too (their file, not the visual store's).
+            _visualOrigin = _gameSettingsOrigin;
         }
         HdPack? pack = null; var open = "none"; var found = 0;
         var fromEnvironment = !string.IsNullOrWhiteSpace(packPath);
@@ -158,8 +163,13 @@ public partial class TerrainViewerApp
         HdPackSourceResolver.Resolve(mode, customPath, PackFolders(), new HdFileProbe());
 
     /// <summary>Requests the other visual profile (H or the palette action), saves the request and
-    /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.</summary>
-    private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(_canvas.ToggledVisualProfile, via);
+    /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.
+    /// ARC-UI-2221: the other value than the saved HD value (the one setting, written at every request, so a pending switch is covered); the
+    /// canvas profile can differ from it (a pack-problem fallback, an ARC_VISUAL_PROFILE override), and toggling from that would write the saved value again.</summary>
+    private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(VisualToggleTarget(_gameSettings.HdInterface), via);
+
+    /// <summary>ARC-UI-2221: what a toggle asks for: the other value than the saved HD value.</summary>
+    internal static VisualProfile VisualToggleTarget(bool savedHd) => savedHd ? VisualProfile.Legacy : VisualProfile.Hd;
 
     /// <summary>ARC-UI-089: requests <paramref name="target"/> (an HD request names its target; the toggle asks for the other one).</summary>
     private VisualRequestOutcome RequestVisualProfile(VisualProfile target, string via)
@@ -168,10 +178,11 @@ public partial class TerrainViewerApp
         var outcome = _canvas.RequestVisualProfile(target);
         // Persisted at request time; a failure is reported and never blocks the switch.
         _visualKeyNotice = null;
-        if (outcome != VisualRequestOutcome.NoOp)
+        var on = target == VisualProfile.Hd;
+        // ARC-UI-2221: a request the canvas finds no change in (a fallback to Legacy while HD is saved On) still changes the saved value when it differs.
+        if (outcome != VisualRequestOutcome.NoOp || on != _gameSettings.HdInterface)
         {
             // ARC-UI-2174: the one HD value; the interface follows at once (the experimental generated interface is honoured only while HD is On, so Off clears it).
-            var on = target == VisualProfile.Hd;
             SaveGameSettings(_gameSettings with { HdInterface = on, GeneratedInterface = _gameSettings.GeneratedInterface && on });
             if (_visualStore is { } store)
                 _visualNotice = !store.Persistent ? "not saved (automated run)" : store.Save(target) ? null : "save FAILED, this run only";
@@ -207,6 +218,94 @@ public partial class TerrainViewerApp
         // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
         HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
+        SyncOriginalComposition();
+        SyncSteamwovenWorldZoom();
+    }
+
+    /// <summary>ARC-UI-3059: the composition's scale <c>s</c> the world zoom steps are capped by: device pixels per original unit, <c>min(width / 800, height / 600)</c> of the window (the column's unit scale; the same for the full-width layout, which has no composition of its
+    /// own), whatever the layout options in force (the launcher asks before any layout has run).</summary>
+    internal double SteamwovenWorldScale()
+    {
+        var size = GetViewport().GetVisibleRect().Size;
+        return size.X > 0 && size.Y > 0 ? SteamwovenColumnMenu.Fit((int)size.X, (int)size.Y).Factor : 1;
+    }
+
+    /// <summary>ARC-UI-3059: whether the world is drawn at the player's whole zoom step: the Steamwoven look (the HD option with the generated interface) in the game window.</summary>
+    internal bool SteamwovenWorldZoomActive => AreaGameBarPanel.SteamwovenOn && OriginalCompositionFactor == 0;
+
+    /// <summary>ARC-UI-3059: the whole step the game setting resolves to at the window's scale now.</summary>
+    internal int SteamwovenWorldZoomStep => SteamwovenWorldZoom.Resolve(_gameSettings.WorldZoomStep, SteamwovenWorldScale());
+
+    /// <summary>ARC-UI-3059: per frame, the camera shows the step (a resize or a change of look moves the cap) and goes back to the diagnostic preference when the look ends. The Fit view of the palette is a session view and is left alone.</summary>
+    private void SyncSteamwovenWorldZoom()
+    {
+        if (_camera is null || !IsWorld || _readyActorPlan is null) return;
+        var active = SteamwovenWorldZoomActive;
+        if (!active && !_steamwovenZoomWasActive) return;
+        _steamwovenZoomWasActive = active;
+        if (_worldFitView) return;
+        var viewport = WorldViewport;
+        var wanted = active ? SteamwovenWorldZoomStep : _worldStoredZoom;
+        if (Math.Abs(_camera.State.Zoom - Math.Max(wanted, _camera.ZoomFloor(viewport) / _camera.ZoomScale)) > 1e-9) _camera.SetWorldZoom(wanted, WorldAnchor, viewport);
+    }
+
+    /// <summary>ARC-UI-2936: whether the window draws the Original look as the centred 4:3 composition: the HD interface option is off, no launcher screen is open and the run is not an automated one (those read the plain
+    /// window pixels) unless <see cref="_originalCompositionForced"/> (the composition smoke).</summary>
+    internal bool OriginalCompositionWanted => _originalCompositionForced is { } forced ? forced
+        : !InterfaceHd.Enabled && _launcher is null && !_nativeSmoke && !SelfTestBootstrap && GetViewport() == GetWindow();
+
+    /// <summary>Null: the viewer decides (<see cref="OriginalCompositionWanted"/>); the composition smoke sets it.</summary>
+    internal bool? _originalCompositionForced;
+
+    /// <summary>The composition smoke's render target: the composition is laid out for this size instead of the real window's (a window cannot have the size of a 4K target on every screen); the picture on screen is the same virtual screen.</summary>
+    internal Vector2I? _originalCompositionTarget;
+
+    /// <summary>The virtual screen's whole factor now in force (0: none, the window draws at its own size).</summary>
+    internal int OriginalCompositionFactor { get; private set; }
+
+    /// <summary>ARC-UI-2936: per frame, the window's content scale follows the look. In the composition the window is a virtual screen of 800 n × 600 n pixels (n = ceil(s), viewport mode, aspect keep): every interface part keeps
+    /// its whole-factor layout at n, the world is drawn at the composition's scale, Godot centres the picture, reduces it smoothly to s and leaves the rest black, and the pointer is mapped back by the window. The
+    /// camera's zoom follows the same factor (<see cref="OriginalComposition.ZoomScale"/>).</summary>
+    private void SyncOriginalComposition()
+    {
+        var window = GetWindow();
+        var wanted = OriginalCompositionWanted;
+        var size = _originalCompositionTarget ?? window.Size;
+        var factor = wanted && size.X > 0 && size.Y > 0 ? OriginalComposition.WholeFactor(size.X, size.Y) : 0;
+        var virtualSize = factor == 0 ? Vector2I.Zero : new Vector2I(OriginalComposition.ScreenWidth * factor, OriginalComposition.ScreenHeight * factor);
+        var contentSet = window.ContentScaleMode == Window.ContentScaleModeEnum.Viewport && window.ContentScaleAspect == Window.ContentScaleAspectEnum.Keep && window.ContentScaleSize == virtualSize;
+        var changed = factor != OriginalCompositionFactor;
+        if (changed || (factor != 0 && !contentSet))
+        {
+            if (factor == 0)
+            {
+                window.ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
+                window.ContentScaleSize = Vector2I.Zero;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.ContentScaleFactor = 1;
+            }
+            else
+            {
+                window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.ContentScaleFactor = 1;
+                window.ContentScaleSize = virtualSize;
+            }
+            // The picture beside the virtual screen is the window's clear colour: black while the composition stands, the project's colour again after it.
+            if (changed) RenderingServer.SetDefaultClearColor(factor == 0 ? (Color)ProjectSettings.GetSetting("rendering/environment/defaults/default_clear_color", new Color(0.3f, 0.3f, 0.3f)) : Colors.Black);
+            OriginalCompositionFactor = factor;
+            if (changed) { _gameBarPanel?.Relayout(); GD.Print($"ARC-UI-2936 original composition factor={factor} window={size.X}x{size.Y}"); }
+        }
+        // The camera after the window: the viewport the new content scale gives is not read until the next frame, so the camera is told it.
+        var (zoomScale, viewShift) = factor == 0 ? (1.0, 0.0) : (OriginalComposition.ZoomScale(factor), OriginalComposition.ViewShift(factor));
+        var playHeight = factor == 0 ? 0.0 : (double)OriginalComposition.ViewHeight * factor;
+        if (_camera is not null && (_camera.ZoomScale != zoomScale || _camera.ViewShift != viewShift || _camera.PlayHeight != playHeight))
+        {
+            _camera.ZoomScale = zoomScale; _camera.ViewShift = viewShift; _camera.PlayHeight = playHeight;
+            var viewport = factor != 0 ? new Vector2(virtualSize.X, virtualSize.Y) : GetViewport() == window ? new Vector2(window.Size.X, window.Size.Y) : WorldViewport;
+            if (IsWorld && _readyActorPlan is not null) _camera.ResizeWorld(WorldAnchor, viewport);
+            else _camera.ReapplyZoom();
+        }
     }
 
     /// <summary>ARC-RENDER-2060, ARC-RENDER-2076, ARC-UI-2174: the relit look is a component of HD, not a setting of its own: it is on exactly while the active

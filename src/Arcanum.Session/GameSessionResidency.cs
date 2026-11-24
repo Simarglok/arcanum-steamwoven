@@ -403,8 +403,8 @@ public sealed partial class GameSessionOwner
         if (_inventory.Objects.PileOf(entity) is { } heap && heap.Map == map) return new(entity, row.Kind, origin, null, heap.Entity, off, destroyed);
         if (row.Holder is { } of && residency.Rows[of] is var holderRow)
         {
-            // A critical's drop from an NPC (ARC-COMBAT-009) and a spilled container's items (ARC-COMBAT-008) lie loose.
-            if (holderRow.Kind == SessionResidentKind.Npc && Record(map, entity, ItemDroppedProperty) is { Map: var dropMap, Value: var drop and > 0 } && dropMap == map)
+            // A critical's drop from an NPC (ARC-COMBAT-009), the invulnerable items a script's destroy took out of an NPC or a container (ARC-WORLD-2493, ARC-WORLD-2502) and a spilled container's items (ARC-COMBAT-008) lie loose.
+            if ((holderRow.Kind is SessionResidentKind.Npc or SessionResidentKind.Container) && Record(map, entity, ItemDroppedProperty) is { Map: var dropMap, Value: var drop and > 0 } && dropMap == map)
                 return new(entity, row.Kind, origin, Moved(map, entity) ?? new((int)((drop - 1) & 0xFFFFFF), (int)(((drop - 1) >> 24) & 0xFFFFFF)), null, off, destroyed);
             if (holderRow.Kind == SessionResidentKind.Container && RecordedObject(_maps, map, of) is { Condition: SessionObjectCondition.Destroyed, Spill: { } spill })
                 return new(entity, row.Kind, origin, Moved(map, entity) ?? spill, null, off, destroyed);

@@ -103,6 +103,12 @@ public sealed class GameSessionLimits
     /// <c>CreatedItemRules.Limit</c> lie around one object; under Original the plant generator adds without limit, and past this bound
     /// the session creates no more (the viewer reports it).</summary>
     public const int PolicyMaxCreatedItems = 8192;
+    /// <summary>Mana stores (field 92) of worn items the session holds (ARC-MAGIC-2403): a payment writes the store of every item a critter wears, never refused for a shared budget as the original
+    /// writes it always. A critter wears at most nine items, and the installed maps hold 3,792 NPCs (34,128 slots), the hero and the companions are 65 more; the rest is room for created critters.</summary>
+    public const int PolicyMaxManaStores = 65_536;
+    /// <summary>Spent spell charges (field 105) of the items a spell source can be (ARC-MAGIC-2434): a payment writes the charge of any item the host names as the source, never refused for a shared budget as the original
+    /// writes it always. One row for every item that ever paid or was recharged; the installed map holds 5,380 item rows in its largest residency, so 65,536 leaves room for every map and for made items.</summary>
+    public const int PolicyMaxItemCharges = 65_536;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
@@ -110,7 +116,7 @@ public sealed class GameSessionLimits
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
         int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems,
         int maxAmmoRecords = PolicyMaxAmmoRecords, int maxGoldRecords = PolicyMaxGoldRecords, int maxDangerRecords = PolicyMaxDangerRecords,
-        int maxDangerEnemies = PolicyMaxDangerEnemies, int maxCreatedItems = PolicyMaxCreatedItems)
+        int maxDangerEnemies = PolicyMaxDangerEnemies, int maxCreatedItems = PolicyMaxCreatedItems, int maxManaStores = PolicyMaxManaStores, int maxItemCharges = PolicyMaxItemCharges)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -129,12 +135,14 @@ public sealed class GameSessionLimits
         if (maxDangerRecords is < 1 or > PolicyMaxDangerRecords) throw new ArgumentOutOfRangeException(nameof(maxDangerRecords));
         if (maxDangerEnemies is < 1 or > PolicyMaxDangerEnemies) throw new ArgumentOutOfRangeException(nameof(maxDangerEnemies));
         if (maxCreatedItems is < 1 or > PolicyMaxCreatedItems) throw new ArgumentOutOfRangeException(nameof(maxCreatedItems));
+        if (maxManaStores is < 1 or > PolicyMaxManaStores) throw new ArgumentOutOfRangeException(nameof(maxManaStores));
+        if (maxItemCharges is < 1 or > PolicyMaxItemCharges) throw new ArgumentOutOfRangeException(nameof(maxItemCharges));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
         MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords; MaxGoldRecords = maxGoldRecords; MaxDangerRecords = maxDangerRecords;
-        MaxDangerEnemies = maxDangerEnemies; MaxCreatedItems = maxCreatedItems;
+        MaxDangerEnemies = maxDangerEnemies; MaxCreatedItems = maxCreatedItems; MaxManaStores = maxManaStores; MaxItemCharges = maxItemCharges;
     }
 
     public int MaxMaps { get; }
@@ -155,6 +163,10 @@ public sealed class GameSessionLimits
     public int MaxDangerEnemies { get; }
     /// <summary>ARC-WORLD-081: the created items on the ground (<see cref="PolicyMaxCreatedItems"/>).</summary>
     public int MaxCreatedItems { get; }
+    /// <summary>ARC-MAGIC-2403: the worn items' mana stores (<see cref="PolicyMaxManaStores"/>), apart from <see cref="MaxDurabilityRecords"/>.</summary>
+    public int MaxManaStores { get; }
+    /// <summary>ARC-MAGIC-2434: the spent spell charges of items (<see cref="PolicyMaxItemCharges"/>), apart from <see cref="MaxDurabilityRecords"/>.</summary>
+    public int MaxItemCharges { get; }
 }
 
 /// <summary>
@@ -318,7 +330,13 @@ public sealed record GameSessionCreationResult(GameSessionOwner? Owner, GameSess
     ClockFailure ClockFailure, GlobalFlagReason FlagReason);
 
 public readonly record struct GameSessionMutationResult(GameSessionDisposition Disposition,
-    GameSessionFailure Failure, GameSessionVersion Version);
+    GameSessionFailure Failure, GameSessionVersion Version)
+{
+    private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+
+    /// <summary>ARC-SCRIPT-2880: the lines the item scripts the move ran printed (the remove-item scripts of a destroy, ledger IE3), in order, for the host to show; empty when none ran or the move carries none.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
+}
 
 /// <summary>Saved clock state without the process-local owner identity. Schema 70 (MIG12 S3, ARC-DEV-122) adds the real and animation
 /// stamps of the session's three clocks (TL34: the original's save stores all three): real from 1 ms, animation from 0; the world
@@ -680,8 +698,9 @@ public sealed class GameSessionSnapshot
     /// Schema 99 adds the hero's stored resistance array and stored age (<see cref="SessionHeroState.Resistances"/>, <see cref="SessionHeroState.Age"/>, ARC-MAGIC-1658).
     /// Schema 100 adds the native traps' shots in flight to the flights section (<see cref="SessionFlightState.TrapShots"/>, ARC-TECHNOLOGY-1635).
     /// Schema 101 adds the saved gambling roll (<see cref="GamblingRoll"/>, ARC-UI-1740). Schema 102 adds the followers of NPC leaders (<see cref="SessionPartyState.NpcLed"/>, ARC-WORLD-1840).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 101 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 102;
+    /// Schema 103 adds the changed mana stores of worn items to the durability section (ARC-MAGIC-2371). Schema 104 gives each pending recharge event (<c>item.recharge</c>) the map it is parked or scheduled on instead of a placeholder (ARC-MAGIC-2400). Schema 105 adds the inventory's last-drop tiles (ARC-SCRIPT-2594). Schema 106 adds the silent-move adjustments of worn armour (ARC-AI-1578).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 105 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 106;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

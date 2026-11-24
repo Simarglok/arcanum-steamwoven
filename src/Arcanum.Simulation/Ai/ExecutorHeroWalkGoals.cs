@@ -159,7 +159,7 @@ public static partial class AiExecutorRules
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(world);
         var frames = run.Frames.ToBuilder();
-        var state = new HeroWalkState(run.Flags, run.PathFlags);
+        var state = new HeroWalkState(run.Flags, run.PathFlags) { Approach = run.Bottom.Goal is GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem };
         var reason = AiExecutorReason.None;
         for (var nodes = 1; ; nodes++)
         {
@@ -216,6 +216,8 @@ public static partial class AiExecutorRules
     {
         public GoalRunFlags Flags = flags;
         public GoalPathFlags PathFlags = pathFlags;
+        /// <summary>ARC-COMBAT-2736: the walk is the approach of a use (38), loot (81) or pickup (15) run (the original's goals 8 and 61); the hero's own walk goals 3 and 4 and the walks of other goals (attack, cast, skills) are not covered (not read).</summary>
+        public bool Approach;
     }
 
     private static Transition HeroWalkNode(GoalFrame goal, HeroWalkState state, IAiHeroWalkWorld world) => goal.Goal switch
@@ -297,6 +299,11 @@ public static partial class AiExecutorRules
                         if (plan.Straight) state.Flags |= GoalRunFlags.Flight;
                         var steps = plan.Steps.Length > SegmentSteps ? plan.Steps[..SegmentSteps] : plan.Steps;
                         return new(Move.Next, goal.Goal == GoalType.RunToTile ? 7 : 6, Top: goal with { Path = steps, PathIndex = 0 });
+                    // ARC-COMBAT-2736 (0x427990, 0x42E9B0): the original's planner runs before the no-walk test and has no far outcome (it plans or fails), and the step start then refuses at once, so a run with run flag 0x100 (a Shift click)
+                    // never walks; Steamwoven's route follower is a walk too, so an approach (not the hero's own walk goals) is not handed the far goal: the run ends as a refused step does.
+                    case AiHeroPlanOutcome.Far when state.Approach && (state.Flags & GoalRunFlags.NoWalk) != 0:
+                        state.PathFlags &= ~GoalPathFlags.Replan;
+                        return End(AiExecutorReason.NoWalkStep);
                     case AiHeroPlanOutcome.Far when world.FollowRoute(tile):
                         state.PathFlags &= ~GoalPathFlags.Replan;
                         return new(Move.Restart, Delay: HeroRoutePollMs, Top: goal with { Flags = goal.Flags | GoalFrameFlags.RouteFollow });
@@ -307,7 +314,8 @@ public static partial class AiExecutorRules
                 }
             // 6: the turn toward the path's first rotation (a hero that faces it already, or is not standing, does not turn); goal 5 follows (node 4).
             default:
-                if (!goal.Path.IsDefaultOrEmpty && LineOfFireRules.Rotation(at, goal.Path[0]) is var rotation && world.NeedsTurn(rotation))
+                // ARC-COMBAT-2736 (0x42E9B0): the approach goal 61's step start answers false for run flag 0x100 before it writes the facing, so a no-walk approach (a Shift click out of reach) turns nowhere before its run ends (the hero's own goal 3 pushes the turn goal 53 first).
+                if (!(state.Approach && (state.Flags & GoalRunFlags.NoWalk) != 0) && !goal.Path.IsDefaultOrEmpty && LineOfFireRules.Rotation(at, goal.Path[0]) is var rotation && world.NeedsTurn(rotation))
                     return new(Move.Push, Frame: new GoalFrame(GoalType.Rotate) { Rotation = rotation });
                 return Next(goal.Goal == GoalType.RunToTile ? 5 : 4);
         }
@@ -330,10 +338,14 @@ public static partial class AiExecutorRules
         if (index > 0 && goal.Target is { } stop && world.AttackWalkInReach(stop)) return new(Move.Pop);
         var from = index == 0 ? at : goal.Path[index - 1];
         var next = goal.Path[index];
+        // ARC-COMBAT-2736 (GT148): an approach's step start refuses run flag 0x100 before anything else, so a held or blocked first step ends the same way (the status line hears of it).
+        if (state.Approach && (state.Flags & GoalRunFlags.NoWalk) != 0) return End(AiExecutorReason.NoWalkStep);
         var block = world.StepBlocked(from, next, lastOfSegment: index == goal.Path.Length - 1);
         // ARC-DEV-302 (GT148, D8): a held hero takes no step; the walk asks again in a frame and goes on to its destination when the hold ends.
         if (block == AiStepBlock.Held) return new(Move.Restart, Delay: HeroRoutePollMs, Reason: AiExecutorReason.StepHeld);
         if (block != AiStepBlock.Clear) return BlockedWalk(goal);
+        // ARC-COMBAT-2561 (GT148, GT213): the step start 0x42E9B0 answers false at once while run flag 0x100 (no-walk, a Shift click) is set, and a refusal ends the whole run (a click that added the flag to a walk run in a round stops it at its next step).
+        if ((state.Flags & GoalRunFlags.NoWalk) != 0) return End(AiExecutorReason.NoWalkStep);
         var ms = world.BeginStep(from, next, HeroRunning(state, world));
         if (ms <= 0) return BlockedWalk(goal);
         return new(Move.Next, 1, Delay: Math.Max(ms, 1), Top: goal with { PathIndex = index + 1 });

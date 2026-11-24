@@ -17,6 +17,10 @@ public sealed record SessionThrow(int Weight)
     /// line-of-fire redirect does not change, PF2), from which a missed throw scatters (RH2); null: the attack's
     /// <see cref="SessionAttack.TargetCell"/>.</summary>
     public Arcanum.Simulation.Movement.CellCoord? Target { get; init; }
+
+    /// <summary>ARC-COMBAT-1947: the item event points (<see cref="SessionWornItem.ScriptPoints"/>) of a spare of the wielded weapon's prototype that is not a kit item, from the host; null: the
+    /// session cannot judge such a spare and throws the wielded weapon.</summary>
+    public Func<string, IReadOnlyList<int>>? SpareScripts { get; init; }
 }
 
 /// <summary>ARC-COMBAT-017: the thrown item of a shot in flight (<see cref="Item"/>, its entity) and the thrown range at which its
@@ -200,7 +204,8 @@ public sealed partial class GameSessionOwner
     /// Refused (<see cref="GameSessionFailure.InvalidAttack"/>): a throw that does not fly, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>,
     /// no wielded weapon, or one whose skill is not melee (the only installed "default throws" weapon, the throwing dagger 6072, is a
     /// melee weapon; a bow's ammunition or a boomerang's return would follow other rules, TW7). ARC-SCRIPT-042: a weapon worn with item
-    /// event scripts is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>): the throw's removal would run them.
+    /// event scripts is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>): the throw's removal would run them. ARC-COMBAT-1947 (0x462930): the item thrown is the first other item of the wielded weapon's
+    /// prototype the hero holds (<see cref="SameKindSpare"/>), the wielded one only when there is none; the hand keeps its weapon while spares last.
     /// </summary>
     private GameSessionFailure ThrowingHero(ref SessionHeroAttack hero, SessionThrow? requested, bool flight, out string? thrown)
     {
@@ -210,10 +215,25 @@ public sealed partial class GameSessionOwner
             || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)) return GameSessionFailure.InvalidAttack;
         if (Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove(wielded.Item) != Arcanum.Simulation.Equipment.EquipmentRefusal.None)
             return GameSessionFailure.None;
-        // ARC-SCRIPT-042: the throw's removal (0x466E00) would run the weapon's wield-off and remove-item scripts, which this path does not.
-        if (wielded.ScriptPoints.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
-        // ARC-MAGIC-022: nor does it run a marked weapon's unwear (0x4CBFC0).
-        if (wielded.ItemSpells) return GameSessionFailure.ItemEffectUnsupported;
+        // ARC-COMBAT-1947 (0x54ED30 → 0x462930): the item thrown is the first other item of the wielded weapon's prototype the hero holds, else the wielded one.
+        var spare = SameKindSpare(wielded.Entity, requested);
+        if (spare is not null)
+        {
+            // The same checks as for the wielded weapon, on the item that leaves the hero's list (a pack item: it is not worn, so no wear spells or wield scripts).
+            if (QueryItemOff(_actor.Map, spare, dataOff: false)) return GameSessionFailure.None;
+            if (HasItemRuns(spare)) return GameSessionFailure.ItemEffectUnsupported;
+            if (SpareScriptPoints(spare, requested).Count > 0) return GameSessionFailure.ItemScriptUnsupported;
+        }
+        else
+        {
+            // ARC-SCRIPT-2386 (IV15, throw node 0x42AB90): an item that is switched off (object flag 0x2, a script's toggle) is not thrown: the weapon stays in the hand and attacks as without the flag.
+            // Only the session's record is read (the map data's own bit of a worn weapon is not).
+            if (QueryItemOff(_actor.Map, wielded.Entity, dataOff: false)) return GameSessionFailure.None;
+            // ARC-SCRIPT-042: the throw's removal (0x466E00) would run the weapon's wield-off and remove-item scripts, which this path does not.
+            if (wielded.ScriptPoints.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
+            // ARC-MAGIC-022: nor does it run a marked weapon's unwear (0x4CBFC0).
+            if (wielded.ItemSpells) return GameSessionFailure.ItemEffectUnsupported;
+        }
         var throwing = HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing];
         var range = ThrowRules.Range(hero.Combatant.Strength, throwing.Training, requested.Weight);
         hero = hero with
@@ -221,9 +241,43 @@ public sealed partial class GameSessionOwner
             Weapon = hero.Weapon with { Range = range }, Skill = CombatSkill.Throwing, SkillLevel = throwing.Level, Training = throwing.Training,
             Supported = true,
         };
-        thrown = wielded.Entity;
+        thrown = spare ?? wielded.Entity;
         return GameSessionFailure.None;
     }
+
+    // ARC-COMBAT-1947: the prototype 15085, which 0x49B290 numbers 0x3AD9: 0x462930 looks for no other item of it.
+    private const int NoSpareLookupPrototype = 15085;
+
+    /// <summary>
+    /// ARC-COMBAT-1947 (the same-prototype finder of the hero's attack click): the first other item the hero holds with the wielded weapon's prototype, in the hero's list order (kit, taken, made), or null
+    /// (none, or the prototype 15085). NOT READY: the session keeps no script points of a pack item, so a spare that is not a kit item (which carries none) is looked at only when the host
+    /// names its points (<see cref="SessionThrow.SpareScripts"/>); otherwise the wielded weapon is thrown as before.
+    /// </summary>
+    private string? SameKindSpare(string wielded, SessionThrow requested)
+    {
+        if (HeldKind(wielded) is not { } kind || kind.Prototype == NoSpareLookupPrototype) return null;
+        var first = HeroHeld().FirstOrDefault(held => held.Entity != wielded && held.Kind.Prototype == kind.Prototype);
+        return first.Entity is { } spare && (HeroDomain.KitNumber(spare) is not null || requested.SpareScripts is not null) ? spare : null;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2524 (ledger RH2, TW1, TW11): the item a click on a critter throws when the hero's wielded weapon "default throws" (<paramref name="requested"/>, the host's facts of it): the attack start builds the throw
+    /// goal 37 with the item and the target's location, never the critter, so the host starts the location throw (<see cref="ThrowHeroItem"/> with no struck critter) with this item instead of the attack goal. The item is the first other
+    /// item of the wielded weapon's prototype the hero holds (<see cref="SameKindSpare"/>), else the wielded one. Null (the attack goal starts, the weapon stays in the hand, as <see cref="ThrowingHero"/> leaves it): no hero or
+    /// no wielded weapon, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>, a wielded item that is no melee weapon (the session's own limit, TW7), a weapon the remove check refuses, or an item switched off.
+    /// </summary>
+    public string? QueryDefaultThrowItem(SessionThrow requested)
+    {
+        ArgumentNullException.ThrowIfNull(requested);
+        if (QueryHeroAttack() is not { } hero || requested.Weight is < 0 or > ThrowRules.MaxWeight || hero.Weapon.Kind != WeaponKind.Weapon || hero.Skill != CombatSkill.Melee
+            || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)
+            || Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove(wielded.Item) != Arcanum.Simulation.Equipment.EquipmentRefusal.None) return null;
+        var item = SameKindSpare(wielded.Entity, requested) ?? wielded.Entity;
+        return QueryItemOff(_actor.Map, item, dataOff: false) ? null : item;
+    }
+
+    private static IReadOnlyList<int> SpareScriptPoints(string spare, SessionThrow requested) =>
+        HeroDomain.KitNumber(spare) is not null ? [] : requested.SpareScripts?.Invoke(spare) ?? [];
 
     /// <summary>
     /// ARC-COMBAT-019 (ledger RH4, BR rows): a wielded boomerang (the throwing skill, 0x465D80) is checked with the thrown range of its

@@ -25,6 +25,7 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaMainMenuPanel : CanvasLayer
 {
     private ColorRect _backdrop = null!;
+    private SteamwovenColumnSidesView _sides = null!;
     private PanelContainer _panel = null!;
     private Label _header = null!;
     private VBoxContainer _buttons = null!;
@@ -121,6 +122,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
         Layer = 4;
         _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = DiagnosticBackdrop, MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
+        // ARC-UI-2891: the Steamwoven menus fill the window's height with black beside the plate.
+        _sides = new SteamwovenColumnSidesView();
+        AddChild(_sides);
         _art = new AreaMenuArtView();
         _art.ButtonPressed += index => ButtonPressed?.Invoke(index);
         _art.SoundRequested += id => SoundRequested?.Invoke(id);
@@ -459,7 +463,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
+        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false; _sides.Clear();
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -472,12 +476,14 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
+        UpdateSides();
         _modal.Position = Vector2.Zero; _modal.Size = size;
         if (_dialogScreen.Visible)
         {
             // The plate the menu's art stands on (the dialog's point is a point of the original's 800 × 600 screen).
             var (factor, position) = _art.PlateFit();
             _dialogScreen.Scale = new Vector2(factor, factor); _dialogScreen.Position = position;
+            _dialogScreen.TextureFilter = _art.TextureFilter; // the box samples as the plate under it does (ARC-UI-2577)
         }
         if (_art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible)
         {
@@ -493,6 +499,17 @@ public partial class AreaMainMenuPanel : CanvasLayer
         var height = _panel.GetCombinedMinimumSize().Y;
         _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
     }
+
+    /// <summary>ARC-UI-2891: while a Steamwoven menu is drawn by this panel (the full-screen menus and the pre-made, new-character and shop screens) the plate fills the window's height and the window around it is black (<see cref="SteamwovenColumnSidesView"/>); no backdrop of its own.</summary>
+    private void UpdateSides()
+    {
+        var anyArt = _art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible;
+        if (anyArt && AreaGameBarPanel.ColumnMenuPlan(GetViewport().GetVisibleRect().Size) is { } column) _sides.Present(column);
+        else _sides.Clear();
+    }
+
+    /// <summary>ARC-UI-2891: for the self-test: the black around the plate and whether it shows.</summary>
+    internal (SteamwovenColumnSidesView Sides, bool Shown) ColumnSidesForSelfTest => (_sides, _sides.Visible);
 
     private bool _dockedBelow, _optionsArt;
 

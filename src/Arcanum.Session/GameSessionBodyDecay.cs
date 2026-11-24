@@ -25,6 +25,8 @@ public sealed record SessionBodyDecayFiring(GameEvent Event, SessionMapId Map, s
 {
     public int Dropped { get; init; }
     public int Destroyed { get; init; }
+    /// <summary>ARC-SCRIPT-2879: the remove-item scripts (28) the walk ran, one per item with the point, with the corpse as the triggerer.</summary>
+    public SessionPassRemovals Removals { get; init; } = SessionPassRemovals.None;
 }
 
 /// <summary>
@@ -140,8 +142,11 @@ public sealed partial class GameSessionOwner
 
         // The items leave their holder in the walk's order (last first); each placement sees the items still to come as not yet dropped (as a container's spill does).
         var later = held2.Where(item => !item.Destroy).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-SCRIPT-2879 (0x463860 → 0x467860, BD3): every item of the walk, destroyed or dropped, runs its remove-item script (28; ARC-SCRIPT-2885: the wield-off script 25 first when the corpse wore the item) with the corpse as the triggerer after its unlink and before it is destroyed or laid down. Limit: the runs come after the commit of the corpse's destroy and the seed items' drop changes above (the original runs point 28 before its destroy), so a script that reads the corpse or an item's drop state through the host sees them already changed.
+        var removals = new PassRemovals(this, _passWorld?.ItemScriptHost, map, npc => PassWorldAs<ISessionRestockWorld>()?.NpcWieldScripts(map, npc));
         foreach (var (entity, placed, isSeed, destroy) in held2)
         {
+            removals.Run(at.Code, entity, PassItemPoints(map, entity));
             if (destroy) { DestroyObject(entity); continue; }
             later.Remove(entity);
             if (placed is not null)
@@ -160,7 +165,7 @@ public sealed partial class GameSessionOwner
         if (created is not null) DestroyObject(at.Code);
         CancelBodyDecay(at.Code);
         Revise();
-        _passBodyDecays?.Add(Report(SessionBodyDecayOutcome.Removed, held2.Count - destroyedItems.Length, destroyedItems.Length));
+        _passBodyDecays?.Add(Report(SessionBodyDecayOutcome.Removed, held2.Count - destroyedItems.Length, destroyedItems.Length) with { Removals = removals.Result });
         return GameEventHandlerOutcome.Completed;
     }
 
@@ -177,7 +182,7 @@ public sealed partial class GameSessionOwner
     private BodyItem AddedBodyItem(SessionMadeItem item, SessionMapId map, CellCoord where)
     {
         var given = _inventory.Hero.GivenOf(item.Entity);
-        var facts = given is { Origin: { } origin } && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null;
+        var facts = AddedItemFacts(item);
         if (facts is { Summoned: true } or { NoDisplay: true }) return new(item.Entity, null, false, true);
         if (given is { } record)
         {
@@ -196,6 +201,10 @@ public sealed partial class GameSessionOwner
             ? new(item.Entity, new(item.Entity, item.Kind, SessionPlacedSource.Created, null, map, where, item.Complexity), false, false)
             : new(item.Entity, null, false, true);
     }
+
+    // The seed row's facts of an item the session added to an NPC when it is a given taken item (its origin seed attached), else null (a made or kit item's flags read as clear).
+    private SessionItemFacts? AddedItemFacts(SessionMadeItem item) =>
+        _inventory.Hero.GivenOf(item.Entity) is { Origin: { } origin } && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null;
 
     private const long ItemDecayRulesRetryMs = Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs;
 }

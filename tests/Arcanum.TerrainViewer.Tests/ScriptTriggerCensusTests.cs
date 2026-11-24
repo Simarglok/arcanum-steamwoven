@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Arcanum.Data.Content;
+using Arcanum.Data.Maps;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
@@ -28,6 +30,10 @@ public sealed class ScriptTriggerCensusTests
         ScrPoint.Use or AreaUseScriptHost.CatchingThiefPoint => AreaUseScriptHost.Admission,
         ScrPoint.Dialog => AreaScriptHost.SkillTalkAdmission,
         ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat => AreaUseScriptHost.HeartbeatAdmission,
+        // ARC-SCRIPT-2859 (TQ25): the leader-killing point (20) runs under the dying set (RunLeaderKilling).
+        ScrPoint.LeaderKilling => AreaUseScriptHost.DyingAdmission,
+        // ARC-AI-2821 (TQ14): the will-KOS point (22) runs under the will-KOS set.
+        ScrPoint.WillKos => AreaUseScriptHost.WillKosAdmission,
         // ARC-SCRIPT-1483: the hit step's points (hit, critter hits, critical hit) run under the placed set.
         ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit => AreaUseScriptHost.CombatPointAdmission,
         SessionScriptPoint.Get or SessionScriptPoint.Drop or SessionScriptPoint.InsertItem or SessionScriptPoint.WieldOn or SessionScriptPoint.WieldOff
@@ -111,7 +117,117 @@ public sealed class ScriptTriggerCensusTests
         Assert.AreEqual(180, rows[ScrPoint.Dialog]);
         Assert.IsTrue(admitted[ScrPoint.Dialog] >= 115, admitted[ScrPoint.Dialog].ToString());
         // ARC-SCRIPT-1562: the combat-point set admitted 24 of the 26 hit rows (2 before: the rest stopped at 91, 80 and condition 37), all 18 critter-hits rows and 3 of the 4 critical-hit rows. ARC-SCRIPT-1661: with obj is in combat (31) and adjust stat (137) it admits all 26, 18 and 4.
+        // ARC-SCRIPT-2335 (ledger IV7): the item set (S14-item) admits 6 of the 28 insert-item rows on the shown maps' windows (3 before: the loop for, the container vicinity kinds, the name test and change art number free the three temple
+        // display-case scripts 2992 to 2994); the other 22 stop on toggle state (56) in 16 rows, get story state (42), is dead (22), condition 46, quest state (6), the scenery and critter vicinity kinds (15, 8), one each.
+        // ARC-SCRIPT-2346 (ledger IV9-IV11): toggle state (56) of the attachee item frees the 16 rows that stopped on it: the item set admits 22 of the 28; the other 6 stop on get story state (42), is dead (22), condition 46, quest state (6),
+        // the scenery and critter vicinity kinds (15, 8), one each.
+        Assert.AreEqual(28, rows[SessionScriptPoint.InsertItem]);
+        // ARC-SCRIPT-2347 (ledger IV16): with the quest state condition, assign object, get object type, obj is dead and monster generator disabled the item set admits 23 of the 28 (22 before: the row that stopped on condition 22 or 46 joins); the 5 left stop on toggle
+        // monster generator (110), set PC quest state (16), get story state (42) and the scenery and critter vicinity kinds (15, 8), one each.
+        // ARC-SCRIPT-2374 (ledger IV21): set PC quest state (16) and give quest experience (63) free the row that stopped on action 16: 24 of the 28; the 4 left stop on toggle monster generator (110), get story state (42) and the scenery and critter vicinity kinds (15, 8), one row each.
+        // ARC-SCRIPT-2376 (ledger IV25): with the scenery and critter vicinity kinds (15, 8) the item set admits 26 of the 28 (24 before: the two rows that stopped on those kinds join); the 2 left stop on toggle monster generator (110) and get story state (42), one row each.
+        // The set only admits: the session still refuses the toggle state of script 1239 on the looped scenery (it flips the off flag of an item of the move only).
+        // ARC-SCRIPT-2375 (ledger IV31): and get and set story state (42, 43) free the row that stopped on get story state (1094): 27 of the 28; the one left stops on toggle monster generator (110). The set rumor and rename scripts (1103, 1566, 1573)
+        // have no placed row on these maps (they are prototype scripts); the next test reads them whole.
+        // ARC-SCRIPT-2378 (ledger IV34): toggle monster generator (110) is admitted too, but the count stayed 27: the one row left (script 2103: everyone in the vicinity, condition 46, 110, call script in) stops on distance between (71) now.
+        // ARC-SCRIPT-2426 (ledger IV36-IV39): distance between (71) of the looped critter and the hero is admitted too, and the count stays 27: the same row (script 2103) now stops on change script (99, line 10: the looped critter's dialog
+        // point), the only command of the script outside the set (ARC-SCRIPT-2432 admits it: 28 of 28 expected).
+        // ARC-SCRIPT-2432 (ledger IV40-IV43): change script (99) is admitted too: the last row (script 2103) is admitted whole, 28 of the 28.
+        Assert.AreEqual(28, admitted[SessionScriptPoint.InsertItem]);
+        // ARC-AI-2821 (ledger TQ14): the will-KOS point (22) holds 60 attachments of 7 scripts on these maps; the will-KOS set (the heartbeat set plus is wielding item, get stat and call script) admits all 60 (47 of them with the heartbeat set alone).
+        Assert.AreEqual((60, 7, 0, 60), (rows[ScrPoint.WillKos], scripts[ScrPoint.WillKos].Count, missing[ScrPoint.WillKos], admitted[ScrPoint.WillKos]));
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
+    }
+
+    /// <summary>
+    /// ARC-DEV-2816 (AC1; epic #2814, docs/research/script-trigger-conditions.md): the guard on the refusals of the installed scripts. Over the 79 maps (the window each opens), every script a trigger kind attaches (the object points the hosts run, and the tile and sector
+    /// scripts of the maps) is read against the admission set of the host that runs it; the scripts a host refuses are pinned in <c>ScriptTriggerRefusalBaseline.txt</c> as one row per trigger kind and script (kind, script, first refusal). A script
+    /// refused at a kind that is not in the baseline fails the test naming the kind and the script, so a host change that narrows a set, or a new attachment the data gains, cannot refuse a script unseen. A script the baseline names that is admitted now
+    /// fails too, so the file keeps saying what is still refused (the gap issues of #2814 shrink it). The first refusal column is informational (a script refused later at another command is the same row). Opt-in: <c>DAT_ROOT</c>;
+    /// <c>ARC_SCRIPT_REFUSAL_BASELINE_WRITE</c>, when set, names the file the current rows are written to (to refresh the baseline).
+    /// </summary>
+    // The set of the host that runs a point for an object of this type (ARC-DEV-2816): the item use of a placed item (types 5 to 14) runs under the vicinity-kind item-use set, the dying, destroy, bust and taking damage points under their own sets.
+    private static ScrAdmissionSet? RefusalHostSet(int point, int objectType) => point switch
+    {
+        ScrPoint.Use when objectType is >= 5 and <= 14 => AreaUseScriptHost.ItemUseAdmission,
+        ScrPoint.Dying => AreaUseScriptHost.DyingAdmission,
+        // ARC-SCRIPT-2820 (TQ12): the start-combat and end-combat points run under the dying set (RunCombatPassPoint).
+        ScrPoint.StartCombat or ScrPoint.EndCombat => AreaUseScriptHost.DyingAdmission,
+        // ARC-SCRIPT-2858 (TQ16): the caught-thief point runs under its own set (RunCaughtThief).
+        ScrPoint.CaughtThief => AreaUseScriptHost.CaughtThiefAdmission,
+        // ARC-SCRIPT-2860 (TQ11): the unlock point runs under its own set (RunUnlock).
+        ScrPoint.Unlock => AreaUseScriptHost.UnlockAdmission,
+        ScrPoint.Destroy => AreaUseScriptHost.DestroyPointAdmission,
+        ScrPoint.Bust => AreaUseScriptHost.BustAdmission,
+        ScrPoint.TakingDamage => AreaUseScriptHost.TakingDamageAdmission,
+        _ => HostSet(point),
+    };
+
+    [TestMethod, TestCategory("RealData")]
+    public void Refused_installed_scripts_per_trigger_kind_match_the_pinned_baseline()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var first = AreaLoadOperation.Execute(1, Arguments(root, "crematorium-lev 1"), default);
+        // (kind, script) -> the first refusal read; kind is "point N", "tile" or "sector".
+        var current = new SortedDictionary<(string Kind, int Script), string>(Comparer<(string Kind, int Script)>.Create((a, b) =>
+            a.Kind == b.Kind ? a.Script.CompareTo(b.Script) : string.CompareOrdinal(a.Kind, b.Kind)));
+        void Read(string kind, int script, ScrAdmissionSet set)
+        {
+            // A script the content cannot read is a row of its own, so it cannot pass unseen.
+            if (content.Script(script) is not { Status: ScriptContentStatus.Read, Program: { } program }) { current.TryAdd((kind, script), "unreadable"); return; }
+            if (ScrAdmission.AdmitFrom(program, set, 0).Refusal is not { } refusal) return;
+            var key = refusal.Code switch
+            {
+                ScrRefusalCode.ActionNotAdmitted => $"action {refusal.Type}",
+                ScrRefusalCode.ConditionNotAdmitted => $"condition {refusal.Type}",
+                ScrRefusalCode.FocusKindNotAdmitted => $"focus {refusal.Kind}",
+                ScrRefusalCode.ValueKindNotAdmitted => $"value {refusal.Kind}",
+                _ => refusal.Code.ToString(),
+            };
+            current.TryAdd((kind, script), key);
+        }
+        var maps = 0;
+        foreach (var destination in first.MapDestinations!.Values)
+        {
+            var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
+            if (result.Area is null) continue;
+            maps++;
+            foreach (var row in result.Area.Snapshot.Objects.GroupBy(AreaUseScriptHost.EntityId).Select(g => g.First()))
+            for (var point = 0; point < ScrPoint.Count; point++)
+            {
+                if (point == ScrPoint.DialogOverride || RefusalHostSet(point, row.Type) is not { } set || AreaUseScriptHost.LoadedSlot(row, point) is not { Script: > 0 } slot) continue;
+                Read($"point {point}", slot.Script, set);
+            }
+            foreach (var placed in (result.MapTransitions?.Placed ?? []).Concat(result.MapTemplateScripts))
+                if (placed.Script > 0) Read(placed.Trigger == MapTransitionTrigger.TileEntry ? "tile" : "sector", placed.Script, AreaUseScriptHost.PlacedAdmission);
+        }
+        Assert.AreEqual(79, maps);
+        var rows = current.Select(r => FormattableString.Invariant($"{r.Key.Kind}\t{r.Key.Script}\t{r.Value}")).ToArray();
+        if (Environment.GetEnvironmentVariable("ARC_SCRIPT_REFUSAL_BASELINE_WRITE") is { Length: > 0 } output) File.WriteAllLines(output, rows);
+        var baseline = File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "ScriptTriggerRefusalBaseline.txt")).Where(l => l.Length > 0 && l[0] != '#')
+            .Select(l => l.Split('\t')).ToDictionary(c => (c[0], int.Parse(c[1], System.Globalization.CultureInfo.InvariantCulture)), c => c[2]);
+        var added = current.Where(r => !baseline.ContainsKey(r.Key)).Select(r => $"script {r.Key.Script} at {r.Key.Kind} is refused ({r.Value})").ToArray();
+        var gone = baseline.Keys.Where(k => !current.ContainsKey(k)).Select(k => $"script {k.Item2} at {k.Item1} is admitted now").ToArray();
+        Assert.AreEqual(0, added.Length, "new refusals (fix the host or, when the gap is filed, add the row to the baseline): " + string.Join("; ", added));
+        Assert.AreEqual(0, gone.Length, "the baseline is stale (remove the rows): " + string.Join("; ", gone));
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2375 (ledger IV31; AC2, AC3): the four installed point 21 scripts that set the story state (1094), a rumor (1103, 1566) or an item's name number (1573) are admitted whole by the item set, which is the static half of the claim that
+    /// the item event runs them; the opt-in census above counts only the rows placed on the shown maps' windows (1094 is one of them). Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_story_state_rumor_and_rename_item_scripts_are_admitted_whole_by_the_item_set()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        foreach (var script in new[] { 1094, 1103, 1566, 1573 })
+        {
+            Assert.IsTrue(content.Script(script) is { Status: ScriptContentStatus.Read, Program: { } program }, $"script {script} is read");
+            var admission = ScrAdmission.AdmitFrom(content.Script(script).Program!, SessionItemScripts.Admission, 0);
+            Assert.IsTrue(admission.IsAdmitted, $"script {script}: {admission.Refusal}");
+        }
     }
 
     /// <summary>
@@ -145,6 +261,162 @@ public sealed class ScriptTriggerCensusTests
         Assert.IsTrue(Read(ScrPoint.Dialog, 1059, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1059, the dialog-point poison script, runs");
         Assert.IsFalse(Read(ScrPoint.Dialog, 1059, AreaScriptHost.Admission).IsAdmitted, "without the use host's queries the plain set refuses 1059");
         if (Environment.GetEnvironmentVariable("ARC_COMBAT_POINT_POISON") is { Length: > 0 } output) File.WriteAllLines(output, report);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2319 (ledger GF8): the installed scripts that name the group focus kinds (13, 14), read against the sets of the hosts that run their points: the combat-point set (hit 7, miss 8, critical hit 34), the placed set (taking damage 23)
+    /// and the talk set (dialog 9). The census of ARC-RES-2262 found 12 roots naming kind 13 (11 free alone, on 61 sites) and 4 naming kind 14 (2232, 2234, 2239, 1750); 2232, 2234 and 2239 also need the group in is undead and get armor (ARC-SCRIPT-2326). Every answer is reported (the file named by
+    /// <c>ARC_GROUP_FOCUS_REPORT</c>, when set, receives it). Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_group_focus_scripts_are_read_against_the_sets_of_their_hosts()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var report = new List<string>();
+        ScrAdmissionResult Read(int number, ScrAdmissionSet set)
+        {
+            Assert.AreEqual(ScriptContentStatus.Read, content.Script(number).Status, $"script {number}");
+            var admission = ScrAdmission.AdmitFrom(content.Script(number).Program!, set, 0);
+            report.Add($"script {number} set {set.Id} admitted={admission.IsAdmitted} refusal={admission.Refusal?.Code}:{admission.Refusal?.Type}");
+            return admission;
+        }
+        // Kind 13: the combat-point set (hit 7, miss 8, critical hit 34) and the placed set (taking damage 23) run 1160, 2350, 2506, 2507 and 1749 whole; the dialog script 1160 (point 9) runs under the talk set; the use set holds 2350, 2506 and 2507.
+        foreach (var number in new[] { 1160, 2350, 2506, 2507, 1749 })
+        {
+            var combat = Read(number, AreaUseScriptHost.CombatPointAdmission);
+            Assert.IsTrue(combat.IsAdmitted, $"{number} under the combat-point set: {combat.Refusal?.Code} type {combat.Refusal?.Type} line {combat.Refusal?.Line}");
+            Assert.IsTrue(Read(number, AreaUseScriptHost.PlacedAdmission).IsAdmitted, $"{number} under the placed set");
+        }
+        Assert.IsTrue(Read(1160, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1160, the dialog-point script, under the talk set");
+        // Without the use host's queries the plain dialog set keeps the group kinds out (the host answers the followers).
+        Assert.IsFalse(Read(1160, AreaScriptHost.SkillAdmission).IsAdmitted, "the plain dialog set refuses 1160");
+        // Kind 14 (ARC-SCRIPT-2326, ledger AR6): 2232, 2234 and 2239 ask the group in the is undead condition (38) and the armour look (action 32, S62); the dialog point 9 runs them whole under the talk set, the plain dialog set still refuses them.
+        foreach (var number in new[] { 2232, 2234, 2239 })
+        {
+            var talk = Read(number, AreaScriptHost.SkillTalkAdmission);
+            Assert.IsTrue(talk.IsAdmitted, $"{number} under the talk set: {talk.Refusal?.Code} type {talk.Refusal?.Type} line {talk.Refusal?.Line}");
+            Assert.IsFalse(Read(number, AreaScriptHost.SkillAdmission).IsAdmitted, $"{number} under the plain dialog set");
+        }
+        if (Environment.GetEnvironmentVariable("ARC_GROUP_FOCUS_REPORT") is { Length: > 0 } output) File.WriteAllLines(output, report);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (ledger TQ23; AC1): the installed attachments of the critical-hit (34) and critical-miss (35) points by object type, over the placed rows of every map the data opens whole and over every item prototype, so the armour pieces
+    /// the damage apply's loop runs (object type 7, <see cref="AreaUseScriptHost.RunArmourCritical"/>) are counted apart from the weapons whose points the hit step runs. Every script of an armour piece is read against the combat-point set
+    /// (<see cref="AreaUseScriptHost.CombatPointAdmission"/>). Numbers and script numbers only; <c>ARC_ARMOUR_CRITICAL_CENSUS</c>, when set, receives the report. Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_critical_points_are_counted_by_object_type_and_the_armour_scripts_are_read_against_the_combat_point_set()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var report = new List<string>();
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        // Placed rows: the entity rows of the maps (one per entity), by point and object type.
+        var placed = new SortedDictionary<(int Point, int Type), (int Rows, SortedSet<int> Scripts)>();
+        var maps = 0;
+        foreach (var map in WorldCatalog.Open(stack).Maps)
+        {
+            // A map the installed data does not open whole is skipped, as the other whole-map censuses do.
+            Arcanum.Data.Area.AreaSnapshot? snapshot;
+            try { snapshot = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default).Area?.Snapshot; }
+            catch (Exception error) when (error is InvalidOperationException or Arcanum.Data.Area.AreaException) { report.Add($"skipped {map.Name}: {error.Message}"); continue; }
+            if (snapshot is null) continue;
+            maps++;
+            foreach (var row in snapshot.Objects.GroupBy(AreaUseScriptHost.EntityId).Select(g => g.First()))
+                foreach (var point in new[] { ScrPoint.CriticalHit, ScrPoint.CriticalMiss })
+                    if (AreaUseScriptHost.LoadedSlot(row, point) is { Script: > 0 } slot)
+                    {
+                        var (rows, scripts) = placed.GetValueOrDefault((point, row.Type), (0, new SortedSet<int>()));
+                        scripts.Add(slot.Script);
+                        placed[(point, row.Type)] = (rows + 1, scripts);
+                    }
+        }
+        report.Add($"maps read {maps}");
+        foreach (var ((point, type), (rows, scripts)) in placed) report.Add($"placed point {point} type {type}: rows {rows} scripts {string.Join(",", scripts)}");
+        // Prototypes: every installed item prototype, by point and object type.
+        var prototypes = ContentPrototypes.Open(stack);
+        var byPrototype = new SortedDictionary<(int Point, int Type), (int Prototypes, SortedSet<int> Scripts)>();
+        foreach (var number in prototypes.Numbers)
+            if (Arcanum.Data.Combat.CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { Item: not null } fields)
+                foreach (var attachment in fields.Object.ScriptAttachments.Where(a => a.Script > 0 && a.Point is ScrPoint.CriticalHit or ScrPoint.CriticalMiss))
+                {
+                    var (count, scripts) = byPrototype.GetValueOrDefault((attachment.Point, fields.Object.Type), (0, new SortedSet<int>()));
+                    scripts.Add(attachment.Script);
+                    byPrototype[(attachment.Point, fields.Object.Type)] = (count + 1, scripts);
+                }
+        foreach (var ((point, type), (count, scripts)) in byPrototype) report.Add($"prototype point {point} type {type}: prototypes {count} scripts {string.Join(",", scripts)}");
+        // Every script an armour piece (type 7) holds at the points, read against the combat-point set.
+        var armourScripts = placed.Where(p => p.Key.Type == 7).SelectMany(p => p.Value.Scripts).Concat(byPrototype.Where(p => p.Key.Type == 7).SelectMany(p => p.Value.Scripts)).Distinct().Order().ToArray();
+        foreach (var number in armourScripts)
+        {
+            var status = content.Script(number).Status;
+            var admission = status == ScriptContentStatus.Read ? ScrAdmission.AdmitFrom(content.Script(number).Program!, AreaUseScriptHost.CombatPointAdmission, 0) : null;
+            report.Add($"armour script {number}: {status} admitted={admission?.IsAdmitted} refusal={admission?.Refusal?.Code}:{admission?.Refusal?.Type}");
+        }
+        if (Environment.GetEnvironmentVariable("ARC_ARMOUR_CRITICAL_CENSUS") is { Length: > 0 } output) File.WriteAllLines(output, report);
+        // The installed data (ARC-SCRIPT-2828, 81 maps read whole): critical hit (34) sits on 2 weapon rows (30047, 30064) and 2 armour rows (30219, 30237); critical miss (35) on 2 weapon rows (30046, 30050) and no armour; no item
+        // prototype carries either point; both armour scripts are admitted whole by the combat-point set.
+        Assert.AreEqual(81, maps);
+        CollectionAssert.AreEqual(new[] { (ScrPoint.CriticalHit, 5), (ScrPoint.CriticalHit, 7), (ScrPoint.CriticalMiss, 5) }, placed.Keys.ToArray());
+        Assert.AreEqual((2, 2, 2), (placed[(ScrPoint.CriticalHit, 5)].Rows, placed[(ScrPoint.CriticalHit, 7)].Rows, placed[(ScrPoint.CriticalMiss, 5)].Rows));
+        CollectionAssert.AreEqual(new[] { 30219, 30237 }, placed[(ScrPoint.CriticalHit, 7)].Scripts.ToArray());
+        Assert.AreEqual(0, byPrototype.Count, "no item prototype carries the critical points");
+        Assert.IsTrue(armourScripts.All(number => content.Script(number).Status == ScriptContentStatus.Read && ScrAdmission.AdmitFrom(content.Script(number).Program!, AreaUseScriptHost.CombatPointAdmission, 0).IsAdmitted), "the armour scripts run whole");
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2841 (ledger TQ31; AC2): the installed weapons (object type 5) whose attachments the self-hit of a critical miss reaches: the hit (7) and critical-hit (34) points, over the placed rows of every map the data opens whole and over every item
+    /// prototype, with the script numbers; the attacker's critter-hits point (26) is counted over the critters. Numbers and script numbers only; <c>ARC_SELF_HIT_CENSUS</c>, when set, receives the report. Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_weapons_with_hit_and_critical_hit_scripts_that_a_critical_miss_self_hit_reaches_are_counted()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        var report = new List<string>();
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var points = new[] { ScrPoint.Hit, ScrPoint.CriticalHit, ScrPoint.CritterHits };
+        var placed = new SortedDictionary<(int Point, int Type), (int Rows, SortedSet<int> Scripts)>();
+        var maps = 0;
+        foreach (var map in WorldCatalog.Open(stack).Maps)
+        {
+            Arcanum.Data.Area.AreaSnapshot? snapshot;
+            try { snapshot = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default).Area?.Snapshot; }
+            catch (Exception error) when (error is InvalidOperationException or Arcanum.Data.Area.AreaException) { report.Add($"skipped {map.Name}: {error.Message}"); continue; }
+            if (snapshot is null) continue;
+            maps++;
+            foreach (var row in snapshot.Objects.GroupBy(AreaUseScriptHost.EntityId).Select(g => g.First()))
+                foreach (var point in points)
+                    if (AreaUseScriptHost.LoadedSlot(row, point) is { Script: > 0 } slot)
+                    {
+                        var (rows, scripts) = placed.GetValueOrDefault((point, row.Type), (0, new SortedSet<int>()));
+                        scripts.Add(slot.Script);
+                        placed[(point, row.Type)] = (rows + 1, scripts);
+                    }
+        }
+        report.Add($"maps read {maps}");
+        foreach (var ((point, type), (rows, scripts)) in placed) report.Add($"placed point {point} type {type}: rows {rows} scripts {string.Join(",", scripts)}");
+        var prototypes = ContentPrototypes.Open(stack);
+        var byPrototype = new SortedDictionary<(int Point, int Type), (int Prototypes, SortedSet<int> Scripts)>();
+        foreach (var number in prototypes.Numbers)
+            if (Arcanum.Data.Combat.CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { } fields)
+                foreach (var attachment in fields.Object.ScriptAttachments.Where(a => a.Script > 0 && points.Contains(a.Point)))
+                {
+                    var (count, scripts) = byPrototype.GetValueOrDefault((attachment.Point, fields.Object.Type), (0, new SortedSet<int>()));
+                    scripts.Add(attachment.Script);
+                    byPrototype[(attachment.Point, fields.Object.Type)] = (count + 1, scripts);
+                }
+        foreach (var ((point, type), (count, scripts)) in byPrototype) report.Add($"prototype point {point} type {type}: prototypes {count} scripts {string.Join(",", scripts)}");
+        if (Environment.GetEnvironmentVariable("ARC_SELF_HIT_CENSUS") is { Length: > 0 } output) File.WriteAllLines(output, report);
+        Assert.AreEqual(81, maps);
+        // The installed data (ARC-SCRIPT-2841, 81 maps read whole): the hit point (7) sits on 26 placed weapon rows (11 scripts) and 4 weapon prototypes (28003, 28006, 28007, 29006; 6 more on type 14 prototypes); the critical-hit point (34) on 2 placed weapon rows
+        // (30047, 30064) and no weapon prototype; the critter-hits point (26) on 18 placed critter rows (1345, 30122) and 9 critter prototypes. A self-hit of a critical miss reaches the points of the weapon the attacker holds and its own point 26.
+        CollectionAssert.AreEqual(new[] { (ScrPoint.Hit, 5), (ScrPoint.CritterHits, 16), (ScrPoint.CriticalHit, 5), (ScrPoint.CriticalHit, 7) }.OrderBy(k => k).ToArray(), placed.Keys.OrderBy(k => k).ToArray());
+        Assert.AreEqual((26, 18, 2), (placed[(ScrPoint.Hit, 5)].Rows, placed[(ScrPoint.CritterHits, 16)].Rows, placed[(ScrPoint.CriticalHit, 5)].Rows));
+        CollectionAssert.AreEqual(new[] { 30047, 30064 }, placed[(ScrPoint.CriticalHit, 5)].Scripts.ToArray());
+        Assert.AreEqual((4, 9), (byPrototype[(ScrPoint.Hit, 5)].Prototypes, byPrototype[(ScrPoint.CritterHits, 16)].Prototypes));
+        Assert.IsFalse(byPrototype.ContainsKey((ScrPoint.CriticalHit, 5)), "no weapon prototype carries the critical-hit point");
     }
 
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",

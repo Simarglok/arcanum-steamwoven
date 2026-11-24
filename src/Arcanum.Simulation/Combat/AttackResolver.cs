@@ -50,7 +50,9 @@ public static class AttackResolver
         var targetIsCritter = request.TargetKind == AttackTargetKind.Critter;
 
         if ((attacker.Conditions & Inactive) != 0) return Refused(AttackRefusal.AttackerInactive, rolls);
-        if (targetIsCritter && target.Conditions.HasFlag(CombatantConditions.Dead)) return Refused(AttackRefusal.TargetDead, rolls);
+        // ARC-COMBAT-2392 (ledger TW8): a thrown item flies at a corpse and rolls against it as at any critter (the throw's hit resolve 0x4C7160 asks nothing of the target's life); every other attack refuses a corpse.
+        var corpse = targetIsCritter && target.Conditions.HasFlag(CombatantConditions.Dead);
+        if (corpse && request.Skill != CombatSkill.Throwing) return Refused(AttackRefusal.TargetDead, rolls);
 
         var aimed = request.AimedLocation is not null;
         var location = request.AimedLocation ?? AttackRules.HitLocationFromRoll(rolls.D100(CombatRollPurpose.HitLocation));
@@ -95,7 +97,7 @@ public static class AttackResolver
                 }
             }
 
-            if (proceed && !targetIsCritter)
+            if (proceed && !targetIsCritter && !request.NoDefender)
             {
                 hit = true;
             }
@@ -109,7 +111,8 @@ public static class AttackResolver
                 critical = attackCheck.Critical;
                 if (!hit) missCause = AttackMissCause.SkillCheck;
 
-                if (hit)
+                // A corpse never dodges (0x4C7160 skill 1 fails at once for a dead defender: nothing is rolled).
+                if (hit && !corpse && !request.NoDefender)
                 {
                     dodgeCheck = DodgeCheck(target, request.Difficulty, rolls, profile);
                     if (dodgeCheck.Success)
@@ -146,7 +149,7 @@ public static class AttackResolver
             missCause = AttackMissCause.Fate;
         }
 
-        if (hit && request.DeferHit)
+        if (hit && (request.DeferHit || corpse))
         {
             // ARC-COMBAT-016: the projectile carries the hit (flags 0x2, 0x4) and the location; its damage is rolled on arrival.
             return new AttackResolution(AttackRefusal.None, critical ? AttackOutcome.CriticalHit : AttackOutcome.Hit,
@@ -203,7 +206,7 @@ public static class AttackResolver
     /// (a hit or critical hit without a damage packet, from <see cref="Resolve"/> with <see cref="AttackRequest.DeferHit"/>, or
     /// <see cref="ForcedHit"/>) on <paramref name="request"/>'s target as it is now, with the carried location, aim, critical and
     /// weapon magic, and the attack's wear; only the damage's rolls are made. The request's check inputs (distance, cover, ammunition)
-    /// are not read. A target that is dead now is refused (<see cref="AttackRefusal.TargetDead"/>, nothing rolled).
+    /// are not read. A target that is dead now is refused (<see cref="AttackRefusal.TargetDead"/>, nothing rolled), except for a thrown item (ARC-COMBAT-2392: the carried hit stands, no damage).
     /// </summary>
     public static AttackResolution LandHit(AttackRequest request, AttackResolution carried, ICombatRollSource rollSource,
         ICriticalEffects? criticalEffects = null, CombatAnomalyProfile? profile = null)
@@ -219,7 +222,11 @@ public static class AttackResolver
         Validate(request with { DeferHit = false, AimedLocation = null, AmmunitionShort = false });
         var rolls = new CombatRollLog(rollSource);
         if (request.TargetKind == AttackTargetKind.Critter && request.Target.Conditions.HasFlag(CombatantConditions.Dead))
+        {
+            // ARC-COMBAT-2392 (TW8): a thrown item that lands on a corpse (it died in flight, or was one at the throw) hits it without damage: the outcome step runs its scripts and returns before the critter's hit points (0x4B4390).
+            if (request.Skill == CombatSkill.Throwing) return carried with { Rolls = rolls.Rolls.ToArray() };
             return Refused(AttackRefusal.TargetDead, rolls);
+        }
         var critical = carried.Outcome == AttackOutcome.CriticalHit;
         var damage = Damage(request, DamageRecipient.Target, request.Target, request.TargetKind, critical, carried.HitLocation, carried.Aimed,
             carried.WeaponMagicCancelled, new CriticalAccumulator(), criticalEffects, rolls, profile);
@@ -269,8 +276,8 @@ public static class AttackResolver
                 WeaponToHit = weapon.ToHitBonus + (magic ? weapon.MagicToHitAdjustment : 0),
                 WeaponMinimumStrength = weapon.MinimumStrength,
                 SourceStrength = attacker.Strength,
-                Target = true,
-                TargetCritter = true,
+                Target = !request.NoDefender,
+                TargetCritter = !request.NoDefender,
                 TargetConditions = TargetConditionsOf(target.Conditions),
                 TargetUnaware = request.TargetUnaware,
                 TargetArmorClass = target.ArmorClass,
@@ -337,7 +344,8 @@ public static class AttackResolver
     }
 
     private static SkillTargetConditions TargetConditionsOf(CombatantConditions c) =>
-        (c.HasFlag(CombatantConditions.Paralyzed) ? SkillTargetConditions.Paralyzed : 0)
+        (c.HasFlag(CombatantConditions.Dead) ? SkillTargetConditions.Dead : 0)
+        | (c.HasFlag(CombatantConditions.Paralyzed) ? SkillTargetConditions.Paralyzed : 0)
         | (c.HasFlag(CombatantConditions.Unconscious) ? SkillTargetConditions.Unconscious : 0)
         | (c.HasFlag(CombatantConditions.FallingDown) ? SkillTargetConditions.FallingDown : 0)
         | (c.HasFlag(CombatantConditions.Stunned) ? SkillTargetConditions.Stunned : 0)

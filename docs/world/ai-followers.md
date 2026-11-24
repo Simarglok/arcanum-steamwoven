@@ -67,7 +67,7 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
   a leave ends the leaver's run (the removal's interrupt at priority 5), and the curse's attack event runs through the host right
   after the order, before the former follower's pass. The host's world knows critters only (an order on a container or a ground
   item is ignored at its attack event; a door or scenery has no session entity, so no target). The viewer sends no curse: the
-  typed order text (the Enter chat and `broadcast.mes`) is not read, so only tests reach it.
+  typed order text (Enter, the order line of ARC-UI-2305, with the words of `broadcast.mes`) reaches it from the viewer.
 - **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115) and, since ARC-WORLD-119, the curse's;
   its race insult is not floated. The comment lines (ARC-AI-1527) are asked by the host: `AreaAiHost.AttackEnded` (the taunt kind
   and draw, 0x4B6B90 → 0x4AE9E0) at the end of the hero's hit, `AreaAiHost.Hurt` (the near-death line, 0x4AEAB0) after each critter
@@ -77,7 +77,7 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
   range (`DialogFollowerComment.Say`: the speaker's own override line 11999 + range / 100 first, else the `gd_npc_*` file of the
   speaker's and the PC's genders, the names expanded) and floats it over the follower as a white script line. The "combat taunts"
   setting is on the options window's Video page (default on, the settings file's `combat taunts` line). The line texts are the
-  player's and are never stored; no voice is played. NOT READY: the taunt of a hit on a door or scenery, the strike-time self-hit of a shot
+  player's and are never stored; a line from the speaker's own override dialog starts that record's voice with the float (ARC-AI-1640: the listener's gender picks the file, a female voice first; generated lines have none). NOT READY: the taunt of a hit on a door or scenery, the strike-time self-hit of a shot
   ([#1683](https://github.com/Simarglok/arcanum-steamwoven/issues/1683)), the race-line selection. The near-death line is asked for every critter damage as the original's damage function does (ARC-AI-1638): the attack path, a script's answer and the spell, trap and burn damage steps (asked as each step lands, ARC-AI-1680: `SessionSpellCaster.DamageStepApplied` calls the viewer's `AskNearDeathOfCastStep`, so the can-speak gate reads the state after that step, not after a later step of the same frame; a script's step is marked `FromScript` so it asks once).
 - **World-map travel.** Its window's stop attacking for the hero on opening and allow attacking on return (FO5, FO6) are the
   travel host's calls of `StopAttacking` and `AllowAttacking` with the hero; the W panel does not make them yet.

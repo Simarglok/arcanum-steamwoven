@@ -96,6 +96,8 @@ public interface IAreaHeroRunsViewer
     bool HeroAttackRepeats(string target) => false;
     /// <summary>An attack goal ends the run (the viewer clears the attack).</summary>
     void AttackEnds(string target, AiExecutorReason reason) { }
+    /// <summary>ARC-COMBAT-2736: a Shift click's use (38, 81) or pickup (15) run ended at its first step because the target was out of reach (no-walk flag 0x100, GT148/GT213): the viewer's status line says so (the original says nothing).</summary>
+    void HeroClickNoWalkEnds(GoalType goal, string target) { }
     /// <summary>ARC-DEV-182: the throw's start (the art 14, the action points); null when it cannot start.</summary>
     AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) => null;
     /// <summary>ARC-DEV-182: the throw at the action frame.</summary>
@@ -376,14 +378,66 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         return started.Started;
     }
 
+    private static GoalType ClickGoalType(HeroClickGoal goal) => goal switch
+    {
+        HeroClickGoal.Talk => GoalType.Talk,
+        HeroClickGoal.UseObject => GoalType.UseObject,
+        HeroClickGoal.UseContainer => GoalType.UseContainer,
+        HeroClickGoal.Pickup => GoalType.PickupItem,
+        HeroClickGoal.Attack => GoalType.Attack,
+        HeroClickGoal.AttemptAttack => GoalType.AttemptAttack,
+        _ => GoalType.ThrowItem,
+    };
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62): what the click's start branch (0x54ED30) reads of the hero's runs for a goal it is about to start: whether an equal goal is queued (0x44E6F0: the bottom goal of a run of the hero is the goal or its
+    /// alias, the same objects), the main run's (0x423300) current-goal index and whether its top goal is 1 or 2 (0x4373F0), and whether the hero's first run is its main run with the fidget as bottom goal (0x44E830).
+    /// <paramref name="goal"/> is the click's goal, or <see cref="HeroClickGoal.None"/> for a throw of <paramref name="item"/>.
+    /// </summary>
+    public HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null)
+    {
+        var table = _session.QueryGoals();
+        var equal = table.EqualGoalQueued(Hero, new GoalFrame(ClickGoalType(goal), target) { Item = item }) is not null;
+        if (table.MainRunOf(Hero) is not { } main) return new(equal, 0, false, false);
+        var first = table.FirstRunOf(Hero);
+        return new(equal, main.Depth - 1, main.Top.Goal is GoalType.AnimateLoop or GoalType.Fidget, first is not null && first.Handle == main.Handle && main.Bottom.Goal == GoalType.Fidget);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62): a click's goal queued beneath the hero's main run (0x44DBE0 through 0x44D9B0, as <see cref="QueueCast"/> queues a cast): the goal's frame goes to the bottom of the run's stack, so the table plays it when
+    /// the goals above have popped; the run, its flags and its pending step stay. False when the hero has no main run or the table refused (eight goals, the run being stepped).
+    /// </summary>
+    public bool QueueGoal(HeroClickGoal goal, string target)
+    {
+        if (_session.QueryGoals().MainRunOf(Hero) is not { } main) return false;
+        return _session.InsertGoalAtBottom(main.Handle, new GoalFrame(ClickGoalType(goal), target)).Inserted;
+    }
+
+    /// <summary>Whether the hero's attack run holds another attack goal beneath the one playing (a repeated click queued under it, ARC-COMBAT-1949): the viewer's attack stays for it.</summary>
+    public bool AttackQueuedBeneath => AttackRun is { } run && run.Frames.Any(f => !ReferenceEquals(f, run.Top) && f.Goal is GoalType.Attack or GoalType.AttemptAttack);
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62): the click's run flags on the hero's existing main run, where the click added nothing (label 0x54FB19): Shift (0x436C50) turns on the no-walk flag 0x100 and no running; otherwise running 0x40
+    /// (0x436AB0), refused at encumbrance 4 or more (0x45F790); a use goal (38, 81) turns on 0x4000 as well (0x436ED0). The ORed flags are all the table keeps; a walk under way stops at its next step by the walk step's own
+    /// reading of 0x100 (0x42E9B0, GT148/GT213; ARC-COMBAT-2561: <see cref="AiExecutorReason.NoWalkStep"/>). No-op with no main run in the table.
+    /// </summary>
+    public void ApplyClickFlags(bool shift, bool nearOccupied)
+    {
+        if (_session.QueryGoals().MainRunOf(Hero) is not { } main) return;
+        var flags = shift ? GoalRunFlags.NoWalk : _viewer.HeroEncumbrance < AiExecutorRules.RunRefusedEncumbrance ? GoalRunFlags.Running : GoalRunFlags.None;
+        if (nearOccupied) flags |= GoalRunFlags.NearOccupied;
+        if (flags != GoalRunFlags.None) _session.TurnOnRunFlags(main.Handle, flags);
+    }
+
     /// <summary>
     /// ARC-DEV-174 (MIG13 S11b, GS26 and GS27): the object click's use goal 38 (<paramref name="container"/>: 81), started as the talk is (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the
-    /// hero's runs, so a repeated click restarts the run), the run flag on. The goal's frame carries the target; node 1 writes the range. False when the gate or a run's refusal stopped it.
+    /// hero's runs, so a repeated click restarts the run), the run flag on (<paramref name="run"/>), 0x4000 always and the no-walk flag 0x100 when <paramref name="noWalk"/> (ARC-COMBAT-1948). The goal's frame carries the target; node 1 writes the range. False when the gate or a run's refusal stopped it.
     /// </summary>
-    public bool Use(string target, bool container, bool run)
+    public bool Use(string target, bool container, bool run, bool noWalk = false)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(container ? GoalType.UseContainer : GoalType.UseObject, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        // ARC-COMBAT-1948 (0x436ED0, 0x436C50): the click's use goals always carry run flag 0x4000, and Shift adds the no-walk flag 0x100 (no running then).
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(container ? GoalType.UseContainer : GoalType.UseObject, target), GoalRunFlags.NearOccupied | (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None));
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_USE");
         return started.Started;
@@ -393,10 +447,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// ARC-DEV-175 (MIG13 S11c, GS26 and GS27): the object click's pickup goal 15, started as the talk and the use are (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the hero's
     /// runs, so a repeated click restarts the run), the run flag on. False when the gate or a run's refusal stopped it.
     /// </summary>
-    public bool Pickup(string target, bool run)
+    public bool Pickup(string target, bool run, bool noWalk = false)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.PickupItem, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.PickupItem, target), (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None));
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_PICKUP");
         return started.Started;
@@ -752,6 +806,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         _restartAfterStep = stepped.End is not (GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow or GoalStepperEnd.UnknownGoal);
         if (stepped.Answer.NextDelayMs is null && stepped.End is not GoalStepperEnd.Finished) RouteEnds++;
         if (IsHeroAttack(run) && stepped.Answer.NextDelayMs is null) LastAttackEnd = $"{stepped.End} {stepped.Step?.Reason}";
+        // ARC-COMBAT-2736: a Shift use, loot or pickup out of reach ends silently in the original; the status line of the viewer must not keep saying the goal started.
+        if ((IsHeroUse(run) || IsHeroPickup(run)) && stepped.Answer.NextDelayMs is null && stepped.Step?.Reason == AiExecutorReason.NoWalkStep && run.Bottom.Target is { } clicked) _viewer.HeroClickNoWalkEnds(run.Bottom.Goal, clicked);
         return stepped.Answer;
     }
 

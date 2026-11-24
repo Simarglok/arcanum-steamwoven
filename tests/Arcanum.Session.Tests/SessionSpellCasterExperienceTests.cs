@@ -257,4 +257,103 @@ public sealed class SessionSpellCasterExperienceTests
         Assert.AreEqual(before, atCallback[0], "the callback ran before the experience was written");
         Assert.IsTrue(HeroExperience(owner) > before, "the step's pool share was paid after it");
     }
+
+    // ARC-SCRIPT-2859 (LK1–LK3): the kill step's leader-killing loop (0x45DA20, point 20) runs after the award for each direct follower of the hero, for a kill whose killer is the hero or a critter the hero leads.
+    private const string Cat = "oid:cat";
+
+    private static List<(SessionLeaderKillingRequest Request, int Experience)> Watch(GameSessionOwner owner, params string[] followers)
+    {
+        foreach (var follower in followers) Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, follower).Disposition);
+        var asked = new List<(SessionLeaderKillingRequest, int)>();
+        owner.LeaderKillingScript = request => asked.Add((request, HeroExperience(owner)));
+        return asked;
+    }
+
+    [TestMethod]
+    public void A_hero_kill_asks_each_followers_leader_killing_script_in_order_after_the_award()
+    {
+        var record = Bolt(1000);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var asked = Watch(owner, Thug, Cat);
+        var maxHitPoints = MaxHitPoints(owner, caster, Rat);
+        var before = HeroExperience(owner);
+        CastAtRat(owner, caster, record);
+        var damage = caster.Log.Single(e => e.Kind == SpellCastEventKind.Damaged && e.Object == Rat).Value;
+        var (share, _) = ExperienceRules.DamageShare(160, 160, damage, maxHitPoints);
+        var map = owner.QueryActor().Map.RuntimeMap;
+        CollectionAssert.AreEqual(new[] { new SessionLeaderKillingRequest(Rat, map, Thug), new SessionLeaderKillingRequest(Rat, map, Cat) }, asked.Select(a => a.Request).ToArray());
+        Assert.IsTrue(asked.All(a => a.Experience == before + share + ExperienceRules.KillAward(160)), "the loop follows the kill award");
+        Assert.IsNotNull(owner.QueryLifeRecord(Rat)!.Value.DeathTimeMs, "the answer decides nothing: the death was processed");
+    }
+
+    [TestMethod]
+    public void A_follower_that_died_earlier_is_not_asked_but_the_victim_that_is_a_follower_is()
+    {
+        var record = Bolt(1000);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var asked = Watch(owner, Cat, Thug, Rat);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ApplyDamage(owner.Version, SessionLifeTarget.Critter(Cat, new LifeFacts(), default), new LifeDamage { HitPoints = 1_000 }).Disposition);
+        Assert.IsNotNull(owner.QueryLifeRecord(Cat)!.Value.DeathTimeMs);
+        CastAtRat(owner, caster, record);
+        CollectionAssert.AreEqual(new[] { Thug, Rat }, asked.Select(a => a.Request.Follower).ToArray(), "the dead Cat left the array; the dying Rat is still in it when the loop runs");
+    }
+
+    [TestMethod]
+    public void A_kill_by_a_follower_of_the_hero_asks_the_loop_and_one_by_another_npc_does_not()
+    {
+        var record = Bolt(1000);
+        var (led, ledCaster) = Session(record);
+        using var _ = led;
+        var asked = Watch(led, Thug);
+        CastAtRat(led, ledCaster, record, Thug);
+        Assert.AreEqual(1, asked.Count);
+        Assert.AreEqual(new SessionLeaderKillingRequest(Rat, led.QueryActor().Map.RuntimeMap, Thug), asked[0].Request);
+
+        var (other, otherCaster) = Session(record);
+        using var __ = other;
+        var none = Watch(other, Cat);
+        CastAtRat(other, otherCaster, record, Thug);
+        Assert.AreEqual(0, none.Count, "the killer has no PC leader: no award and no loop");
+    }
+
+    [TestMethod]
+    public void A_hurt_a_script_kill_and_a_death_the_dying_script_stopped_ask_no_leader_killing_script()
+    {
+        var (hurt, hurtCaster) = Session(Bolt(3));
+        using var _ = hurt;
+        var hurtAsked = Watch(hurt, Thug);
+        CastAtRat(hurt, hurtCaster, Bolt(3));
+        Assert.AreEqual(0, hurtAsked.Count, "no death");
+
+        var record = Bolt(1000);
+        var (script, scriptCaster) = Session(record);
+        using var __ = script;
+        var scriptAsked = Watch(script, Thug);
+        Assert.IsTrue(scriptCaster.ApplyScriptDamage(Rat, 1000, 0, unresistable: true).Applied);
+        Assert.AreEqual(0, scriptAsked.Count, "no source, no PC leader");
+
+        var (stopped, stoppedCaster) = Session(record);
+        using var ___ = stopped;
+        stopped.DyingScript = _ => false;
+        var stoppedAsked = Watch(stopped, Thug);
+        CastAtRat(stopped, stoppedCaster, record);
+        Assert.AreEqual(0, stoppedAsked.Count, "skip default ends the kill step before its loop");
+    }
+
+    [TestMethod]
+    public void A_host_that_throws_ends_the_loop_and_the_kill_is_still_committed()
+    {
+        var record = Bolt(1000);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        Watch(owner, Thug, Cat);
+        var calls = 0;
+        owner.LeaderKillingScript = _ => { calls++; throw new InvalidOperationException("host failure"); };
+        CastAtRat(owner, caster, record);
+        Assert.AreEqual(1, calls);
+        Assert.IsNotNull(owner.QueryLifeRecord(Rat)!.Value.DeathTimeMs);
+    }
 }

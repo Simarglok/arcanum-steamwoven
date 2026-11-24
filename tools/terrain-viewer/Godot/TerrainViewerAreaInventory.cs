@@ -115,8 +115,17 @@ public partial class TerrainViewerApp
         // ARC-DEV-366: an item script's add-effect action (the tech books' effects 168 to 175) takes its rule from the hero's effect tables; the
         // field is read at each use, so the tables the character start loads later still answer.
         host.EffectRules = number => _areaEffectRules?.Invoke(number);
+        // ARC-UI-2444: the item windows' portrait of an NPC that stores the PC's own one takes the catalogue's next or previous (0x4CEB80).
+        host.PortraitCatalogueSource = PortraitCatalogueNow;
+        // ARC-SCRIPT-2335: an insert-item script's container vicinity, name test and change art number read the shown map's use-script host.
+        host.ShownScripts = () => _readyArea is { } shownArea ? UseScriptHost(shownArea.Snapshot) : null;
+        // ARC-WORLD-2357: the substitute container reach (the dialog item hold, the restock merchant search) measures where the shown map's AI host has the NPC now.
+        // It reads the built host without building it again (the restock event reaches it mid-advance, as AreaEvents' own host reader does); a group companion not following stands on its own cell (AreaAiHost.Tile).
+        host.NpcLiveCell = npc => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai.Tile(npc) : null;
         host.NpcWearer = (map, npc) => AreaEvents.NpcWieldScripts(map, npc);
         host.NpcWearerFacts = (map, npc) => AreaEvents.RestockWielder(map, npc)?.Wearer;
+        // ARC-UI-2159: the weight test of a sale onto a slot of a merchant's doll reads the merchant's build and life state from the shown map's AI host.
+        host.NpcSlotInsertCheck = npc => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai.SlotInsertCheck(npc) : null;
         _inventoryHost = host;
         // ARC-DEV-354: the carried items whose row neither the new host's maps nor the rows handed over from the last one give (a fresh run, a load
         // into another window or map) are read by identity from their origin map.
@@ -215,24 +224,36 @@ public partial class TerrainViewerApp
         return Math.Max(Math.Abs(at.X - cell.X), Math.Abs(at.Y - cell.Y));
     }
 
-    /// <summary>ARC-WORLD-092: where a map row stands now: an NPC the AI walked on its cell, anything else on its map data's.</summary>
+    /// <summary>ARC-WORLD-092: where a map row stands now: a companion on its own actor's committed cell (ARC-COMBAT-1945), an NPC the AI walked on its cell, anything else on its map data's.</summary>
     private (long X, long Y) LiveWorldCell(AreaObjectRecord row) =>
+        _areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == row.Key) is { } companion ? _areaCompanions.WorldCell(companion.Speaker) :
         _aiHost?.Scene.Npcs.FirstOrDefault(n => n.Row.Key == row.Key) is { } npc && _aiHost.Movers.IsMoved(npc.Entity) && _aiHost.Movers.Of(npc.Entity) is { } mover
             ? (mover.Cell.X, mover.Cell.Y) : (row.WorldX!.Value, row.WorldY!.Value);
 
     /// <summary>
     /// A guarded left press (see <c>WorldRouteClick</c>) on a ground item, a container, a junk pile or a dead NPC: true when it was one. ARC-DEV-175 (MIG13 S11c, GS26 and GS27): the click is an <see cref="ObjectClickRequest"/>; the click
     /// rules make it the pickup goal 15 for an item (the hero walks onto its tile through goal 8 with range 0, then goal 16 takes it) or the use goal 81 for a container or a body (S11b: range 1, then the loot window). There is no walk-to-pick-up
-    /// intent any more; the act is applied at the frame's next safe point (<see cref="ProcessUsePending"/>). Alt is passed in combat mode only (out of it Alt is the immediate action 0x4445A0, not read).
+    /// intent any more; the act is applied at the frame's next safe point (<see cref="ProcessUsePending"/>). ARC-INPUT-1946: Alt is passed as pressed; out of combat mode it is the immediate action 0x4445A0 (<see cref="AreaHeroPull"/>), which builds no goal and replaces nothing the hero does.
     /// </summary>
-    private bool TryAreaInventoryClick(Vector2 screen, bool alt)
+    private bool TryAreaInventoryClick(Vector2 screen, bool alt, bool shift, out bool immediate)
     {
+        immediate = false;
         if (InventoryOpen || ActorCell() is null || InventoryTargetAt(screen) is not { } target) return false;
+        // ARC-INPUT-1946 (0x4445A0): the Alt action builds no goal, so it cancels no approach and starts no run; it moves the item or body at once.
+        if (alt && HeroRequests.ClickGoalOf(InventoryTargetOf(target.Row.Key), alt, false) == Arcanum.Simulation.Goals.HeroClickGoal.Immediate)
+        {
+            var moved = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: true));
+            _inventoryStatus = moved.Outcome == HeroRequestOutcome.Done ? "moved onto the hero's tile" : "nothing moved: out of reach (one tile) or not takable";
+            GD.Print($"ARC-INPUT-1946 alt-click kind={target.Kind} outcome={moved.Outcome}");
+            SyncAreaInventory(); RefreshAreaStatus();
+            immediate = true;
+            return true;
+        }
         CancelPickPocket("an item click replaced it");
         CancelTalkApproach("an item click replaced it"); CancelAreaUseApproach("an item click replaced it"); CancelInventoryApproach(null);
         _useOpenPending = null;
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
-        var request = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: alt && HeroInCombatMode));
+        var request = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: alt, Shift: shift));
         // ARC-DEV-304 (GT115, GT120): a body with the spoken-with-dead spell flag is talked to (goal 21); a body that is no dialog NPC has no window to open (the generic greeting line is not modelled).
         _inventoryStatus = request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Talk ? $"talking to a body spoken with by spell: goal 21 {(request.Outcome == HeroRequestOutcome.Done ? "started" : "refused")} (no dialog NPC, so no window)"
             : request.Click is not (Arcanum.Simulation.Goals.HeroClickGoal.Pickup or Arcanum.Simulation.Goals.HeroClickGoal.UseContainer) ? $"the click does nothing here ({request.Click})"
@@ -289,7 +310,7 @@ public partial class TerrainViewerApp
         if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
         if (_inventoryPanel is null)
         {
-            _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel);
+            _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel); _inventoryPanel.DiagnosticSwitch = DebugMode;
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
             _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };
@@ -311,6 +332,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
             _inventoryPanel.HolderView = InventoryHolderView;
+            _inventoryPanel.PortraitTextures = HolderPortraitTexture;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -622,6 +644,15 @@ public partial class TerrainViewerApp
         // ARC-UI-029: a question still up goes with the window; nothing moves (ARC-DEV-110: the window's close pops the quantity picker
         // above it, mode 13, and its leave step drops the question).
         CloseWindowMode(mode);
+        FinishInventoryClose(holder);
+    }
+
+    /// <summary>
+    /// The close of the inventory family's window after the stack took it off: the theft goes on, a junk pile dissolves, the container's lid closes, the input gate closes. ARC-MAGIC-1336: also the tail of a
+    /// loot window a spell's cursor took with it when it was cancelled (SA38: the leave case of mode 1 pops the window below it too, and the stack's hide step only hides the panel).
+    /// </summary>
+    private void FinishInventoryClose(string? holder)
+    {
         // ARC-DEV-323 (SL13): the window's close ends no goal. The original's close (0x573440, the steal mode's leave case) calls nothing of the goal table, so a Steal or Plant
         // that walks to the victim (goal 33) or waits for its attempt (86) goes on without the window and makes its attempt as it does after a load (ProcessPickPocketPending);
         // ARC-DEV-184 ended it here. What ends such a run is a new order, a cancel or its own end.
@@ -695,8 +726,8 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's; ARC-UI-1328: or a junk pile's) gold pile whole without asking (the original's flag 0x20, QW1).
             var result = line.StackKind is { Type: SessionItemType.Gold }
-                ? SessionJunkPile.Number(holder) is not null ? _areaSession!.TakeGoldFromJunkPile(_areaSession.Version, holder, line.Entity, line.Units)
-                : _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
+                ? SessionJunkPile.Number(holder) is not null ? _areaSession!.TakeGoldFromJunkPile(_areaSession.Version, holder, line.Entity, line.Units, _inventoryHost!.ItemScripts(_areaSession))
+                : _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity, _inventoryHost!.ItemScripts(_areaSession))
                 : _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.

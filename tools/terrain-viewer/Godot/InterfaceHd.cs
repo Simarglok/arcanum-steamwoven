@@ -46,7 +46,10 @@ public static class InterfaceHd
     public static bool Configure(HdPack? pack, bool enabled, bool generated = false)
     {
         if (ReferenceEquals(pack, Pack) && enabled == Enabled && generated == Generated) return false;
+        var sameCopies = ReferenceEquals(pack, Pack) && enabled == Enabled;
         Pack = pack; Enabled = enabled; Generated = generated;
+        if (!sameCopies) DropDirectFrames(); // the generated setting alone does not change a direct frame's copy
+        AreaLensPlace.Unified = generated; // ARC-UI-2714: the generated window arts carry the lens at the common place
         HdOptimizedStore.Attach(pack, enabled);
         RefreshTextures();
         Changed?.Invoke();
@@ -90,6 +93,21 @@ public static class InterfaceHd
         return true;
     }
 
+    /// <summary>ARC-UI-2452: the fractional device scale the strips of the Steamwoven layout are drawn at (null: the bars' whole <see cref="GeneratedScale"/>). Strip textures that claim no
+    /// scale source paint at this scale (<see cref="PaintScale"/>) and are sampled Linear unless the scale is whole and the sizes come out in whole device pixels.</summary>
+    public static double? FractionalScale { get; private set; }
+
+    /// <summary>ARC-UI-2452: sets or clears <see cref="FractionalScale"/>; generated textures paint again for a new scale. Returns whether it changed.</summary>
+    public static bool SetFractionalScale(double? deviceScale)
+    {
+        var next = deviceScale is { } value && double.IsFinite(value) && value > 0 ? Math.Round(value, 3) : (double?)null;
+        if (FractionalScale == next) return false;
+        FractionalScale = next;
+        if (Generated) { RefreshTextures(); Changed?.Invoke(); }
+        GD.Print($"ARC-UI-2452 steamwoven strip scale={(next is { } shown ? shown.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) : "off")}");
+        return true;
+    }
+
     /// <summary>One painted frame: straight RGBA at (Legacy size × <see cref="Scale"/>), kept per Legacy frame so a greyed copy and a rebuilt texture
     /// reuse it. <see cref="Pixels"/> is null while it is painted (<see cref="Failed"/> when painting threw).</summary>
     internal sealed class GeneratedFrameEntry(HdPack? pack, bool hdOn, double scale)
@@ -103,6 +121,8 @@ public static class InterfaceHd
     }
 
     private static readonly ConditionalWeakTable<AreaInterfaceFrame, GeneratedFrameEntry> GeneratedFrames = new();
+    // ARC-RENDER-3002: direct frames wait on their own gate (two workers), so a grid of icons at a new scale never queues ahead of a window's generated chrome.
+    private static readonly SemaphoreSlim DirectGate = new(Math.Max(1, Math.Min(2, System.Environment.ProcessorCount / 4)));
     private static readonly SemaphoreSlim GeneratedGate = new(Math.Max(1, Math.Min(4, System.Environment.ProcessorCount / 2)));
     private static int _generatedPending;
 
@@ -170,6 +190,132 @@ public static class InterfaceHd
         lock (Textures)
             for (var i = 0; i < Textures.Count; i++)
                 if (Textures[i].TryGetTarget(out var texture) && texture.IsFrame(frame)) texture.Refresh();
+    }
+
+    // ---- ARC-RENDER-3002: direct pack frames at a fractional device scale, area-resampled once per scale on a worker ----
+
+    /// <summary>One direct frame resampled to a device scale: straight RGBA of <see cref="Width"/> × <see cref="Height"/> (the Legacy size times the scale, rounded per edge).
+    /// <see cref="Pixels"/> is null while a worker resamples it (<see cref="Failed"/> when the redraw is not usable or the work threw: the frame then draws as before).</summary>
+    internal sealed class DirectFrameEntry(HdPack pack, double scale)
+    {
+        private byte[]? _pixels;
+        public HdPack Pack { get; } = pack;
+        /// <summary>Device pixels per Legacy pixel the frame is resampled to (rounded to 1/1000).</summary>
+        public double Scale { get; } = scale;
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public byte[]? Pixels { get => Volatile.Read(ref _pixels); set => Volatile.Write(ref _pixels, value); }
+        public volatile bool Failed;
+        /// <summary>ARC-RENDER-3045: set (before <see cref="Failed"/>) when the pack has no usable redraw for the frame: no scale is worth another worker.</summary>
+        public volatile bool Unusable;
+    }
+
+    // Up to DirectKeep scales per frame, least recently asked for first out (a frame shared by views at up to four different scales does not resample again on every draw).
+    private const int DirectKeep = 4;
+    private static readonly ConditionalWeakTable<AreaInterfaceFrame, List<DirectFrameEntry>> DirectFrames = new();
+    private static int _directPending;
+    private static long _directTicks;
+
+    /// <summary>Direct frames still being resampled on a worker (a self-test waits for 0).</summary>
+    public static int DirectPending => Volatile.Read(ref _directPending);
+
+    /// <summary>Totals of the resampled direct frames kept now (how many, their bytes as straight RGBA) and the worker time spent since the pack or the HD setting last changed.</summary>
+    public static (long Frames, long Bytes, double Milliseconds) DirectTotals
+    {
+        get
+        {
+            long frames = 0, bytes = 0;
+            lock (DirectFrames)
+                foreach (var pair in DirectFrames)
+                    foreach (var entry in pair.Value)
+                        if (entry.Pixels is { } pixels) { frames++; bytes += pixels.Length; }
+            return (frames, bytes, Interlocked.Read(ref _directTicks) * 1000.0 / Stopwatch.Frequency);
+        }
+    }
+
+    /// <summary>The scale (rounded to 1/1000) a direct frame of a pack of <paramref name="packScale"/> is resampled to for the real device scale <paramref name="device"/>,
+    /// or null when it draws as before: a scale at or above the pack's, and a whole scale that divides the pack's (1 and 2 for a 4× pack: an exact mip level).
+    /// ARC-RENDER-3045: a whole scale that does not divide it (3 for a 4× pack, which the trilinear draw over-blurs) is resampled to exactly that whole scale (within 0.01).</summary>
+    internal static double? DirectScale(double device, int packScale)
+    {
+        if (!double.IsFinite(device) || device <= 0 || packScale < 2) return null;
+        var scale = Math.Round(device, 3);
+        if (scale <= 0 || scale >= packScale - 0.001) return null;
+        var whole = Math.Round(scale);
+        if (Math.Abs(scale - whole) >= 0.01) return scale;
+        return whole >= 1 && packScale % (int)whole != 0 ? whole : null;
+    }
+
+    /// <summary>The entry of <paramref name="frame"/> for <paramref name="pack"/> at <paramref name="scale"/> (<see cref="DirectScale"/>): <c>Pixels</c> are set when ready, <c>Failed</c>
+    /// when the pack has no usable redraw, neither while a worker resamples it (this call starts the worker the first time). Main thread.</summary>
+    internal static DirectFrameEntry DirectFor(AreaInterfaceFrame frame, HdSpriteQuery query, HdPack pack, double scale)
+    {
+        lock (DirectFrames)
+        {
+            var entries = DirectFrames.GetOrCreateValue(frame);
+            entries.RemoveAll(e => !ReferenceEquals(e.Pack, pack));
+            // ARC-RENDER-3045: a pack with no usable redraw for the frame has none at any scale; the failed entry answers every scale (no worker per new scale).
+            var unusable = entries.Find(e => e.Unusable);
+            if (unusable is not null) return unusable;
+            var known = entries.Find(e => e.Scale == scale);
+            if (known is not null)
+            {
+                // Least recently used: the scale asked for last is the last to go.
+                if (entries[^1] != known) { entries.Remove(known); entries.Add(known); }
+                return known;
+            }
+            if (entries.Count >= DirectKeep) entries.RemoveAt(0);
+            var entry = new DirectFrameEntry(pack, scale);
+            entries.Add(entry);
+            Interlocked.Increment(ref _directPending);
+            Task.Run(() => ResampleDirectAsync(entries, entry, frame, query));
+            return entry;
+        }
+    }
+
+    private static async Task ResampleDirectAsync(List<DirectFrameEntry> entries, DirectFrameEntry entry, AreaInterfaceFrame frame, HdSpriteQuery query)
+    {
+        // Queued frames hold no pool thread; one whose entry went meanwhile (another scale, pack or setting) is not resampled at all.
+        await DirectGate.WaitAsync();
+        try
+        {
+            lock (DirectFrames) if (!entries.Contains(entry)) { entry.Failed = true; return; }
+            var clock = Stopwatch.StartNew();
+            var pack = entry.Pack;
+            if (pack.ResolveSprite(query, frame.Rgba) is not { Status: HdFrameStatus.Hd, Rgba: { } rgba } hd
+                || hd.Width != frame.Width * pack.Scale || hd.Height != frame.Height * pack.Scale) { entry.Unusable = true; entry.Failed = true; return; }
+            var (width, height) = InterfaceChromeRenderer.PixelSize(frame.Width, frame.Height, entry.Scale);
+            var pixels = InterfaceChromeRenderer.ResampleStraight(rgba, hd.Width, hd.Height, width, height);
+            lock (DirectFrames) if (!entries.Contains(entry)) { entry.Failed = true; return; }
+            entry.Width = width; entry.Height = height; entry.Pixels = pixels;
+            Interlocked.Add(ref _directTicks, clock.ElapsedTicks);
+            if ((long)width * height > 200_000)
+                GD.Print($"ARC-RENDER-3002 direct frame {hd.Width}x{hd.Height} -> {width}x{height} resampled off the main thread in {clock.ElapsedMilliseconds} ms (scale {entry.Scale})");
+        }
+        catch (Exception e)
+        {
+            // Any failure (an out-of-memory at a big scale included) draws the frame with the mip chain as before. A pack that rejects the frame (a Legacy hash mismatch)
+            // rejects it at every scale: no worker per scale (ARC-RENDER-3045).
+            if (e is ArgumentException) entry.Unusable = true;
+            entry.Failed = true;
+            GD.PrintErr($"ARC-RENDER-3002 direct interface frame resample failed: {e.GetType().Name}");
+        }
+        finally
+        {
+            DirectGate.Release();
+            Interlocked.Decrement(ref _directPending);
+            Callable.From(() => GeneratedPainted(frame)).CallDeferred();
+        }
+    }
+
+    // A new pack or HD setting forgets every resampled frame (a worker still running notices and drops its result).
+    private static void DropDirectFrames()
+    {
+        lock (DirectFrames)
+        {
+            foreach (var pair in DirectFrames) pair.Value.Clear();
+            Interlocked.Exchange(ref _directTicks, 0);
+        }
     }
 
     /// <summary>Straight-alpha RGBA with each colour turned to its luma (the weights of <see cref="GreyImage"/>), a copy.</summary>
@@ -337,6 +483,9 @@ public static class InterfaceHd
 /// at a zoom below 4× (200 % of 800 × 600 is 2×) is filtered down instead of sampled nearest, whatever the parent node's filter. The Legacy
 /// texture, the tile case and the bitmap fonts keep the parent's Nearest. The mip chain costs about a third more memory per decoded HD frame, and
 /// a magnification above 4× would now be soft rather than nearest.</para>
+/// <para>ARC-RENDER-3002: at a fractional device scale below the pack's (a view's claimed scale source) a plain frame is resampled once per
+/// scale with the area filter on a worker (<see cref="InterfaceHd.DirectFor"/>) and drawn 1:1 from that copy; the mip chain it replaces is freed. Whole scales, scales
+/// from the pack's up, art-font canvases and textures with no claimed scale keep the trilinear draw.</para>
 /// </summary>
 public partial class HdInterfaceTexture : Texture2D
 {
@@ -352,6 +501,10 @@ public partial class HdInterfaceTexture : Texture2D
     private ImageTexture? _generated;
     private CanvasTexture? _generatedCanvas;
     private InterfaceHd.GeneratedFrameEntry? _generatedFrom;
+    // ARC-RENDER-3002: the pack frame area-resampled to the device scale (straight RGBA, drawn 1:1) instead of the mip chain.
+    private ImageTexture? _area;
+    private CanvasTexture? _areaCanvas;
+    private InterfaceHd.DirectFrameEntry? _areaFrom;
     private int _activeScale = 1;
     // ARC-UI-148: device pixels per Legacy pixel of what draws, for a region draw (a generated frame at a fractional scale is not a whole multiple).
     private float _activeRatio = 1;
@@ -370,6 +523,15 @@ public partial class HdInterfaceTexture : Texture2D
     /// <summary>ARC-UI-140: true when what draws is the generated chrome of a recipe (a self-test reads it).</summary>
     internal bool IsGenerated => Active() is { } active && ReferenceEquals(active, _generatedCanvas);
 
+    /// <summary>ARC-RENDER-3002: true when what draws is the pack frame area-resampled to the device scale (a self-test reads it).</summary>
+    internal bool IsAreaResampled => Active() is { } active && ReferenceEquals(active, _areaCanvas);
+
+    /// <summary>ARC-RENDER-3002: the pixel size of the uploaded area-resampled copy (zero while none is uploaded; a self-test reads it).</summary>
+    internal Vector2I AreaPixelSize => _area is { } image && _areaCanvas is not null ? new(image.GetWidth(), image.GetHeight()) : default;
+
+    /// <summary>ARC-RENDER-3002: the uploaded area-resampled copy as straight RGBA bytes (null while none is uploaded; a self-test compares it).</summary>
+    internal byte[]? AreaImageBytes() => _area?.GetImage()?.GetData();
+
     /// <summary>ARC-UI-141: true when this texture (or a greyed copy of it) is made from <paramref name="frame"/>.</summary>
     internal bool IsFrame(AreaInterfaceFrame frame) => ReferenceEquals(_frame, frame);
 
@@ -381,6 +543,9 @@ public partial class HdInterfaceTexture : Texture2D
 
     internal int HdScale => _activeScale;
 
+    /// <summary>ARC-UI-2452: the Legacy frame behind the texture (its RGBA and art identity), null before it is bound.</summary>
+    internal AreaInterfaceFrame? FrameForBoard => _frame;
+
     /// <summary>True when the HD image is premultiplied for an art-font (PremultAlpha) canvas.</summary>
     internal bool Premultiplied => _premultipliedAlpha;
 
@@ -390,7 +555,7 @@ public partial class HdInterfaceTexture : Texture2D
     // The HD image is kept only while HD draws, so a switch back to Legacy frees what the windows decoded.
     internal void Refresh()
     {
-        if (!InterfaceHd.Enabled) { _hd = null; _hdCanvas = null; _hdFor = null; _failed = false; }
+        if (!InterfaceHd.Enabled) { _hd = null; _hdCanvas = null; _hdFor = null; _failed = false; DropArea(); }
         // The generated frame is looked up again at the next draw (its entry says whether pack, HD setting or scale changed); the uploaded image of
         // the old entry keeps drawing while the new one is painted, and goes when the generated interface is off.
         if (!InterfaceHd.Generated) { _generated = null; _generatedCanvas = null; _generatedFrom = null; }
@@ -414,7 +579,9 @@ public partial class HdInterfaceTexture : Texture2D
         _activeScale = InterfaceHd.Pack?.Scale ?? 1;
         _activeRatio = _activeScale;
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack || _frame?.Hd is not { } query) return null;
-        if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; }
+        if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; DropArea(); }
+        // ARC-RENDER-3002: a plain frame at a fractional device scale below the pack's draws from its area-resampled copy once a worker has it (the mip chain is freed then).
+        if (!_premultipliedAlpha && AreaCanvas(pack, query) is { } area) return area;
         if (_hdCanvas is null && !_failed)
         {
             // ARC-DEV-369: a worker may have resolved this frame already; only the upload is left.
@@ -452,13 +619,53 @@ public partial class HdInterfaceTexture : Texture2D
         return _hdCanvas;
     }
 
+    private void DropArea() { _area = null; _areaCanvas = null; _areaFrom = null; }
+
+    // ARC-RENDER-3002: the area-resampled frame for the device scale this texture is drawn at (its scale source); null while the scale is whole
+    // or at least the pack's, the pack has no usable redraw, or nothing is ready yet and no earlier scale draws (the mip chain draws then, as before).
+    private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query)
+    {
+        // Only a view that claims its device scale: a texture with no claim may be drawn at any scale, and a copy for the wrong one is blurrier than the mip chain.
+        if (ScaleSource is not { } source || InterfaceHd.DirectScale(source(), pack.Scale) is not { } scale) { DropArea(); return null; }
+        var real = (double)source();
+        // Settled: the copy of this pack and scale is uploaded, so the draw takes no lock and no lookup.
+        if (_areaCanvas is not null && _areaFrom is { } held && ReferenceEquals(held.Pack, pack) && held.Scale == scale && !held.Failed)
+        {
+            _activeRatio = (float)(_area?.GetWidth() ?? 1) / Math.Max(1, _frame.Width);
+            _activeScale = Math.Max(1, (int)MathF.Round(_activeRatio));
+            return _areaCanvas;
+        }
+        var entry = InterfaceHd.DirectFor(_frame, query, pack, scale);
+        if (entry.Failed) { DropArea(); return null; }
+        if (entry.Pixels is not { } pixels)
+        {
+            // Still resampling: an earlier scale's copy keeps drawing, stretched into the same Legacy rectangle, until the new one is ready.
+            if (_areaCanvas is null) return null;
+        }
+        else if (!ReferenceEquals(_areaFrom, entry) || _areaCanvas is null)
+        {
+            using var image = Image.CreateFromData(entry.Width, entry.Height, false, Image.Format.Rgba8, _greyscale ? InterfaceHd.GreyBytes(pixels) : pixels);
+            _area = ImageTexture.CreateFromImage(image);
+            _areaFrom = entry;
+            // One texel per device pixel (Nearest) only when the copy is exactly what the view shows; otherwise Linear on an almost 1:1 sample.
+            var exact = Math.Abs(real - scale) < 0.001 && Math.Abs(_frame.Width * scale - entry.Width) < 0.001 && Math.Abs(_frame.Height * scale - entry.Height) < 0.001;
+            _areaCanvas = new CanvasTexture { DiffuseTexture = _area, TextureFilter = exact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear };
+            _hd = null; _hdCanvas = null; _failed = false;
+        }
+        _activeRatio = (float)(_area?.GetWidth() ?? 1) / Math.Max(1, _frame.Width);
+        _activeScale = Math.Max(1, (int)MathF.Round(_activeRatio));
+        return _areaCanvas;
+    }
+
     // ARC-UI-141: the generated frame at the exact device scale. The pixels are painted once per frame on a worker (InterfaceHd.GeneratedFor);
     // this texture only greys them when it is a greyed copy, premultiplies for art fonts and uploads, drawn 1:1 (Nearest, no mip chain).
     private CanvasTexture? GeneratedCanvas(ChromeRecipe recipe, HdSpriteQuery query, out bool painting)
     {
         painting = false;
-        var device = ScaleSource is { } source ? source() : (double)InterfaceHd.GeneratedScale;
-        var scale = ScaleSource is null ? InterfaceHd.GeneratedScale : InterfaceHd.PaintScale(device);
+        // ARC-UI-2452: a fractional strip scale paints like a window's own scale (no scale source: the strips').
+        var bySource = ScaleSource is not null || InterfaceHd.FractionalScale is not null;
+        var device = ScaleSource is { } source ? source() : InterfaceHd.FractionalScale ?? (double)InterfaceHd.GeneratedScale;
+        var scale = !bySource ? InterfaceHd.GeneratedScale : InterfaceHd.PaintScale(device);
         var entry = InterfaceHd.GeneratedFor(_frame, query, recipe, scale);
         if (entry.Failed) return null; // drawn as HD or Legacy
         if (entry.Pixels is not { } pixels)
@@ -476,7 +683,7 @@ public partial class HdInterfaceTexture : Texture2D
         _generatedFrom = entry;
         // One texel per device pixel (Nearest) only when the painted size is exactly what the window shows: the bars' whole scale, or a window whose
         // device scale is the painted one and whose frame sizes come out in whole device pixels.
-        var exact = ScaleSource is null ? InterfaceHd.GeneratedExact
+        var exact = !bySource ? InterfaceHd.GeneratedExact
             : Math.Abs(device - scale) < 0.001 && Math.Abs(_frame.Width * scale - pixelWidth) < 0.001 && Math.Abs(_frame.Height * scale - pixelHeight) < 0.001;
         _generatedCanvas = new CanvasTexture { DiffuseTexture = _generated, TextureFilter = exact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear };
         return _generatedCanvas;

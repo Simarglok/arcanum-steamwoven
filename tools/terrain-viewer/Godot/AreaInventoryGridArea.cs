@@ -127,6 +127,10 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-1765: an item of the hero was pressed in the service window's frame (its entity): the app quotes it, and pays on the next press of the same item (IS3).</summary>
     public event Action<string>? ServiceItemPressed;
 
+    /// <summary>ARC-UI-1908: the stored portrait's small image by portrait number (the viewer reads and decodes it on first use; null: it did not read). The windows draw it where
+    /// the original's image function 0x553D10 answers a portrait (<see cref="AreaInventoryView.HolderPortrait"/>).</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get; set; }
+
     /// <summary>ARC-UI-1765: the grid draws the item service window's frame with <paramref name="frame"/>'s parts (null: the own window's).</summary>
     public void SetService(AreaServiceFrame? frame)
     {
@@ -147,6 +151,21 @@ public partial class AreaInventoryGridArea : Control
     {
         if (frame == _barter) return;
         _barter = frame; QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-3033: the kit's background shows under this frame (loot or barter look): the frame draws none of its own background art (the merchant's or body's side, the hero's inventory), and the kit's doll view and
+    /// doll cover replace the window's where the kit has them; null: the frame draws its own art as before.</summary>
+    internal AreaKitBackdrop? KitBackdrop => _kit;
+    private AreaKitBackdrop? _kit;
+
+    /// <summary>ARC-UI-3033: what the last loot or barter draw did for the self-test: the frame's own background art (and the hero's inventory art) drawn, and the kit's doll view and doll cover drawn in place of the window's.</summary>
+    internal (bool Background, bool Pack, bool KitDoll, bool KitCover) KitDrawForSelfTest => _kitDraw;
+    private (bool Background, bool Pack, bool KitDoll, bool KitCover) _kitDraw;
+
+    public void SetKitBackdrop(AreaKitBackdrop? kit)
+    {
+        if (kit == _kit) return;
+        _kit = kit; QueueRedraw();
     }
 
     // The shown object's scroll maximum by the window's mode (IW31, BW4).
@@ -174,6 +193,31 @@ public partial class AreaInventoryGridArea : Control
     }
     private bool _menuUp;
 
+    /// <summary>
+    /// ARC-UI-3033: what the original's window arts paint into their background and the kit has no layer for yet (kit.json <c>grid.inventory_cells</c>, size open): the two item grids' black cells with their grid lines, the five
+    /// counter fields and the quote line's field (barter). Drawn under the content while the kit's background shows, so the grids and fields do not vanish with the old art; a stand-in until the kit's grid layer lands.
+    /// </summary>
+    private void KitFields(bool barter)
+    {
+        var black = new Color(0f, 0f, 0f);
+        var line = new Color(.2f, .24f, .32f);
+        void Field(float x, float y, float w, float h) => DrawRect(new Rect2(x * _scale, y * _scale, w * _scale, h * _scale), black);
+        void Grid(float x, float y, int columns, int rows)
+        {
+            Field(x, y, columns * AreaInventoryDrag.CellPixels, rows * AreaInventoryDrag.CellPixels);
+            for (var column = 0; column <= columns; column++)
+                DrawLine(new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, y * _scale), new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, (y + rows * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
+            for (var row = 0; row <= rows; row++)
+                DrawLine(new Vector2(x * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), new Vector2((x + columns * AreaInventoryDrag.CellPixels) * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
+        }
+        // The hero's pack grid, and the holder's (the merchant's or the body's) grid below the holder's lines.
+        Grid(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, Arcanum.Session.SessionHeroGrid.Columns, Arcanum.Session.SessionHeroGrid.Rows);
+        if (barter) Grid(AreaBarterArtLayout.GridX, AreaBarterArtLayout.GridY, AreaBarterArtLayout.Columns, AreaBarterArtLayout.ShownRows);
+        else Grid(AreaLootArtLayout.GridX, AreaLootArtLayout.GridY, AreaLootArtLayout.Columns, AreaLootArtLayout.ShownRows);
+        foreach (var (x, y, w, h) in AreaInventoryArtLayout.Counts) Field(x, y, w, h);
+        if (barter) { var quote = AreaBarterArtLayout.QuoteLine; Field(quote.X - 7, quote.Y - 3, quote.Width + 14, quote.Height + 6); }
+    }
+
     // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.
     private void Background(AreaInventoryArtLook look, int number, AreaInventoryMode mode)
     {
@@ -195,6 +239,8 @@ public partial class AreaInventoryGridArea : Control
     {
         MouseFilter = MouseFilterEnum.Stop;
         FocusMode = FocusModeEnum.None;
+        _textLayer = new TextLayer { Name = "Texts" };
+        AddChild(_textLayer);
         Fit(AreaInventoryDrag.FrameWidth);
     }
 
@@ -216,6 +262,21 @@ public partial class AreaInventoryGridArea : Control
         _scale = scale;
         CustomMinimumSize = new(AreaInventoryDrag.FrameWidth * _scale, AreaInventoryDrag.FrameHeight * _scale);
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// ARC-UI-2575: with the Steamwoven layout on, puts <paramref name="panel"/> (whose <paramref name="area"/> is the 800 × 400 frame) so the frame lies in the window zone at the layout's unit scale, whatever the panel
+    /// holds around the frame (the switch, the message and quantity rows); false while that layout is not in use (nothing is changed). The one placement of the inventory, loot and barter windows.
+    /// </summary>
+    public static bool PlaceInZone(PanelContainer panel, AreaInventoryGridArea area, Vector2 viewSize)
+    {
+        if (AreaGameBarPanel.ZoneWindow(viewSize, (int)AreaInventoryDrag.FrameWidth, (int)AreaInventoryDrag.FrameHeight) is not { } zone) return false;
+        area.FitScale((float)zone.Scale);
+        var offset = area.GlobalPosition - panel.GlobalPosition;
+        panel.Size = new((float)(AreaInventoryDrag.FrameWidth * zone.Scale) + offset.X * 2, 0);
+        panel.Size = new(panel.Size.X, panel.GetCombinedMinimumSize().Y);
+        panel.Position = new((float)zone.X - offset.X, (float)zone.Y - offset.Y);
+        return true;
     }
 
     /// <summary>ARC-UI-051: sets the original look (null: the diagnostic shapes).</summary>
@@ -248,8 +309,20 @@ public partial class AreaInventoryGridArea : Control
         }
     }
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += RedrawForKit;
+
+    private void RedrawForKit() => QueueRedraw();
+
+    /// <summary>ARC-UI-3032: the kit's background of the loot, steal and See Contents windows shows under this window (the bar panel drew it), so the window draws no background art of its own, and takes the kit's doll covers where the set has them.
+    /// Never in the barter window (its own backdrop family has no kit window yet) nor the own window.</summary>
+    internal bool KitBackgroundShown => _barter is null && LootLook && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Loot;
+
+    /// <summary>ARC-UI-3032: for the self-test: the background arts this window drew at its last loot-mode redraw (the loot art 234 and pack art 221, or none), and the arts it drew from a kit cover instead.</summary>
+    internal (IReadOnlyList<int> Backgrounds, IReadOnlyList<int> KitCovers) LootDrawForSelfTest { get; private set; } = ([], []);
+
     public override void _ExitTree()
     {
+        AreaGameBarPanel.KitBackgroundChanged -= RedrawForKit;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -411,8 +484,16 @@ public partial class AreaInventoryGridArea : Control
         if (Mode == AreaInventoryMode.Contents && !ArrangeAt(frame)) { QueueRedraw(); return; }
         if (TargetPicking)
         {
-            // The own window's grid and doll only: the loot, steal and barter looks name their items by their own layouts (not ready for a target).
-            if (!BarterLook && !LootLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
+            // ARC-MAGIC-1336 (0x573850, IW44): the loot window (and the steal window, which the activation closes first) names the item under the pointer by its own layout, the holder's grid and doll
+            // and the hero's; its doll and bag buttons are the button system's and take the press first. The barter window is closed by the activation, so it has no target.
+            if (LootLook)
+            {
+                _toggleDown = ToggleAt(frame);
+                if (_toggleDown is not null) { QueueRedraw(); return; }
+                if (AreaLootArtLayout.Press(_view, LootHit(frame)) is { } lootPicked) Callable.From(() => ItemPicked?.Invoke(lootPicked)).CallDeferred();
+                return;
+            }
+            if (!BarterLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
                 Callable.From(() => ItemPicked?.Invoke(picked)).CallDeferred();
             return;
         }
@@ -626,7 +707,61 @@ public partial class AreaInventoryGridArea : Control
         return new(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
     }
 
+    // ARC-UI-2795: the windows' texts are the original's art fonts. The frame's draw collects them as runs (placed in the frame's scaled pixels) and a child layer, which
+    // has the art text draw's premultiplied material (the frame's own draws are not all opaque), draws them over the frame in the same redraw.
+    private readonly List<TextRun> _runs = [];
+    private TextLayer? _textLayer;
+    private readonly record struct TextRun(AreaArtFontFace Face, IReadOnlyList<(int X, AreaArtGlyph Glyph)> Glyphs, int X, int Y, AreaArtTextBlend Blend);
+
+    private sealed partial class TextLayer : Control
+    {
+        internal IReadOnlyList<TextRun> Runs { get; set; } = [];
+        internal float TextScale { get; set; } = 1;
+
+        public TextLayer()
+        {
+            MouseFilter = MouseFilterEnum.Ignore;
+            SetAnchorsPreset(LayoutPreset.FullRect);
+            AreaArtTextDraw.Prepare(this);
+        }
+
+        public override void _Draw()
+        {
+            foreach (var run in Runs) AreaArtTextDraw.Glyphs(this, run.Face, run.Glyphs, run.X, run.Y, (255, 255, 255), run.Blend, scale: TextScale);
+        }
+    }
+
+    /// <summary>One line of <paramref name="face"/> text in <paramref name="rect"/> (the original's pixels) at the frame's scale: left, centred or right in its width and
+    /// centred in its height unless <paramref name="middle"/> is false (PROJECT: the exe's anchors are not read). White, as the original's fonts of these windows.</summary>
+    private void Line(AreaArtFontFace? face, string text, (int X, int Y, int Width, int Height) rect, AreaArtLabel.Alignment align = AreaArtLabel.Alignment.Left,
+        bool middle = true, AreaArtTextBlend blend = AreaArtTextBlend.Coverage)
+    {
+        if (face is null || text.Length == 0) return;
+        var width = face.Font.Measure(text).Width;
+        var x = align switch { AreaArtLabel.Alignment.Right => rect.Width - width, AreaArtLabel.Alignment.Centre => (rect.Width - width) / 2, _ => 0 };
+        var y = middle ? (rect.Height - AreaTextFontLayout.LineHeight(face.Frames)) / 2 : 0;
+        _runs.Add(new(face, face.Font.Layout(text), (int)MathF.Round((rect.X + Math.Max(0, x)) * _scale), (int)MathF.Round((rect.Y + y) * _scale), blend));
+    }
+
+    /// <summary>A text broken at <paramref name="rect"/>'s width and drawn from its top left, as many lines as its height takes (the message window's text draw, MW26).</summary>
+    private void Block(AreaArtFontFace? face, string text, (int X, int Y, int Width, int Height) rect)
+    {
+        if (face is null || text.Length == 0) return;
+        foreach (var line in AreaTextFontLayout.Place(face.Font, AreaTextFontLayout.LineHeight(face.Frames), rect, text).Lines)
+            _runs.Add(new(face, line.Glyphs, (int)MathF.Round((rect.X + line.X) * _scale), (int)MathF.Round((rect.Y + line.Y) * _scale), AreaArtTextBlend.Coverage));
+    }
+
     public override void _Draw()
+    {
+        _runs.Clear();
+        DrawFrame();
+        if (_textLayer is null) return;
+        _textLayer.Runs = [.. _runs];
+        _textLayer.TextScale = _scale;
+        _textLayer.QueueRedraw();
+    }
+
+    private void DrawFrame()
     {
         if (LootLook || BarterLook) { DrawLoot(Look!); return; }
         if (Look is { } look) { DrawOriginal(look); return; }
@@ -712,44 +847,44 @@ public partial class AreaInventoryGridArea : Control
             var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
             DrawTextureRect(texture, placed, false);
         }
-        Background(look, AreaInventoryArtLayout.DollArt, AreaInventoryMode.Own);
-        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        // ARC-UI-3037: over the kit's background (the paper doll and the pack, also of the identify and repair windows) the window draws neither of its own background arts; the view window's art, items and text stay.
+        if (AreaGameBarPanel.KitBackgroundWindow != SteamwovenKitWindow.Inventory)
+        {
+            Background(look, AreaInventoryArtLayout.DollArt, AreaInventoryMode.Own);
+            Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        }
+        else AreaKitStandIns.Inventory(this, _scale);
         // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
         var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
         Art(AreaInventoryHole.Art(AreaInventoryMode.Own), holeX, holeY);
-        var font = GetThemeDefaultFont();
-        var size = Math.Max(6, (int)Math.Round(12 * _scale));
-        void Text((int X, int Y, int Width, int Height) rect, string text)
-        {
-            if (text.Length == 0) return;
-            var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
-            DrawString(font, new(box.Position.X, box.Position.Y + (box.Size.Y + size) / 2 - 2), text, HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
-        }
+        var fonts = look.Fonts;
         if (_view is null) return;
         // ARC-UI-1765 (0x576520 modes 5 and 6): the NPC's image at half its size, then its quote line in its rectangle; the weight lines are mode 0's alone (IW24) and the boxes are not made (IW19).
         var service = ServiceLook ? _service : null;
         if (service is not null)
         {
-            if (service.Image is { } image && look.Art.GetValueOrDefault(image) is { } picture)
+            // ARC-UI-1908 (0x576520 modes 5 and 6): a portrait is drawn by 0x4CE680 forced to 32 by 32 at the corner (the art is halved); PROJECT: a portrait file that did not read leaves the halved art.
+            if (service.Portrait is { } portraitId && PortraitTextures?.Invoke(portraitId) is { } portrait)
+            {
+                var (ix, iy, iw, ih) = AreaServiceArtLayout.PortraitRect;
+                DrawTextureRect(portrait, Scaled(ix, iy, iw, ih), false);
+            }
+            else if (service.Image is { } image && look.Art.GetValueOrDefault(image) is { } picture)
             {
                 var (ix, iy, iw, ih) = AreaServiceArtLayout.ImageRect(picture.GetWidth(), picture.GetHeight());
                 DrawTextureRect(picture, Scaled(ix, iy, iw, ih), false);
             }
-            if (service.Quote.Length > 0)
-            {
-                var (qx, qy, qw, qh) = AreaServiceArtLayout.QuoteLine;
-                var lineHeight = Math.Max(1f, font.GetHeight(size));
-                DrawMultilineString(font, new(qx * _scale, qy * _scale + font.GetAscent(size)), service.Quote, HorizontalAlignment.Left, qw * _scale, size,
-                    Math.Max(1, (int)(qh * _scale / lineHeight)), AreaInventoryArtLook.TextColour);
-            }
+            // ARC-UI-2795 (exe 0x576520): the quote line is font 0x682C74 (art 229, white).
+            if (service.Quote.Length > 0) Block(fonts?.Text, service.Quote, AreaServiceArtLayout.QuoteLine);
         }
         else
         {
             var lines = look.Texts.Lines(_view.Carry, _view.Speed);
-            for (var i = 0; i < lines.Count; i++) Text(AreaInventoryArtLayout.Lines[i], lines[i]);
+            for (var i = 0; i < lines.Count; i++) Line(fonts?.Text, lines[i], AreaInventoryArtLayout.Lines[i]);
         }
         var counts = new[] { _view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < _view.Ammo.Count ? _view.Ammo[type] : 0)).ToArray();
-        for (var i = 0; i < counts.Length; i++) Text(AreaInventoryArtLayout.Counts[i], counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
+        for (var i = 0; i < counts.Length; i++)
+            Line(fonts?.Bar, counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture), AreaInventoryArtLayout.Counts[i], blend: AreaArtTextBlend.Additive);
         var over = Held is null ? null : AreaInventoryDrag.HitTest(_pointer.X / _scale, _pointer.Y / _scale).Icon;
         foreach (var icon in service is not null ? Array.Empty<AreaInventoryIcon>() : new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
         {
@@ -760,15 +895,9 @@ public partial class AreaInventoryGridArea : Control
         // right edge of its rectangle, the second starts at the left edge of its (PROJECT: the text's top sits on the rectangle's top, F0 for the original's vertical anchor).
         if (_view.HeroRatings is { } ratings)
         {
-            void Rating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
-            {
-                var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
-                var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
-                DrawString(font, new(rightAligned ? box.End.X - width : box.Position.X, box.Position.Y + size), text, HorizontalAlignment.Left, -1, size, AreaInventoryArtLook.TextColour);
-            }
-            Rating(ratings.Damage, AreaInventoryArtLayout.DamageRatingBox, true);
-            Rating(ratings.Armour, AreaInventoryArtLayout.ArmourRatingBox, false);
+            // ARC-UI-2795: the PC's two ratings are font 0x681390 (art 486, white).
+            Line(fonts?.Rating, ratings.Damage.ToString(System.Globalization.CultureInfo.InvariantCulture), AreaInventoryArtLayout.DamageRatingBox, AreaArtLabel.Alignment.Right, middle: false);
+            Line(fonts?.Rating, ratings.Armour.ToString(System.Globalization.CultureInfo.InvariantCulture), AreaInventoryArtLayout.ArmourRatingBox, AreaArtLabel.Alignment.Left, middle: false);
         }
         // ARC-DEV-339: the arrange button, drawn with its first frame as the other buttons are.
         Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
@@ -829,8 +958,17 @@ public partial class AreaInventoryGridArea : Control
         var view = _view!;
         var barter = BarterLook ? _barter : null;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
+        // ARC-UI-3032: over the kit's background the loot window draws no background art of its own and the doll covers come from the kit when the set has them (the original art otherwise).
+        var kit = KitBackgroundShown;
+        var coversFromKit = new List<int>();
         void Art(int number, float x, float y)
         {
+            if (kit && AreaGameBarPanel.KitCover(number) is { } cover)
+            {
+                DrawTextureRect(cover.Texture, Scaled(x, y, (float)cover.Width, (float)cover.Height), false);
+                coversFromKit.Add(number);
+                return;
+            }
             if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
         // An item's art centred in its rectangle (scaled down when larger) and cut to the band from clipTop to clipBottom of the frame.
@@ -853,62 +991,59 @@ public partial class AreaInventoryGridArea : Control
             var ratio = texture.GetHeight() / h;
             DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
         }
-        Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
+        // ARC-UI-3033: over a complete kit background of the barter window the frame's own background art (the merchant's side, and the hero's inventory below) is not drawn; the loot window's kit (ARC-UI-3032) is the bool above.
+        var barterKit = _kit;
+        void Overlay(AreaKitOverlay overlay, float x, float y) => DrawTextureRect(overlay.Texture, Scaled(x, y, (float)overlay.UnitWidth, (float)overlay.UnitHeight), false);
+        _kitDraw = (barterKit is null, barterKit is null, false, false);
+        IReadOnlyList<int>? backgrounds = barterKit is not null ? [] : barter is not null ? null : SteamwovenKitComposer.LootBackgroundArts(kit);
+        LootDrawForSelfTest = (backgrounds ?? [barter!.Background, AreaInventoryArtLayout.PackArt], coversFromKit);
+        if (barterKit is not null) KitFields(barter is not null);
+        else if (backgrounds is null || backgrounds.Contains(AreaLootArtLayout.LootArt)) Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
         if (!_menuUp) Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
-        if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
-        var font = GetThemeDefaultFont();
-        var size = Math.Max(6, (int)Math.Round(12 * _scale));
+        // ARC-UI-1908 (0x576520 modes 1-4, IW27): a portrait the image function answers is drawn at its own size at the image's corner by 0x4CE470; PROJECT: a portrait file that
+        // did not read leaves the flag-and-race art in its place, so the window is not empty.
+        if (view.HolderPortrait is { } portraitId && PortraitTextures?.Invoke(portraitId) is { } portrait)
+        {
+            var (px, py) = AreaLootArtLayout.Image;
+            DrawTextureRect(portrait, Scaled(px, py, portrait.GetWidth(), portrait.GetHeight()), false);
+        }
+        else if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
+        var fonts = look.Fonts;
         if (barter is not null)
         {
-            // The merchant's name centred on x 215 (0x5766A4..0x57671A) and the quote line below it (0x57687F); PROJECT: the project's font.
-            var (nx, ny, nw, nh) = AreaBarterArtLayout.NameLine;
-            // A name wider than its 200-pixel line is cut with an ellipsis, so it stays centred inside the line.
-            var name = barter.Name;
-            while (name.Length > 1 && font.GetStringSize(name, HorizontalAlignment.Left, -1, size).X > nw * _scale) name = name[..^2] + "…";
-            var width = font.GetStringSize(name, HorizontalAlignment.Left, -1, size).X;
-            DrawString(font, new(Math.Max(nx * _scale, AreaBarterArtLayout.NameCentreX * _scale - width / 2), ny * _scale + (nh * _scale + size) / 2 - 2), name,
-                HorizontalAlignment.Left, nw * _scale, size, AreaInventoryArtLook.TextColour);
-            var (qx, qy, qw, qh) = AreaBarterArtLayout.QuoteLine;
-            if (barter.Quote.Length > 0)
-                DrawMultilineString(font, new(qx * _scale, qy * _scale + size), barter.Quote, HorizontalAlignment.Left, qw * _scale, size, 2,
-                    AreaInventoryArtLook.TextColour);
+            // The merchant's name centred on x 215 (0x5766A4..0x57671A) in font 0x682418 (art 27, white) and the quote line below it (0x57687F) in font 0x682C74 (art 229, white; ARC-UI-2795).
+            // A name wider than its 200-pixel line is cut with an ellipsis (PROJECT), so it stays centred inside the line.
+            if (fonts?.Title is { } titleFace)
+                Line(titleFace, AreaSaveListArtLayout.Fit(titleFace.Font, barter.Name, AreaBarterArtLayout.NameLine.Width), AreaBarterArtLayout.NameLine, AreaArtLabel.Alignment.Centre);
+            if (barter.Quote.Length > 0) Block(fonts?.Text, barter.Quote, AreaBarterArtLayout.QuoteLine);
         }
-        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        if (backgrounds is null || backgrounds.Contains(AreaInventoryArtLayout.PackArt)) Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         // ARC-UI-1918 (IW26, 0x576520): with the hero's toggle set the doll cover 341 is drawn over the pack at (361, 0), then the three weight lines in the rectangles of 0x5CAEC8
         // and the two ratings in those of 0x5CAF18 (the own window's lines and ratings, moved).
         var heroDoll = HeroDoll;
         if (heroDoll)
         {
-            Art(AreaHeroDollToggle.CoverArt, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y);
+            if (barterKit?.HeroDollCover is { } kitCover) { Overlay(kitCover, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y); _kitDraw.KitCover = true; }
+            else Art(AreaHeroDollToggle.CoverArt, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y);
             var lines = look.Texts.Lines(view.Carry, view.Speed);
             for (var i = 0; i < lines.Count && lines[i].Length > 0; i++)
             {
                 var (lx, ly, lw, lh) = AreaHeroDollToggle.Lines[i];
-                var lineBox = Scaled(lx, ly, lw, lh);
-                DrawString(font, new(lineBox.Position.X, lineBox.Position.Y + (lineBox.Size.Y + size) / 2 - 2), lines[i], HorizontalAlignment.Left, lineBox.Size.X, size, AreaInventoryArtLook.TextColour);
+                Line(fonts?.Text, lines[i], (lx, ly, lw, lh));
             }
             if (view.HeroRatings is { } heroRatings)
             {
                 // The damage rating ends at the right edge of its rectangle, the armour rating starts at the left edge of its (as the own window's; PROJECT: the text's top sits on the rectangle's top).
-                void HeroRating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
-                {
-                    var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
-                    var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
-                    DrawString(font, new(rightAligned ? box.End.X - width : box.Position.X, box.Position.Y + size), text, HorizontalAlignment.Left, -1, size, AreaInventoryArtLook.TextColour);
-                }
-                HeroRating(heroRatings.Damage, AreaHeroDollToggle.DamageRatingBox, true);
-                HeroRating(heroRatings.Armour, AreaHeroDollToggle.ArmourRatingBox, false);
+                // ARC-UI-2795: the PC's ratings are font 0x681390 (art 486, white).
+                Line(fonts?.Rating, heroRatings.Damage.ToString(System.Globalization.CultureInfo.InvariantCulture), AreaHeroDollToggle.DamageRatingBox, AreaArtLabel.Alignment.Right, middle: false);
+                Line(fonts?.Rating, heroRatings.Armour.ToString(System.Globalization.CultureInfo.InvariantCulture), AreaHeroDollToggle.ArmourRatingBox, AreaArtLabel.Alignment.Left, middle: false);
             }
         }
         var counts = new[] { view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < view.Ammo.Count ? view.Ammo[type] : 0)).ToArray();
         for (var i = 0; i < counts.Length; i++)
         {
-            var (cx, cy, cw, ch) = AreaInventoryArtLayout.Counts[i];
-            var box = Scaled(cx, cy, cw, ch);
-            DrawString(font, new(box.Position.X, box.Position.Y + (box.Size.Y + size) / 2 - 2), counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture),
-                HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
+            Line(fonts?.Bar, counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture), AreaInventoryArtLayout.Counts[i], blend: AreaArtTextBlend.Additive);
         }
         var over = Held is null ? null : barter is not null ? BarterHit(_pointer / _scale).Icon : LootHit(_pointer / _scale).Icon;
         // ARC-RES-1327 (XR16): the open turns the drop and use boxes off in modes 4, 5 and 6 (0x5727B0), so the See Contents window draws neither.
@@ -952,7 +1087,8 @@ public partial class AreaInventoryGridArea : Control
         if (doll)
         {
             var (dollX, dollY) = barter is not null ? AreaBarterArtLayout.DollView : AreaLootArtLayout.DollView;
-            Art(DollArt, dollX, dollY);
+            if (barterKit?.Doll is { } kitDoll) { Overlay(kitDoll, dollX, dollY); _kitDraw.KitDoll = true; }
+            else Art(DollArt, dollX, dollY);
             foreach (var (slot, rect) in AreaLootArtLayout.BodySlotRects)
             {
                 var entry = view.BodyDoll.FirstOrDefault(entry => entry.Slot == slot);
@@ -966,17 +1102,9 @@ public partial class AreaInventoryGridArea : Control
             }
             if (view.BodyRatings is { } ratings)
             {
-                // The damage rating ends at the right edge of its box, the armour rating starts at the left edge of its box (0x576AF7..0x576C38).
-                void Rating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
-                {
-                    var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
-                    var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
-                    DrawString(font, new((rightAligned ? box.End.X - width : box.Position.X), box.Position.Y + (box.Size.Y + size) / 2 - 2), text, HorizontalAlignment.Left, -1, size,
-                        AreaInventoryArtLook.TextColour);
-                }
-                Rating(ratings.Damage, AreaLootArtLayout.DamageRatingBox, true);
-                Rating(ratings.Armour, AreaLootArtLayout.ArmourRatingBox, false);
+                // The damage rating ends at the right edge of its box, the armour rating starts at the left edge of its box (0x576AF7..0x576C38); ARC-UI-2795: the other party's rating is font 0x682C74 (art 229, white).
+                Line(fonts?.Text, ratings.Damage.ToString(System.Globalization.CultureInfo.InvariantCulture), AreaLootArtLayout.DamageRatingBox, AreaArtLabel.Alignment.Right);
+                Line(fonts?.Text, ratings.Armour.ToString(System.Globalization.CultureInfo.InvariantCulture), AreaLootArtLayout.ArmourRatingBox, AreaArtLabel.Alignment.Left);
             }
         }
         foreach (var item in doll ? [] : view.LootGrid)
@@ -1045,6 +1173,9 @@ public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Ar
     /// <summary>ARC-UI-064: the barter window's own arts read (<see cref="AreaInventoryArtContent.BarterArtReady"/>).</summary>
     public bool BarterReady { get; init; }
 
-    /// <summary>PROJECT: the lines' colour; the original's fonts (0x682C74 for the lines, 0x68345C for the counts) are not read.</summary>
+    /// <summary>ARC-UI-2795: the original's text fonts (art 27 for the merchant's name, 229 for the lines and quotes, 171 for the counts, 486 for the PC's ratings); null draws no window text.</summary>
+    public AreaTextFonts? Fonts { get; init; }
+
+    /// <summary>PROJECT: the colour of the diagnostic look's texts and of an item's name when its art did not read (the windows' own texts are white, in the original's fonts).</summary>
     public static readonly Color TextColour = new(.92f, .86f, .72f);
 }

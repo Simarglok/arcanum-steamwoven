@@ -60,12 +60,24 @@ public partial class TerrainViewerApp
     /// </summary>
     private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
     {
-        RunObjectBreakScripts(row, steps, byHero, ranged, breaker);
+        // ARC-SCRIPT-2644: the destroy point the break's gate ran has its awards, floats and creations taken here (the trap and BUST runs below take their own).
+        // ARC-SCRIPT-2686: and its printed lines go to the message window (IS2, PW1) and its dialog action is queued as a heartbeat's is (opened once the pump that broke the object returned).
+        // ARC-SCRIPT-2749: every run the gates left, oldest first (an earlier wear's run included).
+        if (_readyArea is { } gated && UseScriptHost(gated.Snapshot) is { } gateHost) ShowDestroyPointRuns(gateHost, AreaUseScriptHost.EntityId(row));
+        // ARC-SCRIPT-2646 (OD7, 0x43F1C0 → 0x424070): the break first interrupts the object's goal runs at level 5, after the trap and before the BUST script.
+        var interrupted = false;
+        void Interrupt() { if (interrupted) return; interrupted = true; InterruptBrokenObjectRuns(row); }
+        RunObjectBreakScripts(row, steps, byHero, ranged, breaker, Interrupt);
+        if (AreaObjectBreakHost.Interrupts(steps)) Interrupt();
+        // ARC-SCRIPT-2670 (0x43EB30 → 0x43F710): a scenery the break busted has the busted art written and its restart decided at once (the next frame's art scan).
+        if (row.Type == SceneryType && AreaObjectBreakHost.Interrupts(steps)) ScanSceneryArtNow();
+        // ARC-SCRIPT-2620 (OD7–OD11, 0x43F1C0 → 0x43CCA0 → 0x423FF0, 0x459740): a scenery, trap or container the break destroyed ends its goal runs and tells its spell runs, as a script's destroy does (the trap fired before the break, the interrupt first).
+        if (AreaObjectBreakHost.EndsRuns(steps) && ShownObjectRef(row) is { } destroyed) EndDestroyedObjectRuns(destroyed);
         // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.
         PlayObjectBreakSounds(row, steps);
     }
 
-    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
+    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null, Action? interrupt = null)
     {
         if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
         if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
@@ -74,15 +86,44 @@ public partial class TerrainViewerApp
         var outer = _objectBreakRunning;
         _objectBreakRunning = true;
         AreaObjectBreakRun ran;
-        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts, breaker); }
+        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts, breaker, interrupt); }
         finally { _objectBreakRunning = outer; }
-        if ((ran.Bust ?? ran.TrapScript) is { } scripted) Awarded(host, scripted);
+        // ARC-SCRIPT-2723: both runs of the break (the ordinary trap script, then the BUST script; a window's trap and its BUST script both run) hand over their awards, floats, creations, printed lines and dialog action.
+        if (ran.TrapScript is { } trapRun) TakeBreakRunOutput(host, AreaUseScriptHost.EntityId(row), trapRun, "trap script");
+        if (ran.Bust is { } bustRun) TakeBreakRunOutput(host, AreaUseScriptHost.EntityId(row), bustRun, "bust script");
         if (!ran.Any) return;
         GD.Print($"ARC-DEV-260 object-break target={ran.Entity} by-hero={byHero} ranged={ranged} {ran.Describe()}");
         if (ran.Trap is { } met) NoteTrapMeeting(met);
     }
 
     private bool _objectBreakRunning;
+
+    /// <summary>
+    /// ARC-SCRIPT-2749 (ledger BS3g): shows the destroy-point runs the item and object gates kept (awards, printed lines, dialog action), oldest first: the break steps take them at once, and the frame pump takes those of the wear paths
+    /// (an armour or weapon worn out under an attack, the critical "destroy weapon"), whose callers show nothing of the run.
+    /// </summary>
+    private void ShowDestroyPointRuns(AreaUseScriptHost host, string entity)
+    {
+        foreach (var run in host.TakeDestroyPointRuns()) TakeBreakRunOutput(host, entity, run, "destroy point");
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2686, ARC-SCRIPT-2723: what the host takes of one script run of an object's break (the destroy point, the ordinary trap script, the BUST script): the awards, floats and creations,
+    /// the printed lines to the message window (IS2, PW1) and the dialog action, which is queued as a heartbeat's is (opened once the pump that broke the object returned; the first one stands).
+    /// </summary>
+    private void TakeBreakRunOutput(AreaUseScriptHost host, string entity, AreaScriptedUse run, string kind)
+    {
+        Awarded(host, run);
+        foreach (var entry in ScriptLineEntries(run.Printed)) PostMessage(entry, kind + " script line");
+        if (run.Dialog is not { } talk) return;
+        var queued = _heartbeatDialog is null;
+        _heartbeatDialog ??= talk;
+        GD.Print($"ARC-SCRIPT-2723 break-run-talk kind={kind} object={entity} script={run.Run?.Script} dialog={talk.Script} line={talk.Line} node={talk.Node} queued={queued}");
+    }
+
+    /// <summary>ARC-SCRIPT-2620: the shown map's script handle of an object row (null before an area is ready).</summary>
+    private Arcanum.Scripting.Scr.ScrObjectRef? ShownObjectRef(AreaObjectRecord row) =>
+        _readyArea is null || CurrentAreaMap <= 0 ? null : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, AreaUseScriptHost.EntityId(row));
 
     /// <summary>The PC's step gate (<see cref="AreaGridSession.StepCharge"/>): the walk's trap check of the next tile, then the turn-based
     /// step charge (the walk goal's next-step check 0x4270B0 runs before the step start 0x42E9B0 charges, EX20).</summary>

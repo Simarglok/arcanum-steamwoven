@@ -51,6 +51,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
     private int _holdersCreated;
     private readonly HashSet<int> _refusedAttach = [];
     private readonly Dictionary<int, (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)> _holders = [];
+    // ARC-MAGIC-1336: per map, the item entity -> its container's entity, read from the same holders as _holders and dropped with them.
+    private readonly Dictionary<int, Dictionary<string, string>> _containerItems = [];
 
     /// <param name="inventory">The maps' seeds and object rows.</param>
     /// <param name="prototypes">ARC-WORLD-106: an item prototype's stored fields (the facts of an item the session made or a regeneration
@@ -161,6 +163,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (_holdersStamp is not { } stamp || !ReferenceEquals(stamp.Session, session) || stamp.Revision != session.Version.Revision || _holdersCreated != _resolver.CreatedVersion)
         {
             _holders.Clear();
+            _containerItems.Clear();
             _holdersStamp = (session, session.Version.Revision);
             _holdersCreated = _resolver.CreatedVersion;
         }
@@ -219,6 +222,38 @@ public sealed class AreaCombatHost : IAreaEventObjects
         // grenade's explosion at the end of its flight): the holder is the NPC that held it.
         return session.QueryDroppedItem(item) is { } dropped && Held(dropped.Map.RuntimeMap, out var lying) && ItemFields(lying, dropped.Item) is { } fields
             ? SessionItemSpells.FromCombatFields(item, dropped.Holder, fields) : null;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1336 (ledger IW44): the spell facts of an item a container of a map this host covers holds now, as the loot window lists it (the cast host's
+    /// item lookup asks it for an item that is neither the hero's nor an NPC's, so a spell that targets an item in an inventory can name it): the item's fields
+    /// (<see cref="ItemFields"/>) through <see cref="SessionItemSpells.FromCombatFields"/> with the container as its holder (the item is an object in its
+    /// holder's inventory, at the holder's location). Null for an item no container lists (an NPC's, the hero's), a destroyed one, or one whose fields do not
+    /// read as an item.
+    /// </summary>
+    public SessionItemSpells? ContainerItemSpells(GameSessionOwner session, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        if (session.IsItemDestroyed(item)) return null;
+        foreach (var map in _resolver.Maps)
+        {
+            if (!ContainerItemIndex(session, map.RuntimeMap).TryGetValue(item, out var container) || !Held(map.RuntimeMap, out var held)) continue;
+            var (holders, _) = HolderIndex(session, map.RuntimeMap);
+            if (holders[container].Items.FirstOrDefault(listed => listed.Entity == item) is { Entity: not null } found && ItemFields(held, found) is { } fields)
+                return SessionItemSpells.FromCombatFields(item, container, fields);
+        }
+        return null;
+    }
+
+    private Dictionary<string, string> ContainerItemIndex(GameSessionOwner session, int runtimeMap)
+    {
+        var (holders, _) = HolderIndex(session, runtimeMap);
+        if (_containerItems.TryGetValue(runtimeMap, out var cached)) return cached;
+        var index = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Container))
+            foreach (var item in holder.Items) index.TryAdd(item.Entity, holder.Entity);
+        return _containerItems[runtimeMap] = index;
     }
 
     /// <summary>

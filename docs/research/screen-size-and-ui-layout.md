@@ -1,5 +1,7 @@
 # Screen size in the original: UI layout and play-view dependencies (ARC-RES-093)
 
+> **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): for the Steamwoven look the strips are not tiled (the sides continue the same painted material), play-view panels fill the whole middle band with a backdrop, and full-screen menus cover the frame instead of a pillar-box. Tables A and B, the rule readers and the 2026-11-07 decision stay valid. **Amended 2026-11-19** (owner verdict #2892): the layout is one centred 4:3 composition scaled to the screen with the world or black at the sides, not a full-width layout; see the [ADR amendment](../ui/steamwoven-interface-adr.md#amendment-of-2026-11-19).
+
 Status: **Research**, work item ARC-RES-093, 2026-11-07. Docs only; no code changes.
 Requirements: [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive layout),
 [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD). Owner decision (Display,

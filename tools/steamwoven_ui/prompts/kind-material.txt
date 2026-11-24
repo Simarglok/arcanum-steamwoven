@@ -1,0 +1,4 @@
+KIND: MATERIAL (single seamless surface)
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: SHEET (the approved material sheet, the swatch of this material), CONTEXT crop (where it is used).
+
+Make one seamless tileable surface of the material named in the part note: flat, evenly lit, top-down, with the same grain scale, tone and wear as the SHEET swatch. Left and right edges, and top and bottom edges, must continue into each other without a visible seam or repeat. No vignette, no gradient across the image, no objects, no text.

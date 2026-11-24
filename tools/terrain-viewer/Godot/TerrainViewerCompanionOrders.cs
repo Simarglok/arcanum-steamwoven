@@ -92,15 +92,15 @@ public partial class TerrainViewerApp
         var ai = AreaAiHostNow();
         // Only the combat orders read the combat facts (an invalid one refuses the whole order); without the host an attack order goes
         // without a target, as before ARC-WORLD-117 (a target would lift NO_ATTACK and fail for want of the attack event's world).
-        Func<string, SessionPeaceFacts>? combat = ai is not null && request.Type is CompanionOrderType.Attack or CompanionOrderType.BackOff ? ai.OrderFacts : null;
+        Func<string, SessionPeaceFacts>? combat = ai is not null && (request.Type is CompanionOrderType.Attack or CompanionOrderType.BackOff || request.Addressing == CompanionOrderAddressing.Text) ? ai.OrderFacts : null;
         var facts = AreaCompanionOrders.Facts(session, group, pc.State.CommittedCell, host.State, CompanionName, combat);
         var (result, noGoal) = AreaCompanionOrders.Issue(session, group, request with { Followers = facts, Target = ai is null ? null : request.Target },
             pc.State.CommittedCell, WorldTime, ai, SayOrderSpeech);
         GD.Print(AreaCompanionOrders.Log(source, request.Type, result) + (noGoal.Count == 0 ? "" : " | goal not started: " + string.Join(", ", noGoal))
-            + (request.Type == CompanionOrderType.Attack ? $" | target={request.Target?.Entity ?? "none"} ai={ai is not null}" : ""));
+            + (request.Type == CompanionOrderType.Attack || request.Addressing == CompanionOrderAddressing.Text ? $" | target={request.Target?.Entity ?? "none"} ai={ai is not null}" : ""));
         SayOrderAcknowledgements(result);
         _companionNotice = result.Failure != GameSessionFailure.None ? $"{source}: order refused ({result.Failure})"
-            : result.Outcomes.Count == 0 ? $"{source}: {request.Type} reached no follower within {CompanionOrderRules.Reach} tiles"
+            : result.Outcomes.Count == 0 ? $"{source}: {(request.Addressing == CompanionOrderAddressing.Text ? "the typed text" : request.Type)} reached no follower within {CompanionOrderRules.Reach} tiles"
             : $"{source}: " + string.Join("; ", result.Outcomes.Select(AreaCompanionOrders.Describe))
                 + (noGoal.Count == 0 ? "" : $" (no goal started for {noGoal.Count}: tile off the map)");
         RefreshFollowerPortraits();
@@ -230,7 +230,13 @@ public partial class TerrainViewerApp
         }
         if (HeroInCombatMode)
         {
-            _companionNotice = "follower click in combat mode: attacking a follower is not ready"; // 0x54EFDA: the left Alt attacks it, nothing happens without
+            // 0x54EFDA: the left Alt attacks it (ARC-COMBAT-1945), nothing happens without.
+            if (!LeftAltHeld) { _companionNotice = "follower click in combat mode: a follower is attacked only with left Alt held"; RefreshReadyStatus(); return; }
+            CancelPortalApproach("a follower click replaced it", keepArmed: true);
+            if (_pendingOrder is not null) CancelPendingOrder("a follower attack replaced it");
+            if (AttackMapActive && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } attacked && AreaTargetOf(attacked.Key) is { } follower
+                && AttackCritterClick(follower, true, Godot.Input.IsKeyPressed(Key.Shift)) && (_attack is not null || HeroRunsHost()?.ThrowRun is not null)) { _companionNotice = "follower click in combat mode: attack"; return; }
+            _companionNotice = "follower click in combat mode: no attack started";
             RefreshReadyStatus();
             return;
         }
@@ -336,8 +342,18 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
-        IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, AreaCompanionOrders.Label(item)));
+        if (PortraitOrderLabel(item) is not { } label)
+        {
+            _companionNotice = $"{AreaCompanionOrders.Label(item)}: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})";
+            RefreshReadyStatus();
+            return;
+        }
+        IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, label));
     }
+
+    /// <summary>ARC-UI-1975 (FP10): the label of a menu row's order, the message of the file the menu draws (the project's words without it); null: the row has no message, so no order.</summary>
+    private string? PortraitOrderLabel(FollowerMenuItem item) =>
+        AreaCompanionOrders.OrderLabel(item, _followerPortraits?.MenuTexts ?? AreaFollowerMenuTexts.Project("no texts read"));
 
     /// <summary>ARC-UI-1736 (FP12, 0x56AB68, the editor 0x5597C0 with mode 2): the follower's character sheet, the NPC sheet (never greyed; the editor's own refusal for a dead hero).</summary>
     private void OpenFollowerSheet(string entity)
@@ -378,14 +394,20 @@ public partial class TerrainViewerApp
         }
         if (pending.Type == CompanionOrderType.Attack)
         {
-            IssueAreaOrder("portrait", new(CompanionOrderType.Attack, CompanionOrderAddressing.Portrait, [], entity,
-                AreaCompanionOrders.Label(FollowerMenuItem.Attack)) { Target = OrderTarget(AreaObjectAtScreen(screen)) });
+            if (PortraitOrderLabel(FollowerMenuItem.Attack) is not { } attackLabel)
+            {
+                _companionNotice = $"attack: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})"; RefreshReadyStatus(); return true;
+            }
+            IssueAreaOrder("portrait", new(CompanionOrderType.Attack, CompanionOrderAddressing.Portrait, [], entity, attackLabel) { Target = OrderTarget(AreaObjectAtScreen(screen)) });
             return true;
         }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) { _companionNotice = "walk: no tile there"; RefreshReadyStatus(); return true; }
-        IssueAreaOrder("portrait", new(CompanionOrderType.WalkHere, CompanionOrderAddressing.Portrait, [], entity,
-            AreaCompanionOrders.Label(FollowerMenuItem.Walk), cell));
+        if (PortraitOrderLabel(FollowerMenuItem.Walk) is not { } walkLabel)
+        {
+            _companionNotice = $"walk: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})"; RefreshReadyStatus(); return true;
+        }
+        IssueAreaOrder("portrait", new(CompanionOrderType.WalkHere, CompanionOrderAddressing.Portrait, [], entity, walkLabel, cell));
         return true;
     }
 }

@@ -113,7 +113,8 @@ public sealed partial class GameSessionOwner
         SessionNpcAttackValues values;
         try { values = Levelled(attacker).AttackValues(status, record.State, _rules.Combat, request.ThrowerWorn?.Keys); }
         catch (ArgumentException) { return GameSessionFailure.InvalidAttack; }
-        if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee || struck && !values.Supported) return GameSessionFailure.AttackUnsupported;
+        // ARC-COMBAT-2699 (TW7, TW8): any wielded weapon the NPC attack supports (melee, bow or firearms) is thrown; the weapon's own skill is not asked.
+        if (values.Weapon.Kind != WeaponKind.Weapon || !values.Supported) return GameSessionFailure.AttackUnsupported;
         return GameSessionFailure.None;
     }
 

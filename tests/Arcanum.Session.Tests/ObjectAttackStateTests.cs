@@ -198,7 +198,7 @@ public sealed class ObjectAttackStateTests
         var statue = Target("statue", DamageableObjectKind.Scenery, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = statue });
         Assert.AreEqual(ObjectBreak.SceneryBusted, busted.Object!.Break);
-        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound, busted.Host);
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.ObjectBroken | SessionObjectHostSteps.BustScript | SessionObjectHostSteps.BustSound, busted.Host);
         Assert.AreEqual(new SessionObjectState(6, 0, SessionObjectCondition.Busted), owner.QueryObject(statue), "damage set to the maximum");
         var again = owner.AttackObject(owner.Version, new() { Target = statue });
         Assert.AreEqual(DamagePrevention.Invulnerable, again.Resolution!.Damage!.Prevented, "a busted scenery is invulnerable");
@@ -227,7 +227,7 @@ public sealed class ObjectAttackStateTests
     {
         using var owner = Owner();
         var plain = BreakIt(owner, new() { Target = Target("trap-a", DamageableObjectKind.Trap) });
-        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.DestroySound), (plain.Object!.Break, plain.Host));
+        Assert.AreEqual((ObjectBreak.Destroyed, SessionObjectHostSteps.WitnessesHearBreak | SessionObjectHostSteps.ObjectBroken | SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.ObjectDestroyed), (plain.Object!.Break, plain.Host));
         var art = Target("trap-b", DamageableObjectKind.Trap, with: b => b with { HasDestroyedArt = true });
         var busted = BreakIt(owner, new() { Target = art });
         Assert.AreEqual(ObjectBreak.TrapBusted, busted.Object!.Break);
@@ -253,6 +253,26 @@ public sealed class ObjectAttackStateTests
         Assert.AreEqual(GameSessionFailure.ObjectUnavailable, owner.AttackObject(owner.Version, new() { Item = vase, ItemFacts = facts }).Failure);
         Assert.AreEqual(GameSessionFailure.ObjectUnavailable,
             owner.AttackObject(owner.Version, new() { Item = new("cup", new(4, 0, 0, false)), ItemFacts = facts }).Failure, "an item in a chest");
+    }
+
+    // ARC-SCRIPT-2722 (OD12, TD2): the hero's hit that would delete an item asks the item destroy gate; a refusal keeps the item and the host steps say so.
+    [TestMethod]
+    public void AnItemWhoseDestroyPointKeepsItIsNotDeletedByTheHerosHit()
+    {
+        using var owner = Owner();
+        var answer = false;
+        owner.AttachItemDestroyGate(_ => answer);
+        var vase = new SessionWearItem("vase", new ItemCondition(4, 0, 0, false));
+        var facts = new SessionObjectBaseline { Kind = DamageableObjectKind.Item, Material = ObjectMaterial.Glass };
+        Assert.AreEqual(ItemBreakStep.Broken, BreakIt(owner, new() { Item = vase, ItemFacts = facts }).Item!.Value.Break);
+        var kept = BreakIt(owner, new() { Item = vase, ItemFacts = facts });
+        Assert.AreEqual((ItemBreakStep.Deleted, true), (kept.Item!.Value.Break, kept.Item!.Value.DestroyKept));
+        Assert.IsTrue(kept.Host.HasFlag(SessionObjectHostSteps.DestroyKept) && kept.Host.HasFlag(SessionObjectHostSteps.DestroySound));
+        Assert.IsFalse(owner.IsItemDestroyed("vase"));
+        answer = true;
+        var gone = BreakIt(owner, new() { Item = vase, ItemFacts = facts });
+        Assert.AreEqual((ItemBreakStep.Deleted, false), (gone.Item!.Value.Break, gone.Item!.Value.DestroyKept));
+        Assert.IsTrue(owner.IsItemDestroyed("vase"));
     }
 
     [TestMethod]

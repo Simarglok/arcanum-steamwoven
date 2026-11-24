@@ -5,6 +5,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Input;
 using Arcanum.Presentation.Display;
 using Arcanum.Presentation.Hud;
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.World;
@@ -190,6 +191,10 @@ public sealed record AreaGameSettings
     /// <summary>ARC-UI-140: the interface draws its generated chrome where a recipe exists (default off; the options line's third value,
     /// saved with <see cref="HdInterface"/> on so the pictures keep the HD redraws).</summary>
     public bool GeneratedInterface { get; init; }
+
+    /// <summary>ARC-UI-3059: the world's zoom in the Steamwoven look, in whole steps: 0 = automatic (the highest step the window offers), else 1 to 4 (a step above the window's cap reads as the cap, see <see cref="SteamwovenWorldZoom"/>).
+    /// Read only while the Steamwoven look is on; the settings line is <c>world zoom</c>.</summary>
+    public int WorldZoomStep { get; init; }
 
     /// <summary>ARC-DEV-350: where the active HD pack is read from (default Auto); it takes effect at the next start.</summary>
     public HdPackSourceMode HdPackSource { get; init; }

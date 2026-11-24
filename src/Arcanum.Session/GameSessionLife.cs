@@ -106,8 +106,20 @@ public sealed record SessionLifeResult(GameSessionDisposition Disposition, GameS
 /// <summary>ARC-DEV-312: what the session tells the host's dying script (<see cref="GameSessionOwner.DyingScript"/>): the NPC that died, the map its life step ran on and the killer, an entity id (<see cref="SessionSpellCaster.Hero"/> for the hero) or none.</summary>
 public sealed record SessionDyingRequest(string Victim, int Map, string? Killer);
 
+/// <summary>ARC-SCRIPT-2859: what the session tells the host's leader-killing script (<see cref="GameSessionOwner.LeaderKillingScript"/>): the NPC that died (the triggerer), the map its damage step ran on and the follower of the hero whose script runs (the attachee).</summary>
+public sealed record SessionLeaderKillingRequest(string Victim, int Map, string Follower);
+
 /// <summary>ARC-COMBAT-1141: what the session tells the host's taking-damage script (<see cref="GameSessionOwner.TakingDamageScript"/>): the NPC about to take the damage, the map its life step runs on and the attacker, an entity id or none (the kill and the poison tick have none).</summary>
 public sealed record SessionTakingDamageRequest(string Victim, int Map, string? Attacker);
+
+/// <summary>
+/// ARC-SCRIPT-2853: what the session tells the host's item drop script (<see cref="GameSessionOwner.DropScript"/>, point 5, run by the drop 0x461AB0): the item, the map whose row it is (<see cref="ItemMap"/>: the shown map for an NPC's item, the map a carried
+/// item was taken on), the holder that drops it, an NPC entity or <see cref="SessionSpellCaster.Hero"/>, and the map the drop runs on (<see cref="Map"/>, where the holder stands).
+/// </summary>
+public sealed record SessionDropScriptRequest(string Item, int ItemMap, string Holder, int Map);
+
+/// <summary>ARC-SCRIPT-2853: the host's answer to a drop script: run default (the drop goes on), skip default (the drop is refused and the item stays), or a script the host cannot apply (the drop stays unapplied, as before the host ran any).</summary>
+public enum SessionDropScriptAnswer { RunDefault, SkipDefault, NotModelled }
 
 /// <summary>ARC-AI-1134 (ledger DY3, DY7): what the session tells the host after an NPC's death was processed (<see cref="GameSessionOwner.KillNotice"/>): the NPC that died, the map its life step ran on and the killer, an entity id (<see cref="SessionSpellCaster.Hero"/> for the hero) or none.</summary>
 public sealed record SessionKillNoticeRequest(string Victim, int Map, string? Killer);

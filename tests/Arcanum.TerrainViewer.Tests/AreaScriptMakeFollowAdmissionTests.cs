@@ -6,17 +6,17 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-SCRIPT-1842 (#1322, ledger TI6): the heartbeat and dying sets hold make follow (21) and stay inside S59; the opt-in check counts the installed scripts that carry it and how many each set admits whole.</summary>
+/// <summary>ARC-SCRIPT-1842 (#1322, ledger TI6): the heartbeat and dying sets hold make follow (21) and stay inside the latest set; the opt-in check counts the installed scripts that carry it and how many each set admits whole.</summary>
 [TestClass]
 public sealed class AreaScriptMakeFollowAdmissionTests
 {
     [TestMethod]
-    public void The_heartbeat_and_dying_sets_hold_make_follow_and_stay_inside_S59()
+    public void The_heartbeat_and_dying_sets_hold_make_follow_and_stay_inside_the_latest_set()
     {
         foreach (var set in new[] { AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.MakeFollow), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
     }
 

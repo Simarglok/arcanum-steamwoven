@@ -76,6 +76,7 @@ public partial class TerrainViewerApp
         _mainMenuShown = true;
         if (!QuickKeysActive) { _mainMenuStatus = "not opened: the first scene has no game session"; GD.Print("ARC-UI-011 main menu not opened: no game session"); return; }
         OpenMainMenu(MainMenuTexts(arguments));
+        Callable.From(SoakOpenWindow).CallDeferred();
     }
 
     /// <summary>The menu's texts, read once a run (the game's MainMenu.mes, or the project's with the reason).</summary>
@@ -675,11 +676,29 @@ public partial class TerrainViewerApp
     /// focus, Left and Right change the focused control, and the O key closes the menu from play (OP7).</summary>
     private void HandleMainMenuKey(InputEventKey key)
     {
-        if (!key.Pressed || key.Echo || _mainMenu is null) return;
+        if (key.Echo || _mainMenu is null) return;
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape(), cancels: true); return; }
-        // The quit box takes Return as yes, as the original's yes/no box (SF3).
-        if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
+        // ARC-INPUT-2647 (menu handler 0x546EE0 and the yes/no box 0x51EBF0 act on a key event only when its key-state byte says
+        // released, ledger SF6): the menu's Escape (back, Continue, the root's exit, the quit box's no) acts on the release; the press
+        // does nothing, so the release of the press that opened the menu cannot reach it and a press never closes and reopens it.
+        if (routed == Key.Escape) { if (!key.Pressed) MainMenuCommand(() => _mainMenu.Escape(), cancels: true); return; }
+        // ARC-INPUT-2648 (same read, ledger SF6): the quit box's Return (yes) and the options window's O key are key events too, so they act on
+        // the release of a press this menu saw; the press does nothing, and the release of a press made before the menu was there (Return
+        // that chose the button, a key held when it opened) finds nothing armed and does nothing, so one physical press never acts twice.
+        // A press that changed the window (a button's letter) is not this window's: its release does nothing (the O that opened Options does not close it).
+        if (!ReferenceEquals(_menuKeysFor, _mainMenu) || _menuKeysWindow != _mainMenu.Window) { _menuKeysFor = _mainMenu; _menuKeysWindow = _mainMenu.Window; _menuKeysArmed.Clear(); }
+        if (!key.Pressed)
+        {
+            if (!_menuKeysArmed.Remove(routed)) return;
+            // The quit box takes Return as yes, as the original's yes/no box (SF3).
+            if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) MainMenuCommand(() => _mainMenu.Answer(true));
+            // The original's key table reads the O key's scan code here, not the typed letter.
+            else if (key.PhysicalKeycode == Key.O && _mainMenu.Window == AreaMenuWindow.Options && !_mainMenu.QuitPending) MainMenuCommand(() => _mainMenu.OptionsKey());
+            return;
+        }
+        _menuKeysArmed.Add(routed);
+        // The press of the quit box's Return, and of O in the options window, is eaten; the release acts (above).
+        if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) return;
         // ARC-UI-034: Return in the character editor goes on as its Accept does (the menu's key handler, CM5).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.Window is AreaMenuWindow.CharacterEditor or AreaMenuWindow.Shop) { MainMenuCommand(() => _mainMenu.Accept()); return; }
         // ARC-UI-033: while the name field is typed into, Backspace removes its last character and Enter ends the typing.
@@ -690,8 +709,7 @@ public partial class TerrainViewerApp
         }
         if (_mainMenu.Window == AreaMenuWindow.Options && !_mainMenu.QuitPending)
         {
-            // The original's key table reads the O key's scan code here, not the typed letter.
-            if (key.PhysicalKeycode == Key.O) { MainMenuCommand(() => _mainMenu.OptionsKey()); return; }
+            if (key.PhysicalKeycode == Key.O) return;
             // The keyboard moves the focus over the controls and buttons as a controller does (the original has no such keys).
             if (routed is Key.Up or Key.Down) { MainMenuCommand(() => { _mainMenu.Move(routed == Key.Up ? -1 : 1); return AreaMenuCommand.Nothing; }); return; }
             if (routed is Key.Left or Key.Right)
@@ -704,6 +722,11 @@ public partial class TerrainViewerApp
         if (key.Unicode is > 0 and < 0x10000 && !char.IsControl((char)key.Unicode) && _mainMenu.Window != AreaMenuWindow.PickCharacter)
             MainMenuCommand(() => _mainMenu.Type((char)key.Unicode));
     }
+
+    // ARC-INPUT-2648: the keys whose press the open menu saw; only their release acts (reset when another menu instance is up).
+    private AreaMainMenu? _menuKeysFor;
+    private AreaMenuWindow _menuKeysWindow;
+    private readonly HashSet<Key> _menuKeysArmed = [];
 
     private void HandleMainMenuPulse(IntentFrame intent)
     {
@@ -852,7 +875,20 @@ public partial class TerrainViewerApp
             Require(_mainMenu.Window == AreaMenuWindow.SinglePlayer, "single player by its letter");
             Choose(52);
             Require(MainMenuOpen && ReferenceEquals(placeholder, _areaSession) && _mainMenu.Notice == "no save to continue from", "Last Save without a save stayed");
-            Choose(50); Choose(420);
+            Choose(50);
+            // ARC-UI-2489 (M03): the new-game window, as NAME-newgame.png beside ARC_AREA_MENU_CAPTURE's main window.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } newGameCapture)
+            {
+                Require(_mainMenu.Window == AreaMenuWindow.NewGame, "the new game window opened for its capture: " + _mainMenu.Window);
+                for (var i = 0; i < 2; i++)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                }
+                using var newGameShot = GetViewport().GetTexture().GetImage();
+                Require(newGameShot.SavePng(System.IO.Path.ChangeExtension(newGameCapture, null) + "-newgame.png") == Error.Ok, "the new game capture saved");
+            }
+            Choose(420);
             Require(_mainMenu.Window == AreaMenuWindow.PickCharacter, "the pre-made browser opened");
             // ARC-UI-066: the browser in the original's look, browsed by its arrows.
             await PremadeBrowserArtForSmoke(Require);

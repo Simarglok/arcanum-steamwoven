@@ -189,6 +189,20 @@ public sealed class AreaContainerLootTests
         Assert.IsTrue(session.QueryItemDecays().Any(d => d.Entity == Entity(14)), "its decay starts over");
     }
 
+    // ARC-SCRIPT-2346 (IV10): an item a script switched off is not listed or drawn in the loot window (0x576520 paints, 0x575fa0 hit-tests, 0x579770 takes all without it) and is listed again when the flag goes.
+    [TestMethod]
+    public void A_switched_off_item_is_left_out_of_the_loot_window_lines_and_grid()
+    {
+        var (session, map, inventory, world) = Start();
+        using var owned = session;
+        Assert.AreEqual((1, 1), (inventory.View(session, null, 1, Entity(0)).Loot.Count, inventory.View(session, null, 1, Entity(0)).LootGrid.Count));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(9)), 1)]).Disposition);
+        var view = inventory.View(session, null, 1, Entity(0));
+        Assert.AreEqual((0, 0), (view.Loot.Count, view.LootGrid.Count));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(9)), null)]).Disposition);
+        Assert.AreEqual(1, inventory.View(session, null, 1, Entity(0)).Loot.Count);
+    }
+
     [TestMethod]
     public void An_unlocked_container_opens_a_frame_its_items_are_looted_and_its_close_shuts_it()
     {
@@ -292,6 +306,11 @@ public sealed class AreaContainerLootTests
         var loot = RestockRules.GenerateOnce(set, CrateX);
         Assert.AreEqual((SessionRestockOutcome.Regenerated, 1, loot.Coins, loot.BasicPrototypes.Count), (done.Outcome, done.Removed, done.Coins, done.Created.Count));
         Assert.IsTrue(session.QueryContainerGenerated(new(1), Entity(5)));
+        // ARC-UI-2766 (FR-ITEM-003): the loot window's gold pile carries its real coins for the item window's Quantity line, and no other item carries a quantity.
+        var piles = inventory.View(session, null, 1, Entity(5)).LootGrid.Where(item => item.Kind.Type == SessionItemType.Gold).ToArray();
+        Assert.AreEqual(1, piles.Length, "the generated pile is in the loot grid");
+        Assert.AreEqual(loot.Coins, piles[0].Quantity);
+        Assert.IsTrue(inventory.View(session, null, 1, Entity(5)).LootGrid.Where(item => item.Kind.Type != SessionItemType.Gold).All(item => item.Quantity is null));
         Assert.AreEqual(GameSessionDisposition.NoChange, AreaRestockHost.Schedule(session, inventory, Entity(5))?.Disposition, "no source after it (RK12)");
         // The kept amulet and the new goods are looted; the destroyed axe is gone.
         Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(5), Entity(11)).Disposition);

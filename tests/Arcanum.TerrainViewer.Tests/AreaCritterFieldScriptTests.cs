@@ -4,6 +4,8 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -248,9 +250,98 @@ public sealed class AreaCritterFieldScriptTests
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
         {
             Assert.IsTrue(new[] { 38, 39, 57, 89, 92 }.All(set.Actions.Contains), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
         Assert.IsTrue(new[] { 38, 39, 89 }.All(AreaScriptHost.TalkAdmission.Actions.Contains));
         Assert.IsFalse(AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.ToggleInvulnerability) || AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.Rename));
+    }
+
+    [TestMethod]
+    public void Get_armor_reads_the_armour_part_of_the_stored_current_art_and_the_bare_hero_has_none()
+    {
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        AreaObjectRecord WithArt(int index, uint art) { var row = Npc(index); return row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = art } : f)] }; }
+        var chain = WithArt(1, (2u << 28) | (3u << 20));
+        var plate = WithArt(2, (2u << 28) | (6u << 20) | 0x30);
+        var monster = WithArt(3, (12u << 28) | (5u << 20) | (0xFu << 23));
+        var unique = WithArt(4, (13u << 28) | (7u << 20));
+        var host = new AreaUseScriptHost(session, 1, [chain, plate, monster, unique], [], null, null);
+        // ARC-SCRIPT-2326 (AR1–AR3): bits 20..23 of a critter art id, bits 20..22 of a monster's, 0 for any other art type; the bare hero shows underwear (0).
+        Assert.AreEqual((3, 6, 5, 0), (host.ArmorOf(Ref(chain)), host.ArmorOf(Ref(plate)), host.ArmorOf(Ref(monster)), host.ArmorOf(Ref(unique))));
+        Assert.AreEqual(0, host.ArmorOf(host.Pc));
+        Assert.IsNull(host.ArmorOf(new ScrObjectRef(1, "oid:nobody")), "an object the host has no row for is not known");
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetArmor) && AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.GetArmor));
+    }
+
+    // ARC-SCRIPT-2342 (AC3): the hero's worn-armour path. The hero wears the body armour the session records; the world's hero body reads its use art (null: not read) and the armour part is bits 6..9 of it.
+    private static uint UseArt(int part) => (6u << 28) | ((uint)part << 6);
+
+    // A hero with a two-item kit (a weapon and body armour), as the character sheet tests start one.
+    private static GameSessionOwner HeroWithKit()
+    {
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 0, 0, null, null, 385,
+            [new(new(SessionItemType.Weapon, 6049, 4021, 101)), new(new(SessionItemType.Armor, 8188, 4022, 102))]);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
+        return AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(), AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner
+            ?? throw new InvalidOperationException("SESSION_HERO");
+    }
+
+    [TestMethod]
+    public void Get_armor_of_the_hero_is_bare_not_modelled_while_the_worn_use_art_is_not_read_and_the_part_of_that_art_otherwise()
+    {
+        using var bareSession = ConversationSessionFixture.CreateWithHero(1);
+        var bare = new AreaUseScriptHost(bareSession, 1, [], [], null, null);
+        Assert.AreEqual(0, bare.ArmorOf(bare.Pc), "bare: underwear");
+
+        // Worn, the viewer's hero body does not read the item's use art: the answer is not modelled.
+        uint? use = null;
+        using var session = HeroWithKit();
+        var mail = new Arcanum.Simulation.Equipment.EquipmentItem
+        {
+            Kind = Arcanum.Simulation.Equipment.EquipmentItemKind.Armor,
+            Armor = new Arcanum.Simulation.Equipment.EquipmentArmor { Coverage = Arcanum.Simulation.Equipment.ArmorCoverage.Torso, Sizes = Arcanum.Simulation.Equipment.ArmorSizes.Medium },
+        };
+        Assert.AreEqual(GameSessionFailure.None, session.Equip(session.Version, "kit:2", Arcanum.Simulation.Equipment.EquipmentSlot.Armor,
+            new(session.QueryHeroKit()[1].Kind, [], false, mail), (_, _) => true, _ => SessionInsertVerdict.Accepted).Failure);
+        var host = new AreaUseScriptHost(session, 1, [], [], null, new AreaScriptWorld(() => null, _ => false, _ => null, () => null, BodyArmorUseArt: () => use));
+        Assert.IsNull(host.ArmorOf(host.Pc), "worn armour whose use art is not read is not modelled");
+        Assert.IsNull(new AreaUseScriptHost(session, 1, [], [], null, null).ArmorOf(host.Pc), "no world reads it either");
+
+        // Part 1..8 is the art's armour part; part 9 or more gives a critter art no part (0x504060 sets 0 and the original logs it).
+        foreach (var part in new[] { 1, 3, 6, 8 })
+        {
+            use = UseArt(part);
+            Assert.AreEqual(part, host.ArmorOf(host.Pc), $"part {part}");
+        }
+        foreach (var part in new[] { 9, 12, 15 })
+        {
+            use = UseArt(part);
+            Assert.AreEqual(0, host.ArmorOf(host.Pc), $"part {part} does not stand in a critter art id");
+        }
+        use = (7u << 28) | (5u << 6);
+        Assert.AreEqual(0, host.ArmorOf(host.Pc), "a use art that is no item art has no armour part");
+
+        // A polymorphed hero wears a monster body whose armour part is 0, whatever its worn armour's art says.
+        use = UseArt(4);
+        Assert.AreEqual(4, host.ArmorOf(host.Pc));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteTraitArt(session.Version, SessionSpellCaster.Hero, new(5, 0)).Disposition);
+        Assert.AreEqual(0, host.ArmorOf(host.Pc), "polymorphed hero");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteTraitArt(session.Version, SessionSpellCaster.Hero, null).Disposition);
+        Assert.AreEqual(4, host.ArmorOf(host.Pc), "the polymorph ended");
+    }
+
+    [TestMethod]
+    public void Get_armor_of_a_polymorphed_npc_is_the_monster_bodys_part_0_and_the_stored_art_again_when_the_polymorph_ends()
+    {
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        var row = Npc(1);
+        row = row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = (2u << 28) | (3u << 20) } : f)] };
+        var host = new AreaUseScriptHost(session, 1, [row], [], null, null);
+        var who = Ref(row);
+        Assert.AreEqual(3, host.ArmorOf(who));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteTraitArt(session.Version, who.Code, new(5, 0)).Disposition);
+        Assert.AreEqual(0, host.ArmorOf(who), "the apply takes the worn items off and writes a monster art with part 0");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteTraitArt(session.Version, who.Code, null).Disposition);
+        Assert.AreEqual(3, host.ArmorOf(who));
     }
 }

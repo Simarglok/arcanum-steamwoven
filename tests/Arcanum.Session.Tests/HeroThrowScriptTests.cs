@@ -1,6 +1,8 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.Scr;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -16,7 +18,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class HeroThrowScriptTests
 {
-    private const int WieldOffScript = 710, RemoveScript = 711, ThrowScript = 712;
+    private const byte Triggerer = 0, Attachee = 1;
+    private const int WieldOffScript = 710, RemoveScript = 711, ThrowScript = 712, InsertScript = 713;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly ScrProgram Runs = Program(C(ScrCatalogue.Action.ReturnRunDefault));
 
@@ -38,12 +41,13 @@ public sealed class HeroThrowScriptTests
     /// <summary>A host with the three scripts on kit:2; a printed line is the hero's.</summary>
     private sealed class Host : ISessionItemScriptHost
     {
-        public Dictionary<int, ScrProgram> Programs { get; } = new() { [WieldOffScript] = Runs, [RemoveScript] = Runs, [ThrowScript] = Runs };
+        public Dictionary<int, ScrProgram> Programs { get; } = new() { [WieldOffScript] = Runs, [RemoveScript] = Runs, [ThrowScript] = Runs, [InsertScript] = Runs };
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code != "kit:2" ? null : point switch
         {
             SessionScriptPoint.WieldOff => new ScrSlot(WieldOffScript, 0, 0),
             SessionScriptPoint.RemoveItem => new ScrSlot(RemoveScript, 0, 0),
             SessionScriptPoint.Throw => new ScrSlot(ThrowScript, 0, 0),
+            SessionScriptPoint.InsertItem => new ScrSlot(InsertScript, 0, 0),
             _ => null,
         };
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
@@ -57,7 +61,15 @@ public sealed class HeroThrowScriptTests
         public ScrObjectRef? Leader(ScrObjectRef critter) => null;
         public bool IsJilted(ScrObjectRef critter) => false;
         public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
-        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "It hums for the hero.", "line 1");
+        // ARC-COMBAT-2390: a host callback that runs while the script's line is read (it may change what the session does not revise, the random sequence).
+        public Action? OnLine { get; set; }
+        public Dictionary<int, SessionEffectDefinition> Effects { get; } = [];
+        public SessionEffectDefinition? EffectDefinition(int number) => Effects.TryGetValue(number, out var rule) ? rule : null;
+        public SessionPrintedLine PrintedLine(int script, int line)
+        {
+            OnLine?.Invoke();
+            return new(SessionPrintedLineStatus.Shown, "It hums for the hero.", "line 1");
+        }
     }
 
     [TestMethod]
@@ -73,13 +85,70 @@ public sealed class HeroThrowScriptTests
     }
 
     [TestMethod]
-    public void AThrowScriptWithAnInsertItemScriptIsStillRefusedWithAHost()
+    public void ADeclinedThrowRunsTheInsertItemScriptOfTheGiveBackAfterTheThrowScript()
+    {
+        // ARC-COMBAT-2183 (0x4617F0): the refusing throw script's give-back inserts the item into the hero's list, which runs its insert-item script.
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var revision = owner.Version.Revision;
+        var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (result.Disposition, result.Failure, result.ScriptDeclined), result.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.Throw, SessionScriptPoint.InsertItem }, result.Scripts.Select(run => run.Point).ToArray(), "the throw script, then the give-back's insertion");
+        Assert.IsTrue(result.Scripts.All(run => run.Attachee == "kit:2"));
+        Assert.AreEqual((true, true), (ReadFlag(owner, 7), ReadFlag(owner, 3)), "both runs' writes are kept");
+        Assert.AreEqual(1, result.Messages.Count, "the insert-item script's line is the host's to post");
+        Assert.AreEqual(0, result.Shots.Count, "nothing flies");
+        Assert.IsTrue(Holds(owner, "kit:2"), "the item is back in the hero's list");
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision for the runs");
+    }
+
+    [TestMethod]
+    public void AThrownItemThatTheScriptLetsFlyRunsNoInsertItemScript()
     {
         using var owner = Owner();
         var host = new Host();
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
         var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0L), (result.Disposition, result.Failure, owner.Version.Revision), "the give-back would run the insert-item script");
-        Assert.AreEqual(0, result.Scripts.Count, "no script is run for it");
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, false), (result.Disposition, result.Failure, result.ScriptDeclined));
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.Throw }, result.Scripts.Select(run => run.Point).ToArray(), "the item is not inserted back");
+        Assert.AreNotEqual(true, ReadFlag(owner, 3));
+        Assert.AreEqual(1, result.Shots.Count);
+    }
+
+    [TestMethod]
+    public void ADeclinedThrowOfAWornItemRunsWieldOffThenThrowThenInsertItem()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, Wearable(2, Coat, [SessionScriptPoint.WieldOff, SessionScriptPoint.InsertItem]), Drawn, Accept, host).Disposition);
+        // The wear's own insert-item run (the default program) wrote nothing; the program that writes flag 3 is set after it, so only the give-back can.
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        Assert.AreNotEqual(true, ReadFlag(owner, 3));
+        var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.WieldOff, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true), (result.Disposition, result.Failure, result.ScriptDeclined), result.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.WieldOff, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem }, result.Scripts.Select(run => run.Point).ToArray());
+        Assert.AreEqual(true, ReadFlag(owner, 3), "the give-back's insert-item run wrote it");
+        Assert.AreEqual(0, owner.QueryEquipment().Worn.Count, "worn no more");
+        Assert.IsTrue(Holds(owner, "kit:2"));
+    }
+
+    [TestMethod]
+    public void ADeclinedThrowWhoseInsertItemRunTheSessionCannotApplyRefusesBeforeAnyEffect()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        // A dialog is no command of an item event (SessionItemScripts.Admission).
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.Dialog, (Number, 1)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var revision = owner.Version.Revision;
+        var before = ReadFlag(owner, 7);
+        var result = owner.ThrowHeroItem(owner.Version, At(owner, host, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, revision), (result.Disposition, result.Failure, owner.Version.Revision), "the whole throw is refused");
+        Assert.AreEqual(before, ReadFlag(owner, 7), $"the throw script's write is not applied (flag was {before})");
+        Assert.IsTrue(Holds(owner, "kit:2"));
     }
 
     [TestMethod]
@@ -192,5 +261,113 @@ public sealed class HeroThrowScriptTests
         var result = owner.ThrowHeroItem(stale, At(owner, host, SessionScriptPoint.RemoveItem));
         Assert.AreEqual((GameSessionFailure.StaleVersion, false), (result.Failure, ReadFlag(owner, 3) == true), "a stale version refuses before the scripts run");
         Assert.AreEqual(0, result.Scripts.Count);
+    }
+
+    // ARC-COMBAT-2176: the refusals of the struck critter's attack come before any script runs (the preflight, as NpcThrowPreflight does for an NPC).
+    private static SessionHeroThrow AtRat(GameSessionOwner owner, Host host, params int[] points) =>
+        At(owner, host, points) with { Struck = SessionCritterCombat.From("oid:rat", AttackStateTests.Npc(hpAdjustment: 5000)).Combat!, StruckCell = Here(owner, 3) };
+
+    private static void AssertRefusedBeforeScripts(GameSessionOwner owner, Host host, SessionHeroThrow request, GameSessionFailure expected, string why)
+    {
+        var (version, draws) = (owner.Version, owner.QueryRandom().Draws);
+        var result = owner.ThrowHeroItem(owner.Version, request);
+        Assert.AreEqual((GameSessionDisposition.Rejected, expected), (result.Disposition, result.Failure), why);
+        Assert.AreEqual(0, result.Scripts.Count, $"{why}: no script ran");
+        Assert.AreEqual(false, ReadFlag(owner, 3), $"{why}: no script change applied");
+        Assert.AreEqual((version, draws), (owner.Version, owner.QueryRandom().Draws), $"{why}: nothing changed");
+        Assert.IsTrue(Holds(owner, "kit:2"), why);
+    }
+
+    [TestMethod]
+    public void AStruckThrowTheAttackWouldRefuseIsRefusedBeforeTheScriptsRun()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var request = AtRat(owner, host, SessionScriptPoint.Throw);
+        AssertRefusedBeforeScripts(owner, host, request with { StruckLight = 300 }, GameSessionFailure.InvalidAttack, "a light level outside 0..255");
+        AssertRefusedBeforeScripts(owner, host, request with { StruckCell = Here(owner, 200_000), Target = Here(owner, 200_000) }, GameSessionFailure.InvalidAttack, "a distance beyond the thrown range");
+        Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        AssertRefusedBeforeScripts(owner, host, request, GameSessionFailure.RandomExhausted, "the rolls of the attack run out");
+    }
+
+    [TestMethod]
+    public void AStruckThrowTheAttackAcceptsRunsItsScriptsAndStrikes()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.RemoveItem, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.IsNotNull(result.Attack?.Resolution, "the critter was attacked");
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.RemoveItem, SessionScriptPoint.Throw }, result.Scripts.Select(run => run.Point).ToArray());
+        Assert.AreEqual((true, true), (ReadFlag(owner, 3), ReadFlag(owner, 7)));
+    }
+
+    // ARC-COMBAT-2390 (exe read 0x42AB90, 0x4B3C00, 0x4B3170): once the throw script lets the throw through, the original's throw flies whatever the attack check finds (its only refusal is the ammunition check), and a retry runs the scripts again.
+    // So a refusal of the attack on the struck critter that only the scripts' runs could bring about (the preflight judged the throw before them) throws the item at the location, the runs' changes kept and their scripts run once.
+    [TestMethod]
+    public void AStruckThrowWhoseRandomSequenceRunsOutDuringTheScriptsFliesToTheLocation()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6)), C(ScrCatalogue.Action.ReturnRunDefault));
+        host.OnLine = () => Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure), result.Failure.ToString());
+        Assert.IsNull(result.Attack?.Resolution, "no attack on the critter: the item flies to the location");
+        Assert.AreEqual(1, result.Shots.Count);
+        Assert.AreEqual(Here(owner, 3), result.Destination);
+        Assert.AreEqual(1, result.Scripts.Count(run => run.Point == SessionScriptPoint.Throw), "the script ran once");
+        Assert.AreEqual(true, ReadFlag(owner, 7), "its change stays");
+        Assert.IsFalse(Holds(owner, "kit:2"));
+        Assert.AreEqual("kit:2", owner.QueryPlacedItems().Single().Entity);
+    }
+
+    // ARC-COMBAT-2392 (TW8): a critter that is dead at the press (the preflight lets it through) is still thrown at, after the scripts ran once, with the normal roll against the corpse and no damage.
+    [TestMethod]
+    public void AStruckCorpseIsThrownAtAfterTheScriptsRanOnce()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6)), C(ScrCatalogue.Action.ReturnRunDefault));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, SessionCritterCombat.From("oid:rat", AttackStateTests.Npc(hpAdjustment: 5000)).Combat!.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure), result.Failure.ToString());
+        Assert.AreEqual((AttackRefusal.None, true), (result.Attack!.Resolution!.Refusal, result.Attack.Resolution.Damage is null), "the roll is against the corpse, which takes no damage");
+        Assert.AreEqual(1, result.Shots.Count);
+        Assert.AreEqual(1, result.Scripts.Count(run => run.Point == SessionScriptPoint.Throw), "the script ran once");
+        Assert.AreEqual(true, ReadFlag(owner, 7));
+        Assert.IsFalse(Holds(owner, "kit:2"));
+    }
+
+    [TestMethod]
+    public void AStruckThrowWhoseScriptChangesTheHeroStillStrikesTheCritterWithTheNewValues()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        const int Effect = 61;
+        host.Effects[Effect] = new(Effect, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1)]);
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), (Number, Effect), (Number, 5)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var strength = owner.QueryHeroAttack()!.Combatant.Strength;
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure), result.Failure.ToString());
+        Assert.AreEqual(strength + 1, owner.QueryHeroAttack()!.Combatant.Strength, "the script's effect is applied");
+        Assert.IsNotNull(result.Attack?.Resolution, "the critter was attacked");
+    }
+
+    [TestMethod]
+    public void AThrowScriptCannotChangeTheStruckCritterSoThatIsRefusedBeforeAnyEffect()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        const int Effect = 61;
+        host.Effects[Effect] = new(Effect, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1)]);
+        // An effect on another object than the hero is not the session's (the item here stands for any object but the hero).
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.AddEffect, (Attachee, 0), (Number, Effect), (Number, 5)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0L), (result.Disposition, result.Failure, owner.Version.Revision));
+        Assert.IsTrue(Holds(owner, "kit:2"));
     }
 }

@@ -47,6 +47,14 @@ namespace Arcanum.World;
 /// holds no facts of (the PC included since ARC-SCRIPT-1773); without them obj can see obj and obj can hear obj stop the run.
 /// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
+/// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
+/// ARC-SCRIPT-2505 (GR1): <see cref="StandardReaction"/> answers the standard effective reaction (0x4C0CC0) of an NPC of the shown map toward the hero (null: not known; without it get reaction of an NPC that is no dialog speaker is not modelled).
+/// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
+/// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
+/// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
+/// ARC-SCRIPT-2514 (BS3c, 0x43CCA0 → 0x423FF0, 0x459740): <see cref="ObjectDestroyed"/> is told each shown-map scenery or container a script's destroy applied, right after the session recorded it, so the viewer ends the object's goal runs (its loop, eye-candy overlays and hover) and the spell runs aimed at or cast from it; without it the runs stay as before.
+/// ARC-SCRIPT-2788: <see cref="CarriedRow"/> answers the body row of a companion the party carries (named by its home map and entity) when the shown map's window and the loaded maps' rows hold none (a follower recruited from another sector of the main map), so a tile script it steps onto runs for it; without it only those rows are read.
+/// ARC-SCRIPT-2519 (TI5c, F2, 0x502880, 0x502930): <see cref="NpcFacing"/> answers the facing an NPC of the shown map stands in now (its mover's, else its map art's rotation) so the made critter of a transform takes it; without it (or for an NPC it does not know) the made critter keeps its prototype's art facing.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -58,7 +66,13 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
-    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null);
+    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
+    Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null,
+    Func<string, string?, string, int, int, string>? ScriptUseItemWithSkill = null, Func<ScrObjectRef, AreaObjectRecord?>? CarriedRow = null);
+
+/// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
+public sealed record AreaScriptWornArmor(uint? UseArt);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -138,12 +152,14 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrGroupQueries, IScrWorldQueries, IScrObjectStateQueries, IScrContainerQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
     /// <summary>ARC-SKILLS-010: the catching-thief point (11) whose slot an NPC's run keeps as map changes too, under <c>scr11.*</c>.</summary>
     public const int CatchingThiefPoint = 11;
+    /// <summary>ARC-SCRIPT-2858: the thief's caught-thief point (33).</summary>
+    public const int CaughtThiefPoint = ScrPoint.CaughtThief;
     /// <summary>ARC-WORLD-114: the map-change key of an NPC a script's toggle state (56) switched off (value 1; absent while it is as its
     /// map data has it). The original flips object flag 0x2; an NPC switched off is neither drawn nor in the object lists, and its AI
     /// passes stop at the gate (<see cref="SwitchedOff"/>).</summary>
@@ -185,11 +201,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>, which leaves the run's loop over the vicinity early.
     /// ARC-MAGIC-030 (MT21b, ledger SC1–SC6): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49) of
     /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
-    /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
+    /// ARC-RENDER-2197: plus float line (23) of <see cref="ScrAdmissionSet.S19"/>, which the use script 2862 of the Vendigroth underground carries after its end game (a float of its line 1 over its attachee, handed out through <see cref="TakeFloats"/> as a tile script's is; the installed game holds no dialog file for 2862, so nothing floats there). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
     /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
     /// ARC-SCRIPT-1620 (TI6): plus attack (36, 0x447D2F), which raises the attack event of the first object of operand 1 on each object of operand 0 through the AI host (<see cref="AreaScriptWorld.ScriptAttack"/>); 79 installed scripts use it (111 clauses), and the heartbeat set admits it too.
     /// ARC-SCRIPT-1764 (NP9–NP12): plus queue newspaper (85) and float newspaper headline (86) of <see cref="ScrAdmissionSet.S59"/> (<see cref="AreaScriptNewspaper"/>; the headline floats through <see cref="TakeFloats"/>), which the placed, dying and combat-point sets and the heartbeat set admit too.
     /// ARC-SCRIPT-1772 (CQ1–CQ8): plus the critter getters get social class (38), get origin (39) and get faction (89), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/> (<see cref="CritterFieldWriteActions"/>), which the placed, heartbeat, dying and combat-point sets admit too.
+    /// ARC-SCRIPT-2248 (ledger OT1–OT5): plus toggle state (56) of <see cref="ScrAdmissionSet.S16"/>, which the heartbeat set held alone: the ground rune tile script 2221 carries it, in its loop over the portals around its attachee. The run applies it to an NPC of the shown map (<see cref="ObjectStateRefusal"/>, <see cref="OffProperty"/>) and refuses it for any other object, as before.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions).Concat(ScrAdmissionSet.WorldObjectConditions)
             .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
@@ -199,10 +216,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.UseItemWithSkill, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity]),
+        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-SCRIPT-2789: the set an item's use script runs under (<see cref="RunItemUse"/>): <see cref="Admission"/> with the focus kinds everyone (8) and anyone (9) in the vicinity, in actions (the loop over the critters around the item, as
+    /// <see cref="PlacedAdmission"/> has it), which <see cref="CrittersNearItem"/> answers around the item's own location field. Joachim's note to Virgil (use script 1567) loops over everyone near the note and calls Virgil's script 1687 on him; without the kinds the run was refused at its
+    /// line 4 and the whole use was lost. A use click on a door or scenery keeps <see cref="Admission"/>.
+    /// </summary>
+    public static ScrAdmissionSet ItemUseAdmission { get; } = new("S4-area-item-use-vicinity", Admission.Conditions, Admission.Actions, Admission.ValueKinds,
+        Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
     /// ratio, <see cref="PowerRatio"/>), play script eye candy (120; the use host shows none) and destroy (68; of the item being used only, <see cref="ObjectStateRefusal"/>).</summary>
@@ -211,7 +236,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
     /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
-    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
+    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, .. ScrAdmissionSet.CritterArtActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
     /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests; the viewer shows the stop since ARC-SCRIPT-1828 (the spell play, 104, is not shown yet).</summary>
     private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
@@ -237,7 +262,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.FloatLine, .. CastActions, .. StopSpellActions, .. DamageActions]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, .. CastActions, .. StopSpellActions, .. DamageActions]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -266,11 +291,41 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
             ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions, .. ScrAdmissionSet.CritterQueryConditions, .. ScrAdmissionSet.CritterStateConditions, .. ScrAdmissionSet.CritterTailConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
-            ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
+            ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.CallScriptAt,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject]));
+        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.LocalObject,
+            ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
+
+    /// <summary>
+    /// ARC-SCRIPT-2822 (ledger TQ7): the set a follower's new-sector script (attachment point 27) runs under (<see cref="RunNewSector"/>): <see cref="HeartbeatAdmission"/> (which holds call script in, 54, through the session's queue, and remove this
+    /// script) plus get area (84), which Virgil's installed 1568 asks first (<see cref="AreaOf"/>). The original's executor (0x447220) has no per-point restriction; the narrow set keeps the scripts this host can apply whole.
+    /// </summary>
+    public static ScrAdmissionSet NewSectorAdmission { get; } = new("S2-area-new-sector-heartbeat-get-area",
+        HeartbeatAdmission.Conditions, HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.GetArea), HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
+    /// <summary>
+    /// ARC-SCRIPT-2338 (ledger BS1, BS2): the set a BUST script (attachment point 30) runs under (<see cref="RunBust"/>): <see cref="HeartbeatAdmission"/> plus the story actions of <see cref="ScrAdmissionSet.S13"/> (set PC quest
+    /// state 16, mark map location 49, set rumor 50, add and remove reputation 72 and 73) and play script eye candy (120). The original's script executor (0x447220) has no per-point restriction, so a bust script runs the same commands a use
+    /// script does; the heartbeat set stays narrow because it runs every few seconds for every NPC near the PC, and a break runs once. The installed bust script 1734 (main map, the scenery that stops the script eye candy
+    /// of its neighbours) sets a PC quest state and plays a script eye candy; the run applies them through the same <see cref="Apply"/> as a use click (<see cref="AreaScriptStory.Apply"/>, the eye candy requests for the viewer).
+    /// ARC-SCRIPT-2501 (ledger BS3): plus destroy (68), so the container script 2092 (points 2 and 30), which destroys the sceneries around it, is admitted; a destroy of a scenery of the shown map is applied by <see cref="DestroyScenery"/>.
+    /// </summary>
+    public static ScrAdmissionSet BustAdmission { get; } = new("S2-area-bust-heartbeat-story-eye-candy",
+        HeartbeatAdmission.Conditions,
+        HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
+    /// <summary>
+    /// ARC-SCRIPT-2513 (ledger BS3d): the set a taking-damage script (attachment point 23) runs under (<see cref="RunTakingDamage"/>): <see cref="HeartbeatAdmission"/> plus play script eye candy (120) and destroy (68), which the container script
+    /// 2827 (the one installed site, on the main map) uses to destroy the sceneries around it and play their eye candy. The original's executor (0x447220) has no per-point restriction (ledger BS3, BS1); the narrow set only keeps the
+    /// scripts this host can apply whole, so a script that holds anything else is still refused at the plan. A destroy of a scenery is applied by <see cref="DestroyScenery"/>.
+    /// </summary>
+    public static ScrAdmissionSet TakingDamageAdmission { get; } = new("S2-area-taking-damage-heartbeat-eye-candy-destroy",
+        HeartbeatAdmission.Conditions,
+        HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
@@ -308,6 +363,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
+    // ARC-SCRIPT-2881: the lines the remove-item script (28) of the item a use script destroyed printed during the apply in flight, read by the use after it.
+    private readonly List<SessionScriptMessage> _removalMessages = [];
     private readonly List<AreaScriptFade> _fades = [];
     private int _fadeClears;
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
@@ -395,11 +452,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
     // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity; ARC-SCRIPT-047: its NPCs likewise.
-    // ARC-SCRIPT-2041: its portals likewise (focus kind 19).
-    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [];
+    // ARC-SCRIPT-2041: its portals likewise (focus kind 19); ARC-SCRIPT-2322: its containers (focus kinds 17 and 18).
+    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [], _containers = [];
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
+    // ARC-SCRIPT-2788: the NPC triggerer of the tile script RunPlaced runs now (the one object CarriedRow may answer for).
+    private ScrObjectRef? _placedTriggerer;
 
     /// <summary>ARC-WORLD-081: the create objects of the runs applied since the last call, in order.</summary>
     public IReadOnlyList<AreaScriptCreation> TakeCreations()
@@ -430,6 +489,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _shown.TryAdd(EntityId(row), row);
             if (row.Type == SceneryType && row.WorldX is not null && row.WorldY is not null) _scenery.Add((EntityId(row), row));
             if (row.Type == PortalObjectType && row.WorldX is not null && row.WorldY is not null) _portals.Add((EntityId(row), row));
+            if (row.Type == ContainerObjectType && row.WorldX is not null && row.WorldY is not null) _containers.Add((EntityId(row), row));
             if (row.Type == NpcType && row.WorldX is not null && row.WorldY is not null && _shown[EntityId(row)] == row) _npcs.Add((EntityId(row), row));
         }
     }
@@ -439,6 +499,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// needs; the viewer sets it once the tables are read. Without it such an action is refused (<see cref="AreaScriptStory.Apply"/>).
     /// </summary>
     public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
+
+    /// <summary>ARC-SCRIPT-2787: where an object's shown name comes from for <c>@npcname@</c> in a printed or floated line (<see cref="AreaDialogNames.NpcNameSource"/>); null: the diagnostic placeholder.</summary>
+    public Func<AreaObjectRecord, string?>? NpcName { get; set; }
 
     // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
     public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
@@ -451,11 +514,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-WORLD-081 (PG3): the shown map's scenery within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
-    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place.
+    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
-    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre)
+    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : SceneryAround(at);
+
+    private IReadOnlyList<ScrObjectRef> SceneryAround(CellCoord at)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         return _scenery.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
@@ -463,26 +527,91 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2041 (PV1–PV3): the shown map's portals within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, open, closed or locked alike, in snapshot order
-    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place.
+    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     public IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        if (VicinityCentre(centre) is not { } at) return [];
         return _portals.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
     }
 
     /// <summary>
+    /// ARC-SCRIPT-2319 (GF2, GF5): the direct followers of <paramref name="leader"/> as the session's follower array holds them (field 0xF1; <see cref="GameSessionOwner.QueryFollowers"/>): the hero's party followers for the PC, an NPC's own followers for an
+    /// NPC row of the shown map; nothing for any other object (the original reads a non-critter as having none). The followers are named on the shown map, as the leader tests of <see cref="Leader"/> and the follower walk of the critter-state
+    /// conditions name them; a follower standing on another map is the carried companion of the shown map's seed (FM1).
+    /// </summary>
+    [OriginalFunction(0x4411C0, OriginalFunctionScope.Partial)]
+    public IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader)
+    {
+        if (IsPc(leader)) return _session.QueryParty().Followers.Select(f => new ScrObjectRef(_shownMap, f.Entity)).ToArray();
+        if (Row(leader) is not { Type: NpcType }) return [];
+        return _session.QueryFollowers(leader.Code).Select(f => new ScrObjectRef(leader.Map, f)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2322 (CV1–CV3): the shown map's containers within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, in snapshot order (the portals' rule with the
+    /// container type). Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
+    {
+        if (VicinityCentre(centre) is not { } at) return [];
+        return ContainersAround(at);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV2): the containers in the vicinity of an item, the attachee of its insert-item script: the scan is centred on the item's own location field, which an insertion does not write, so it is the tile its map data
+    /// gives (a held item keeps the tile it had where the map placed it, also on another map than its own: the original scans the current map around the stale coordinates, so an item taken to another map reads the row of its origin map) or, for an item the session put on the ground, the tile it lies on; null for an item of another map, one without a row (made at run time) or without a tile.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef>? ContainersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? ContainersAround(cell) : null;
+
+    /// <summary>ARC-SCRIPT-2376 (IV25, PG3): the scenery in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
+    public IReadOnlyList<ScrObjectRef>? SceneryNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? SceneryAround(cell) : null;
+
+    /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
+    public IReadOnlyList<ScrObjectRef>? CrittersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? CrittersAround(cell) : null;
+
+    // The item's own location field as the host reads it (IV2, IV8): the placed cell of a session-dropped item lying on the ground, else the tile it last lay on after the session dropped it and took it up again or a pickup took it from the ground where an NPC dropped it, a container spilled it or a push left it (a held item keeps that stale
+    // location field in the original, also on another map: the scan is of the shown map around those coordinates), else the tile of its map data or of the carried item's row; null for an item of another map with no drop, or one without a tile.
+    // ARC-SCRIPT-1704: with <paramref name="anyMap"/> (a vicinity scan, whose centre is the location field whichever map the reference names) an item named on another map reads its row by identity too, and a dropped item matches on its origin map.
+    private CellCoord? ItemCentre(ScrObjectRef item, bool anyMap = false)
+    {
+        if ((item.Map == _shownMap || anyMap) && _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && (p.Map.RuntimeMap == item.Map || anyMap && p.Origin?.RuntimeMap == item.Map)) is { } placed) return placed.Cell;
+        if (_session.QueryItemLastDrop(item.Code) is { } dropped) return dropped;
+        if (item.Map != _shownMap && !anyMap) return null;
+        // ARC-SCRIPT-2701 (IV8): a map-data item lying loose on another tile than its data holds (a drop of an NPC, a spill, a throw's landing, a push) reads that tile, also in the insert-item run of its own pickup.
+        if (_session.QueryItemLooseCell(item.Code) is { } loose) return loose;
+        // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
+        return (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
+    }
+
+    private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
+    {
+        return _containers.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
+                && _world?.Gone(s.Row) != true)
+            .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1704 (CP14, IV2): the centre of a vicinity scan whose centre is <paramref name="centre"/>. The original's vicinity builder reads the object's own location field (the object field reader's field 2, ledger CP14) and scans the current map around it, so an item
+    /// (a combat-point script's weapon, which the hero carries from the map it took it on, or an NPC holds) is centred on its own stale location (<see cref="ItemCentre"/>: the tile a session-dropped item lies on, else the tile of its map data, read by
+    /// identity from the origin map when the item is carried here), whichever map the reference names; any other object is centred on its place when it is of the shown map. Null (an empty scan) for an object without a place, a made or kit item
+    /// (the location its creation wrote is not read) and an object of another map.
+    /// </summary>
+    private CellCoord? VicinityCentre(ScrObjectRef centre) => !IsPc(centre) && IsItemObject(centre) ? ItemCentre(centre, anyMap: true) : centre.Map == _shownMap ? Place(centre) : null;
+
+    /// <summary>
     /// ARC-SCRIPT-047 (TG4): the shown map's PCs and NPCs within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
     /// destroyed or switched off, the centre itself and the dead included: the NPC rows in snapshot order at their live cells
     /// (<see cref="AreaScriptWorld.CritterCell"/>, else the row's), then the PC at its live cell (the original's list order is not read).
-    /// Empty for a centre of another map or without a place.
+    /// Empty for a centre of another map or without a place (an item centre follows <see cref="VicinityCentre"/>: any map).
     /// </summary>
     [OriginalFunction(0x440FF0, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre)
+    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => VicinityCentre(centre) is not { } at ? [] : CrittersAround(at);
+
+    private IReadOnlyList<ScrObjectRef> CrittersAround(CellCoord at)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         static bool Near(CellCoord cell, CellCoord at) => Math.Abs((long)cell.X - at.X) <= ScrWorld.VicinityReach && Math.Abs((long)cell.Y - at.Y) <= ScrWorld.VicinityReach;
         // Off in the play mask (0x5E2F88 = 3): destroyed or switched off in the map data (object flags 0x1, 0x2) or gone in the session.
         var list = _npcs.Where(n => ((Number(n.Row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) == 0 && !NpcOff(_session, _shownMap, n.Entity, Number(n.Row, ObjectFlagsSlot) ?? 0) && _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))
@@ -589,10 +718,30 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1661 (CP12): this host adjusts the hero's alignment (stat 19) only, which the session stores as a base stat; an NPC's alignment, which the world keeps in its combat values and the session does not write, and every other stat stop the dispatch as not modelled.
+    /// ARC-SCRIPT-1661 (CP12), ARC-SCRIPT-1705, ARC-SCRIPT-2574: this host adjusts the alignment (stat 19) of the hero, which the session stores as a base stat, and of an NPC row it reads: one of the shown map or of another map it was given, or a critter created at run time
+    /// (the entry the stat setter writes into the NPC's stored base stats, kept as the written entry <c>npc.stat.19</c>; <see cref="NpcStoredAlignment"/>); every other stat and a scenery, portal or container stop the dispatch as not modelled.
     /// </summary>
     /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
-    public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
+    public bool CanAdjustStat(ScrObjectRef obj, int stat) =>
+        stat == AreaScriptStory.AlignmentStat && (IsPc(obj) ? _session.QueryHero() is not null : NpcStoredAlignment(obj) is not null);
+
+    // ARC-SCRIPT-1705, ARC-SCRIPT-2574: the stored base alignment (0x4B0740) of an NPC row (the shown map's, another given map's or a created critter's) with the entries the session wrote over the row's fields; null for an object that is no NPC, one with no row here, or fields that do not read.
+    private int? NpcStoredAlignment(ScrObjectRef obj)
+    {
+        if (Row(obj) is not { } row || row.Type != NpcType) return null;
+        var stats = AreaWrittenCritterFields.Read(_session, row)?.Critter?.BaseStats;
+        return stats is { Count: Arcanum.Session.SessionCritterIndexedWrites.StatCount } ? stats[AreaScriptStory.AlignmentStat] : null;
+    }
+
+    // ARC-SCRIPT-1705, ARC-SCRIPT-2574 (0x4B0980 for an NPC, stat 19): the stored base alignment plus the number, clamped to -1000..1000, written as the object's base stat; the followers' re-check is the PC's only, so none is armed. A request the session refuses refuses the run.
+    private bool AdjustNpcStat(ScrObjectRef who, int stat, int delta)
+    {
+        if (stat != AreaScriptStory.AlignmentStat || NpcStoredAlignment(who) is not { } stored) return false;
+        var next = (int)Math.Clamp((long)stored + delta, AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
+        if (next == stored) return true;
+        // The record is kept on the NPC's own map (a created critter's is the shown one); the written entries are read by identity wherever the NPC stands.
+        return _session.WriteCritterStat(_session.Version, new SessionMapId(who.Map), AreaConversationState.EntityId(Row(who)!), AreaScriptStory.AlignmentStat, next).Disposition != GameSessionDisposition.Rejected;
+    }
 
     private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1,
         SummonedSpellFlag = 0x4000, NoStrayNpcFlag = 0x8000, AssociateBlockingObjectFlags = 0x102;
@@ -609,6 +758,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (Row(npc) is not { } row) return null;
         return row.Type == NpcType && _session.QueryReactionRecord(npc.Code) is { MetBefore: true };
     }
+
+    /// <summary>ARC-SCRIPT-2505 (ledger GR1): get reaction of the first object toward the second. A first object that is no NPC (the PC, or a row of the shown map that is not an NPC) gives 50 whatever the second object is: the
+    /// enemy-list test reads only an NPC's list and the type tests that follow end at 50 (Kerghan's script 1105 line 57 loops over the vicinity, which holds the PC). An NPC of the shown map toward the PC is the standard effective reaction
+    /// the world reads for it (the AI host's, the same session query the dialog's reaction conditions read), whether or not it is a dialog speaker. Null (not modelled) for a first object this host has no row for, an NPC toward a second
+    /// object that is not the PC (its enemy list is not read here), or a world without the answer.</summary>
+    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc)
+    {
+        if (IsPc(npc)) return NonNpcReaction;
+        if (Row(npc) is not { } row) return null;
+        if (row.Type != NpcType) return NonNpcReaction;
+        return IsPc(pc) && _world?.StandardReaction is { } ask ? ask(npc.Code) : null;
+    }
+
+    private const int NonNpcReaction = 50;
 
     /// <summary>ARC-SCRIPT-1733 (CS2, case 15): bit 0x1 of the spell flags (<see cref="SpellFlags"/>, field 0x14) of any object, the flags the session's spells wrote included.</summary>
     public bool? IsInvisible(ScrObjectRef obj) => SpellFlags(obj) is { } flags ? (unchecked((uint)flags) & InvisibleSpellFlag) != 0 : null;
@@ -676,6 +839,53 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1772 (CQ3, case 0x59, 0x45D080): an NPC's faction (field 0x124) as it is now, a script's set faction over the map data's (<see cref="Faction"/>), 0 for the PC and any other object type; null for an object this host has no row for.</summary>
     public int? FactionOf(ScrObjectRef obj) => NpcField(obj, row => AreaConversationHost.Scope(row, _session).Faction);
 
+    /// <summary>
+    /// ARC-SCRIPT-2326 (ledger AR1–AR3, exe read 2026-11-16) and ARC-SCRIPT-2342 (AR2, AR7): get armor (32), the armour part of the object's current art id. A critter's current art is rewritten by the wield hooks when body armour (slot 1006)
+    /// goes on or off and by a Trait polymorph, so the answer follows what the session did to the critter, not the stored art alone. The PC: a polymorphed hero (monster art, armour bits 0, nothing can be worn) 0; else the armour part of the use art of the body armour
+    /// it wears (<see cref="AreaScriptWorld.BodyArmorUseArt"/>, null when not read: not modelled), 0 bare. An NPC: polymorphed (<see cref="GameSessionOwner.QueryTraitArt"/>) 0; one the session dressed (<see cref="GameSessionOwner.QueryNpcWorn"/>, a regeneration's best items,
+    /// the barter and loot windows) the part its body armour gives (<see cref="Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt"/> over its stored art: 0 bare, an item whose part the art type cannot hold is refused and the part stays 0), null when the world does not read it;
+    /// any other row from its stored current art (field 1, slot 0), 0 for an art that is no critter's or monster's (items, scenery, unique NPCs); null for an object this host has no row for or one whose row holds no current art.
+    /// </summary>
+    public int? ArmorOf(ScrObjectRef obj)
+    {
+        if (IsPc(obj))
+        {
+            if (_session.QueryHero() is null) return null;
+            // A polymorphed hero wears a monster body with its armour part 0 (the apply takes every worn item off; the wear check refuses a polymorphed critter): AR7.
+            if (_session.QueryTraitArt(SessionSpellCaster.Hero) is not null) return 0;
+            // Bare: underwear (part 0). Worn: the use art's armour part, which the world's hero body reads; not read there: not modelled.
+            var part = 0;
+            if (_session.QueryEquipment().Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor))
+            {
+                if (_world?.BodyArmorUseArt?.Invoke() is not { } use) return null;
+                part = Arcanum.Simulation.Equipment.BodyArmorArtRules.ItemArmor(use);
+            }
+            return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.CritterArt << 28, part));
+        }
+        if (Row(obj) is not { } row || Number(row, CurrentArtSlot) is not { } art) return null;
+        var stored = unchecked((uint)art);
+        if (row.Type == NpcType)
+        {
+            // The apply of a Trait polymorph takes the worn items off and writes a monster art (field 1); the stored base art (0x18) stays. The monster art's armour bits start at 0 (inferred, TR-reads of AR7).
+            if (_session.QueryTraitArt(obj.Code) is not null) return 0;
+            if (_session.QueryNpcWorn(obj.Code) is { } dressed)
+            {
+                // The insert and removal of a wear slot run the hooks for an NPC as for the PC: the art took the armour part of the body armour the NPC wears now (0 when none).
+                var wearsArmor = dressed.Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
+                if (!wearsArmor) return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, null)!.Value);
+                // The record says armour is worn: a world that finds none (an item whose fields are not read yet, a broken one) is not modelled rather than bare.
+                if (_world?.NpcBodyArmor?.Invoke(obj.Code) is not { UseArt: { } } worn) return null;
+                var wornArt = Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, worn.UseArt);
+                // A refused wield (an art type that cannot hold the part) leaves the part the clear before it wrote: 0.
+                return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(wornArt ?? Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(stored, 0));
+            }
+        }
+        // ARC-SCRIPT-2351 (AR8): an NPC the session never dressed whose map-data body armour was taken off since (a script take or steal, loot, a break): the removal's wield-off hook set the part to 0 (AR2), which the stored art does not show.
+        if (row.Type == NpcType && _session.QueryNpcBodyArmorTakenOff(obj.Code))
+            return 0;
+        return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(stored);
+    }
+
     // The three getters read a field only of an object whose type is NPC (0x10) and answer 0 for any other type, the PC included.
     private int? NpcField(ScrObjectRef obj, Func<AreaObjectRecord, int> read)
     {
@@ -741,7 +951,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map), else of an item the hero wears (a made or kit item has no row, ARC-SCRIPT-1562); null for any other (not modelled).
     private int? ComplexityOf(ScrObjectRef item) => Row(item) is { } row
         ? Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Item is { } fields ? fields.MagickTechComplexity : null
-        : _session.QueryWornComplexity(item.Code);
+        : _session.QueryWornComplexity(item.Code) ?? PrototypeItemComplexity(item);
+
+    /// <summary>ARC-SCRIPT-1594 (VT8): the magick-tech complexity of a made or kit item's prototype (the original makes every object as a copy of its prototype, which holds the value until something writes it), as the viewer reads it
+    /// (<see cref="AreaInventoryHost.PrototypeComplexity"/>); null without the source or for an item that stands on no prototype of the session.</summary>
+    public Func<int, int?>? PrototypeComplexity { get; set; }
+
+    private int? PrototypeItemComplexity(ScrObjectRef item) =>
+        IsPrototypeItem(item) && _session.QueryPrototypeItemKind(item.Code) is { } kind ? PrototypeComplexity?.Invoke(kind.Prototype) : null;
+
+    // ARC-SCRIPT-1594 (VT8): an item of the shown map's session that owns no object row: one the session made (a made item) or the starting kit holds, wherever it lies or is carried; its slots and prototype come from the session.
+    private bool IsPrototypeItem(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is null && _session.QueryPrototypeItemKind(obj.Code) is not null;
 
     /// <summary>The identified test is not answered by the use host (its set holds no condition that asks it).</summary>
     public bool? IsIdentified(ScrObjectRef obj) => null;
@@ -763,6 +983,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// without one.</summary>
     public (long X, long Y)? Location(ScrObjectRef obj) => Place(obj) is { } cell ? (cell.X, cell.Y) : null;
 
+    /// <summary>
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile it last lay on after a pickup (IV8), else the tile of its map data or the carried item's row: the same centre as
+    /// the vicinity scans of the run, <see cref="ContainersNearItem"/>, IV2), any other object its place as <see cref="Location"/> gives it. Null for an object without a place (an item of another map, one with no tile).
+    /// </summary>
+    public (long X, long Y)? LocationOfObject(ScrObjectRef obj)
+    {
+        if (IsPc(obj) || !IsItemObject(obj)) return Location(obj);
+        return ItemCentre(obj) is { } at ? (at.X, at.Y) : null;
+    }
+
+    // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
+    private bool IsItemObject(ScrObjectRef obj) =>
+        Row(obj) is { } row ? row.Type is >= FirstItemType and <= LastItemType
+        : CarriedItemRow(obj) is not null || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && (p.Map.RuntimeMap == obj.Map || p.Origin?.RuntimeMap == obj.Map)) || _session.QueryItemLastDrop(obj.Code) is not null;
+
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>
     public bool? IsDead(ScrObjectRef obj)
@@ -778,7 +1013,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return false;
         if (Row(obj) is not { } row) return null;
         var data = Number(row, ObjectFlagsSlot) ?? 0;
-        return row.Type == NpcType ? NpcOff(_session, obj.Map, obj.Code, data) : (data & OffObjectFlag) != 0;
+        if (row.Type == NpcType) return NpcOff(_session, obj.Map, obj.Code, data);
+        // ARC-SCRIPT-2324 (OT8): a scenery's off flag is the map data's under a script's toggle state of it; any other object type reads the map data's.
+        return row.Type == Arcanum.Data.Combat.CombatFieldReader.SceneryType ? _session.QueryObjectOff(new SessionMapId(obj.Map), obj.Code, (data & OffObjectFlag) != 0) : (data & OffObjectFlag) != 0;
     }
 
     // ARC-MAGIC-030 (MT21b, SC1): the object's spell flags (field 20) as the original's field getter reads them for any object type: a row's effective value, and for a
@@ -841,6 +1078,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-050: the shown map's runtime number (the dialog host borrows this host's answers only for its own map).</summary>
     public int ShownMap => _shownMap;
 
+    /// <summary>ARC-SCRIPT-2335: whether the host reads a row for the object (the shown map's, a loaded map's or a created critter's).</summary>
+    public bool KnowsObject(ScrObjectRef obj) => Row(obj) is not null;
+
     private AreaObjectRecord? Row(ScrObjectRef obj)
     {
         if (obj.Map == _shownMap && _clicked is { } clicked && clicked.Entity == obj.Code) return clicked.Row;
@@ -848,11 +1088,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
         // ARC-DEV-371: a critter created at run time is in none of the maps' rows.
         if (obj.Map == _shownMap && _world?.CreatedRow?.Invoke(obj.Code) is { } created) return created;
+        // ARC-SCRIPT-2788: a carried follower's body row (its home sector may lie outside the shown window).
+        // Only for the NPC whose tile script runs now (RunPlaced): the other row readers keep their answers for a body outside the window.
+        if (_placedTriggerer is { } stepping && stepping == obj && _world?.CarriedRow?.Invoke(obj) is { } carried) return carried;
         return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
 
     /// <summary>ARC-DEV-316: the item whose use script runs now (the only object <see cref="OtherMapRow"/> answers for), else null.</summary>
     private ScrObjectRef? _itemUse;
+    // ARC-SCRIPT-1590: the NPC that uses the item of the run (null: the PC), whose list the destroy of the item in use leaves.
+    private ScrObjectRef? _itemUser;
 
     /// <summary>
     /// ARC-DEV-316 (B32 tail): the row of the item whose use script runs (<see cref="RunItemUse"/>) when its origin map is one the host was
@@ -882,6 +1127,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-WORLD-110 its script is 0 once the trap state removed the trap it names (docs/world/trap-state-runtime.md).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
+        // ARC-SCRIPT-1594 (VT8): a made or kit item reads the slot the session kept for it, else its prototype's element.
+        if (IsPrototypeItem(attachee)) return _session.QueryItemScriptSlot(attachee.Code, point) is { } own ? new(own.Script, own.LocalFlags, own.Counters) : null;
         if (Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, point) is not { } loaded) return null;
         if (!KeptAsMapChanges(point)) return loaded;
         long? Read(string property) => _session.QueryObjectChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
@@ -892,8 +1139,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.NewSector or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying or ScrPoint.Destroy
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.StartCombat or ScrPoint.EndCombat or ScrPoint.CaughtThief or ScrPoint.LeaderKilling or ScrPoint.Unlock or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1011,11 +1258,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // ARC-DEV-265: the session holds the hero's arrays alone; another PC reads 0 (SessionScriptLimits.IsHero).
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
-    public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
-    // ARC-SCRIPT-047: the dialog gates of a call-ex of an NPC's dialog point (E6): dead as the session holds it (map data or killed);
-    // surrender and mind control are not modelled here (normal).
-    public ScrDialogState DialogState(ScrObjectRef attachee) =>
-        !IsPc(attachee) && attachee.Map == _shownMap && Row(attachee) is { Type: NpcType } && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
+    /// <summary>ARC-SCRIPT-2957 (ledger TQ32, addresses there): the interpreter's entry gate, which every object point of this host runs through (the other hosts answer false, #2988): an NPC (type 16) whose NPC flags (slot 69) carry the monster-generator bit 0x80000 runs no script and answers run default.</summary>
+    public bool IsMonsterGenerator(ScrObjectRef attachee) => Row(attachee) is { Type: 16 } row && Number(row, NpcFlagsSlot) is { } flags && (flags & MonsterGeneratorNpcFlag) != 0;
+    private const int NpcFlagsSlot = 69;
+    private const long MonsterGeneratorNpcFlag = 0x80000;
+    // ARC-SCRIPT-047 / ARC-SCRIPT-2464: the dialog gates of a call-ex or call script callee on an NPC's dialog point (E6, TG5), all three read on the NPC's row of the shown map: dead as the session holds it (map data or killed),
+    // surrendered as the session's danger record says (0x4AF210, <see cref="IsSurrendered"/>) and mind-controlled by bit 0x8000000 of the spell flags, field 0x14 (<see cref="IsMindControlled(AreaObjectRecord)"/>).
+    // The gates are independent, as the dispatcher tests them one after the other. The PC, another map's object and anything that is not an NPC meet none.
+    public ScrDialogState DialogState(ScrObjectRef attachee)
+    {
+        if (IsPc(attachee) || attachee.Map != _shownMap || Row(attachee) is not { Type: NpcType } row) return ScrDialogState.Normal;
+        var state = ScrDialogState.Normal;
+        if (_session.QueryNpcDead(attachee.Code)) state |= ScrDialogState.Dead;
+        if (IsSurrendered(attachee) == true) state |= ScrDialogState.Surrendered;
+        if (IsMindControlled(row)) state |= ScrDialogState.MindControlled;
+        return state;
+    }
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
@@ -1030,6 +1288,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The hero's side: the PC's follower or waiting NPC (the host's own reads that mean the hero's party, not the script leader query).
     private bool FollowsPc(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc;
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     // SG1: the PC's own entry (botched reads as 6); any other object the quest's global state. A number outside the quest
@@ -1083,15 +1342,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1772 (CQ5): <see cref="NameOf(AreaObjectRecord)"/> with the name number a script's rename gave an NPC (<see cref="SessionNpcName.Property"/>, kept only while it differs from the map data's), which the name conditions and the dialog's follower-named test
-    /// read; every other row keeps its own.
+    /// read; ARC-SCRIPT-2375 (IV30): and an item (<see cref="SessionItemName.Property"/>); every other row keeps its own.
     /// </summary>
     public static int NameOf(GameSessionOwner session, AreaObjectRecord row)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(row);
-        return row.Type == NpcType && session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcName.Key(EntityId(row))) is { } renamed ? unchecked((int)renamed) : NameOf(row);
+        if (row.Type == NpcType && session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcName.Key(EntityId(row))) is { } renamed) return unchecked((int)renamed);
+        // ARC-SCRIPT-2375 (IV30): an item's renamed number is the item's own field, found by its identity wherever the item is now.
+        return row.Type is >= FirstItemType and <= LastItemType && session.QueryObjectChange(new SessionMapId(row.Key.RuntimeMap), SessionItemName.Key(EntityId(row))) is { } itemRenamed ? unchecked((int)itemRenamed) : NameOf(row);
     }
 
-    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85;
+    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85, CurrentArtSlot = 0;
 
     private static long? Number(AreaObjectRecord row, int slot) =>
         row.EffectiveFields.FirstOrDefault(field => field.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue ? n : null;
@@ -1115,13 +1376,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var worn = _session.QueryEquipment().Worn.ToDictionary(item => item.Entity, item => (int)item.Slot, StringComparer.Ordinal);
             int? Location(string entity) => worn.TryGetValue(entity, out var slot) ? slot : null;
-            return _session.QueryHeroKit().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))
-                .Concat(_session.QueryPcInventory().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity))))
+            return _session.QueryHeroKit().Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Kind.Name), Location(item.Entity)))
+                .Concat(_session.QueryPcInventory().Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Kind.Name), Location(item.Entity))))
                 // ARC-MAGIC-051: an item the hero assembled lives in the made items, not the kit or the pack (the powered shield's timer needs its name).
-                .Concat(_session.QueryMadeItems().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))).ToArray();
+                .Concat(_session.QueryMadeItems().Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Kind.Name), Location(item.Entity)))).ToArray();
         }
         var holder = _session.QueryMapInventory(new SessionMapId(obj.Map))?.Holders.FirstOrDefault(h => h.Entity == obj.Code);
-        return holder is null ? [] : holder.Items.Select(item => new HeldItem(item.Facts.Kind.Name, item.Facts.InventoryLocation)).ToArray();
+        return holder is null ? [] : holder.Items.Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Facts.Kind.Name), item.Facts.InventoryLocation)).ToArray();
     }
 
     /// <summary>
@@ -1176,8 +1437,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
+            return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
@@ -1198,11 +1459,36 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, guarded), this, new() { Rules = Remember(rules), Admission = Admission });
+            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = null; }
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2858 (TQ16, exe read 2026-11-19): the caught-thief script (point 33) of <paramref name="thief"/>, an NPC of the shown map, which a noticed failed steal or plant of an NPC thief runs through the script dispatcher (0x441980, 0x4C7160) just before the
+    /// victim's catching-thief script (point 11, <see cref="RunCatchingThief"/>): the thief is the attachee, the victim (<paramref name="victim"/>: the hero or an NPC) the triggerer, no extra object here (the original passes the attempt's object), line 0, under
+    /// <see cref="CaughtThiefAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The original ignores the answer (the next call is made whatever it is). A thief that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunCaughtThief(string thief, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(thief); ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, thief);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.CaughtThief) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var previous = _clicked;
+        _clicked = (thief, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.CaughtThief, attachee, victim, null), this, new() { Rules = Remember(rules), Admission = CaughtThiefAdmission });
+            return Finish(run, _ => "a teleport from a caught-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-SCRIPT-2858: the set a caught-thief script (point 33) runs under (<see cref="RunCaughtThief"/>): the set of the other NPC point scripts (<see cref="DyingAdmission"/>).</summary>
+    public static ScrAdmissionSet CaughtThiefAdmission => DyingAdmission;
 
     /// <summary>
     /// ARC-WORLD-114: an NPC's first-heartbeat (10) or heartbeat (19) script, which the AI tick runs with the NPC as the attachee and
@@ -1223,10 +1509,50 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var npc = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc));
+            var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
+            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc), npc);
         }
         finally { _clicked = null; }
+    }
+
+    /// <summary>
+    /// ARC-AI-2821 (ledger TQ14; exe 0x4AE120): the set a will-KOS script (attachment point 22) runs under (<see cref="RunWillKos"/>): <see cref="HeartbeatAdmission"/> plus the is-wielding-item condition (21, scripts 1157 and 2833), get stat (33, script 2764) and call script (7, scripts 1157 and 2833), which the installed
+    /// verdict scripts use to read what the candidate wields and its stats and to call a shared verdict script. The test is asked on every kill-on-sight evaluation of the deciding NPC (target finding 0x4AB460, dialog start 0x412FD0 and the reply step 0x413130 all reach it), so the script runs as often as a heartbeat does
+    /// and holds the heartbeat's narrow set; a script outside it is refused and the evaluation goes on as without one.
+    /// </summary>
+    public static ScrAdmissionSet WillKosAdmission { get; } = new("S2-area-will-kos-heartbeat-wielding-stat-call",
+        HeartbeatAdmission.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem), HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.GetStat).Append(ScrCatalogue.Action.CallScript),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
+    /// <summary>
+    /// ARC-AI-2821 (ledger TQ14; exe 0x4AE120, the call 0x441980(candidate, npc, none, 22)): the will-KOS script (attachment point 22) of <paramref name="row"/>, the NPC that decides, run with <paramref name="candidate"/> as the triggerer, no extra object
+    /// and line 0, after the target validity test and before the rest of the kill-on-sight rule, under <see cref="WillKosAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The answer 0 ("skip default") vetoes the
+    /// kill-on-sight (<see cref="WillKosVetoes"/>); anything else lets the evaluation go on. A refused or unapplied run, an NPC with no script at the point, and an NPC of another map veto nothing.
+    /// </summary>
+    public AreaScriptedUse RunWillKos(AreaObjectRecord row, ScrObjectRef candidate, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(candidate); ArgumentNullException.ThrowIfNull(rules);
+        var entity = EntityId(row);
+        if (row.Key.RuntimeMap != _shownMap || row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, "not an NPC of the shown map");
+        var attachee = new ScrObjectRef(_shownMap, entity);
+        if (Slot(attachee, ScrPoint.WillKos) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (entity, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.WillKos, attachee, candidate, null), this, new() { Rules = Remember(rules), Admission = WillKosAdmission });
+            return Finish(run, _ => "a teleport from a will-KOS script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-AI-2821: whether a will-KOS run (<see cref="RunWillKos"/>) vetoes the kill-on-sight: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way), but not a script file that cannot be opened (run default). A run that was not applied cancels nothing.</summary>
+    public static bool WillKosVetoes(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        // A script file that cannot be opened answers 1 ("run default") in the interpreter 0x4449B0 (the result local of 0x4449B0 is set to 1 when the file open fails), so a missing or unreadable file vetoes nothing, unlike the dispatcher's own skip default for it elsewhere.
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop is not (ScrStop.MissingScript or ScrStop.UnreadableScript);
     }
 
     // ARC-DEV-254 (GT198): the original's guard (global 0x5FC26C) is set around the point-0x17 script call only; a damage dealt while it runs skips the script.
@@ -1235,7 +1561,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the taking-damage script (attachment point 0x17, 23) of <paramref name="victim"/>, an object of the shown map (any type: the original runs it for portals, containers, scenery and items too), run by the
     /// damage apply 0x4B4390 before the destroyed, invulnerable and wall gates and before the resistance step. The triggerer is the damage's attacker (<paramref name="attacker"/>, null for a damage without one: a script's own damage,
-    /// the null handle), the extra object none, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
+    /// the null handle), the extra object none, line 0, under <see cref="TakingDamageAdmission"/> (ARC-SCRIPT-2513: the heartbeat set plus play script eye candy and destroy); its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
     /// call only) skips it: no run. The caller reads <see cref="TakingDamageVetoes"/>. An object that is not a row of the shown map, or has no slot at the point, has no script (the step goes on).
     /// </summary>
     public AreaScriptedUse RunTakingDamage(string victim, ScrObjectRef? attacker, ScrRuleProfile rules)
@@ -1250,15 +1576,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _inTakingDamage = true;
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = TakingDamageAdmission });
+            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _inTakingDamage = false; _clicked = previous; }
     }
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
-    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). ARC-SCRIPT-1661 (CP11, CP12): plus the commands of <see cref="ScrAdmissionSet.S52"/> the area weapon scripts 30064 and 30074 and the alignment weapon 30252 use: obj is in combat (31, <see cref="IsInCombat"/>) and adjust stat (137, the hero's alignment only, <see cref="CanAdjustStat"/>). A script outside it is refused and the hit goes on as without one.
+    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). ARC-SCRIPT-1661 (CP11, CP12): plus the commands of <see cref="ScrAdmissionSet.S52"/> the area weapon scripts 30064 and 30074 and the alignment weapon 30252 use: obj is in combat (31, <see cref="IsInCombat"/>) and adjust stat (137, the alignment of the hero or of an NPC of the shown map, <see cref="CanAdjustStat"/>; ARC-SCRIPT-1705). A script outside it is refused and the hit goes on as without one.
     /// </summary>
     public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Concat([ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat]),
         PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.AdjustStat]),
@@ -1277,7 +1603,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public AreaScriptedUse RunCombatPoint(int point, ScrObjectRef attachee, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
-        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
+        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss or ScrPoint.Drop)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
         var previousItem = _itemUse;
         // An item the host was not given a map of is read by identity, as an item's use is; every other object is a row of a loaded map.
         _itemUse = attachee;
@@ -1289,12 +1615,50 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _clicked = (attachee.Code, row);
             try
             {
-                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = rules, Admission = CombatPointAdmission });
-                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = CombatPointAdmission });
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
             }
             finally { _clicked = previous; }
         }
         finally { _itemUse = previousItem; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2853 (exe read, ledger PI1, VP6; 0x461AB0 → 0x441980, TQ19): the drop script (point 5) of the item <paramref name="item"/> that the holder <paramref name="holder"/> (the triggerer; the PC's handle for the hero) is about to drop,
+    /// run before the no-drop check; no extra object. It uses the same executor and set as <see cref="RunCombatPoint"/> (an item row of the shown map, or a carried item read by identity). Read the answer with <see cref="ItemDropRefuses"/>.
+    /// </summary>
+    public AreaScriptedUse RunItemDrop(ScrObjectRef item, ScrObjectRef holder, ScrRuleProfile rules) => RunCombatPoint(ScrPoint.Drop, item, holder, null, rules);
+
+    /// <summary>ARC-SCRIPT-2853: whether an item drop run (<see cref="RunItemDrop"/>) refuses the drop: the dispatcher's "skip default" (0 of 0x441980, which a script that runs past its last line ends in too), as for <see cref="TakingDamageVetoes"/>. An item with no script at the point answers run default.</summary>
+    public static bool ItemDropRefuses(AreaScriptedUse ran) => TakingDamageVetoes(ran);
+
+    /// <summary>ARC-SCRIPT-2853: whether the host applied an item drop run, or found no script to run (<see cref="AreaScriptedUseOutcome.NoTeleport"/>); a refused or unapplicable run is not modelled and the drop stays unapplied.</summary>
+    public static bool ItemDropModelled(AreaScriptedUse ran) => ran.Outcome is AreaScriptedUseOutcome.NoTeleport;
+
+    /// <summary>The object type of an armour piece (armour, shields, helmets, gauntlets, boots, rings and medallions), which the damage apply's armour loop asks (0x4B47F8: type 7).</summary>
+    private const int ArmourType = 7;
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (0x4B4390, the loop at 0x4B47F8, GT201; ledger TQ23): the critical-hit script (point 34) of each armour piece <paramref name="worn"/> (an entity of the victim's wear slots 1000–1008, in slot order; an item of another
+    /// type, a weapon or a generic item, runs none) for a critical damage step on a living critter: the attacker is the triggerer, <paramref name="victim"/> (the one who takes the damage: the attacker itself on a critical self-hit) the extra
+    /// object, line 0, through <see cref="RunCombatPoint"/> (its set, its slot kept as map changes); the answers are ignored. A piece the host cannot read (no row) or with no script at the point runs nothing. Returns the runs, one per piece
+    /// that was asked, in order.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> RunArmourCritical(IReadOnlyList<ScrObjectRef> worn, ScrObjectRef attacker, ScrObjectRef victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(worn); ArgumentNullException.ThrowIfNull(rules);
+        var runs = new List<AreaScriptedUse>(worn.Count);
+        foreach (var piece in worn)
+        {
+            // An item the host was not given a map of is read by identity, as its use is (the type is the row's).
+            var previous = _itemUse;
+            _itemUse = piece;
+            bool armour;
+            try { armour = Row(piece)?.Type == ArmourType; }
+            finally { _itemUse = previous; }
+            if (armour) runs.Add(RunCombatPoint(ScrPoint.CriticalHit, piece, attacker, victim, rules));
+        }
+        return runs;
     }
 
     /// <summary>
@@ -1313,10 +1677,39 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (follower, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
+            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2822 (ledger TQ7; 0x4F2330 → 0x441980 with point 0x1B): the new-sector script (attachment point 27) of <paramref name="follower"/>, a direct follower of the hero: the hero's sector entry (a crossing, and also the arrival, teleport and
+    /// placement of mode 2) runs it for every direct follower after the sector's own script (which may be none), the hero as the triggerer, the follower as the attachee, no extra object, line 0, under <see cref="NewSectorAdmission"/>; its slot is kept as map changes
+    /// (<see cref="SlotProperty"/>). The original tests only the follower's slot and the generator flag: no map, distance, waiting or alive gate, so a follower carried from another map (named by its home map) runs it as well, through its carried body row
+    /// (<see cref="AreaScriptWorld.CarriedRow"/>). The answer decides nothing. A follower with no row the host reads, or no script at the point, runs nothing.
+    /// </summary>
+    [OriginalFunction(0x4F2330, OriginalFunctionScope.Partial)]
+    public AreaScriptedUse RunNewSector(ScrObjectRef follower, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        // The carried body row answers for the one follower whose run is going (the one object CarriedRow may answer for).
+        var previousTriggerer = _placedTriggerer;
+        _placedTriggerer = follower;
+        try
+        {
+            if (Row(follower) is not { } row || Slot(follower, ScrPoint.NewSector) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            var previous = _clicked;
+            _clicked = (follower.Code, row);
+            try
+            {
+                var run = ScrDispatcher.RunObject(new(ScrPoint.NewSector, follower, Pc, null), this, new() { Rules = Remember(rules), Admission = NewSectorAdmission });
+                return Finish(run, _ => "a teleport from a new-sector script is not modelled", writeback => WriteObjectSlot(writeback, follower), follower);
+            }
+            finally { _clicked = previous; }
+        }
+        finally { _placedTriggerer = previousTriggerer; }
     }
 
     /// <summary>
@@ -1326,6 +1719,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public static ScrAdmissionSet DyingAdmission { get; } = new("S4-area-dying",
         PlacedAdmission.Conditions.Union(HeartbeatAdmission.Conditions), PlacedAdmission.Actions.Union(HeartbeatAdmission.Actions),
         PlacedAdmission.ValueKinds.Union(HeartbeatAdmission.ValueKinds), PlacedAdmission.FocusKinds.Union(HeartbeatAdmission.FocusKinds), counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 (ledger BS3): the set the destroy point (2) of a scenery runs under (<see cref="RunDestroyPoint"/>): the union of <see cref="BustAdmission"/> (the story actions and the script eye candy the installed scenery
+    /// scripts 1734, 1194 and 2403 use) and <see cref="DyingAdmission"/> (the commands of the other object point scripts). The original's executor has no per-point restriction (BS1).
+    /// </summary>
+    public static ScrAdmissionSet DestroyPointAdmission { get; } = new("S4-area-destroy-point",
+        DyingAdmission.Conditions.Union(BustAdmission.Conditions), DyingAdmission.Actions.Union(BustAdmission.Actions),
+        DyingAdmission.ValueKinds.Union(BustAdmission.ValueKinds), DyingAdmission.FocusKinds.Union(BustAdmission.FocusKinds), counterIndexWraps: true);
 
     /// <summary>
     /// ARC-DEV-312 (exe read 2026-11-10, ledger DY1–DY3): the dying script (attachment point 12) of <paramref name="victim"/>, a creature of the shown map whose hit points the damage or kill has just written, which the kill (0x45DA20)
@@ -1343,8 +1744,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (victim, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = rules, Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1372,10 +1773,104 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _dangerRunDepth++;
         try
         {
-            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = rules, Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _dangerRunDepth--; _clicked = previous; }
+    }
+
+    private int _combatPassDepth;
+
+    /// <summary>
+    /// ARC-SCRIPT-2820 (TQ12, exe read 2026-11-19): the start-combat (15) or end-combat (16) script of <paramref name="npc"/>, an NPC of the shown map, through the script dispatcher (0x441980) at the two places the original calls it: the AI gate 0x4A8570 (16 in real
+    /// time only, then 15, on every AI pass of an NPC in combat mode; the NPC's danger source as the triggerer, none without one) and the turn-based subturn end 0x4B7630 (16 for the outgoing non-PC actor, the actor as the triggerer too). The NPC is the attachee, no extra object,
+    /// line 0, under <see cref="DyingAdmission"/> (the set of the other NPC combat scripts); its slot is kept as map changes (<see cref="SlotProperty"/>). Both callers ignore the answer. An NPC that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// The original has no guard; a script whose effects reach the same pass again runs nested, so the depth is bounded (<see cref="MaxDangerRunDepth"/>).
+    /// </summary>
+    public AreaScriptedUse RunCombatPassPoint(int point, string npc, ScrObjectRef? triggerer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(npc); ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.StartCombat or ScrPoint.EndCombat)) throw new ArgumentOutOfRangeException(nameof(point), "Not a start-combat or end-combat point.");
+        var attachee = new ScrObjectRef(_shownMap, npc);
+        if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_combatPassDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested combat pass scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (npc, row);
+        _combatPassDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a combat pass script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _combatPassDepth--; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2859 (TQ25, exe read 2026-11-19, LK1-LK3): the leader-killing script (attachment point 20, 0x14) of <paramref name="follower"/>, a direct follower of the killer's PC leader, which the kill step (0x45DA20, the loop after the
+    /// experience award, the alignment step and the kill log) runs through the script dispatcher (0x441980) when an NPC dies: the dead NPC (<paramref name="victim"/>) as the triggerer, the follower as the attachee, the PC leader
+    /// (<paramref name="leader"/>) as the extra object, line 0, under <see cref="DyingAdmission"/> (the set of the other NPC point scripts); its slot is kept as map changes (<see cref="SlotProperty"/>). The kill step ignores the
+    /// answer. A follower that is not a row of the shown map, or has no script at the point, runs nothing. The original has no guard; a script whose effects kill another NPC reaches the loop again nested, so the depth is bounded
+    /// (<see cref="MaxDangerRunDepth"/>).
+    /// </summary>
+    public AreaScriptedUse RunLeaderKilling(string follower, string victim, ScrObjectRef leader, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(follower); ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, follower);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.LeaderKilling) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_leaderKillingDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested leader-killing scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (follower, row);
+        _leaderKillingDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderKilling, attachee, new ScrObjectRef(_shownMap, victim), leader), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a leader-killing script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _leaderKillingDepth--; _clicked = previous; }
+    }
+
+    private int _leaderKillingDepth;
+
+    /// <summary>
+    /// ARC-SCRIPT-2860 (TQ11, exe read 2026-11-19, UL1-UL3): the unlock script (attachment point 3) of <paramref name="target"/>, a portal or container of the shown map, which both open attempts (0x4AEB70, 0x4AED80) run through the script
+    /// dispatcher (0x441980) before the lock test: the opener (<paramref name="opener"/>: the PC or an NPC) as the triggerer, the object as the attachee, no extra object, line 0, under <see cref="UnlockAdmission"/>; its slot is kept as map
+    /// changes (<see cref="SlotProperty"/>). The attempt reads the answer (<see cref="UnlockRefused"/>: 0 refuses the opening). A target that is not a row of the shown map, or has no script at the point, runs nothing. The original has no guard; a script
+    /// whose effects open or toggle its own object reaches the attempt again nested, so a run of the same object inside its own run is not made (another object's attempt runs) (<see cref="AreaScriptedUseOutcome.Refused"/>).
+    /// </summary>
+    public AreaScriptedUse RunUnlock(string target, ScrObjectRef opener, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, target);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Unlock) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_unlocking.Contains(target)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "this object's unlock script is already running: a nested open attempt on it does not run it again");
+        var previous = _clicked;
+        _clicked = (target, row);
+        _unlocking.Add(target);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Unlock, attachee, opener, null), this, new() { Rules = Remember(rules), Admission = UnlockAdmission });
+            return Finish(run, _ => "a teleport from an unlock script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _unlocking.Remove(target); _clicked = previous; }
+    }
+
+    private readonly HashSet<string> _unlocking = new(StringComparer.Ordinal);
+
+    /// <summary>ARC-SCRIPT-2860: the set an unlock script (point 3) runs under (<see cref="RunUnlock"/>): the set of the object use scripts (<see cref="Admission"/>), which admits the installed script 1151 of a door whole (opt-in check).</summary>
+    public static ScrAdmissionSet UnlockAdmission => Admission;
+
+    /// <summary>
+    /// ARC-SCRIPT-2860 (UL2): what the open attempt reads from an unlock run (<see cref="RunUnlock"/>): true when the dispatcher answered 0 ("skip default", which includes a script that runs past its last line), so the attempt answers 4 and refuses the
+    /// opening; false when the object has no script at the point or the script answered "run default" (the attempt goes on to the lock test); null when the run did not finish (refused by the admission, effects the host cannot apply, an unreadable or
+    /// changed file, a nested run): the original has no such case, so the caller keeps the refusal it had before this point was run.
+    /// </summary>
+    public static bool? UnlockRefused(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport ? UseStops(ran) : null;
     }
 
     /// <summary>
@@ -1398,8 +1893,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _raiseRunDepth++;
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = rules, Admission = DyingAdmission });
-            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = Remember(rules), Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _raiseRunDepth--; _clicked = previous; }
     }
@@ -1437,7 +1932,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD15): the BUST script (attachment point 30) of <paramref name="victim"/>, an object of the shown map, which the break
     /// (0x43F1C0) runs through the script dispatcher (0x441980) with <paramref name="breaker"/> as the triggerer (null: a break with no attacker,
-    /// the null handle), the object as the attachee and no extra object, under <see cref="HeartbeatAdmission"/>. The break ignores the answer, so
+    /// the null handle), the object as the attachee and no extra object, under <see cref="BustAdmission"/>. The break ignores the answer, so
     /// the caller reads nothing from it; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown
     /// map, or has no script at the point, runs nothing.
     /// </summary>
@@ -1451,10 +1946,166 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (victim, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
-            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = Remember(rules), Admission = BustAdmission });
+            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-SCRIPT-2501: the rules of the latest run this host began, which a destroy point run nested in that run's effects takes (the original has one executor; the rule mode is the session's).</summary>
+    private ScrRuleProfile Remember(ScrRuleProfile rules) => _lastRules = rules;
+
+    private ScrRuleProfile? _lastRules;
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 (ledger TD2, BS3): the destroy point (2) of <paramref name="victim"/>, a scenery of the shown map that a script's destroy (68, 0x43CCA0) is about to remove: the object is the triggerer and the attachee, no extra
+    /// object, line 0 (0x441980 at 0x43CD0E), under <see cref="DestroyPointAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>, keys scr2.*, no schema step). The caller reads <see cref="DyingStops"/> (return 0 keeps the object). An object that is not a
+    /// row of the shown map, or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunDestroyPoint(string victim, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, victim);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Destroy) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (victim, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Destroy, attachee, attachee, null), this, new() { Rules = Remember(rules), Admission = DestroyPointAdmission });
+            return Finish(run, _ => "a teleport from a destroy script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 (ledger TD2, BS3): a script's destroy of a scenery of the shown map. An object already destroyed (its map data's flag 0x1, or an earlier destroy) is left as it is; otherwise the scenery's destroy point (2) runs first, and
+    /// a return of 0 (skip default, <see cref="DyingStops"/>) keeps it; else the session records it destroyed (the object condition, which the view reads as gone: not drawn, not picked, out of the vicinity lists). A script that destroys the
+    /// scenery whose destroy point is running leaves it to that run (the original would run the point again, as flag 0x1 is set last). The runs the original ends at once (0x423FF0, 0x459740) are ended through <see cref="AreaScriptWorld.ObjectDestroyed"/> (ARC-SCRIPT-2514); the other clean-up is not modelled (BS3).
+    /// </summary>
+    private bool DestroyScenery(ScrObjectRef obj)
+    {
+        if (AlreadyDestroyed(obj) || _destroyingScenery.Contains(obj.Code)) return true;
+        switch (RunDestroyPointGate(obj, false))
+        {
+            case DestroyPointFate.Failed: return false;
+            case DestroyPointFate.Kept: return true;
+        }
+        if (AlreadyDestroyed(obj)) return true;
+        // ARC-WORLD-2502 (0x43CCA0 → 0x4639E0): a container's invulnerable items are dropped on its cell with the destroy (a junk pile only destroyed, a never generated 0x200 container regenerated first).
+        var applied = ShownContainer(obj) && Place(obj) is { } cell
+            ? NotedRemoval(_session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj), ItemScripts)).Disposition != GameSessionDisposition.Rejected
+            : _session.ApplyChanges(_session.Version, null,
+                [new(new SessionMapId(obj.Map), MapChangeKey.ForEntity(obj.Code, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition != GameSessionDisposition.Rejected;
+        // ARC-SCRIPT-2514 (BS3c): the destroy (0x43CCA0) kills every goal run of the object (0x423FF0) and tells the spell runs (0x459740): the viewer's hosts end them.
+        if (applied) _world?.ObjectDestroyed?.Invoke(obj);
+        return applied;
+    }
+
+    private readonly HashSet<string> _destroyingScenery = new(StringComparer.Ordinal);
+
+    private enum DestroyPointFate { Proceed, Kept, Failed }
+
+    /// <summary>
+    /// ARC-SCRIPT-2501 / ARC-SCRIPT-2644 (TD2): runs the destroy point (2) of <paramref name="obj"/> as the first step of its object destroy (0x43CCA0) and says what follows: <see cref="DestroyPointFate.Proceed"/> (no point, or it answered to go on, or the point's run
+    /// destroyed the object itself), <see cref="DestroyPointFate.Kept"/> (the point answered 0), <see cref="DestroyPointFate.Failed"/> (the run did not apply: nothing is destroyed on a guess). The object's own destroy that the point raises again is left to the running one.
+    /// </summary>
+    private DestroyPointFate RunDestroyPointGate(ScrObjectRef obj, bool forBreak)
+    {
+        if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 }) return DestroyPointFate.Proceed;
+        _destroyingScenery.Add(obj.Code);
+        try
+        {
+            var ran = RunDestroyPoint(obj.Code, _lastRules ?? _session.Rules.Scripts);
+            // ARC-SCRIPT-2686: only a break's or an item's gate keeps its run for the viewer (a script's destroy has its own caller to show it); ARC-SCRIPT-2749: every run is kept in order, so two deleting steps in one pass show both.
+            if (forBreak) KeepDestroyPointRun(ran);
+            // A point run that did not apply (a nested refusal the plan could not see, a callee the set does not admit) leaves the object and fails the run: the original has no such case, so nothing is destroyed on a guess.
+            if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return DestroyPointFate.Failed;
+            if (DyingStops(ran)) return DestroyPointFate.Kept;
+        }
+        finally { _destroyingScenery.Remove(obj.Code); }
+        return DestroyPointFate.Proceed;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2644 (ledger TD2, OD7–OD11): the session's gate for the break's object destroy (<see cref="GameSessionOwner.AttachObjectDestroyGate"/>): a door, container (after its drop), trap or busted scenery of the shown map that the break is about to destroy runs its destroy point (2) first
+    /// (0x43F1C0 → 0x43CCA0, the object as the triggerer and the attachee), and the answer 0 (or a run that did not apply) keeps it. False: the object stays. An object of another map, one with no destroy point, or one whose point is already running (it destroyed itself) answers true.
+    /// </summary>
+    public bool BreakMayDestroy(SessionObjectTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.Map.RuntimeMap != _shownMap) return true;
+        var obj = new ScrObjectRef(_shownMap, target.Entity);
+        // The row's own entity id is the code the scripts and the guard use (the viewer names a container by its inventory holder id).
+        if (_content is null || Row(obj) is not { } row) return true;
+        obj = new ScrObjectRef(_shownMap, EntityId(row));
+        if (_destroyingScenery.Contains(obj.Code)) return true;
+        return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2722 (ledger TD2, OD12): the session's gate for the break's item deletion (<see cref="GameSessionOwner.AttachItemDestroyGate"/>): an item that is hit again after its first break is deleted through the object destroy
+    /// (the break's items case, ledger BS3g), which runs the item's destroy point (2) first (the item as the triggerer and the attachee). The answer 0, or a run that did not apply, keeps the item. False: the item stays. An item carried here from another map reads the row of its origin map (ARC-SCRIPT-2749); an item that has no row the host reads (held by a critter with no origin map, a made or kit item: open), one with no destroy point, or one whose point is already running (it destroyed itself) answers true. The run is kept for the viewer
+    /// (<see cref="TakeDestroyPointRuns"/>).
+    /// </summary>
+    public bool ItemMayDestroy(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var obj = new ScrObjectRef(_shownMap, entity);
+        if (_content is null) return true;
+        // ARC-SCRIPT-2749: an item carried here from another map has no row of the shown map: its row is read by identity from its origin map (as an item's use script reads it), and stands as the row of the run for the gate's length.
+        var carried = Row(obj) is null ? CarriedItemRow(obj) : null;
+        var row = carried ?? Row(obj);
+        if (row is not { Type: >= FirstItemType and <= LastItemType }) return true;
+        obj = new ScrObjectRef(_shownMap, EntityId(row));
+        if (_destroyingScenery.Contains(obj.Code)) return true;
+        var previous = _clicked;
+        if (carried is not null) _clicked = (obj.Code, carried);
+        try { return RunDestroyPointGate(obj, true) == DestroyPointFate.Proceed; }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-SCRIPT-2644: the oldest run of the destroy point a gate made and nobody took yet (its award, message and float queues belong to the viewer); null when none is waiting. <see cref="TakeDestroyPointRuns"/> takes them all.</summary>
+    public AreaScriptedUse? TakeBreakDestroyRun() => _destroyPointRuns.Count > 0 ? _destroyPointRuns.Dequeue() : null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2749 (ledger BS3g): every destroy-point run the gates made since the last take, oldest first (two deleting steps of one pass, such as an armour and a weapon wearing out under one attack, each keep their own run); the viewer shows their lines and awards.
+    /// </summary>
+    public IReadOnlyList<AreaScriptedUse> TakeDestroyPointRuns()
+    {
+        if (_destroyPointRuns.Count == 0) return [];
+        var runs = _destroyPointRuns.ToArray();
+        _destroyPointRuns.Clear();
+        return runs;
+    }
+
+    private readonly Queue<AreaScriptedUse> _destroyPointRuns = new();
+
+    // A host nobody drains (a test, a map with no viewer) keeps a bounded tail: the oldest run goes first.
+    private const int MaxPendingDestroyRuns = 64;
+
+    private void KeepDestroyPointRun(AreaScriptedUse ran)
+    {
+        while (_destroyPointRuns.Count >= MaxPendingDestroyRuns) _destroyPointRuns.Dequeue();
+        _destroyPointRuns.Enqueue(ran);
+    }
+
+
+    // ARC-SCRIPT-2501: a scenery of the shown map.
+    private bool ShownScenery(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.SceneryType };
+
+    // ARC-WORLD-2502: a container of the shown map (including a junk pile, prototype 3043).
+    private bool ShownContainer(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.ContainerType };
+
+    // ARC-WORLD-2502 (DD2): a junk pile, which the destroy's inventory step (0x4639E0) leaves alone.
+    private bool IsJunkPile(ScrObjectRef obj) => Row(obj) is { PrototypeNumber: SessionObjectFacts.JunkPilePrototypeFile };
+
+    // ARC-SCRIPT-2501: why the destroy point of a scenery cannot run (null: it has none, or the program is admitted whole by the destroy-point set).
+    private string? DestroyPointRefusal(ScrObjectRef obj)
+    {
+        if (Slot(obj, ScrPoint.Destroy) is not { Script: > 0 } own) return null;
+        if (Script(own.Script) is not { Status: ScrScriptStatus.Found, Program: { } program }) return $"destroy of {obj.Code} runs its destroy script {own.Script}, which is unreadable";
+        return ScrAdmission.Admit(program, DestroyPointAdmission).IsAdmitted ? null : $"destroy of {obj.Code} runs its destroy script {own.Script}, which the destroy-point set does not admit";
     }
 
     /// <summary>
@@ -1469,6 +2120,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
         _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
         return _session.CreateItemForHero(_session.Version, item.Kind, insertCheck);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1878 (ledger TT5; 0x4BC7B0 → 0x4617F0): a new item of the prototype <paramref name="prototype"/> in the pack of the NPC <paramref name="npc"/> (<see cref="GameSessionOwner.AddItemToNpc"/>), as a follower's expert disarm makes the device for itself,
+    /// with the same weight, script and no-drop facts as <see cref="GiveHeroPrototypeItem"/>. Null when the world has no item data for the number. <paramref name="insertCheck"/> is the check of the NPC's pack (the viewer passes its diagnostic one, which accepts any item). A pack that refuses (no room, the insert check) is the result's refusal; the original's device then stays at the NPC's feet (not modelled).
+    /// </summary>
+    public InventoryMutationResult? GiveNpcPrototypeItem(string npc, int prototype, SessionInsertCheck insertCheck)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (_world?.Item(prototype) is not { } item) return null;
+        _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
+        _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+        _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
+        return _session.AddItemToNpc(_session.Version, npc, item.Kind, insertCheck);
     }
 
     /// <summary>
@@ -1489,8 +2154,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (entity, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = Remember(rules), Admission = Admission });
+            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1526,8 +2191,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (Slot(attachee, ScrPoint.Examine) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
             if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
             if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = Remember(rules), Admission = Admission });
+            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1552,8 +2217,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (target, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee));
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = Remember(rules), Admission = Admission });
+            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee), attachee);
         }
         finally { _clicked = previous; }
     }
@@ -1570,6 +2235,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
         // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
         return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2789: whether the reading of a written item goes on after its use script's run (<see cref="RunItemUse"/>). The original has no refused run: its interpreter runs every script to an end (the dispatcher answers 0 "skip default" or 1 "run default", ledger IU rows) and the
+    /// reading (item use) goes on unless the answer is 0, so a script this host refuses (a command outside the set, a question it cannot answer, a script file it cannot read) is only a gap of the model, never the original's stop. A refused run applied nothing,
+    /// so the reading goes on without its effects (as a door's use and a bed's rest hook go on, <see cref="UseStops"/>, <see cref="AreaBedAnswer.NotModelled"/>); a run that applied goes on with run default and stops with skip default. Effects the host rejected
+    /// (<see cref="AreaScriptedUseOutcome.EffectsRejected"/>), a changed script file and a refused teleport leave the reading stopped as before: part of the run is known to have been wanted.
+    /// </summary>
+    public static bool ReadingGoesOn(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome == AreaScriptedUseOutcome.Refused || ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != ScrOutcome.SkipDefault;
     }
 
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
@@ -1589,20 +2266,25 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied. ARC-SCRIPT-1481 (IU2): with a <paramref name="target"/> entity (the PC's, or an NPC of the shown map) that object is the use's target too (the extra object: a right click and the use icon with Shift
     /// target the hero, the item cursor a critter; the food use script 30282 heals its extra object).
     /// </summary>
-    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, string? target = null)
+    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, string? target = null, ScrObjectRef? user = null)
     {
         ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        // ARC-SCRIPT-1594 (VT8): a made item or one of the starting kit owns no object row and no origin map; it is named by the shown map.
         var item = new ScrObjectRef(originMap, entity);
+        if (Row(item) is null && IsPrototypeItem(new ScrObjectRef(_shownMap, entity))) item = new ScrObjectRef(_shownMap, entity);
+        // ARC-SCRIPT-1590 (IU2): an NPC of the shown map that eats or drinks is the user, the triggerer of the script, and its own list loses the item the script destroys.
+        if (user is { } npc && !IsPc(npc) && (npc.Map != _shownMap || Row(npc) is not { Type: NpcType })) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the user is not an NPC of the shown map");
         _itemUse = item;
+        _itemUser = user is { } holder && !IsPc(holder) ? holder : null;
         try
         {
-            if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+            if (Row(item) is null && !IsPrototypeItem(item)) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, _itemUser ?? Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = Remember(rules), Admission = ItemUseAdmission });
+            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item), item);
         }
-        finally { _itemUse = null; }
+        finally { _itemUse = null; _itemUser = null; }
     }
 
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,
@@ -1643,36 +2325,47 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         // ARC-DEV-328: the original keeps one object wherever it stands (FM1), so a companion carried here runs the tile's script as any NPC does; it is named by
         // its home map, and the viewer's live cell for it (<see cref="AreaScriptWorld.CritterCell"/>) says it stands here.
-        if (triggerer is { } npc && (Row(npc) is not { Type: NpcType } || (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)))
-            return new(AreaScriptedUseOutcome.Refused, null, [], null, "the triggerer is not an NPC of the shown map");
+        _placedTriggerer = triggerer;
+        try
+        {
+        if (triggerer is { } npc)
+        {
+            var row = Row(npc);
+            // ARC-SCRIPT-2788: the refusal names the clause that failed (the row, its type, or the map the NPC stands on).
+            if (row is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} has no object row the host reads");
+            if (row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} is not an NPC (object type {row.Type})");
+            if (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)
+                return new(AreaScriptedUseOutcome.Refused, null, [], null, $"the triggerer {npc.Code} of map {npc.Map} does not stand on the shown map {_shownMap}");
+        }
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.
         var slot = PlacedSlot(placed);
-        var options = new ScrRunOptions { Rules = rules, Admission = PlacedAdmission };
+        var options = new ScrRunOptions { Rules = Remember(rules), Admission = PlacedAdmission };
         var run = placed.Trigger == MapTransitionTrigger.TileEntry
             ? ScrDispatcher.RunTile(new(slot, triggerer ?? Pc), this, options)
             : ScrDispatcher.RunSector(new(slot, Pc), this, options);
         var source = placed.Trigger == MapTransitionTrigger.TileEntry ? ScrSource.Tile : ScrSource.Sector;
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
+        }
+        finally { _placedTriggerer = null; }
     }
 
     /// <summary>
     /// ARC-WORLD-2038 (ledger TT20): why a script's teleport of an object other than the hero cannot be recorded as the NPC request (<see cref="AreaScriptWorld.RequestNpcTeleport"/>), or null: no world seam, an object that is no NPC of the shown map,
-    /// a destination on another map (FM1: only its record would move, not built) or the AI host's own refusal (a follower, a cell it does not hold). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
+    /// the AI host's own refusal (a follower, a cell it does not hold on the shown map, a map the viewer does not list; a destination on another map is ARC-WORLD-2039: only the NPC's record moves, FM1). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
     /// </summary>
     public string? NpcTeleportRefusedBecause(ScrTeleport other)
     {
         ArgumentNullException.ThrowIfNull(other);
         if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null) return $"a teleport of {other.Object.Code} is not modelled";
         if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType }) return $"a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled";
-        if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap) return $"a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled";
         return npcRefusal(other);
     }
 
     /// <summary>ARC-WORLD-2038 (TT20): records a script's teleport of an NPC in the session's one change-of-place slot (the object moves at the next ping), after <see cref="NpcTeleportRefusedBecause"/> answered null and the run applied.</summary>
     public void RequestNpcTeleport(ScrTeleport teleport) => _world!.RequestNpcTeleport!(teleport);
 
-    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write)
+    private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write, ScrObjectRef? attachee = null)
     {
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
@@ -1704,7 +2397,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Lines)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            // ARC-SCRIPT-2787 (0x44B390 → 0x416B00): @pcname@ is the triggerer (the hero) and @npcname@ the attachee of the running script.
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, attachee is { } at ? Row(at) : null)));
             if (printed.Status != ScrPrintedLineStatus.Shown) continue;
             lines.Add(printed.Text);
             printedLines.Add(new(line.Kind, printed.Text));
@@ -1715,7 +2409,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Floats)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, Row(line.Speaker) ?? (attachee is { } at2 ? Row(at2) : null))));
             if (printed.Status != ScrPrintedLineStatus.Shown) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: float line {line.Line} of script {line.Script} is not a plain line");
             floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
@@ -1728,11 +2422,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-WORLD-114: likewise a toggle state or kill the viewer cannot apply.
         if (ObjectStateRefusal(effects) is { } refusedState)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedState}");
-        // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map and not with a teleport (not modelled together); such a run
-        // applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
-        if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || effects.Teleports.Count > 0))
+        // ARC-SCRIPT-2752 (ledger SX3): likewise a use item with skill the AI host cannot start.
+        if (SkillUseRefusal(effects) is { } refusedSkill)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedSkill}");
+        // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map; such a run applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
+        // ARC-WORLD-2358 (ledger TT20): the hero's teleport of the same run is allowed (the dialog opens inside the run and ends it, the ping takes the request at the next frame), a teleport of an NPC together with the conversation
+        // is not (the speaker may be the one that moves): that pair stays refused.
+        if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || npcTeleports.Count > 0))
             return new(AreaScriptedUseOutcome.Refused, null, lines, run, $"script {run.Script}: a conversation of script {dialog.Script} with "
-                + (dialog.Npc?.Code ?? "no NPC") + (effects.Teleports.Count > 0 ? " and a teleport" : "") + " is not modelled");
+                + (dialog.Npc?.Code ?? "no NPC") + (npcTeleports.Count > 0 ? " and a teleport of an NPC" : "") + " is not modelled");
         // ARC-SCRIPT-052: a conversation with an NPC destroyed (before or by this run) is not modelled (the view no longer has him).
         if (effects.Dialog is { Npc: { } talker } && (AlreadyDestroyed(talker)
             || effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Destroy && r.Object == talker)))
@@ -1743,20 +2441,37 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
             || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
-        if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
+        // ARC-SCRIPT-2881: the lines the used-up item's remove-item script (28) printed with the deletion follow the run's own, also when a later action of the run was refused (the deletion and its 28 are committed by then).
+        var removalFrom = _removalMessages.Count;
+        var applied = Apply(effects, write);
+        var removalLines = _removalMessages.GetRange(removalFrom, _removalMessages.Count - removalFrom);
+        _removalMessages.RemoveRange(removalFrom, removalLines.Count);
+        foreach (var message in removalLines) { lines.Add(message.Text); printedLines.Add(new(message.Kind, message.Text)); }
+        if (!applied) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects") { Printed = [.. removalLines.Select(m => new AreaPrintedLine(m.Kind, m.Text))] };
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
         foreach (var requested in npcTeleports) RequestNpcTeleport(requested);
         var teleport = npcTeleports.Count > 0 ? null : effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
-            return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
-            { Dialog = talk, Printed = printedLines };
+            return teleport is null
+                ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
+                    { Dialog = talk, Printed = printedLines }
+                // ARC-WORLD-2358: the hero's teleport written before the dialog action, with the conversation the run opened (the caller queues the transfer for the next frame and opens the conversation).
+                : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y}) and conversation of script {talk.Script} node {talk.Node}")
+                    { Dialog = talk, Printed = printedLines };
         return teleport is null
             ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: " + (npcTeleports.Count > 0 ? $"{npcTeleports.Count} teleport request(s) of NPCs" : "no teleport"))
                 { Printed = printedLines, NpcTeleports = npcTeleports }
             : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})") { Printed = printedLines };
     }
+
+    // ARC-SCRIPT-2880: the lines the remove-item scripts of the destroys the run being applied makes printed join the used-up item's (ARC-SCRIPT-2881) in one list, which the run's result takes.
+    private void NoteRemovalLines(IReadOnlyList<SessionScriptMessage> lines) => _removalMessages.AddRange(lines);
+
+    private GameSessionMutationResult NotedRemoval(GameSessionMutationResult result) { NoteRemovalLines(result.Messages); return result; }
+
+    private InventoryMutationResult NotedRemoval(InventoryMutationResult result) { NoteRemovalLines(result.Messages); return result; }
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
@@ -1772,7 +2487,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-DEV-100: the global variables and the hero's variables and flags.
         if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
-        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add, BlessingEffects)) return false;
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add, BlessingEffects, AdjustNpcStat)) return false;
         // ARC-SCRIPT-1764 (NP9): the queue newspaper requests, in action order, by the rule of the original's queue (0x4BF140).
         if (!AreaScriptNewspaper.Queue(_session, effects)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later
@@ -1850,13 +2565,25 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_itemUse is { } used && used.Equals(request.Object))
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
-                    if (_session.DestroyUsedItem(_session.Version, used.Code).Disposition == GameSessionDisposition.Rejected) return false;
+                    // ARC-SCRIPT-1590: an NPC's food leaves its own list (the item destruction 0x43CCA0, as its spent food does).
+                    var removed = _itemUser is { } eater ? _session.RemoveItemFromNpc(_session.Version, eater.Code, used.Code, ItemScripts) : _session.DestroyUsedItemWithLines(_session.Version, used.Code, ItemScripts);
+                    if (removed.Disposition == GameSessionDisposition.Rejected) return false;
+                    _removalMessages.AddRange(removed.Messages);
+                    continue;
+                }
+                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map; ARC-WORLD-2502: a container of it (its destroy point first, then the destroy with the drop of its invulnerable items).
+                if (ShownScenery(request.Object) || ShownContainer(request.Object))
+                {
+                    if (!DestroyScenery(request.Object)) return false;
                     continue;
                 }
                 // TD2: an NPC already destroyed is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
-                var destroyed = _session.ApplyChanges(_session.Version, null,
-                    [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
+                // ARC-WORLD-2493 (0x43CCA0 → 0x4639E0): the NPC's invulnerable items are dropped on its cell with the destroy; an NPC with no cell of its own is destroyed with its list.
+                var destroyed = Place(request.Object) is { } cell
+                    ? NotedRemoval(_session.DestroyMapNpc(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, cell, scripts: ItemScripts))
+                    : _session.ApplyChanges(_session.Version, null,
+                        [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
                 if (destroyed.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
@@ -1910,8 +2637,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.HealPoison)
             {
-                // VT3: the PC or an NPC of the shown map; the level falls by the amount to 0 at most through the session's life step (the stat setter's timer event, ledger PZ1, PZ3).
-                if (request.Value > 0 && (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object)))
+                // VT3: the PC or an NPC of the shown map; the level falls by the amount to 0 at most through the session's life step (the stat setter's timer event, ledger PZ1, PZ3); a negative amount raises it (ARC-SCRIPT-1593).
+                if (request.Value != 0 && (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object)))
                     LastHealLife = _world!.ScriptHealLife!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, 0, request.Value);
                 continue;
             }
@@ -1994,6 +2721,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (flipped.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
+            // ARC-SCRIPT-2324 (OT8): a scenery of the shown map flips the off flag it reads now (the map data's, or an earlier toggle's record): the record keeps 1 for off and 0 for on over a data that stores it off,
+            // and is cleared when the flag is back to what the data stores, so an even number of toggles leaves no record.
+            if (ShownScenery(request.Object) && Row(request.Object) is { } toggledScenery)
+            {
+                var dataOff = ((Number(toggledScenery, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0;
+                var willBeOff = !_session.QueryObjectOff(new SessionMapId(request.Object.Map), request.Object.Code, dataOff);
+                var flipped = _session.ApplyChanges(_session.Version, null,
+                    [new(new SessionMapId(request.Object.Map), SessionItemOff.Key(request.Object.Code), willBeOff == dataOff ? null : willBeOff ? 1 : 0)]);
+                if (flipped.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
             var key = MapChangeKey.ForEntity(request.Object.Code, OffProperty);
             var toggled = _session.ApplyChanges(_session.Version, null,
                 [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
@@ -2003,6 +2741,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // runs changed, as map changes.
         foreach (var stored in effects.SlotWrites)
             if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
+        // ARC-SCRIPT-2752 (SX3): the use-item-with-skill starter of each request in order, after the run's other effects (SkillUseRefusal checked them; a slot write that fails after it leaves the goal started); the original ignores the starter's answer, so a refusal of the gate or the table goes on.
+        foreach (var use in effects.SkillUses)
+            LastSkillUse = _world!.ScriptUseItemWithSkill!(use.Source.Code, use.Item?.Code, use.Target.Code, use.Skill, use.Modifier);
         // ARC-SCRIPT-1481: the item in use that the run destroyed keeps no slot (a counter raised after the destroy would be an orphan map change).
         if (_itemUse is { } gone && _session.IsItemDestroyed(gone.Code)) return true;
         return effects.Writeback is not { } writeback || writeSlot(writeback);
@@ -2073,7 +2814,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             case ScrObjectStateChange.DestroyItemNamed:
             {
-                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value);
+                var destroyed = NotedRemoval(_session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value, ItemScripts));
                 LastNamedItem = destroyed;
                 return destroyed.Disposition != GameSessionDisposition.Rejected;
             }
@@ -2284,6 +3025,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
 
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV5): the plan of a change art number as <see cref="ArtPlan(ScrObjectRef, int)"/> makes it, for the session's item set, which applies it in its own revision; null for an object the plan refuses (a run the host cannot apply),
+    /// an empty plan (no change) for the objects the action leaves as they are.
+    /// </summary>
+    public SessionObjectArtPlan? PlanObjectArt(ScrObjectRef obj, int number)
+    {
+        var plan = ArtPlan(obj, number);
+        return plan.Refusal is not null ? null : new(new SessionMapId(obj.Map), obj.Code, plan.Art, plan.Baseline, plan.Openable?.Openable, plan.Openable?.Baseline);
+    }
+
     // ARC-SCRIPT-1826 (AN18): the map the session names as the origin of an item it moved (the hero's taken item, an item of the hero lying on the ground, an item the hero gave away), or null.
     private SessionMapId? ItemOrigin(string entity)
     {
@@ -2329,7 +3080,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
-        Row(obj) is { } row && ((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0 || Destroyed(_session, obj.Map, obj.Code);
+        Row(obj) is { } row && (((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0
+            || row.Type == Arcanum.Data.Combat.CombatFieldReader.SceneryType && !IsPc(obj) && _session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed
+            || row.Type == Arcanum.Data.Combat.CombatFieldReader.ContainerType && !IsPc(obj) && _session.QueryObjectCondition(new SessionMapId(obj.Map), obj.Code, Arcanum.Simulation.Combat.DamageableObjectKind.Container) == SessionObjectCondition.Destroyed)
+        || Destroyed(_session, obj.Map, obj.Code);
 
     // ARC-SCRIPT-052 (TD3): the NPCs a stop attacking of the object reaches (the PC's whole follower tree for the PC (0x4AA4A0, ARC-WORLD-2119)) with the world's facts for each.
     private Dictionary<string, SessionPeaceFacts> StopFacts(ScrObjectRef obj)
@@ -2366,18 +3120,41 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return true;
     }
 
+    /// <summary>The answer of the last use item with skill (79) a run applied (<see cref="AreaScriptWorld.ScriptUseItemWithSkill"/>), for the tests and the log.</summary>
+    public string? LastSkillUse { get; private set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2752 (ledger SX3, SX4; the lockpicks' and the skeleton key's use scripts carry it): a use item with skill (79) is applied for an NPC of the shown map as the source, with the pick-locks skill (14: the
+    /// check takes the modifier) on a portal of the shown map; the AI host starts the goal 40. The refusal text of any other request, which leaves the run unapplied whole: no AI host, the hero as the source (its goal runs
+    /// are the hero host's), a source that is no NPC of the shown map, another skill, a target that is no portal of the shown map (a container's lock is not wired).
+    /// </summary>
+    private string? SkillUseRefusal(ScrEffects effects)
+    {
+        foreach (var use in effects.SkillUses)
+        {
+            if (_world?.ScriptUseItemWithSkill is null) return "use item with skill needs the AI host";
+            if (IsPc(use.Source)) return "use item with skill by the hero is not modelled (the hero's goal 40 is the hero host's)";
+            if (!ShownNpc(use.Source)) return $"use item with skill by {use.Source.Code}, which is no NPC of the shown map, is not modelled";
+            if (use.Skill != Arcanum.Simulation.Ai.AiExecutorRules.PickLocksSkill) return $"use item with skill {use.Skill} is not modelled (only pick locks takes the modifier)";
+            if (use.Target.Map != _shownMap || _world.Openable?.Invoke(use.Target) is not { Art: not null }) return $"use item with skill on {use.Target.Code}, which is no portal of the shown map, is not modelled";
+        }
+        return null;
+    }
+
     // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
     // of the shown map only; a kill needs the world's kill (ARC-SCRIPT-1360: an NPC its map data has off is switched on by a toggle, see NpcOff). ARC-SCRIPT-052: destroy takes an NPC of the shown map out of the world unless it follows the PC (the party removal is not
     // read) or has a destroy-point script (the destroy event is audit slice 4); stop attacking acts on the PC or an NPC of the shown map.
-    private string? ObjectStateRefusal(ScrEffects effects)
+    private string? ObjectStateRefusal(ScrEffects effects) => ObjectStateRefusal(effects.WorldChanges, effects.ObjectStates);
+
+    private string? ObjectStateRefusal(IReadOnlyList<ScrWorldRequest> worldChanges, IReadOnlyList<ScrObjectStateRequest> objectStates)
     {
         // ARC-SCRIPT-1164 (WO5): a sector with a negative number, or an x beyond the 26 packed bits, is not kept in the session's keys.
-        foreach (var change in effects.WorldChanges)
+        foreach (var change in worldChanges)
             if (change.Change == ScrWorldChange.SectorBlocked && SessionSectorBlock.Pack(change.A, change.B) is null)
                 return $"toggle sector blocked of ({change.A},{change.B}) is not modelled (a negative sector or an x beyond 26 bits)";
         // ARC-SCRIPT-1279: the (holder, name) pairs earlier item actions of the run touched: each plan below is read against the state before the run, so an action that meets a pair an earlier one changed would be planned on a stale list.
         var touched = new HashSet<(string? Holder, int Name)>();
-        foreach (var request in effects.ObjectStates)
+        foreach (var request in objectStates)
         {
             if (request.Change == ScrObjectStateChange.StopAttacking)
             {
@@ -2392,13 +3169,26 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_itemUse is { } used && used.Equals(request.Object))
                 {
                     if (_session.IsItemDestroyed(used.Code)) continue;
-                    if (_session.UsedItemDestructionRefusal(used.Code) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
+                    if ((_itemUser is { } eater ? _session.NpcItemRemovalRefusal(eater.Code, used.Code, ItemScripts) : _session.UsedItemDestructionRefusal(used.Code, ItemScripts)) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
+                    continue;
+                }
+                // ARC-SCRIPT-2501 (BS3): a scenery of the shown map is destroyed by DestroyScenery, its destroy point run first; ARC-WORLD-2502: so is a container, whose invulnerable items the session's budgets may refuse to lay down.
+                if (ShownScenery(request.Object) || ShownContainer(request.Object))
+                {
+                    if (AlreadyDestroyed(request.Object)) continue;
+                    if (DestroyPointRefusal(request.Object) is { } pointWhy) return pointWhy;
+                    if (ShownContainer(request.Object) && Place(request.Object) is { } containerCell
+                        && _session.DestroyMapContainerRefusal(new SessionMapId(request.Object.Map), request.Object.Code, containerCell, IsJunkPile(request.Object), ItemScripts) is { } containerWhy)
+                        return $"destroy of {request.Object.Code} is refused by the session ({containerWhy})";
                     continue;
                 }
                 if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc)
-                    return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
+                    return $"destroy of {request.Object.Code} is not modelled (only an NPC, a scenery or a container of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
+                // ARC-WORLD-2493: the destroy drops the NPC's invulnerable items (0x4639E0), which the session's budgets may refuse; checked before any effect applies.
+                if (Place(request.Object) is { } dropCell && _session.DestroyMapNpcRefusal(new SessionMapId(request.Object.Map), request.Object.Code, dropCell, ItemScripts) is { } dropWhy)
+                    return $"destroy of {request.Object.Code} is refused by the session ({dropWhy})";
                 if (FollowsPc(request.Object)) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
                 // ARC-SCRIPT-1842: the map change does not reach the session's destroy (which unlinks, 0x45E180), so a leader or follower of an NPC is left as it is.
                 if (_session.QueryLeader(request.Object.Code) is not null || _session.QueryFollowers(request.Object.Code).Count > 0)
@@ -2472,9 +3262,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.HealPoison)
             {
-                // VT3: a negative amount raises the level in the original (the level minus the amount); that is not modelled.
+                // VT3: a negative amount raises the level (the level minus the amount, ARC-SCRIPT-1593): the life step is asked with the negative amount.
                 if (_world?.ScriptHealLife is null) return "heal poison needs the session's life step";
-                if (request.Value < 0) return "heal poison of a negative amount raises the poison level, which is not modelled";
                 continue;
             }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
@@ -2558,7 +3347,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value, ItemScripts);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }
@@ -2569,6 +3358,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
+            // ARC-SCRIPT-2324 (OT8): a toggle state of a scenery of the shown map flips its off flag (the view reads it as gone); a destroyed or respawning-off scenery is out of the vicinity lists, so only an object named directly can reach here.
+            if (request.Change == ScrObjectStateChange.ToggleOff && ShownScenery(request.Object)) continue;
             if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
             if (request.Change == ScrObjectStateChange.Kill && (_world?.Kill is null || _world.CanKill?.Invoke(request.Object) == false))
@@ -2606,26 +3397,179 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Row(near) is { Type: 15 or 16 } ? DropOwner.Npc : DropOwner.Object;
     }
 
-    private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
+    /// <summary>ARC-SCRIPT-2198: the first reason the dialog host cannot apply the state requests of a talk run through this host, or null. A talk run holds disband (22) and create item (66) of the shown map's objects (the same plan as a use run's:
+    /// the party, the item prototype and the holder's list), and the slots of other objects its change script (99) and call-ex callees wrote (<see cref="CanWriteObjectSlot"/>). ARC-SCRIPT-2440: and one transform of a placed NPC (40,
+    /// <see cref="TransformRefusal"/>); any other transform is refused whole.</summary>
+    internal string? TalkStateRefusal(ScrEffects effects)
     {
-        if (writeback.Source != ScrSource.Object || !KeptAsMapChanges(writeback.Point) || writeback.Attachee != attachee
-            || Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, writeback.Point) is not { } loaded) return false;
+        var transforms = effects.ObjectStates.Where(request => request.Change == ScrObjectStateChange.Transform).ToArray();
+        if (transforms.Length > 1) return "a second transform in one run is not modelled";
+        foreach (var request in transforms)
+            if (TransformRefusal(request) is { } refusal) return refusal;
+        foreach (var write in effects.SlotWrites)
+            if (!CanWriteObjectSlot(write)) return $"the slot of point {write.Point} of {write.Attachee?.Code} cannot be stored (no loaded element on the shown map)";
+        var planned = effects.ObjectStates.Where(request => request.Change == ScrObjectStateChange.CreateItem).ToArray();
+        return planned.Length == 0 ? null : ObjectStateRefusal([], planned);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2440, ARC-SCRIPT-2506 (ledger TI5, TI5b, exe read 2026-11-17, F1–F12): why a transform (40) of <paramref name="request"/>'s object into critter prototype <see cref="ScrObjectStateRequest.Value"/> cannot be applied here, or null.
+    /// Modelled: a placed NPC of the shown map (no created critter, not already destroyed) becomes a created critter of the prototype's file (the script's number + 20, F1) on its tile in the session; it starts from its prototype alone (F2; its inventory
+    /// is the host's restock of a created critter, F4) and carries the old NPC's hit-point and fatigue percentages (F2, F3: <see cref="TransformDamage"/>, through <see cref="AreaScriptWorld.CarryVitals"/> when either is below 100); the old NPC's destroy
+    /// script (point 2) runs first and a refusal of it keeps the old NPC while the made critter stands (F6); then the old NPC is destroyed as a script destroy does (the map change, its invulnerable items dropped on its tile, F4), a follower of the PC
+    /// leaves the party and an NPC's leader and followers are unlinked (F5). The old art's rotation goes to the made critter as its recorded place (ARC-SCRIPT-2519, <see cref="AreaScriptWorld.NpcFacing"/>). The AI focus, enemy list, combat entries and items left in the destroyed holder need no code (ledger TI5c: the original leaves the handle in place and its readers refuse a destroyed object, as ours do).
+    /// </summary>
+    internal string? TransformRefusal(ScrObjectStateRequest request)
+    {
+        var obj = request.Object;
+        string Not(string why) => $"transform of {obj.Code} into prototype {request.Value} is not modelled ({why})";
+        if (ScrTransformedObject.Is(obj)) return Not("the object a transform made");
+        if (IsPc(obj) || obj.Map != _shownMap || Row(obj) is not { Type: NpcType }) return Not("only an NPC of the shown map");
+        if (_session.QueryCreatedObject(obj.Code) is not null) return Not("a created critter");
+        if (AlreadyDestroyed(obj)) return Not("the NPC is destroyed already");
+        if (DestroyPointRefusal(obj) is { } scriptWhy) return Not(scriptWhy);
+        if (_world?.Critter is not { } critter || !critter(request.Value)) return Not("no critter prototype the session can create");
+        if (Place(obj) is not { } cell) return Not("it has no tile");
+        if (_world.Vitals?.Invoke(obj.Code) is not { } vitals) return Not("its hit points and fatigue are unknown: the shares cannot be carried");
+        if (vitals.MaxHitPoints <= 0 || vitals.MaxFatigue <= 0) return Not("a maximum of 0: the original divides by it without a guard (0x4AB400)");
+        if (TransformPercents(vitals) is not (100, 100) && _world.CarryVitals is null) return Not("its hit points or fatigue are below full and the viewer's life cannot carry the shares");
+        if (_session.DestroyMapNpcRefusal(new SessionMapId(_shownMap), obj.Code, cell, ItemScripts) is { } dropWhy) return Not($"the session would refuse the destroy's drops ({dropWhy})");
+        if (_session.QueryCreateObjectRefusal(SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell) is { } why) return Not($"the session would refuse it ({why})");
+        return null;
+    }
+
+    // ARC-SCRIPT-2506 (F2): the hit-point and fatigue percentages of the old NPC, current × 100 / maximum truncated (0x4AB400, 0x4AB430), each capped at 100 (a higher one carries no damage).
+    private static (int HitPoints, int Fatigue) TransformPercents(AreaScriptVitals vitals) =>
+        ((int)Math.Min(100, vitals.HitPoints * 100L / vitals.MaxHitPoints), (int)Math.Min(100, vitals.Fatigue * 100L / vitals.MaxFatigue));
+
+    /// <summary>
+    /// ARC-SCRIPT-2506 (ledger TI5, F3, 0x43D530): the damage a transform sets on the new critter so it holds the old one's percentages: <c>(100 - percent) * maximum / 100</c> for hit points, at most maximum - 1 (the new critter never starts dead), and for fatigue the
+    /// same without that clamp (a fatigue share can leave the new critter out cold). A percentage of 100 or more carries no damage (a negative damage is not stored).
+    /// </summary>
+    public static (int HitPoints, int Fatigue) TransformDamage(int hitPointPercent, int maxHitPoints, int fatiguePercent, int maxFatigue) =>
+        ((int)Math.Clamp((100L - hitPointPercent) * maxHitPoints / 100, 0, Math.Max(0, maxHitPoints - 1)),
+         (int)Math.Clamp((100L - fatiguePercent) * maxFatigue / 100, 0, Arcanum.Simulation.Combat.LifeLimits.MaxAmount));
+
+    /// <summary>ARC-SCRIPT-2440 (ledger TI5): the critter the last <see cref="ApplyTalkTransform"/> made (test and smoke seam; null before any).</summary>
+    public SessionCreatedObject? LastTransformed { get; private set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2440, ARC-SCRIPT-2506 (ledger TI5; <see cref="TransformRefusal"/> planned it): the transform of a placed NPC, in the original's order: the new critter of the prototype's file is created on the old one's tile (a failure ends the action, nothing
+    /// else happens) and told to the host (<see cref="AreaScriptWorld.CritterMade"/>), it takes the old NPC's percentages, the old NPC's destroy script runs (a refusal keeps the old NPC and the made critter stands, F6), then the old NPC is destroyed (its leader
+    /// links and, for a follower of the PC, its place in the party go; the invulnerable items drop on its tile). Returns the made object, or null when something refused: the made critter then goes again, so a refusal never leaves two of them.
+    /// </summary>
+    internal ScrObjectRef? ApplyTalkTransform(ScrObjectStateRequest request)
+    {
+        LastTransformed = null;
+        var old = request.Object;
+        var cell = Place(old)!.Value;
+        // The plan's vitals may have moved since (an earlier request of the run): read again, refuse on any that cannot carry.
+        if (_world?.Vitals?.Invoke(old.Code) is not { MaxHitPoints: > 0, MaxFatigue: > 0 } oldVitals) return null;
+        var percents = TransformPercents(oldVitals);
+        var made = _session.CreateObject(_session.Version, SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell);
+        if (made.Object is not { } critter) return null;
+        LastTransformed = critter;
+        _world.CritterMade?.Invoke(critter.Entity);
+        // ARC-SCRIPT-2519 (TI5c, F2, 0x502880 and 0x502930): the made critter takes the old object's art rotation, read now while the old NPC stands. Steamwoven keeps a critter's facing as its recorded place (npc.pos: the AI host
+        // stands a created critter there when it hosts it and a save keeps it), written once nothing can take the critter away again. A follower of the PC has no mover facing of its own in the AI host (its body is the companion's): not carried.
+        var facing = FollowsPc(old) ? null : _world.NpcFacing?.Invoke(old.Code);
+        void CarryFacing() { if (facing is { } turned) _session.RecordNpcPlace(_session.Version, new SessionMapId(_shownMap), critter.Entity, cell, turned); }
+        // The old NPC stays on any refusal below: the made critter goes again (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
+        ScrObjectRef? Undo()
+        {
+            _session.DestroyCreatedObject(_session.Version, critter.Entity, scripts: ItemScripts);
+            LastTransformed = null;
+            return null;
+        }
+        // The earlier requests and the creation may have used the session's budgets since the plan: asked again before anything else applies.
+        if (_session.DestroyMapNpcRefusal(new SessionMapId(old.Map), old.Code, cell, ItemScripts) is not null) return Undo();
+        if (percents is not (100, 100) && _world.CarryVitals?.Invoke(critter.Entity, percents.HitPoints, percents.Fatigue) != true) return Undo();
+        // F6: the old object's destroy script runs first; a return of 0 keeps it (the creation stands either way), a run that could not apply leaves everything as it was.
+        if (Slot(old, ScrPoint.Destroy) is { Script: > 0 })
+        {
+            var ran = RunDestroyPoint(old.Code, _lastRules ?? _session.Rules.Scripts);
+            if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return Undo();
+            if (DyingStops(ran)) { CarryFacing(); return new ScrObjectRef(_shownMap, critter.Entity); }
+        }
+        // F5: a follower of the PC leaves the party (the same forced leave as a disband, NS1); an NPC's leader and followers are unlinked by the session's destroy.
+        if (FollowsPc(old))
+        {
+            var left = _session.LeaveParty(_session.Version, old.Code, new PartyLeave(Force: true));
+            if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
+        }
+        // ARC-SCRIPT-2880: the lines the removal scripts of the dropped items print have no run to join here (the talk host shows none of a transform's), so they are not kept.
+        var removalMark = _removalMessages.Count;
+        var destroyed = NotedRemoval(_session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true, scripts: ItemScripts));
+        _removalMessages.RemoveRange(removalMark, _removalMessages.Count - removalMark);
+        if (destroyed.Disposition == GameSessionDisposition.Rejected) return Undo();
+        CarryFacing();
+        return new ScrObjectRef(_shownMap, critter.Entity);
+    }
+
+    /// <summary>ARC-SCRIPT-2198: one disband or create item request of a talk run, in action order (<see cref="TalkStateRefusal"/> planned it); false when the session refuses. Any other request is not this host's and does nothing.</summary>
+    internal bool ApplyTalkObjectState(ScrObjectStateRequest request)
+    {
+        if (request.Change == ScrObjectStateChange.CreateItem) return ApplyWorldObject(request);
+        if (request.Change != ScrObjectStateChange.Disband || IsPc(request.Object)) return true;
+        // NS1: as a use run's disband: the session's leave with the follow check skipped; one that follows no one does nothing.
+        var left = _session.LeaveParty(_session.Version, request.Object.Code, new PartyLeave(Force: true));
+        return left.Disposition != GameSessionDisposition.Rejected || left.Failure == GameSessionFailure.InvalidCompanion;
+    }
+
+    /// <summary>ARC-SCRIPT-2198: whether <see cref="WriteObjectSlot(ScrWriteback)"/> can store the slot (an object of the shown map with the loaded element at a point kept as map changes), a pure lookup.</summary>
+    internal bool CanWriteObjectSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Attachee: { } attachee } && KeptAsMapChanges(writeback.Point)
+        && (IsPrototypeItem(attachee) || Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, writeback.Point) is not null);
+
+    /// <summary>ARC-SCRIPT-2198: stores the slot of another object a talk run wrote (change script, a call-ex callee's result) as map changes, as a use run does.</summary>
+    internal bool WriteObjectSlot(ScrWriteback writeback) => CanWriteObjectSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
+
+    /// <summary>ARC-WORLD-2382: whether <see cref="WriteUseSlot"/> can store the run's slot (a use slot of an object of the shown map that has the loaded element), a pure lookup the talk host asks before anything applies.</summary>
+    internal bool CanWriteUseSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Point: ScrPoint.Use, Attachee: { } attachee }
+        && Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, ScrPoint.Use) is not null;
+
+    /// <summary>ARC-WORLD-2382 (point 1, 0x447282): the use-slot write a deferred call's dialog action makes (the speaker's local flags and counters), as map changes of the shown map's object, as a tile run's writes are.</summary>
+    internal bool WriteUseSlot(ScrWriteback writeback) => CanWriteUseSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
+
+    private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee) =>
+        writeback.Attachee == attachee && IsPrototypeItem(attachee) ? WritePrototypeItemSlot(writeback, attachee)
+        : writeback.Attachee == attachee && ObjectSlotEdits(writeback) is { } edits && _session.ApplyChanges(_session.Version, null, edits).Disposition != GameSessionDisposition.Rejected;
+
+    // ARC-SCRIPT-1594 (VT8): the slot a run left on a made or kit item is the session's (the item owns no row, so no map change keeps it); an item the run destroyed keeps none.
+    private bool WritePrototypeItemSlot(ScrWriteback writeback, ScrObjectRef item) =>
+        !KeptAsMapChanges(writeback.Point) ? false
+        : _session.IsItemDestroyed(item.Code) ? true
+        : _session.StoreItemScriptSlot(_session.Version, new(item.Code, writeback.Point, writeback.Slot.Script, writeback.Slot.LocalFlags, writeback.Slot.Counters)).Disposition != GameSessionDisposition.Rejected;
+
+    // The map changes that keep a slot write of an object: the loaded element's three parts, each cleared where it is back at its loaded value (ARC-DEV-096: where the object's record sits, which may be another map than the attachee's). Null for a write the
+    // host does not keep (no row, a point outside the kept ones, no loaded element).
+    private MapChangeEdit[]? ObjectSlotEdits(ScrWriteback writeback)
+    {
+        if (writeback.Source != ScrSource.Object || writeback.Attachee is not { } attachee || !KeptAsMapChanges(writeback.Point)
+            || Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, writeback.Point) is not { } loaded) return null;
         var map = new SessionMapId(attachee.Map);
-        // ARC-DEV-096: a part back at its loaded value is cleared where the object's record sits, which may be another map than the attachee's.
         MapChangeEdit Edit(string property, long value, long baseline)
         {
             var key = MapChangeKey.ForEntity(attachee.Code, property);
             return value == baseline ? new(_session.QueryObjectRecordMap(key) ?? map, key, null) : new(map, key, value);
         }
         var point = writeback.Point;
-        var result = _session.ApplyChanges(_session.Version, null,
+        return
         [
             Edit(SlotProperty(point, ScriptPart), writeback.Slot.Script, loaded.Script),
             Edit(SlotProperty(point, LocalFlagsPart), writeback.Slot.LocalFlags, loaded.LocalFlags),
             Edit(SlotProperty(point, CountersPart), writeback.Slot.Counters, loaded.Counters),
-        ]);
-        return result.Disposition != GameSessionDisposition.Rejected;
+        ];
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2432 (IV40): the map changes of a change script (99) of a critter of the shown map, for the session's item set, which applies them in its own revision: the same edits a use run writes (<see cref="WriteObjectSlot"/>); null for any
+    /// other object (a scenery, a container, an item, the hero) and for a critter with no loaded element at the point.
+    /// </summary>
+    public IReadOnlyList<MapChangeEdit>? PlanCritterSlot(ScrWriteback writeback) =>
+        writeback.Attachee is { } attachee && Row(attachee) is { Type: NpcType } ? ObjectSlotEdits(writeback) : null;
+
+    /// <summary>ARC-SCRIPT-2432 (IV40): whether the object is a critter the host holds a row for (its attachment slots are kept as map changes, <see cref="Slot"/>).</summary>
+    public bool IsCritterRow(ScrObjectRef obj) => Row(obj) is { Type: NpcType };
 
     private bool WritePlacedSlot(ScrWriteback writeback, MapPlacedScript placed, ScrSource source)
     {

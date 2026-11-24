@@ -259,6 +259,40 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-COMBAT-2873 (0x45DA20 calls 0x45DC90 with flag 1 right after the experience award): the killer's PC leader, the hero, moves its stored alignment toward the dead NPC's (<see cref="Simulation.Skills.PickPocketRules.AlignmentAfterKill"/>:
+    /// the victim's alignment as the kill log reads it, the hero's stored one for both sides as the theft's step does), the followers armed as for any alignment change, in a revision of its own. A victim the hero summoned
+    /// (the step's one early exit: the spell flag 0x4000 held by a run the hero cast, 0x459040) changes nothing, and neither does a session without a hero. The caller tests the kill, the dying script's veto and the PC leader.
+    /// Returns the failure of a refused write (none otherwise).
+    /// </summary>
+    internal GameSessionFailure RunKillAlignment(SessionCritterCombat victim)
+    {
+        if (_hero is not { } hero) return GameSessionFailure.None;
+        if (_inventory.Objects.CreatedObject(victim.Entity) is { Summoner: SessionEventKinds.PlayerEntity } made && (made.SpellFlags & SessionCreatedObject.SummonedFlag) != 0) return GameSessionFailure.None;
+        var alignment = hero.State.Alignment;
+        if (Simulation.Skills.PickPocketRules.AlignmentAfterKill(victim.KillFacts.Alignment, alignment, alignment) is not { } next) return GameSessionFailure.None;
+        var changed = ChangeHeroAlignment(Version, next);
+        return changed.Disposition == GameSessionDisposition.Rejected ? changed.Failure : GameSessionFailure.None;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2859 (0x45DA20, the loop after the award, the alignment step and the kill log): the leader-killing script (point 20) of each direct follower of the hero, for an NPC that died with a PC leader behind its killer
+    /// (the hero, or a critter the hero leads: the same test as the kill award). The followers are taken first and asked in array order, as the original copies the list before it runs the scripts; the answers are ignored. A host that
+    /// throws ends the loop (the death is committed). Without a host nothing runs.
+    /// </summary>
+    internal void RunLeaderKilling(string victim)
+    {
+        if (LeaderKillingScript is not { } script) return;
+        var map = _actor.Map.RuntimeMap;
+        // The original's array holds the living only (a follower that died earlier left it in its own kill step, 0x45DFC0); the session keeps a dead follower in its party order, so one with a death time is left out. The victim itself
+        // is still in the array when the loop runs (its party leave follows), so it is asked too.
+        foreach (var follower in FollowersOf(SessionEventKinds.PlayerEntity).Where(entity => entity == victim || !(_life.Critters.TryGetValue(entity, out var record) && record.DeathTimeMs is not null)).ToArray())
+        {
+            try { script(new(victim, map, follower)); }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { return; }
+        }
+    }
+
+    /// <summary>
     /// ARC-DEV-295 (B39): the experience steps of one damage step that did not come from a weapon swing or shot, such as a spell's or a
     /// PC-placed trap's. In the original they sit inside the damage function (0x4B4390, XP10) and its death notification (0x45DA20, XP9),
     /// so every damage step with a source object (the packet's +0x30: a spell run's other object, else its parent, DH1) pays them, whoever
@@ -274,7 +308,20 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(victim);
         ArgumentNullException.ThrowIfNull(outcome);
-        if (source is null || _experience.Rules is null) return new(null, null, GameSessionFailure.None);
+        if (source is null) return new(null, null, GameSessionFailure.None);
+        // ARC-SCRIPT-2859: the kill step's leader-killing loop follows the award (and runs without experience data, which only leaves the award out).
+        bool LeaderKills() => outcome.Events.HasFlag(LifeEvents.Died) && !deathStopped && (source.IsHero || PcLeads(source.Entity!));
+        if (_experience.Rules is null)
+        {
+            // ARC-COMBAT-2873: the alignment step (0x45DC90) between the award and the loop; a refused alignment write ends the step as a refused kill award does.
+            if (LeaderKills())
+            {
+                var failure = RunKillAlignment(victim);
+                if (failure != GameSessionFailure.None) return new(null, null, failure);
+                RunLeaderKilling(victim.Entity);
+            }
+            return new(null, null, GameSessionFailure.None);
+        }
         SessionExperienceAward? hitAward = null, killAward = null;
         // ARC-DEV-302: a stone the spells wrote counts as the data's.
         if (outcome.HitPointDamage > 0 && !WithWrittenHolds(victim.Entity, victim.Facts).Traits.HasFlag(LifeTraits.Stoned))
@@ -290,6 +337,12 @@ public sealed partial class GameSessionOwner
             var kill = RecordNpcKill(Version, victim.Experience, creditsHero: source.IsHero || PcLeads(source.Entity!));
             killAward = kill.Award;
             if (kill.Disposition == GameSessionDisposition.Rejected) return new(hitAward, killAward, kill.Failure);
+            if (LeaderKills())
+            {
+                var failure = RunKillAlignment(victim);
+                if (failure != GameSessionFailure.None) return new(hitAward, killAward, failure);
+                RunLeaderKilling(victim.Entity);
+            }
         }
         return new(hitAward, killAward, GameSessionFailure.None);
     }
@@ -298,23 +351,31 @@ public sealed partial class GameSessionOwner
     /// The hero after an award, or null when the source gives nothing: a zero amount (before any change) or a dead hero
     /// (after the difficulty, as in the source). Needs a hero and experience data.
     /// </summary>
-    internal HeroAward? Give(long amount)
+    internal HeroAward? Give(long amount) => Gain(amount, _effects.Maximum(EffectSpecial.XpGain, HeroInnateRules())) is { } gain ? GiveGain(gain) : null;
+
+    /// <summary>ARC-SCRIPT-2410: the experience an award of <paramref name="amount"/> gives under the hero's experience gain <paramref name="modifiers"/> (the difficulty first, as the award of <see cref="AwardHeroExperience"/> does), or null when the source gives nothing: a zero amount or a dead hero.</summary>
+    internal int? Gain(long amount, IReadOnlyList<EffectModifier> modifiers)
     {
         if (amount == 0) return null;
-        var hero = _hero!.State;
         var adjusted = Simulation.Character.ExperienceRules.AdjustForDifficulty(amount, _difficulty);
         var life = _life.Hero!.Value.State;
         if (LifeRules.Evaluate(life, HeroLifeFacts(life)).IsDead) return null;
-        var gain = EffectModifiers.Apply(adjusted, _effects.Maximum(EffectSpecial.XpGain, HeroInnateRules()));
+        return EffectModifiers.Apply(adjusted, modifiers);
+    }
+
+    /// <summary>ARC-SCRIPT-2410: the hero after an award whose experience <paramref name="gain"/> is already computed (<see cref="Gain"/>), over the hero as it is now or over <paramref name="from"/> (a move that gives several awards plans each over the hero as the one before left it).</summary>
+    internal HeroAward GiveGain(int gain, SessionHeroState? from = null)
+    {
+        var hero = from ?? _hero!.State;
         var experience = (int)Math.Clamp(hero.Experience + (long)gain, SessionHeroLimits.MinExperience, SessionHeroLimits.MaxExperience);
-        return RecalculateHero(experience, gain);
+        return RecalculateHero(experience, gain, from);
     }
 
     /// <summary>The hero's level recalculation over a stored <paramref name="experience"/>: the hero after it and what it gave, <paramref name="award"/> being the amount the award reports.</summary>
     /// <remarks>The recalculation 0x4A69C0 (ledger XP5): the award (0x45F110) and the stat setter's experience case (ARC-MAGIC-1628) both end here. Needs a hero and experience data.</remarks>
-    internal HeroAward RecalculateHero(int experience, int award)
+    internal HeroAward RecalculateHero(int experience, int award, SessionHeroState? from = null)
     {
-        var hero = _hero!.State;
+        var hero = from ?? _hero!.State;
         var life = _life.Hero!.Value.State;
         // The hero's scheme spends each level's points as the level is written (ARC-WORLD-036), over a running copy of its sheet.
         var sheet = AdvancementDomain.HeroSheet(hero);
@@ -325,7 +386,7 @@ public sealed partial class GameSessionOwner
         Func<int, int, int>? spend = null;
         if (_advancement.Rules is { } rules && rules.Scheme(schemeNumber) is { } scheme)
         {
-            var modifiers = AdvancementDomain.HeroModifiers(_hero, _effects, life.PoisonLevel, HeroInnateRules());
+            var modifiers = AdvancementDomain.HeroModifiers(_hero!, _effects, life.PoisonLevel, HeroInnateRules());
             spend = (level, unspent) =>
             {
                 var outcome = AutoLevelRules.Apply(sheet with { Level = level, UnspentPoints = unspent }, modifiers, scheme, null, npc: false,

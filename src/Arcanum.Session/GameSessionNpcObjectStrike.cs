@@ -25,6 +25,8 @@ public sealed record SessionNpcObjectAttack(SessionCritterCombat Attacker)
     public Func<bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483: as <see cref="SessionNpcAttack.HitScripts"/>, for a hit on an object.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828: as <see cref="SessionAttack.ArmourScripts"/>, for the NPC's own critical self-hit (the only damage step an NPC's strike on an object has).</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
 }
 
 public sealed partial class GameSessionOwner
@@ -89,6 +91,9 @@ public sealed partial class GameSessionOwner
         if (!ValidWear(attackerSide, objectSide, targetBroken: false, wear: null)) return RejectObject(GameSessionFailure.InvalidWear);
         var attackerStatus = LifeRules.Evaluate(attackerRecord.State, attackerFacts!);
         SessionNpcAttackValues values;
+        // ARC-COMBAT-2693: a grenade's stray strike is the grenade's: the NPC's wielded weapon takes no wear from it.
+        if (arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)
+            attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes; a shot in flight carries its own.
         if (arrow is not null) values = arrow.Values;
         else
@@ -172,16 +177,21 @@ public sealed partial class GameSessionOwner
             flying = shots;
         }
         // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step; a shot that flies asks at its strike.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && !flies && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
-            attack.HitScripts?.Invoke(new(arrow?.WeaponItem ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, resolution.Outcome == AttackOutcome.CriticalHit, arrow is not null));
-        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (before the invulnerable gate); a wall has none.
-        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
+        // ARC-COMBAT-2538 (RH5): a wall's hit offers them too (the weapon's scripts with the wall as the extra object), as the hero's does (ARC-COMBAT-1973).
+        // ARC-SCRIPT-2841 (TQ31): a critical miss's self-hit asks them too, but only where the attack is resolved at once (a flying shot runs no hit step on the self-hit).
+        if (attack.HitScripts is { } hitScripts && HitScriptEventOf(resolution, !flies, !flies,
+                new(arrow?.WeaponItem ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, false, arrow is not null, Generic: arrow?.Values.Weapon.Kind == WeaponKind.ThrownItem)) is { } hitEvent)
+            hitScripts(hitEvent);
+        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (before the invulnerable gate); ARC-COMBAT-2538 (RH5): so is a wall's (point 23 comes before the damage step leaves for a wall), and the answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(Disposition(changed), GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = spentAmmo, Shots = flying };
 
         if (damage.Recipient == DamageRecipient.Attacker)
         {
             // A critical self-hit: the NPC takes the damage and its own armour and weapon the wear (as ARC-WORLD-092's attack on a critter does); it has no killer.
+            // ARC-SCRIPT-2828 (0x4B47F8): the NPC's worn armour runs its critical-hit script on a critical self-hit, before the hit points are written.
+            NotifyArmourCritical(attack.ArmourScripts, resolution, attack.AttackerWorn, QueryLife(attacker.Target).View?.Status);
             var applied = ApplyDamage(Version, attacker.Target, LifeDamage.FromAttack(resolution)!);
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version) { Ammunition = spentAmmo, Shots = flying };
@@ -201,11 +211,11 @@ public sealed partial class GameSessionOwner
         var amount = Math.Clamp(damage.HitPointDamage, 0, ItemDurabilityLimits.MaxDamageStep);
         var state = ObjectState(struck);
         var hit = ObjectDamageRules.Hit(Facts(struck.Baseline, state.Condition), state.Damage, amount);
-        var write = ObjectWrite(struck, hit);
+        var write = ObjectWrite(struck, hit, out var kept);
         if (write.Disposition == GameSessionDisposition.Rejected)
             return new(Disposition(changed), GameSessionFailure.None, resolution, hit, null, null, null, SessionObjectHostSteps.None, write.Failure, Version) { Ammunition = spentAmmo, Shots = flying };
         // ARC-AI-2084: the witness steps stay: 0x4AEE50 hears only a PC or a PC-led NPC's damage, which the host's rule decides (the AI host's GuardWitnesses leaves any other attacker out).
-        var host = HostSteps(struck.Baseline, hit);
+        var host = HostSteps(struck.Baseline, hit, kept);
         var wear = resolution.Wear is { Any: true }
             ? WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = attackerSide, Target = objectSide, TargetBroken = hit.Broken })
             : null;

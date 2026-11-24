@@ -1,0 +1,24 @@
+{
+  "note": "Cut-outs of the material sheet (SWI-GEN-2, cutouts.py): rectangles [x0, y0, x1, y1] of the 800 x 600 layout on the tone-fitted context image named by 'source' (any pixel size: the rectangle is scaled by width / 800); a cut-out smaller than 120 layout units on a side also gets a context crop (`<id>.context.png`, at least 240 x 180 layout units around it) for later Codex references. 'tiles': the wood tile is made only as input for the strip method study (#2457); paper and parchment are parts of the window backgrounds and are made whole by the window geometry, not tiled (owner decision 2026-11-20); a parchment tile, if ever needed, has no grid (the grid is a separate layer).",
+  "items": [
+    {"id": "wood-panel", "source": "ctx-inventory", "rect": [730, 265, 790, 322], "material": "wood", "note": "panel wood, canonical source (inventory)"},
+    {"id": "dark-well", "source": "ctx-inventory", "rect": [215, 512, 585, 580], "material": "black", "note": "matte black of the message window"},
+    {"id": "desk-wood", "source": "ctx-reading", "rect": [5, 175, 125, 440], "material": "wood", "note": "finer desk wood of the reading window"},
+    {"id": "page-paper", "source": "ctx-logbook", "rect": [230, 110, 420, 370], "material": "paper", "note": "page paper of the logbook"},
+    {"id": "parchment", "source": "ctx-schematic", "rect": [250, 190, 560, 400], "material": "parchment", "note": "with the printed grid (the schematic has no parchment without it; the grid is a separate layer of the kit)"},
+    {"id": "black-grid", "source": "ctx-inventory", "rect": [385, 90, 675, 420], "material": "black", "note": "black field with the faint blue grid"},
+    {"id": "cloth-cover", "source": "ctx-logbook", "rect": [171, 140, 181, 360], "material": "cloth", "note": "red cloth cover edge of the logbook"},
+    {"id": "brass-ring-lens", "source": "ctx-logbook", "rect": [12, 55, 125, 168], "material": "brass", "note": "brass ring of the portrait lens with its glass"},
+    {"id": "brass-edge", "source": "ctx-hud", "rect": [225, 492, 575, 499], "material": "brass", "note": "brass trim edge of the message window"},
+    {"id": "rivet", "source": "ctx-character", "rect": [503, 103, 518, 118], "material": "iron", "note": "rivet at the corner of the iron panel"},
+    {"id": "vial-red", "source": "ctx-hud", "rect": [14, 462, 42, 555], "material": "glass", "note": "red vial with its liquid and brass cap"},
+    {"id": "iron", "source": "ctx-character", "rect": [510, 103, 730, 119], "material": "iron", "note": "iron plate of the character sheet panel"},
+    {"id": "strip-wood", "source": "ctx-hud", "rect": [642, 546, 684, 596], "material": "wood", "note": "main interface wood of the bottom strip, from the gap between the sync and gear buttons and below the sync button"},
+    {"id": "round-button-key", "source": "ctx-hud", "rect": [688, 451, 738, 499], "material": "brass", "note": "round brass button plate with its rim (key button of the bottom strip). Sample of the rim and the dome of the plate only: the symbol on it carries the original's dithering and is not a sample of symbols; symbols are separate parts, redrawn clean (owner note 2026-11-20)."},
+    {"id": "round-button-gear", "source": "ctx-hud", "rect": [688, 536, 738, 584], "material": "brass", "note": "round brass button plate with its rim (gear button of the bottom strip). Sample of the rim and the dome of the plate only: the symbol on it carries the original's dithering and is not a sample of symbols; symbols are separate parts, redrawn clean (owner note 2026-11-20)."},
+    {"id": "vial-blue", "source": "ctx-hud", "rect": [754, 462, 782, 555], "material": "glass", "note": "blue vial with its liquid and brass cap, beside the red one"}
+  ],
+  "tiles": [
+    {"id": "tile-wood", "from": "wood-panel", "reference": {"screen": "ctx-inventory", "material": "wood"}}
+  ]
+}

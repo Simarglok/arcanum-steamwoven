@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
@@ -35,13 +36,20 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         var savedInterfaceHd = _gameSettings.HdInterface;
+        var savedGeneratedInterface = _gameSettings.GeneratedInterface;
+        // ARC-UI-2306: the bars stay up under the window (the note entry runs on the bottom strip), so the stage runs with them, as the game does.
+        var savedBars = _gameBarForSelfTest;
+        _gameBarForSelfTest = true;
         try
         {
+            for (var i = 0; i < 1200 && !(_gameBarPanel is { Visible: true } && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_gameBarPanel is { Visible: true } && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }, "the bars and art 200 read");
             // ARC-UI-126: ARC_AREA_WORLDMAP_HD_VERIFY=1 runs the stage with the HD interface art of ARC_HD_PACK (the bar and sheet smokes' switch), for a native look.
-            if (System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") == "1")
+            // ARC-UI-2993: ARC_AREA_WORLDMAP_HD_VERIFY=generated also turns the generated interface on, which is the Steamwoven layout (the composition's scale) the HD option plays with.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") is "1" or "generated")
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
-                _gameSettings = _gameSettings with { HdInterface = true };
+                _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = _gameSettings.GeneratedInterface || System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") == "generated" };
                 SyncInterfaceHd();
                 Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
             }
@@ -78,6 +86,9 @@ public partial class TerrainViewerApp
             {
                 var artView = _worldMapPanel.ArtView;
                 Require(_worldMapPanel.ArtMode && artView.Visible, "the window shows the original look");
+                // ARC-UI-2993: the checks below are the 1:1 window units' ones (the original look, HD off); the HD option's picture scale has its own step after them.
+                artView.SetPixelsPerUnitForSelfTest(1);
+                _worldMapPanel.CentreOnParty();
                 var max = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width);
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), $"opened centred on the party: offset {artView.Offset}");
                 var scrollFrom = artView.Offset;
@@ -89,6 +100,25 @@ public partial class TerrainViewerApp
                 Require(artView.Offset == max, "scrolling clamps at the south-east corner");
                 _worldMapPanel.CentreOnParty();
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
+                // ARC-UI-2993 (AC1, AC2): at the composition's scales the picture is drawn 1:1 in device pixels, so the view covers more picture pixels: Home centres on the party, the scroll
+                // clamps at the larger visible area's corners, and the pointer over the party's picture pixel reads that pixel's sector (the same map pixel as before).
+                foreach (var scale in new[] { 1.33, 1.8, 2.4, 3.6 })
+                {
+                    artView.SetPixelsPerUnitForSelfTest(scale);
+                    var scaledMax = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width, scale);
+                    _worldMapPanel.CentreOnParty();
+                    Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, scaledMax, scale), $"HD scale {scale}: Home centres on the party: {artView.Offset}");
+                    var partyAt = AreaWorldMapArtLayout.ToWindow(map.Position.X, map.Position.Y, artView.Offset, scale);
+                    artView.PointerForSelfTest(new Vector2((float)(partyAt.X + .5 / scale), (float)(partyAt.Y + .5 / scale)));
+                    Require(artView.ReadoutForSelfTest == AreaWorldMapArtLayout.Readouts(map.Position.X, map.Position.Y, data.Width, artLook!.Content.Offsets.Longitude, artLook.Content.Offsets.Latitude),
+                        $"HD scale {scale}: the pointer over the party's pixel reads its sector");
+                    for (var i = 0; i < 200; i++) artView.ScrollBy(7, AreaWorldMapArtLayout.CompassStep);
+                    Require(artView.Offset == (0, 0), $"HD scale {scale}: scrolling clamps at the north-west corner");
+                    for (var i = 0; i < 200; i++) artView.ScrollBy(3, AreaWorldMapArtLayout.CompassStep);
+                    Require(artView.Offset == scaledMax, $"HD scale {scale}: scrolling clamps at the south-east corner of the larger visible area: {artView.Offset} vs {scaledMax}");
+                }
+                artView.SetPixelsPerUnitForSelfTest(1);
+                _worldMapPanel.CentreOnParty();
                 // ARC-UI-134 (WM140): the lens shows the game view around the hero under the window, drawn over by art 198 when it read.
                 for (var f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var (holeCorner, holeEdge) = artView.LensOnScreen;
@@ -202,7 +232,23 @@ public partial class TerrainViewerApp
                     image.SavePng(path);
                 }
                 var shot = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } path ? path : null;
-                await Shot(shot);
+                // ARC-UI-2993: a local capture of the map view for the owner. ARC_WORLDMAP_SMOKE_SIZE=WIDTHxHEIGHT sets the display; ARC_WORLDMAP_SMOKE_PICTURE=before draws the picture in window units
+                // (scaled with the window, the earlier look), anything else draws the window's own picture scale (1:1 device pixels under the HD option); the view is centred on the marked area.
+                if (shot is not null)
+                {
+                    var captureSizeText = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SIZE")?.Split('x');
+                    var picked = captureSizeText is [var cw, var ch] && int.TryParse(cw, out var captureWidth) && int.TryParse(ch, out var captureHeight) && captureWidth >= 800 && captureHeight >= 600 ? new Vector2I(captureWidth, captureHeight) : (Vector2I?)null;
+                    var displayBefore = DisplayServer.WindowGetSize();
+                    if (picked is { } pickedSize) { await SetSmokeWindowSizeAsync(pickedSize); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+                    artView.SetPixelsPerUnitForSelfTest(System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_PICTURE") == "before" ? 1 : null);
+                    artView.SetOffsetForSelfTest(AreaWorldMapArtLayout.CentreOn(markedPixel.X, markedPixel.Y, artView.MaxOffset, artView.PixelsPerUnit));
+                    GD.Print($"ARC-UI-2993 world-map capture display {GetViewport().GetVisibleRect().Size} window scale {artView.Scale.X:0.###} pixels per unit {artView.PixelsPerUnit:0.###}");
+                    await Shot(shot);
+                    artView.SetPixelsPerUnitForSelfTest(1);
+                    artView.SetOffsetForSelfTest(mapOffset);
+                    if (picked is not null) await SetSmokeWindowSizeAsync(displayBefore);
+                }
+                else await Shot(shot);
                 _worldMapPanel.ToggleKind();
                 Require(artView.Kind == AreaWorldMapKind.Continent && !artView.ScrollBy(2, AreaWorldMapArtLayout.KeyStep), "Z shows the continent view, which does not scroll");
                 await Shot(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".continent.png"));
@@ -265,7 +311,7 @@ public partial class TerrainViewerApp
                         }
                         throw new InvalidOperationException("ARC-UI-110 world-map quill smoke: no marker-free point in the view");
                     }
-                    void QuillCycle(AreaWorldMapKind kind, int sessionView)
+                    async Task QuillCycle(AreaWorldMapKind kind, int sessionView)
                     {
                         var notes = artView.NotesForSelfTest(kind)!;
                         var count = notes.Count;
@@ -275,21 +321,48 @@ public partial class TerrainViewerApp
                         Require(panel.QuillActive && map.Selected == -1 && map.Waypoints.Count == waypoints, $"{kind}: Q entered the quill, cleared the selection and kept the waypoints");
                         var spot = ClearPoint(kind);
                         artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
-                        Require(panel.EditingNote && artView.NoteEditIndexForSelfTest == -1 && map.Waypoints.Count == waypoints && artView.Kind == kind, $"{kind}: a quill press on empty ground opens a new note's text entry (no waypoint added, no zoom)");
-                        artView.NoteEditTextForSelfTest = "Smoke quill note";
+                        Require(panel.EditingNote && artView.NoteEditIndexForSelfTest == -1 && map.Waypoints.Count == waypoints && artView.Kind == kind, $"{kind}: a quill press on empty ground opens a new note's text entry (no waypoint added, no zoom): available={panel.NoteEntryAvailable?.Invoke()} bars={_gameBarPanel is { Visible: true }} font={_worldMapArtLook?.Font is not null} art200={Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }} message=\"{artView.MessageForSelfTest}\"");
+                        // ARC-UI-2306 (BM4): the entry runs on the bottom strip in bar mode 6: art 200, the three buttons and the marker radio group.
+                        SyncMapNoteEntry();
+                        Require(MapNoteViewForSelfTest is { } strip && strip.BackgroundForSelfTest is not null && _mapNote.IsOpen && _mapNote.Text == ""
+                            && MapNoteEntry.Buttons.All(b => strip.ButtonCentreForSelfTest(b.Action) is not null) && MapNoteEntry.Markers.All(m => strip.MarkerCentreForSelfTest(m.Type) is not null),
+                            $"{kind}: the entry runs on the bottom strip (art 200, three buttons, three markers)");
+                        // A native look (ARC_WORLDMAP_SMOKE_SHOT): the entry with a typed text and the skull chosen; original-derived, kept under the thread, never committed.
+                        if (kind == AreaWorldMapKind.Map && System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } noteShot)
+                        {
+                            TypeMapNoteForSelfTest("Camp by the old mill"); _mapNote.Select(1); SyncMapNoteEntry();
+                            for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                            using var image = GetViewport().GetTexture().GetImage();
+                            image.SavePng(System.IO.Path.ChangeExtension(noteShot, ".note-entry.png"));
+                            _mapNote.Select(0); SyncMapNoteEntry();
+                        }
+                        TypeMapNoteForSelfTest("abc");
+                        MapNoteButtonReleased(MapNoteAction.Clear, true);
+                        Require(_mapNote.IsOpen && _mapNote.Text == "" && panel.EditingNote, $"{kind}: Clear empties the text and the entry stays open");
+                        TypeMapNoteForSelfTest("xyz");
+                        MapNoteButtonReleased(MapNoteAction.Cancel, true);
+                        Require(_mapNote.IsOpen && _mapNote.Text == _mapNote.Saved && panel.EditingNote, $"{kind}: Cancel puts the opened text back and the entry stays open");
+                        MapNoteMarkerReleased(2, true);
+                        Require(_mapNote.Marker == 2 && artView.NoteEditTypeForSelfTest == 0, $"{kind}: the marker chosen while the entry is open is for the next note, not this one");
+                        _mapNote.Select(0);
+                        TypeMapNoteForSelfTest("Smoke quill note");
                         InventoryKey(Key.Enter);
-                        Require(!panel.EditingNote && notes.Count == 1 && notes.Items[0].Text == "Smoke quill note" && notes.Items[0].Type == AreaTownNotes.QuestionType, $"{kind}: Enter keeps the new note");
+                        Require(!panel.EditingNote && notes.Count == 1 && notes.Items[0].Text == "Smoke quill note" && notes.Items[0].Type == 0 && notes.Items[0].Flags == AreaTownNotes.PlayerFlags, $"{kind}: Enter keeps the new note (marker 0, flags 0)");
+                        // ARC-UI-2330: the kept note (marker 0) is drawn with the note art 142 of its type, and the type arts all read with the look.
+                        Require(AreaWorldMapArtLayout.NoteArtOf(notes.Items[0].Type) == 142 && AreaWorldMapArtLayout.NoteTypeArts.All(n => _worldMapArtLook?.Art.ContainsKey(n) == true),
+                            $"{kind}: a note of type 0 is drawn with art 142 and the four note arts are read");
                         Require(session.QueryMapNotes(sessionView) is { } kept && kept.Notes.Count == 1 && kept.Notes[0].Text == "Smoke quill note"
                             && session.QueryMapNotes(sessionView == SessionStoryLimits.MapNoteView ? SessionStoryLimits.ContinentNoteView : SessionStoryLimits.MapNoteView) is null, $"{kind}: the session keeps this view's note alone");
                         artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
                         Require(panel.EditingNote && artView.NoteEditIndexForSelfTest == 0 && artView.NoteEditTextForSelfTest == "Smoke quill note", $"{kind}: a quill press on the note opens its text");
-                        artView.NoteEditTextForSelfTest = "Edited";
+                        TypeMapNoteForSelfTest("Edited");
                         InventoryKey(Key.Escape);
-                        Require(!panel.EditingNote && notes.Items[0].Text == "Smoke quill note" && !MainMenuOpen, $"{kind}: Escape cancels the entry and opens no menu");
+                        Require(!panel.EditingNote && notes.Items[0].Text == "Edited" && !MainMenuOpen, $"{kind}: Escape leaves the entry, keeps the typed text of the note (0x564070) and opens no menu");
                         artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
-                        artView.NoteEditTextForSelfTest = "Edited";
+                        TypeMapNoteForSelfTest("Edited again");
                         InventoryKey(Key.Enter);
-                        Require(notes.Items[0].Text == "Edited" && session.QueryMapNotes(sessionView)!.Notes[0].Text == "Edited", $"{kind}: Enter keeps the edited text");
+                        Require(notes.Items[0].Text == "Edited again" && session.QueryMapNotes(sessionView)!.Notes[0].Text == "Edited again", $"{kind}: Enter keeps the edited text");
                         // The quill's press leaves the hover off; with the quill off the note shows its text unless a marker lies under the pointer.
                         artView.PointerForSelfTest(spot);
                         Require(artView.HoverWorldNoteForSelfTest == -1, $"{kind}: the hover is off with the quill");
@@ -300,21 +373,43 @@ public partial class TerrainViewerApp
                         panel.DescriptionRequested += Collect;
                         artView.PointerForSelfTest(spot + new Vector2(0, 1));
                         panel.DescriptionRequested -= Collect;
-                        Require(artView.HoverWorldNoteForSelfTest == 0 && texts.Count > 0 && texts[^1] == "Edited", $"{kind}: the pointer over the note asks for its text: {string.Join("|", texts)}");
+                        Require(artView.HoverWorldNoteForSelfTest == 0 && texts.Count > 0 && texts[^1] == "Edited again", $"{kind}: the pointer over the note asks for its text: {string.Join("|", texts)}");
                         InventoryKey(Key.Q);
                         artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
-                        artView.NoteEditTextForSelfTest = "  ";
+                        TypeMapNoteForSelfTest("  ");
                         InventoryKey(Key.Enter);
                         Require(notes.Count == 0 && session.QueryMapNotes(sessionView) is null, $"{kind}: an empty text deletes the note and the session drops the empty list");
                         // A note stays in the session across the window: put one, close, reopen.
+                        _mapNote.Select(2);
                         artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
-                        artView.NoteEditTextForSelfTest = "Kept";
+                        TypeMapNoteForSelfTest("Kept");
                         InventoryKey(Key.Enter);
                         Require(notes.Count == 1, $"{kind}: a note is back for the reopen check");
+                        Require(notes.Items[0].Type == 2, $"{kind}: a new note takes the marker the radio group holds when it is made");
+                        // ARC-UI-2330, ARC-UI-2445 look (ARC_WORLDMAP_SMOKE_SHOT): one note of each type next to the kept one, drawn with the arts of their types and their labels
+                        // ("after") and without the labels ("before"); original-derived, kept under the thread, never committed. The extra notes go again.
+                        if (kind == AreaWorldMapKind.Map && System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } typeShot)
+                        {
+                            var first = notes.Items[0];
+                            for (int t = 0, slot = 0; t < 4; t++) if (t != first.Type) Require(notes.AddByQuill(Math.Max(0, first.PixelX + new[] { -60, 0, 60 }[slot]), Math.Max(0, first.PixelY + new[] { -45, 45, -45 }[slot++]), "type " + t, t), "the type look note was added");
+                            for (var pass = 0; pass < 2; pass++)
+                            {
+                                artView.NoteLabelsOffForSelfTest = pass == 1; // ARC-UI-2445: before = art of the type, no labels (the #2330 look); after = art and label
+                                artView.RedrawForSelfTest();
+                                for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                                using var typeImage = GetViewport().GetTexture().GetImage();
+                                typeImage.SavePng(System.IO.Path.ChangeExtension(typeShot, pass == 0 ? ".notes-after.png" : ".notes-before.png"));
+                            }
+                            artView.NoteLabelsOffForSelfTest = false;
+                            while (notes.Count > 1) notes.EditByQuill(notes.Count - 1, " ");
+                            Require(notes.Count == 1 && notes.Items[0].Text == "Kept", "the type look notes are gone again");
+                        }
+                        _mapNote.Select(0);
                         InventoryKey(Key.Q);
                         Require(!panel.QuillActive, $"{kind}: Q left the quill");
                     }
-                    QuillCycle(AreaWorldMapKind.Map, SessionStoryLimits.MapNoteView);
+                    await QuillCycle(AreaWorldMapKind.Map, SessionStoryLimits.MapNoteView);
                     // The list a window opened later is given is read from the session (a reopen would also drop the journey's waypoints, so the read is made directly).
                     Require(MapNotesOf(session, SessionStoryLimits.MapNoteView) is { Count: 1 } reread && reread.Items[0].Text == "Kept" && MapNotesOf(session, SessionStoryLimits.ContinentNoteView).Count == 0,
                         "the list a reopened window reads comes from the session");
@@ -322,7 +417,7 @@ public partial class TerrainViewerApp
                     if (!artView.ToggleKind()) GD.Print("ARC-UI-110 native-smoke worldmap-quill continent SKIP (the continent picture is not there)");
                     else
                     {
-                        QuillCycle(AreaWorldMapKind.Continent, SessionStoryLimits.ContinentNoteView);
+                        await QuillCycle(AreaWorldMapKind.Continent, SessionStoryLimits.ContinentNoteView);
                         // A kind switch ends the quill (WM103).
                         InventoryKey(Key.Q);
                         Require(panel.QuillActive, "Q entered the quill again in the continent view");
@@ -430,8 +525,10 @@ public partial class TerrainViewerApp
         finally
         {
             if (WorldMapOpen) EndWorldMap();
+            _worldMapPanel?.ArtView.SetPixelsPerUnitForSelfTest(null);
+            _gameBarForSelfTest = savedBars;
             _worldMapTownGateOffForSmoke = false;
-            if (_gameSettings.HdInterface != savedInterfaceHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
+            if (_gameSettings.HdInterface != savedInterfaceHd || _gameSettings.GeneratedInterface != savedGeneratedInterface) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGeneratedInterface }; SyncInterfaceHd(); }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }
@@ -442,8 +539,8 @@ public partial class TerrainViewerApp
     private async Task WorldMapWindowArtAsync(string window, AreaWorldMapArtView view)
     {
         if (!WindowArtSmokeRequested) return;
-        // ARC-UI-1810: the frame, the Zoom, Whole map, Travel and compass buttons and the lens 198 (the cover 217 stays art).
-        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt, AreaWorldMapArtLayout.ZoomArt, AreaWorldMapArtLayout.WholeArt, AreaWorldMapArtLayout.TravelArt, AreaWorldMapArtLayout.CompassArt, AreaWorldMapArtLayout.LensArt]);
+        // ARC-UI-1810: the frame, the Zoom, Whole map, Travel and compass buttons, the lens 198 and (ARC-UI-2194) the bottom cover 217.
+        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt, AreaWorldMapArtLayout.ZoomArt, AreaWorldMapArtLayout.WholeArt, AreaWorldMapArtLayout.TravelArt, AreaWorldMapArtLayout.CompassArt, AreaWorldMapArtLayout.LensArt, AreaWorldMapArtLayout.CoverArt]);
         await WindowArtSmokeAsync(window, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), view.DeviceScale, () => view.HasLook);
     }
 
@@ -557,23 +654,23 @@ public partial class TerrainViewerApp
             view.LeftForSelfTest(noteAt + away, true); view.LeftForSelfTest(noteAt + away, false);
             if (panel.EditingNote) { placed = true; break; }
         }
-        Require(placed && view.NoteEditIndexForSelfTest == -1, "a quill press on empty ground opens a new note's text entry");
-        view.NoteEditTextForSelfTest = "Quill note";
+        Require(placed && view.NoteEditIndexForSelfTest == -1, $"a quill press on empty ground opens a new note's text entry: available={panel.NoteEntryAvailable?.Invoke()} bars={_gameBarPanel is { Visible: true }} font={_worldMapArtLook?.Font is not null} art200={Art(MapNoteEntry.BackgroundArt) is { Length: > 0 }} message=\"{view.MessageForSelfTest}\"");
+        TypeMapNoteForSelfTest("Quill note");
         InventoryKey(Key.Enter);
-        Require(!panel.EditingNote && notes.Count == before + 1 && notes.Items[^1].Text == "Quill note" && notes.Items[^1].Type == AreaTownNotes.QuestionType, "Enter keeps the new note");
+        Require(!panel.EditingNote && notes.Count == before + 1 && notes.Items[^1].Text == "Quill note" && notes.Items[^1].Type == 0 && notes.Items[^1].Flags == AreaTownNotes.PlayerFlags, "Enter keeps the new note (marker 0, flags 0)");
         Require(session.QueryTownNotes(number) is { } kept2 && kept2.Notes.Count == notes.Count && kept2.Notes[^1].Text == "Quill note", "the session keeps the quill's note");
         var madeAt = new Vector2(AreaWorldMapArtLayout.View.X + notes.Items[^1].PixelX - view.TownOffset.X, AreaWorldMapArtLayout.View.Y + notes.Items[^1].PixelY - view.TownOffset.Y);
         view.LeftForSelfTest(madeAt, true); view.LeftForSelfTest(madeAt, false);
         Require(panel.EditingNote && view.NoteEditIndexForSelfTest == notes.Count - 1 && view.NoteEditTextForSelfTest == "Quill note", "a quill press on a note opens its text");
-        view.NoteEditTextForSelfTest = "Edited";
+        TypeMapNoteForSelfTest("Edited");
         InventoryKey(Key.Escape);
-        Require(!panel.EditingNote && notes.Items[^1].Text == "Quill note" && !MainMenuOpen, "Escape cancels the entry and opens no menu");
+        Require(!panel.EditingNote && notes.Items[^1].Text == "Edited" && !MainMenuOpen, "Escape leaves the entry, keeps the typed text of the note (0x564070) and opens no menu");
         view.LeftForSelfTest(madeAt, true); view.LeftForSelfTest(madeAt, false);
-        view.NoteEditTextForSelfTest = "Edited";
+        TypeMapNoteForSelfTest("Edited again");
         InventoryKey(Key.Enter);
-        Require(notes.Count == before + 1 && notes.Items[^1].Text == "Edited" && session.QueryTownNotes(number)!.Notes[^1].Text == "Edited", "Enter keeps the edited text");
+        Require(notes.Count == before + 1 && notes.Items[^1].Text == "Edited again" && session.QueryTownNotes(number)!.Notes[^1].Text == "Edited again", "Enter keeps the edited text");
         view.LeftForSelfTest(madeAt, true); view.LeftForSelfTest(madeAt, false);
-        view.NoteEditTextForSelfTest = "  ";
+        TypeMapNoteForSelfTest("  ");
         InventoryKey(Key.Enter);
         Require(notes.Count == before && session.QueryTownNotes(number)!.Notes.Count == before, "an empty text deletes the note");
         view.RightReleaseForSelfTest();

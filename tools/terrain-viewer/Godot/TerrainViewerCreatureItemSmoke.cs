@@ -84,7 +84,7 @@ public partial class TerrainViewerApp
             session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
 
             // One throw: the item made on the hero's feet, into the pack, onto the cursor, thrown at the tile; the flight and the script's run are played out. Returns the item's entity and the run the landing made.
-            (string Item, AreaThrownItemRun Run) Throw(AreaPrototypeItem prototype, CellCoord tile, string label)
+            (string Item, AreaThrownItemRun Run) Throw(AreaPrototypeItem prototype, CellCoord tile, string label, ulong? seed = null)
             {
                 session.AttachItemWeights(number => items.Item(number)?.Weight);
                 session.AttachItemScripts(number => items.Item(number)?.Scripts);
@@ -96,6 +96,7 @@ public partial class TerrainViewerApp
                 SyncAreaInventory();
                 Require(HoldItemOnGameCursor(item, "smoke") is null && GameCursorItemForSelfTest == item, $"{label}: the item is on the game cursor ({HeldThrowNoticeForSelfTest})");
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _thrownItemRunsForSelfTest.Clear(); _lastHeldThrowForSelfTest = null;
+                _heldThrowSeedForSelfTest = seed;
                 Require(ThrowGameCursorItem(tile), $"{label}: the throw started ({HeldThrowNoticeForSelfTest})");
                 for (var frames = 0; frames < 1500 && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++) Frame();
                 Require(_lastHeldThrowForSelfTest is { Disposition: GameSessionDisposition.Changed }, $"{label}: the item was thrown ({_lastHeldThrowForSelfTest?.Disposition} {_lastHeldThrowForSelfTest?.Failure}, {HeldThrowNoticeForSelfTest})");
@@ -108,7 +109,8 @@ public partial class TerrainViewerApp
 
             // The pet: thrown at a tile of its own (no creature there), so it is a flight that ended at its destination (the hit point 7, ARC-COMBAT-1223; the range end runs the miss point 8).
             var petTile = new CellCoord(standAt.X + Math.Sign(npcAt.X - standAt.X) * 2, standAt.Y + Math.Sign(npcAt.Y - standAt.Y) * 2);
-            var thrownPet = Throw(pet, petTile, "pet");
+            // ARC-COMBAT-2435: a throw at a tile rolls as a throw at a location; the pet's must hit to end at its destination (a miss scatters), so its roll starts from a seed that hits.
+            var thrownPet = Throw(pet, petTile, "pet", 727);
             var petRun = thrownPet.Run;
             GD.Print($"ARC-MAGIC-042 creature-item pet point={petRun.Point} outcome={petRun.Outcome} critter={petRun.Critter} followed={petRun.Followed} detail={petRun.Detail}");
             // ARC-COMBAT-1223 (ledger PS5, 0x4B2870): the end at the destination runs the item's hit script (point 7), only the range end the miss script (point 8).

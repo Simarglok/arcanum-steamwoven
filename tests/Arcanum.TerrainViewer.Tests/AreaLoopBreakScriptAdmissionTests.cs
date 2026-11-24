@@ -11,17 +11,19 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaLoopBreakScriptAdmissionTests
 {
     [TestMethod]
-    public void The_use_placed_heartbeat_and_dying_sets_hold_loop_break_and_stay_inside_S43()
+    public void The_use_placed_heartbeat_and_dying_sets_hold_loop_break_and_stay_inside_the_latest_set()
     {
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
-        // The dialog host runs no loops: its sets stay without the break.
-        foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+        // The dialog host's bare sets run no loops; since ARC-SCRIPT-2198 its talk sets (a use host of the map answering) hold the loop with its break and end.
+        foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
             Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
+        foreach (var set in new[] { AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak) && set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -49,6 +51,7 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         Assert.AreEqual(0, counts["S38"], "S38 refuses every one of them by construction");
         // 22 installed scripts carry a loop break; S40 admits 12 whole (the rest hold a command of another slice), the use set none (its scripts hold other refused commands), the placed and dying sets 7 each and the heartbeat set 1.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 8, from 5).
-        Assert.AreEqual((22, 12, 0, 8, 8, 18), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (group and container kinds S61 and S62, toggle state, portal kind; issue #1846).
+        Assert.AreEqual((22, 12, 1, 10, 8, 20), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

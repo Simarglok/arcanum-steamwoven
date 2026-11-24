@@ -121,24 +121,67 @@ public sealed class HeroItemThrowStateTests
         Assert.AreEqual((GameSessionFailure.None, AttackOutcome.Hit), (stray.Failure, stray.Resolution!.Outcome), "a stray strike is a forced hit");
     }
 
+    // ARC-COMBAT-2435 (ledger TW11, 0x4C7160 with no defender): a throw at a tile that names no critter rolls as a throw at a location: the hit location, the technology and magick checks, the hit and the critical
+    // roll (no dodge), and for a miss the scatter direction; a hit flies to the tile and strikes nothing, a miss flies toward its scattered tile.
     [TestMethod]
-    public void AThrowAtAnEmptyTileFliesThereUnrolled()
+    public void AThrowAtAnEmptyTileRollsAsAThrowAtALocation()
+    {
+        var seen = new HashSet<AttackOutcome>();
+        for (ulong seed = 1; seed < 400 && !(seen.Contains(AttackOutcome.Hit) && seen.Contains(AttackOutcome.Miss) && seen.Contains(AttackOutcome.CriticalMiss)); seed++)
+        {
+            // One throw on a session of its own seed: a critical miss turns on the hero.
+            using var owner = Owner();
+            Assert.IsTrue(owner.RestoreRandom(new(seed, 0)));
+            var draws = owner.QueryRandom().Draws;
+            var target = Here(owner, 4);
+            var thrown = owner.ThrowHeroItem(owner.Version, new("kit:3", Armour(2), target));
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (thrown.Disposition, thrown.Failure));
+            var resolution = thrown.Attack!.Resolution!;
+            Assert.AreEqual(AttackRefusal.None, resolution.Refusal);
+            Assert.IsTrue(owner.QueryRandom().Draws > draws, "the roll draws from the stream");
+            Assert.IsFalse(resolution.Damage is { Recipient: DamageRecipient.Target }, "no defender takes damage");
+            var hit = resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+            Assert.AreEqual(hit ? target : thrown.Attack.Scatter, thrown.Destination, "a hit flies to the tile, a miss to its scattered tile");
+            Assert.AreEqual(hit, thrown.Attack.Scatter is null, "only a miss scatters");
+            Assert.AreEqual(resolution.Outcome == AttackOutcome.CriticalMiss, thrown.Attack.Life is not null, "only a critical miss turns on the hero");
+            Assert.AreEqual(1, thrown.Shots.Count);
+            Assert.AreEqual(ThrowRules.Range(owner.QueryHeroAttack()!.Combatant.Strength, SkillTraining.None, 0), owner.QueryThrownShot(thrown.Shots[0])!.Value.Range, "the thrown range");
+            seen.Add(resolution.Outcome == AttackOutcome.CriticalHit ? AttackOutcome.Hit : resolution.Outcome);
+            if (resolution.Outcome == AttackOutcome.CriticalMiss) continue;
+            // A miss may scatter back onto the hero's own tile, where the item already lies (nothing to move).
+            Assert.AreEqual(thrown.Destination == owner.QueryActor().Cell ? GameSessionDisposition.NoChange : GameSessionDisposition.Changed,
+                owner.LandThrownItem(owner.Version, thrown.Shots[0], thrown.Destination!.Value).Disposition);
+            Assert.AreEqual(thrown.Destination, owner.QueryPlacedItems().Single(p => p.Entity == "kit:3").Cell);
+        }
+        CollectionAssert.IsSubsetOf(new[] { AttackOutcome.Hit, AttackOutcome.Miss, AttackOutcome.CriticalMiss }, seen.ToArray(), "a hit, a miss and a critical miss were rolled");
+    }
+
+    // ARC-COMBAT-2435: a distance above the thrown range is a certain miss for a throw at a location too (the distance term of the check).
+    [TestMethod]
+    public void AThrowAtALocationBeyondTheThrownRangeAlwaysMisses()
+    {
+        using var owner = Owner();
+        var range = ThrowRules.Range(owner.QueryHeroAttack()!.Combatant.Strength, SkillTraining.None, 0);
+        for (var i = 0; i < 25; i++)
+        {
+            var thrown = owner.ThrowHeroItem(owner.Version, new("kit:3", Armour(2), Here(owner, range + 3)));
+            Assert.AreEqual(GameSessionFailure.None, thrown.Failure);
+            Assert.AreNotEqual(AttackOutcome.Hit, thrown.Attack!.Resolution!.Outcome);
+            Assert.AreNotEqual(AttackOutcome.CriticalHit, thrown.Attack.Resolution.Outcome);
+            Assert.IsTrue(owner.EndShot(thrown.Shots[0]));
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "kit:3", Accept).Disposition);
+            if (thrown.Attack.Resolution.Outcome == AttackOutcome.CriticalMiss) break;
+        }
+    }
+
+    // ARC-COMBAT-2435: a bad light level of the location is refused before anything is rolled.
+    [TestMethod]
+    public void AThrowAtALocationRefusesALightOutOfRange()
     {
         using var owner = Owner();
         var draws = owner.QueryRandom().Draws;
-        var target = Here(owner, 4);
-        var thrown = owner.ThrowHeroItem(owner.Version, new("kit:3", Armour(2), target));
-        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, target), (thrown.Disposition, thrown.Failure, thrown.Destination));
-        Assert.AreEqual((1, (AttackResolution?)null, draws), (thrown.Shots.Count, thrown.Attack!.Resolution, owner.QueryRandom().Draws));
-        Assert.AreEqual(ThrowRules.Range(owner.QueryHeroAttack()!.Combatant.Strength, SkillTraining.None, 0), owner.QueryThrownShot(thrown.Shots[0])!.Value.Range);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, thrown.Shots[0], target).Disposition);
-        Assert.AreEqual(target, owner.QueryPlacedItems().Single().Cell);
-        Assert.AreEqual(0, owner.QueryItemDecays().Count);
-        // A snapshot taken meanwhile keeps a thrown item on the hero's cell, as ARC-COMBAT-017's.
-        var again = owner.ThrowHeroItem(owner.Version, new("kit:2", Armour(), target));
-        using var restored = GameSessionOwner.Restore(owner.Capture(), RestoreOptions()).Owner!;
-        Assert.AreEqual((0, owner.QueryActor().Cell), (restored.QueryShotsInFlight().Count, restored.QueryPlacedItems().Single(p => p.Entity == "kit:2").Cell));
-        Assert.IsTrue(owner.EndShot(again.Shots[0]));
+        var thrown = owner.ThrowHeroItem(owner.Version, new("kit:3", Armour(2), Here(owner, 3)) { TargetLight = 256 });
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidAttack, draws), (thrown.Disposition, thrown.Failure, owner.QueryRandom().Draws));
     }
 
     [TestMethod]
@@ -178,9 +221,10 @@ public sealed class HeroItemThrowStateTests
         Assert.IsTrue(Holds(owner, "kit:2"));
         var dead = owner.ApplyDamage(owner.Version, Rat().Target, new LifeDamage { HitPoints = 100_000 });
         Assert.AreEqual(GameSessionDisposition.Changed, dead.Disposition);
+        // ARC-COMBAT-2392 (TW8): a throw flies at a corpse too, with the normal hit or miss roll and no damage.
         var corpse = owner.ThrowHeroItem(owner.Version, AtRat(owner));
-        Assert.AreEqual((GameSessionDisposition.NoChange, AttackRefusal.TargetDead, 0), (corpse.Disposition, corpse.Attack!.Resolution!.Refusal, corpse.Shots.Count));
-        Assert.IsTrue(Holds(owner, "kit:2"), "a refused attack throws nothing");
+        Assert.AreEqual((GameSessionDisposition.Changed, AttackRefusal.None, 1, true), (corpse.Disposition, corpse.Attack!.Resolution!.Refusal, corpse.Shots.Count, corpse.Attack.Resolution.Damage is null));
+        Assert.IsFalse(Holds(owner, "kit:2"), "the item is thrown");
     }
 
     [TestMethod]

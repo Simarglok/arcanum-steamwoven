@@ -112,6 +112,21 @@ public sealed class AreaItemScriptHostTests
     }
 
     [TestMethod]
+    public void A_printed_line_names_the_hero_by_its_player_name()
+    {
+        // ARC-SCRIPT-2787 (0x416B00): @pcname@ is the hero's player name; a line naming the NPC stays unsupported on an item run.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetHeroPlayerName(session.Version, System.Text.Encoding.Latin1.GetBytes("Zed")).Disposition);
+            var host = new AreaItemScriptHost(session, [Map()], content);
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, "It hums for Zed."), Pair(host.PrintedLine(500, 1)));
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLine(501, 1).Status);
+            return 0;
+        });
+    }
+
+    [TestMethod]
     public void The_host_reads_slots_from_rows_and_prints_only_plain_lines()
     {
         WithContent(content =>
@@ -182,6 +197,71 @@ public sealed class AreaItemScriptHostTests
         Assert.IsTrue(rule.SameAs(new SessionEffectDefinition(TomeEffect, [new(EffectAttributeKind.TechDiscipline, 3, EffectChangeOperator.Add, 1)])));
         Assert.IsNull(host.EffectDefinition(169), "a number the tables do not hold");
         Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, number => throw new ArgumentException("outside the tables")).EffectDefinition(5), "a number the tables refuse");
+    }
+
+    // ARC-SCRIPT-2375 (IV30): the name number of an item row is the map data's until a script's rename wrote the item's own field; the host's data read ignores the record, the name readers do not.
+    [TestMethod]
+    public void An_items_data_name_and_its_renamed_number_are_read_apart()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaItemScriptHost(session, [Map()], null);
+        var item = new ScrObjectRef(1, Entity(0));
+        Assert.AreEqual(0, host.ItemNameInData(item), "the row holds no name field");
+        Assert.IsNull(host.ItemNameInData(new ScrObjectRef(1, "made:1")), "a made item has no row");
+        Assert.IsNull(host.ItemNameInData(new ScrObjectRef(1, Entity(7))), "no row at all");
+        var row = Row(0, 7, 10, 20, 500);
+        Assert.AreEqual(0, AreaUseScriptHost.NameOf(session, row));
+        var written = session.ApplyChanges(session.Version, null, [new(new SessionMapId(row.Key.RuntimeMap), SessionItemName.Key(Entity(0)), 2805)]);
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, written.Disposition);
+        Assert.AreEqual(2805, AreaUseScriptHost.NameOf(session, row), "the name readers follow the rename");
+        Assert.AreEqual(0, host.ItemNameInData(item), "the data read leaves the record out");
+        // A row that is not an item keeps its own number whatever a record says.
+        var other = Row(9, 16, 14, 20, 0);
+        Assert.AreEqual(0, AreaUseScriptHost.NameOf(session, other));
+    }
+
+    // ARC-SCRIPT-2432 (IV40): a critter's attachment slot in a point 21 run is the shown map's use host's reading, and a change script of it is planned as the use host's own map changes (a part back at its loaded value clears its record).
+    [TestMethod]
+    public void A_change_script_of_a_critter_is_planned_over_the_use_hosts_slot_and_any_other_object_is_not_kept()
+    {
+        using var session = ConversationSessionFixture.Create();
+        const int Loaded = 700, Changed = 1358;
+        AreaObjectRecord WithDialog(int index, int type) =>
+            new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
+                [], [new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dialog, [5, 6, Loaded])], null)], true, true, true);
+        AreaObjectRecord critter = WithDialog(1, 16), scenery = WithDialog(2, 4), noElement = Row(3, 16, 13, 20, 0);
+        var shown = new AreaUseScriptHost(session, 1, [critter, scenery, noElement], [], null);
+        var host = new AreaItemScriptHost(session, [Map()], null, null, () => shown);
+        var npc = new ScrObjectRef(1, Entity(1));
+        Assert.AreEqual(new ScrSlot(Loaded, 5, 6), host.Slot(npc, ScrPoint.Dialog));
+        var edits = host.PlanObjectSlot(new(ScrSource.Object, npc, ScrPoint.Dialog, new ScrSlot(Changed, 5, 6)));
+        Assert.IsNotNull(edits);
+        Assert.AreEqual(3, edits.Count);
+        Assert.IsTrue(edits.All(edit => edit.Key.Entity == npc.Code));
+        CollectionAssert.AreEqual(new long?[] { Changed, null, null }, edits.Select(edit => edit.Value).ToArray(), "only the number differs from the loaded element");
+        Assert.IsTrue(shown.IsCritterRow(npc));
+        // Applied, the host reads the changed number and the held flags and counters.
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.ApplyChanges(session.Version, null, edits).Disposition);
+        Assert.AreEqual(new ScrSlot(Changed, 5, 6), host.Slot(npc, ScrPoint.Dialog));
+        // A write back to the loaded number clears the record.
+        var back = host.PlanObjectSlot(new(ScrSource.Object, npc, ScrPoint.Dialog, new ScrSlot(Loaded, 5, 6)))!;
+        Assert.IsTrue(back.All(edit => edit.Value is null));
+        // A scenery, a critter without the element, an unknown object, a point the host does not keep and a write that is not an object's are refused.
+        Assert.IsNull(host.PlanObjectSlot(new(ScrSource.Object, new ScrObjectRef(1, Entity(2)), ScrPoint.Dialog, new ScrSlot(Changed, 0, 0))), "a scenery");
+        Assert.IsNull(host.PlanObjectSlot(new(ScrSource.Object, new ScrObjectRef(1, Entity(3)), ScrPoint.Dialog, new ScrSlot(Changed, 0, 0))), "no loaded element");
+        Assert.IsNull(host.PlanObjectSlot(new(ScrSource.Object, new ScrObjectRef(1, Entity(7)), ScrPoint.Dialog, new ScrSlot(Changed, 0, 0))), "no row");
+        Assert.IsNull(host.PlanObjectSlot(new(ScrSource.Object, npc, ScrPoint.Count - 1, new ScrSlot(Changed, 0, 0))), "a point it does not keep");
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null).PlanObjectSlot(new(ScrSource.Object, npc, ScrPoint.Dialog, new ScrSlot(Changed, 0, 0))), "no shown map");
+    }
+
+    // ARC-SCRIPT-2336 (FK8): the follower list of a point 21 run comes from the shown map's use host; without one the host cannot answer and the session refuses the move.
+    [TestMethod]
+    public void The_host_has_no_follower_list_without_a_shown_map()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var leader = new ScrObjectRef(1, "pc");
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null).FollowersOf(leader), "no shown map host");
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, null, () => null).FollowersOf(leader), "a shown map that is not there");
     }
 
     [TestMethod]

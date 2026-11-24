@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <remarks>ARC-UI-1195: <see cref="Slate"/> is the character sheet's pages. ARC-UI-1196: <see cref="Cloth"/> is a book cover's maroon weave, <see cref="Parchment"/> a page (cream with soft mottling and the shade of the fold at the logbook's spine,
 /// so everything that sits on a page matches it) and <see cref="PageEdge"/> the striped edge of a stack of pages. ARC-UI-1199: <see cref="Paper"/> is the parchment of a loose sheet (the schematic window's blueprint
 /// page): the same cream and mottling with no fold.</remarks>
-public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge, Paper }
+public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge, Paper, Brass, BrassDark }
 
 /// <summary>The edges of a frame that get a rim (a panel's edge facing the play view).</summary>
 [Flags]
@@ -46,8 +46,18 @@ public sealed record ChromeGrid(int X, int Y, int Columns, int Rows, int Cell, b
 /// (<see cref="InterfaceChromeRenderer"/>'s socket ring) around the circle at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="Radius"/>,
 /// painted on the opaque pixels of the frame, and the square rim a square hole would get is not drawn. The lens arts (231-233) fill the circle's box with the same ring.
 /// <paramref name="Shape"/> (the default) also gives the circle's edge (the pixels within a unit and a half inside it) an anti-aliased alpha instead of the Legacy stairs;
-/// deeper inside the Legacy alpha is untouched. A frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.</summary>
-public sealed record ChromeRoundView(double CenterX, double CenterY, double Radius, bool Shape = true) : ChromePart;
+/// deeper inside the Legacy alpha is untouched. A frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.
+/// ARC-UI-2645: <paramref name="Inward"/> (the lens arts, whose box is the circle's box: the circle touches the four sides, so a ring outside it has no room there and was cut at the sides) lays the ring inside the circle
+/// instead, over the live view's outermost three units.</summary>
+public sealed record ChromeRoundView(double CenterX, double CenterY, double Radius, bool Shape = true, bool Inward = false) : ChromePart;
+
+/// <summary>ARC-UI-2714: a recipe's lens (the 89 × 89 round view's square) stands in the Legacy frame at (<paramref name="X"/>, <paramref name="Y"/>) but the generated art puts it at the common place
+/// (<see cref="AreaLensPlace"/>): the frame's box of the lens with a margin of <see cref="ChromeLensFrom.Margin"/> units (the hole and the picture around it that a recipe keeps) is moved there before the
+/// recipe paints, and the place it leaves is filled from the frame beside it. The recipe's own marks (a keep, a bare hole, a round view) name the common place.</summary>
+public sealed record ChromeLensFrom(int X, int Y)
+{
+    public const int Side = 89, Margin = 5;
+}
 
 /// <summary>ARC-UI-1196: a picture's printed or drawn marks (a glyph, an arrow) on the generated ground under it. In the rectangle the Legacy pixels are compared with the
 /// rectangle's median colour; where they are darker or lighter than the median by more than a tenth the difference is multiplied onto the generated colour, so the marks
@@ -72,6 +82,31 @@ public sealed record ChromeMarks(int X, int Y, int Width, int Height) : ChromePa
 /// <paramref name="Radius"/> at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) in Legacy pixels: the button's brass rim (lit on the upper left, on the lower right in the down frame), a dark glass face,
 /// and the art's own pixels inside <paramref name="KeepRadius"/> (the lamp itself, dim or lit by the frame). The circle's edge gets an anti-aliased alpha instead of the Legacy stairs.</summary>
 public sealed record ChromeBall(double CenterX, double CenterY, double Radius, double KeepRadius) : ChromePart;
+
+/// <summary>ARC-UI-2194: a capsule (stadium) plate of <see cref="ChromeMaterial.Brass"/> in Legacy pixels: a raised rim of <paramref name="Rim"/> units with a lit upper left and a shaded lower right, and a
+/// recessed face inside it (the same brass, darker, with the bevel the other way round, as a sunk panel has). Drawn with its own colours over the whole shape (the art's alpha decides what shows), its edge anti-aliased, its brass sampled in the window's
+/// coordinates (<see cref="ChromeRecipe.OriginX"/>), so two arts of one window that carry the same plate meet without a seam. The shape is horizontal (the width is at least the height).</summary>
+public sealed record ChromeCapsule(double X, double Y, double Width, double Height, double Rim = 3) : ChromePart;
+
+/// <summary>ARC-UI-2194: a convex polygon plate (points clockwise on the screen, Legacy pixels) of a material with a one-unit bevel: lit on the edges that face the upper left, shaded on the others
+/// (the brass housing behind the world map window's two plates). Edge anti-aliased; the alpha is the art's.</summary>
+public sealed record ChromePolygon(IReadOnlyList<(double X, double Y)> Points, ChromeMaterial Material) : ChromePart
+{
+    /// <summary>The polygon's box in whole Legacy pixels (x, y, width, height), found once.</summary>
+    public (int X, int Y, int Width, int Height) Box { get; } = Bounds(Points);
+
+    private static (int, int, int, int) Bounds(IReadOnlyList<(double X, double Y)> points)
+    {
+        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+        foreach (var (x, y) in points) { x0 = Math.Min(x0, x); y0 = Math.Min(y0, y); x1 = Math.Max(x1, x); y1 = Math.Max(y1, y); }
+        return ((int)Math.Floor(x0), (int)Math.Floor(y0), (int)Math.Ceiling(x1 - x0) + 1, (int)Math.Ceiling(y1 - y0) + 1);
+    }
+}
+
+/// <summary>ARC-UI-2194: the housing ring around a round opening of an art (the world map window's compass opening): a brass ring of <paramref name="Width"/> units outside the circle at
+/// (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="InnerRadius"/>, painted on the art's opaque pixels only (the opening's alpha, and so its hit area, stays the Legacy one;
+/// the button drawn over it covers its edge).</summary>
+public sealed record ChromeSocket(double CenterX, double CenterY, double InnerRadius, double Width) : ChromePart;
 
 /// <summary>ARC-UI-1196: what is drawn around the holes of a panel's Legacy frame (the transparent regions the live view or the page shows through).</summary>
 public enum ChromeHoles
@@ -100,9 +135,11 @@ public enum ChromeKind
 /// <remarks>ARC-UI-1196: <paramref name="Holes"/> says what the holes of the Legacy frame get; <paramref name="OriginX"/> and <paramref name="OriginY"/> are where the art's corner lies in the
 /// window's larger picture (the logbook's book), in Legacy pixels: the materials are sampled at that offset, so a tab or a page button painted on its own continues the page or the
 /// stack it lies on without a seam. ARC-UI-1784: <paramref name="KeepFace"/> (a button only) keeps the art's whole picture inside the generated rim (a ball whose colour tells the college
-/// apart), where a plain button keeps only the glyph on a generated brass face. ARC-UI-1199: <paramref name="TabPaper"/> is the material of a tab's paper bookmark.</remarks>
+/// apart), where a plain button keeps only the glyph on a generated brass face. ARC-UI-1199: <paramref name="TabPaper"/> is the material of a tab's paper bookmark. ARC-UI-2720: <paramref name="FoldX"/> is the x of the fold
+/// the Parchment material shades, in the same coordinates as the materials (the art's own plus <paramref name="OriginX"/>): the logbook's book has it at its 286, the reading window's book at the
+/// 320 of its art, which lies at <see cref="AreaReadingArtLayout.BackgroundCorner"/> in the window.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment, float FoldX = InterfaceChromeRenderer.LogbookFold, ChromeLensFrom? LensFrom = null, bool FamilyWood = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -135,7 +172,7 @@ public static class InterfaceChromeRecipes
     /// under it and the arrow.</summary>
     private static IEnumerable<ChromeRecipe> LogbookRecipes()
     {
-        yield return new ChromeRecipe("logbooks_side.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [], Holes: ChromeHoles.None);
+        yield return new ChromeRecipe("logbooks_side.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [], Holes: ChromeHoles.None, LensFrom: new ChromeLensFrom(25, 24));
         yield return new ChromeRecipe("book_main.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
         [
             new ChromePlate(7, 23, 561, 355, ChromeMaterial.Cloth),
@@ -166,20 +203,21 @@ public static class InterfaceChromeRecipes
     private static IEnumerable<ChromeRecipe> ReadingRecipes()
     {
         var (ox, oy) = AreaReadingArtLayout.BackgroundCorner;
-        yield return new ChromeRecipe("WritenSideBar.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [], Holes: ChromeHoles.None);
+        yield return new ChromeRecipe("WritenSideBar.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [], Holes: ChromeHoles.None, LensFrom: new ChromeLensFrom(25, 24));
         ChromeRecipe Table(string file, params ChromePart[] parts) => new(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts, Holes: ChromeHoles.None, OriginX: ox, OriginY: oy);
         static IEnumerable<ChromePart> Outline(int x, int y, int width, int height) =>
         [
             new ChromePlate(x, y, width, 1, ChromeMaterial.Dark, Bevel: false), new ChromePlate(x, y + height - 1, width, 1, ChromeMaterial.Dark, Bevel: false),
             new ChromePlate(x, y, 1, height, ChromeMaterial.Dark, Bevel: false), new ChromePlate(x + width - 1, y, 1, height, ChromeMaterial.Dark, Bevel: false),
         ];
+        // ARC-UI-2720: the materials are sampled in window coordinates, so the fold the pages' shade follows is the book art's 320 plus its corner.
         yield return Table("BookBackground.ART",
             new ChromePlate(40, 23, 556, 352, ChromeMaterial.Cloth),
             new ChromePlate(50, 30, 27, 337, ChromeMaterial.PageEdge, Bevel: false),
             new ChromePlate(564, 30, 29, 337, ChromeMaterial.PageEdge, Bevel: false),
             new ChromePlate(77, 30, 243, 337, ChromeMaterial.Parchment, Bevel: false),
             new ChromePlate(320, 30, 244, 337, ChromeMaterial.Parchment, Bevel: false),
-            new ChromePlate(289, 21, 62, 9, ChromeMaterial.Iron), new ChromePlate(289, 371, 62, 9, ChromeMaterial.Iron));
+            new ChromePlate(289, 21, 62, 9, ChromeMaterial.Iron), new ChromePlate(289, 371, 62, 9, ChromeMaterial.Iron)) with { FoldX = ox + AreaReadingArtLayout.BookFold };
         yield return Table("NoteBackground.ART", new ChromePlate(188, 25, 278, 352, ChromeMaterial.Parchment));
         yield return Table("TeleBackground.ART", [new ChromePlate(178, 25, 283, 352, ChromeMaterial.Parchment),
             .. Outline(186, 34, 49, 49), .. Outline(405, 34, 49, 49),
@@ -265,7 +303,7 @@ public static class InterfaceChromeRecipes
             new ChromeRuling(PageX, PageY, PageWidth, PageHeight, RuleStep, RuleX - PageX, RuleY - PageY),
             new ChromeSunk(577, 179, 103, 71, ChromeMaterial.Paper), new ChromeSunk(577, 275, 103, 71, ChromeMaterial.Paper),
             new ChromeSunk(39, 334, 126, 30, ChromeMaterial.Pit),
-            new ChromeBare(AreaSchematicWindowLayout.RoundView.X, AreaSchematicWindowLayout.RoundView.Y, AreaSchematicWindowLayout.RoundView.Width, AreaSchematicWindowLayout.RoundView.Height),
+            new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89),
             new ChromeKeep(72, 144, 90, 70, true), new ChromeKeep(71, 231, 96, 72, true),
         };
         for (var d = 0; d < AreaSchematicWindowLayout.Disciplines; d++)
@@ -273,7 +311,7 @@ public static class InterfaceChromeRecipes
             var (x, y) = AreaSchematicWindowLayout.DisciplineTab(d);
             parts.Add(new ChromeBare(x, y, 27, 40));
         }
-        yield return new ChromeRecipe("Schematic_Base.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts);
+        yield return new ChromeRecipe("Schematic_Base.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts, LensFrom: new ChromeLensFrom(50, 26));
         var tabs = new[] { "Anatomical_Tab.ART", "Chemistry_Tab.ART", "Electrical_Tab.ART", "Explosives_Tab.ART", "GunSmithy_Tab.ART", "Mechanical_Tab.ART", "Smithy_Tab.ART", "Theraputics_Tab.ART" };
         for (var d = 0; d < tabs.Length; d++)
         {
@@ -393,27 +431,27 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(124, 25, 223, 55, ChromeMaterial.Pit),
             new ChromeSunk(18, 100, 330, 310, ChromeMaterial.Pit), // runs off the frame's bottom: the original's box has no bottom edge between its corners
             new ChromeGrid(23, 107, 10, 9, 32),
-            new ChromeKeep(11, 9, 89, 89), // the opaque box behind the live round view
-            new ChromeRoundView(55.5, 53.5, 44.5, false),
+            new ChromeKeep(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), // the opaque box behind the live round view
+            new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), // ARC-UI-2762: the lens art 198 carries the one ring (inside its square); a second ring outside the circle showed as arcs at the four sides
             new ChromeKeep(10, 303, 112, 97),
             new ChromeKeep(244, 303, 114, 97),
         ]);
         // ARC-UI-1194: the loot, barter and steal windows' frames (Legacy pixels of each art). The grids' last column and row carry a line too (their pit goes on
         // for the scroll bar's chain, which is kept). The curly flourishes of the original's boxes are not drawn (as in the inventory).
-        List<ChromePart> lootParts = [new ChromeRoundView(60.5, 61.5, 44.5), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
+        List<ChromePart> lootParts = [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
         foreach (var x in new[] { 171.0, 258.0 })
             foreach (var y in new[] { 45.5, 64.5, 82.5 }) lootParts.Add(new ChromeRivet(x, y, 2.5));
         lootParts.AddRange([new ChromeSunk(6, 134, 342, 260, ChromeMaterial.Pit), new ChromeGrid(8, 136, 10, 8, 32, true), new ChromeKeep(332, 136, 12, 256)]);
-        var loot = new ChromeRecipe("loot.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, lootParts);
+        var loot = new ChromeRecipe("loot.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, lootParts, LensFrom: new ChromeLensFrom(16, 17));
         List<ChromePart> barterParts =
         [
             new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit), new ChromeSunk(82, 125, 266, 36, ChromeMaterial.Pit),
             new ChromeSunk(6, 166, 343, 228, ChromeMaterial.Pit), new ChromeGrid(8, 168, 10, 7, 32, true), new ChromeKeep(332, 168, 12, 224),
             new ChromeRivet(147.5, 112, 2.5), new ChromeRivet(282.5, 112, 2.5),
         ];
-        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeKeep(12, 13, 98, 95, true), .. barterParts]);
+        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
         var follower = new ChromeRecipe("barter_follower.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
-            [new ChromeRoundView(60.5, 61.5, 44.5), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts]);
+            [new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts], LensFrom: new ChromeLensFrom(16, 17));
         var lootDoll = new ChromeRecipe("loot_pd.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
         [
             new ChromeSunk(70, 46, 215, 194, ChromeMaterial.Pit),
@@ -440,7 +478,7 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(231, 303, 110, 97),
         ], Holes: ChromeHoles.None); // the cover's four clear columns at the right edge (x 337 to 340) show the pack under it: not a hole, so no brass rim runs down them
         // The lenses (231 barter, 232 loot, 233 own window; ARC-UI-1810: 198 `PCWinCvr`, the character sheet's, the logbook's and the map window's) are the round view's ring around the live game view's circle.
-        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
+        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5, Inward: true)]));
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
             "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art",
             // ARC-UI-1195: the character sheet's buttons (the + and − of the stats, skills, technology and spells pages, the page tabs, the skill group and discipline buttons).
@@ -450,7 +488,12 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, barterDoll, dollCover, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        // ARC-UI-2763: the windows of the inventory family (the inventory, loot, barter, steal, identify and repair windows, backdrop BD-A) are all one wood: the original's arts have wood of slightly different tones
+        // (the doll 223 darker than the pack 221, the loot doll lighter), so the window's two halves and the backdrop behind them read as two surfaces. Every art of the family takes the tone `FamilyWoodLow` / `FamilyWoodHigh`;
+        // the pack art (inventor.art) continues the doll's grain from the split (358 units), as the backdrop's right piece does.
+        ChromeRecipe Family(ChromeRecipe recipe) => recipe with { FamilyWood = true };
+        return [top, bottom, Family(inventory with { OriginX = InterfaceChromeRenderer.SteamwovenFamilySplitUnits }), Family(doll), Family(loot), Family(barter), Family(follower), Family(lootDoll), Family(barterDoll), Family(dollCover),
+            .. lenses.Select(recipe => recipe.File is "lns_bart.art" or "lns_loot.art" or "lns_papr.art" ? Family(recipe) : recipe), .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
@@ -462,31 +505,53 @@ public static class InterfaceChromeRecipes
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and
     // 680, 189) are sunk black pits the window writes its numbers in. The portrait's ring is the round view's generated one (ARC-UI-1810: the lens art 198 carries the same ring in its corners). Kept pictures: the compass rose,
-    // the red route sketch and the Travel button's brass ring, and the brass pill under the view's bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of
+    // the red route sketch and the Travel button's brass ring. The brass pill under the view's bottom edge is generated (ARC-UI-2194: <see cref="NavPillParts"/>, the same parts as the cover 217's; the compass button 139 is drawn on it). The holes of
     // the zoom and whole-map buttons are covered by those buttons. The map picture itself, the pieces the windows do not draw (140, 199, 219, 220) are not part of it.
     private static ChromeRecipe[] MapPanels()
     {
         List<ChromePart> window =
         [
             new ChromeSunk(680, 157, 94, 22, ChromeMaterial.Pit), new ChromeSunk(680, 189, 94, 22, ChromeMaterial.Pit),
-            new ChromeRoundView(69.5, 68.5, 44.5),
+            // ARC-UI-2694: the hole's square takes no rim of the window's own and no ring outside the circle: the lens art 198 carries the one ring (inside its square), a second one outside showed as cut arcs.
+            new ChromeBare(AreaLensPlace.X, AreaLensPlace.Y, 89, 89),
             new ChromeKeep(704, 51, 47, 47, true),
             new ChromeKeep(716, 26, 23, 23, true), new ChromeKeep(683, 63, 23, 23, true), new ChromeKeep(749, 63, 23, 23, true), new ChromeKeep(717, 97, 23, 23, true),
             new ChromeKeep(725, 13, 5, 15), new ChromeKeep(725, 119, 5, 33), new ChromeKeep(666, 72, 19, 5), new ChromeKeep(771, 72, 20, 5),
             new ChromeSunk(673, 266, 110, 41, ChromeMaterial.WoodDark), new ChromeKeep(675, 268, 106, 38),
             new ChromeKeep(691, 307, 70, 69, true),
-            new ChromeKeep(295, 341, 206, 51),
+            // ARC-UI-2194: the brass pill under the view (its upper part is the cover 217's), the compass opening's own rim given up for the pill's ring.
+            new ChromeBare(AreaWorldMapArtLayout.CoverAt.X + 83, AreaWorldMapArtLayout.CoverAt.Y + 8, 41, 41),
+            .. NavPillParts(AreaWorldMapArtLayout.CoverAt.X, AreaWorldMapArtLayout.CoverAt.Y),
         ];
         // ARC-UI-1810: the buttons over the frame. Zoom (811, 111 x 56) and Whole map (812, 106 x 56) are a lamp and a picture of a map side by side, two frames each (the lamp lit in the second): a generated
         // lamp ball (rim, dark glass, the lamp's own light kept) and the map picture kept. Travel (813, 57 x 57) and the compass button (139, 45 x 45) are balls on their own: the generic button recipe for
         // the blank Travel ball, and the compass ball's own picture inside a generated rim, as the other ball buttons.
         return
         [
-            new ChromeRecipe("mapmain.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window),
+            new ChromeRecipe("mapmain.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window, LensFrom: new ChromeLensFrom(25, 24)),
             new ChromeRecipe("MapZoomBut.ART", ChromeKind.Panel, ChromeMaterial.Dark, ChromeSides.None, [new ChromeBall(21.5, 29, 21, 8), new ChromeKeep(45, 0, 66, 56)], Holes: ChromeHoles.None),
             new ChromeRecipe("MapWholeBut.ART", ChromeKind.Panel, ChromeMaterial.Dark, ChromeSides.None, [new ChromeBall(21.5, 28.5, 21, 8), new ChromeKeep(53, 0, 53, 56)], Holes: ChromeHoles.None),
             new ChromeRecipe("MapTravelBut.ART", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []),
             new ChromeRecipe("navbutton.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true),
+            // ARC-UI-2194: the bottom cover 217 (207 x 35, the pill's upper part over the view's bottom edge): the same parts at the cover's own coordinates, its brass sampled at the window's.
+            new ChromeRecipe("Nav_Cvr.ART", ChromeKind.Panel, ChromeMaterial.Brass, ChromeSides.None, [.. NavPillParts(0, 0)], Holes: ChromeHoles.None,
+                OriginX: AreaWorldMapArtLayout.CoverAt.X, OriginY: AreaWorldMapArtLayout.CoverAt.Y),
+        ];
+    }
+
+    /// <summary>ARC-UI-2194: the world map window's brass pill under the view, as parts at (<paramref name="x"/>, <paramref name="y"/>), where the cover 217's corner lies (the window's (294, 341); 0, 0 for the cover itself).
+    /// The cover holds the pill's upper 35 rows and the frame 138 the rest, so both recipes build them from this one list and the plates meet at the cover's lower edge. A housing plate (darker brass),
+    /// the two end studs, the two capsule plates (a raised rim round a recessed face), the ring round the compass opening (centre 103.5, 28.5; the button 139 is drawn over the opening) and the two screws.</summary>
+    public static IReadOnlyList<ChromePart> NavPillParts(int x, int y)
+    {
+        (double X, double Y)[] housing = [(38, 19), (41, 15), (46, 12), (52, 10), (155, 10), (161, 12), (165, 15), (169, 19), (169, 49), (38, 49)];
+        return
+        [
+            new ChromePolygon([.. housing.Select(p => (p.X + x, p.Y + y))], ChromeMaterial.BrassDark),
+            new ChromeCapsule(x, y + 31, 8, 7, 1.5), new ChromeCapsule(x + 199, y + 32, 8, 7, 1.5),
+            new ChromeCapsule(x + 4.5, y + 19, 66, 29), new ChromeCapsule(x + 136.5, y + 19, 66, 29),
+            new ChromeSocket(x + 103.5, y + 28.5, 20.5, 5.5),
+            new ChromeRivet(x + 75, y + 44.5, 3.5), new ChromeRivet(x + 132, y + 44.5, 3.5),
         ];
     }
 
@@ -502,7 +567,7 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(497, 59, 244, 332, ChromeMaterial.Pit),
             new ChromeSunk(24, 278, 452, 113, ChromeMaterial.Pit),
             new ChromeKeep(308, 294, 3, 84),
-            new ChromeKeep(12, 10, 89, 89, true), new ChromeRoundView(56.5, 54.5, 44.5, false), // the medallion inside the lens 198 (kept) and the ring the lens carries in its corners
+            new ChromeKeep(AreaLensPlace.X, AreaLensPlace.Y, 89, 89, true), // the medallion under the lens 198 (kept; ARC-UI-2694: the lens's round view replaces it and the lens art draws the ring)
             new ChromeKeep(6, 131, 100, 100, true),
             new ChromeKeep(411, 127, 76, 56, true), new ChromeKeep(411, 197, 76, 56, true),
             new ChromeKeep(747, 60, 46, 330),
@@ -525,7 +590,7 @@ public static class InterfaceChromeRecipes
         foreach (var y in new[] { 82, 130, 177, 225, 272 }) spells.Add(new ChromeSunk(16, y - 2, 36, 36, ChromeMaterial.Pit));
         return
         [
-            new ChromeRecipe("char_maint.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window),
+            new ChromeRecipe("char_maint.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window, LensFrom: new ChromeLensFrom(12, 10)),
             new ChromeRecipe("Skills_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, skills),
             new ChromeRecipe("Disciplines_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, disciplines),
             new ChromeRecipe("char_spells.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, spells),
@@ -558,6 +623,13 @@ public static class InterfaceChromeRenderer
     }
 
     private static readonly Rgb Ink = new(20, 14, 8), BrassLight = new(214, 178, 96), Brass = new(160, 120, 52), BrassDark = new(96, 70, 30);
+    /// <summary>ARC-UI-2763: the width in original units of the left part of the inventory family's window (the doll's, the loot and barter windows' left art, the pack's `PackX`): where the pack art 221 starts, so its grain continues the left part's.</summary>
+    public const int SteamwovenFamilySplitUnits = Arcanum.World.AreaInventoryArtLayout.PackX;
+
+    /// <summary>ARC-UI-2763: the darkest and lightest wood colour of the inventory family: the wood of the pack art 221 (`inventor.art`) as <see cref="TuneWood"/> reads it (mean 64, 51, 42 in the Legacy pixels), the art every window of the family has
+    /// on its right and the middle one of the family's arts (the doll 223 reads 61, 46, 38, the loot window 66, 53, 45, its doll 70, 53, 43).</summary>
+    public static readonly (float R, float G, float B) FamilyWoodLow = (12.34f, 1.14f, 5.40f), FamilyWoodHigh = (102.34f, 87.10f, 69.89f);
+
     private static readonly Rgb WoodLowDefault = new(58, 37, 20), WoodHighDefault = new(112, 76, 43), IronLow = new(44, 46, 50), IronHigh = new(96, 98, 104);
     private static readonly Rgb SlateLow = new(20, 22, 26), SlateHigh = new(66, 68, 74);
     private static readonly Rgb PitFill = new(3, 3, 5), GridLine = new(48, 54, 64);
@@ -579,6 +651,8 @@ public static class InterfaceChromeRenderer
         public Rgb WoodLow = InterfaceChromeRenderer.WoodLowDefault, WoodHigh = InterfaceChromeRenderer.WoodHighDefault;
         /// <summary>ARC-UI-1196: where the art's corner lies in the window's larger picture (<see cref="ChromeRecipe.OriginX"/>): the materials are sampled at that offset.</summary>
         public double OriginX, OriginY;
+        /// <summary>ARC-UI-2720: the x, in the materials' coordinates, of the fold the Parchment material shades (<see cref="ChromeRecipe.FoldX"/>).</summary>
+        public float FoldX = InterfaceChromeRenderer.LogbookFold;
         /// <summary>ARC-UI-1810: the frame being painted is the recipe's down frame (a <see cref="ChromeBall"/> turns its light to the other side).</summary>
         public bool Down;
 
@@ -640,7 +714,10 @@ public static class InterfaceChromeRenderer
         if (!picture.IsEmpty && picture.Length != pixelWidth * pixelHeight * 4) throw new ArgumentException("picture RGBA size", nameof(picture));
         if (frameIndex < 0) throw new ArgumentOutOfRangeException(nameof(frameIndex));
 
-        var canvas = new Canvas(width, height, legacy.ToArray(), picture.IsEmpty ? null : picture.ToArray(), scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, Down = frameIndex == recipe.DownFrame };
+        var legacyPixels = legacy.ToArray();
+        var picturePixels = picture.IsEmpty ? null : picture.ToArray();
+        if (recipe.LensFrom is { } lensFrom) MoveLens(lensFrom, legacyPixels, width, height, picturePixels, pixelWidth, pixelHeight, scale);
+        var canvas = new Canvas(width, height, legacyPixels, picturePixels, scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, FoldX = recipe.FoldX, Down = frameIndex == recipe.DownFrame };
         if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);
@@ -658,6 +735,77 @@ public static class InterfaceChromeRenderer
         return output;
     }
 
+    /// <summary>ARC-UI-2714: moves the lens's box of a frame (<see cref="ChromeLensFrom.Side"/> units square plus <see cref="ChromeLensFrom.Margin"/> units around it) from where the Legacy frame has it to the
+    /// common place (<see cref="AreaLensPlace"/>): the pixels of the frame (and of the HD picture at the same layout, <paramref name="scale"/> device pixels per unit) are copied there, and the
+    /// place left is filled with the pixels beside it (the column to its left, or to its right at the frame's edge), so the frame's silhouette closes where the lens was.</summary>
+    private static void MoveLens(ChromeLensFrom from, byte[] legacy, int width, int height, byte[]? picture, int pictureWidth, int pictureHeight, double scale)
+    {
+        int Edge(double units) => (int)Math.Round(units * scale, MidpointRounding.AwayFromZero);
+        var size = ChromeLensFrom.Side + 2 * ChromeLensFrom.Margin;
+        var (fromX, fromY) = (from.X - ChromeLensFrom.Margin, from.Y - ChromeLensFrom.Margin);
+        var (toX, toY) = (AreaLensPlace.X - ChromeLensFrom.Margin, AreaLensPlace.Y - ChromeLensFrom.Margin);
+        if (fromX < 0 || fromY < 0 || toX < 0 || toY < 0 || (fromX == toX && fromY == toY)) return;
+        MoveBox(legacy, width, height, fromX, fromY, toX, toY, size, size);
+        if (picture is null) return;
+        var w = Math.Min(Edge(fromX + size) - Edge(fromX), Edge(toX + size) - Edge(toX));
+        var h = Math.Min(Edge(fromY + size) - Edge(fromY), Edge(toY + size) - Edge(toY));
+        MoveBox(picture, pictureWidth, pictureHeight, Edge(fromX), Edge(fromY), Edge(toX), Edge(toY), w, h);
+    }
+
+    private static void MoveBox(byte[] pixels, int width, int height, int fromX, int fromY, int toX, int toY, int boxWidth, int boxHeight)
+    {
+        var (w, h) = (Math.Min(boxWidth, Math.Min(width - fromX, width - toX)), Math.Min(boxHeight, Math.Min(height - fromY, height - toY)));
+        if (w <= 0 || h <= 0) return;
+        var box = new byte[w * h * 4];
+        for (var y = 0; y < h; y++) Array.Copy(pixels, ((fromY + y) * width + fromX) * 4, box, y * w * 4, w * 4);
+        // The place left: each row takes the pixel beside the box (to its left; at the frame's left edge, to its right).
+        var beside = fromX > 0 ? fromX - 1 : Math.Min(fromX + w, width - 1);
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+            Array.Copy(pixels, ((fromY + y) * width + beside) * 4, pixels, ((fromY + y) * width + fromX + x) * 4, 4);
+        for (var y = 0; y < h; y++) Array.Copy(box, y * w * 4, pixels, ((toY + y) * width + toX) * 4, w * 4);
+    }
+
+    /// <summary>
+    /// ARC-UI-2452: a plain board of <paramref name="material"/> of exactly <paramref name="boardWidth"/> × <paramref name="boardHeight"/> device pixels (RGBA, all opaque), the Steamwoven
+    /// prototype's sides of the two panels and menu backdrop. The wood takes the colours of the strip frame <paramref name="tone"/> (its Legacy RGBA and recipe, as the strip's own wood is tuned)
+    /// so the sides match the centre; the material is sampled at <paramref name="scale"/> device pixels per unit from (<paramref name="originX"/>, <paramref name="originY"/>) units at the board's
+    /// top left, so a board beside the strip continues the strip's grain. <paramref name="rim"/> is <see cref="ChromeSides.Top"/> or <see cref="ChromeSides.Bottom"/> (or none): the brass rim the strip has
+    /// on the edge that faces the play view, on the board's own edge.
+    /// </summary>
+    public static byte[] RenderBoard(ChromeMaterial material, ChromeSides rim, int boardWidth, int boardHeight, double scale, double originX, double originY,
+        ChromeRecipe? tone, ReadOnlySpan<byte> toneLegacy, int toneWidth, int toneHeight)
+    {
+        if (boardWidth is < 1 or > MaxSide * 8 || boardHeight is < 1 or > MaxSide * 8) throw new ArgumentOutOfRangeException(nameof(boardWidth), $"{boardWidth}x{boardHeight}");
+        if (!(scale >= 0.25 && scale <= MaxScale)) throw new ArgumentOutOfRangeException(nameof(scale), scale.ToString());
+        if ((rim & ~(ChromeSides.Top | ChromeSides.Bottom)) != 0) throw new ArgumentOutOfRangeException(nameof(rim), rim.ToString());
+        var legacyW = (int)Math.Ceiling(boardWidth / scale) + 1;
+        var legacyH = (int)Math.Ceiling(boardHeight / scale) + 1;
+        var opaque = new byte[legacyW * legacyH * 4];
+        Array.Fill(opaque, (byte)255);
+        var canvas = new Canvas(legacyW, legacyH, opaque, null, scale);
+        if (tone is not null && toneLegacy.Length == toneWidth * toneHeight * 4)
+        {
+            var toneCanvas = new Canvas(toneWidth, toneHeight, toneLegacy.ToArray(), null, 1);
+            TuneWood(toneCanvas, tone);
+            canvas.WoodLow = toneCanvas.WoodLow; canvas.WoodHigh = toneCanvas.WoodHigh;
+        }
+        // A board that hangs from its top keeps the canvas's top rows, one that stands on its bottom keeps the bottom rows (so the rim lies on the kept edge).
+        var skipRows = rim == ChromeSides.Bottom ? canvas.H - boardHeight : 0;
+        canvas.OriginX = originX; canvas.OriginY = originY - skipRows / scale;
+        Fill(canvas, 0, 0, canvas.W, canvas.H, material);
+        Rim(canvas, rim);
+        var output = new byte[boardWidth * boardHeight * 4];
+        for (var y = 0; y < boardHeight; y++)
+        for (var x = 0; x < boardWidth; x++)
+        {
+            var c = canvas.Color[(y + skipRows) * canvas.W + x];
+            var o = (y * boardWidth + x) * 4;
+            output[o] = ToByte(c.R); output[o + 1] = ToByte(c.G); output[o + 2] = ToByte(c.B); output[o + 3] = 255;
+        }
+        return output;
+    }
+
     /// <summary>ARC-UI-148: the pixel size of a frame of <paramref name="width"/> × <paramref name="height"/> Legacy pixels painted at <paramref name="scale"/>
     /// (each edge is <c>round(size × scale)</c>, so a whole scale gives exactly size × scale).</summary>
     public static (int Width, int Height) PixelSize(int width, int height, double scale) =>
@@ -668,6 +816,15 @@ public static class InterfaceChromeRenderer
     /// covers (alpha-weighted colour, so a transparent texel adds no colour; every target pixel is opaque), the exact box filter for a whole ratio
     /// (4 to 2 and 4 to 1) and the area-weighted one for 4 to 3. A source of the target's size is copied with alpha 255.</summary>
     public static byte[] ResamplePicture(ReadOnlySpan<byte> source, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)
+        => Resample(source, sourceWidth, sourceHeight, targetWidth, targetHeight, keepAlpha: false);
+
+    /// <summary>ARC-RENDER-3002: the same area (box) filter as <see cref="ResamplePicture"/> for a frame that keeps its transparency: the alpha of a target pixel is
+    /// the area average of the source alphas (straight alpha, rounded) and its colour is weighted by alpha, so a transparent texel adds no colour and an edge does
+    /// not grow a dark or light halo. A source of the target's size is copied as it is.</summary>
+    public static byte[] ResampleStraight(ReadOnlySpan<byte> source, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)
+        => Resample(source, sourceWidth, sourceHeight, targetWidth, targetHeight, keepAlpha: true);
+
+    private static byte[] Resample(ReadOnlySpan<byte> source, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight, bool keepAlpha)
     {
         if (sourceWidth < 1 || sourceHeight < 1 || targetWidth < 1 || targetHeight < 1) throw new ArgumentOutOfRangeException(nameof(sourceWidth));
         if (source.Length != sourceWidth * sourceHeight * 4) throw new ArgumentException("source RGBA size", nameof(source));
@@ -675,7 +832,7 @@ public static class InterfaceChromeRenderer
         {
             // The same size: the pixels as they are, opaque like every other ratio's.
             var copy = source.ToArray();
-            for (var i = 3; i < copy.Length; i += 4) copy[i] = 255;
+            if (!keepAlpha) for (var i = 3; i < copy.Length; i += 4) copy[i] = 255;
             return copy;
         }
         var output = new byte[targetWidth * targetHeight * 4];
@@ -705,7 +862,7 @@ public static class InterfaceChromeRenderer
                 // A fully transparent area keeps its own colour (the texel under a hole is never shown, but stays defined).
                 if (weight > 0) { output[o] = (byte)Math.Round(r / weight); output[o + 1] = (byte)Math.Round(g / weight); output[o + 2] = (byte)Math.Round(b / weight); }
                 else { output[o] = (byte)Math.Round(rawR / area); output[o + 1] = (byte)Math.Round(rawG / area); output[o + 2] = (byte)Math.Round(rawB / area); }
-                output[o + 3] = 255;
+                output[o + 3] = keepAlpha ? (byte)Math.Round(weight / area) : (byte)255;
             }
         }
         return output;
@@ -728,16 +885,25 @@ public static class InterfaceChromeRenderer
             }
         }
         if (recipe.Holes != ChromeHoles.None)
-            foreach (var hole in Holes(c))
+        {
+            var holes = Holes(c);
+            // ARC-UI-2194: a bare mark names the smallest hole whose box holds its centre (a small opening inside the box of a large hole, the compass opening in the map view's hole, has its own).
+            var bare = recipe.Parts.OfType<ChromeBare>().Select(mark => holes.Where(hole => mark.X + mark.Width * 0.5 >= hole.X0 && mark.X + mark.Width * 0.5 < hole.X1 && mark.Y + mark.Height * 0.5 >= hole.Y0 && mark.Y + mark.Height * 0.5 < hole.Y1)
+                .OrderBy(hole => (hole.X1 - hole.X0) * (hole.Y1 - hole.Y0)).Select(hole => (Hole?)hole).FirstOrDefault()).Where(hole => hole is not null).ToList();
+            foreach (var hole in holes)
                 if (!recipe.Parts.OfType<ChromeRoundView>().Any(view => view.CenterX >= hole.X0 && view.CenterX < hole.X1 && view.CenterY >= hole.Y0 && view.CenterY < hole.Y1)
-                    && !recipe.Parts.OfType<ChromeBare>().Any(bare => bare.X + bare.Width * 0.5 >= hole.X0 && bare.X + bare.Width * 0.5 < hole.X1 && bare.Y + bare.Height * 0.5 >= hole.Y0 && bare.Y + bare.Height * 0.5 < hole.Y1))
+                    && !bare.Contains(hole))
                     HoleRim(c, hole, recipe.Holes == ChromeHoles.Cloth);
+        }
         foreach (var part in recipe.Parts)
         {
             switch (part)
             {
                 case ChromeRoundView view: RoundView(c, view); break;
                 case ChromeBall ball: Ball(c, ball); break;
+                case ChromePolygon polygon: Polygon(c, polygon); break;
+                case ChromeCapsule capsule: Capsule(c, capsule); break;
+                case ChromeSocket socket: RingBand(c, socket.CenterX * c.Scale, socket.CenterY * c.Scale, socket.InnerRadius * c.Scale, socket.Width * c.Scale / c.S); break; // the width in exact device pixels (RingBand multiplies by the rounded scale)
                 case ChromeRivet rivet: Rivet(c, rivet); break;
                 case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y), keep.Round); break;
                 case ChromeGlyph glyph: Glyph(c, glyph); break;
@@ -902,6 +1068,12 @@ public static class InterfaceChromeRenderer
     // wood is the middle of our grain; its spread (about six standard deviations of the pixels) is the grain's range, never wider than ours.
     private static void TuneWood(Canvas c, ChromeRecipe recipe)
     {
+        if (recipe.FamilyWood)
+        {
+            c.WoodLow = new Rgb(FamilyWoodLow.R, FamilyWoodLow.G, FamilyWoodLow.B);
+            c.WoodHigh = new Rgb(FamilyWoodHigh.R, FamilyWoodHigh.G, FamilyWoodHigh.B);
+            return;
+        }
         double sr = 0, sg = 0, sb = 0, qr = 0, qg = 0, qb = 0; long n = 0;
         for (var y = 0; y < c.LegacyH; y++)
         for (var x = 0; x < c.LegacyW; x++)
@@ -938,7 +1110,13 @@ public static class InterfaceChromeRenderer
                 ChromePlate p => (p.X, p.Y, p.Width, p.Height),
                 ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
                 ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                // ARC-UI-2762: the lens's square (and four units around it, where the Legacy frame has its own ring) is no wood: the frames draw no ring of their own, so the old ring pixels must not tone the wood.
+                ChromeBare { Width: 89 } p => (p.X - 4, p.Y - 4, p.Width + 8, p.Height + 8),
                 ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
+                // ARC-UI-2194: the brass pill's parts (the housing and the plates; the ring lies inside the housing's box).
+                ChromeCapsule p => ((int)Math.Floor(p.X), (int)Math.Floor(p.Y), (int)Math.Ceiling(p.Width) + 1, (int)Math.Ceiling(p.Height) + 1),
+                ChromePolygon p => (p.Box.X, p.Box.Y, p.Box.Width, p.Box.Height + 2), // two rows more: the pill's last rows lie under the housing's lower edge
+                ChromeSocket p => ((int)Math.Floor(p.CenterX - p.InnerRadius - p.Width), (int)Math.Floor(p.CenterY - p.InnerRadius - p.Width), (int)Math.Ceiling(2 * (p.InnerRadius + p.Width)) + 1, (int)Math.Ceiling(2 * (p.InnerRadius + p.Width)) + 1),
                 _ => (0, 0, 0, 0),
             };
             if (x >= px && x < px + pw && y >= py && y < py + ph) return true;
@@ -964,19 +1142,31 @@ public static class InterfaceChromeRenderer
         ChromeMaterial.Slate => Rgb.Lerp(SlateLow, SlateHigh, Math.Clamp(0.15f + 0.75f * Fbm(u * 0.18f, v * 0.18f, 13), 0, 1)),
         ChromeMaterial.Dark => Rgb.Lerp(DarkFill, new Rgb(16, 16, 26), Fbm(u * 0.05f, v * 0.05f, 11)),
         ChromeMaterial.Cloth => ClothAt(u, v),
-        ChromeMaterial.Parchment => ParchmentAt(u, v),
+        ChromeMaterial.Parchment => ParchmentAt(u, v, c.FoldX),
         ChromeMaterial.Paper => PaperAt(u, v),
         ChromeMaterial.PageEdge => PageEdgeAt(u, v),
+        ChromeMaterial.Brass => BrassAt(u, v),
+        ChromeMaterial.BrassDark => BrassAt(u, v).Times(0.45f),
         _ => FaceHigh,
     };
+
+    // ARC-UI-2194: brushed brass for the world map window's pill: long horizontal streaks under a slow tone, in our own colours.
+    private static readonly Rgb BrassMatLow = new(112, 82, 36), BrassMatHigh = new(176, 136, 64);
+
+    private static Rgb BrassAt(float u, float v)
+    {
+        var tone = Fbm(u * 0.03f, v * 0.12f, 61);
+        var streak = Fbm(u * 0.04f, v * 0.9f, 62);
+        return Rgb.Lerp(BrassMatLow, BrassMatHigh, Math.Clamp(0.5f + 1.8f * (tone - 0.5f) + 1.1f * (streak - 0.5f), 0, 1));
+    }
 
     // ARC-UI-1196: our own cloth, parchment and page edge (colours chosen by eye).
     private static readonly Rgb ClothLow = new(56, 28, 30), ClothHigh = new(98, 50, 52);
     private static readonly Rgb ParchmentLow = new(132, 126, 110), ParchmentHigh = new(176, 170, 152), PaperLow = new(172, 150, 108), PaperHigh = new(222, 200, 154);
     private static readonly Rgb PageEdgeLow = new(70, 63, 56), PageEdgeHigh = new(136, 128, 116);
 
-    /// <summary>The x, in the book's Legacy pixels, of the fold between the two pages (the book art's 286: the left page ends and the right one starts).</summary>
-    private const float Fold = 286f;
+    /// <summary>The x, in the book's Legacy pixels, of the fold between the two pages (the logbook's book art's 286: the left page ends and the right one starts).</summary>
+    public const float LogbookFold = 286f;
 
     private static Rgb ClothAt(float u, float v)
     {
@@ -993,13 +1183,13 @@ public static class InterfaceChromeRenderer
         return Rgb.Lerp(PaperLow, PaperHigh, Math.Clamp(0.35f + 0.55f * mottle + 0.1f * (grain - 0.5f), 0, 1));
     }
 
-    private static Rgb ParchmentAt(float u, float v)
+    private static Rgb ParchmentAt(float u, float v, float fold)
     {
         var mottle = Fbm(u * 0.035f, v * 0.04f, 21);
         var grain = Fbm(u * 0.4f, v * 0.4f, 22);
         var colour = Rgb.Lerp(ParchmentLow, ParchmentHigh, Math.Clamp(0.35f + 0.55f * mottle + 0.1f * (grain - 0.5f), 0, 1));
         // The pages sink toward the fold: a soft shade on both sides and a dark line on the fold itself.
-        var d = MathF.Abs(u - Fold);
+        var d = MathF.Abs(u - fold);
         return colour.Times(1 - 0.4f * MathF.Exp(-d / 20f) - (d < 1.2f ? 0.3f : 0));
     }
 
@@ -1241,6 +1431,22 @@ public static class InterfaceChromeRenderer
     {
         float cx = (float)(view.CenterX * c.Scale), cy = (float)(view.CenterY * c.Scale), r = (float)(view.Radius * c.Scale);
         var reach = (int)(r + 2);
+        if (view.Inward)
+        {
+            // The ring takes the three outermost units of the circle: those pixels become opaque (an anti-aliased inner edge), then the brass band is laid on them from the inner radius out to the circle's edge.
+            var inner = r - 3 * c.S;
+            for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
+            for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
+            {
+                float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
+                if (d < inner - 0.5f || d >= r + 0.5f) continue;
+                var i = y * c.W + x;
+                c.Alpha[i] = Math.Clamp(d - inner + 0.5f, 0, 1);
+                c.Color[i] = Ink;
+            }
+            RingBand(c, cx, cy, inner);
+            return;
+        }
         for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
         for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
         {
@@ -1256,10 +1462,10 @@ public static class InterfaceChromeRenderer
 
     // The brass ring around a circle (centre and radius in device pixels), on the opaque pixels outside it: an ink edge, lit brass on the upper left,
     // shaded on the lower right, an ink edge again; three units wide. A round hole's socket and a window's round view (ChromeRoundView) share it.
-    private static void RingBand(Canvas c, double centreX, double centreY, double radius)
+    private static void RingBand(Canvas c, double centreX, double centreY, double radius, double widthUnits = 3)
     {
         float cx = (float)centreX, cy = (float)centreY, r = (float)radius;
-        var ring = 3f * c.S;
+        var ring = (float)widthUnits * c.S;
         var reach = (int)(r + ring + 2);
         for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
         for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
@@ -1272,6 +1478,61 @@ public static class InterfaceChromeRenderer
             var brass = Rgb.Lerp(BrassDark, BrassLight, Math.Clamp(0.5f + 0.5f * (t < 0.5f ? -facing : facing), 0, 1));
             var colour = t < 0.18f ? Rgb.Lerp(Ink, brass, t / 0.18f) : t > 0.85f ? Rgb.Lerp(brass, Ink, (t - 0.85f) / 0.15f) : brass;
             c.Blend(x, y, colour, Math.Clamp(r + ring + 0.5f - d, 0, 1));
+        }
+    }
+
+    // ARC-UI-2194: a capsule plate (see ChromeCapsule). The outline's distance is measured to the capsule's middle line, so the straight sides and the round ends share one edge.
+    private static void Capsule(Canvas c, ChromeCapsule cap)
+    {
+        float s = (float)c.Scale, x0 = (float)(cap.X * s), y0 = (float)(cap.Y * s), x1 = (float)((cap.X + cap.Width) * s), y1 = (float)((cap.Y + cap.Height) * s);
+        float r = MathF.Min(x1 - x0, y1 - y0) * 0.5f, cy = (y0 + y1) * 0.5f, rim = (float)cap.Rim * s;
+        for (var y = Math.Max(0, (int)y0 - 1); y < Math.Min(c.H, (int)y1 + 2); y++)
+        for (var x = Math.Max(0, (int)x0 - 1); x < Math.Min(c.W, (int)x1 + 2); x++)
+        {
+            float px = x + 0.5f, py = y + 0.5f, dx = px - Math.Clamp(px, x0 + r, x1 - r), dy = py - cy;
+            var depth = r - MathF.Sqrt(dx * dx + dy * dy);
+            if (depth < -0.5f) continue;
+            var lit = dx + dy < 0;
+            var brass = Material(c, ChromeMaterial.Brass, px / s, py / s);
+            Rgb colour;
+            if (depth < rim)
+            {
+                colour = depth < 1.5f * c.S ? (lit ? Rgb.Lerp(brass, White, 0.38f) : brass.Times(0.5f)) : Rgb.Lerp(brass, BrassLight, 0.25f);
+                if (depth < 0.6f * c.S) colour = Rgb.Lerp(colour, Ink, 0.55f);
+            }
+            else
+            {
+                var face = brass.Times(0.66f);
+                colour = depth - rim < c.S ? (lit ? face.Times(0.5f) : Rgb.Lerp(face, White, 0.2f)) : face;
+            }
+            c.Blend(x, y, colour, Math.Clamp(depth + 0.5f, 0, 1));
+        }
+    }
+
+    // ARC-UI-2194: a convex polygon plate (see ChromePolygon). The distance inside is the smallest to any edge; the lit side is where the nearest edge faces the upper left.
+    private static void Polygon(Canvas c, ChromePolygon polygon)
+    {
+        var points = polygon.Points.Select(p => ((float)(p.X * c.Scale), (float)(p.Y * c.Scale))).ToList();
+        double area = 0;
+        for (var i = 0; i < points.Count; i++) { var (a, b) = (points[i], points[(i + 1) % points.Count]); area += a.Item1 * b.Item2 - b.Item1 * a.Item2; }
+        if (area < 0) points.Reverse();
+        int xa = (int)points.Min(p => p.Item1) - 1, xb = (int)points.Max(p => p.Item1) + 2, ya = (int)points.Min(p => p.Item2) - 1, yb = (int)points.Max(p => p.Item2) + 2;
+        for (var y = Math.Max(0, ya); y < Math.Min(c.H, yb); y++)
+        for (var x = Math.Max(0, xa); x < Math.Min(c.W, xb); x++)
+        {
+            float px = x + 0.5f, py = y + 0.5f, best = float.MaxValue, nx = 0, ny = 0;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var (a, b) = (points[i], points[(i + 1) % points.Count]);
+                float ex = b.Item1 - a.Item1, ey = b.Item2 - a.Item2, len = MathF.Sqrt(ex * ex + ey * ey);
+                if (len <= 0) continue;
+                var d = (ex * (py - a.Item2) - ey * (px - a.Item1)) / len;
+                if (d < best) { best = d; nx = ey / len; ny = -ex / len; }
+            }
+            if (best < -0.5f) continue;
+            var colour = Bevelled(Material(c, polygon.Material, px / (float)c.Scale, py / (float)c.Scale), best, nx + ny < 0, c.S);
+            if (best < 0.6f * c.S) colour = Rgb.Lerp(colour, Ink, 0.55f);
+            c.Blend(x, y, colour, Math.Clamp(best + 0.5f, 0, 1));
         }
     }
 

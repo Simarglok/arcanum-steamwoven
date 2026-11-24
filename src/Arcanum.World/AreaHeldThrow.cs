@@ -11,18 +11,18 @@ public static class AreaHeldThrow
 {
     /// <summary>
     /// The refusal of the lift onto the game cursor, in the order of <see cref="GameSessionOwner.ThrowHeroItem"/>'s own checks, or
-    /// <see cref="GameSessionFailure.None"/>: an item whose throw script (point 6) comes with an insert-item script (the give-back of a refusing throw would run it, NOT READY, <see cref="GameSessionFailure.ItemScriptUnsupported"/>), and the no-drop flag
+    /// <see cref="GameSessionFailure.None"/>: a stack (ammunition, gold) whose throw script (point 6) comes with an insert-item script (the give-back of a refusing throw would merge it back and run it, NOT READY, <see cref="GameSessionFailure.ItemScriptUnsupported"/>; ARC-COMBAT-2183: any other item runs it at the give-back), and the no-drop flag
     /// (the original's remove check 0x466DA0 refuses the lift and the item stays, <see cref="GameSessionFailure.ItemNotDroppable"/>). ARC-COMBAT-1955: the removal's wield-off and remove-item scripts and the item's throw script run at the throw
     /// (<see cref="SessionHeroThrow.Scripts"/>), so the lift no longer refuses them. ARC-UI-086: an ammunition stack takes the
     /// original's stack path instead (QW1, QW5: the units are split off after a quantity question; the stack path runs no remove check and
-    /// no remove-item event), so only its throw script refuses it (NOT READY); ARC-UI-094: so does the hero's gold pile (its coins are split off the same way, HG1). The session checks again at the throw.
+    /// no remove-item event); ARC-UI-094: so does the hero's gold pile (its coins are split off the same way, HG1). ARC-COMBAT-2182: the throw script of the split stack runs at the throw too, so the lift refuses a stack for the same script mix as any item. The session checks again at the throw.
     /// </summary>
     public static GameSessionFailure Lift(SessionGridMoveItem facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
         var stack = facts.Kind.Type is SessionItemType.Ammo or SessionItemType.Gold;
         var throws = facts.ScriptPoints.Contains(SessionScriptPoint.Throw);
-        if (throws && (stack || facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem))) return GameSessionFailure.ItemScriptUnsupported;
+        if (throws && stack && facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem)) return GameSessionFailure.ItemScriptUnsupported;
         return !stack && facts.NoDrop ? GameSessionFailure.ItemNotDroppable : GameSessionFailure.None;
     }
 
@@ -31,7 +31,7 @@ public static class AreaHeldThrow
     {
         GameSessionFailure.AttackUnsupported => $"not thrown: {name} needs a count to throw (the quantity question gave none)",
         GameSessionFailure.GoldShort => $"not thrown: the hero holds fewer coins than asked",
-        GameSessionFailure.ItemScriptUnsupported => $"not thrown: {name}'s scripts do not run here (a stack's throw script, or a throw script with an insert-item script, is NOT READY)",
+        GameSessionFailure.ItemScriptUnsupported => $"not thrown: {name}'s scripts do not run here (a stack's throw script with an insert-item script is NOT READY)",
         GameSessionFailure.AmmoShort => $"not thrown: {name} has fewer units than asked",
         GameSessionFailure.InvalidAmmo or GameSessionFailure.BudgetExceeded => $"not thrown: the stack of {name} cannot be split ({failure})",
         GameSessionFailure.ItemNotDroppable => $"not thrown: {name} cannot be dropped",

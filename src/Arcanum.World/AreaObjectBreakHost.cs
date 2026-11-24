@@ -36,14 +36,21 @@ public sealed record AreaObjectBreakRun(string Entity, AreaTrapMeeting? Trap, Ar
 /// </summary>
 public static class AreaObjectBreakHost
 {
-    /// <summary>Runs the trap and then the BUST script that <paramref name="steps"/> name for <paramref name="row"/>.</summary>
+    /// <summary>ARC-SCRIPT-2620 (ledger OD7–OD11, BS3c): the break destroyed a scenery, trap or container (the break calls the object destroy), so the host ends the object's goal runs and tells its spell runs as a script's destroy does (ledger BS3c).</summary>
+    public static bool EndsRuns(SessionObjectHostSteps steps) => (steps & SessionObjectHostSteps.ObjectDestroyed) != 0;
+
+    /// <summary>ARC-SCRIPT-2646 (ledger OD7, 0x43F1C0 → 0x424070): the break interrupts the object's goal runs at level 5 first, before the dispatch that runs the BUST script and the destroy.</summary>
+    public static bool Interrupts(SessionObjectHostSteps steps) => (steps & SessionObjectHostSteps.ObjectBroken) != 0;
+
+    /// <summary>Runs the trap, then the break's interrupt of the object's runs (<paramref name="interrupt"/>, when <paramref name="steps"/> name it), then the BUST script that <paramref name="steps"/> name for <paramref name="row"/>.</summary>
+    /// <param name="interrupt">ARC-SCRIPT-2646: the host's interrupt of the object's goal runs; it runs after the trap and before the BUST script, as the original's break does, so a run the BUST script starts is not interrupted. Null runs none.</param>
     /// <param name="traps">The shown map's trap host; null runs no trap.</param>
     /// <param name="byHero">The hero's attack broke the object (it is the BUST breaker).</param>
     /// <param name="ranged">The attack was ranged (it fires the trap with no triggerer).</param>
     /// <param name="breaker">ARC-TECHNOLOGY-1760 (OD15): an object of the shown map that is the attacker of a hit that is not the hero's (a trap's shot: the shooter object), named by its script entity (<see cref="AreaUseScriptHost.EntityId"/>); it is the
     /// BUST breaker when <paramref name="byHero"/> is false. Null: no attacker.</param>
     public static AreaObjectBreakRun Run(AreaUseScriptHost host, AreaTraps? traps, AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged,
-        ScrRuleProfile rules, string? breaker = null)
+        ScrRuleProfile rules, string? breaker = null, Action? interrupt = null)
     {
         ArgumentNullException.ThrowIfNull(host); ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
         var entity = AreaUseScriptHost.EntityId(row);
@@ -56,6 +63,7 @@ public static class AreaObjectBreakHost
             if (trap is { Outcome: SessionTrapOutcome.Fired, Result.Run: null })
                 trapScript = host.RunTrapScript(row, triggerByHero ? host.Pc : null, rules);
         }
+        if (Interrupts(steps)) interrupt?.Invoke();
         if (steps.HasFlag(SessionObjectHostSteps.BustScript)) bust = host.RunBust(entity, byHero ? host.Pc : breaker is null ? null : host.ObjectRef(breaker), rules);
         return new(entity, trap, trapScript, bust);
     }

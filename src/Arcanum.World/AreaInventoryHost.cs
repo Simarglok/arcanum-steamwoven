@@ -97,6 +97,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
+    /// <summary>ARC-UI-1908 (IW27): the stored portrait the item windows draw for the holder in place of <see cref="HolderImage"/> (<see cref="AreaLootArtLayout.HolderPortrait"/>:
+    /// a critter the observing PC leads, directly or through its followers, that stores one); null when the art decides.</summary>
+    public int? HolderPortrait { get; init; }
     /// <summary>ARC-UI-052: the looted holder is a container (a junk pile too): its grid scrolls further.</summary>
     public bool HolderContainer { get; init; }
 }
@@ -113,6 +116,10 @@ public sealed class AreaInventoryHost
     /// range 1 (the source's 0x428930); the pickup goal's own move-near range is not pinned, so pickup
     /// uses the same reach (project choice).</summary>
     public const int Reach = 1;
+
+    /// <summary>ARC-UI-2444: where the item windows find the portrait catalogue for the clash rule of 0x4CEB80 (the viewer reads it from the game
+    /// folder on first use); null or an answer of null: no catalogue, the stored portrait shows as it is.</summary>
+    public Func<PortraitCatalogue?>? PortraitCatalogueSource { get; set; }
 
     /// <summary>PROJECT diagnostic insert check: every item fits. Carry weight, Technophobia and grid room need the
     /// created character, which the viewer does not have yet (NOT READY).</summary>
@@ -157,6 +164,9 @@ public sealed class AreaInventoryHost
         return made.Entity is not null && _prototypeFields(made.Kind.Prototype) is { } fields ? (made.Kind, fields) : null;
     }
 
+    /// <summary>ARC-SCRIPT-1594 (VT8): the magick-tech complexity a prototype's item fields hold (the value a made or kit item reads until something writes it); null without the prototype source or when the prototype does not read as an item.</summary>
+    public int? PrototypeComplexity(int prototype) => _prototypeFields?.Invoke(prototype)?.Item?.MagickTechComplexity;
+
     /// <summary>ARC-DEV-072 (MIG1, TM3): the record resolver over this host's maps: an object's base record by identity, from these
     /// maps or from the home map it reads on demand.</summary>
     public RecordResolver Resolver => _resolver;
@@ -168,7 +178,13 @@ public sealed class AreaInventoryHost
     public Func<int, EffectRule?>? EffectRules { get; set; }
 
     /// <summary>The item script host over <paramref name="session"/>, or null without script content.</summary>
-    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts, number => EffectRules?.Invoke(number));
+    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts, number => EffectRules?.Invoke(number), ShownScripts);
+
+    /// <summary>
+    /// ARC-SCRIPT-2335: the use-script host of the shown map (the viewer sets it), which answers the world commands of an insert-item script: the containers around the item, an object's name and a change art number. Read on each use;
+    /// null (or one that returns null): such a script's move is refused, as before.
+    /// </summary>
+    public Func<AreaUseScriptHost?>? ShownScripts { get; set; }
 
     public IReadOnlyCollection<AreaInventoryMap> Maps => _maps.Values;
     public SessionInsertCheck InsertCheck { get; }
@@ -309,7 +325,9 @@ public sealed class AreaInventoryHost
             if (map is null || !map.TryGetEntity(key, out entity!)) return null;
         }
         if (session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
-        if (current.Ground.Any(ground => ground.Item.Entity == entity)) return new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item lying on the ground (a script's toggle, a thrown one in flight) is not picked.
+        // ARC-SCRIPT-2397 (IV18): the map data's own bit counts too (an NPC's drop or a spill keeps the flag word).
+        if (current.Ground.FirstOrDefault(ground => ground.Item.Entity == entity) is { } lying) return session.QueryItemOff(new(runtimeMap), entity, lying.Item.Facts.OffInData) ? null : new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
         return current.Holders.FirstOrDefault(holder => holder.Entity == entity) switch
         {
             { Kind: SessionHolderKind.Npc, Dead: true } => new(AreaInventoryTargetKind.DeadNpc, entity, map.Row(entity)),
@@ -327,6 +345,9 @@ public sealed class AreaInventoryHost
         return session.QueryPcInventory().Where(item => item.Origin.RuntimeMap == runtimeMap && map.TryGetRow(item.Entity, out _))
             .Select(item => map.Row(item.Entity).Key)
             .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
+            // ARC-SCRIPT-2386 (IV15, hide mask 3): the seed's items lying on the ground that are switched off (a script's toggle, one thrown and in flight) are not drawn at their T0 cell either.
+            .Concat((session.QueryMapInventory(new(runtimeMap))?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, ground.Item.Facts.OffInData)
+                && map.TryGetRow(ground.Item.Entity, out _)).Select(ground => map.Row(ground.Item.Entity).Key))
             .ToHashSet();
     }
 
@@ -357,6 +378,9 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-UI-2138: an NPC as the wearer of the wear test 0x464D20 (race, gender, crippled arms, in its current life state), asked before a hero's item is sold onto a slot of a merchant's doll; null: the host does not know it (the item goes back).</summary>
     public Func<SessionMapId, string, Arcanum.Simulation.Equipment.EquipmentWearer?>? NpcWearerFacts { get; set; }
 
+    /// <summary>ARC-UI-2159: the weight test of an item put on a wear slot of an NPC (a merchant's doll in a barter window, 0x466510 of the wear 0x466640), or null when the host cannot say (the sale then takes the diagnostic check).</summary>
+    public Func<string, SessionInsertCheck?>? NpcSlotInsertCheck { get; set; }
+
     /// <summary>The dialog's negative IN through the session (<see cref="SessionDialogInventoryPort"/>) with this insert check.</summary>
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session), entity => AttachHolderMap(session, entity), entity => NpcWearer?.Invoke(session.QueryActor().Map, entity));
@@ -366,7 +390,7 @@ public sealed class AreaInventoryHost
     public SessionDialogItemTakePort TakeItemDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, DiagnosticInsertCheck, entity => AttachHolderMap(session, entity), NpcCell, ItemScripts(session));
 
-    // ARC-DEV-238: the cell of an NPC on the shown maps (its map row's, as the substitute container's range reads it), for the item a refused hand-over lays down.
+    // ARC-DEV-238: the cell of an NPC on the shown maps (its map row's), for the item a refused hand-over lays down.
     private CellCoord? NpcCell(string npc)
     {
         foreach (var map in _maps.Values.Concat(_resolver.CreatedMap(npc) is { } created ? [created] : []))
@@ -382,18 +406,29 @@ public sealed class AreaInventoryHost
 
     /// <summary>
     /// ARC-DEV-194 (BT11, 0x45F650): the substitute container of an NPC: it has none at T0 and does not follow the hero now (no leader), the area names a container of its inventory
-    /// source (field 0x126) and the container lies within <see cref="AreaBarterMerchant.SubstituteRange"/> tiles of the NPC's cell (Chebyshev). The cell is the NPC's map row, not
-    /// where the AI has walked it. Null for an NPC with none.
+    /// source (field 0x126) and the container lies within <see cref="AreaBarterMerchant.SubstituteRange"/> tiles of the NPC's cell (Chebyshev). ARC-WORLD-2357 (the original measures where the
+    /// NPC is now): the cell is <see cref="NpcLiveCell"/>'s (where the AI has walked it), else the NPC's map row. Null for an NPC with none.
     /// </summary>
     public string? SubstituteContainer(GameSessionOwner session, string npc)
     {
         foreach (var map in _maps.Values)
-            if (map.Substitute(npc) is { } substitute && map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y
-                && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
+            if (map.Substitute(npc) is { } substitute && LiveCell(map, npc) is { } cell
                 && session.QueryLeader(npc) is null
-                && Arcanum.Simulation.Ai.AiExecutorRules.Distance(new((int)x, (int)y), substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
+                && Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return substitute.Entity;
         return null;
+    }
+
+    /// <summary>ARC-WORLD-2357: the cell the shown map's AI host has an NPC on now (<see cref="AreaAiHost.Tile"/>); null (the default): the host does not know it, and the NPC's map-row cell is used.</summary>
+    public Func<string, CellCoord?>? NpcLiveCell { get; set; }
+
+    /// <summary>ARC-WORLD-2357: where an NPC of <paramref name="map"/> stands now for the substitute container distance: <see cref="NpcLiveCell"/>'s, else its map row's cell; null when it has neither.</summary>
+    public CellCoord? LiveCell(AreaInventoryMap map, string npc)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (NpcLiveCell?.Invoke(npc) is { } live) return live;
+        return map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
+            ? new((int)x, (int)y) : null;
     }
 
     /// <summary>ARC-DEV-179: the dialog's <c>$$</c> condition and action through the session (<see cref="SessionDialogGoldPort"/>): a new gold
@@ -416,6 +451,17 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-DEV-354: the row this host knows for <paramref name="entity"/> without reading anything: a held map's, else a carried item's
     /// (<see cref="Retain"/>, <see cref="ReadCarriedRows"/>); null when it knows none.</summary>
     public AreaObjectRecord? KnownRow(string entity) => RowOf(entity ?? throw new ArgumentNullException(nameof(entity)));
+
+    /// <summary>
+    /// ARC-SCRIPT-2346 (IV10): whether the item is switched off (object flag 0x2: the record of a script's toggle state, else the row's data bit). The original's inventory window leaves such an item out of what it draws and offers (ledger IV10)
+    /// while it still fills its cells and counts in the weight and the room, so the view drops it from what the window draws and offers and keeps the session's lists as they are.
+    /// </summary>
+    internal bool IsOff(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        var dataOff = !entity.StartsWith("made:", StringComparison.Ordinal) && RowOf(entity) is { } row
+            && row.EffectiveFields.FirstOrDefault(field => field.Slot == 18) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
+        return session.QueryItemOff(new(runtimeMap), entity, dataOff);
+    }
 
     /// <summary>The row of an entity among the held maps, else among the rows of items the hero carried out of a window of the same map (<see cref="Retain"/>).</summary>
     private AreaObjectRecord? RowOf(string entity)
@@ -486,6 +532,8 @@ public sealed class AreaInventoryHost
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
               Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) }))
             .Select(line => session.QueryAmmo(line.Entity) is { } stack ? line with { StackKind = HeldKind(line.Entity), Units = stack.Units, StackAmmoType = stack.AmmoType } : line)
+            // ARC-SCRIPT-2346 (IV10): a switched-off item is not listed (see IsOff).
+            .Where(line => !IsOff(session, runtimeMap, line.Entity))
             .ToArray();
         SessionItemKind? HeldKind(string entity) => session.QueryHeroKit().Select(item => (item.Entity, item.Kind)).Concat(session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(session.QueryMadeItems().Select(item => (item.Entity, item.Kind))).Where(pair => pair.Entity == entity).Select(pair => (SessionItemKind?)pair.Kind).FirstOrDefault();
@@ -493,13 +541,14 @@ public sealed class AreaInventoryHost
         // ARC-UI-015: the paper doll lists the nine wear slots in slot order (the original's locations 1000..1008).
         var wornBySlot = session.QueryEquipment().Worn.ToDictionary(item => item.Slot, item => item.Entity);
         var doll = session.QueryHero() is null ? Array.Empty<AreaDollSlot>() : Enum.GetValues<EquipmentSlot>()
-            .Select(slot => wornBySlot.TryGetValue(slot, out var entity) ? new AreaDollSlot(slot, entity, ItemName(session, entity, catalog)) : new AreaDollSlot(slot, null, null))
+            // ARC-SCRIPT-2386 (IV13, 0x576520, 0x575FA0): a switched-off item in a worn slot is neither painted nor hit: the slot shows empty (the equipment logic still counts the item).
+            .Select(slot => wornBySlot.TryGetValue(slot, out var entity) && !IsOff(session, runtimeMap, entity) ? new AreaDollSlot(slot, entity, ItemName(session, entity, catalog)) : new AreaDollSlot(slot, null, null))
             .ToArray();
         var carry = session.QueryHeroCarry();
         // ARC-UI-019: the grid in slot order, with the items that found no room.
         var heroGrid = session.QueryHeroGrid();
-        var grid = heroGrid.Items.Select(item => new AreaGridItem(item.Entity, item.Slot, item.Width, item.Height, ItemName(session, item.Entity, catalog))).ToArray();
-        var unplaced = heroGrid.Unplaced.Select(entity => ItemName(session, entity, catalog)).ToArray();
+        var grid = heroGrid.Items.Where(item => !IsOff(session, runtimeMap, item.Entity)).Select(item => new AreaGridItem(item.Entity, item.Slot, item.Width, item.Height, ItemName(session, item.Entity, catalog))).ToArray();
+        var unplaced = heroGrid.Unplaced.Where(entity => !IsOff(session, runtimeMap, entity)).Select(entity => ItemName(session, entity, catalog)).ToArray();
         // ARC-UI-029: the four ammunition counts follow the gold (IW9: the stack each type's critter field names, the first here).
         var heroAmmo = session.QueryHeroAmmo();
         var ammo = Enumerable.Range(0, SessionAmmoRecord.AmmoTypes).Select(type => heroAmmo.FirstOrDefault(stack => stack.AmmoType == type).Units).ToArray();
@@ -517,25 +566,27 @@ public sealed class AreaInventoryHost
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
-            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0, StackAmmoType = Stack(item.Facts) ? item.Facts.AmmoType : null }).ToArray();
+            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0, StackAmmoType = Stack(item.Facts) ? item.Facts.AmmoType : null }).Where(line => !IsOff(session, runtimeMap, line.Entity)).ToArray();
         // ARC-UI-052: the loot window's grid shows the holder's items at their locations, its worn ones left out (0x577C6C).
         // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from). ARC-UI-055:
         // another item takes its size from the session (its inventory art's cells, 0x461780), drawn at most a container grid's size.
         var pileSlots = pile is null ? null : session.QueryJunkPiles().FirstOrDefault(p => p.Entity == holder)?.Items.ToDictionary(entry => entry.Entity, StringComparer.Ordinal);
+        // ARC-SCRIPT-2346 (IV10): a switched-off item keeps its cells in the arrangement and is not drawn.
         var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
             .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
             .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
-                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray());
+                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)
+                { Quantity = row.Entry.Facts.Kind.Type == SessionItemType.Gold ? row.Entry.Facts.Quantity : null }).ToArray()).Where(item => !IsOff(session, runtimeMap, item.Entity)).ToArray();
         // ARC-UI-072: the body's worn items by slot (its record over its map data, ARC-WORLD-103: the session's lists show it).
         var bodyDoll = pile is not null || current?.Holders.FirstOrDefault(h => h.Entity == holder) is not { } wearer || wearer.Kind != SessionHolderKind.Npc
             ? Array.Empty<AreaDollSlot>()
-            : Enum.GetValues<EquipmentSlot>().Select(slot => wearer.Items.FirstOrDefault(item => item.Facts.Worn && item.Facts.InventoryLocation == (int)slot) is { } worn
+            : Enum.GetValues<EquipmentSlot>().Select(slot => wearer.Items.FirstOrDefault(item => item.Facts.Worn && item.Facts.InventoryLocation == (int)slot && !IsOff(session, runtimeMap, item.Entity)) is { } worn
                 ? new AreaDollSlot(slot, worn.Entity, Rowless(worn.Entity) is not null ? KindName(worn.Facts.Kind, catalog) : Name(worn.Entity, catalog)) { Kind = worn.Facts.Kind } : new AreaDollSlot(slot, null, null)).ToArray();
         var (image, container) = pile is not null
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
             : HolderLook(runtimeMap, holder);
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image,
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image, HolderPortrait = pile is not null ? null : HolderPortrait(session, runtimeMap, holder),
               HolderContainer = container, BodyDoll = bodyDoll };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
@@ -551,15 +602,35 @@ public sealed class AreaInventoryHost
     /// row or fields do not read.</summary>
     public int? HolderImage(int runtimeMap, string holder) => HolderLook(runtimeMap, holder ?? throw new ArgumentNullException(nameof(holder))).Image;
 
+    /// <summary>ARC-UI-1908 (IW27): the portrait the item windows draw for a seed holder instead of its image: the stored portrait of a
+    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>); null for any other holder or row. ARC-UI-2444: the
+    /// portrait is the one 0x4CEB80 shows (<see cref="AreaLootArtLayout.ShownPortrait"/>): an NPC that stores the PC's own portrait shows another,
+    /// found with <see cref="PortraitCatalogueSource"/> (none: the stored one).</summary>
+    public int? HolderPortrait(GameSessionOwner session, int runtimeMap, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(holder);
+        var row = HolderRow(runtimeMap, holder);
+        if (row is null || row.Type is not (CombatFieldReader.PcType or CombatFieldReader.NpcType)) return null;
+        var player = session.QueryHero()?.Portrait;
+        // The catalogue is asked for only when a clash is possible (a cold start reads it from the game folder).
+        var catalogue = AreaLootArtLayout.StoredPortrait(row) is { } stored && stored == player ? PortraitCatalogueSource?.Invoke() : null;
+        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.ShownPortrait(row, catalogue, player, session));
+    }
+
+    private AreaObjectRecord? HolderRow(int runtimeMap, string holder)
+    {
+        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) return own;
+        return _resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made) ? made : null;
+    }
+
     /// <summary>ARC-UI-052: the loot window's image of a seed holder (<see cref="AreaLootArtLayout.HolderImage"/>) from its object row: a
     /// critter's flags and race, a container's description (its prototype file less 20, as the session's junk piles count it); and whether
     /// it is a container. No image when its row or fields do not read.</summary>
 
     private (int? Image, bool Container) HolderLook(int runtimeMap, string holder)
     {
-        AreaObjectRecord? row = null;
-        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) row = own;
-        else if (_resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made)) row = made;
+        var row = HolderRow(runtimeMap, holder);
         if (row is null) return (null, false);
         var container = row.Type == CombatFieldReader.ContainerType;
         if (container) return (AreaLootArtLayout.HolderImage(row.Type, 0, -1, row.PrototypeNumber - 20), true);
@@ -815,6 +886,19 @@ public sealed class AreaInventoryHost
         return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? AreaLockpicks.From(entity, fields) : null;
     }
 
+    /// <summary>
+    /// ARC-COMBAT-1878 (the finder 0x462760, ledger PL4, PL5): the PC's first lockpicks in inventory order, armed or not: the starting kit's items first, then the items taken from the world, then the made ones (the order of the inventory lines,
+    /// <see cref="View"/>); the first that reads as lockpicks (<see cref="Lockpick"/>: an item the session destroyed is not one). Null when the hero holds none or there is no hero. The best-follower chooser scores every candidate with this one item.
+    /// </summary>
+    public SessionLockpick? FirstLockpicks(GameSessionOwner session, IReadOnlyList<SessionLockpick?>? kitLockpicks)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null) return null;
+        foreach (var entity in session.QueryHeroKit().Select(item => item.Entity).Concat(session.QueryPcInventory().Select(item => item.Entity)).Concat(session.QueryMadeItems().Select(item => item.Entity)))
+            if (Lockpick(session, entity, kitLockpicks) is { } pick) return pick;
+        return null;
+    }
+
     /// <summary>ARC-UI-016: the spell facts of an item the hero holds (the cast host's item lookup): a kit item's from
     /// <paramref name="kitItemSpells"/> (the hero load's, by kit entity), a taken item's from its object row
     /// (<see cref="SessionItemSpells.FromCombatFields"/>), whether listed or worn; null for anything else, an item the session no
@@ -897,7 +981,7 @@ public sealed class AreaInventoryHost
     /// <summary>Plain text for a transfer that did not move the item: a gate script that declined it (ARC-SCRIPT-041, with what it
     /// printed), or the refusal.</summary>
     public static string NotMoved(InventoryMutationResult result) => result.DeclinedBy is { } point
-        ? (point == SessionScriptPoint.Get ? "the item's get script declined it" : "the PC's transfer script declined it") + Printed(result)
+        ? (point == SessionScriptPoint.Get ? "the item's get script declined it" : "the transfer script declined it") + Printed(result)
         : Refusal(result.Failure, result.Verdict);
 
     /// <summary>Plain text for a transfer refusal shown in the window and the status line; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal

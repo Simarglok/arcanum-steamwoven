@@ -52,7 +52,8 @@ public static class AiSupportRules
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(rolls);
         ArgumentNullException.ThrowIfNull(profile);
-        var n = Get(world, npc);
+        // ARC-AI-2793: a healer the world does not hold (its window left it) heals nobody; the pass's own guard (AiSchedulerRules.Pass) stops it earlier.
+        if (npc is null || world.Find(npc) is not { } n) return new(AiHealStop.Unknown, [], null);
         if (n.Asleep) return new(AiHealStop.Asleep, [], null);
         var state = world.Danger(npc).State;
         if (state == DangerState.Flee) return new(AiHealStop.Fleeing, [], null);

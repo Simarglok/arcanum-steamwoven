@@ -1,5 +1,7 @@
 # HD interface art: methods for panels, frames, buttons and small art (ARC-RES-094)
 
+> **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): for the Steamwoven look the interface is a kit authored at 3840 × 2160 on a full-width layout, not per-file redraws fitted to the original pixels. The U3 recommendation, its geometry gates and the U4 side pieces no longer apply to that look. The census, the methods and the measurements stay valid as research and for the current HD-option fallback. **Amended 2026-11-19** (owner verdict #2892): the layout is one centred 4:3 composition scaled to the screen with the world or black at the sides, not a full-width layout; see the [ADR amendment](../ui/steamwoven-interface-adr.md#amendment-of-2026-11-19).
+
 Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 redraws, strips and icons not usable in round 1; round 2 (refined tiles) is a candidate, not gated.** Work item ARC-RES-094, docs-only. Requirements:
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive layout, status unchanged),
 [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD).
@@ -411,7 +413,12 @@ No model was trained; no weight is added to the repository. Generated frames are
   redrawn cursors were not made.
 - The staircase of the Legacy edge at 200–300 % was not tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the
   silhouette. The filtered HD minification itself is in the viewer since ARC-UI-112 (an HD interface frame is drawn trilinear with
-  mipmaps below 4×, whatever the parent node's filter); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
+  mipmaps below 4×, whatever the parent node's filter; ARC-RENDER-3002 replaces that at a **fractional** device scale below 4: a directly drawn frame whose view
+  claims its device scale (`ScaleSource`) is area-resampled once per scale on a worker (`InterfaceChromeRenderer.ResampleStraight`, straight alpha kept,
+  colour weighted by alpha) and drawn 1:1 from that copy, the mip chain freed (ARC-RENDER-3045: a **whole** scale the pack's does not divide, 3 of a 4× pack, is
+  resampled to exactly that scale too; the copies kept per frame are the four scales asked for last; a pack with no usable redraw for a frame costs one failed worker, not one per scale;
+  until the first copy lands the trilinear mip chain draws, as before, so the Legacy pixels never show in HD mode); whole scales that divide the pack's (1 and 2), scales from 4 up, art-font canvases and textures that claim no
+  scale (the Steamwoven strips' direct frames included) keep the trilinear draw, and the fonts' glyphs are [#2939](https://github.com/Simarglok/arcanum-steamwoven/issues/2939)); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
   draw), not a judgement of real art at 200–300 %. Mip levels average straight alpha (not premultiplied), so a pack's transparent
   texels must carry sensible colour (the U1/U2 colour bleed does); the edge of a region draw may take up to about 7 % of the
   neighbouring texels in at an unaligned region edge (about 7 % in the synthetic probe: 237 of 255). The filter applies at every
@@ -467,9 +474,27 @@ The native interface self-test compares a fractional edge against ordinary
 alpha blending and checks transparent RGB under the sheet's PremultAlpha
 material. The existing sheet smoke accepts `ARC_AREA_SHEET_HD_VERIFY=1` with an
 explicit `ARC_HD_PACK`: it temporarily enables interface HD, requires the
-character frames to resolve as HD and restores the in-memory setting. Existing
-`ARC_AREA_SHEET_CAPTURE` writes local-only readbacks; neither switch writes the
-player's settings. Local redraw variants, removal masks and compositions are
+character frames to resolve as HD and restores the in-memory setting. The full
+run is `./arcanum smoke crash-site --env ARC_HD_PACK=<pack> --env
+ARC_AREA_SHEET_HD_VERIFY=1` (ARC-DEV-2923): `ARC_HD_PACK` alone makes the world
+profile HD (the relit look), and the Crash Site smoke's later cave-lighting
+pixel observers compare Legacy source pixels, so with the check requested the
+viewer starts with the Legacy world profile unless the run names one, and the
+check still turns the interface HD. An explicit `ARC_VISUAL_PROFILE=hd` is
+refused by the check at its start (the sheet smoke), not minutes later by
+`AREA_SOURCE_PIXEL_MISMATCH`. Existing `ARC_AREA_SHEET_CAPTURE` writes
+local-only readbacks; neither switch writes the player's settings.
+
+Art 787 `ScrllSlideM1` (the 11×1 middle of the schemes page's scroll thumb,
+used since ARC-UI-1742) first had no pack frame, and the check tolerated that one
+refusal (ARC-UI-2915). ARC-UI-2917 added it (owner decision of #2917, option B): a
+44×4 frame cropped from the installed HD `scrllslidem` frame (art 239, rows 8 to
+11 of 20, the middle of its five Legacy rows), after the check that all five
+Legacy rows of art 239 equal the one Legacy row of art 787 pixel for pixel. The
+frame went in with `apply --add-new` (backup `ARC-UI-2917-6f97ea89d4d3`), so the
+check no longer has a known gap and fails on any refused frame.
+
+Local redraw variants, removal masks and compositions are
 kept outside git. They are candidates, not owner acceptance.
 
 ## Top strip and left buttons (ARC-UI-116)
@@ -531,4 +556,5 @@ Diagnosed on 2026-11-11 with the `worldmap` stage in Legacy and HD side by side 
   Check a native shot after any install: a rejected frame shows as Legacy art, not as an error.
 - **Native look:** `./arcanum smoke pr --stages worldmap --env ARC_HD_PACK=<pack> --env ARC_AREA_WORLDMAP_HD_VERIFY=1 --env ARC_WORLDMAP_SMOKE_SHOT=<png>`
   runs the stage with the HD interface switch on (`ARC_AREA_WORLDMAP_HD_VERIFY`, like the bar and sheet smokes) and saves the frame; the shot is
-  original-derived and stays under `local/`.
+  original-derived and stays under `local/`. ARC-UI-2993: `ARC_AREA_WORLDMAP_HD_VERIFY=generated` also turns the generated interface on, which is the Steamwoven layout (the composition's scale s; without it the window keeps its own whole factor and the picture its 1:1 window units);
+  `ARC_WORLDMAP_SMOKE_SIZE=WIDTHxHEIGHT` sets the display of the capture and `ARC_WORLDMAP_SMOKE_PICTURE=before` draws the earlier look (picture scaled by s) for a before/after composite.

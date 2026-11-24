@@ -128,6 +128,17 @@ public sealed record AreaBarterMerchant(string Entity, string Name, int Multipli
         return this with { Container = substitute.Entity, ContainerBuyList = data.BuyList(substitute.InventorySource) };
     }
 
+    /// <summary>ARC-WORLD-2245 (the original measures where the NPC is now): <see cref="WithSubstitute(AreaSubstituteContainer?, CellCoord, AreaBarterData)"/> from the cell <paramref name="speakerCell"/>
+    /// gives for <paramref name="speaker"/> (<see cref="AreaSpeakerCells.Live"/>: a following companion's committed cell, else the AI host's cell of the NPC, else its T0 cell). The container
+    /// stays at its own T0 cell: a container does not move in the session.</summary>
+    public AreaBarterMerchant WithSubstitute(AreaSubstituteContainer? substitute, AreaSpeaker speaker, Func<AreaSpeaker, (long X, long Y)> speakerCell, AreaBarterData data)
+    {
+        ArgumentNullException.ThrowIfNull(speaker);
+        ArgumentNullException.ThrowIfNull(speakerCell);
+        var (x, y) = speakerCell(speaker);
+        return WithSubstitute(substitute, new(checked((int)x), checked((int)y)), data);
+    }
+
     /// <summary>The merchant facts of an NPC's stored fields with its leaders read from the session (ARC-WORLD-2119): follower of the hero (direct leader), led by anyone, chain to the PC; null for anything that is not an NPC.</summary>
     public static AreaBarterMerchant? From(string entity, string name, CombatFields fields, AreaBarterData data, GameSessionOwner session)
     {
@@ -246,7 +257,7 @@ public sealed class AreaBarter
     public SessionBarterOpenResult Open()
     {
         var opened = _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower && !Merchant.PcLeads, GoldKind(),
-            AreaInventoryHost.DiagnosticInsertCheck);
+            AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
         // ARC-UI-1740: the skill module's gambling roll is thrown before anyone can bet and saved with the session (SR12).
         if (opened.Disposition != GameSessionDisposition.Rejected) _session.EnsureGamblingRoll(_session.Version);
         return opened with { Version = _session.Version };
@@ -259,23 +270,26 @@ public sealed class AreaBarter
         var reaction = _reaction();
         var parties = Parties(haggle, training, reaction);
         var worn = _session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-SCRIPT-2386 (IV14): barter is mode 1 of the inventory window (0x683464), which paints (0x576520) and hit-tests (0x575FA0) like it: a switched-off item (object flag 0x2) of the
+        // hero's or the merchant's list is not offered and cannot be taken into the hand, so it is on no line (it keeps its cells, weight and stock). A deal prices an item when it is dropped, no list.
+        var map = _session.QueryActor().Map.RuntimeMap;
         var hero = _session.QueryHeroKit().Select(item => (item.Entity, item.Kind))
             .Concat(_session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(_session.QueryMadeItems().Select(item => (item.Entity, item.Kind)))
-            .Where(item => !_session.IsItemDestroyed(item.Entity))
+            .Where(item => !_session.IsItemDestroyed(item.Entity) && !_inventory.IsOff(_session, map, item.Entity))
             .Select(item => Line(item.Entity, item.Kind, TradeDirection.PcSells, parties, worn.Contains(item.Entity), Units(item.Entity) ?? 1))
             .ToArray();
         var shown = Merchant.Container ?? Merchant.Entity;
         var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == shown);
         var wares = (holder?.Items ?? [])
-            .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold)
+            .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, map, item.Entity))
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, false,
                 item.Facts.AmmoType is not null ? item.Facts.Quantity ?? 1 : 1))
             .ToArray();
         // ARC-UI-1926: the doll view's items are the real merchant's, even when a substitute container is the shown grid (0x575CB0 returns the merchant as owner).
         var merchantHolder = Merchant.Container is null ? holder : _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
         var wornWares = (merchantHolder?.Items ?? [])
-            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold)
+            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, map, item.Entity))
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, true, 1))
             .ToArray();
         return new(Merchant, _session.QueryGold(), _session.QueryNpcGold(Merchant.Entity) ?? 0, haggle, training, reaction, hero, wares) { WornWares = wornWares };
@@ -345,8 +359,11 @@ public sealed class AreaBarter
         if (test != EquipmentRefusal.None) return Refused("");
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
         var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
-        var result = _session.BarterSellWorn(_session.Version, Merchant.Entity, entity, slot, wearable, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
-            identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session));
+        // ARC-UI-2159: the merchant wears it (the wield context gives its scripts their wearer) after the weight test of 0x466510; a merchant the AI host holds no build of takes the diagnostic check.
+        var map = _session.QueryActor().Map;
+        var result = _session.BarterSellWorn(_session.Version, Merchant.Entity, entity, slot, wearable, price, line.Kind,
+            _inventory.NpcSlotInsertCheck?.Invoke(Merchant.Entity) ?? AreaInventoryHost.DiagnosticInsertCheck,
+            identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session), npcWearer: _inventory.NpcWearer?.Invoke(map, Merchant.Entity));
         // A slot the merchant's list shows filled goes back silently (the original never swaps an NPC's slot); the other refusals print as a grid sale's do.
         if (result.Disposition != GameSessionDisposition.Changed && result.Item is null && result.Failure == GameSessionFailure.InvalidEquipment) return Refused("");
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
@@ -429,7 +446,7 @@ public sealed class AreaBarter
         if (!result.Settled)
         {
             var text = result.Move is { } move
-                ? move.Failure == GameSessionFailure.GoldShort ? "not enough money" : $"refused: {AreaInventoryHost.Refusal(move.Failure, move.Verdict)}"
+                ? (move.Failure == GameSessionFailure.GoldShort ? "not enough money" : $"refused: {AreaInventoryHost.Refusal(move.Failure, move.Verdict)}") + AreaInventoryHost.Printed(move)
                 : $"refused: {result.Failure}";
             return new(gate, result, result.Won, 0, 0, text);
         }
@@ -447,10 +464,22 @@ public sealed class AreaBarter
             said = BetLine(GamblingRules.LostCategory, result.Paid);
         }
         if (change != 0 && !_adjustReaction(change)) change = 0;
+        // ARC-UI-1824: the lines a won item's move scripts printed follow the line.
+        if (result.Move is { } moved) said += AreaInventoryHost.Printed(moved);
         return new(gate, result, result.Won, result.Paid, change, said);
     }
 
-    private AreaBarterTrade Settle(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
+    /// <summary>
+    /// ARC-UI-1824: the trade's text. The lines the trade's item scripts printed (insert item, remove item, wield off: the original posts them to the message window)
+    /// follow the text as the loot window's do (<see cref="AreaInventoryHost.Printed"/>), for a refused trade too (a script that ran before the refusal may have printed).
+    /// </summary>
+    internal AreaBarterTrade Settle(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
+    {
+        var trade = SettleWithoutPrinted(direction, line, result);
+        return trade with { Text = trade.Text + AreaInventoryHost.Printed(result) };
+    }
+
+    private AreaBarterTrade SettleWithoutPrinted(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
     {
         var total = line.Quote.Price * line.Count;
         if (result.Disposition != GameSessionDisposition.Changed)

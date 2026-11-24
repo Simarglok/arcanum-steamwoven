@@ -68,7 +68,6 @@ carries exactly one of the program and the refusal.
 | `WriteToNumber` | P5 | an assign, add, subtract, multiply, divide or get-story-state action stores into a number literal (operand 0), or a get-skill action (set S11, ARC-SKILLS-009) into one (its operand 2) |
 | `ComputedGoto` | P6 | a goto whose target is not a number literal |
 | `NegativeGoto` | P6 | a literal goto below 0 (the original reads −1..−4 as control codes, ledger X6) |
-| `GotoBeyondEnd` | P6 | a literal goto past the line count |
 | `ScriptNumberOutOfRange` | P4 | a literal change-this-script number outside 0..99999 (ARC-SCRIPT-008) |
 
 Not refused, by design:
@@ -77,9 +76,15 @@ Not refused, by design:
   data leaves editor bytes in nearly every clause.
 - The false action of an always-true condition (type 0) is never run, so it is
   not checked either.
-- A literal goto to exactly the line count is the end of the script: *skip
+- A literal goto to the line count or beyond it is the end of the script: *skip
   default* without auto-removal (the original clears an auto-removing script
   when a run falls past the last line, not on this goto, F0; census rule P6).
+  Since ARC-SCRIPT-3005 a target past the line count is admitted too: the
+  original's line read compares unsigned and a target outside 0..count−1 ends
+  the run with skip default (ledger E9, [`scr-event-dispatcher.md`](../research/scr-event-dispatcher.md)),
+  which the interpreter already does as `LineOutOfRange`; the refusal
+  `GotoBeyondEnd` was the project's own strictness and is gone (installed
+  dialog scripts 1537 and 1539 hold such a goto).
 - A computed flag index (a counter, variable or flag holding the number) is a
   run-time bound for the interpreter (S2), not a static refusal.
 

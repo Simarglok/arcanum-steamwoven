@@ -19,8 +19,8 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaHeartbeatSceneryLoopTests
 {
-    private const byte Attachee = 1, Number = 3, Looped = 10, LocalObject = 11, EveryScenery = 15;
-    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, LoopFlag = 2360, AssignFlag = 2361;
+    private const byte Attachee = 1, Number = 3, Looped = 10, LocalObject = 11, EveryScenery = 15, EveryPortal = 19;
+    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, ToggleScript = 835, PortalToggleScript = 836, MixedToggleScript = 837, SceneryToggleScript = 838, TwiceScript = 839, LoopFlag = 2360, AssignFlag = 2361;
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
     private static (byte, int) N(int value) => (Number, value);
@@ -72,6 +72,31 @@ public sealed class AreaHeartbeatSceneryLoopTests
             Write("scr/00832reaction.scr", Program(
                 Do(new(ScrCatalogue.Action.GetReaction, (Attachee, -1), (Attachee, -1), (4, 0))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2248: 835 toggles its attachee (a use click's object); 836 has the shape of the ground rune tile script 2221 at line 15 to 20: for every portal in the vicinity, toggle the looped portal.
+            Write("scr/00835toggle.scr", Program(Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00836portals.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (EveryPortal, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 837: toggle the attachee, then every portal around it: a run whose first toggle the host could apply and whose second it cannot.
+            Write("scr/00837mixed.scr", Program(
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.LoopFor, (EveryPortal, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2324: 838 has the shape of the NPC scripts 1179 and 2407: for every scenery in the vicinity, toggle the looped scenery.
+            Write("scr/00838scenery.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (EveryScenery, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 839: toggle the attachee twice in one run.
+            Write("scr/00839twice.scr", Program(
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -80,6 +105,8 @@ public sealed class AreaHeartbeatSceneryLoopTests
 
     private static AreaObjectRecord Npc(int script) => AreaHeartbeatScriptTests.Row(1, 16, script);
     private static AreaObjectRecord Scenery(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 3, 0) with { WorldX = worldX ?? 10 + index };
+
+    private static AreaObjectRecord Container(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 2, 0) with { WorldX = worldX ?? 10 + index };
 
     private static AreaObjectRecord Portal(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 1, 0) with { WorldX = worldX ?? 10 + index };
 
@@ -93,10 +120,10 @@ public sealed class AreaHeartbeatSceneryLoopTests
         Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity) && set.FocusKinds.Contains(ScrFocusKind.LocalObject));
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.FloatLine));
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetReaction), "the host has no reaction answer");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60));
-        // The dying set is built on it and the placed set already held all three; the use click's set is unchanged.
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest));
+        // The dying set is built on it and the placed set already held all three; the use click's set gained float line for script 2862 (ARC-RENDER-2197).
         Assert.IsTrue(AreaUseScriptHost.DyingAdmission.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity));
-        Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
     }
 
     [TestMethod]
@@ -160,6 +187,18 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2321 (AS3): the focus kind any scenery in the vicinity (16), the list of kind 15 read as "one is enough", for the tile script 2561 and the bust script 1734.
+    [TestMethod]
+    public void Every_script_host_set_that_admits_the_scenery_focus_admits_the_any_scenery_focus_too()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
+        {
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity), set.Id);
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.AnySceneryInVicinity), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
+        }
+    }
+
     // ARC-SCRIPT-2041 (PV1–PV4): the focus kind every portal in the vicinity (19) of the four ground rune tile scripts.
     [TestMethod]
     public void The_use_placed_dying_and_combat_point_sets_admit_the_portal_focus_and_the_heartbeat_set_does_not()
@@ -168,7 +207,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity), set.Id);
             Assert.IsFalse(set.FocusKinds.Contains(ScrFocusKind.AnyPortalInVicinity), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
         Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity));
     }
@@ -189,6 +228,332 @@ public sealed class AreaHeartbeatSceneryLoopTests
             var around = host.PortalsInVicinity(new(1, AreaUseScriptHost.EntityId(npc)));
             CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near), AreaUseScriptHost.EntityId(nearToo) }, around.Select(o => o.Code).ToArray(), "snapshot order; no scenery, NPC, gone or far portal");
             Assert.AreEqual(0, host.PortalsInVicinity(new(2, AreaUseScriptHost.EntityId(npc))).Count, "an object of another map has no place here");
+        });
+    }
+
+    // ARC-SCRIPT-2322 (ledger CV1–CV5): the focus kinds every container (17) and any container (18) in the vicinity, in the use, placed, dying, combat-point and heartbeat sets.
+    [TestMethod]
+    public void Every_set_that_runs_a_script_on_an_object_admits_the_container_focus_kinds()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.HeartbeatAdmission })
+        {
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity), set.Id);
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
+        }
+    }
+
+    [TestMethod]
+    public void The_containers_around_an_object_are_the_near_containers_that_are_not_gone()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Npc(LoopScript);
+            var near = Container(2);
+            var nearToo = Container(3, 14);
+            var gone = Container(4);
+            var far = Container(5, 60);
+            var portal = Portal(6);
+            var host = Host(session, content, row => row.Key == gone.Key, npc, near, nearToo, gone, far, portal);
+            var around = host.ContainersInVicinity(new(1, AreaUseScriptHost.EntityId(npc)));
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near), AreaUseScriptHost.EntityId(nearToo) }, around.Select(o => o.Code).ToArray(), "snapshot order; no portal, NPC, gone or far container");
+            Assert.AreEqual(0, host.ContainersInVicinity(new(2, AreaUseScriptHost.EntityId(npc))).Count, "an object of another map has no place here");
+        });
+    }
+
+    // ARC-SCRIPT-2335 (ledger IV2, IV5): an insert-item script's vicinity is the scan around the item's own tile (a held item keeps the tile its map data gave it), not around its holder; an item without a row, or of
+    // another map, has no known tile (the session then refuses the move), and a change art number of an object the host holds no row for is refused (no plan), the hero's is an empty plan.
+    [TestMethod]
+    public void The_containers_around_an_item_are_the_near_containers_of_its_own_tile_and_a_made_item_has_none()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var near = Container(2);
+            var far = Container(5, 60);
+            var host = Host(session, content, _ => false, item, near, far);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.ContainersNearItem(new(1, AreaUseScriptHost.EntityId(item)))!.Select(o => o.Code).ToArray());
+            Assert.IsNull(host.ContainersNearItem(new(1, "made:3")), "a made item has no row and so no known tile");
+            Assert.IsNull(host.ContainersNearItem(new(2, AreaUseScriptHost.EntityId(item))), "another map");
+            Assert.IsNull(host.PlanObjectArt(new(1, "made:3"), 4), "no row, no plan");
+            Assert.IsNull(host.PlanObjectArt(host.Pc, 4)!.Art, "the hero's art is a critter class: a plan that changes nothing is still a plan");
+            Assert.IsNull(host.PlanObjectArt(new(1, AreaUseScriptHost.EntityId(far)), 4), "no art index in this host: the plan is refused");
+        });
+    }
+
+    // ARC-SCRIPT-2594 (ledger IV8): an item the session dropped and took up again keeps the tile it lay on as its location field: the vicinity scans and distance between of its insert-item run centre on it (before, a made item had no tile and the move was refused),
+    // also while the shown map is another one (the scan is of the shown map around the stale coordinates), and a drop again lets the placed cell answer.
+    [TestMethod]
+    public void A_made_item_the_hero_dropped_and_took_up_again_scans_around_its_drop_tile()
+    {
+        WithContent(content =>
+        {
+            using var session = AreaMadeItemFactsTests.HeroWithProducts();
+            var host0 = new AreaInventoryHost([], prototypeFields: AreaMadeItemFactsTests.ProductFields);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.DropHeroItem(session.Version, "made:1", host0.GridMoveItem(session, "made:1", null)!).Disposition);
+            var cell = session.QueryPlacedItems().Single().Cell;
+            var near = Container(2, cell.X + 1) with { WorldY = cell.Y };
+            var far = Container(3, cell.X + 60) with { WorldY = cell.Y };
+            var item = new ScrObjectRef(1, "made:1");
+            AreaUseScriptHost Host1() => Host(session, content, _ => false, near, far);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, Host1().ContainersNearItem(item)!.Select(o => o.Code).ToArray(), "lying on the ground: the placed cell");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, "made:1", AreaInventoryHost.DiagnosticInsertCheck).Disposition);
+            Assert.AreEqual(0, session.QueryPlacedItems().Count);
+            var host = Host1();
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.ContainersNearItem(item)!.Select(o => o.Code).ToArray(), "held again: the drop tile, not the hero's cell");
+            Assert.AreEqual(((long)cell.X, (long)cell.Y), host.LocationOfObject(item), "distance between reads the same location field");
+            Assert.IsNotNull(host.SceneryNearItem(item));
+            Assert.IsNotNull(host.CrittersNearItem(item));
+            Assert.IsNull(host.ContainersNearItem(new(1, "made:2")), "an item never dropped has no tile");
+            // The scan is of the shown map around the stale coordinates: an item ref of another map reads the tile too.
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.ContainersNearItem(new(2, "made:1"))!.Select(o => o.Code).ToArray());
+        });
+    }
+
+    // ARC-SCRIPT-2701 (ledger IV8): a map-data item that a push left on another tile than its data holds scans around that tile, in the insert-item run of its own pickup and after it (the stale location field of the held item).
+    [TestMethod]
+    public void A_pushed_map_data_item_scans_around_the_tile_it_lay_on_before_and_after_its_pickup()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var entity = AreaUseScriptHost.EntityId(item);
+            var dataTile = Container(2);
+            var pushedTile = Container(3, 41) with { WorldY = 20 };
+            Assert.AreEqual(GameSessionDisposition.Changed, session.AttachMapInventory(new(1), new SessionMapInventorySeed([], [new SessionSeedItem(entity, new(new(SessionItemType.Generic, 1, 10, 20), 0, 0, 0, null, []), new(12, 20))])).Disposition);
+            AreaUseScriptHost Host1() => Host(session, content, _ => false, item, dataTile, pushedTile);
+            var at = new ScrObjectRef(1, entity);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(dataTile) }, Host1().ContainersNearItem(at)!.Select(o => o.Code).ToArray(), "on its data tile");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.MoveGroundItem(session.Version, entity, new(40, 20)).Disposition);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(pushedTile) }, Host1().ContainersNearItem(at)!.Select(o => o.Code).ToArray(), "lying where the push left it: the loose cell, before the pickup commits");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition);
+            var host = Host1();
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(pushedTile) }, host.ContainersNearItem(at)!.Select(o => o.Code).ToArray(), "held: the tile it last lay on");
+            Assert.AreEqual((40L, 20L), host.LocationOfObject(at), "distance between reads the same location field");
+        });
+    }
+
+    // ARC-SCRIPT-2426 (ledger IV36-IV39, HW3): distance between on an insert-item run reads each object's location field: an item its own tile (never the holder's), a critter its tile, the hero its live cell; an object without a place (a made item, an item of
+    // another map, an unknown entity) has no answer, and the item host passes the shown map's answers on (without a shown map none).
+    [TestMethod]
+    public void Distance_between_reads_an_items_own_tile_a_critters_tile_and_the_heros_cell()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var critter = Npc(0) with { WorldX = 15 };
+            var host = Host(session, content, _ => false, item, critter);
+            Assert.AreEqual((12L, 20L), host.LocationOfObject(new(1, AreaUseScriptHost.EntityId(item))), "the item's own tile");
+            Assert.AreEqual((15L, 20L), host.LocationOfObject(new(1, AreaUseScriptHost.EntityId(critter))), "the critter's row tile");
+            Assert.AreEqual((12L, 21L), host.LocationOfObject(host.Pc), "the hero's live cell");
+            Assert.IsNull(host.LocationOfObject(new(1, "made:3")), "a made item has no row and so no known tile");
+            Assert.IsNull(host.LocationOfObject(new(2, AreaUseScriptHost.EntityId(item))), "another map");
+            Assert.IsNull(host.LocationOfObject(new(1, "nothing")), "an unknown entity");
+            var items = new AreaItemScriptHost(session, [], null, null, () => host);
+            Assert.AreEqual((12L, 21L), items.LocationOf(host.Pc));
+            Assert.IsNull(new AreaItemScriptHost(session, [], null, null, () => null).LocationOf(host.Pc), "no shown map");
+        });
+    }
+
+    // ARC-SCRIPT-2376 (ledger IV25, PG3, TG4): the scenery and the critters of an insert-item script's vicinity are the scans around the item's own tile as well; an item without a known tile gets no answer (the session then refuses the move).
+    [TestMethod]
+    public void The_scenery_and_the_critters_around_an_item_are_those_near_its_own_tile()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var near = Scenery(2);
+            var far = Scenery(5, 60);
+            var gone = Scenery(4);
+            var container = Container(3);
+            var critter = Npc(0);
+            var farCritter = AreaHeartbeatScriptTests.Row(7, 16, 0) with { WorldX = 60 };
+            var host = Host(session, content, row => row.Key == gone.Key, item, near, far, gone, container, critter, farCritter);
+            var at = new ScrObjectRef(1, AreaUseScriptHost.EntityId(item));
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.SceneryNearItem(at)!.Select(o => o.Code).ToArray(), "no container, far or gone scenery");
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(critter), host.Pc.Code }, host.CrittersNearItem(at)!.Select(o => o.Code).ToArray(), "the near NPC, then the hero (the host's world puts it at (12, 21), next to the item); no far critter, no scenery");
+            foreach (var around in new Func<ScrObjectRef, IReadOnlyList<ScrObjectRef>?>[] { host.SceneryNearItem, host.CrittersNearItem, host.ContainersNearItem })
+            {
+                Assert.IsNull(around(new(1, AreaUseScriptHost.EntityId(critter))), "an NPC is no item: no centre from its map row");
+                Assert.IsNull(around(new(1, "made:3")), "a made item has no row and so no known tile");
+                Assert.IsNull(around(new(2, AreaUseScriptHost.EntityId(item))), "another map");
+            }
+        });
+    }
+
+    // ARC-SCRIPT-2248 (ledger OT1–OT5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
+    [TestMethod]
+    public void Every_set_that_runs_a_script_on_an_object_admits_toggle_state()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.HeartbeatAdmission })
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ToggleState), set.Id);
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.CombatPointAdmission })
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
+        Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Kill), "kill stays with the heartbeat and dying sets");
+        Assert.IsTrue(ScrAdmission.Admit(ProgramOf(ToggleScript), AreaUseScriptHost.Admission).IsAdmitted);
+        Assert.IsTrue(ScrAdmission.Admit(ProgramOf(PortalToggleScript), AreaUseScriptHost.PlacedAdmission).IsAdmitted);
+    }
+
+    private static ScrProgram ProgramOf(int number)
+    {
+        ScrProgram? read = null;
+        WithContent(content => read = content.Script(number).Program);
+        return read!;
+    }
+
+    // The use click's script toggles its object: an NPC of the shown map switches off, a second run switches it back on (the heartbeat host's answer, shared).
+    [TestMethod]
+    public void A_use_script_toggles_an_NPC_of_the_shown_map_off_and_back_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, ToggleScript, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, entity));
+            var first = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, first.Outcome, first.Detail);
+            Assert.IsTrue(AreaUseScriptHost.SwitchedOff(session, 1, entity), "switched off by the toggle");
+            var second = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, second.Outcome, second.Detail);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, entity), "and on again");
+        });
+    }
+
+    // The shape of 2221: a loop over the portals around the attachee. With none around nothing is toggled; with one the run is refused whole (a portal's off flag is not modelled), so nothing applies.
+    [TestMethod]
+    public void A_use_script_that_toggles_the_portals_around_it_runs_over_none_and_is_refused_over_one()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, PortalToggleScript, point: ScrPoint.Use);
+            var alone = Host(session, content, _ => false, npc);
+            var none = alone.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, none.Outcome, none.Detail);
+            var portal = Portal(2);
+            var host = Host(session, content, _ => false, npc, portal);
+            var refused = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            StringAssert.Contains(refused.Detail, "toggle state of " + AreaUseScriptHost.EntityId(portal) + " is not modelled");
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, AreaUseScriptHost.EntityId(portal)));
+        });
+    }
+
+    // ARC-SCRIPT-2324 (ledger OT8): the shape of the NPC scripts 1179 and 2407, a loop over the sceneries around the attachee that toggles each. The view reads a switched-off scenery as gone (not drawn, no block, not picked,
+    // out of the vicinity lists).
+    [TestMethod]
+    public void A_script_that_toggles_the_sceneries_around_it_switches_them_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, SceneryToggleScript, point: ScrPoint.Use);
+            var near = Scenery(2);
+            var targets = new AreaObjectTargets(1, [npc, near], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+            var host = Host(session, content, row => targets.Gone(session).Contains(row.Key), npc, near);
+            var entity = AreaUseScriptHost.EntityId(near);
+            Assert.AreEqual(false, host.IsSwitchedOff(new(1, entity)), "on to begin with");
+            Assert.AreEqual(1, host.SceneryInVicinity(new(1, AreaUseScriptHost.EntityId(npc))).Count);
+            var first = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, first.Outcome, first.Detail);
+            Assert.IsTrue(host.IsSwitchedOff(new(1, entity)), "switched off by the toggle");
+            Assert.IsTrue(targets.Gone(session).Contains(near.Key), "the view reads it as gone");
+            Assert.IsNull(targets.Target(session, near.Key), "and it is no target");
+            Assert.AreEqual(0, host.SceneryInVicinity(new(1, AreaUseScriptHost.EntityId(npc))).Count, "and it is in no vicinity list");
+            // A second run finds no scenery in its vicinity (the original's lists leave a switched-off object out), so it toggles nothing: only a script that names the object itself brings it back (the next test).
+            var second = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, second.Outcome, second.Detail);
+            Assert.AreEqual(true, host.IsSwitchedOff(new(1, entity)), "still off");
+            Assert.AreEqual(1L, session.QueryObjectChange(new SessionMapId(1), SessionItemOff.Key(entity)), "the record of the toggle");
+        });
+    }
+
+    // ARC-SCRIPT-2324: the same scenery toggled twice in one run ends as it began, with no record, over a data that stores it on and over one that stores it off.
+    [TestMethod]
+    public void A_scenery_toggled_twice_in_one_run_ends_as_it_began()
+    {
+        WithContent(content =>
+        {
+            foreach (var dataFlags in new uint[] { 0, AreaUseScriptHost.OffObjectFlagBit })
+            {
+                using var session = ConversationSessionFixture.Create();
+                var scenery = AreaHeartbeatScriptTests.Row(2, 3, TwiceScript, objectFlags: dataFlags, point: ScrPoint.Use) with { WorldX = 12 };
+                var targets = new AreaObjectTargets(1, [scenery], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+                var host = Host(session, content, row => targets.Gone(session).Contains(row.Key), scenery);
+                var entity = AreaUseScriptHost.EntityId(scenery);
+                var run = host.Run(scenery, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
+                Assert.AreEqual(dataFlags != 0, host.IsSwitchedOff(new(1, entity)), $"data flags {dataFlags}");
+                Assert.AreEqual(dataFlags != 0, targets.Gone(session).Contains(scenery.Key));
+                Assert.IsNull(session.QueryObjectChange(new SessionMapId(1), SessionItemOff.Key(entity)), "no record");
+            }
+        });
+    }
+
+    // A scenery the map data stores off (object flag 0x2) is gone for the view and out of the vicinity lists (so a loop never reaches it); a script that names it (here its own use script's toggle of its attachee) switches it on,
+    // a record of 0 over the data, and a second one off again, which clears the record.
+    [TestMethod]
+    public void A_scenery_the_map_data_stores_off_is_gone_until_a_toggle_switches_it_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, SceneryToggleScript, point: ScrPoint.Use);
+            var hidden = AreaHeartbeatScriptTests.Row(2, 3, ToggleScript, objectFlags: AreaUseScriptHost.OffObjectFlagBit, point: ScrPoint.Use) with { WorldX = 12 };
+            var targets = new AreaObjectTargets(1, [npc, hidden], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+            var host = Host(session, content, row => targets.Gone(session).Contains(row.Key), npc, hidden);
+            var entity = AreaUseScriptHost.EntityId(hidden);
+            Assert.IsTrue(targets.Gone(session).Contains(hidden.Key), "off in the data");
+            Assert.IsTrue(host.IsSwitchedOff(new(1, entity)));
+            Assert.AreEqual(0, host.SceneryInVicinity(new(1, AreaUseScriptHost.EntityId(npc))).Count, "so a loop does not reach it");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(hidden, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, session.QueryObjectChange(new SessionMapId(1), SessionItemOff.Key(entity)), "the record of 'on' over the data");
+            Assert.IsFalse(targets.Gone(session).Contains(hidden.Key), "switched on");
+            Assert.IsFalse(host.IsSwitchedOff(new(1, entity)) ?? true);
+            Assert.AreEqual(1, host.SceneryInVicinity(new(1, AreaUseScriptHost.EntityId(npc))).Count, "and a loop reaches it now");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(hidden, session.Rules.Scripts).Outcome);
+            Assert.IsTrue(targets.Gone(session).Contains(hidden.Key), "off again");
+            Assert.IsNull(session.QueryObjectChange(new SessionMapId(1), SessionItemOff.Key(entity)), "back at the data's state: no record");
+        });
+    }
+
+    // The refusal is whole: an NPC toggle that comes before a portal toggle in the same run is not applied either.
+    [TestMethod]
+    public void A_run_that_toggles_an_NPC_and_then_a_portal_is_refused_whole_and_the_NPC_stays_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, MixedToggleScript, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc, Portal(2));
+            var run = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome, run.Detail);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, AreaUseScriptHost.EntityId(npc)), "nothing applied");
+        });
+    }
+
+    // An NPC the map data stores off (object flag 0x2) is switched on by a use script's toggle, through the session's flag change, and off again by a second one.
+    [TestMethod]
+    public void A_use_script_switches_on_an_NPC_the_map_data_stores_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, ToggleScript, objectFlags: AreaUseScriptHost.OffObjectFlagBit, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "off in the data");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(npc, session.Rules.Scripts).Outcome);
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "switched on");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(npc, session.Rules.Scripts).Outcome);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "and off again");
         });
     }
 }

@@ -101,12 +101,46 @@ public partial class TerrainViewerApp
             var visible = layer.Field.Lines(entity).Where(l => FloaterRules.Alpha(l.Offset, h) > 0).ToArray();
             Require(drawn.Length > 0 && drawn.Select(d => d.Alpha).SequenceEqual(visible.Select(l => FloaterRules.Alpha(l.Offset, h))),
                 "the drawn lines carry the fade's opacity: " + string.Join(",", drawn.Select(d => d.Alpha)));
-            Require(drawn.Zip(visible).All(pair => (int)pair.First.Position.Y - (int)drawn[0].Position.Y == pair.Second.Offset - visible[0].Offset),
+            Require(drawn.Zip(visible).All(pair => (int)pair.First.Position.Y - (int)drawn[0].Position.Y == (pair.Second.Offset - visible[0].Offset) * layer.Factor),
                 "each line stands at its offset in the box");
+            // ARC-UI-2289: the lines are laid out in the original's pixels (the 200 px box, the 90 px rise) and drawn at the screen's whole factor: the same lines at factor 2
+            // are twice as far from the tile centre on the 2 px grid; the layer's own factor is the screen's.
+            Require(layer.Factor == AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size), $"the floater factor {layer.Factor} is the screen's whole factor");
+            layer.FactorOverride = 1; var floaters1 = layer.DrawnForSelfTest().Where(d => d.Owner == entity).ToArray();
+            layer.FactorOverride = 2; var floaters2 = layer.DrawnForSelfTest().Where(d => d.Owner == entity).ToArray();
+            layer.FactorOverride = null;
+            Require(floaters1.Length > 0 && floaters2.Length == floaters1.Length
+                && floaters2.All(d => d.Position.X % 2 == 0 && d.Position.Y % 2 == 0)
+                && floaters1.Zip(floaters2).All(pair => pair.First.Text == pair.Second.Text && pair.First.Alpha == pair.Second.Alpha
+                    && (int)pair.Second.Position.Y - (int)floaters2[0].Position.Y == ((int)pair.First.Position.Y - (int)floaters1[0].Position.Y) * 2),
+                "at factor 2 the lines keep their text and fade, stand on the 2 px grid, twice as far apart: " + string.Join(",", floaters1.Select(d => d.Position)) + " -> " + string.Join(",", floaters2.Select(d => d.Position)));
+            // The box stands on the owner's tile centre: its first drawn line is (90 + 5 line heights - its offset) original pixels above the anchor, times the factor.
+            if (layer.Anchor(entity) is { } tile)
+            {
+                var firstVisible = visible[0];
+                foreach (var (factor, set) in new[] { (1, floaters1), (2, floaters2) })
+                {
+                    var expectedY = (int)Math.Round(tile.Y / factor) - FloaterRules.BoxRise - FloaterRules.BoxLines * h + firstVisible.Offset;
+                    Require(Math.Abs((int)set[0].Position.Y - expectedY * factor) <= 1,
+                        $"factor {factor}: the first line stands {FloaterRules.BoxRise} original px (+ the box) above the tile centre: y={set[0].Position.Y} expected={expectedY * factor}");
+                }
+            }
+            GD.Print("ARC-UI-2289 floaters drawn at the screen's whole factor PASS");
             var view = GetViewport().GetVisibleRect();
             Require(drawn.All(d => view.HasPoint(d.Position)), "the NPC's lines are on screen: " + string.Join(",", drawn.Select(d => d.Position)));
             layer.Redraw();
             await Capture("critical");
+            if (!string.IsNullOrWhiteSpace(capture))
+            {
+                // ARC-UI-2289 capture at the owner's 2560 x 1440: the old look (factor 1) and the new one (the screen's whole factor, 2 there).
+                var floaterWindowBefore = DisplayServer.WindowGetSize();
+                await SetSmokeWindowSizeAsync(new Vector2I(2560, 1440));
+                await NextFrameAsync();
+                GD.Print($"ARC-UI-2289 capture window={GetViewport().GetVisibleRect().Size} factor={layer.Factor}");
+                layer.FactorOverride = 1; layer.Redraw(); await Capture("floater-factor1");
+                layer.FactorOverride = null; layer.Redraw(); await Capture("floater-factor-screen");
+                await SetSmokeWindowSizeAsync(floaterWindowBefore);
+            }
 
             // The NPC attacks the hero until a hit lands or is dodged: red damage over the hero, or a white dodge.
             var heroLines = 0;
@@ -169,7 +203,7 @@ public partial class TerrainViewerApp
                 var castId = ObjectTargets()!.KeyOfEntity(t!.Object!.Entity) is { } key ? _spellCastMap?.IdOf(key) : null;
                 if (castId is null || _spellCastMap?.Row(castId) is not { WorldX: not null, WorldY: not null } candidate) return false;
                 _floaterCells[castId] = LiveWorldCell(candidate);
-                return FloaterAnchor(castId) is { } point && objectView.HasPoint(point);
+                return FloaterAnchor(castId) is { } point && objectView.HasPoint(point - new Vector2(0, FloaterRules.BoxRise * layer.DrawScale));
             }) ?? damageables.FirstOrDefault();
             if (damageable?.Object is { } doomed && ObjectTargets()!.KeyOfEntity(doomed.Entity) is { } doomedKey && _spellCastMap?.IdOf(doomedKey) is { } doomedId)
             {
@@ -226,14 +260,14 @@ public partial class TerrainViewerApp
             var bubbles = layer.LayOutBubbles();
             Require(bubbles.Count == 2 && bubbles.Any(b => b.Owner == HeroFloater), $"both bubbles draw ({bubbles.Count} bubbles)");
             var heroBubble = bubbles.First(b => b.Owner == HeroFloater);
-            Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X / layer.BubbleFactor <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");
+            Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X / layer.Factor <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");
             if (!string.IsNullOrWhiteSpace(capture)) { layer.Redraw(); await Capture("bubble-after"); }
             // ARC-UI-2278: a bubble is laid out in the original's pixels and drawn at the screen's whole factor (as the bars and the dialog band): the same text, box and
             // lines at factor 2 are twice the size and stand on the 2 px grid; the layer's own factor is the screen's.
-            Require(layer.BubbleFactor == AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size), $"the bubble factor {layer.BubbleFactor} is the screen's whole factor");
-            layer.BubbleFactorOverride = 1; var oneX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
-            layer.BubbleFactorOverride = 2; var twoX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
-            layer.BubbleFactorOverride = null;
+            Require(layer.Factor == AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size), $"the bubble factor {layer.Factor} is the screen's whole factor");
+            layer.FactorOverride = 1; var oneX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
+            layer.FactorOverride = 2; var twoX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
+            layer.FactorOverride = null;
             Require(twoX.Lines.Count == oneX.Lines.Count && twoX.Rect.Size == oneX.Rect.Size * 2
                 && twoX.Lines.All(l => l.Position.X % 2 == 0 && l.Position.Y % 2 == 0 && twoX.Rect.Encloses(new Rect2(l.Position, new Vector2(1, 1)))),
                 $"at factor 2 the bubble is twice the size on the 2 px grid: {oneX.Rect} -> {twoX.Rect}");
@@ -243,9 +277,9 @@ public partial class TerrainViewerApp
                 var windowBefore = DisplayServer.WindowGetSize();
                 await SetSmokeWindowSizeAsync(new Vector2I(2560, 1440));
                 await NextFrameAsync();
-                GD.Print($"ARC-UI-2278 capture window={GetViewport().GetVisibleRect().Size} factor={layer.BubbleFactor}");
-                layer.BubbleFactorOverride = 1; layer.Redraw(); await Capture("bubble-factor1");
-                layer.BubbleFactorOverride = null; layer.Redraw(); await Capture("bubble-factor-screen");
+                GD.Print($"ARC-UI-2278 capture window={GetViewport().GetVisibleRect().Size} factor={layer.Factor}");
+                layer.FactorOverride = 1; layer.Redraw(); await Capture("bubble-factor1");
+                layer.FactorOverride = null; layer.Redraw(); await Capture("bubble-factor-screen");
                 await SetSmokeWindowSizeAsync(windowBefore);
             }
             BubbleClockForSelfTest = 1000 + 6000; TickFloaters();

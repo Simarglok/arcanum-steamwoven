@@ -70,7 +70,7 @@ Order: E1-e before E1-f (one writer in the Summon and AI files); E6, MA-9 and MA
 | **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag); **spot half done, ARC-MAGIC-057; disarm half done, ARC-SKILLS-1156** | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
 | **MA-9** Tempus Fugit | Implement what MA-R read (XR6); the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 (done) | done: ARC-MAGIC-056, session and stat files | FR-MAGIC-007 |
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
-| **E1-f** AI summoning and AI parity (**summon half built, ARC-MAGIC-1169**: an NPC summoner's faction and alignment, the AIRedirect component; the `ai-cast` pass over the 80 is [#1835](https://github.com/Simarglok/arcanum-steamwoven/issues/1835)) | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
+| **E1-f** AI summoning and AI parity (**summon half built, ARC-MAGIC-1169**: an NPC summoner's faction and alignment, the AIRedirect component; the `ai-cast` pass over the 80 is built, ARC-MAGIC-1835: stage `ai-cast-pass`, findings [AP1–AP7](ledger/npc-ai.md#ai-cast-pass-arc-magic-1835) and issues [#2654](https://github.com/Simarglok/arcanum-steamwoven/issues/2654), [#2655](https://github.com/Simarglok/arcanum-steamwoven/issues/2655), [#2656](https://github.com/Simarglok/arcanum-steamwoven/issues/2656), [#2657](https://github.com/Simarglok/arcanum-steamwoven/issues/2657)) | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
 
 MA-10 is done (ARC-MAGIC-1167): the raise script runs through the dispatcher before the life step ([ledger RZ1–RZ3](ledger/spell-runs.md)); the refusal feedback (message 605, resisted effect) is built too (ARC-MAGIC-1838, [RZ3](ledger/spell-runs.md)).
 
@@ -104,7 +104,7 @@ Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-change
 
 Done by owner decision D5(a): magic builds the state and a text answer, the windows are E8's ([contract](../world/spell-cast-host.md#identify-arc-magic-032), ledger [XR1-XR5](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)). The original's Identify writes nothing and shows a window to the casting local player only, so an NPC caster's has no effect.
 The hero's answer is a typed event and a message line by the target's type (`IdentifyCritter`, `IdentifyContainer`, `IdentifyItem`); Divine Magick's identified flag is the session's `MarkItemIdentified` mark (no schema step), now read by the weapon spell pane too.
-Left: the three windows (an inventory item is a spell target since ARC-MAGIC-1128); what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
+Left: the three windows (an inventory item is a spell target since ARC-MAGIC-1128, a loot window's item since ARC-MAGIC-1336); what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
 
 ## Social and AI flags (MA-4, ARC-MAGIC-035)
 

@@ -65,7 +65,7 @@ public partial class AreaCombatHud : CanvasLayer
     }
     internal int EndTurnFrameForSelfTest => _endTurn.HasMeta("frame") ? (int)_endTurn.GetMeta("frame") : -1;
     internal bool ListShownForSelfTest => _list.Visible;
-    internal IReadOnlyList<string> RowTextsForSelfTest => _rows.GetChildren().OfType<Label>().Select(l => l.Text).ToArray();
+    internal IReadOnlyList<string> RowTextsForSelfTest => _rows.GetChildren().OfType<AreaArtLabel>().Select(l => l.Text).ToArray();
     internal bool ShownForSelfTest => Visible;
     /// <summary>The panel's and the list's rectangles in window pixels.</summary>
     internal (Rect2 Panel, Rect2 List) PlacementForSelfTest => (_panel.GetGlobalRect(), _list.GetGlobalRect());
@@ -178,9 +178,10 @@ public partial class AreaCombatHud : CanvasLayer
                 ActionPointLamp.Shortfall => ShortfallColor,
                 _ => OffColor,
             };
-        _list.Visible = view.Rows is not null;
+        // ARC-UI-2940: the list is drawn in the original's text font only; without the font (no game folder) it is not drawn.
+        _list.Visible = view.Rows is not null && _font is not null;
         // The rows are rebuilt only when their text changes (the running lights redraw the lamps every 100 ms).
-        var key = view.Rows is { } texts ? $"{view.Round}|{view.Hidden}|" + string.Join("\n", texts.Select(r => (r.Current ? ">" : " ") + r.Name)) : null;
+        var key = view.Rows is { } texts ? $"{_font?.GetHashCode()}|{view.Round}|{view.Hidden}|" + string.Join("\n", texts.Select(r => (r.Current ? ">" : " ") + r.Name)) : null;
         if (key != _rowsKey)
         {
             _rowsKey = key;
@@ -198,10 +199,22 @@ public partial class AreaCombatHud : CanvasLayer
 
     private void AddRow(string text, bool current)
     {
-        var label = new Label { Text = text, MouseFilter = Control.MouseFilterEnum.Ignore };
-        label.AddThemeFontSizeOverride("font_size", 13);
-        if (current) label.AddThemeColorOverride("font_color", new Color(1f, .85f, .3f));
+        if (_font is not { } face) return;
+        // ARC-UI-2940: the original's text font (art 229; the HD redraw with the HD interface on) in white, the current row in the old gold.
+        var label = new AreaArtLabel { Face = face, Text = text, Colour = current ? Current : White };
+        label.CustomMinimumSize = new Vector2(label.TextWidth, AreaTextFontLayout.LineHeight(face.Frames));
         _rows.AddChild(label);
+    }
+
+    private static readonly (byte R, byte G, byte B) White = (255, 255, 255), Current = (255, 217, 77);
+    private AreaArtFontFace? _font;
+
+    /// <summary>ARC-UI-2940: the font of the turn-order list (art 229); null draws no list.</summary>
+    public void SetFont(AreaArtFontFace? face)
+    {
+        if (ReferenceEquals(_font, face)) return;
+        _font = face;
+        if (_view is { } view) Show(view, _bars);
     }
 
     private void Place()
@@ -212,8 +225,10 @@ public partial class AreaCombatHud : CanvasLayer
         // As the PC's gauges: over the bars (layer 6) when they are shown, else under the hover tooltip and the windows.
         Layer = _inBars ? 6 : 2;
         var factor = _inBars ? _bars!.Factor : AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2452: in the Steamwoven layout the screen lies where the strips put it, at the strips' fractional scale.
+        var (origin, scale) = _inBars ? _bars!.ScreenFrame(size) : (new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor), (float)factor);
+        _root.Position = origin;
+        _root.Scale = new(scale, scale);
         if (_artShown)
         {
             // ARC-UI-1888: the original's places (table 0x5CAA48 and the window table 0x5CAA38).
@@ -237,7 +252,10 @@ public partial class AreaCombatHud : CanvasLayer
             }
         }
         // The list under the top strip at the right (the follower portraits stand at the left edge), unscaled (its text is a normal label).
+        // ARC-UI-2604: at the right edge of the frame's edge rectangle (EdgeRect); without the layout it is the whole window, as before.
         _list.ResetSize();
-        _list.Position = new(Math.Max(0, size.X - _list.GetCombinedMinimumSize().X - 8), AreaGameBarPanel.TopInset + 8);
+        // ARC-UI-2890: in the column mode against the frame's right edge over the world, from the frame's top.
+        var free = AreaGameBarPanel.EdgeRect(size);
+        _list.Position = new(Math.Max(free.Position.X, free.End.X - _list.GetCombinedMinimumSize().X - 8), AreaGameBarPanel.EdgeTop + 8);
     }
 }

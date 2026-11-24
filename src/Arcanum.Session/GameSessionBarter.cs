@@ -7,7 +7,12 @@ namespace Arcanum.Session;
 /// <summary>ARC-WORLD-090: what a barter window's open changed: the coins and piles that moved from the substitute container onto the
 /// merchant, the merchant's pile they joined (null when none moved) and how many items it newly marked identified.</summary>
 public readonly record struct SessionBarterOpenResult(GameSessionDisposition Disposition, GameSessionFailure Failure, int Coins, int Piles,
-    string? Pile, int Identified, GameSessionVersion Version);
+    string? Pile, int Identified, GameSessionVersion Version)
+{
+    /// <summary>ARC-SCRIPT-2855: the lines the moved piles' insert-item scripts printed, in order, for the host to show; empty when none ran.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
+    private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+}
 
 /// <summary>
 /// ARC-UI-050: the barter window's trades between the hero and an NPC merchant, in the original's order (0x578EA0, ledger BT5): the item
@@ -43,14 +48,15 @@ public sealed partial class GameSessionOwner
     /// ever (BT11, a hang: a technical bug, fixed in both modes without a switch). Refused before any effect: an invalid input
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>),
     /// an NPC or a container (not spilled) its seed does not list (<see cref="GameSessionFailure.UnknownHolder"/>), a pile with an
-    /// insert-item script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a sum past 32 bits or a full record, list or identified
+    /// insert-item script when there is no <paramref name="scripts"/> host (ARC-SCRIPT-2855, ledger NT1: with one the event runs on each moved pile first, 0x464830 → 0x441980 point 21 with the merchant as the triggerer, applied with the move (all runs before the first pile moves; the original's 0x4643D0 loop moves pile by pile, so a later pile's script reads the state before the earlier piles joined the merchant's: a limit), a run
+    /// the session cannot apply refuses: <see cref="GameSessionFailure.ItemScriptUnsupported"/>), a sum past 32 bits or a full record, list or identified
     /// budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, and the new pile's refusals of <see cref="GiveGoldToNpc"/>.
     /// One revision; nothing to move or mark is no change.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x572640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4643D0, OriginalFunctionScope.Partial)]
     public SessionBarterOpenResult OpenBarter(GameSessionVersion expected, string npc, string? container, bool identify, SessionItemKind pileKind,
-        SessionInsertCheck npcInsert)
+        SessionInsertCheck npcInsert, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(npcInsert);
@@ -67,7 +73,9 @@ public sealed partial class GameSessionOwner
             return Refuse(GameSessionFailure.UnknownHolder);
         var stock = box is null ? [] : _inventory.Current(seed, box, entry => DroppedCell(map, seed, entry)).ToArray();
         var piles = stock.Where(entry => entry.Facts.Kind.Type == SessionItemType.Gold && (entry.Facts.Quantity ?? 0) != 0).ToArray();
-        if (piles.Any(entry => entry.Facts.HasScript(SessionScriptPoint.InsertItem))) return Refuse(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-SCRIPT-2855 (BT11, NT1): each moved pile's insert-item script (21) runs first with the merchant as the triggerer, in the container's order.
+        var insert = piles.Length == 0 ? PileInsert.None : RunPileInserts(scripts, piles.Select(entry => entry.Entity).ToArray(), npc, npcTriggerer: true, container);
+        if (insert.Failure != GameSessionFailure.None) return Refuse(insert.Failure);
         var coins = piles.Sum(entry => (long)entry.Facts.Quantity!.Value);
         var target = piles.Length == 0 ? null : NpcPile(npc);
         if (target is { } grown && grown.Quantity + coins > int.MaxValue || target is null && coins > int.MaxValue) return Refuse(GameSessionFailure.BudgetExceeded);
@@ -86,19 +94,22 @@ public sealed partial class GameSessionOwner
         if (piles.Length == 0 && marked.Count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, 0, null, 0, Version);
         if (_revision == long.MaxValue) return Refuse(GameSessionFailure.RevisionExhausted);
         string? pile = target?.Entity;
+        var report = new CreatedScripts { Defer = true };
         if (piles.Length > 0 && target is null)
         {
             // 0x464830 creates the first pile with its coins and moves it in (0x4617F0); the later piles join it.
-            var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal);
-            if (created is null) return Refuse(refusal!.Value.Failure);
+            var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal, scripts: scripts, report: report);
+            if (created is null) return Refuse(refusal!.Value.Failure) with { Messages = refusal.Value.Messages };
             pile = created.Value.Entity;
             if (identify) marked.Add(pile);
         }
         if (pile is not null) _inventory.Piles[pile] = (int)((target?.Quantity ?? 0) + coins);
+        insert.Runs?.Commit();
+        report.CommitPending();
         foreach (var entry in piles) DestroyObject(entry.Entity);
         _inventory.Identified.UnionWith(marked);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, (int)coins, piles.Length, pile, marked.Count, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, (int)coins, piles.Length, pile, marked.Count, Version) { Messages = [.. insert.Runs?.Messages ?? [], .. report.Messages] };
     }
 
     /// <summary>ARC-WORLD-090: whether the session marked the item identified (item flag 0x1 a barter window set); the item's own
@@ -157,17 +168,18 @@ public sealed partial class GameSessionOwner
             else
             {
                 if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
-                if (NpcHasScript(npc, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
                 if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
                     return RejectItem(GameSessionFailure.BudgetExceeded);
             }
         }
         var moved = container is not null ? TakeFromContainer(container, item, stack, count, newStackKind, heroInsert, scripts)
-            : stack ? TakeAmmoFromNpc(Version, npc, item, count, newStackKind, heroInsert)
+            : stack ? TakeAmmoFromNpc(Version, npc, item, count, newStackKind, heroInsert, scripts)
                 : TakeItemFromNpc(Version, npc, item, heroInsert, scripts, unwield: wornItem, npcWearer: npcWearer);
-        if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
-        var paid = GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert);
-        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version } : paid with { Item = moved.Item, Version = Version };
+        // A recipient's transfer script that declined the item (DeclinedBy, ARC-SCRIPT-2827) leaves it with the hero: no payment.
+        if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is not null || total == 0) return moved;
+        var paid = GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert, scripts);
+        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version, Scripts = [.. moved.Scripts, .. paid.Scripts], Messages = [.. moved.Messages, .. paid.Messages] }
+            : paid with { Item = moved.Item, Version = Version };
     }
 
     /// <summary>
@@ -202,7 +214,7 @@ public sealed partial class GameSessionOwner
     /// through <see cref="GiveAmmoToNpc"/> (a new NPC stack of <paramref name="newStackKind"/>); then the NPC pays <c>count × unitPrice</c>
     /// through <see cref="TakeGoldFromNpc"/>. Refused before any effect, beyond those calls' refusals: <see cref="BarterBuy"/>'s input
     /// checks, an NPC with fewer coins than the total (<see cref="GameSessionFailure.GoldShort"/>, the original's rolled-back stack sale),
-    /// a pile with an insert-item script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a hero sum past 32 bits or a full record
+    /// a pile with an insert-item script when there is no <paramref name="scripts"/> host or its run cannot be applied (the payment's run is tried before the item moves; ARC-SCRIPT-2855, <see cref="GameSessionFailure.ItemScriptUnsupported"/>), a hero sum past 32 bits or a full record
     /// budget (<see cref="GameSessionFailure.BudgetExceeded"/>). ARC-WORLD-090: with a <paramref name="container"/> the item goes into the
     /// container's list (0x578EA0 moves a sold item into the shown object: <see cref="GiveItemToNpc"/>'s rules with the container as
     /// holder; units of ammunition join its first stack of the type, which the original's lookup never finds, AMA5); the coins still come
@@ -211,7 +223,12 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GiveItemToNpc"/>); without a host it is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
     /// </summary>
     public InventoryMutationResult BarterSell(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
-        SessionInsertCheck npcInsert, string? container = null, bool identify = false, ISessionItemScriptHost? scripts = null)
+        SessionInsertCheck npcInsert, string? container = null, bool identify = false, ISessionItemScriptHost? scripts = null) =>
+        SellCore(expected, npc, item, count, unitPrice, newStackKind, npcInsert, container, identify, scripts, null, null);
+
+    // BarterSell's body; ARC-UI-2159: slotWearer (with the item's listed points) is the merchant as the wearer of a sale onto a slot of its doll.
+    private InventoryMutationResult SellCore(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
+        SessionInsertCheck npcInsert, string? container, bool identify, ISessionItemScriptHost? scripts, NpcWearer? slotWearer, IReadOnlyList<int>? slotPoints)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(npcInsert);
@@ -228,17 +245,20 @@ public sealed partial class GameSessionOwner
         {
             if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
             if (NpcPile(npc) is not { } pile || pile.Quantity < total) return RejectItem(GameSessionFailure.GoldShort);
-            if (pile.Facts?.HasScript(SessionScriptPoint.InsertItem) == true) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+            // ARC-SCRIPT-2855: the payment's insert-item script (21 on the merchant's pile) is tried before the item moves, so a run the session cannot apply refuses the sale with nothing moved; the payment runs it again for real.
+            if (RunPileInsert(scripts, pile.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, pile.Quantity == total ? npc : null) is { Failure: not GameSessionFailure.None } probe) return RejectItem(probe.Failure);
             if (_inventory.Gold + total > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
             if (pile.Quantity == total ? !_durability.Records.ContainsKey(pile.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
                 : !_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         }
         var into = container ?? npc;
         var kind = container is null ? SessionHolderKind.Npc : SessionHolderKind.Container;
-        var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts);
-        if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
-        var paid = TakeGoldFromNpc(Version, npc, (int)total);
-        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version }
+        var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert, scripts) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts, slotWearer: slotWearer, slotPoints: slotPoints);
+        // ARC-SCRIPT-2827: the merchant's transfer script declined the item (DeclinedBy): it stays with the hero and nothing is paid.
+        if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is not null || total == 0) return moved;
+        var paid = TakeGoldFromNpc(Version, npc, (int)total, scripts: scripts);
+        return paid.Disposition == GameSessionDisposition.Changed
+            ? moved with { Version = Version, InsertScript = paid.InsertScript ?? moved.InsertScript, Scripts = [.. moved.Scripts, .. paid.Scripts], Messages = [.. moved.Messages, .. paid.Messages] }
             : paid with { Item = moved.Item, Version = Version, Scripts = moved.Scripts, InsertScript = moved.InsertScript, Messages = moved.Messages };
     }
 
@@ -246,12 +266,13 @@ public sealed partial class GameSessionOwner
     /// ARC-UI-2138 (0x575360 → 0x5788C0 → 0x578EA0 with the location 1000 + slot, executor 0x461810 → 0x461CA0 → 0x466640, ledger IW35, BW5): the hero's item, worn or in its pack, is sold onto a slot of the merchant's doll and the merchant
     /// wears it. <see cref="BarterSell"/>'s sale of one whole item into the NPC itself (never the substitute container: the executor puts a slot location on the merchant, 0x57934B), then the NPC's worn record names the item in <paramref name="slot"/>
     /// (the record a dressed NPC keeps, ARC-WORLD-103; for an NPC the session never dressed it starts from what its map data has worn), in the sale's one revision. The wear test (0x464D20) is the caller's, as <see cref="QueryWearRefusal"/>'s is for the hero. Refused
-    /// before any effect: a slot that is not a wear slot or that the NPC's list shows filled (the original puts the item back, no swap for an NPC), a first worn record past the saved budget, and an item the session cannot wear for the NPC: one with item event
-    /// scripts on the move (<see cref="GameSessionFailure.ItemScriptUnsupported"/>) or item spells (<see cref="GameSessionFailure.ItemEffectUnsupported"/>); NOT READY (the original runs the wield scripts, art and light of the NPC's wear). PROJECT: the room test the executor
-    /// runs for the NPC (0x466510, its carry weight) is <paramref name="npcInsert"/>. A sale refused in the sale rules leaves the NPC's record as it was; a payment refused after the move leaves the item on the NPC's slot, as the original leaves a moved item.
+    /// before any effect: a slot that is not a wear slot or that the NPC's list shows filled (the original puts the item back, no swap for an NPC), a first worn record past the saved budget, and an item the session cannot wear for the NPC: one with item spells (<see cref="GameSessionFailure.ItemEffectUnsupported"/>; NOT READY: the NPC's item spells are not modelled, as in its best-items wield) or one with item event
+    /// scripts on the move when the host gives no script host or no wield context of the merchant (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). ARC-UI-2159: with them the hero's removal runs (wield off, remove item; the hero the wearer) and the merchant's wield on (24)
+    /// and insert item (21) run (<paramref name="npcWearer"/>: the merchant is their wearer and triggerer, its effect list the runs change), planned in two run sets, one commit and the sale's one revision (NOT READY: the two sets do not share pending state, so a global variable, flag, quest, story or item slot one set writes is not read by the other's runs, and when both write the same one the later commit wins). NOT READY: the art and
+    /// light of the NPC's wear. The room test the executor runs for the NPC (0x466510, its carry weight: code 1, no grid room for a slot) is <paramref name="npcInsert"/>. A sale refused in the sale rules leaves the NPC's record as it was; a payment refused after the move leaves the item on the NPC's slot, as the original leaves a moved item.
     /// </summary>
     public InventoryMutationResult BarterSellWorn(GameSessionVersion expected, string npc, string item, EquipmentSlot slot, SessionWearableItem wearable, int unitPrice,
-        SessionItemKind newStackKind, SessionInsertCheck npcInsert, bool identify = false, ISessionItemScriptHost? scripts = null)
+        SessionItemKind newStackKind, SessionInsertCheck npcInsert, bool identify = false, ISessionItemScriptHost? scripts = null, SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(wearable);
@@ -260,7 +281,10 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (EquipmentRules.WearSlot(wearable.Item) is not { } own || own != slot && !(own is EquipmentSlot.Ring1 && slot is EquipmentSlot.Ring2)) return RejectItem(GameSessionFailure.InvalidEquipment);
-        if (EquipmentDomain.MovePoints(wearable.ScriptPoints).Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-UI-2159 (IE4): an item with item event scripts is worn by the merchant through the item script host, as the NPC best-items wield does (the merchant is the wearer and the triggerer of the wield on and insert item runs); without the host or the
+        // merchant's wield context the sale is refused.
+        var points = EquipmentDomain.MovePoints(wearable.ScriptPoints);
+        if (points.Count > 0 && (scripts is null || npcWearer is null)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (wearable.HasItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         if (QueryHolderItems(npc) is not { } listed) return RejectItem(GameSessionFailure.UnknownHolder);
         var record = new SortedDictionary<EquipmentSlot, string>();
@@ -272,7 +296,11 @@ public sealed partial class GameSessionOwner
         record[slot] = item;
         _inventory.NpcWorn[npc] = record;
         InventoryMutationResult result;
-        try { result = BarterSell(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts); }
+        try
+        {
+            result = SellCore(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts,
+                points.Count > 0 ? new NpcWearer(npc, npcWearer!.Target, NpcStatsOverSheet(npc, npcWearer.Stored)) : null, points);
+        }
         catch
         {
             // A host callback that throws leaves the item with the hero: the record is as it was.
@@ -305,8 +333,11 @@ public sealed partial class GameSessionOwner
             if (newStackKind.Type != SessionItemType.Ammo) return RejectItem(GameSessionFailure.InvalidAmmo);
             var source = ContainerStacks(container).First(pair => pair.Stack.Entity == item).Stack;
             if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+            // ARC-SCRIPT-2855 (AM4): the container's stack's insert-item script runs first with the hero as the triggerer.
+            var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, source.Units == count ? container : null);
+            if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
             var hero = HeroStackOfType(source.AmmoType);
-            return MoveUnits(source, count, hero, hero is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null);
+            return MoveUnits(source, count, hero, hero is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
         }
         if (_inventory.Lists.IsContainer(container) && _inventory.AddedTo(container).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
             return Take(seed, new(item, _inventory.AddedFacts(added)), container, insertCheck, scripts);
@@ -316,14 +347,19 @@ public sealed partial class GameSessionOwner
     }
 
     // ARC-WORLD-090: GiveAmmoToNpc's move into an NPC or a container (whose stack lookup follows AMA5).
-    private InventoryMutationResult GiveAmmoTo(string holder, SessionHolderKind kind, string stack, int count, SessionItemKind newStackKind, SessionInsertCheck insertCheck)
+    private InventoryMutationResult GiveAmmoTo(string holder, SessionHolderKind kind, string stack, int count, SessionItemKind newStackKind, SessionInsertCheck insertCheck,
+        ISessionItemScriptHost? scripts = null)
     {
-        if (kind == SessionHolderKind.Npc) return GiveAmmoToNpc(Version, holder, stack, count, newStackKind, insertCheck);
+        if (kind == SessionHolderKind.Npc) return GiveAmmoToNpc(Version, holder, stack, count, newStackKind, insertCheck, scripts);
         if (newStackKind.Type != SessionItemType.Ammo) return RejectItem(GameSessionFailure.InvalidAmmo);
         if (!HeroHeld().Any(held => held.Entity == stack && held.Kind.Type == SessionItemType.Ammo)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         var source = _inventory.Ammo[stack];
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        // ARC-SCRIPT-2855 (AM4): the hero's stack's insert-item script runs first with the container as the triggerer (no critter: the hero's reading of a printed line).
+        var insert = RunPileInsert(scripts, source.Entity, holder, npcTriggerer: false, source.Units == count ? SessionEventKinds.PlayerEntity : null);
+        if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = ContainerStackOfType(holder, source.AmmoType);
-        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind) : null);
+        var report = new CreatedScripts { Defer = true };
+        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind, scripts, report) : null, insert, report);
     }
 }

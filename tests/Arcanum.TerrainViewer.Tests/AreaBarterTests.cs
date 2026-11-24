@@ -8,6 +8,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -66,8 +67,8 @@ public sealed class AreaBarterTests
     }
 
     private static AreaBarter Barter(GameSessionOwner session, AreaBarterData data, List<int> changes, int reaction = 50, bool follower = false,
-        int set = 1, bool wearer = false) =>
-        new(session, new AreaInventoryHost([]) { NpcWearerFacts = wearer ? (_, _) => new EquipmentWearer() : null }, data, new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(set), follower),
+        int set = 1, bool wearer = false, SessionInsertCheck? slotCheck = null) =>
+        new(session, new AreaInventoryHost([]) { NpcWearerFacts = wearer ? (_, _) => new EquipmentWearer() : null, NpcSlotInsertCheck = slotCheck is null ? null : _ => slotCheck }, data, new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(set), follower),
             () => reaction, change => { changes.Add(change); return true; }, (entity, _) => entity);
 
     [TestMethod]
@@ -114,6 +115,25 @@ public sealed class AreaBarterTests
         var refused = barter.Buy("vest");
         Assert.AreEqual((false, 1000, 100, "won't sell (Worn)"), (refused.Moved, session.QueryGold(), session.QueryNpcGold("merchant"), refused.Text));
         Assert.AreEqual("vest", barter.View().WornWares.Single().Entity, "still worn");
+    }
+
+    // ARC-SCRIPT-2386 (IV14, mode 1 of the inventory window: 0x576520 paints, 0x575FA0 hit-tests): a switched-off item is on no barter line, the hero's, the merchant's or its worn one, so it cannot be bought or sold.
+    [TestMethod]
+    public void A_switched_off_item_is_on_no_barter_line()
+    {
+        using var session = Session(masterHaggle: true);
+        var barter = Barter(session, Data(), []);
+        var map = session.QueryActor().Map;
+        var before = barter.View();
+        Assert.IsTrue(before.Hero.Count > 0 && before.Wares.Count > 0 && before.WornWares.Count == 1);
+        var items = before.Hero.Concat(before.Wares).Concat(before.WornWares).Select(line => line.Entity).ToArray();
+        var changes = items.Select(entity => new MapChangeEdit(map, SessionItemOff.Key(entity), 1)).ToArray();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, changes).Disposition);
+        var view = barter.View();
+        Assert.AreEqual((0, 0, 0), (view.Hero.Count, view.Wares.Count, view.WornWares.Count));
+        Assert.IsFalse(barter.Buy("vest").Moved, "an item the window does not offer is not bought");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, items.Select(entity => new MapChangeEdit(map, SessionItemOff.Key(entity), null)).ToArray()).Disposition);
+        Assert.AreEqual(before.Hero.Count + before.Wares.Count + before.WornWares.Count, barter.View().Hero.Count + barter.View().Wares.Count + barter.View().WornWares.Count);
     }
 
     [TestMethod]
@@ -215,6 +235,21 @@ public sealed class AreaBarterTests
         Assert.AreEqual(version, session.Version, "still nothing changed");
     }
 
+    // ARC-UI-2159 (0x466510 in 0x466640): the weight test of the merchant's carry weight refuses the sale onto a slot as it refuses a grid sale: the item stays with the hero, nothing is paid and no worn record is made.
+    [TestMethod]
+    public void A_sale_onto_a_slot_the_merchant_cannot_carry_is_refused_by_the_weight_test()
+    {
+        using var session = Session(vest: false);
+        var version = session.Version;
+        var heavy = Barter(session, Data(), [], wearer: true, slotCheck: _ => SessionInsertVerdict.TooHeavy).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.IsFalse(heavy.Moved, heavy.Text);
+        StringAssert.StartsWith(heavy.Text, "refused:");
+        Assert.AreEqual((version, 1000, 100), (session.Version, session.QueryGold(), session.QueryNpcGold("merchant")));
+        Assert.IsNull(session.QueryNpcWorn("merchant"));
+        var light = Barter(session, Data(), [], wearer: true, slotCheck: _ => SessionInsertVerdict.Accepted).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.IsTrue(light.Moved, light.Text);
+    }
+
     [TestMethod]
     public void A_sale_onto_a_slot_in_a_followers_window_is_free_and_a_refused_sale_leaves_no_worn_record()
     {
@@ -227,6 +262,32 @@ public sealed class AreaBarterTests
         var notDealt = Barter(refused, Data("{1}{4020}"), [], wearer: true).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
         Assert.AreEqual((false, "won't buy (NotDealt)"), (notDealt.Moved, notDealt.Text), "price 0 puts it back");
         Assert.IsNull(refused.QueryNpcWorn("merchant"));
+    }
+
+    // ARC-UI-1824: the lines an item script printed during a trade follow the trade's text (as the loot window shows them), for a trade that moved and for a refused one.
+    [TestMethod]
+    public void The_lines_an_item_script_printed_during_a_trade_follow_the_trade_text()
+    {
+        using var session = Session();
+        var barter = Barter(session, Data(), []);
+        var line = barter.View().Wares.First(item => item.Entity == "axe");
+        InventoryMutationResult Result(GameSessionDisposition disposition, GameSessionFailure failure, params SessionScriptMessage[] printed) =>
+            new(disposition, failure, null, null, session.Version) { Messages = printed };
+        var said = new SessionScriptMessage(600, 2, 0, "The ring hums.");
+        var also = new SessionScriptMessage(600, 3, 0, " It cools. ");
+
+        var bought = barter.Settle(TradeDirection.PcBuys, line, Result(GameSessionDisposition.Changed, GameSessionFailure.None, said, also));
+        Assert.IsTrue(bought.Text.StartsWith("bought axe", StringComparison.Ordinal), bought.Text);
+        Assert.IsTrue(bought.Text.EndsWith(" — The ring hums. It cools.", StringComparison.Ordinal), bought.Text);
+
+        var sold = barter.Settle(TradeDirection.PcSells, line, Result(GameSessionDisposition.Changed, GameSessionFailure.None, said));
+        Assert.IsTrue(sold.Text.StartsWith("sold axe", StringComparison.Ordinal) && sold.Text.EndsWith(" — The ring hums.", StringComparison.Ordinal), sold.Text);
+
+        var refused = barter.Settle(TradeDirection.PcSells, line, Result(GameSessionDisposition.Rejected, GameSessionFailure.GoldShort, said));
+        Assert.AreEqual("the merchant cannot pay — The ring hums.", refused.Text, "a script that ran before the refusal may have printed");
+
+        var silent = barter.Settle(TradeDirection.PcBuys, line, Result(GameSessionDisposition.Changed, GameSessionFailure.None));
+        Assert.IsFalse(silent.Text.Contains('—', StringComparison.Ordinal), "no printed line, no suffix");
     }
 
     [TestMethod]
@@ -280,6 +341,24 @@ public sealed class AreaBarterTests
              new("chest-coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 50), null)]);
         Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(session.QueryActor().Map, seed).Failure);
         return session;
+    }
+
+    [TestMethod]
+    public void The_substitute_limit_measures_the_speaker_from_its_live_cell()
+    {
+        // ARC-WORLD-2245 (0x45F650): a merchant the AI host walked away from its T0 cell is measured where it stands now.
+        var data = StockData();
+        var own = new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(2), false);
+        var chest = new AreaSubstituteContainer("chest", 1, new(40, 40));
+        var speaker = new AreaSpeaker(2, AreaAiRouteTests.Npc(0, [], 0, (20, 25), (20, 25)), 1, 40, 40);
+        Func<AreaSpeaker, (long X, long Y)> at(CellCoord? host) => AreaSpeakerCells.Live(null, _ => host);
+
+        Assert.AreEqual("chest", own.WithSubstitute(chest, speaker, at(null), data).Container, "nobody holds it: the T0 cell, 0 tiles");
+        Assert.IsNull(own.WithSubstitute(chest, speaker, at(new(61, 40)), data).Container, "the AI host walked it 21 tiles away");
+        Assert.AreEqual("chest", own.WithSubstitute(chest, speaker, at(new(60, 20)), data).Container, "20 tiles away (Chebyshev), not the T0 cell");
+        var away = new AreaSpeaker(2, speaker.Row, 1, 100, 100);
+        Assert.AreEqual("chest", own.WithSubstitute(chest, away, at(new(41, 41)), data).Container, "far at T0, the host walked it next to the chest");
+        Assert.IsNull(own.WithSubstitute(chest, away, at(null), data).Container, "far at T0 and nobody holds it");
     }
 
     [TestMethod]

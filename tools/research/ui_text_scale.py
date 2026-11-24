@@ -61,7 +61,7 @@ class Window:
 WINDOWS = (
     Window("main menu, single player, new game", (327,), "tools/terrain-viewer/Core/AreaMenuArt.cs"),
     Window("options window", (27, 229), "tools/terrain-viewer/Core/AreaMenuArt.cs"),
-    Window("save and load list", (27,), "tools/terrain-viewer/Core/AreaSaveListArt.cs"),
+    Window("save and load list", (229,), "tools/terrain-viewer/Core/AreaSaveListArt.cs"),
     Window("character creation and pre-made browser", (27, 171), "tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs"),
     Window("character sheet", (27, 229, 171), "tools/terrain-viewer/Core/AreaCharacterSheetArt.cs"),
     Window("character sheet spells page", (28,), "tools/terrain-viewer/Core/AreaCharacterSheetSpells.cs"),

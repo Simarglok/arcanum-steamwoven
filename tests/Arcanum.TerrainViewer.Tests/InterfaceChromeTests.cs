@@ -273,6 +273,28 @@ public sealed class InterfaceChromeTests
         Assert.AreEqual((0, 0, 255, 255), Pixel(one, 1, 0, 0));
     }
 
+    // ARC-RENDER-3002: the area filter of a direct frame keeps its transparency.
+    [TestMethod]
+    public void A_straight_resample_averages_alpha_and_weights_colour_by_it()
+    {
+        var source = new byte[2 * 1 * 4];
+        (source[0], source[1], source[2], source[3]) = (255, 0, 0, 0);
+        (source[4], source[5], source[6], source[7]) = (0, 0, 255, 255);
+        var one = InterfaceChromeRenderer.ResampleStraight(source, 2, 1, 1, 1);
+        Assert.AreEqual((0, 0, 255, 128), Pixel(one, 1, 0, 0), "half the area is transparent: alpha is the mean, the colour is the opaque texel's");
+        CollectionAssert.AreEqual(source, InterfaceChromeRenderer.ResampleStraight(source, 2, 1, 2, 1), "the same size is returned as it is, alpha included");
+        var hole = InterfaceChromeRenderer.ResampleStraight(new byte[4 * 4 * 4], 4, 4, 3, 3);
+        Assert.AreEqual((0, 0, 0, 0), Pixel(hole, 3, 1, 1), "a fully transparent area stays transparent");
+        var opaque = new byte[4 * 4 * 4];
+        for (var i = 0; i < opaque.Length; i += 4) (opaque[i], opaque[i + 1], opaque[i + 2], opaque[i + 3]) = (10, 20, 30, 255);
+        foreach (var (w, h) in new[] { (3, 3), (2, 2), (1, 1), (3, 2) })
+        {
+            var flat = InterfaceChromeRenderer.ResampleStraight(opaque, 4, 4, w, h);
+            for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) Assert.AreEqual((10, 20, 30, 255), Pixel(flat, w, x, y), $"a flat opaque frame stays flat at {w}x{h}");
+        }
+        Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.ResampleStraight(new byte[10], 2, 2, 1, 1));
+    }
+
     [TestMethod]
     public void Scale_and_picture_bounds_are_refused()
     {
@@ -441,8 +463,9 @@ public sealed class InterfaceChromeTests
                 CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
                 // The silhouette is the Legacy one: a frame without a hole is opaque in every pixel; one with the 89 x 89 hole is opaque everywhere more than two pixels
                 // outside the hole's box and clear in the hole's middle.
-                Assert.AreEqual(hole ? 0 : 255, Pixel(a, pw, (int)(60.5 * scale), (int)(61.5 * scale)).A, $"{file} middle of the round view at {scale}");
-                int x0 = (int)(16 * scale) - 2, x1 = (int)Math.Ceiling(105 * scale) + 2, y0 = (int)(17 * scale) - 2, y1 = (int)Math.Ceiling(106 * scale) + 2;
+                Assert.AreEqual(hole ? 0 : 255, Pixel(a, pw, (int)((AreaLensPlace.X + 44.5) * scale), (int)((AreaLensPlace.Y + 44.5) * scale)).A, $"{file} middle of the round view at {scale}");
+                // ARC-UI-2714: the recipe moves the hole to the common place (the loot, follower and barter frames carry it at the Legacy (16, 17)).
+                int x0 = (int)(AreaLensPlace.X * scale) - 2, x1 = (int)Math.Ceiling((AreaLensPlace.X + 89) * scale) + 2, y0 = (int)(AreaLensPlace.Y * scale) - 2, y1 = (int)Math.Ceiling((AreaLensPlace.Y + 89) * scale) + 2;
                 for (var y = 0; y < ph; y++)
                 for (var x = 0; x < pw; x++)
                     if (!hole || x < x0 || x >= x1 || y < y0 || y >= y1)
@@ -766,6 +789,17 @@ public sealed class InterfaceChromeTests
             for (var x = x0; x < x0 + w; x++) { var i = (y * 800 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (0, 0, 0, 0); }
         }
         Clear(150, 11, 501, 365); Clear(25, 24, 89, 89);
+        // ARC-UI-2194: the brass pill is an opaque island inside the view's hole (the cover's silhouette at (294, 341)), with the compass opening clear to its lower edge.
+        var cover = SyntheticCover();
+        for (var y = 0; y < 35; y++)
+        for (var x = 0; x < 207; x++)
+            if (cover[(y * 207 + x) * 4 + 3] > 0) { var i = ((341 + y) * 800 + 294 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (110, 80, 40, 255); }
+        for (var y = 341; y < 341 + 49; y++)
+        for (var x = 294; x < 501; x++)
+        {
+            double dx = x + 0.5 - (294 + PillCentre.X), dy = y + 0.5 - (341 + PillCentre.Y);
+            if (dx * dx + dy * dy < 20.5 * 20.5) { var i = (y * 800 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (0, 0, 0, 0); }
+        }
         return rgba;
     }
 
@@ -774,13 +808,31 @@ public sealed class InterfaceChromeTests
     {
         var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
         Assert.AreEqual(ChromeKind.Panel, recipe.Kind);
-        // ARC-UI-1810: the portrait's ring is the generated round view (the lens 198's corners carry the same ring), not a kept picture.
-        Assert.AreEqual(1, recipe.Parts.OfType<ChromeRoundView>().Count());
+        // ARC-UI-2694: the window frame draws no ring of its own around the lens's circle (the lens art 198 carries the one ring inside its square): its square takes no rim.
+        Assert.AreEqual(0, recipe.Parts.OfType<ChromeRoundView>().Count());
+        Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (AreaLensPlace.X, AreaLensPlace.Y, 89, 89)), "the lens's square takes no rim"); // ARC-UI-2714: at the common place; the recipe moves the Legacy (25, 24) hole there
         Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < 119 && keep.Y < 119 && keep.X + keep.Width > 19 && keep.Y + keep.Height > 19), "no kept picture over the portrait's ring");
         // 140 and 199 (the waypoint panel's pieces) and 219 and 220 (the two landscape pictures) are drawn by no window of the viewer; the picture stays art.
         foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART" })
             Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file, new byte[] { 1 }), 0, 1, 1, new byte[4])), file);
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("MAPMAIN.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void The_inventory_family_frames_draw_no_ring_of_their_own_around_the_lens_so_the_lens_art_carries_the_one_ring()
+    {
+        // ARC-UI-2762: a second ring outside the circle (painted on the frame) showed as arcs at the four sides of the lens in the inventory, loot and barter windows.
+        foreach (var file in new[] { "pdoll.art", "loot.art", "barter.art", "barter_follower.art", "mapmain.art" })
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(0, recipe.Parts.OfType<ChromeRoundView>().Count(), $"{file} draws no ring around the lens");
+            Assert.IsTrue(recipe.Parts.OfType<ChromeBare>().Any(bare => (bare.X, bare.Y, bare.Width, bare.Height) == (AreaLensPlace.X, AreaLensPlace.Y, 89, 89)), $"{file}: the lens's square at the common place takes no rim");
+            Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < AreaLensPlace.X + 89 && keep.Y < AreaLensPlace.Y + 89 && keep.X + keep.Width > AreaLensPlace.X - 4 && keep.Y + keep.Height > AreaLensPlace.Y - 4 && keep.Round),
+                $"{file}: no kept round picture brings the old ring around the lens");
+        }
+        // The lens arts carry the one ring, inside their square.
+        foreach (var file in new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" })
+            CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5, Inward: true) }, Recipe(file).Parts.ToArray(), file);
     }
 
     [TestMethod]
@@ -791,10 +843,10 @@ public sealed class InterfaceChromeTests
         {
             ChromeSunk p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "sunk"),
             ChromeKeep p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "keep"),
-            ChromeRoundView p => (X: (int)(p.CenterX - p.Radius), Y: (int)(p.CenterY - p.Radius), Width: (int)Math.Ceiling(2 * p.Radius), Height: (int)Math.Ceiling(2 * p.Radius), Kind: "view"),
+            ChromeBare p when p.Width == 89 => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "view"), // ARC-UI-2694: the lens's square, no ring of the frame's own
             _ => (X: 0, Y: 0, Width: 0, Height: 0, Kind: "other"),
         }).Where(box => box.Kind != "other").ToArray();
-        Assert.IsTrue(boxes.Count(box => box.Kind == "sunk") == 3 && boxes.Count(box => box.Kind == "view") == 1);
+        Assert.IsTrue(boxes.Count(box => box.Kind == "sunk") == 3 && boxes.Count(box => box.Kind == "view") == 1, $"sunk {boxes.Count(box => box.Kind == "sunk")}, view {boxes.Count(box => box.Kind == "view")}");
         foreach (var (x, y, w, h, kind) in boxes) Assert.IsTrue(x >= 0 && y >= 0 && x + w <= 800 && y + h <= 400, $"a {kind} at ({x}, {y}, {w} x {h}) lies inside 800 x 400");
         foreach (var keep in boxes.Where(box => box.Kind == "keep"))
         foreach (var other in boxes.Where(box => box.Kind == "sunk"))
@@ -825,7 +877,7 @@ public sealed class InterfaceChromeTests
         var one = InterfaceChromeRenderer.Render(recipe, 800, 400, legacy, [], 0, 1);
         // The square hole of the map view gets the brass rim every hole gets (its ink line is the outer pixel); the round portrait view does not get one around its square's corner.
         Assert.IsTrue(Pixel(one, 800, 149, 200).R < 60, "the map view's rim");
-        Assert.IsTrue(Pixel(one, 800, 24, 24).R > 60, "no square rim at the portrait's corner");
+        Assert.IsTrue(Pixel(one, 800, AreaLensPlace.X - 1, AreaLensPlace.Y - 1).R > 60, "no square rim at the portrait's corner"); // ARC-UI-2714: the hole stands at the common place
         // The readout plates are sunk black pits.
         Assert.IsTrue(Pixel(one, 800, 727, 168).R < 12 && Pixel(one, 800, 727, 200).R < 12, "the two readout plates are black");
     }
@@ -948,7 +1000,150 @@ public sealed class InterfaceChromeTests
             var (pw, _) = InterfaceChromeRenderer.PixelSize(89, 89, scale);
             Assert.AreEqual(0, Pixel(a, pw, pw / 2, pw / 2).A, $"the lens is clear in the middle at {scale}");
             Assert.AreEqual(255, Pixel(a, pw, 1, 1).A, $"and opaque in the corner at {scale}");
+            // ARC-UI-2645: the circle touches the frame's four sides, so the ring lies inside it: at the middle of each side the ring is there (opaque, brass), not cut off by the box.
+            foreach (var (x, y) in new[] { (pw / 2, 1), (pw / 2, pw - 2), (1, pw / 2), (pw - 2, pw / 2) })
+            {
+                var edge = Pixel(a, pw, x, y);
+                Assert.AreEqual(255, edge.A, $"the ring is whole at ({x}, {y}) at {scale}");
+                Assert.IsTrue(edge.R > edge.B, $"the ring is brass at ({x}, {y}) at {scale}: {edge}");
+            }
+            Assert.IsTrue(Pixel(a, pw, pw / 2, (int)(pw * 0.2)).A < 255, $"the view is clear inside the ring at {scale}");
         }
+    }
+
+    // ARC-UI-2194: the world map window's bottom cover 217 (207 x 35) and the brass pill under it in the frame 138.
+    private static (double X, double Y) PillCentre => (103.5, 28.5);
+
+    // A synthetic cover of the real size: the opaque pill (a housing from x 39 to 169 from row 10, a plate band from x 4 to 203 from row 19, a ring of radius 26 round the compass opening) with the opening (radius 20.5) clear.
+    private static byte[] SyntheticCover()
+    {
+        var rgba = new byte[207 * 35 * 4];
+        for (var y = 0; y < 35; y++)
+        for (var x = 0; x < 207; x++)
+        {
+            double dx = x + 0.5 - PillCentre.X, dy = y + 0.5 - PillCentre.Y, d = Math.Sqrt(dx * dx + dy * dy);
+            var opaque = (x is >= 39 and < 169 && y >= 10 || x is >= 4 and < 203 && y >= 19 || d < 26) && d >= 20.5;
+            var i = (y * 207 + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = opaque ? ((byte)200, (byte)10, (byte)10, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+        }
+        return rgba;
+    }
+
+    private static bool SamePart(ChromePart a, ChromePart b) => a is ChromePolygon p && b is ChromePolygon q ? p.Material == q.Material && p.Points.SequenceEqual(q.Points) : a.Equals(b);
+
+    [TestMethod]
+    public void The_cover_and_the_frames_pill_are_built_from_the_same_parts_with_no_kept_picture()
+    {
+        var cover = Recipe("Nav_Cvr.ART");
+        Assert.AreEqual(ChromeKind.Panel, cover.Kind);
+        Assert.AreEqual(ChromeMaterial.Brass, cover.Base);
+        Assert.AreEqual(ChromeHoles.None, cover.Holes, "the opening's edge is the pill's ring, not a hole rim");
+        Assert.AreEqual((294, 341), (cover.OriginX, cover.OriginY), "the brass is sampled at the cover's place in the window");
+        Assert.IsFalse(cover.Parts.OfType<ChromeKeep>().Any(), "no kept picture");
+        var parts = InterfaceChromeRecipes.NavPillParts(0, 0);
+        Assert.AreEqual(parts.Count, cover.Parts.Count);
+        Assert.IsTrue(parts.Zip(cover.Parts).All(pair => SamePart(pair.First, pair.Second)));
+        // The pill's parts: one housing, two studs and two plates (capsules), the ring round the opening, two screws.
+        Assert.AreEqual(1, parts.OfType<ChromePolygon>().Count());
+        Assert.AreEqual(4, parts.OfType<ChromeCapsule>().Count());
+        Assert.AreEqual(2, parts.OfType<ChromeRivet>().Count());
+        var socket = parts.OfType<ChromeSocket>().Single();
+        Assert.AreEqual((PillCentre.X, PillCentre.Y), (socket.CenterX, socket.CenterY));
+        // The frame carries the same parts shifted to the cover's place and no kept picture over the pill's rectangle (294, 341, 207 x 51); the opening takes no hole rim of its own.
+        var frame = Recipe("mapmain.art");
+        var shifted = InterfaceChromeRecipes.NavPillParts(294, 341);
+        Assert.IsTrue(shifted.All(part => frame.Parts.Any(own => SamePart(own, part))), "the frame's pill is the cover's parts at (294, 341)");
+        Assert.IsFalse(frame.Parts.OfType<ChromeKeep>().Any(keep => keep.X < 501 && keep.X + keep.Width > 294 && keep.Y < 392 && keep.Y + keep.Height > 341), "no kept picture over the pill");
+        Assert.IsTrue(frame.Parts.OfType<ChromeBare>().Any(bare => bare.X <= 294 + PillCentre.X && 294 + PillCentre.X < bare.X + bare.Width && bare.Y <= 341 + PillCentre.Y && 341 + PillCentre.Y < bare.Y + bare.Height));
+    }
+
+    [TestMethod]
+    public void The_cover_keeps_its_silhouette_paints_new_brass_and_meets_the_frames_pill_without_a_seam()
+    {
+        var legacy = SyntheticCover();
+        var cover = Recipe("Nav_Cvr.ART");
+        var frameLegacy = MapFrame();
+        foreach (var scale in new[] { 1.0, 2.0, 4.0 })
+        {
+            var a = InterfaceChromeRenderer.Render(cover, 207, 35, legacy, [], 0, scale);
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(cover, 207, 35, legacy, [], 0, scale), $"deterministic at {scale}");
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(207, 35, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length);
+            int At(double v) => (int)(v * scale);
+            // The silhouette (the alpha, so the opening's hit area too) is the Legacy one at every device pixel, and none of the Legacy colour is left.
+            for (var y = 0; y < ph; y++)
+            for (var x = 0; x < pw; x++)
+            {
+                var p = Pixel(a, pw, x, y);
+                var lx = Math.Min(206, (int)(x / scale)); var ly = Math.Min(34, (int)(y / scale));
+                Assert.AreEqual(legacy[(ly * 207 + lx) * 4 + 3] > 0, p.A > 0, $"alpha at {x},{y} at {scale}");
+                Assert.IsFalse(p.A > 0 && p.R == 200 && p.G == 10 && p.B == 10, $"generated colour at {x},{y} at {scale}");
+            }
+            Assert.AreEqual(0, Pixel(a, pw, At(PillCentre.X), At(PillCentre.Y)).A, $"the compass opening is clear at {scale}");
+            // The plate: a bright rim, a darker recessed face, both brass (red over green over blue); the housing between the plate and the ring is darker than the plate's rim.
+            var rim = Pixel(a, pw, At(30), At(21.5)); var face = Pixel(a, pw, At(30), At(30)); var housing = Pixel(a, pw, At(73.5), At(30));
+            foreach (var p in new[] { rim, face, housing }) Assert.IsTrue(p.R > p.G && p.G > p.B && p.A == 255, $"brass at {scale}");
+            Assert.IsTrue(rim.R + rim.G + rim.B > face.R + face.G + face.B, $"the rim is brighter than the face at {scale}");
+            Assert.IsTrue(face.R + face.G + face.B > housing.R + housing.G + housing.B, $"the face is brighter than the housing at {scale}");
+
+            if (scale > 2) continue;
+            // The frame draws the same pill at the cover's place: where the cover is opaque the frame's pixels are the cover's (the same brass at the same window position).
+            var f = InterfaceChromeRenderer.Render(Recipe("mapmain.art"), 800, 400, frameLegacy, [], 0, scale);
+            var (fw, _) = InterfaceChromeRenderer.PixelSize(800, 400, scale);
+            foreach (var (sx, sy) in new[] { (30.0, 30.0), (30.0, 34.0), (12.0, 25.0), (60.0, 14.0), (73.5, 30.0), (80.0, 30.0), (150.0, 30.0), (190.0, 34.0), (104.0, 4.0) })
+            {
+                var c = Pixel(a, pw, At(sx), At(sy)); var w = Pixel(f, fw, At(294 + sx), At(341 + sy));
+                Assert.AreEqual(255, c.A, $"cover opaque at {sx},{sy} at {scale}");
+                Assert.AreEqual((c.R, c.G, c.B), (w.R, w.G, w.B), $"the frame's pill matches the cover at {sx},{sy} at {scale}");
+            }
+            // Across the cover's lower edge the pill goes on: the pixel under the cover's last row is close to it.
+            foreach (var sx in new[] { 30.0, 60.0, 150.0, 185.0 })
+            {
+                var above = Pixel(a, pw, At(sx), ph - 1); var below = Pixel(f, fw, At(294 + sx), At(341 + 35));
+                Assert.IsTrue(Math.Abs(above.R - below.R) + Math.Abs(above.G - below.G) + Math.Abs(above.B - below.B) < 70, $"no seam at {sx} at {scale}: {above} / {below}");
+            }
+            // The frame's opening is clear (the compass button's own hit area) and wood is left outside the pill.
+            Assert.AreEqual(0, Pixel(f, fw, At(294 + PillCentre.X), At(341 + PillCentre.Y)).A);
+        }
+    }
+
+    [TestMethod]
+    public void The_cover_at_fractional_scales_keeps_its_size_and_the_ring_reaches_its_outer_edge()
+    {
+        var legacy = SyntheticCover();
+        foreach (var scale in new[] { 1.5, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("Nav_Cvr.ART"), 207, 35, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(207, 35, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length);
+            Assert.AreEqual(0, Pixel(a, pw, (int)(PillCentre.X * scale), (int)(PillCentre.Y * scale)).A, $"the opening is clear at {scale}");
+            // Just inside the ring's outer radius (the art is opaque out to 26 units) the ring's own brass is drawn, not the cover's flat base: the ring's lit and shaded sides differ.
+            (int R, int G, int B, int A) At(double dx, double dy) => Pixel(a, pw, (int)((PillCentre.X + dx) * scale), (int)((PillCentre.Y + dy) * scale));
+            var (left, right) = (At(-24.5, 0), At(24.5, 0));
+            Assert.IsTrue(left.R + left.G + left.B > right.R + right.G + right.B, $"the ring's upper-left is lit at {scale}: {left} / {right}");
+        }
+    }
+
+    [TestMethod]
+    public void A_bare_mark_exempts_the_smallest_hole_around_its_centre_and_the_larger_hole_keeps_its_rim()
+    {
+        // A 60 x 60 art: a clear rectangle (4 to 56 by 10 to 50, not round) with an opaque island (a disk of radius 10) that has a clear round opening of radius 5 at its centre: the rectangle's box holds the opening's centre too.
+        var legacy = new byte[60 * 60 * 4];
+        for (var y = 0; y < 60; y++)
+        for (var x = 0; x < 60; x++)
+        {
+            double dx = x + 0.5 - 30, dy = y + 0.5 - 30, d = Math.Sqrt(dx * dx + dy * dy);
+            var inSquare = x is >= 4 and < 56 && y is >= 10 and < 50;
+            var opaque = !inSquare || (d < 10 && d >= 5);
+            var i = (y * 60 + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = opaque ? ((byte)120, (byte)80, (byte)40, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+        }
+        ChromeRecipe Make(params ChromePart[] parts) => new("Bare_Test.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts);
+        var plain = InterfaceChromeRenderer.Render(Make(), 60, 60, legacy, [], 0, 1);
+        var bare = InterfaceChromeRenderer.Render(Make(new ChromeBare(28, 28, 4, 4)), 60, 60, legacy, [], 0, 1);
+        Assert.IsTrue(Pixel(bare, 60, 3, 30).R < 30, "the large hole keeps its rim");
+        Assert.AreEqual(Pixel(plain, 60, 3, 30), Pixel(bare, 60, 3, 30));
+        CollectionAssert.AreNotEqual(plain, bare, "the opening's own rim is not drawn when it is bare");
     }
 
     // ARC-UI-1196: the logbook's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
@@ -981,7 +1176,7 @@ public sealed class InterfaceChromeTests
         Assert.AreEqual(ChromeHoles.Cloth, Recipe("book_quests.art").Holes);
         // ARC-UI-1810: the lens art (pcwincvr, 198) is shared with the character sheet and the world map; its recipe is the round view's ring (the lenses 231 to 233's), found by the lowercase name.
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("PCWinCvr.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
-        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5) }, Recipe("PCWinCvr.ART").Parts.ToArray());
+        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5, Inward: true) }, Recipe("PCWinCvr.ART").Parts.ToArray());
         var tabs = new[] { "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art" };
         for (var i = 0; i < tabs.Length; i++)
         {
@@ -1012,6 +1207,22 @@ public sealed class InterfaceChromeTests
         }
     }
 
+    // ARC-UI-2714: a recipe with a lens place of the Legacy frame moves the hole to the common place before it paints (the schematics frame has it at (50, 26)).
+    [TestMethod]
+    public void The_schematics_frame_has_its_lens_hole_moved_to_the_common_place()
+    {
+        var legacy = Flat(800, 400, (90, 60, 30), (50, 26, 89, 89));
+        foreach (var scale in new[] { 1.0, 2.0 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, legacy, [], 0, scale);
+            var width = (int)(800 * scale);
+            Assert.AreEqual(0, Pixel(a, width, (int)((AreaLensPlace.X + 44) * scale), (int)((AreaLensPlace.Y + 44) * scale)).A, $"the common place is clear at {scale}");
+            Assert.AreEqual(0, Pixel(a, width, (int)((AreaLensPlace.X + 15) * scale), (int)((AreaLensPlace.Y + 44) * scale)).A, $"the circle's left part, where the Legacy frame was opaque, is clear at {scale}");
+            Assert.AreEqual(255, Pixel(a, width, (int)(125 * scale), (int)(100 * scale)).A, $"the Legacy hole's right part is closed at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, legacy, [], 0, scale), $"deterministic at {scale}");
+        }
+    }
+
     [TestMethod]
     public void The_side_panels_square_hole_is_plain_and_a_covers_hole_has_a_cloth_edge_not_a_brass_one()
     {
@@ -1019,9 +1230,12 @@ public sealed class InterfaceChromeTests
         var withHole = Flat(165, 400, (90, 60, 30), (25, 24, 89, 89));
         var sideA = InterfaceChromeRenderer.Render(Recipe("logbooks_side.art"), 165, 400, withHole, [], 0, 2);
         var sideB = InterfaceChromeRenderer.Render(Recipe("logbooks_side.art"), 165, 400, Flat(165, 400, (90, 60, 30)), [], 0, 2);
-        Assert.AreEqual(Pixel(sideB, 330, 48, 100), Pixel(sideA, 330, 48, 100), "left of the hole");
-        Assert.AreEqual(Pixel(sideB, 330, 229, 100), Pixel(sideA, 330, 229, 100), "right of the hole");
-        Assert.AreEqual(0, Pixel(sideA, 330, 100, 100).A, "the hole stays clear");
+        // ARC-UI-2714: the generated art carries the hole at the common place (11, 9) in place of the Legacy (25, 24): the old place is closed, the new one clear.
+        Assert.AreEqual(Pixel(sideB, 330, 2 * (AreaLensPlace.X - 2), 100), Pixel(sideA, 330, 2 * (AreaLensPlace.X - 2), 100), "left of the hole");
+        Assert.AreEqual(Pixel(sideB, 330, 2 * (AreaLensPlace.X + 89 + 2), 100), Pixel(sideA, 330, 2 * (AreaLensPlace.X + 89 + 2), 100), "right of the hole");
+        Assert.AreEqual(0, Pixel(sideA, 330, 2 * (AreaLensPlace.X + 44), 2 * (AreaLensPlace.Y + 44)).A, "the hole stays clear");
+        Assert.AreEqual(255, Pixel(sideA, 330, 2 * 110, 2 * 70).A, "the Legacy hole's place is closed where it lies outside the common one");
+        Assert.AreEqual(Pixel(sideB, 330, 2 * 110, 2 * 70), Pixel(sideA, 330, 2 * 110, 2 * 70), "and filled with the frame's own wood");
         // The page art: a cloth frame with a hole at (14, 12, 537, 331). The cloth next to the hole is darker than a few units further in, and not brass-coloured.
         var frame = Flat(561, 355, (100, 40, 45), (14, 12, 537, 331));
         var cover = InterfaceChromeRenderer.Render(Recipe("book_quests.art"), 561, 355, frame, [], 0, 2);
@@ -1196,7 +1410,7 @@ public sealed class InterfaceChromeTests
         var with = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(), [], 0, Scale);
         var without = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(holes: false), [], 0, Scale);
         // The lens's square and a tab slot are holes with no rim: the wood beside them is the wood of the frame with no hole.
-        var (lx, ly, lw, lh) = AreaSchematicWindowLayout.RoundView;
+        var (lx, ly, lw, lh) = (AreaLensPlace.X, AreaLensPlace.Y, 89, 89); // ARC-UI-2714: the recipe moves the Legacy (50, 26) hole to the common place
         Assert.AreEqual(Pixel(without, 1600, (lx - 2) * Scale, (ly + 40) * Scale), Pixel(with, 1600, (lx - 2) * Scale, (ly + 40) * Scale), "beside the lens's square");
         Assert.AreEqual(Pixel(without, 1600, (lx + lw + 1) * Scale, (ly + 40) * Scale), Pixel(with, 1600, (lx + lw + 1) * Scale, (ly + 40) * Scale));
         Assert.AreEqual(0, Pixel(with, 1600, (lx + 40) * Scale, (ly + 40) * Scale).A, "the lens's square stays clear");
@@ -1659,6 +1873,26 @@ public sealed class InterfaceChromeTests
             Assert.IsTrue(At(paper, 300, 83) < At(paper, 300, 70) - 80, $"the masthead's rule is ink on the paper at {scale}");
             var telegram = Paint("TeleBackground.ART");
             Assert.IsTrue(At(telegram, 186, 60) < At(telegram, 195, 60) - 80, $"the form box's edge is ink on the paper at {scale}");
+        }
+    }
+
+    [TestMethod]
+    public void The_reading_books_fold_shade_lies_where_the_two_pages_meet_at_every_scale()
+    {
+        Assert.AreEqual((int)AreaReadingArtLayout.BookFold, Recipe("BookBackground.ART").Parts.OfType<ChromePlate>().Single(p => p.X == 320).X, "the fold is where the right page starts");
+        // ARC-UI-2720: the shade of the fold is sampled in window coordinates, so the book (at (132, 0)) must carry its own fold x; the darkest column of the page rows is the fold.
+        foreach (var scale in new[] { 1.0, 2.0, 3.0 })
+        {
+            var pixels = InterfaceChromeRenderer.Render(Recipe("BookBackground.ART"), ReadingBackgroundWidth, ReadingBackgroundHeight, Flat(ReadingBackgroundWidth, ReadingBackgroundHeight, (150, 120, 90)), [], 0, scale);
+            var width = InterfaceChromeRenderer.PixelSize(ReadingBackgroundWidth, ReadingBackgroundHeight, scale).Item1;
+            var best = 0; var bestLuma = double.MaxValue;
+            for (var x = (int)(100 * scale); x < (int)(540 * scale); x++)
+            {
+                double sum = 0;
+                for (var y = (int)(60 * scale); y < (int)(340 * scale); y += (int)scale) sum += Luma(Pixel(pixels, width, x, y));
+                if (sum < bestLuma) { bestLuma = sum; best = x; }
+            }
+            Assert.AreEqual(AreaReadingArtLayout.BookFold, best / scale, 1.0, $"the fold of the book lies at its page join at {scale}");
         }
     }
 

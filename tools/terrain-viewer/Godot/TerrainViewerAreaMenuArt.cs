@@ -143,8 +143,18 @@ public partial class TerrainViewerApp
         }
         require(_mainMenu!.Window == AreaMenuWindow.SinglePlayer && panel.ArtMode && art.LabelsForSelfTest.Count == _mainMenu.Shown.Count,
             "the click opened Single Player in the original's look: " + _mainMenu.Window);
+        // ARC-UI-2489 (M02): the single-player window beside the main one, as NAME-single.png (the pointer is off the labels first, so no label is lit by the hover).
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } singleCapture)
+        {
+            GetViewport().PushInput(new InputEventMouseMotion { Position = away, GlobalPosition = away });
+            await Frames(2);
+            using var singleShot = GetViewport().GetTexture().GetImage();
+            require(singleShot.SavePng(System.IO.Path.ChangeExtension(singleCapture, null) + "-single.png") == Error.Ok, "the single-player capture saved");
+        }
         MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
         require(_mainMenu!.Window == AreaMenuWindow.Main && panel.ArtMode, "Back returned to the main window");
+        // ARC-UI-2891: the menus in the Steamwoven layout (opt-in, ARC_AREA_MENU_COLUMN=1).
+        if (ColumnMenuSmokeOn()) await MenuColumnForSmoke(require, Frames);
         GD.Print("ARC-UI-058 native-smoke menu art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             _menuArtContent!.Detail, Labels = labels, Places = places.Select(place => $"{place.X},{place.Y} {place.Width}x{place.Height}").ToArray() }));
     }

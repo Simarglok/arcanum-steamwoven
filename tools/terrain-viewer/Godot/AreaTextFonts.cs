@@ -9,6 +9,12 @@ public sealed record AreaTextFonts(AreaArtFontFace Title, AreaArtFontFace Text, 
     /// <summary>ARC-UI-1884: the quantity pane's roller font (art 25), null when it did not read.</summary>
     public AreaArtFontFace? Roller { get; init; }
 
+    /// <summary>ARC-UI-2368: the bottom strip's bar font (art 171), null when it did not read.</summary>
+    public AreaArtFontFace? Bar { get; init; }
+
+    /// <summary>ARC-UI-2795: the inventory windows' rating font (art 486), null when it did not read.</summary>
+    public AreaArtFontFace? Rating { get; init; }
+
     public int TitleLineHeight { get; } = AreaTextFontLayout.LineHeight(Title.Frames);
     public int TextLineHeight { get; } = AreaTextFontLayout.LineHeight(Text.Frames);
     public int NumberLineHeight { get; } = Numbers is null ? AreaTextFontLayout.LineHeight(Text.Frames) : AreaTextFontLayout.LineHeight(Numbers.Frames);

@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
     /// A guarded left press on a map-mode trigger object. ARC-DEV-174 (MIG13 S11b): the click is an <see cref="ObjectClickRequest"/>, the hero's use goal 38 of the goal table (<see cref="StartUseClick"/>): its steps test the range,
     /// walk the hero within use range (goal 8) and ask for the use in the last node, which <see cref="ApplyUse"/> applies at the frame's next safe point.
     /// </summary>
-    private bool TryAreaMapUse(Vector2 screen)
+    private bool TryAreaMapUse(Vector2 screen, bool shift = false)
     {
         if (_mapTransfers is null || _worldActor.Session is not AreaGridSession || AreaObjectAtScreen(screen) is not { } hit
             || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null && !_mapTransfers.IsBed(hit))) return false;
@@ -178,7 +178,7 @@ public partial class TerrainViewerApp
             _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
             return true;
         }
-        return StartUseClick(hit);
+        return StartUseClick(hit, shift);
     }
 
     /// <summary>A cell from which the use rule accepts a use of the trigger (so a walk-to-use ends where the use runs).</summary>
@@ -293,6 +293,10 @@ public partial class TerrainViewerApp
             ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
             // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
+            // ARC-SCRIPT-2506 (TI5): the made critter of a script's transform takes the old NPC's hit-point and fatigue percentages through the session's life.
+            CarryVitals: (entity, hitPointPercent, fatiguePercent) => CarryTransformVitals(owner, entity, hitPointPercent, fatiguePercent),
+            // ARC-SCRIPT-2519 (TI5c): the made critter of a script's transform takes the old NPC's facing (its mover's, else its map art's rotation).
+            NpcFacing: ScriptNpcFacing,
             // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
             ScriptAttack: (attacker, victim) =>
             {
@@ -308,26 +312,42 @@ public partial class TerrainViewerApp
             CanHear: (listener, source) => AreaAiHostNow()?.ScriptCanHear(listener, source),
             // ARC-SCRIPT-1735 (E5-a tail, NS5): a script's change art number writes the new art id only when an ART file of the module's content names it.
             ArtExists: aid => ExtraArt()?.Exists(aid) == true,
+            // ARC-SCRIPT-2326: get armor of the hero reads the armour part of the use art of its worn body armour (the viewer's hero body reads it, null when not read: NOT READY).
+            BodyArmorUseArt: () => _areaSession is { } armorSession ? WornBodyArmorUseArt(armorSession) : null,
+            // ARC-SCRIPT-2342 (AR2, AR7): get armor of an NPC the session dressed reads the use art of the body armour it wears now from the AI host's combat reads.
+            NpcBodyArmor: npc => AreaAiHostNow()?.WornBodyArmor(npc),
+            // ARC-SCRIPT-2505: get reaction of an NPC that is no dialog speaker reads the AI host's standard reaction toward the hero.
+            StandardReaction: npc => AreaAiHostNow()?.StandardReaction(npc),
             // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map is a request in the session's one slot; the AI host's relocation carries it out at the next ping (PingNpcChangeOfPlace).
-            NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, new(teleport.X, teleport.Y)) : "no AI host",
+            NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y)) : "no AI host",
             RequestNpcTeleport: teleport =>
             {
                 if (AreaAiHostNow() is not { } ai) return;
                 var (flags, seconds) = AreaChangeOfPlace.Flags(teleport.Fade);
-                GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, new(teleport.X, teleport.Y), flags, seconds)}");
-            });
+                GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, teleport.RuntimeMap, new(teleport.X, teleport.Y), flags, seconds)}");
+            },
+            // ARC-SCRIPT-2514 (BS3c): a script's destroy of a scenery or container ends the object's goal runs and tells its spell runs.
+            ObjectDestroyed: EndDestroyedObjectRuns,
+            // ARC-SCRIPT-2752 (SX3): a script's use item with skill (79) starts the NPC's goal 40 in the AI host.
+            ScriptUseItemWithSkill: (npc, item, target, skill, modifier) => AreaAiHostNow()?.ScriptUseItemWithSkill(npc, item, target, skill, modifier) ?? "no AI host",
+            // ARC-SCRIPT-2788: a carried follower's body row comes from its template (its home sector may lie outside the shown window).
+            CarriedRow: obj => _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map)?.Template.Speaker.Row);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
             // ARC-DEV-316: an item taken on another map runs its use script on the row of its home map, read on demand.
             OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
+            // ARC-SCRIPT-1594 (VT8): a made or kit item's use script reads its power ratio from the prototype's complexity.
+            PrototypeComplexity = inventory is null ? null : inventory.PrototypeComplexity,
             // ARC-SCRIPT-1165 (E5-c): a script's add blessing and add curse take their effect from the module's tables.
             BlessingEffects = BlessingEffectOf,
             // ARC-SCRIPT-1164 (E5-b): a script's create item enters the holder's list under the inventory host's insert check.
             InsertCheck = inventory?.InsertCheck,
             // ARC-MAGIC-1823: a script's transfer item from the hero runs the item's wield-off, remove-item and insert-item scripts (the hero's give does).
             ItemScripts = inventory?.ItemScripts(owner),
+            // ARC-SCRIPT-2787: a printed or floated line's @npcname@ is the shown name of the script's attachee (the description tables, as the hover reads them).
+            NpcName = AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog),
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);
@@ -381,6 +401,7 @@ public partial class TerrainViewerApp
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
+            _callDialogs.Clear();   // ARC-WORLD-2358: a conversation a call asked for before the reset belongs to the old session
             ClearTransition();
             if (_mapTransfers.Clear() is { } dropped) { _areaUseStatus = $"transfer to '{dropped.To.Name}' cancelled by reset/reload"; RefreshAreaStatus(); }
             // A reset puts the actor back on its spawn without entering it, as a load does.
@@ -388,15 +409,24 @@ public partial class TerrainViewerApp
             return false;
         }
         if (_worldActor.Session is not AreaGridSession session) return false;
+        // ARC-WORLD-2358 (TT20): a deferred call's run that started a conversation opens it now, with the speaker rules of any scripted start; a hero teleport the same run queued is taken at the next frame (the ping), with the dialog open.
+        var callTalk = OpenCallDialogs();
+        if (callTalk && _mapTransfers.Pending is not null) return false;
         // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order; since
         // ARC-SCRIPT-017 every tile script runs through the session, then the script of a sector the step enters.
         // ARC-SCRIPT-046: a conversation a run opened holds the steps still queued for a later frame.
+        var talkOpenBefore = ConversationOpen;
         RunMapEnteredSteps();
+        // ARC-WORLD-2358 (TT20): a tile or sector script that started a conversation and asked for the hero's teleport leaves the dialog open for one frame; the ping takes the request at the next one.
+        if (!talkOpenBefore && ConversationOpen && _mapTransfers.Pending is { ByTalkScript: true }) return false;
         // ARC-DEV-204: a change that waits for its fade-out is the only one: another request met meanwhile is dropped, not queued behind it.
         if (TransitionFadePending) { _mapTransfers.Clear(); return false; }
         if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
-        if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
+        // ARC-WORLD-2261 (TT20): the original's ping applies a script's teleport at the next frame under any interface mode, so the hero's teleport a dialog script asked for waits for no window but the dialog the same run opened.
+        if (_mapTransfers.Pending is not { } transfer || (WorldModal && !(transfer.ByTalkScript && ConversationOnlyModal)) || session.State.Phase != MovementPhase.Settled) return false;
         _mapTransfers.Clear();
+        // ARC-WORLD-2261 (TT20): a change to another map ends the dialog before anything moves (0x4D3E20 → 0x4601D0 → 0x568830 → 0x5678D0), while the old host, session and companions are still the dialog's own.
+        if (transfer.ByTalkScript && !transfer.SameMap && ConversationOpen) EndConversation();
         // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
         LeaveCombatModeForMapChange();
         // ARC-DEV-113 (MIG11 S2): with a session the transfer is the session's change of place, requested and run by this frame's ping.
@@ -449,8 +479,41 @@ public partial class TerrainViewerApp
                 PostScriptedLines();
                 if (_mapTransfers.LastScripted?.Dialog is { } sectorTalk) BeginScriptedConversation(sectorTalk);
             }
+            // ARC-SCRIPT-2822 (ledger TQ7, 0x4F2330): inside the same sector entry, after the sector's script (which may be none), every direct follower's new-sector script (point 27) runs; the arrival, teleport and placement are entries too.
+            if (AreaMapTransfers.RunsFollowerNewSector(step.From, step.To, step.TileScriptOnly)) RunFollowersNewSector();
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
+    }
+
+    private readonly List<(string Follower, int Script, AreaScriptedUseOutcome Outcome, string? Detail)> _newSectorRuns = [];
+
+    /// <summary>
+    /// ARC-SCRIPT-2822 (ledger TQ7): the hero's sector entry runs the new-sector script (point 27) of every direct follower, the hero as the triggerer, with no map, distance, waiting or alive gate; a follower carried here is named by
+    /// its home map. The answer decides nothing; a printed line is posted, a conversation a run asked for opens (none while one is open).
+    /// </summary>
+    private void RunFollowersNewSector()
+    {
+        if (_mapTransfers is not { } transfers || _areaSession is not { } session || UseScriptHost(transfers.Map.Snapshot) is not { } host) return;
+        foreach (var follower in session.QueryParty().Followers)
+        {
+            var obj = new Arcanum.Scripting.Scr.ScrObjectRef(CompanionHomeMap(follower.Entity) ?? CurrentAreaMap, follower.Entity);
+            var ran = Awarded(host, host.RunNewSector(obj, session.Rules.Scripts));
+            if (ran.Run is null) { if (NpcTileLogAll) GD.Print("ARC-SCRIPT-2822 new-sector none " + follower.Entity + " map " + obj.Map + ": " + ran.Detail); continue; }
+            _newSectorRuns.Add((follower.Entity, ran.Run.Script ?? 0, ran.Outcome, ran.Detail));
+            if (_newSectorRuns.Count > 64) _newSectorRuns.RemoveAt(0);
+            GD.Print("ARC-SCRIPT-2822 new-sector " + System.Text.Json.JsonSerializer.Serialize(new { Follower = follower.Entity, obj.Map, Outcome = ran.Outcome.ToString(), ran.Detail,
+                Dialog = ran.Dialog?.Script, Lines = ran.Printed.Count }));
+            foreach (var entry in ScriptLineEntries(ran.Printed)) PostMessage(entry, "script line");
+            if (ran.Dialog is { } talk && !ConversationOpen) BeginScriptedConversation(talk);
+        }
+    }
+
+    /// <summary>ARC-WORLD-2358: opens the conversation the deferred calls of the last frames started (<see cref="AreaEventWorld"/>'s call dialog), one at a time: the scripted start itself drops one met while a conversation is open. True when one was asked.</summary>
+    private bool OpenCallDialogs()
+    {
+        var asked = false;
+        while (_callDialogs.TryDequeue(out var dialog)) { BeginScriptedConversation(dialog); asked = true; }
+        return asked;
     }
 
     /// <summary>The actor stands on the same-map arrival of <paramref name="transfer"/> (the session, when there is one, placed it).</summary>

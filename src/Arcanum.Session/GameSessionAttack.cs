@@ -142,6 +142,11 @@ public sealed class SessionCritterCombat
     private CharacterStatContext StatContext(LifeState state) => new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
         state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: SpeedShift);
 
+    /// <summary>ARC-COMBAT-1832: the same NPC with the invulnerable trait (object flag 0x400000) set or cleared as the session's written flags have it over the map data's.</summary>
+    internal SessionCritterCombat WithInvulnerable(bool on) => on == Facts.Traits.HasFlag(LifeTraits.Invulnerable) ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
+        _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts with { Traits = on ? Facts.Traits | LifeTraits.Invulnerable : Facts.Traits & ~LifeTraits.Invulnerable },
+        Loaded, Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
+
     internal SessionCritterCombat WithUnarmedBody(UnarmedBodySpell body) => body == UnarmedBody ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
         _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
@@ -412,7 +417,7 @@ public sealed class SessionCritterCombat
             DamageBonus = snapshot.GetEffective(CharacterStat.DamageBonus),
             MagickTechAptitude = aptitude,
             ArmorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
-                value => value, profile),
+                value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), profile),
             Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances),
             Conditions = CombatantRules.Conditions(status, state, Facts.Traits, _flags),
             LightEmission = _ownLight,
@@ -483,7 +488,8 @@ public sealed class SessionCritterCombat
         EquipmentItem Shown(EquipmentItem item, bool known) => known || item.MagickTechComplexity <= 0 || item.Armor is not { } armor ? item
             : item with { Armor = armor with { MagicAcAdjustment = 0, MagicResistances = EquipmentResistances.None } };
         var equipment = EquipmentRules.Evaluate(worn.ToDictionary(pair => pair.Key, pair => Shown(pair.Value, identified(pair.Key))), aptitude, SkillTraining.None);
-        var armorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value, profile);
+        var armorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
+            value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), profile);
         var resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances);
         var magic = CombatantRules.MagicResistance(storedMagicResistance, equipment.Resistances.Magic, Monstrous, _effectResistances.Magic);
         var armour = DollRatings.Armour(armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic);
@@ -662,8 +668,10 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (attachment point 0x17) of whoever takes the damage, asked by the damage apply (0x4B4390) right before it, after the attack is resolved: the recipient in, whether the damage goes on out
     /// (false: the script skipped the default, which cancels the whole damage step, <see cref="SessionAttackResult.Vetoed"/>). Null: the damage goes on. The hero has no script data here, so a host answers true for it.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
-    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
+    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit (ARC-SCRIPT-2841: and of a critical miss's self-hit that is resolved at once, <see cref="SessionHitScriptEvent.SelfHit"/>), asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-SCRIPT-2828 (0x4B4390, 0x4B47F8): the host's critical-hit scripts (point 34) of the armour a critical damage step on a living critter reaches, asked after its taking-damage script let the damage go on and before the damage is written (<see cref="SessionArmourCriticalEvent"/>). Null: none run.</summary>
+    public Action<SessionArmourCriticalEvent>? ArmourScripts { get; init; }
     /// <summary>ARC-COMBAT-1929 (0x45F9D0): the target's facing and awareness of the hero, for a backstab of a melee attack with a wielded weapon (the wielded weapon's art subtype comes with <see cref="HeroWorn"/>). Null: the host knows none, and the attack is no backstab.</summary>
     public SessionBackstabFacts? Backstab { get; init; }
     /// <summary>ARC-COMBAT-1942 (0x4B3170, SC16): the target is the occupant the blow pulled out of a bed it struck (the record's target replaced), so the check carries -30 (<see cref="AttackRequest.TargetWasInBed"/>).</summary>
@@ -745,8 +753,8 @@ public sealed partial class GameSessionOwner
             ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
             DamageBonus = snapshot.GetEffective(CharacterStat.DamageBonus),
             MagickTechAptitude = aptitude,
-            ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value,
-                _rules.Combat),
+            ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
+                value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), _rules.Combat),
             // ARC-MAGIC-027: the hero's durable effects' resistance changes, under the innate effects' (ARC-MAGIC-1700).
             Resistances = CombatantRules.Resistances(HeroStoredResistances().Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
                 HeroEffectResistances()),
@@ -871,6 +879,42 @@ public sealed partial class GameSessionOwner
         facts is null || skill != CombatSkill.Melee ? BackstabKind.None
         : AttackRules.Backstab(attacker.BackstabLevel, attacker.BackstabTraining, weapon.Kind, weapon.ArtSubtype, facts.TargetFacesAttacker, facts.TargetPerceivesAttacker);
 
+    // The struck critter as it defends (null: its facts are invalid): a follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002). Shared by the attack and the hero throw's preflight (ARC-COMBAT-2176).
+    private Combatant? StrikeDefender(SessionAttack attack, SessionCritterCombat target, SessionLifeRecord record, LifeFacts facts)
+    {
+        Combatant defender;
+        try { defender = Levelled(target).Combatant(LifeRules.Evaluate(record.State, facts), record.State, _rules.Combat); }
+        catch (ArgumentException) { return null; }
+        // ARC-COMBAT-009: the items the critical-hit procedure looks at are the ones the host says the NPC wears now (an earlier
+        // critical may have dropped or destroyed some of its map data's).
+        if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
+        // ARC-WORLD-1149: the light at the target's cell, for the darkness penalty (full light without a host that knows it).
+        if (attack.TargetLight is { } targetLight) defender = defender with { LightLevel = targetLight };
+        return defender;
+    }
+
+    // The resolver's request of an attack on a critter (shared with the hero throw's preflight, ARC-COMBAT-2176).
+    private AttackRequest StrikeRequest(SessionAttack attack, SessionHeroAttack hero, Combatant defender, PendingShot? pending, PackThrow? pack, string? thrown) => new()
+    {
+        Attacker = hero.Combatant,
+        Target = defender,
+        Weapon = hero.Weapon,
+        Skill = hero.Skill,
+        SkillLevel = hero.SkillLevel,
+        Training = hero.Training,
+        AimedLocation = pending is null ? attack.Aim : null,
+        Distance = pending is null ? attack.Distance : 1,
+        CoverRating = pending is null ? attack.LineOfFire?.Cost ?? 0 : 0,
+        LineOfFireBlocked = pending is null && (attack.LineOfFire?.Blocked ?? false),
+        Difficulty = _difficulty,
+        // ARC-COMBAT-023: a thrown pack item takes no ammunition of the wielded weapon.
+        AmmunitionShort = pending is null && pack is null && ShotAmmunition() is { Short: true },
+        DeferHit = pending is null && attack.Flight,
+        // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
+        Backstab = pending is null && thrown is null ? BackstabOf(hero.Combatant, hero.Skill, hero.Weapon, attack.Backstab) : BackstabKind.None,
+        TargetWasInBed = attack.TargetWasInBed,
+    };
+
     private SessionAttackResult CritterAttack(GameSessionVersion expected, SessionAttack attack, SessionShot? landing, PackThrow? pack = null)
     {
         ThrowIfDisposed();
@@ -914,36 +958,10 @@ public sealed partial class GameSessionOwner
         if (_revision >= long.MaxValue - (thrown is null ? 0 : 2)) return RejectAttack(GameSessionFailure.RevisionExhausted);
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
-        // A follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002).
         var defending = Levelled(target);
-        Combatant defender;
-        try { defender = defending.Combatant(targetStatus, record.State, _rules.Combat); }
-        catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
-        // ARC-COMBAT-009: the items the critical-hit procedure looks at are the ones the host says the NPC wears now (an earlier
-        // critical may have dropped or destroyed some of its map data's).
-        if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
-        // ARC-WORLD-1149: the light at the target's cell, for the darkness penalty (full light without a host that knows it).
-        if (attack.TargetLight is { } targetLight) defender = defender with { LightLevel = targetLight };
-        var request = new AttackRequest
-        {
-            Attacker = hero.Combatant,
-            Target = defender,
-            Weapon = hero.Weapon,
-            Skill = hero.Skill,
-            SkillLevel = hero.SkillLevel,
-            Training = hero.Training,
-            AimedLocation = pending is null ? attack.Aim : null,
-            Distance = pending is null ? attack.Distance : 1,
-            CoverRating = pending is null ? attack.LineOfFire?.Cost ?? 0 : 0,
-            LineOfFireBlocked = pending is null && (attack.LineOfFire?.Blocked ?? false),
-            Difficulty = _difficulty,
-            // ARC-COMBAT-023: a thrown pack item takes no ammunition of the wielded weapon.
-            AmmunitionShort = pending is null && pack is null && ShotAmmunition() is { Short: true },
-            DeferHit = pending is null && attack.Flight,
-            // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
-            Backstab = pending is null && thrown is null ? BackstabOf(hero.Combatant, hero.Skill, hero.Weapon, attack.Backstab) : BackstabKind.None,
-            TargetWasInBed = attack.TargetWasInBed,
-        };
+        var defender = StrikeDefender(attack, target, record, facts!);
+        if (defender is null) return RejectAttack(GameSessionFailure.InvalidAttack);
+        var request = StrikeRequest(attack, hero, defender, pending, pack, thrown);
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
         int? scatterRotation = null;
@@ -976,7 +994,10 @@ public sealed partial class GameSessionOwner
         if (throwing && pack?.Split is { } split) thrown = SplitForThrow(pack.Item, split.Count, split.Kind);
         if (throwing) heroSide = heroSide with { Worn = Throw(thrown!, attack.HeroWorn) };
         // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss (the original takes it before every roll).
-        var ammunition = pending is null && pack is null && resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
+        // ARC-COMBAT-2415 (TW8): a pack item that is a weapon with an ammunition type takes its units from the hero's stack here (the check passed at ThrowHeroItem).
+        var ammunition = pending is null && resolution.Refusal == AttackRefusal.None
+            ? pack is null ? SpendShot() : pack.Ammo is { } packAmmo ? SpendAmmo(Version, SessionAmmoHolder.Hero, packAmmo.Type, packAmmo.Count) : null
+            : null;
         if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend };
         var spent = ammunition is { Disposition: GameSessionDisposition.Changed };
@@ -988,8 +1009,10 @@ public sealed partial class GameSessionOwner
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step (0x4B3770), at the landing for a shot that flew.
-        if (resolution.Refusal == AttackRefusal.None && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
-            attack.HitScripts?.Invoke(new(pending is null ? WieldedEntity() : pending.WeaponItem, resolution.Outcome == AttackOutcome.CriticalHit, pending is not null, pending?.Thrown is not null));
+        // ARC-SCRIPT-2841 (TQ31): a critical miss's self-hit asks them too, before its damage step, but only where the attack is resolved at once: a shot or a throw that flies runs no hit step on the self-hit (the projectile ends on the attacker's own tile).
+        if (attack.HitScripts is { } hitScripts && HitScriptEventOf(resolution, !(pending is null && attack.Flight), !(attack.Flight || throwing),
+                new(pending is null ? WieldedEntity() : pending.WeaponItem, false, pending is not null, pending?.Thrown is not null)) is { } hitEvent)
+            hitScripts(hitEvent);
         // ARC-DEV-261 (GT198): the victim's script comes before the invulnerable gate, so a prevented damage asks it too; its answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
@@ -1006,6 +1029,9 @@ public sealed partial class GameSessionOwner
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version)
             { Ammunition = ammunition, Shots = flying, Scatter = scatter, Vetoed = true };
+        // ARC-SCRIPT-2828 (0x4B47F8): the victim's worn armour runs its critical-hit script after the victim's own and before the hit points are written.
+        NotifyArmourCritical(attack.ArmourScripts, resolution, recipient == DamageRecipient.Target ? attack.TargetWorn : attack.HeroWorn,
+            QueryLife(recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero).View?.Status);
         // ARC-DEV-312: the hero is the killer of a target it kills (its critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage, killer: recipient == DamageRecipient.Target ? SessionSpellCaster.Hero : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
@@ -1030,12 +1056,18 @@ public sealed partial class GameSessionOwner
                 if (kill.Disposition == GameSessionDisposition.Rejected) stepFailure = kill.Failure;
             }
         }
+        // ARC-COMBAT-2873: the kill step's alignment step (0x45DC90, flag 1) follows the award and comes before the kill log (the hero is the killer's PC leader); it needs no experience data.
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
+            stepFailure = RunKillAlignment(target);
         // ARC-UI-097: the hero's kill and injury log (0x4F5330 after the death's experience, 0x4F5690 in the damage function): the NPC the hero
         // killed, or the hero's own critical self-hit (the attacker is the victim: the self-inflicted cause).
         if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
             stepFailure = RecordKillLog(defending);
         else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Attacker)
             stepFailure = RecordHeroInjuries(outcome.Events, SelfInflictedCause);
+        // ARC-SCRIPT-2859: the kill step's leader-killing loop (point 20) follows the award and the kill log; the hero is the killer's PC leader.
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
+            RunLeaderKilling(target.Entity);
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
         // ARC-MAGIC-023: the damage step's item events (IC2). The parent hit's melee bit (0x4CBAD0) reads an attack entry's context and

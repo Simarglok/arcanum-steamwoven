@@ -178,6 +178,8 @@ public sealed class NpcAttackStateTests
             var result = owner.AttackByNpc(owner.Version, new SessionNpcAttack(rat) { Target = victim, HitScripts = heard.Add });
             if (result.Resolution?.Refusal != AttackRefusal.None) continue;
             var hit = result.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+            // ARC-SCRIPT-2841: a critical miss's self-hit tells the host as well (the NPC is its own victim).
+            if (result.Resolution?.Outcome == AttackOutcome.CriticalMiss) { Assert.AreEqual(before + 1, heard.Count); Assert.IsTrue(heard[^1].SelfHit); continue; }
             Assert.AreEqual(before + (hit ? 1 : 0), heard.Count);
             if (hit) { hits++; Assert.AreEqual((null, result.Resolution!.Outcome == AttackOutcome.CriticalHit, false, false), (heard[^1].Weapon, heard[^1].Critical, heard[^1].Projectile, heard[^1].Thrown)); }
             else misses++;
@@ -230,6 +232,9 @@ public sealed class NpcAttackStateTests
             var rat = Combat();
             var victim = Combat(entity: Other);
             var experience = owner.QueryHeroExperience()!.Experience;
+            // ARC-SCRIPT-2859: the loop follows the same PC-leader test as the award; the hero's followers are asked once each.
+            var leaderKilling = new List<string>();
+            owner.LeaderKillingScript = request => leaderKilling.Add(request.Follower);
             SessionAttackResult? last = null;
             for (var attempt = 0; attempt < 600 && !owner.QueryNpcKilled(Other); attempt++)
             {
@@ -240,6 +245,7 @@ public sealed class NpcAttackStateTests
             Assert.IsTrue(owner.QueryNpcKilled(Other), "the bites kill the victim within the bounded run");
             var after = owner.QueryNpcExperience(Other)!.Value;
             Assert.IsTrue(after.Pool < 160, "the hits drained the pool");
+            CollectionAssert.AreEqual(mode switch { 0 => Array.Empty<string>(), 1 => new[] { Rat }, _ => new[] { "oid:mid" } }, leaderKilling, $"mode {mode}");
             if (led)
             {
                 Assert.AreEqual(160 / 5, last!.KillAward!.Award);

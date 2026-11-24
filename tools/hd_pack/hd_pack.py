@@ -8,8 +8,7 @@ unlisted extras). Nothing here contains or produces original art; it moves local
   verify     every manifest file present with the declared size (--deep: SHA-256), no symlinks
   plan       what a diff-only update of INSTALLED from STAGED would change (writes nothing)
   apply      that update, with a backup outside hd-packs and a receipt (--dry-run first)
-  rollback   undo one apply or menu-art from its backup folder (--dry-run first)
-  menu-art   replace the unlisted main-menu-16x9.png (checked header, backup, receipt)
+  rollback   undo one apply or relayout from its backup folder (--dry-run first)
   mirror     copy missing/different files from one pack to another (the iCloud copy, ARC-DEV-349); never deletes
   stage      run the importer into a staging folder that is never an installed pack
   fonts-plan write the importer plan for the traced font frames of tools/hd_font (ARC-DEV-361); files only, no pack touched
@@ -46,8 +45,6 @@ DEFAULT_COPY = Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidia
 DEFAULT_MODULE = Path("/Applications/Arcanum/modules/Arcanum.dat")
 REPO = Path(__file__).resolve().parents[2]
 REPLACEABLE = "interface/"  # only entries whose file lives here are replaced; other folders are extras of other tasks (unless --folders names them)
-MENU_FILE = "main-menu-16x9.png"
-MENU_MAX_BYTES, MENU_MAX_W, MENU_MAX_H = 40 * 1024 * 1024, 3840, 2160
 IGNORED = {".DS_Store"}
 
 
@@ -76,6 +73,8 @@ def load_manifest(pack: Path) -> tuple[dict, str]:
 
 
 def entry_key(e: dict) -> tuple:
+    if e.get("kind") == "portrait":  # ARC-UI-2865: a portrait redraw is keyed by the original bitmap's path (docs/formats/hd-pack.md#portrait-entries)
+        return ("portrait", e["portrait"]["path"])
     return (e["art"]["sha256"], e["group"], e["frame"], e["palette"])
 
 
@@ -221,8 +220,6 @@ def cmd_status(a) -> int:
     print("  entries per folder:", ", ".join(f"{k} {v}" for k, v in sorted(info["perFolder"].items())))
     unlisted = info["unlisted"]
     print(f"  files not in the manifest ({len(unlisted)}):", ", ".join(unlisted[:8]) + (" ..." if len(unlisted) > 8 else ""))
-    menu = a.installed / MENU_FILE
-    print(f"  {MENU_FILE}: " + (f"{menu.stat().st_size} bytes sha256 {sha256(menu)}" if menu.is_file() else "absent"))
     print(f"  integrity ({'deep' if a.deep else 'size'}): " + ("OK" if not problems else f"{len(problems)} problems, first: {problems[0]}"))
     return 1 if problems else 0
 
@@ -289,6 +286,19 @@ def load_map_file(path: Path) -> "layout.LayoutMap":
 def pack_map(pack: Path) -> "layout.LayoutMap | None":
     """The pack's own layout map, or None for a pack still in the old folder layout (character-hd114/, interface/ flat)."""
     return load_map_file(pack / layout.MAP_FILE) if (pack / layout.MAP_FILE).is_file() else None
+
+
+def portrait_rows(keyed_entries: dict) -> dict:
+    """The default layout rows (screen `portraits`, kind `heroes` or `npcs`) of the portrait entries among `keyed_entries`, by the ART name `art_of` finds in their staged file."""
+    rows = {}
+    for e in keyed_entries.values():
+        if e.get("kind") == "portrait":
+            stem = e["portrait"]["path"].rsplit("/", 1)[-1].removesuffix(".bmp")
+            try:
+                rows[layout.art_of(e["file"])] = ("portraits", "npcs" if stem.startswith("npc") else "heroes", False)
+            except layout.LayoutError as err:
+                raise PackError(str(err)) from err
+    return rows
 
 
 def place_entry(e: dict, lm: "layout.LayoutMap") -> str:
@@ -365,6 +375,8 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
     if lm is None and extra_map is not None:
         raise PackError("--map only applies to a pack with a layout-map.tsv (run relayout first)")
     pack_rows = dict(lm.rows) if lm is not None else {}
+    if lm is not None:  # ARC-UI-2865: a staged portrait needs no row in the map: it goes to interface/portraits/<heroes|npcs>/ and apply appends the row
+        lm = layout.LayoutMap({**portrait_rows(ks), **lm.rows})
     if lm is not None and extra_map is not None:  # the pack's own rows win; the file only adds ARTs the pack's map lacks
         lm = layout.LayoutMap({**{a: r for a, r in extra_map.rows.items() if a not in lm.rows}, **lm.rows})
 
@@ -551,28 +563,12 @@ def cmd_rollback(a) -> int:
     inst = a.installed
     if receipt.get("kind") == "refresh":
         raise PackError("a refresh cannot be rolled back: the edited PNGs are the only copy of your edits. Put an older PNG back from your own copy and run refresh again")
-    if receipt.get("status") not in ("applied", "failed", "started", "rolling-back", "rolled-back") or receipt.get("kind") not in ("update", "menu", "relayout"):
+    if receipt.get("kind") == "menu":
+        raise PackError("a menu-art receipt cannot be rolled back: the game no longer reads main-menu-16x9.png (ARC-UI-3003) and hd_pack.py no longer installs it. Delete or restore that file by hand if you want it back")
+    if receipt.get("status") not in ("applied", "failed", "started", "rolling-back", "rolled-back") or receipt.get("kind") not in ("update", "relayout"):
         raise PackError("receipt has an unknown kind or status")
     if receipt["kind"] == "relayout":
         return rollback_relayout(a, receipt)
-    if receipt["kind"] == "menu":
-        current = sha256(inst / MENU_FILE) if (inst / MENU_FILE).is_file() else None
-        if current not in (receipt["newSha256"], receipt["oldSha256"]) or (current == receipt["oldSha256"] and receipt["status"] == "applied"):
-            raise PackError("the installed main-menu art changed after that install; refusing to roll back over it")
-        if receipt["oldSha256"] and (not (a.backup / MENU_FILE).is_file() or sha256(a.backup / MENU_FILE) != receipt["oldSha256"]):
-            raise PackError("the backup of the main-menu art does not match its receipt")
-        steps = [f"restore {MENU_FILE}" if receipt["oldSha256"] else f"remove {MENU_FILE}"]
-        print("rollback menu-art:", steps[0])
-        if a.dry_run:
-            print("DRY-RUN: nothing changed")
-            return 0
-        with Lock(inst.parent):
-            if receipt["oldSha256"]:
-                atomic_copy(a.backup / MENU_FILE, inst / MENU_FILE)
-            elif (inst / MENU_FILE).is_file():
-                (inst / MENU_FILE).unlink()
-        print("PASS rollback")
-        return 0
     current = sha256(inst / "manifest.json")
     interrupted = receipt["status"] in ("started", "failed") and current == receipt["oldManifestSha256"]  # files copied, manifest not yet
     if current != receipt["newManifestSha256"] and not interrupted:
@@ -860,7 +856,7 @@ def cmd_refresh(a) -> int:
     return 1 if problems else 0
 
 
-# ---- menu art / mirror / stage ---------------------------------------------------------------
+# ---- PNG header / mirror / stage ---------------------------------------------------------------
 
 def png_header(path: Path) -> tuple[int, int, int, int, int]:
     with open(path, "rb") as f:
@@ -869,42 +865,6 @@ def png_header(path: Path) -> tuple[int, int, int, int, int]:
         raise PackError(f"{path} is not a PNG")
     w, h, depth, ctype, _comp, _filt, interlace = struct.unpack(">IIBBBBB", head[16:29])
     return w, h, depth, ctype, interlace
-
-
-def cmd_menu_art(a) -> int:
-    guard_installed(a.installed, a.allow_symlink)
-    guard_backup(a.backup_root, a.installed)
-    w, h, depth, ctype, interlace = png_header(a.image)
-    size = a.image.stat().st_size
-    if w == 0 or h == 0 or depth != 8 or ctype not in (2, 6) or interlace != 0 or w > MENU_MAX_W or h > MENU_MAX_H or size > MENU_MAX_BYTES:
-        raise PackError(f"{a.image}: needs 8-bit RGB/RGBA, not interlaced, at most {MENU_MAX_W}x{MENU_MAX_H} and 40 MiB (has {w}x{h}, depth {depth}, type {ctype}, interlace {interlace}, {size} bytes)")
-    if abs(w / h - 16 / 9) > 0.02:
-        print(f"WARNING: {w}x{h} is not 16:9; the viewer crops the side art for narrower screens only")
-    target = a.installed / MENU_FILE
-    new_sha = sha256(a.image)
-    old_sha = sha256(target) if target.is_file() else None
-    backup = a.backup_root / f"{a.task}-menu-{(old_sha or 'none')[:12]}"
-    print(f"{MENU_FILE}: {old_sha and old_sha[:12]} -> {new_sha[:12]} ({w}x{h}); backup {backup}")
-    if old_sha == new_sha:
-        print("nothing to do (identical)")
-        return 0
-    if backup.exists():
-        raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
-    if a.dry_run:
-        print("DRY-RUN: nothing changed")
-        return 0
-    with Lock(a.installed.parent):
-        backup.mkdir(parents=True)
-        if old_sha:
-            atomic_copy(target, backup / MENU_FILE)
-        receipt = {"kind": "menu", "task": a.task, "status": "started", "oldSha256": old_sha, "newSha256": new_sha}
-        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
-        atomic_copy(a.image, target, preserve=False)
-        ok = sha256(target) == new_sha
-        receipt["status"] = "applied" if ok else "failed"
-        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
-    print(f"{'PASS' if ok else 'FAIL'} menu-art installed; roll back with: rollback {backup}")
-    return 0 if ok else 1
 
 
 def cmd_mirror(a) -> int:
@@ -1075,6 +1035,93 @@ def cmd_fonts_plan(a) -> int:
     return 0
 
 
+PORTRAIT_PLAN_KIND = "arcanum-steamwoven-hd-portrait-plan"
+
+
+def read_sums(folder: Path) -> dict:
+    """`SHA256SUMS.txt` of a delivery folder (`<sha256>  ./<relative path>` per line)."""
+    path = folder / "SHA256SUMS.txt"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as e:
+        raise PackError(f"{folder} has no readable SHA256SUMS.txt ({e})") from e
+    sums = {}
+    for line in lines:
+        digest, _, name = line.partition("  ")
+        if len(digest) == 64 and name:
+            sums[name.removeprefix("./")] = digest
+    return sums
+
+
+def portrait_plan(hero: Path | None, npc: Path | None, out: Path, pack_id: str) -> tuple[dict, dict]:
+    """ARC-UI-2865: the importer plan for the portrait deliveries. A hero delivery (ARC-UI-2864) holds `large/<id>_b.png` (512, for the 128 bitmap
+    `portrait/<id>_b.bmp`) and `small/<id>.png` (256, for `portrait/<id>.bmp`); an NPC delivery (ARC-UI-2884) holds `<id>.png` (256, the small bitmap
+    only: an NPC has no large one). Every file used is checked against the delivery's SHA256SUMS.txt, its PNG header (8-bit, not interlaced, the size
+    above) and, for a hero, that its large and small image exist for the same ids. Image paths are relative to OUT. The importer checks each size
+    against the original bitmap it redraws."""
+    items, counts = [], {}
+
+    def add(folder: Path, rel: str, bmp: str, side: int, sums: dict, group: str) -> None:
+        png = folder / rel
+        if not png.is_file() or png.is_symlink():
+            raise PackError(f"{png} is missing or not a plain file")
+        if sums.get(rel) != sha256(png):
+            raise PackError(f"{png} is not listed in {folder}/SHA256SUMS.txt or differs from it; the delivery changed after it was packed")
+        w, h, depth, ctype, interlace = png_header(png)
+        if (w, h) != (side, side) or depth != 8 or ctype not in (2, 6) or interlace:
+            raise PackError(f"{png}: {w}x{h}, depth {depth}, colour type {ctype}; expected {side}x{side}, 8-bit RGB or RGBA, not interlaced")
+        items.append({"bmp": bmp, "image": os.path.relpath(png, out.parent).replace(os.sep, "/")})
+        counts[group] = counts.get(group, 0) + 1
+
+    if hero is not None:
+        sums = read_sums(hero)
+        ids = sorted(p.name.removesuffix("_b.png") for p in (hero / "large").glob("*_b.png"))
+        small = sorted(p.name.removesuffix(".png") for p in (hero / "small").glob("*.png"))
+        if ids != small:
+            raise PackError(f"{hero}: the large and the small folder name different portraits ({sorted(set(ids) ^ set(small))[:6]})")
+        for i in ids:
+            add(hero, f"large/{i}_b.png", f"portrait/{i}_b.bmp", 512, sums, "hero large")
+            add(hero, f"small/{i}.png", f"portrait/{i}.bmp", 256, sums, "hero small")
+    if npc is not None:
+        sums = read_sums(npc)
+        for p in sorted(npc.glob("*.png")):
+            add(npc, p.name, f"portrait/{p.stem}.bmp", 256, sums, "npc small")
+    if not items:
+        raise PackError("no portrait delivery given (--hero DIR, --npc DIR)")
+    for it in items:
+        if not all(c.islower() or c.isdigit() or c in "_-/." for c in it["bmp"]):
+            raise PackError(f"{it['bmp']} is not a lowercase portrait name")
+    return {"schema": 1, "kind": PORTRAIT_PLAN_KIND, "packId": pack_id, "scale": 4, "items": items}, counts
+
+
+def cmd_portraits_plan(a) -> int:
+    out = a.out
+    real = out.resolve()
+    anchored = any(p.name == "local" and (p.parent / ".git").exists() for p in real.parents)
+    if out.is_symlink() or not anchored or GAME_SUPPORT.resolve() in (real, *real.parents) \
+            or {"hd-packs", "hd_pack", "pack-out"} & set(real.parts):
+        raise PackError(f"{out} must be a plain file under a checkout's local/ directory, never inside an installed pack, a staging pack or a pack collection")
+    if out.suffix != ".json":
+        raise PackError(f"{out} must be a .json file")
+    if out.exists():
+        try:
+            if json.loads(out.read_text()).get("kind") != PORTRAIT_PLAN_KIND:
+                raise ValueError("not a portrait plan")
+        except (OSError, ValueError, AttributeError) as e:
+            raise PackError(f"{out} exists and is not a portrait plan of this tool; refusing to overwrite it ({e})") from e
+    plan, counts = portrait_plan(a.hero.resolve() if a.hero else None, a.npc.resolve() if a.npc else None, real, a.pack_id)
+    for group, n in sorted(counts.items()):
+        print(f"  {group}: {n} images")
+    print(f"plan {out}: {len(plan['items'])} portraits, scale 4x, pack id {plan['packId']}")
+    if a.dry_run:
+        print("DRY-RUN: nothing written")
+        return 0
+    real.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(real, (json.dumps(plan, indent=1) + "\n").encode())
+    print(f"PASS portraits-plan; next: stage --plan {out} --staging local/res095/pack-out/{a.pack_id} --dry-run")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="hd_pack.py", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1108,10 +1155,8 @@ def parser() -> argparse.ArgumentParser:
     s = add("plan", cmd_plan, "show the diff-only update, write nothing"); installed(s); update_args(s)
     s = add("apply", cmd_apply, "diff-only update with backup"); installed(s); write(s); update_args(s)
     s.add_argument("--no-base-check", action="store_true", help="apply without --base (only when the installed entries are known untouched)")
-    s = add("rollback", cmd_rollback, "undo one apply or menu-art"); installed(s)
+    s = add("rollback", cmd_rollback, "undo one apply or relayout"); installed(s)
     s.add_argument("backup", type=Path); s.add_argument("--dry-run", action="store_true")
-    s = add("menu-art", cmd_menu_art, "replace main-menu-16x9.png"); installed(s); write(s)
-    s.add_argument("--image", type=Path, required=True)
     s = add("mirror", cmd_mirror, "copy a pack's missing files to another folder (the iCloud copy)")
     s.add_argument("--src", type=Path, default=DEFAULT_INSTALLED); s.add_argument("--dst", type=Path, default=DEFAULT_COPY, help=f"the copy folder (default: the iCloud/Obsidian hd_pack/{PACK_ID})")
     s.add_argument("--dry-run", action="store_true"); s.add_argument("--deep", action="store_true", help="hash content-named files too (reads the destination fully)")
@@ -1129,6 +1174,12 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--pack-id", default="interface-fonts", help="id of the staging pack the plan builds (default interface-fonts)")
     s.add_argument("--art", help="only these font ART numbers, e.g. 27,229 (default: every font folder)")
     s.add_argument("--dry-run", action="store_true", help="read and check the frames, print the counts, write nothing")
+    s = add("portraits-plan", cmd_portraits_plan, "write the importer plan for portrait deliveries (ARC-UI-2865)")
+    s.add_argument("--hero", type=Path, help="the hero portrait delivery folder (large/<id>_b.png 512, small/<id>.png 256, SHA256SUMS.txt)")
+    s.add_argument("--npc", type=Path, help="the NPC portrait delivery folder (<id>.png 256, SHA256SUMS.txt)")
+    s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
+    s.add_argument("--pack-id", default="interface-portraits", help="id of the staging pack the plan builds (default interface-portraits)")
+    s.add_argument("--dry-run", action="store_true", help="read and check the images, print the counts, write nothing")
     return p
 
 

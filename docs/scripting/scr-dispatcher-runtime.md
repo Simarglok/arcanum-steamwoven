@@ -50,6 +50,13 @@ the printed `Lines` (S6), the `Sounds` (S7) and the `Teleports` (S4). A run read
 own writes back from an overlay. Effects made before a stop are kept, as the
 original applies them as it goes; a refused script has none.
 
+### The admission chain (ARC-SCRIPT-1881)
+
+The numbered sets `ScrAdmissionSet.S1` .. `S65` are one linear chain: each set is built on the one before it (`S4` follows `S7`, `S40` follows `S38`, `S58` follows `S56`; numbers that never landed are gaps) and holds every type and kind of it.
+`ScrAdmissionSet.Latest` names the top of the chain (now `S65`): it is the one maximum the interpreter runs (`ScrRunOptions` refuses any set outside it) and the one the host-set tests check against.
+A later slice builds its set on `Latest` and moves that one property, and the sentences "the interpreter runs at most Sn" below are the maximum as each slice left it, not the current one.
+`ScrAdmissionChainTests` finds the sets by reflection and fails when the chain forks or `Latest` is not the top.
+
 ## Decision order of an object event
 
 Each step returns at once when it applies (the original's object script
@@ -90,7 +97,7 @@ action. Read in the original at 0x444B8E–0x444C4D:
 | return and skip default (1) | `ReturnSkipDefault` | skip | yes |
 | return and run default (2) | `ReturnRunDefault` | run | yes |
 | the last line continues | `FellOffEnd` | skip | yes |
-| a line outside the script: a goto to exactly the line count, a start line outside it, an empty script | `LineOutOfRange` | skip | no |
+| a line outside the script: a goto to the line count or beyond it (admitted since ARC-SCRIPT-3005), a start line outside it, an empty script | `LineOutOfRange` | skip | no |
 | 1,000 executed lines (or the option's lower budget) | `Budget` | skip | no |
 | a computed global flag number outside 0..3199 | `IndexOutOfRange` | skip | no |
 
@@ -181,10 +188,15 @@ the script; a reset, reload or map change closes the panel without resuming.
 ## Deferred calls (ARC-SCRIPT-010, slice S5)
 
 - **`ScrAdmissionSet.S5`** (the default of `ScrRunOptions`) is S3 plus call
-  script in (54) and remove script call (125). Call script at (55) stays
-  outside: one installed line uses it and no run reaches it (ARC-RES-045), and
-  its time-of-day arithmetic counted from the module's start hour (TE2) is not
-  settled.
+  script in (54) and remove script call (125). ARC-SCRIPT-2824 adds call
+  script at (55) (ledger TQ17, TE2): the same call request, its delay the
+  seconds from the clock's time of day, counted from the module's start hour
+  (`ScrGameTime.SecondsSinceStartHour`, answered by `IScrTimeQueries`), to the
+  operand's time of day (the operand reduced to a day, one day added when the
+  difference is negative), in game milliseconds with no factor 8 and 0 raised
+  to 1. The Original switch `CallDelayWraps` keeps a negative operand's
+  remainder (the 32-bit count read unsigned); Steamwoven reduces the operand to
+  0..86399 first. A host with no clock ends the run `NotModelled`.
 - **Call script in** asks for a call (`ScrEffects.Calls`, in action order):
   script, line, triggerer and attachee (an absent role is stored as absent, as
   the original stores a null handle) and a game delay of the seconds × 8000 ms
@@ -270,6 +282,8 @@ conversation is not run).
   S6 is print line and S7 the sound actions, not heartbeat and combat.
 
 ## Skill commands (ARC-SKILLS-009, set S11)
+
+- ARC-SCRIPT-2752: the use host's set admits use item with skill (79); its hosts start the NPC source's goal 40 for pick locks (ledger [SX7](../research/ledger/skills.md#script-skill-commands-arc-skills-009)), and leave the run unapplied for any other request.
 
 - **`ScrAdmissionSet.S11`** is S10 plus get skill (47) and use item with skill (79); `ScrRunOptions` accepts any subset of S11 (now
   the interpreter's widest set; the default stays S5). A set with 47 needs a host that implements `IScrSkillQueries`, checked before
@@ -415,9 +429,11 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   slot the run itself changes). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
   `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack; the deepest literal call chain in the installed scripts is 8, and four scripts are on call cycles; kept at 16 by the owner's decision of 2026-10-21, [rule modes](../world/rule-modes.md)) or more than `MaxCallDepth` ×
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
-  top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
-  applied to a callee, so a dialog-point event never runs call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
+  top run's (empty for a refused callee, whose number the result names). The callee runs at the caller's point (0x44B030 copies it into the invocation, then the event runner 0x4449B0), so at the dialog point its attachee meets the dialog gates (E6: dead without the callee's death-speech flag or surrendered without its surrender-speech flag runs nothing, mind-controlled runs 2188; ARC-SCRIPT-2198; the hosts answer all three states for an NPC of the shown map, the session's danger record and spell flag 0x8000000 for the last two, ARC-SCRIPT-2464), and a dialog-point event may run call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
   attachee pair of two groups.
+- **Transform of the attachee (ARC-SCRIPT-2440, ledger TI5b/TI5c)**: transform (40) adds its request as before; when the host says `IScrHost.RebindsTransformedAttachee` the interpreter also hands the later actions of the run (and the scripts it calls) the placeholder
+  `ScrTransformedObject.Placeholder` (`transformed:N`) as the attachee, as the original writes the new handle into the run's own record. The host makes the object and rebinds the placeholder with `ScrEffects.Rebind` before it applies the later requests; the run's own writeback stays
+  the old attachee's. A host that returns false (the default: the use, tile, thrown-item and other hosts) sees no change.
 - **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
   from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use
@@ -469,7 +485,12 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
   nothing. ARC-SCRIPT-1592: the dialog host and the use host keep the requests of the runs they applied (`TakeEyeCandies`, in action order,
   taken once) and the viewer plays them on the shown map every frame as overlay runs of the script list (`AreaEyeCandyHost.PlayScript`, ledger [VT9](../research/ledger/scripts.md)).
   ARC-SCRIPT-1828: **stop script eye candy** (124) hands `ScrEyeCandy(number, object, StopScript)` on, which the hosts keep in the same list in action order (`AreaScriptEyeCandy.Stop`) and the viewer takes off through `AreaEyeCandyHost.StopScript`: the first run of the entry on the object only, as the original's walk 0x4243E0 does (ledger [WE12a](../research/ledger/scripts.md)).
-  ARC-SCRIPT-2041: the focus kind **every portal in the vicinity** (19; set **S60**, S59 plus the kind) is built by the interpreter for a loop for and a first-object read through `IScrPortalQueries.PortalsInVicinity`, with the scenery's cap (ledger [PV1–PV7](../research/ledger/scripts.md#the-portal-vicinity-focus-kind-arc-script-2041-the-loop-of-the-ground-rune-tile-scripts)); the interpreter runs at most S60. The use host lists the shown map's portals within the window's reach; its use, placed, dying and combat-point sets admit the kind, the heartbeat set does not.
+  ARC-SCRIPT-2041: the focus kind **every portal in the vicinity** (19; set **S60**, S59 plus the kind) is built by the interpreter for a loop for and a first-object read through `IScrPortalQueries.PortalsInVicinity`, with the scenery's cap (ledger [PV1–PV7](../research/ledger/scripts.md#the-portal-vicinity-focus-kind-arc-script-2041-the-loop-of-the-ground-rune-tile-scripts)); the interpreter ran at most S60 until ARC-SCRIPT-2319. The use host lists the shown map's portals within the window's reach; its use, placed, dying and combat-point sets admit the kind, the heartbeat set does not.
+  ARC-SCRIPT-2322: the focus kinds **every container in the vicinity** (17) and **any container in the vicinity** (18; one list, type mask 4; set **S62**, S61 plus both) are built by the interpreter for a loop for, a first-object read and a condition's list through `IScrContainerQueries.ContainersInVicinity`, with the same cap (ledger [CV1–CV7](../research/ledger/scripts.md#the-container-vicinity-focus-kinds-arc-script-2322-every-and-any-container-in-the-vicinity)); the interpreter runs at most S62. The use host lists the shown map's containers within the window's reach; its use, placed, dying, combat-point and heartbeat sets admit both kinds; the session's item set does not.
+  ARC-SCRIPT-2248: the use set also admits toggle state (56) of S16, which the heartbeat set held alone, so the placed, dying and combat-point sets do too (ledger [OT1–OT7](../research/ledger/scripts.md#toggle-state-in-the-use-set-arc-script-2248-the-ground-rune-tile-script-2221)): the ground rune tile script 2221 is admitted whole; the host toggles an NPC of the shown map and refuses any other object whole at plan time (#2324).
+  ARC-SCRIPT-2319: the focus kinds **every one in the group** (13) and **anyone in the group** (14; set **S61**, S60 plus both kinds) are built by the interpreter for an operand list and a first-object read as the triggerer's direct followers (`IScrGroupQueries.FollowersOf`, cut at 100) and then the triggerer itself, no filter (ledger [GF1–GF8](../research/ledger/scripts.md#the-group-focus-kinds-arc-script-2319-everyone-and-anyone-in-the-group)); the interpreter ran at most S61 until ARC-SCRIPT-2326. The use host answers from the session's follower array; its use, placed, dying, combat-point and talk sets admit the kinds, the heartbeat set does not.
+  ARC-SCRIPT-2326: **get armor** (action 32; set **S63**, S62 plus the action) stores the armour part of the first object's current art id (bits 20..23 of a critter art, bits 20..22 of a monster art, 0 for any other art; no armour class) into operand 1 through `IScrCritterFieldQueries.ArmorOf`; and the group kinds are admitted in slot 0 of the list conditions the interpreter tests object by object (`ScrAdmissionSet.ListConditions`: is undead 38, is animal 37 and the others, kind 14 "any", kind 13 "every", the triggerer last: a PC triggerer is never undead), ledger [AR1–AR7](../research/ledger/scripts.md#get-armor-and-the-group-in-list-conditions-arc-script-2326); the interpreter runs at most S63. The use host reads the PC's armour from the worn body armour's use art and an NPC's from its stored current art; since ARC-SCRIPT-2342 a session-dressed NPC's from its worn body armour's use art and a polymorphed critter's (hero or NPC) as 0 (ledger AR8).
+  ARC-SCRIPT-2321: the focus kind **any scenery in the vicinity** (16; set **S64**, S63 plus the kind) is the list of kind 15 (one case in the exe builder 0x44B4E0), resolved by the interpreter for an object operand, a first-object read and a loop for through `IScrWorldQueries.SceneryInVicinity`; a condition reads it as "one is enough" (ledger [AS1–AS6](../research/ledger/scripts.md#the-any-scenery-focus-kind-arc-script-2321-the-tile-script-of-the-kna-tha-map-and-the-bust-script-1734)); the interpreter runs at most S64. The use, placed, dying, combat-point and heartbeat sets admit it where they admit kind 15.
 - **Identified** counts `IScrItemQueries.IsIdentified` over operand 0's objects (one at most in the set): true when it is identified,
   false for none or an absent object; an object the host does not know stops the run. **Items being rewielded** is
   `IScrItemQueries.ItemsBeingRewielded`.
@@ -539,7 +560,8 @@ switched-off ones left out, at most 100 (`VicinityListCapped` past that; ledger
 [TG4](../research/ledger/scripts.md#script-triggers-arc-script-047)). An action names the whole list (loop for, or one request per
 object), an optional single object takes its first object. `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`);
 the list rule of SG6 (every object, or any) is the interpreter's since S18 for the dead and switched-off conditions, which a set may
-pair with the scenery list (15).
+pair with the scenery list (15). The lists are in snapshot order (for 8 and 9 the NPC rows, then the PC); the original's order is read in ledger
+[VL1–VL6](../research/ledger/scripts.md#vicinity-list-order-arc-script-2960) (ARC-SCRIPT-2960) and is not modelled yet (issues #2975, #2976).
 
 Call-ex (81) now runs the dialog point (9): it goes through the object entry as the original's 0x44B170 does, so the dialog gates of
 0x4449B0 apply (TG5): a dead attachee whose script lacks file flag 0x8 or a surrendered one without 0x10 runs nothing (the action
@@ -719,7 +741,8 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
   object stops the run (`MissingObject`).
 - **The viewer.** Only the AREA dialog host (`AreaScriptHost.TalkAdmission` and `SkillTalkAdmission`) holds the action: it answers for one of its
   speakers toward the PC from the session's reaction query, the one the dialog's `re` condition reads, so a script and a reply see the same value.
-  Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
+  ARC-SCRIPT-2505: any other NPC of the shown map toward the PC (Kerghan's script 1105 line 57 loop) is the use host's `ReactionOf`, the AI host's standard reaction through
+  `AreaScriptWorld.StandardReaction`, and a first object that is no NPC (the PC among them) gives 50. Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
 - **Tests.** `ScrReactionTests` (the interpreter, a fake host), `AreaTalkQueryTests` (the viewer's host), `WorldTravelTests` (`NearestArea`,
   `AreaAt`), `AreaWorldMapTests` (the town maps of the shown sectors and of the area table).
 
@@ -832,14 +855,14 @@ runs at most S43. Ledger [VT1–VT8](../research/ledger/scripts.md#vitals-comman
 
 The area use host (`AreaUseScriptHost.Admission`, with the placed and dying sets built on it) holds the three commands and heal hit points (75), heal fatigue (76), the magick-tech adjustment (91), play script eye candy (120) and destroy (68), so the food use script
 30282 is admitted whole. The host answers the PC from the session's life and an NPC of the shown map from `AreaScriptWorld.Vitals`; get stat 24 reads the same poison level (0 to 1000). Heal poison and the hero's heal fatigue go through `AreaScriptWorld.ScriptHealLife`
-(the viewer's `HealLifeByScript`: the session's heal with the fatigue and poison amounts); a negative heal poison amount leaves the run unapplied. Destroy of the **item in use** (`RunItemUse`) takes the food out of the hero's list through the session's used-item
+(the viewer's `HealLifeByScript`: the session's heal with the fatigue and poison amounts); a negative heal poison amount raises the level by its size (ARC-SCRIPT-1593: the life step is asked with the negative amount, the viewer writes the level plus the amount through `GameSessionOwner.RaisePoisonLevel`). Destroy of the **item in use** (`RunItemUse`) takes the food out of the hero's list through the session's used-item
 destruction; destroy of any other non-NPC object stays refused. `RunItemUse(…, target: entity)` makes that object (the PC, or an NPC of the shown map) the extra object (the use's target, ledger IU2); the viewer passes the use's target. Tests: `ScrVitalTests` (the interpreter and the sets),
 `AreaVitalScriptTests` (the host over a session, an NPC's vitals, the self-destroying item and, with `DAT_ROOT`, the installed 30282 admitted and a whole hero leaving the potion alone). Under S43 the census (`--script-refusal-census --set S43`) admits 1,575 attached scripts
-on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats. Script eye candy is played by the viewer since ARC-SCRIPT-1592 ([ledger VT9](../research/ledger/scripts.md)).
+on 6,856 placed sites (S38: 1,558 on 6,113). An NPC of the shown map that eats runs the script since ARC-SCRIPT-1590 ([ledger VT10](../research/ledger/scripts.md)). Script eye candy is played by the viewer since ARC-SCRIPT-1592 ([ledger VT9](../research/ledger/scripts.md)). A food the session made or the starting kit holds (no object row) runs its prototype's use script since ARC-SCRIPT-1594 ([ledger VT8](../research/ledger/scripts.md)): the slot from `QueryItemScriptSlot`, the magick-tech ratio from the prototype's complexity (`AreaUseScriptHost.PrototypeComplexity`), a written slot kept through `GameSessionOwner.StoreItemScriptSlot`.
 
 ## Newspaper commands (ARC-SCRIPT-1764, set S59)
 
-`ScrAdmissionSet.S59` is S58 plus queue newspaper (85) and float newspaper headline (86); the interpreter runs at most S59 (S60 since ARC-SCRIPT-2041). Both hand `ScrNewspaperRequest` effects (`ScrEffects.Newspapers`, in action order) to the host and the run goes on.
+`ScrAdmissionSet.S59` is S58 plus queue newspaper (85) and float newspaper headline (86); the interpreter runs at most S59 (S60 since ARC-SCRIPT-2041, S61 since ARC-SCRIPT-2319, S62 since ARC-SCRIPT-2322, S63 since ARC-SCRIPT-2326, S64 since ARC-SCRIPT-2321, S65 since ARC-SCRIPT-2320: plus the focus kinds every follower and any follower, answered through `IScrGroupQueries` like the group kinds). Both hand `ScrNewspaperRequest` effects (`ScrEffects.Newspapers`, in action order) to the host and the run goes on.
 Queue newspaper reads its two operands as numbers (the issue, and the front flag by its value, 0 or not) and the host writes the session's queue by the rule of `GameSessionOwner.QueueNewspaper` (the original's 0x4BF140, the same rule the dialog code `np` uses).
 Float newspaper headline takes its object from operand slot **1** (census anomaly X9: the editor's signature puts it in slot 0, the interpreter reads slot 1 and never reads slot 0): the admission checks slot 1 as an object and leaves slot 0 alone, the interpreter requests the headline float over the object
 (`OptionalObject`, a group's first), and nothing for an absent object. The host reads the head issue's headline (`WrittenTexts.Headline`, 0x56CCA0), punctuates it as the vendor's headline line does (`WrittenTexts.PunctuatedHeadline`: a stop unless it ends in `.`, `?` or `!`, then a space)
@@ -971,6 +994,7 @@ later steps of the apply, like the other session requests). The thrown-item host
   float line and get area (S19, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
   with area 0 by the object's location since ARC-DEV-178), get reaction (S23, ARC-DEV-178, below), unfog town map (S24, ARC-DEV-205, below; the town-map window and its per-cell fog not modelled), destroy and stop attacking (S20, ARC-SCRIPT-052; the viewer's tile and sector set, a destroy of the PC, a
   follower or an NPC with a destroy script not modelled).
+- Trigger points no host runs, with the census of the installed attachments (ARC-SCRIPT-2825; the [slot census](../research/scr-census.md) over every sector, mobile and prototype, not the shown windows; [conditions TQ11, TQ16, TQ21, TQ25](../research/script-trigger-conditions.md)): unlock (3, a portal's or container's open attempt before the lock test) has 1 attachment (a door of the main map, script 1151) and **runs since ARC-SCRIPT-2860** (`AreaUseScriptHost.RunUnlock` under the use set, which admits 1151 whole; asked by the door goals' attempts, the hero's use, the planners' step tests per walker and the loot window's open, [ledger UL1–UL3](../research/ledger/scripts.md#unlock-point-3-arc-script-2860); answer 0 refuses with `AreaPortalUse.ScriptRefused` / `AreaContainerOpenOutcome.UnlockScriptRefused`; a run that did not finish keeps the old `ScriptGuarded` / `UnlockScriptUnsupported`; gating is the T0 flag, a script a map change gave a portal at run time is not asked); buy object (17, the sale check on every price with the PC as seller) has **0** attachments, so it is not modelled and nothing is lost; leader killing (20, each follower of the killer's PC leader when an NPC dies) has 1 (script 1014 of an NPC of the main map) and **runs since ARC-SCRIPT-2859** (`AreaUseScriptHost.RunLeaderKilling` under the dying set, asked by the session's `LeaderKillingScript` after the kill award (and the attack paths' kill log; the session has no kill alignment step, and a spell or trap kill writes no kill log), [ledger LK1–LK3](../research/ledger/scripts.md#leader-killing-point-20-arc-script-2859)); caught thief (33, the victim as triggerer before point 11 at a failed steal or plant) has 10 slots (3 scripts: 2931, 2840, 2839, on NPC thieves of the main map) and now runs for an NPC thief's noticed failed pick pocket (`AreaUseScriptHost.RunCaughtThief`, ARC-SCRIPT-2858, closes [#2858](https://github.com/Simarglok/arcanum-steamwoven/issues/2858): under the dying set, which admits all three whole, the answer ignored); the PC thief has no script. The viewer's own census (`ScriptTriggerCensusTests`) counts only the shown windows of the 79 maps, so it sees none of the three on the main map; recount with the probe's `--script-census` before relying on these numbers.
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a floated line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

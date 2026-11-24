@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 /// ARC-UI-008 diagnostic logbook: the built tabs of the session's PC (<see cref="AreaLogbook"/>), read only, as a scrolled list.
 /// Each entry is drawn in the original's colour for its state (struck through for a quelled rumor, a completed, botched or elsewhere
 /// completed quest). ARC-UI-074: with the game's art (<see cref="SetArt"/>) the logbook shows the original's book instead
-/// (<see cref="AreaLogbookArtView"/>) and this list is one click away ("Diagnostic view"); the synthetic self-tests keep the list.
+/// (<see cref="AreaLogbookArtView"/>); the diagnostic list is one click away ("Diagnostic view") only on the debug and self-test path (<see cref="DiagnosticSwitch"/>).
 /// The app rebuilds it whenever the session or the tab changes.
 /// </summary>
 public partial class AreaLogbookPanel : CanvasLayer
@@ -25,6 +25,7 @@ public partial class AreaLogbookPanel : CanvasLayer
     private AreaRoundView _roundView = null!;
     private Button _toDiagnostic = null!, _toOriginal = null!;
     private bool _diagnosticChosen;
+    private bool _diagnosticSwitch;
     private readonly ButtonGroup _tabs = new() { AllowUnpress = false };
     private AreaLogbookView? _view;
     public event Action? CloseRequested;
@@ -49,6 +50,13 @@ public partial class AreaLogbookPanel : CanvasLayer
     /// <summary>ARC-UI-098: the lens's round view is shown under the window.</summary>
     internal bool RoundViewShown => _roundView.Visible;
     internal Button LookToggleForSelfTest => ArtMode ? _toDiagnostic : _toOriginal;
+
+    /// <summary>ARC-UI-2764: the "Diagnostic view" and "Original look" switches are a debug and self-test path; false (the default) draws neither in play.</summary>
+    public bool DiagnosticSwitch
+    {
+        get => _diagnosticSwitch;
+        set { _diagnosticSwitch = value; if (_toDiagnostic is not null) _toDiagnostic.Visible = value; if (!value) _diagnosticChosen = false; if (_view is { } view && IsOpen) Render(view); }
+    }
 
     public override void _Ready()
     {
@@ -91,7 +99,7 @@ public partial class AreaLogbookPanel : CanvasLayer
         _artView.HintRequested += text => HintRequested?.Invoke(text);
         _artView.CloseRequested += () => CloseRequested?.Invoke();
         _roundView = new AreaRoundView(); AddChild(_roundView);
-        _toDiagnostic = new Button { Name = "DiagnosticView", Text = "Diagnostic view", Flat = true, FocusMode = Control.FocusModeEnum.All, Position = new(6, 380) };
+        _toDiagnostic = new Button { Name = "DiagnosticView", Text = "Diagnostic view", Flat = true, FocusMode = Control.FocusModeEnum.All, Position = new(6, 380), Visible = false };
         _toDiagnostic.AddThemeColorOverride("font_color", Colors.White);
         // In art pixels the switch must stay inside the window's 400 rows: a small font.
         _toDiagnostic.AddThemeFontSizeOverride("font_size", 9);
@@ -124,13 +132,13 @@ public partial class AreaLogbookPanel : CanvasLayer
     {
         _diagnosticChosen = diagnostic;
         if (_view is { } view) Render(view);
-        Callable.From(() => (ArtMode ? _toDiagnostic : _toOriginal).GrabFocus()).CallDeferred();
+        Callable.From(() => { if (_diagnosticSwitch) (ArtMode ? _toDiagnostic : _toOriginal).GrabFocus(); }).CallDeferred();
     }
 
     public void Open(AreaLogbookView view)
     {
         Show(); Render(view);
-        (ArtMode ? _toDiagnostic : _close).GrabFocus();
+        if (!ArtMode) _close.GrabFocus(); else if (_diagnosticSwitch) _toDiagnostic.GrabFocus();
     }
 
     /// <summary>Turns the original book's pages (PROJECT keys and wheel; the buttons do the same); false in the list or at an end.</summary>
@@ -146,7 +154,7 @@ public partial class AreaLogbookPanel : CanvasLayer
     {
         ArgumentNullException.ThrowIfNull(view);
         _view = view;
-        _toOriginal.Visible = _artView.ArtSet;
+        _toOriginal.Visible = _artView.ArtSet && _diagnosticSwitch;
         if (ArtMode)
         {
             _panel.Visible = false;
@@ -198,7 +206,7 @@ public partial class AreaLogbookPanel : CanvasLayer
         var width = Math.Max(1, Math.Min(900, size.X - 48));
         var height = Math.Max(1, Math.Min(640, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     /// <summary>ARC-UI-098: the lens shows the game view around the hero while the original look is up (LB23, IW33).</summary>

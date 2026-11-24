@@ -88,6 +88,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-381 early main menu open, the start scene {(_startLoadPending ? "is not loaded yet (ARC-DEV-387)" : "loads behind it")} (ms since start {Time.GetTicksMsec()})");
         // A smoke runs its stages on the published scene, so it takes the player's route to the load: Single Player, New Game.
         if (_startLoadPending && _nativeSmoke) Callable.From(SmokeOpenNewGameWindow).CallDeferred();
+        Callable.From(SoakOpenWindow).CallDeferred();
     }
 
     private void SmokeOpenNewGameWindow()
@@ -279,7 +280,7 @@ public partial class TerrainViewerApp
             $"Accept pressed while the scene loads is held, with a note: {_menuDeferred} {menu.Notice}");
         MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
         require(menu.Window == AreaMenuWindow.NewCharacter && _menuDeferred is not null, "a held choice takes no other input (Back is ignored)");
-        HandleMainMenuKey(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        HandleMainMenuKey(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
         require(_menuDeferred is null && menu.Window == AreaMenuWindow.NewCharacter && menu.Notice is null, $"Escape took the held choice back: {_menuDeferred} {menu.Notice}");
         MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
         require(menu.Window == AreaMenuWindow.NewGame, "Back left the New Character window");
@@ -289,7 +290,7 @@ public partial class TerrainViewerApp
         MainMenuCommand(() => menu.Start());
         require(_menuDeferred is { Kind: AreaMenuCommandKind.StartNewGame, Hero: 0 } && ReferenceEquals(placeholder, _areaSession) && MainMenuOpen,
             $"Start in the browser is held and starts nothing yet: {_menuDeferred}");
-        HandleMainMenuKey(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        HandleMainMenuKey(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
         require(_menuDeferred is null && menu.Window == AreaMenuWindow.PickCharacter, "Escape took the held start back and stayed in the browser");
         for (var back = 0; back < 3; back++) MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
         require(menu.Window == AreaMenuWindow.Main, "back at the main window");

@@ -180,9 +180,16 @@ public partial class TerrainViewerApp
             // ARC-DEV-209 (MIG14 S3, GT49): the walkers' opener goals run over the shown map's door host; the closed portals a step crosses are read from its T0 assessment.
             DoorWorld = () => _areaDoors,
             Passages = () => _areaPortals is { } passages && _areaSession is { } shown ? passages.Passages(shown) : null,
+            // ARC-SCRIPT-2860 (UL3): a walker's step test asks a portal's unlock script with that walker as the triggerer.
+            PassagesOf = walker => _areaPortals is { } passages && _areaSession is { } shown ? passages.Passages(shown, walker) : null,
             ClosedPortalsOf = step => _areaPortals is { } portals && _areaSession is { } shown ? [.. portals.CrossedClosed(shown, step).Select(p => p.Entity)] : [],
             SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
+            // ARC-AI-1605 (AW18, VBG9): the hero's and a companion's sight and sound lines start at the rest of the step they are walking (their anchor's offset inside the committed cell).
+            ObserverStep = id => id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc
+                ? _worldActor.Session is AreaGridSession walker ? AreaCritterLights.StepOffset(walker.State.Anchor.U, walker.State.Anchor.V, walker.State.CommittedCell) : null
+                : _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == id) is { } follower
+                    ? AreaCritterLights.StepOffset(follower.Grid.State.Anchor.U, follower.Grid.State.Anchor.V, follower.Grid.State.CommittedCell) : null,
             // ARC-SCRIPT-1773 (CS5): obj can see obj with the hero as the observer reads the hero's drawn facing (the octant of the object rotation, as the knockback host reads it).
             HeroRotation = () => _worldActor.Session is AreaGridSession ? _worldActor.State.Facing : null,
             Companions = () => _areaCompanions is { } group
@@ -197,6 +204,8 @@ public partial class TerrainViewerApp
             // ARC-WORLD-1157 (SZ6): a generator's off-screen option reads the game window and the generator's drawn rectangle.
             Screen = () => new RestockScreen(this),
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
+            // ARC-AI-2673 (ledger DSV5): an NPC's repair of an item the PC holds; a kit item's baseline lives in the hero load, not in the session.
+            HeroItemCondition = entity => _inventoryHost?.RepairBaseline(session, entity, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
             // ARC-DEV-287 (MIG13 tail T6): the hero is pushed by the knockback through its grid actor.
             HeroPush = new ViewerHeroPush(this),
@@ -217,7 +226,13 @@ public partial class TerrainViewerApp
             Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            CombatScript = AiCombatScript,
+            // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
+            ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
+            CaughtThief = AiCaughtThief,
+            // ARC-AI-2821 (TQ14, 0x4AE120): the will-KOS script (point 22) of an NPC that decides on a candidate; its skip default vetoes the kill-on-sight.
+            WillKos = AiWillKos,
             GuardCatchingThief = AiGuardCatchingThief,
             // ARC-DEV-258 (MIG13 S14n): an NPC's thrown grenade flies as a projectile.
             LaunchThrown = AiLaunchThrown,
@@ -231,12 +246,16 @@ public partial class TerrainViewerApp
             ObjectFacts = AiObjectFacts,
             // ARC-COMBAT-1776 (0x42A4E0): the door, window or container a pick-locks goal's target string names, as the session picks it, at the light of its cell.
             PickLockTarget = AiPickLockTarget,
+            // ARC-AI-2625 (0x4C7160 case 7, target test 0x4BBDD0): the trap class of the object a spot-trap attempt names.
+            TargetTrapClass = target => _spellCastMap?.Row(target) is { } trapRow && AreaTrapsNow() is { } areaTraps ? areaTraps.TargetClass(trapRow) : Arcanum.Simulation.Traps.TrapClass.None,
             // ARC-AI-1636: an NPC's attack on the object it holds as its focus is the session's object attack on the map row the cast id names.
             ObjectAttackTarget = id => _areaSession is { } objectOwner && _spellCastMap?.Row(id) is { } objectRow && !IsAreaCompanion(objectRow.Key) ? ObjectTargets()?.Target(objectOwner, objectRow.Key, AreaTrapped) : null,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
             HitScripts = RunHitScripts,
+            // ARC-SCRIPT-2828: the critical-hit scripts of the worn armour of a critical damage step.
+            ArmourScripts = RunArmourScripts,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -274,7 +293,7 @@ public partial class TerrainViewerApp
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions
             .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
 
-        public bool Step(string entity, CellCoord next, bool running) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running) == true;
+        public bool Step(string entity, CellCoord next, bool running, bool sneaking = false) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running, sneaking) == true;
 
         public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
 
@@ -295,6 +314,40 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-246 catching-thief victim={victim} thief={thief} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
         // As the hero's thief (AreaPickPocket.Caught): a script that ran and skipped the default stops the consequences, and so does one the viewer cannot finish (Not ready, nothing applied).
         return ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
+    }
+
+    /// <summary>ARC-SCRIPT-2858 (TQ16, 0x4C7160): the NPC thief's caught-thief script (point 33) of a noticed failed pick pocket through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCaughtThief"/>), the victim (the hero is "pc") as the triggerer; the original ignores its
+    /// answer, so nothing is returned. A refused run is logged with its refusal and goes on as without a script.</summary>
+    private void AiCaughtThief(string thief, string victim)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || host.Slot(new(CurrentAreaMap, thief), AreaUseScriptHost.CaughtThiefPoint) is not { Script: > 0 }) return;
+        var who = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, victim);
+        var ran = Awarded(host, host.RunCaughtThief(thief, who, session.Rules.Scripts));
+        GD.Print($"ARC-SCRIPT-2858 caught-thief thief={thief} victim={victim} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
+    }
+
+    /// <summary>
+    /// ARC-AI-2821 (ledger TQ14, exe 0x4AE120 → 0x441980(candidate, npc, none, 22)): the will-KOS script of the NPC <paramref name="npc"/> with <paramref name="candidate"/> ("pc" is the hero) as the triggerer, through the shown map's use-script host. True lets the kill-on-sight
+    /// evaluation go on (the script ran default, or none runs: no script at the point, a refused or unapplied run, logged once); false when the script skipped the default.
+    /// </summary>
+    private bool AiWillKos(string npc, string candidate)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return true;
+        if (host.Slot(new(CurrentAreaMap, npc), Arcanum.Scripting.Scr.ScrPoint.WillKos) is not { Script: > 0 }) return true;
+        if ((map.TryGetRow(npc, out var held) ? held : CreatedCrittersRow(npc)) is not { } row) return true;
+        var ran = Awarded(host, host.RunWillKos(row, new(CurrentAreaMap, candidate), session.Rules.Scripts));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
+        {
+            if (_heartbeatRefusalsLogged.Add($"kos|{npc}|{ran.Outcome}|{ran.Run?.Script}"))
+                GD.Print($"ARC-AI-2821 will-kos-refused npc={npc} candidate={candidate} outcome={ran.Outcome} detail={ran.Detail}");
+            return true;
+        }
+        var veto = AreaUseScriptHost.WillKosVetoes(ran);
+        if (_heartbeatRefusalsLogged.Add($"kos|{npc}|{candidate}|{veto}|{ran.Run!.Script}"))
+            GD.Print($"ARC-AI-2821 will-kos npc={npc} candidate={candidate} script={ran.Run.Script} outcome={ran.Run.Outcome} veto={veto}");
+        return !veto;
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).
@@ -358,8 +411,19 @@ public partial class TerrainViewerApp
         // opens once the event pump that ran this tick returned (OpenHeartbeatConversation).
         if (ran.Dialog is { } talk)
         {
-            _heartbeatDialog ??= talk;
-            GD.Print($"ARC-SCRIPT-047 heartbeat-talk npc={npc} point={scrPoint} script={ran.Run!.Script} dialog={talk.Script} line={talk.Line} node={talk.Node}");
+            // ARC-SCRIPT-2760 (0x567460, the dialog UI mode 3 test at 0x40D9F0/0x551A00): a dialog start while a conversation is open returns silently, it is not kept for later; the run's other effects stay.
+            // Logged once per NPC and dialog (the heartbeat repeats every ~110 ms for as long as the conversation stays open).
+            if (ConversationOpen)
+            {
+                if (_heartbeatRefusalsLogged.Add($"{npc}|talk-dropped|{talk.Script}"))
+                    GD.Print($"ARC-SCRIPT-2760 heartbeat-talk dropped: a conversation is open npc={npc} script={ran.Run!.Script} dialog={talk.Script}");
+            }
+            else
+            {
+                _heartbeatRefusalsLogged.Remove($"{npc}|talk-dropped|{talk.Script}");
+                _heartbeatDialog ??= talk;
+                GD.Print($"ARC-SCRIPT-047 heartbeat-talk npc={npc} point={scrPoint} script={ran.Run!.Script} dialog={talk.Script} line={talk.Line} node={talk.Node}");
+            }
         }
         var states = ran.Run!.Effects.ObjectStates;
         // A skip default (the script's return, or one by rule: a missing script, the end of the script, the line budget) stops the
@@ -377,13 +441,44 @@ public partial class TerrainViewerApp
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
-    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open).
+    /// <summary>ARC-SCRIPT-2820 (TQ12, 0x4A8570, 0x4B7630): an NPC's start-combat (15) or end-combat (16) script through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCombatPassPoint"/>), with the NPC's danger source ("pc" for the hero, none without one) as the
+    /// triggerer; the callers ignore the answer. It runs on every AI pass of an NPC in combat mode, so a miss on the slot returns before anything else; a refused run is logged once per NPC, point and outcome, like the heartbeat's.</summary>
+    private void AiCombatScript(AiScriptPoint point, string npc, string? triggerer)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return;
+        var scrPoint = point == AiScriptPoint.StartCombat ? Arcanum.Scripting.Scr.ScrPoint.StartCombat : Arcanum.Scripting.Scr.ScrPoint.EndCombat;
+        if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return;
+        Arcanum.Scripting.Scr.ScrObjectRef? who = triggerer is null ? null : triggerer == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? host.Pc : new(CurrentAreaMap, triggerer);
+        var ran = Awarded(host, host.RunCombatPassPoint(scrPoint, npc, who, session.Rules.Scripts));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|{ran.Outcome}|{ran.Run?.Script}"))
+            GD.Print($"ARC-SCRIPT-2820 combat-script-refused npc={npc} point={scrPoint} outcome={ran.Outcome} detail={ran.Detail}");
+        else if (ran.Run is not null && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|ran|{ran.Run.Script}"))
+            GD.Print($"ARC-SCRIPT-2820 combat-script npc={npc} point={scrPoint} script={ran.Run.Script} outcome={ran.Run.Outcome} stop={ran.Run.Stop}");
+    }
+
+    /// <summary>ARC-SCRIPT-1590 (item use 0x462CC0 → 0x441980, ledger IU2, VT8): the use script of an item an NPC of the shown map holds, through the shown map's use-script host with the NPC as the user and triggerer and the target as the extra object ("pc" is the hero).
+    /// True lets the use go on (the script ran default, or none that runs: a refused or unapplied run goes on as without a script, logged once); false when the script skipped the default.</summary>
+    private bool AiItemUseScript(string npc, string item, string? target)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return true;
+        var ran = Awarded(host, host.RunItemUse(CurrentAreaMap, item, session.Rules.Scripts, target, new(CurrentAreaMap, npc)));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
+        {
+            if (_heartbeatRefusalsLogged.Add($"use|{npc}|{item}|{ran.Outcome}|{ran.Run?.Script}"))
+                GD.Print($"ARC-SCRIPT-1590 item-use-refused npc={npc} item={item} outcome={ran.Outcome} detail={ran.Detail}");
+            return true;
+        }
+        GD.Print($"ARC-SCRIPT-1590 item-use npc={npc} item={item} script={ran.Run!.Script} outcome={ran.Run.Outcome} states={string.Join(",", ran.Run.Effects.ObjectStates.Select(s => $"{s.Change}:{s.Object.Code}"))}");
+        return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
+    }
+
+    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open, except while a conversation is open: dropped, ARC-SCRIPT-2760).
     private Arcanum.Scripting.Scr.ScrDialogStart? _heartbeatDialog;
 
     /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100) after the event
-    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk that cannot open yet (a conversation
-    /// or a panel outside the stack is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's
-    /// behaviour in those states is not read (audit U5). An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
+    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk asked for while a conversation is open
+    /// is dropped (the original's start callback returns silently in dialog mode, ARC-SCRIPT-2760, audit U5); one that cannot open yet for another reason (a panel outside the stack is open, the hero is under attack)
+    /// stays pending and opens once it can: a project choice, the original's behaviour there is not read. An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
     private void OpenHeartbeatConversation()
     {
         if (_heartbeatDialog is not { } talk) return;
@@ -393,8 +488,15 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-SCRIPT-047 heartbeat-talk dropped: the NPC {talk.Npc?.Code} is not on the shown map");
             return;
         }
-        // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack and a dialog still do.
-        if (ConversationOpen || ProgrammaticOpenBlocked) return;
+        // ARC-SCRIPT-2760: a conversation that opened since the talk was asked refuses it as the original's start callback does (mode 3): dropped, never queued behind the open one.
+        if (ConversationOpen)
+        {
+            _heartbeatDialog = null;
+            GD.Print($"ARC-SCRIPT-2760 heartbeat-talk dropped: a conversation is open script={talk.Script}");
+            return;
+        }
+        // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack still do.
+        if (ProgrammaticOpenBlocked) return;
         // ARC-COMBAT-1935: a hero held in combat mode by the exit gate keeps the talk pending quietly (no log line and no notice on every frame pump); the talk opens once the gate lets go.
         if (HeroInCombatMode && !_areaSession!.QueryCanExitCombatMode(CombatExitFacts())) return;
         if (!LeaveCombatModeForDialog()) return;
@@ -515,6 +617,48 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
+    /// ARC-SCRIPT-2853 (exe read, ledger PI1, VP6, TQ19; 0x461AB0 → 0x441980): the drop script (point 5) of an item a critter drops, asked by the session after the drop's distance is drawn and before the no-drop check, through the shown map's use-script host
+    /// (<see cref="AreaUseScriptHost.RunItemDrop"/>): the holder (the hero's handle, or an NPC of the shown map) is the triggerer and the item the attachee, read by identity from the map a carried item was taken on. Skip default refuses the drop; a run the host cannot apply
+    /// (refused by the admission, effects it cannot apply, a holder that is not on the shown map) leaves the drop unapplied. The run's awards, float lines and created objects are taken as for any other script run.
+    /// </summary>
+    private SessionDropScriptAnswer RunItemDropScript(SessionDropScriptRequest request)
+    {
+        if (request.Map != CurrentAreaMap || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return SessionDropScriptAnswer.NotModelled;
+        var holder = request.Holder == SessionSpellCaster.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(request.Holder));
+        var ran = Awarded(host, host.RunItemDrop(new(request.ItemMap, request.Item), holder, owner.Rules.Scripts));
+        var refuses = AreaUseScriptHost.ItemDropRefuses(ran);
+        if (ran.Run is not null)
+            GD.Print($"ARC-SCRIPT-2853 item-drop-script item={request.Item} holder={request.Holder} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} refuses={refuses} detail={ran.Detail}");
+        return !AreaUseScriptHost.ItemDropModelled(ran) ? SessionDropScriptAnswer.NotModelled : refuses ? SessionDropScriptAnswer.SkipDefault : SessionDropScriptAnswer.RunDefault;
+    }
+
+    /// <summary>ARC-SCRIPT-2828: the armour scripts of a hero's critical damage step on <paramref name="victim"/> (the hero itself on a critical self-hit), the event the session raised before its damage was written.</summary>
+    private Action<SessionArmourCriticalEvent> HeroArmourScripts(string victim) => armour => RunArmourScripts(SessionSpellCaster.Hero, victim, armour);
+
+    /// <summary>
+    /// ARC-SCRIPT-2828 (ledger TQ23; 0x4B4390, 0x4B47F8): the critical-hit script (point 34) of each armour piece the critter that takes a critical damage step wears, asked by the session after the victim's taking-damage script and before the
+    /// hit points are written, through the shown map's use-script host (<see cref="AreaUseScriptHost.RunArmourCritical"/>): the attacker is the triggerer, the critter that takes the damage (the victim, or the attacker on a critical self-hit) the extra
+    /// object. The hero's pieces are items it carries (read by identity from the map it took them on), an NPC's rows of the shown map. The answers cancel nothing; a run that is refused or whose effects the host cannot apply is said and the damage
+    /// goes on. An attacker or victim that is not on the shown map runs nothing here.
+    /// </summary>
+    private void RunArmourScripts(string attacker, string victim, SessionArmourCriticalEvent armour)
+    {
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var map = CurrentAreaMap;
+        static bool IsHero(string id) => id == SessionSpellCaster.Hero || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
+        var struck = armour.Recipient == Arcanum.Simulation.Combat.DamageRecipient.Target ? victim : attacker;
+        var carried = IsHero(struck) ? owner.QueryPcInventory() : null;
+        var pieces = armour.Worn.Select(entity => new Arcanum.Scripting.Scr.ScrObjectRef(carried?.FirstOrDefault(held => held.Entity == entity) is { Entity: not null } held ? held.Origin.RuntimeMap : map, entity)).ToArray();
+        foreach (var one in host.RunArmourCritical(pieces, Ref(attacker), Ref(struck), owner.Rules.Scripts))
+        {
+            var ran = Awarded(host, one);
+            if (ran.Run is not null)
+                GD.Print($"ARC-SCRIPT-2828 armour-critical attacker={attacker} victim={struck} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        }
+    }
+
+    /// <summary>
     /// ARC-MAGIC-1167 (MA-10, ledger RZ1–RZ3): the dead target's raise script (point 0x12) asked by a Heal with the raise bit: true when the raise goes on (no script, a script that ran default, or one the viewer cannot apply), false when
     /// the script skipped the default and refuses it. The healer is the triggerer. The PC has no script here (no attachment data), so a raise of the hero always goes on.
     /// </summary>
@@ -530,7 +674,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-SCRIPT-1483: the combat-point scripts of a hero's hit on <paramref name="victim"/>, the hit event the session raised before its damage step.</summary>
-    private Action<SessionHitScriptEvent> HeroHitScripts(string victim) => hit => RunHitScripts(SessionSpellCaster.Hero, victim, hit);
+    private Action<SessionHitScriptEvent> HeroHitScripts(string victim) => hit => RunHitScripts(SessionSpellCaster.Hero, hit.SelfHit ? SessionSpellCaster.Hero : victim, hit);
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5; 0x4B3770, 0x4B2F60): the combat-point scripts of a hit, asked by the session before the damage step, through the shown map's use-script host
@@ -559,9 +703,9 @@ public partial class TerrainViewerApp
             var weaponMap = IsHero(attacker) && owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is { Entity: not null } carried ? carried.Origin.RuntimeMap : map;
             var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, weapon);
             if (!(hit.Thrown && IsHero(attacker))) Run(Arcanum.Scripting.Scr.ScrPoint.Hit, weaponRef, attackerRef, victimRef);
-            // 0x4B2F60 (CP2): on the projectile path the critical-hit script runs only for a weapon item (object type 5): a thrown potion, ammunition or junk item runs none. An NPC's thrown item is its wielded weapon; the hero's item is read from its list (an item not found counts as the wielded weapon).
+            // 0x4B2F60 (CP2): on the projectile path the critical-hit script runs only for a weapon item (object type 5): a thrown potion, ammunition or junk item runs none. An NPC's thrown item is its wielded weapon, but for a generic item (a grenade, ARC-SCRIPT-2724: the event's SessionHitScriptEvent.Generic); the hero's item is read from its list (an item not found counts as the wielded weapon).
             var isWeapon = !IsHero(attacker) || owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is not { Entity: not null } kindHolder || kindHolder.Kind.Type == SessionItemType.Weapon;
-            if (hit.Critical && (!hit.Projectile || isWeapon)) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
+            if (hit.RunsCriticalHitPoint(isWeapon)) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
         }
         if (!IsHero(attacker)) Run(Arcanum.Scripting.Scr.ScrPoint.CritterHits, attackerRef, victimRef, null);
     }
@@ -598,12 +742,33 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } session) return;
         session.DyingScript = DyingGoesOn;
+        // ARC-SCRIPT-2859: the kill step's leader-killing scripts (point 20) of the hero's followers.
+        session.LeaderKillingScript = RunLeaderKillingScript;
         // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
         session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
+        // ARC-SCRIPT-2853: the drop script (point 5) of an item a critical, an arm hit or a spell's weapon block drops.
+        session.DropScript = RunItemDropScript;
+        // ARC-SCRIPT-2856: the wield-off and remove-item scripts (25, 28) of the worn item an NPC's drop takes off it, over the NPC's script context; their printed lines and eye candy are shown here.
+        session.NpcWearerScripts = npc => AreaEvents.NpcWieldScripts(session.QueryActor().Map, npc);
+        // ARC-SCRIPT-2886: the same scripts of the worn item the hero's critical drop takes off it, over the hero's item script host.
+        session.HeroWearerScripts = () => _inventoryHost?.ItemScripts(session);
+        session.ItemRunOutput = (lines, candies) => { PostScriptLines(lines); QueueScriptEyeCandies(candies); };
         // ARC-AI-1530: the danger setter's enter-combat and exit-combat scripts (slots 13 and 14) of an NPC of the shown map.
         session.DangerHookScript = RunDangerHook;
         // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).
         session.GenerateOnceWorld = () => AreaEvents;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2859 (LK1–LK3): the leader-killing script (point 20) of one follower of the hero, asked by the session once per follower after a kill the hero's side dealt: the dead NPC as the triggerer, the follower as the
+    /// attachee, the hero as the extra object, through the shown map's use-script host; the answer is ignored. A follower that is not a row of the shown map (or has no script at the point) runs nothing.
+    /// </summary>
+    private void RunLeaderKillingScript(SessionLeaderKillingRequest request)
+    {
+        if (_areaSession is not { } owner || request.Map != CurrentAreaMap || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var ran = Awarded(host, host.RunLeaderKilling(request.Follower, request.Victim, host.Pc, owner.Rules.Scripts));
+        if (ran.Run is not null)
+            GD.Print($"ARC-SCRIPT-2859 leader-killing victim={request.Victim} follower={request.Follower} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
     }
 
     /// <summary>
@@ -662,6 +827,27 @@ public partial class TerrainViewerApp
             ? new(life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, life.Record.State.PoisonLevel) : null;
     }
 
+    /// <summary>ARC-SCRIPT-2506 (TI5, F3, 0x43D530): sets the critter a script's transform made to the old NPC's hit-point and fatigue percentages: the new critter is synced into the hosts first, its maxima come from its own life facts and the
+    /// damage (<see cref="AreaUseScriptHost.TransformDamage"/>) goes through the session's life step as a plain packet (no resistance, no script, no floater). False when the critter has no combat values or the session refuses.</summary>
+    private bool CarryTransformVitals(GameSessionOwner session, string entity, int hitPointPercent, int fatiguePercent)
+    {
+        if (AreaAiHostNow() is { } ai) SyncCreatedCritters(session, ai);
+        if (_combatHost?.Build(session, CurrentAreaMap, entity).Combat?.Target is not { } target || session.QueryLife(target).View is not { } life) return false;
+        var (hitPoints, fatigue) = AreaUseScriptHost.TransformDamage(hitPointPercent, life.Status.MaxHitPoints, fatiguePercent, life.Status.MaxFatigue);
+        var hit = session.ApplyDamage(session.Version, target, new LifeDamage { HitPoints = hitPoints, Fatigue = fatigue });
+        GD.Print($"ARC-SCRIPT-2506 transform-vitals entity={entity} hp%={hitPointPercent} fatigue%={fatiguePercent} damage={hitPoints}/{fatigue} disposition={hit.Disposition} failure={hit.Failure}");
+        return hit.Disposition != GameSessionDisposition.Rejected;
+    }
+
+    /// <summary>ARC-SCRIPT-2519 (TI5c): the facing an NPC of the shown map stands in now: its mover's (the AI walked or turned it), else the rotation of its map art (its T0 body's nominal facing); null when the host does not hold it or its body is unknown.</summary>
+    private Arcanum.Simulation.Movement.NeighborDirection? ScriptNpcFacing(string entity)
+    {
+        if (AreaAiHostNow() is not { } host) return null;
+        if (host.Movers.Of(entity) is { } mover) return mover.Facing;
+        return host.Scene.Npcs.FirstOrDefault(npc => npc.Entity == entity) is { } held && NpcT0Body(held.Row.Key) is { } command && TryBodyVisual(command.Visual, out var visual) && visual.NominalFacing is >= 0 and <= 7
+            ? (Arcanum.Simulation.Movement.NeighborDirection)visual.NominalFacing : null;
+    }
+
     /// <summary>ARC-SCRIPT-1562 (WE2, CP7, CP8): the effective magick-tech aptitude (stat 16) of an NPC of the shown map for a combat-point script's magick-tech adjustments (91, 80): its combat values under its effect list and its poison and crippled legs
     /// (<see cref="SessionCritterCombat.EffectiveStat"/>), the stat getter's range clamp left to the callers; null without combat values.</summary>
     private int? ScriptAptitude(string npc)
@@ -678,7 +864,8 @@ public partial class TerrainViewerApp
         SessionLifeTarget? target = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionLifeTarget.Hero
             : _combatHost?.Build(session, CurrentAreaMap, victim).Combat?.Target;
         if (target is not { } who) return "no combat values";
-        var healed = session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
+        // ARC-SCRIPT-1593 (VT3): a negative heal poison amount raises the level by its size (the setter takes the level minus the amount).
+        var healed = poison < 0 ? session.RaisePoisonLevel(session.Version, who, -(long)poison) : session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
         GD.Print($"ARC-SCRIPT-1481 script-heal-life victim={victim} fatigue={fatigue} poison={poison} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
         RefreshAreaStatus();
         return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}"
@@ -789,6 +976,8 @@ public partial class TerrainViewerApp
         TouchAreaView();
         // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
         if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
+        // ARC-SCRIPT-2749: the destroy points a wear path asked (an item worn out under an attack, the critical "destroy weapon") show their lines and awards from the frame, as no wear caller takes them.
+        if (_useScriptHost is { } pointed) ShowDestroyPointRuns(pointed.Host, "wear");
         // ARC-DEV-371: the encounter creatures a tick destroyed are destroyed in the session here, from the frame, never from inside a tick.
         if (_areaSession is { } scriptedSession) { DrainEncounterDestroys(scriptedSession, host); TakeCreatedInventories(scriptedSession); }
         var steps = AiFrameParticipant.TakeSteps();
@@ -1002,16 +1191,57 @@ public partial class TerrainViewerApp
         var thrown = notice.Throw!;
         GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
             + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}"
-            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : "") + (thrown.ScriptDeclined ? " script-declined" : "") + (thrown.Messages.Count > 0 ? $" lines={thrown.Messages.Count}" : ""));
+            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : "") + (thrown.ScriptDeclined ? " script-declined" : "") + (thrown.AmmunitionShort ? " out-of-ammunition" : "") + (thrown.Messages.Count > 0 ? $" lines={thrown.Messages.Count}" : ""));
         // ARC-COMBAT-1761: a line the item's removal or throw script printed goes to the message window, and the eye candy they made plays.
         PostNpcPickupLines(notice);
         QueueScriptEyeCandies(notice.EyeCandies);
+        // ARC-COMBAT-2415 (TW8, 0x4B65D0): the ammunition check refused the thrown weapon: it lies on the thrower's tile switched off, nothing was struck.
+        if (thrown.AmmunitionShort)
+        {
+            _aiNotice = $"{AiName(notice.Npc)} cannot throw: no ammunition for the weapon (it lies switched off on its tile)";
+            // ARC-COMBAT-2698 (0x4B3170): the refusal's out-of-ammunition sound on the thrower (the thrown weapon's sound base + 7); an NPC gets no auto switch (0x4ADFF0 marks it, ARC-COMBAT-2415).
+            if (_aiHost is { } throwHost && NpcOf(throwHost, notice.Npc) is { } thrower && thrower.Row.WorldX is not null && notice.Item is { } refusedItem)
+            {
+                var (sx, sy) = LiveWorldCell(thrower.Row);
+                PlayAmmunitionRefusalSound(EntitySounds(refusedItem, notice.Npc), sx, sy);
+            }
+            SyncAreaCombatBodies();
+            SyncAreaInventory();
+            RefreshAreaStatus();
+            return;
+        }
+        // ARC-COMBAT-2693 (TW11, 0x4B3170): a critical miss of a throw turned on the thrower (the notice's target is none for a throw at a location, a blocking critter the line named for a grenade that flies on): its floaters, stun and fall are the self-hit's.
+        if (thrown.Attack is { Recipient: DamageRecipient.Attacker, Resolution.Refusal: AttackRefusal.None } selfHit)
+        {
+            AiThrowSelfHit(notice, selfHit);
+            return;
+        }
         if (notice.Target is not null && notice.Result is not null)
         {
             AiHit(notice);
             return;
         }
         _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.ScriptDeclined ? "the item's throw script refuses" : thrown.Shots.Count > 0 ? "it flies" : thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
+        SyncAreaCombatBodies();
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
+
+    // ARC-COMBAT-2693: the thrower's own damage of a critical miss at a location: the status line, the floaters over the thrower (the attacker's side), the near-death comment, a stun's end for the hero's follower
+    // that is the thrower, a fall or death animation of the thrower; the bodies and the inventory (the item's critical steps) follow.
+    private void AiThrowSelfHit(AreaAiNotice notice, SessionAttackResult result)
+    {
+        var owner = _areaSession!;
+        var life = _combatHost?.Build(owner, notice.Npc).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
+        _aiNotice = $"{AiName(notice.Npc)} throws: a critical miss turns on the thrower: " + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        FloatCritterAttack(result, notice.Npc, notice.Npc);
+        FollowerAttackComments(result, notice.Npc, notice.Npc);
+        GD.Print($"ARC-COMBAT-2693 ai-throw-self-hit npc={notice.Npc} disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome} recipient={result.Recipient}"
+            + $" damage={result.Life?.HitPointDamage} events={result.Life?.Events} hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} step={result.StepFailure}");
+        _npcThrowSelfHitsForSelfTest.Add((notice.Npc, result.Life?.HitPointDamage ?? 0, AreaCombatFloaters.Of(result, FloaterSideOf(notice.Npc), FloaterSideOf(notice.Npc)) is null ? 0 : 1, _aiNotice ?? ""));
+        if (_npcThrowSelfHitsForSelfTest.Count > 64) _npcThrowSelfHitsForSelfTest.RemoveAt(0);
+        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned) && notice.Npc == AiSchedulerRules.Pc) HeroStunned(owner);
+        if (result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, notice.Npc)] = DeathAnimationOf(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

@@ -62,6 +62,12 @@ public partial class AreaLogbookArtView : Control
     public bool HasNext => _spread.End < _wrapped.Count - 1 && _starts.Count > _spreadIndex + 1;
     internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 
+    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+
+    public override void _ExitTree() => AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
+
+    private static bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Logbook;
+
     public override void _Ready()
     {
         Name = "LogbookArt";
@@ -167,9 +173,29 @@ public partial class AreaLogbookArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
+        // ARC-UI-2575: with the Steamwoven layout the window lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneWindow(size, AreaLogbookArtLayout.Window.Width, AreaLogbookArtLayout.Window.Height) is { } zone)
+        {
+            Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+            Position = new Vector2((float)zone.X, (float)zone.Y);
+            RedrawOnScaleChange();
+            return;
+        }
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), AreaLogbookArtLayout.Window.Y * factor);
+        RedrawOnScaleChange();
+    }
+
+    // The generated frames are painted at the window's device scale: a new scale draws them again.
+    private float _drawnScale;
+
+    private void RedrawOnScaleChange()
+    {
+        var device = DeviceScale();
+        if (Math.Abs(device - _drawnScale) < 0.0005f) return;
+        _drawnScale = device;
+        QueueRedraw();
     }
 
     private Texture2D? Texture(int art, int frame = 0) => AreaCharacterArtDraw.Art(_art, art, frame);
@@ -191,8 +217,11 @@ public partial class AreaLogbookArtView : Control
     public override void _Draw()
     {
         if (_fonts is null || _view is null) return;
-        if (Texture(AreaLogbookArtLayout.SideArt) is { } side) Side(side);
-        if (Texture(AreaLogbookArtLayout.BookArt) is { } book) DrawTextureRect(book, new Rect2(AreaLogbookArtLayout.BookCorner.X, AreaLogbookArtLayout.BookCorner.Y, book.GetWidth(), book.GetHeight()), false);
+        // ARC-UI-3037: over the kit's logbook background (594 + 2286 master px) the side panel 264 and the book 260 are not drawn; the page art 261 (the cloth frame round the text), the tabs, the lens art and the text stay.
+        var kit = KitBackgroundShown;
+        if (kit) AreaKitStandIns.Logbook();
+        if (!kit && Texture(AreaLogbookArtLayout.SideArt) is { } side) Side(side);
+        if (!kit && Texture(AreaLogbookArtLayout.BookArt) is { } book) DrawTextureRect(book, new Rect2(AreaLogbookArtLayout.BookCorner.X, AreaLogbookArtLayout.BookCorner.Y, book.GetWidth(), book.GetHeight()), false);
         if (Texture(AreaLogbookArtLayout.PageArt) is { } page) DrawTextureRect(page, new Rect2(AreaLogbookArtLayout.PageCorner.X, AreaLogbookArtLayout.PageCorner.Y, page.GetWidth(), page.GetHeight()), false);
         for (var i = 0; i < AreaLogbookArtLayout.Tabs.Count; i++)
         {

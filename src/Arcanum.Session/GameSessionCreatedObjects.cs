@@ -64,10 +64,18 @@ public sealed record SessionCreatedObject(string Entity, SessionCreatedKind Kind
 
 /// <summary>The outcome of <see cref="GameSessionOwner.CreateObject"/> and <see cref="GameSessionOwner.DestroyCreatedObject"/>: the object created or destroyed (Changed), or none
 /// (Rejected, <see cref="Failure"/> says why; NoChange for a destroy of an object the session does not hold).</summary>
-public sealed record SessionCreatedObjectResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionCreatedObject? Object, GameSessionVersion Version);
+public sealed record SessionCreatedObjectResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionCreatedObject? Object, GameSessionVersion Version)
+{
+    /// <summary>ARC-SCRIPT-2903: the lines the remove-item scripts (28) of the items a destroyed critter dropped printed, in order, for the host to show (empty for every other result).</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+}
 
 /// <summary>The outcome of <see cref="GameSessionOwner.DestroyCreatedObjects"/>: the objects destroyed.</summary>
-public sealed record SessionCreatedObjectsResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionCreatedObject> Objects, GameSessionVersion Version);
+public sealed record SessionCreatedObjectsResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionCreatedObject> Objects, GameSessionVersion Version)
+{
+    /// <summary>ARC-SCRIPT-2903: as <see cref="SessionCreatedObjectResult.Messages"/>, over all the critters destroyed.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -191,9 +199,10 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-DEV-347 (E1-a, TM4): destroys a created scenery or eye-candy object (the one destroy path, <see cref="DestroyObject"/>; the number stays used). NoChange for an entity the
-    /// session holds no such object under; Rejected for a stale version. One revision. The run that created it (a spell's END, a dispel) calls this.
+    /// session holds no such object under; Rejected for a stale version. One revision. The run that created it (a spell's END, a dispel) calls this. ARC-WORLD-2503 (the inventory-on-destroy, ledger DD10): a critter's items with object flag 0x400000 are taken out and dropped first
+    /// on <paramref name="cell"/> (the cell it stands on now, when the caller knows it; else the cell it was made on) with their decay, planned before anything changes: a refused drop (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>) destroys nothing.
     /// </summary>
-    public SessionCreatedObjectResult DestroyCreatedObject(GameSessionVersion expected, string entity)
+    public SessionCreatedObjectResult DestroyCreatedObject(GameSessionVersion expected, string entity, CellCoord? cell = null, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         SessionCreatedObjectResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
@@ -201,9 +210,18 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (_inventory.Objects.CreatedObject(entity) is not { } held) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, new(_identity, _revision));
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-2503: a critter's invulnerable items are taken out and dropped first (planned before anything changes, so a refusal destroys nothing).
+        var drops = PlanCreatedCritterDrops([held], cell);
+        if (drops.Refusal != GameSessionFailure.None) return Reject(drops.Refusal);
+        // ARC-SCRIPT-2903 (IE3): the remove-item scripts of the dropped items, made and prepared before anything changes; a refusal destroys nothing.
+        var removal = RunCreatedDestroyRemovals(drops, scripts);
+        if (removal.Done is { } refused) return Reject(refused.Failure);
+        if (!RemovalChangesFit(removal, [])) return Reject(GameSessionFailure.BudgetExceeded);
+        removal.Runs?.Commit();
+        DropCreatedCritterItems(drops);
         DestroyObject(entity);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, held, new(_identity, _revision));
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, held, new(_identity, _revision)) { Messages = removal.Runs?.Messages ?? [] };
     }
 
     /// <summary>
@@ -212,7 +230,7 @@ public sealed partial class GameSessionOwner
     /// Changed with the objects destroyed (in the order given) when any was; NoChange with none; Rejected for a stale version, a list over <see cref="SessionCreatedObject.MaxObjects"/>
     /// or an entity that is no created object's name at all (nothing destroyed then).
     /// </summary>
-    public SessionCreatedObjectsResult DestroyCreatedObjects(GameSessionVersion expected, IReadOnlyList<string> entities)
+    public SessionCreatedObjectsResult DestroyCreatedObjects(GameSessionVersion expected, IReadOnlyList<string> entities, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entities);
@@ -222,9 +240,18 @@ public sealed partial class GameSessionOwner
         var held = entities.Distinct(StringComparer.Ordinal).Select(entity => _inventory.Objects.CreatedObject(entity)).OfType<SessionCreatedObject>().ToArray();
         if (held.Length == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, [], new(_identity, _revision));
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-2503: the critters' invulnerable items are dropped first, all planned before anything changes (the budgets count the whole list's drops).
+        var drops = PlanCreatedCritterDrops(held, null);
+        if (drops.Refusal != GameSessionFailure.None) return Reject(drops.Refusal);
+        // ARC-SCRIPT-2903 (IE3): the remove-item scripts of all the dropped items, in one run set made and prepared before anything changes.
+        var removal = RunCreatedDestroyRemovals(drops, scripts);
+        if (removal.Done is { } refused) return Reject(refused.Failure);
+        if (!RemovalChangesFit(removal, [])) return Reject(GameSessionFailure.BudgetExceeded);
+        removal.Runs?.Commit();
+        DropCreatedCritterItems(drops);
         foreach (var made in held) DestroyObject(made.Entity);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(held), new(_identity, _revision));
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(held), new(_identity, _revision)) { Messages = removal.Runs?.Messages ?? [] };
     }
 
     /// <summary>

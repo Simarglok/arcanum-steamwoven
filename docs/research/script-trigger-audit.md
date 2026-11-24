@@ -16,6 +16,11 @@ supplied the names; every call site below was found by scanning all direct calls
 the point argument each one pushes. Behaviour is described in prose; no listing, byte or oracle output is in git. Original parity
 beyond the rows named here is **NOT_VERIFIED**.
 
+The firing conditions of every trigger kind (when, for whom, which gates, what the return changes) and the corrections to
+this note (TG2 callers, points 15 and 16, the first heartbeat, unlock, catching thief) are in
+[script trigger conditions](script-trigger-conditions.md) (ARC-RES-2815, rows TQ1–TQ31); its section 2 is newer than the
+host column of section 2 here.
+
 ## Answer
 
 **Systemic, three causes.** A script of the original does not run in Steamwoven when (a) no Steamwoven host fires its trigger
@@ -32,7 +37,7 @@ TG4), and for the PC calls his own dialog point (script 1324, line 4; the dialog
 action opens DLG 1324 at node 1, then removes itself and skips the tick's default (TG6). Steamwoven added set S17 (critter
 vicinity, `IScrWorldQueries.CrittersInVicinity`), call-ex of the dialog point, a wider heartbeat set and the viewer's
 `OpenHeartbeatConversation`; the smoke stage `opening` observes it. Both rule modes behave the same (the original's own
-behaviour). A talk asked for while another conversation or a window is open or the hero is under attack stays pending and opens
+behaviour). A talk asked for while another conversation is open is dropped, not kept (the start callback returns silently in dialog mode, ARC-SCRIPT-2760, U5); one asked for while a window outside the stack is open or the hero is held in combat mode stays pending and opens
 once it can (Steamwoven's choice, U5). A call-ex of the dialog point refuses a callee that reaches call script.
 
 ## 2. Attachment points: who fires them
@@ -42,12 +47,14 @@ damage on armor (0x4B47F8, a register). Every point but 31 (dialog override, a D
 and admission counts are the installed attachments of the 79 maps map mode opens (census, section 5); "admitted" is the host's set
 from line 0, static.
 
+**Correction (ARC-SCRIPT-2825):** these rows count the shown windows of the 79 maps, so the main map's NPCs and doors outside its window are missing. The full slot census ([scr-census](scr-census.md)) finds 1 slot at unlock (3), 1 at leader killing (20) and 10 slots (3 scripts) at caught thief (33), and none at buy object (17); the "none" rows for 3, 20 and 33 below are wrong ([#2860](https://github.com/Simarglok/arcanum-steamwoven/issues/2860), [#2859](https://github.com/Simarglok/arcanum-steamwoven/issues/2859), [#2858](https://github.com/Simarglok/arcanum-steamwoven/issues/2858)).
+
 | Point | Name | Call sites (0x441980 callers) | Steamwoven host | Rows (scripts) | Admitted |
 | ---: | --- | --- | --- | ---: | ---: |
 | 0 | examine | 0x57CD93 | the description step of the world hover, hotkey bar and inventory pointer (`AreaUseScriptHost.RunExamine`, ARC-DEV-326); barter and dialog windows not | 54 (31) | under the use set |
-| 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2445 (ARC-SCRIPT-1734: a run of the opt-in trigger census with `ARC_SCRIPT_TRIGGER_CENSUS`, not pinned by a test; 2221 was the figure of the audit, ARC-SCRIPT-047, and the point was not recounted since) |
+| 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2448 (ARC-SCRIPT-2248: a run of the opt-in trigger census with `ARC_SCRIPT_TRIGGER_CENSUS`, not pinned by a test, 3 more than the 2445 of ARC-SCRIPT-1734, since the use set admits toggle state, 56) |
 | 2 | destroy | 0x43CD0E | **none** | 26 (7) | — |
-| 3 | unlock | 0x4AEBC5, 0x4AEDC4 | **none** | 0 | — |
+| 3 | unlock | 0x4AEBC5, 0x4AEDC4 | open attempts of portals and containers, shown map (`RunUnlock`, use set; ARC-SCRIPT-2860) | 0 shown (1 on the main map) | — |
 | 4 | get | 0x4618F2 | hero's item moves (`SessionItemScripts`) | 0 | — |
 | 5 | drop | 0x461B2A | hero's item moves | 0 | — |
 | 6 | throw | 0x4B3C6A | **none** | 0 | — |
@@ -64,10 +71,10 @@ from line 0, static.
 | 17 | buy object | 0x4621D7, 0x578446 | **none** | 0 | — |
 | 18 | resurrect | 0x4B5A46 | **none** | 8 (8) | — |
 | 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 98 (was 32; ARC-SCRIPT-1733: 95 before; ARC-SCRIPT-1771: 96 before; ARC-SCRIPT-1815: 97 before, the opt-in census reads the shown windows of the maps, so the 21 main-map sites of script 2231 beyond the Crash Site window are not in this count) |
-| 20 | leader killing | 0x45DB95 | **none** | 0 | — |
+| 20 | leader killing | 0x45DB95 | kill step, shown map (`RunLeaderKilling`, dying set; ARC-SCRIPT-2859) | 0 shown (1 on the main map) | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |
-| 23 | taking damage | 0x4B446B (ARC-DEV-254: 0x4B47F8 is points 34/35, not 23) | script damage, attacks, throws, spell damage, burns, traps, knockback bumps (`AreaUseScriptHost.RunTakingDamage`, ARC-DEV-261; not the kill, poison tick, acid) | 1 (1) | heartbeat set |
+| 23 | taking damage | 0x4B446B (ARC-DEV-254: 0x4B47F8 is points 34/35, not 23) | script damage, attacks, throws, spell damage, burns, traps, knockback bumps (`AreaUseScriptHost.RunTakingDamage`, ARC-DEV-261; not the kill, poison tick, acid) | 1 (1) | taking-damage set (heartbeat set plus 120 and 68, ARC-SCRIPT-2513) |
 | 24 | wield on | 0x46558E, 0x467847 | hero's item moves | 98 (29) | 92 |
 | 25 | wield off | 0x46557D, 0x467D49 | hero's item moves | 92 (28) | 91 |
 | 26 | critter hits | 0x4B3003, 0x4B37FC | the attacker NPC's script before the damage of every resolved hit (`RunCombatPoint`, ARC-SCRIPT-1483; the hero has no script data here) | 18 (2) | 18 under the placed set |
@@ -77,8 +84,8 @@ from line 0, static.
 | 30 | bust | 0x43F30D, 0x43F42A, 0x43F4C0, 0x43F574, 0x4F076E | **none** | 64 (25) | — |
 | 31 | dialog override | none | — (DLG number) | 0 | — |
 | 32 | transfer | 0x461D18 | hero's item moves | 6 (4) | 3 |
-| 33 | caught thief | 0x4C76CE, 0x4C78E9 | **none** | 0 | — |
-| 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
+| 33 | caught thief | 0x4C76CE, 0x4C78E9 | NPC thief's pick pocket: `AreaAiHost.PickPocketAttempt` → `AreaUseScriptHost.RunCaughtThief` (ARC-SCRIPT-2858); the hero thief has no script | 10 | — |
+| 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | the weapon's script for a critical hit, after the hit script (`RunCombatPoint`, ARC-SCRIPT-1483); the worn armour pieces' (0x4B47F8, `AreaUseScriptHost.RunArmourCritical`, ARC-SCRIPT-2828: 2 of the 4 rows are armour, scripts 30219 and 30237, admitted whole; 35 never runs on armour); the self-hit of a critical miss runs 7/34/26 for an attack resolved at once (ARC-SCRIPT-2841, TQ31); on the projectile path (0x4B2F60) a generic parent item (an NPC's thrown grenade) runs none (ARC-SCRIPT-2724: `SessionHitScriptEvent.Generic`) | 4 (4) | 4 under the combat-point set (ARC-SCRIPT-1562, 3 rows; ARC-SCRIPT-1661: plus condition 31, all 4) |
 | 35 | critical miss | 0x4B2F35, 0x4B3163, 0x4B399C (and 0x4B47F8) | **none** | 2 (2) | — |
 
 
@@ -100,7 +107,7 @@ guard's crime notice 0x4AEFCD is not hosted), 12 dying, 23 taking damage and 0 e
 | Sector script | 0x4F2330 for the local player entering a sector (TS3); followers then get point 27. | Map mode, PC crossing a sector. Point 27 not run. |
 | Call script (7) | 0x44B030: the callee from its header at the caller's point, every triggerer × attachee pair (OV1, X11). | Use, tile and sector sets; not the talk or heartbeat sets. |
 | Call-ex (81) | 0x44B170 → 0x441980 (WE3, TG5). | Item set, heartbeat set, since ARC-SCRIPT-052 the tile and sector set; point 1 refused. |
-| Deferred calls (54, 55) | Game-time events (one shared handler, TG7). | Call in (54) through the session queue (talk and use sets); call at (55) refused. |
+| Deferred calls (54, 55) | Game-time events (one shared handler, TG7). | Call in (54) through the session queue (talk and use sets); call at (55) since ARC-SCRIPT-2824 through the same queue (delay to the operand's time of day). |
 | End-game slides | Scripts 997–999 from the slide UI (0x569720). | None. |
 | Native trap scripts | Inside the interpreter (0x4BCB70). | Trap state (ARC-WORLD-110). |
 
@@ -149,9 +156,9 @@ carry their task code; the open ones are 5, 6, 7, 10, 11, 12, 13 and the rest of
 | 6 | Crime and KOS | will KOS (22, 0x4AE179), bust (30), caught thief (33) and the guard's catching thief (11 at 0x4AEFCD) | 124 attachments |
 | 7 | Use-set commands | get hit points (107), set lock state (53), change art (59), computed goto, focus 8 in use scripts | 246 refused use attachments |
 | 8 | Tile-script command groups | **Done in three groups**: ARC-SCRIPT-052 (S20, ledger TD1–TD3: call-ex, destroy, stop attacking), ARC-DEV-157 (S22, ledger GS1–GS4, bugs B20 and B23: get stat for the PC, vicinity loops) and ARC-DEV-298 (float line in the tile set; stage `tile-ghost`). Open: the remaining first refusals by group (action 32, action 22, change art 59, sector is blocked 45, condition 51, damage 60, play script eye candy 120, action 112, set day standpoint 45, monster generator disabled 46; 1779 stops at a computed goto) | tile scripts |
-| 9 | Examine, new sector, resurrect | **Examine done** by ARC-DEV-326 (ledger HK24; made items ARC-SCRIPT-1119). Open: point 27 for followers (0x4F24A3, Virgil's 1568) and 18 (0x4B5A46) | 11 attachments |
+| 9 | Examine, new sector, resurrect | **Examine done** by ARC-DEV-326 (ledger HK24; made items ARC-SCRIPT-1119). Point 27 for followers (0x4F24A3, Virgil's 1568) done by ARC-SCRIPT-2822; open: 18 (0x4B5A46) | 11 attachments |
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
-| 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1) | scripts that test "anyone near" |
+| 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1: read by ARC-SCRIPT-2960, built by #2975 and #2976) | scripts that test "anyone near" |
 | 12 | Item-script commands | toggle state (56) and loop for (18) at insert item, call script in (54) at wield on | 35 item attachments |
 | 13 | Conversation resume and DLG LF | TG8: "return to script" runs the speaker's dialog point; a use- or tile-opened talk then resumes his dialog slot, so its LF reads that slot; read the DLG LF field in the executable (now F0) | talks opened by use and tile scripts |
 
@@ -173,14 +180,13 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
 
 ## Unknowns
 
-- **U1** The order of the vicinity list (TG4) is not read; Steamwoven lists the NPC rows in snapshot order, then the PC. A script that
-  acts on the first object of a list (not a loop) may pick another object than the original.
+- **U1** ~~The order of the vicinity list (TG4) is not read.~~ Read by ARC-SCRIPT-2960 (ledger [VL1–VL6](ledger/scripts.md#vicinity-list-order-arc-script-2960)): the critters and containers are listed sector by sector, newest first inside a sector; the scenery and portals tile by tile in each tile's draw order. Steamwoven lists in snapshot order (the NPC rows, then the PC), so a script that acts on the first object of a list (not a loop) may pick another object than the original: issues #2975 and #2976.
 - **U2** A condition over a list focus kind (8, 9; SG6: every, or for the "any" kinds some) is not modelled; the critter vicinity
   kinds are admitted in actions only.
 - **U3** Whether mode 1 of the location change (same tile, TS2) really re-runs the tile script on every sub-tile offset change was
   not observed in the running game.
-- **U4** The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
-  dialog gates never trigger there.
-- **U5** What the original does with a heartbeat's talk while the PC is in another dialog, a window is open or the PC is under
-  attack is not read (the dialog start refuses a second dialog of the PC, G3, but whether the talk is lost or retried is not known);
-  Steamwoven keeps it pending until it can open.
+- **U4** ~~The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
+  dialog gates never trigger there.~~ Closed by ARC-SCRIPT-2464: the use host and the talk host answer dead, surrendered (the session's danger record) and
+  mind-controlled (spell flag 0x8000000) for an NPC of the shown map.
+- **U5** What the original does with a heartbeat's talk while the PC is in another dialog is read (ARC-SCRIPT-2760: the dialog start callback 0x567460 returns silently when the dialog mode is on top, so the talk is lost, never retried; the heartbeat's other effects stay);
+  what it does while a window outside the stack is open or the PC is under attack is not read, and Steamwoven keeps that talk pending until it can open.

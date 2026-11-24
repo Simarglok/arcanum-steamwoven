@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrGroupQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -42,7 +42,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
-                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
+                ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.CallScriptAt, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
                 ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.StopScriptEyeCandy, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
@@ -51,6 +51,17 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// level). Use item with skill (79) stays out: no live script of the installed data uses it (census ARC-RES-045: 2 lines, none live).</summary>
     public static ScrAdmissionSet SkillAdmission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-skill", Admission.Conditions,
         Admission.Actions.Append(ScrCatalogue.Action.GetSkill), Admission.ValueKinds, Admission.FocusKinds);
+
+    /// <summary>ARC-SCRIPT-2198: the focus kinds the loops of <see cref="TalkStateActions"/> need: the vicinity's critters (8, 9; the use host's <see cref="IScrWorldQueries.CrittersInVicinity"/> answers) and the current looped object (10).</summary>
+    public static IReadOnlyList<ScrFocusKind> TalkStateFocusKinds { get; } = [ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.CurrentLoopedObject];
+
+    /// <summary>
+    /// ARC-SCRIPT-2198 (Kerghan's dialog script 1105, docs/research/bink-movies.md section 7): the actions the talk set holds besides the queries while the shown map's use host answers: the loop of a focus list (18, 19, 20; the interpreter runs it), play script eye candy
+    /// (120, a presentation request <see cref="Apply"/> already collects), call script (7) and call script ex (81; the callee's slot answers are <see cref="Slot"/>'s), change script (99; a slot of another object is stored through the use host), critter disband (22) and
+    /// create item (66; the use host's plan and apply), and transform (40; one transform of a placed NPC, ARC-SCRIPT-2440: the use host's plan and apply, <see cref="AreaUseScriptHost.TransformRefusal"/>).
+    /// </summary>
+    public static IReadOnlyList<int> TalkStateActions { get; } = [ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.PlayScriptEyeCandy,
+        ScrCatalogue.Action.CallScript, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.ChangeScript, ScrCatalogue.Action.CritterDisband, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.TransformObject];
 
     /// <summary>
     /// ARC-SCRIPT-050 (slice 2 of the script trigger audit): <see cref="Admission"/> plus what the shown map's use host answers for a talk
@@ -71,10 +82,11 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
         set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions)
             .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
-        set.Actions.Concat(ScrAdmissionSet.CritterFieldActions).Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
+        set.Actions.Concat(ScrAdmissionSet.CritterFieldActions).Concat(ScrAdmissionSet.CritterArtActions).Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
             ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
             ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
-            ScrCatalogue.Action.CastUnresistableSpellOn]), set.ValueKinds, set.FocusKinds);
+            ScrCatalogue.Action.CastUnresistableSpellOn]).Concat(TalkStateActions), set.ValueKinds, set.FocusKinds.Concat(ScrAdmissionSet.GroupFocusKinds).Concat(TalkStateFocusKinds));
+
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
     /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
@@ -151,14 +163,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     {
         var worn = _session.QueryEquipment().Worn.FirstOrDefault(item => (int)item.Slot == location);
         if (worn is null) return null;
-        return _session.QueryHeroKit().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name)
-            .Concat(_session.QueryPcInventory().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name))
-            .Concat(_session.QueryMadeItems().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name)).FirstOrDefault();
+        return _session.QueryHeroKit().Where(item => item.Entity == worn.Entity).Select(item => (int?)_session.QueryItemName(item.Entity, item.Kind.Name))
+            .Concat(_session.QueryPcInventory().Where(item => item.Entity == worn.Entity).Select(item => (int?)_session.QueryItemName(item.Entity, item.Kind.Name)))
+            .Concat(_session.QueryMadeItems().Where(item => item.Entity == worn.Entity).Select(item => (int?)_session.QueryItemName(item.Entity, item.Kind.Name))).FirstOrDefault();
     }
     public bool HasReputation(ScrObjectRef obj, int reputation) => Answering.HasReputation(obj, reputation);
     public int? ObjectType(ScrObjectRef obj) => Answering.ObjectType(obj);
     public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => Answering.SceneryInVicinity(centre);
     public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => Answering.CrittersInVicinity(centre);
+    public IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader) => Answering.FollowersOf(leader);
     public (long X, long Y)? Location(ScrObjectRef obj) => Answering.Location(obj);
     public bool? IsDead(ScrObjectRef obj) => Answering.IsDead(obj);
     public bool? IsSwitchedOff(ScrObjectRef obj) => Answering.IsSwitchedOff(obj);
@@ -181,6 +194,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int? SocialClassOf(ScrObjectRef obj) => Answering.SocialClassOf(obj);
     public int? OriginOf(ScrObjectRef obj) => Answering.OriginOf(obj);
     public int? FactionOf(ScrObjectRef obj) => Answering.FactionOf(obj);
+    public int? ArmorOf(ScrObjectRef obj) => Answering.ArmorOf(obj);
     // ARC-SCRIPT-1771: bad associates (CS12) and monster of type (CS13) are the shown map's use host's answers too; obj is within range (CS14) reads only the object's location (IScrWorldQueries).
     public bool? HasBadAssociates(ScrObjectRef obj) => Answering.HasBadAssociates(obj);
     public bool? IsMonsterOfType(ScrObjectRef obj, int type) => Answering.IsMonsterOfType(obj, type);
@@ -189,9 +203,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int? MasteredCollege(ScrObjectRef obj) => Answering.MasteredCollege(obj);
 
     /// <summary>ARC-DEV-178 (B19, GR1): the standard effective reaction (0x4C0CC0) of one of this host's speakers toward the PC, read as the dialog's
-    /// reaction conditions read it (the session's reaction with the speaker's and the PC's facts, the enemy list included); null (the dispatch ends
-    /// as not modelled) for any other pair, whose facts this host does not hold.</summary>
-    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc) => IsPc(pc) && Speaker(npc) is { } speaker ? _state.Reaction(speaker.Index) : null;
+    /// reaction conditions read it (the session's reaction with the speaker's and the PC's facts, the enemy list included); ARC-SCRIPT-2505: any other NPC of the shown map toward the PC is the use host's answer
+    /// (<see cref="AreaUseScriptHost.ReactionOf"/>); null (the dispatch ends as not modelled) for any other pair.</summary>
+    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc) => IsPc(pc) && Speaker(npc) is { } speaker ? _state.Reaction(speaker.Index) : Queries?.ReactionOf(npc, pc);
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
@@ -337,7 +351,11 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
-        if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
+        // ARC-WORLD-2382: the use slot is the shown map's use host's to answer (a deferred call's dialog action compares the run's flags with it); null without such a host.
+        if (point == ScrPoint.Use) return Queries?.Slot(attachee, point);
+        // ARC-SCRIPT-2198: an object this host holds no speaker for (a call-ex or change script on another object of the shown map, at any point) is the use host's to answer.
+        if (point != ScrPoint.Dialog || Speaker(attachee) is null) return Queries?.Slot(attachee, point);
+        if (LoadedSlot(Speaker(attachee)!) is not { } loaded) return null;
         // ARC-DEV-081: a carried companion's slot is its home map's key (AreaConversationState.MapOf).
         var stateMap = _state.MapOfEntity(attachee.Code);
         long? Read(string property) => _session.QueryObjectChange(stateMap, MapChangeKey.ForEntity(attachee.Code, property));
@@ -405,16 +423,21 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
-    // ARC-DEV-304 (SU15, E6): the dialog gates of an NPC of this map: dead as the session holds it (map data or killed), so point 9 of a dead NPC whose dialog file
-    // lacks the death-speech flag 0x8 runs default; surrender and mind control are not modelled here (normal).
-    public ScrDialogState DialogState(ScrObjectRef attachee) =>
-        !IsPc(attachee) && Speaker(attachee) is not null && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
+    // ARC-DEV-304 (SU15, E6), ARC-SCRIPT-2464: the dialog gates of an NPC of this map: dead as the session holds it (map data or killed), so point 9 of a dead NPC whose dialog file lacks the death-speech flag 0x8 runs default;
+    // surrendered (0x4AF210, flag 0x10) and mind-controlled (spell flag 0x8000000, which runs 2188) as the shown map's use host answers them, for the speaker as for any other NPC of the map (a callee's attachee on another
+    // NPC, ARC-SCRIPT-2198, is not a speaker at all). Without a use host of this map the speaker's gates are dead alone.
+    public ScrDialogState DialogState(ScrObjectRef attachee) => IsPc(attachee) ? ScrDialogState.Normal
+        : (Queries?.DialogState(attachee) ?? ScrDialogState.Normal)
+            | (Speaker(attachee) is not null && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal);
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
     // ARC-SCRIPT-1842 (0x45DE00): a speaker of this map follows the PC as the conversation state holds it, else the NPC leader the session holds for it (named on the speaker's map).
     public ScrObjectRef? Leader(ScrObjectRef critter) => Speaker(critter) is not { } speaker ? null : _state.Follows(speaker.Index) ? Pc
         : _session.QueryLeader(critter.Code) is { } leader && leader != PcCode ? new ScrObjectRef(critter.Map, leader) : null;
+    /// <summary>ARC-SCRIPT-1899: one critter named by two maps is one object (the original keeps it wherever it stands, FM1): the PC and a mobile (its id is the object's own, <see cref="AreaConversationState.EntityId"/>) are told by their id, any other object by the reference.</summary>
+    public static bool SameCritter(ScrObjectRef a, ScrObjectRef b) => a == b || a.Code == b.Code && (a.Code == PcCode || a.Code.StartsWith("oid:", StringComparison.Ordinal));
+    public bool SameObject(ScrObjectRef a, ScrObjectRef b) => SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => false;
 
     // ARC-SCRIPT-1842: the first PC up a speaker's chain of leaders (0x45DDA0), which the schematic window takes as its viewer: the PC for a follower of the hero or of its companion, null for an NPC led by an NPC alone.
@@ -422,8 +445,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         : _state.Follows(speaker.Index) || _session.QueryPcLeader(critter.Code) is not null ? Pc : null;
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
+    /// <summary>ARC-SCRIPT-2440 (TI5, F11): a talk run's transform makes the later actions of the run name the made critter (<see cref="Apply"/> rebinds the interpreter's placeholder to it).</summary>
+    public bool RebindsTransformedAttachee => true;
+
     /// <summary>ARC-SCRIPT-1165 (E5-c): the effect rule of a blessing or curse number, which a dialog script's add blessing (25) or add curse (27) needs; see <see cref="AreaUseScriptHost.BlessingEffects"/>.</summary>
     public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
+
+    /// <summary>ARC-SCRIPT-2787: where a speaker's shown name comes from for <c>@npcname@</c> in a floated line (<see cref="AreaDialogNames.NpcNameSource"/>); null: the profile's placeholder.</summary>
+    public Func<AreaObjectRecord, string?>? NpcName { get; set; }
 
     // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
     public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
@@ -462,8 +491,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     {
         if (effects.Teleports.Count == 0) return null;
         var heroAsked = effects.Teleports.Any(t => IsPc(t.Object));
-        // A conversation the same run starts is not modelled together with the hero's change of place (the use host and the tile scripts refuse it too): the dialog window would open over a pending map transfer.
-        if (heroAsked && effects.Dialog is not null) return "a run that teleports the hero and starts a conversation is not modelled";
+        // ARC-WORLD-2261 (TT20): a conversation the same run starts is no reason to refuse the hero's teleport. The original opens the dialog inside the run (0x567460, which ends the run: only a teleport before the dialog action is recorded) and
+        // the ping applies the request at the next frame whatever mode is open; the transfer is a ByTalkScript one, which the viewer takes with the dialog window open.
         if (heroAsked && effects.Teleports.Any(t => !IsPc(t.Object))) return "a run that teleports the hero and another object is not modelled";
         foreach (var teleport in effects.Teleports)
         {
@@ -485,11 +514,21 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         ArgumentNullException.ThrowIfNull(effects);
         // The viewer's set admits no use item with skill; a trap object is not modelled.
         if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
+        // ARC-SCRIPT-2440 (TI5, F10; issue #2507): a dialog action in the run of a transform would open the conversation with the made critter (a speaker no host here has): the run is left unapplied whole, so no conversation opens with the destroyed old NPC.
+        if (effects.Dialog is not null && effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Transform)) return false;
         // ARC-WORLD-2038 (TT20): a teleport the hosts cannot record leaves the run unapplied whole, checked before anything applies.
         if (TeleportRefusal(effects) is not null) return false;
         // ARC-SCRIPT-1598: the speaker's slot write is resolved before anything applies (a pure lookup of the run's own object): a run whose write cannot be placed is refused whole, so a damage line is never left applied with the dialog unopened.
         (ScrSlot Loaded, ScrObjectRef Attachee)? slotWrite = null;
-        if (effects.Writeback is { } slotRequest)
+        // ARC-WORLD-2382 (point 1, 0x447282): a deferred call's dialog action stores the run's flags and counters in the speaker's use slot, written through the shown map's use host as a tile run's are; one that host cannot place refuses the run whole.
+        var useWrite = effects.Writeback is { Source: ScrSource.Object, Point: ScrPoint.Use } useRequest ? useRequest : null;
+        var useHost = Queries;   // captured once: a victim's script or a death can move what the delegate answers before the write below
+        if (useWrite is not null && useHost?.CanWriteUseSlot(useWrite) != true) return false;
+        // ARC-SCRIPT-2198: the slots of other objects the run wrote, a disband, a create item and a transform go through the shown map's use host; the run is refused before anything applies when the use host cannot plan them (a transform always; a disband the session later rejects stops the later steps, as the other session steps do).
+        var stateHost = useHost;
+        if (stateHost is null ? effects.SlotWrites.Count > 0 || effects.ObjectStates.Any(r => r.Change is ScrObjectStateChange.Disband or ScrObjectStateChange.CreateItem or ScrObjectStateChange.Transform)
+            : stateHost.TalkStateRefusal(effects) is not null) return false;
+        if (effects.Writeback is { } slotRequest && useWrite is null)
         {
             if (slotRequest.Source != ScrSource.Object || slotRequest.Point != ScrPoint.Dialog || slotRequest.Attachee is not { } slotAttachee
                 || Speaker(slotAttachee) is not { } slotSpeaker || LoadedSlot(slotSpeaker) is not { } slotLoaded) return false;
@@ -510,15 +549,45 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var line in effects.Floats)
         {
             if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male, _profile.Names);
+            var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male,
+                AreaDialogNames.For(_session, _profile.Names, AreaDialogNames.NpcName(NpcName, Speaker(line.Speaker)?.Row)));
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
             floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
         floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
-        _floats.AddRange(floats);
         // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
         if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
+        // ARC-SCRIPT-2440 (ledger TI5, F11): a transform of the speaker (Kerghan's change of shape, 1105 line 80) is applied in action order among the object requests: the requests before it (an attack, a damage, a disband of the old attachee) land first, as the original runs them inline,
+        // then the new critter replaces the interpreter's placeholder in everything that follows (the planned requests, which no placeholder passes, are unchanged). A session refusal of the creation stops the run before it changes anything else of the transform; the old NPC is destroyed
+        // after the new one exists.
+        var damageHost = Queries;   // taken once: the damage's own effects (a victim's script, a death) may move what QueryHost answers
+        bool ApplyObjectState(ScrObjectStateRequest request)
+        {
+            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { damageHost!.ApplyScriptDamage(request); LastDamage = damageHost.LastDamage; return true; }
+            if (request.Change == ScrObjectStateChange.HealHitPoints) { damageHost!.ApplyScriptHeal(request); LastHeal = damageHost.LastHeal; return true; }
+            if (request.Change == ScrObjectStateChange.Attack) { damageHost!.ApplyScriptAttack(request); LastAttack = damageHost.LastAttack; return true; }
+            if (request.Change == ScrObjectStateChange.CastSpell) { damageHost!.ApplyScriptCast(request); LastCast = damageHost.LastCast; return true; }
+            if (request.Change is ScrObjectStateChange.Disband or ScrObjectStateChange.CreateItem) return stateHost!.ApplyTalkObjectState(request);
+            if (request.Change != ScrObjectStateChange.GiveSpellMastery) return true;
+            if (request.Object == Pc) return AreaScriptSpells.GiveMastery(_session, null, request.Value);
+            return request.Object.Map != _map.RuntimeMap || _npcAdvancement?.Invoke(request.Object.Code) is not { } npc || AreaScriptSpells.GiveMastery(_session, npc, request.Value);
+        }
+        var statesDone = 0;
+        var transformAt = effects.ObjectStates.ToList().FindIndex(r => r.Change == ScrObjectStateChange.Transform);
+        if (transformAt >= 0)
+        {
+            for (; statesDone < transformAt; statesDone++)
+                if (!ApplyObjectState(effects.ObjectStates[statesDone])) return false;
+            var transform = effects.ObjectStates[transformAt];
+            if (stateHost!.ApplyTalkTransform(transform) is not { } made) return false;
+            statesDone = transformAt + 1;
+            var placeholder = ScrTransformedObject.Placeholder(transform.Object.Map, 1);
+            effects = effects.Rebind(placeholder, made);
+            for (var i = 0; i < floats.Count; i++)
+                floats[i] = floats[i] with { Speaker = floats[i].Speaker == placeholder ? made : floats[i].Speaker, Listener = floats[i].Listener == placeholder ? made : floats[i].Listener };
+        }
+        _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         foreach (var write in effects.GlobalFlags)
         {
@@ -573,17 +642,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // ARC-SCRIPT-1563 (GT194–GT196): a script's damage and heal apply here too, in the action order of the requests: the use host's session path (victim, amount, type, unresistable; the victim's taking-damage script is asked, GT198).
         // The dialog opens after this (X11: the dialog action ends the run), so a talk's damage lands before the window.
         // The use host is taken once: the damage's own effects (a victim's script, a death) may move what QueryHost answers.
-        var damageHost = Queries;
-        foreach (var request in effects.ObjectStates)
-        {
-            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { damageHost!.ApplyScriptDamage(request); LastDamage = damageHost.LastDamage; continue; }
-            if (request.Change == ScrObjectStateChange.HealHitPoints) { damageHost!.ApplyScriptHeal(request); LastHeal = damageHost.LastHeal; continue; }
-            if (request.Change == ScrObjectStateChange.Attack) { damageHost!.ApplyScriptAttack(request); LastAttack = damageHost.LastAttack; continue; }
-            if (request.Change == ScrObjectStateChange.CastSpell) { damageHost!.ApplyScriptCast(request); LastCast = damageHost.LastCast; continue; }
-            if (request.Change != ScrObjectStateChange.GiveSpellMastery) continue;
-            if (request.Object == Pc) { if (!AreaScriptSpells.GiveMastery(_session, null, request.Value)) return false; }
-            else if (request.Object.Map == _map.RuntimeMap && _npcAdvancement?.Invoke(request.Object.Code) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
-        }
+        foreach (var request in effects.ObjectStates.Skip(statesDone))
+            if (!ApplyObjectState(request)) return false;
+        foreach (var write in effects.SlotWrites)
+            if (!stateHost!.WriteObjectSlot(write)) return false;
         // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): each start schematic UI request in action order, resolved now (the PC, or an NPC
         // and its PC leader); it changes no session state, so it neither stops nor is stopped by a later step.
         foreach (var request in effects.Schematics)
@@ -606,6 +668,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var teleport in effects.Teleports)
             if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
             else teleportHost?.RequestNpcTeleport(teleport);
+        if (useWrite is not null) return useHost?.WriteUseSlot(useWrite) == true;
         if (effects.Writeback is not { } writeback || slotWrite is not { } placed) return true;
         var (loaded, attachee) = placed;
         var stateMap = _state.MapOfEntity(attachee.Code);

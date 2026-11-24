@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.Input;
 using Arcanum.Presentation.Audio;
 using Arcanum.Session;
@@ -49,10 +50,40 @@ public sealed class ViewerSettingsConfigTests
     }
 
     [TestMethod]
+    public void The_removed_interface_layout_line_is_ignored_and_kept()
+    {
+        // ARC-UI-2926: the column is the only layout; an old file's `interface layout` line (column, full-width, column-thin) is not read and not written, and it no longer makes the game group present.
+        Assert.AreEqual(AreaGameSettings.Defaults, ViewerSettingsConfig.ReadGame(Lines("interface layout=full-width\n")));
+        Assert.AreEqual(AreaGameSettings.Defaults, ViewerSettingsConfig.ReadGame(Lines("interface layout=Column-Thin\n")));
+        Assert.IsFalse(ViewerSettingsConfig.HasGame(Lines("interface layout=column\n")), "the line no longer belongs to the game group");
+        Assert.IsFalse(ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults).Any(change => change.Name == ViewerSettingsConfig.InterfaceLayoutLine), "the line is not written");
+        // Kept: a save round trip of the game group leaves the old line in the file as it was, and the settings saved beside it read back.
+        var path = Path.Combine(_root, "arcanum.cfg");
+        File.WriteAllText(path, "interface layout=full-width\ndifficulty=1\n");
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.GameChanges(Chosen)));
+        var after = ArcanumConfig.Read(path);
+        Assert.AreEqual("full-width", after.Entries.Single(entry => entry.Name == ViewerSettingsConfig.InterfaceLayoutLine).Value, "the old line is kept as it was");
+        Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(after));
+    }
+
+    [TestMethod]
+    public void The_world_zoom_line_reads_auto_or_a_step_and_anything_else_as_auto()
+    {
+        // ARC-UI-3059: auto (the default), or a whole step 1 to 4.
+        Assert.AreEqual(0, AreaGameSettings.Defaults.WorldZoomStep);
+        foreach (var step in new[] { 1, 2, 3, 4 }) Assert.AreEqual(step, ViewerSettingsConfig.ReadGame(Lines($"world zoom={step}\n")).WorldZoomStep);
+        foreach (var text in new[] { "auto", "0", "5", "-1", "2.5", "x", "" }) Assert.AreEqual(0, ViewerSettingsConfig.ReadGame(Lines($"world zoom={text}\n")).WorldZoomStep, text);
+        Assert.AreEqual(0, ViewerSettingsConfig.ReadGame(Lines("difficulty=1\n")).WorldZoomStep);
+        var changes = ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults with { WorldZoomStep = 3 });
+        Assert.AreEqual("3", changes.Single(c => c.Name == ViewerSettingsConfig.WorldZoom).Value);
+        Assert.AreEqual("auto", ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults).Single(c => c.Name == ViewerSettingsConfig.WorldZoom).Value);
+    }
+
+    [TestMethod]
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\nworld zoom=auto\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));

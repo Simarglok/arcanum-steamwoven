@@ -1,0 +1,9 @@
+CONTEXT IMAGE - INVENTORY WINDOW
+Size: 2880 x 2160 (4:3). References: ORIGINAL (the 800 x 600 screen with its strips, upscaled to 2880 x 2160: this is the IMAGE TO EDIT; refine this image, raise its detail, do not change its colour or its shape).
+
+Redraw the whole composition with the inventory window open: top strip, the two-part inventory window in the 400-unit middle zone, bottom strip. Keep the strips as in the play-screen context (same wood, same brass).
+- Window left part (about 358 units wide): dark streaked wood with a brass trim. A round portrait lens at the top left (empty glass, thick brass ring). A black plaque with brass scrollwork corners for the weight and speed readout (empty). Below it a large black paper-doll panel with a faint blue grid, brass scrollwork in its corners and the grey silhouettes of empty worn slots (helmet, gauntlet, rings and amulet, shield, boots, torso, weapon). Two curved brass-framed pockets at the lower corners.
+- A thin vertical seam between the two parts: a designed join, keep it.
+- Window right part (about 442 units wide): the same wood; a large black pack grid with a faint blue grid and a thin brass border; at its right edge a column of small brass-framed counter boxes (empty), a small grid-toggle icon and round button, and two oval stone-coloured buttons with a hand and an arrow.
+Keep all item slots empty (no items, no icons other than the silhouettes).
+Goal: style anchor for BD-A (inventory family window backgrounds), grids, hardware frames, plates and the two lower buttons.

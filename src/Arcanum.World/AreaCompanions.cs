@@ -4,6 +4,8 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Party;
@@ -216,6 +218,11 @@ public sealed class AreaCompanion
     public AreaBodyCycle Cycle { get; } = new();
     /// <summary>ARC-WORLD-115: whether the AI host's last step of it runs (its gait while the host holds it).</summary>
     public bool AiRunning { get; internal set; }
+    /// <summary>ARC-RENDER-2539: whether the step the AI host gave was the stealth walk (a concealed follower below prowling expert, 0x42EDC0). ARC-RENDER-2564: for a companion the host does not hold it is set at each
+    /// <see cref="AreaCompanionGroup.Drive"/> from the follow decision's own walk (the group's <see cref="AreaCompanionGroup.ProwlingTraining"/> and the session's flag).</summary>
+    public bool AiSneaking { get; internal set; }
+    /// <summary>ARC-RENDER-2564 (0x42EDC0): the concealment flag is set and the follow decision's run is not permitted (prowling training below master: it walks), set at each <see cref="AreaCompanionGroup.Drive"/>.</summary>
+    public bool RunRefused { get; internal set; }
 }
 
 /// <summary>
@@ -301,7 +308,8 @@ public sealed class AreaCompanionGroup
                 actorId: ActorPrefix + template.Speaker.Index, capabilities: Capabilities) { Occupancy = Admission, CrittersPass = Passes, Timing = timing };
             var source = new AreaRouteSource(steps, chart, Planning, crittersPass: Passes, dead: key => group!.Dead?.Invoke(key) == true);
             var companion = new AreaCompanion(template, grid, new CompanionFollower(source, segmentEndCritterCheck: () => group!._segmentEndCritter));
-            grid.Gait = () => companion.LastUpdate.Action == FollowAction.Run ? MovementGait.Run : MovementGait.Walk;
+            // ARC-RENDER-2564 (0x42EDC0): a concealed follower below prowling expert steps the stealth walk (a run wanted ignored), one below master never runs; the flags come from the AI host's step or, for a companion it does not hold, from the group's drive.
+            grid.Gait = () => companion.AiSneaking ? MovementGait.Sneak : companion.LastUpdate.Action == FollowAction.Run && !companion.RunRefused ? MovementGait.Run : MovementGait.Walk;
             // ARC-MAGIC-1189 (ledger TT10, SP2): the walk check before each of its steps (0x427110): a trap the companion spots on the next tile refuses the step.
             var entityId = companion.Entity;
             // A companion the AI host holds takes the host's steps, whose own walk check (AreaAiHost.StepBlocked) already rolled for this step.
@@ -344,15 +352,21 @@ public sealed class AreaCompanionGroup
     /// walk goes only where the host's steps send it (<see cref="StepTo"/>). Null is none held.</summary>
     public Func<string, bool>? HeldByAi { get; set; }
 
+    /// <summary>ARC-RENDER-2564 (0x42EDC0, 0x4C60C0 with skill 6): the prowling training of a companion's own sheet, read for a concealed companion the AI host does not hold (its follow decision's walk is then the stealth
+    /// walk below expert, and never a run below master); no sheet reads as untrained. Null: untrained for every companion.</summary>
+    public Func<string, SkillTraining>? ProwlingTraining { get; set; }
+
     /// <summary>
     /// ARC-WORLD-115: the AI host's step of the companion <paramref name="entity"/> onto the neighbouring chart cell
     /// <paramref name="next"/>: its walk's ordered goal to that cell (<see cref="CompanionFollower.WalkTo"/>, observed at its grid's
     /// time), driven by <see cref="Drive"/>. False for a companion not here or a cell outside the step evidence.
     /// </summary>
-    public bool StepTo(string entity, CellCoord next, bool running)
+    public bool StepTo(string entity, CellCoord next, bool running, bool sneaking = false)
     {
         if (_companions.FirstOrDefault(c => c.Entity == entity) is not { } companion) return false;
         companion.AiRunning = running;
+        companion.AiSneaking = sneaking && !running;
+        companion.RunRefused = false;
         return companion.Follow.WalkTo(next, companion.Grid.State.Time);
     }
 
@@ -504,6 +518,14 @@ public sealed class AreaCompanionGroup
             var update = held ? new CompanionFollowUpdate(companion.AiRunning ? FollowAction.Run : FollowAction.Walk, null)
                 : FollowDecision(session, companion, record, pc.CommittedCell, frontier);
             companion.LastUpdate = update;
+            if (!held)
+            {
+                // ARC-RENDER-2564 (0x42EDC0): the gait function reads the concealment flag and the prowling training for every critter, the AI host's or not.
+                var prowling = session.IsConcealed(SessionCombatant.Critter(companion.Entity));
+                var facts = new AiMoverFacts(Prowling: prowling, ProwlingTraining: prowling ? ProwlingTraining?.Invoke(companion.Entity) ?? SkillTraining.None : SkillTraining.None);
+                companion.AiSneaking = AiExecutorRules.Sneaks(facts);
+                companion.RunRefused = !AiExecutorRules.RunPermitted(facts);
+            }
             // ARC-WORLD-045: an approach starts the follow goal, which then lives until something interrupts it.
             // ARC-SCRIPT-1136 (CF9): a follower that carries the wait bit is waiting for the AI (the non-combat perform returns "waiting"), so it follows nobody.
             if (record.Standing != CompanionStanding.Following || record.WaitFlag || held) companion.FollowGoal = false;
@@ -629,7 +651,7 @@ public sealed class AreaCompanionGroup
     }
 
     /// <summary>
-    /// ARC-WORLD-2161: <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for a follower with no body here (one the scene does not draw, or whose follow facts do not read): the original's
+    /// ARC-WORLD-2161: <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for a follower with no body here (one whose follow facts do not read, or whose home map could not give a body): the original's
     /// move list carries the whole object, so the session's placement edits stand it on the destination all the same; the body is read from its home map when that map shows it (a visitor).
     /// </summary>
     public static IReadOnlyList<MapChangeEdit> Arrive(AreaBodylessFollower follower, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing)
@@ -640,7 +662,8 @@ public sealed class AreaCompanionGroup
             : Arrive(follower.Entity, follower.Home, follower.HomeWorld, from, destination, arrival, facing);
     }
 
-    private static IReadOnlyList<MapChangeEdit> Arrive(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing) =>
+    /// <summary>ARC-WORLD-2039: the edits of <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for an NPC known by its entity, its home map and its stored cell there (a free NPC a script's teleport sends to another map).</summary>
+    public static IReadOnlyList<MapChangeEdit> Arrive(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing) =>
     [
         new(from, AreaCompanionPlacement.Key(entity), null),
         .. AreaCompanionPlacement.Edits(entity, home, homeWorld, destination, arrival, facing),

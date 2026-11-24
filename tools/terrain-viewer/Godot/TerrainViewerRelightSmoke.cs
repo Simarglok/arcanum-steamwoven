@@ -134,6 +134,56 @@ public partial class TerrainViewerApp
             Require(counts["night-2-add"] > 0, "the relit night frame differs from Legacy near the hero's light");
             Require(counts["day-3-night"] <= counts["day-2-add"] && counts["night-3-night"] <= counts["night-2-add"], "the night-weighted mode changes no more pixels than add");
 
+            // ARC-RENDER-2298: a light's own carrier. The night weight must not read the carried torch as the Legacy light that already lit the hero: with the same two lamps (lit in the relit list
+            // only) the hero's own pixels take a relit term with the torch worn too, not only without it. The hero's pixels are those that differ from the picture with the hero hidden.
+            var carrierReport = new Dictionary<string, object>();
+            {
+                var wasStrength0 = AreaRelight.Strength;
+                var crop = new Rect2I(size.X / 2 - 80, size.Y / 2 - 150, 160, 220).Intersection(new Rect2I(Vector2I.Zero, size));
+                Vector2 HeroPoint()
+                {
+                    var p = _canvas.AreaActorPlacementNow;
+                    if (p is null) return Vector2.Zero;
+                    var projected = TerrainGeometry.Project(checked((int)(p.MapX ?? 0)), checked((int)(p.MapY ?? 0)));
+                    return new Vector2(projected.X + (p.InstanceOffsetX ?? 0) + 40, projected.Y + (p.InstanceOffsetY ?? 0) + 20);
+                }
+                async Task<(int Pixels, int Lit, double Mean)> HeroTerm(EquipmentLight light, string name)
+                {
+                    Require(Wear(wielded.Item with { Light = light }), $"the wielded item is worn with light {light}");
+                    AreaRelight.SetMode(AreaRelight.Mode.Off); AreaRelight.OnlyExtra = false; AreaRelight.Extra.Clear(); PushAreaAmbient();
+                    _canvas.SetActorVisibilityForReadback(false);
+                    var hidden = (await Capture($"carrier-{name}-1-no-hero")).GetRegion(crop);
+                    _canvas.SetActorVisibilityForReadback(true);
+                    var legacyFrame = (await Capture($"carrier-{name}-2-legacy")).GetRegion(crop);
+                    var hero = HeroPoint();
+                    AreaRelight.Extra.Add(new AreaRelight.Light(hero.X + 70, hero.Y - 10, 160f, new Color(1f, .75f, .45f)));
+                    AreaRelight.Extra.Add(new AreaRelight.Light(hero.X - 90, hero.Y + 10, 160f, new Color(.55f, .7f, 1f)));
+                    AreaRelight.OnlyExtra = true; AreaRelight.SetMode(AreaRelight.Mode.NightAdd); AreaRelight.Strength = AreaRelight.LookStrength; PushAreaAmbient();
+                    var relitFrame = (await Capture($"carrier-{name}-3-relit")).GetRegion(crop);
+                    AreaRelight.OnlyExtra = false; AreaRelight.Extra.Clear(); AreaRelight.SetMode(AreaRelight.Mode.Off); AreaRelight.Strength = wasStrength0; PushAreaAmbient();
+                    int pixels = 0, lit = 0; double sum = 0;
+                    for (var y = 0; y < legacyFrame.GetHeight(); y++)
+                        for (var x = 0; x < legacyFrame.GetWidth(); x++)
+                        {
+                            if (legacyFrame.GetPixel(x, y) == hidden.GetPixel(x, y)) continue;
+                            pixels++;
+                            var term = relitFrame.GetPixel(x, y).Luminance - legacyFrame.GetPixel(x, y).Luminance;
+                            if (term > 0.004f) lit++;
+                            sum += Math.Max(term, 0f);
+                        }
+                    return (pixels, lit, pixels == 0 ? 0 : sum / pixels);
+                }
+                var withTorch = await HeroTerm(EquipmentLight.Large, "torch");
+                var withoutTorch = await HeroTerm(EquipmentLight.None, "bare");
+                GD.Print($"ARC-RENDER-2298 relit term on the hero's pixels: torch worn {withTorch.Pixels} px, {withTorch.Lit} lit, mean {withTorch.Mean:0.0000}; no torch {withoutTorch.Pixels} px, {withoutTorch.Lit} lit, mean {withoutTorch.Mean:0.0000}");
+                Require(withTorch.Pixels > 50 && withoutTorch.Pixels > 50, "the hero's own pixels are found in both captures");
+                Require(withoutTorch.Lit > 0, "without a torch the hero's pixels take a relit term (the lamps reach the hero)");
+                Require(withTorch.Lit * 2 >= withoutTorch.Lit && withTorch.Mean >= withoutTorch.Mean * 0.5, "the torch's carrier takes a relit term, within a factor of two of the bare hero");
+                carrierReport["Torch"] = withTorch; carrierReport["Bare"] = withoutTorch;
+                Require(Wear(wielded.Item with { Light = EquipmentLight.Large }), "the hero's torch is put back");
+                await Frames();
+            }
+
 
             // ARC-RENDER-2060, ARC-RENDER-2076: the player's relit look is a part of HD, at the night hour the loop above left. With HD Off it is Legacy,
             // byte for byte; with it On the look is the night-weighted mode at the look's strength (the same pixels as the developer mode set to that), and Off again gives Legacy back.
@@ -150,6 +200,30 @@ public partial class TerrainViewerApp
                 var lookImage = await Capture("setting-2-on-hd");
                 var lookDiff = Differing(nightLegacy, lookImage, near);
                 Require(lookDiff > 0, "the relit look differs from Legacy near the hero's light at night");
+                // ARC-RENDER-2207: the relit light list follows the animation poses of the map's animated lights (a light that steps to another frame or offset moves in the list too).
+                var wasAnimationMs = _lightAnimationMs;
+                try
+                {
+                    _lightAnimationMs = 0; PushAreaAmbient();
+                    var still = AreaRelight.MapLightList.ToArray();
+                    var hourForm = all.AtHour(driver.Selection.Hour);
+                    var posedAtZero = hourForm.AtAnimation(0).PosedPlacements.Where(p => (p.Light.Flags & (StationaryLightFlags.Off | StationaryLightFlags.Dark)) == 0).Count();
+                    Require(still.Length == posedAtZero, $"the relit map lights are the lit placements ({still.Length} of {posedAtZero})");
+                    var movedAt = -1;
+                    static bool Lit(StationaryLight light) => (light.Flags & (StationaryLightFlags.Off | StationaryLightFlags.Dark)) == 0;
+                    var litAtZero = hourForm.AtAnimation(0).PosedPlacements.Where(p => Lit(p.Light)).Select(p => p.Rect).ToArray();
+                    if (hourForm.Field.Animated.Count > 0)
+                        for (var ms = 50; ms <= 20000 && movedAt < 0; ms += 50)
+                            if (!hourForm.AtAnimation(ms).PosedPlacements.Where(p => Lit(p.Light)).Select(p => p.Rect).SequenceEqual(litAtZero)) movedAt = ms;
+                    // The installed data has next to no animated lights (one, on the void map), so on most maps this stays unexercised here; the unit test of the posed placements is the coverage then.
+                    if (movedAt > 0)
+                    {
+                        _lightAnimationMs = movedAt; PushAreaAmbient();
+                        Require(!AreaRelight.MapLightList.SequenceEqual(still), $"an animated light moved in the relit list at {movedAt} ms");
+                    }
+                    settingReport["AnimatedLights"] = hourForm.Field.Animated.Count; settingReport["AnimatedMovedAtMs"] = movedAt;
+                }
+                finally { _lightAnimationMs = wasAnimationMs; PushAreaAmbient(); }
                 _canvas.SetVisualProfile(VisualProfile.Legacy, wasSource, wasBudget); SyncRelitLook(); // the developer mode alone from here, so the per-frame sync does not turn the look back on
                 AreaRelight.SetMode(AreaRelight.Mode.NightAdd); var wasStrength = AreaRelight.Strength; AreaRelight.Strength = AreaRelight.LookStrength; PushAreaAmbient();
                 var developerImage = await Capture("setting-3-developer-night");
@@ -292,7 +366,7 @@ public partial class TerrainViewerApp
             var sprites = _canvas.AreaVisibleCommands.Where(c => c.Identity is not null).GroupBy(c => c.Frame).Select(g => g.First()).ToArray();
             long bytes = sprites.Sum(c => (long)c.Source.Width * c.Source.Height * 4);
             var frames = sprites;
-            report = new { Map = _readyMapName, Setting = settingReport, Walk = walkReport, Hour = driver.Clock.Hour, Window = new { size.X, size.Y }, Differing = counts, Timing = timing,
+            report = new { Map = _readyMapName, Carrier = carrierReport, Setting = settingReport, Walk = walkReport, Hour = driver.Clock.Hour, Window = new { size.X, size.Y }, Differing = counts, Timing = timing,
                 VisibleSpriteFrames = frames.Length, NormalBytesFullRgba8 = bytes, Lights = AreaRelight.UploadedCount };
             GD.Print("ARC-RES-1978 native-smoke relight PASS " + System.Text.Json.JsonSerializer.Serialize(report));
         }

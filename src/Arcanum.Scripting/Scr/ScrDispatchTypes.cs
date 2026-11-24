@@ -29,13 +29,19 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Raise = 18, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Raise = 18, Heartbeat = 19, TakingDamage = 23, NewSector = 27, StartCombat = 15, EndCombat = 16, LeaderKilling = 20, WillKos = 22, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
         Hit = 7, Miss = 8,
         // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
         CritterHits = 26, CriticalHit = 34,
+        // ARC-SCRIPT-2858 (TQ16): the caught thief's point (33), run for the thief before the victim's catching-thief point (11) of a noticed failed steal or plant (0x4C7160).
+        CaughtThief = 33,
         // ARC-COMBAT-1719: the weapon's critical-miss point (35), run after the miss point (8) at the range end of a critical shot (0x4B2870).
-        CriticalMiss = 35;
+        CriticalMiss = 35,
+        // ARC-SCRIPT-2853: the item's drop point (5), run by the drop 0x461AB0 with the holder as the triggerer.
+        Drop = 5,
+        // ARC-SCRIPT-2860 (TQ11): the portal's or container's unlock point (3), run by the open attempts 0x4AEB70 and 0x4AED80 with the opener as the triggerer, before the lock test.
+        Unlock = 3;
 }
 
 /// <summary>
@@ -97,10 +103,31 @@ public interface IScrHost
     ScrObjectRef? Player();
     /// <summary>The critter's leader, or null when it follows no one.</summary>
     ScrObjectRef? Leader(ScrObjectRef critter);
+    /// <summary>
+    /// ARC-SCRIPT-1899: whether two references name one object. The original keeps one critter wherever it stands, so a carried follower named by its home map and the same one named by the map that shows it are one object; a host that
+    /// can tell them apart answers by identity. The default is the plain reference test (the following test uses it to compare a leader with the second object of the condition).
+    /// </summary>
+    bool SameObject(ScrObjectRef a, ScrObjectRef b) => a == b;
     /// <summary>An NPC with the jilted flag; false for anything that is not an NPC.</summary>
     bool IsJilted(ScrObjectRef critter);
     /// <summary>A player character (the dialog action starts a conversation only for one).</summary>
     bool IsPc(ScrObjectRef critter);
+    /// <summary>ARC-SCRIPT-2440 (ledger TI5, F11): whether the host applies a transform (40) of the run's attachee so that the later actions of the same run name the new object (the original writes the new handle into the run's own record). When true the
+    /// interpreter hands the later actions the placeholder <see cref="ScrTransformedObject.Placeholder"/> instead of the old attachee, and the host rebinds it to the made object (<see cref="ScrEffects.Rebind"/>) when it applies the request; a host that
+    /// returns false (the default) keeps the old attachee, and reads the object after the transform itself.</summary>
+    bool RebindsTransformedAttachee => false;
+}
+
+/// <summary>ARC-SCRIPT-2440: the stand-in a run names for the object its transform (40) makes, before any host has made it.</summary>
+public static class ScrTransformedObject
+{
+    private const string Prefix = "transformed:";
+
+    /// <summary>The placeholder of the <paramref name="number"/>th transform (from 1) of a run, on the map of the object that was transformed.</summary>
+    public static ScrObjectRef Placeholder(int map, int number) => new(map, Prefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>Whether the object is the placeholder of a transform's result.</summary>
+    public static bool Is(ScrObjectRef obj) => obj.Code.StartsWith(Prefix, StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -198,6 +225,16 @@ public interface IScrSkillQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-2410 (ledger IV20): optional for a host that applies a run's quest requests as the run goes, as the original does (set PC quest state, 0x4C4D20, and give quest experience, 0x45F110, act at once): the interpreter
+/// tells the host each such request as the action makes it (a call-ex callee's too, in the order the actions run), so the run's later quest reads (<see cref="IScrObjectQueries.QuestState"/>) answer what the earlier writes left. The request
+/// is still collected in <see cref="ScrEffects.States"/>; a host that implements this does not apply it a second time.
+/// </summary>
+public interface IScrQuestWrites
+{
+    void QuestRequested(ScrStateRequest request);
+}
+
+/// <summary>
 /// ARC-SCRIPT-042: the item questions of set <see cref="ScrAdmissionSet.S14"/> (ledger WE rows). A host whose admission set holds the
 /// identified or rewielding condition or the magick-tech adjustment implements this interface; the interpreter asks only for the
 /// objects the clauses name.
@@ -274,7 +311,7 @@ public interface IScrCritterStateQueries
 }
 
 /// <summary>
-/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/>. The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/> and, since ARC-SCRIPT-2326, get armor (<see cref="ScrAdmissionSet.CritterArtActions"/>). The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
 /// 0x45D290 origin field 0x123, 0x45D080 faction field 0x124). A host whose admission set holds one of them implements this interface. An answer is null when the host does not know the object (the dispatch ends not modelled, nothing applied).
 /// </summary>
 public interface IScrCritterFieldQueries
@@ -287,6 +324,10 @@ public interface IScrCritterFieldQueries
 
     /// <summary>Get faction (89): the NPC's faction (field 0x124) as it is now (a script's set faction over the map data's), 0 for any other object type.</summary>
     int? FactionOf(ScrObjectRef obj);
+
+    /// <summary>Get armor (action 32, ARC-SCRIPT-2326, ledger AR1–AR3): the armour part of the object's current art id (object field 1 through 0x406CA0, then 0x504030: bits 20..23 of a critter art id, bits 20..22 of a monster's, 0 for any other art type), the look of the
+    /// body armour a critter wears (3 chain, 4 and 6 plate), not an armour class; null when the host does not know the object (the dispatch ends not modelled, nothing applied).</summary>
+    int? ArmorOf(ScrObjectRef obj);
 }
 
 /// <summary>
@@ -325,6 +366,31 @@ public interface IScrPortalQueries
     /// <see cref="ScrRuleProfile.VicinityListCapped"/>.
     /// </summary>
     IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre);
+}
+
+/// <summary>
+/// ARC-SCRIPT-2319 (ledger GF1–GF7): the group of an object, for the focus kinds every one in the group (13) and anyone in the group (14), which the object-list builder (0x44B4E0) answers as the triggerer's direct followers
+/// (object field 0xF1 through 0x4411C0, in array order) with the triggerer itself appended last. A host whose set admits the kinds implements this interface; the interpreter adds the triggerer and applies the list's cap.
+/// </summary>
+public interface IScrGroupQueries
+{
+    /// <summary>The direct followers of <paramref name="leader"/> in the order the original's follower array holds them (a waiting NPC is outside it, ledger OL16; a forced or charmed follower stays in): the hero's followers for the PC,
+    /// an NPC's own followers for an NPC, none for any other object or one the host does not know.</summary>
+    IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader);
+}
+
+/// <summary>
+/// ARC-SCRIPT-2322 (ledger CV1–CV5): the containers in the vicinity of an object, for the focus kinds every container in the vicinity (17) and any container in the vicinity (18; one list, as the portals' 19 and 20). A
+/// host whose set admits either kind implements it besides <see cref="IScrWorldQueries"/>.
+/// </summary>
+public interface IScrContainerQueries
+{
+    /// <summary>
+    /// The containers in the vicinity of <paramref name="centre"/> (type mask bit 2 of the same scan as the portals, ledger CV1, CV2): every container object of the centre's map whose tile is within
+    /// <see cref="ScrWorld.VicinityReach"/> tiles of the centre's tile on both axes and that is not destroyed or switched off, in the host's list order; empty when the host does not know the centre or its place.
+    /// The interpreter keeps the first <see cref="ScrWorld.VicinityListCap"/> under <see cref="ScrRuleProfile.VicinityListCapped"/>.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre);
 }
 
 /// <summary>
@@ -393,8 +459,10 @@ public interface IScrSpellQueries
     int? MasteredCollege(ScrObjectRef obj);
 }
 
-/// <summary>The game clock as the story commands read it (ledger SQ1, SQ5): the day index (0 on the first day) and the hour and minute of the day.</summary>
-public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
+/// <summary>The game clock as the story commands read it (ledger SQ1, SQ5): the day index (0 on the first day) and the hour and minute of the day.
+/// ARC-SCRIPT-2824 (ledger TQ17): <paramref name="MillisecondOfDay"/> (the clock's own, −1 for "from the hour and minute") and <paramref name="StartHour"/> (the module's start hour,
+/// 15 for the installed startup) give call script at its time of day.</summary>
+public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute, long MillisecondOfDay = -1, int StartHour = 0)
 {
     /// <summary>Whether it is day (0x45ACF0): the hour is 6 to 17.</summary>
     public bool IsDay => Hour is >= 6 and <= 17;
@@ -406,6 +474,24 @@ public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
     /// <summary>Get hours since startup (0x45A890): whole hours of the game's age, the day index times 24 plus the hour.</summary>
     [OriginalFunction(0x45A890, OriginalFunctionScope.Full)]
     public long HoursSinceStartup() => DayIndex * 24 + Hour;
+
+    /// <summary>
+    /// Call script at's "now" (ledger TQ17, TE2): the whole seconds of the day counted from the module's start hour, not from midnight: the clock's millisecond
+    /// of the day plus a day, less the start hour's milliseconds, divided by 1000 and reduced to a day of 86400 seconds. 0..86399.
+    /// </summary>
+    public int SecondsSinceStartHour()
+    {
+        var ms = MillisecondOfDay >= 0 ? MillisecondOfDay : (Hour * 60L + Minute) * 60_000L;
+        return (int)((ms + 86_400_000L - StartHour * 3_600_000L) / 1000 % 86_400);
+    }
+}
+
+/// <summary>ARC-SCRIPT-2824: the game clock a host reads for call script at. A host whose admission set holds that action implements it (<see cref="IScrStoryQueries"/> extends it); a host
+/// that does not ends the dispatch with <see cref="ScrStop.NotModelled"/> when the action runs, as a host with no clock does.</summary>
+public interface IScrTimeQueries
+{
+    /// <summary>The game clock, or null when the host holds none (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
+    ScrGameTime? Time();
 }
 
 /// <summary>
@@ -413,10 +499,8 @@ public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
 /// actions (<see cref="Time"/>), the global quest state, the PC's rumor knowledge and the game-wide quelled set, and the PC's blessings and curses. A host whose
 /// admission set holds one implements this interface; the interpreter asks only for what a clause names.
 /// </summary>
-public interface IScrStoryQueries
+public interface IScrStoryQueries : IScrTimeQueries
 {
-    /// <summary>The game clock, or null when the host holds none (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
-    ScrGameTime? Time();
     /// <summary>The quest's game-wide state (0x4C51A0, 2 until a PC completes or botches it); 0 for a number the host's quest table does not hold.</summary>
     int GlobalQuestState(int quest);
     /// <summary>Whether the object is a PC that has learned the rumor (0x4C58D0); false for any other object and for a rumor number the host does not hold; null for an object the
@@ -1021,6 +1105,43 @@ public sealed class ScrEffects
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
         && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0 && Slides.Count == 0 && Newspapers.Count == 0;
+
+    /// <summary>ARC-SCRIPT-2440: whether any request of the run names <paramref name="obj"/> (the run's own <see cref="Writeback"/> and <see cref="DestroyTrapObject"/> are the event's attachee and are not asked).</summary>
+    public bool Names(ScrObjectRef obj)
+    {
+        var found = false;
+        Rewrite(o => { if (o == obj) found = true; return o; }, false);
+        return found;
+    }
+
+    /// <summary>ARC-SCRIPT-2440 (ledger TI5, F11): the same effects with every request that names <paramref name="from"/> naming <paramref name="to"/>: a host that applies a transform (<see cref="IScrHost.RebindsTransformedAttachee"/>) rebinds the
+    /// placeholder of the made object to it before it applies the later requests. The run's own <see cref="Writeback"/> (the old attachee's slot, which the original writes back to the old object) and <see cref="DestroyTrapObject"/> stay as they are.</summary>
+    public ScrEffects Rebind(ScrObjectRef from, ScrObjectRef to) => Rewrite(o => o == from ? to : o, true);
+
+    private ScrEffects Rewrite(Func<ScrObjectRef, ScrObjectRef> map, bool build)
+    {
+        ScrObjectRef? Opt(ScrObjectRef? o) => o is { } value ? map(value) : null;
+        var calls = Calls.Select(c => c with { Triggerer = Opt(c.Triggerer), Attachee = Opt(c.Attachee) }).ToArray();
+        var sounds = Sounds.Select(c => c with { Object = Opt(c.Object) }).ToArray();
+        var teleports = Teleports.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var schemes = Schemes.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var schematics = Schematics.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var readings = Readings.Select(c => c with { Viewer = map(c.Viewer) }).ToArray();
+        var skillUses = SkillUses.Select(c => c with { Source = map(c.Source), Item = Opt(c.Item), Target = map(c.Target) }).ToArray();
+        var states = States.Select(c => c with { Object = Opt(c.Object), Giver = Opt(c.Giver) }).ToArray();
+        var effectChanges = EffectChanges.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var eyeCandies = EyeCandies.Select(c => c with { Object = map(c.Object) }).ToArray();
+        var slotWrites = SlotWrites.Select(c => c with { Attachee = Opt(c.Attachee) }).ToArray();
+        var creations = Creations.Select(c => c with { Near = map(c.Near) }).ToArray();
+        var objectStates = ObjectStates.Select(c => c with { Object = map(c.Object), Other = Opt(c.Other) }).ToArray();
+        var floats = Floats.Select(c => c with { Speaker = map(c.Speaker), Pc = map(c.Pc) }).ToArray();
+        var ammoUses = AmmoUses.Select(c => c with { Holder = map(c.Holder) }).ToArray();
+        var newspapers = Newspapers.Select(c => c with { Speaker = Opt(c.Speaker), Listener = Opt(c.Listener) }).ToArray();
+        var dialog = Dialog is null ? null : Dialog with { Pc = map(Dialog.Pc), Npc = Opt(Dialog.Npc) };
+        if (!build) return this;
+        return new ScrEffects(Writeback, DestroyTrapObject, GlobalFlags, StoryState, dialog, calls, Lines, sounds, teleports, schemes, schematics, readings, skillUses, states, effectChanges, eyeCandies, slotWrites, creations,
+            objectStates, floats, new ScrStoreWrites(GlobalVariables, PcVariables, PcFlags), TownMaps, ammoUses, Fades, WorldChanges, Slides, newspapers);
+    }
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -1047,7 +1168,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S60"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.Latest"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1068,7 +1189,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S60)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S60.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.Latest)) throw new ArgumentException($"The interpreter runs only the commands of ScrAdmissionSet.Latest ({ScrAdmissionSet.Latest.Id}).", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1089,8 +1210,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
         if (host is not IScrCritterStateQueries && Admission.Conditions.Any(c => ScrAdmissionSet.CritterStateConditions.Contains(c) || ScrAdmissionSet.CritterTailQueryConditions.Contains(c)))
             throw new ArgumentException("A set with a critter-state condition (or bad associates, monster of type) needs a host that implements IScrCritterStateQueries.", nameof(Admission));
-        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(ScrAdmissionSet.CritterFieldActions.Contains))
-            throw new ArgumentException("A set with a critter getter (social class, origin, faction) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
+        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(a => ScrAdmissionSet.CritterFieldActions.Contains(a) || ScrAdmissionSet.CritterArtActions.Contains(a)))
+            throw new ArgumentException("A set with a critter getter (social class, origin, faction, armor) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
@@ -1099,8 +1220,12 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get hit points or get fatigue points needs a host that implements IScrVitalQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains) || Admission.Conditions.Contains(ScrCatalogue.Condition.WithinRange)))
             throw new ArgumentException("A set with random, loop for, distance between, get location, float line, obj is within range or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+        if (host is not IScrGroupQueries && Admission.FocusKinds.Any(ScrAdmissionSet.GroupFocusKinds.Contains))
+            throw new ArgumentException("A set with the focus kinds every one or anyone in the group, or every or any follower, needs a host that implements IScrGroupQueries.", nameof(Admission));
         if (host is not IScrPortalQueries && Admission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity))
             throw new ArgumentException("A set with the focus kind every portal in the vicinity needs a host that implements IScrPortalQueries.", nameof(Admission));
+        if (host is not IScrContainerQueries && (Admission.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity) || Admission.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity)))
+            throw new ArgumentException("A set with a container vicinity focus kind needs a host that implements IScrContainerQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))

@@ -113,7 +113,9 @@ public sealed class AreaObjectTargets
         ArgumentNullException.ThrowIfNull(session);
         if (_objects.TryGetValue(key, out var found))
         {
-            if (session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return null;
+            if (session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off || SceneryOff(session, found)) return null;
+            // ARC-SCRIPT-2386 (IV13, screen pick 0x43D9F0): a switched-off item (a script's toggle) is not a target.
+            if (found.Kind == DamageableObjectKind.Item && session.QueryItemOff(_map, found.Entity, dataOff: false)) return null;
             var read = CombatFieldReader.ReadBreakable(found.Row);
             if (read.Fields is not { } fields) return new(found.Entity, found.Row, found.Kind, null, null, null, $"{read.Failure} {read.Detail}");
             var cell = new CellCoord(checked((int)found.Row.WorldX!.Value), checked((int)found.Row.WorldY!.Value));
@@ -129,7 +131,9 @@ public sealed class AreaObjectTargets
         }
         // An item on the ground (the seed's, not taken or deleted).
         if (_inventory is null || !_inventory.TryGetEntity(key, out var item) || !_inventory.TryGetRow(item, out var row)) return null;
-        if (session.QueryMapInventory(_map)?.Ground.Any(g => g.Item.Entity == item) != true) return null;
+        if (session.QueryMapInventory(_map)?.Ground.FirstOrDefault(g => g.Item.Entity == item) is not { } lying) return null;
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item (a script's toggle, a thrown item in flight) is not a target; ARC-SCRIPT-2397 (IV18): nor is one whose map data is off.
+        if (session.QueryItemOff(_map, item, lying.Item.Facts.OffInData)) return null;
         if (CombatFieldReader.Read(row).Fields is not { } itemFields) return new(item, row, DamageableObjectKind.Item, null, null, null, "item fields do not read");
         return SessionWearItem.FromCombatFields(item, itemFields) is { } wear && SessionObjectFacts.ItemFacts(itemFields, trapped?.Invoke(row) == true) is { } facts
             ? new(item, row, DamageableObjectKind.Item, null, wear, facts, null)
@@ -137,6 +141,37 @@ public sealed class AreaObjectTargets
     }
 
     private (GameSessionVersion Version, IReadOnlySet<AreaObjectKey> Keys)? _gone;
+
+    /// <summary>
+    /// ARC-SCRIPT-2324 (ledger OT8): whether a scenery's off flag (0x2) is set now: the map data's bit, or the record of a script's toggle state (56) over it
+    /// (<see cref="GameSessionOwner.QueryObjectOff"/>). Any other static object type is never asked: only a scenery is toggled and read as off.
+    /// </summary>
+    private bool SceneryOff(GameSessionOwner session, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind) found) =>
+        found.Kind == DamageableObjectKind.Scenery && session.QueryObjectOff(_map, found.Entity, DataOff(found.Row));
+
+    private (GameSessionVersion Version, IReadOnlyDictionary<AreaObjectKey, bool> States)? _sceneryOff;
+
+    /// <summary>
+    /// ARC-SCRIPT-2585 (ledger OT10): the sceneries of the shown map that a script's toggle state (56) changed, by their key: true for off, false for on over a data that stores it off. The lights of these sceneries follow the state
+    /// (<see cref="AreaLocalLighting.WithObjectsOff"/>); a scenery no script toggled is not listed, so its lights stand as the map data loaded them. The same dictionary is returned while the session's version is unchanged, and
+    /// across revisions that change nothing here.
+    /// </summary>
+    public IReadOnlyDictionary<AreaObjectKey, bool> SceneryOffStates(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var version = session.Version;
+        if (_sceneryOff is { } known && known.Version == version) return known.States;
+        var states = new Dictionary<AreaObjectKey, bool>();
+        foreach (var pair in _objects)
+            if (pair.Value.Kind == DamageableObjectKind.Scenery && session.QueryObjectOffRecord(_map, pair.Value.Entity) is { } off) states[pair.Key] = off;
+        IReadOnlyDictionary<AreaObjectKey, bool> result = _sceneryOff is { } previous && previous.States.Count == states.Count && !states.Except(previous.States).Any() ? previous.States : states;
+        _sceneryOff = (version, result);
+        return result;
+    }
+
+    /// <summary>ARC-SCRIPT-2324: the object flag "off" (0x2) of a row's map data.</summary>
+    internal static bool DataOff(AreaObjectRecord row) =>
+        row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags and >= int.MinValue and <= uint.MaxValue } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
 
     /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off, since ARC-SCRIPT-052
     /// those a script destroyed): the view no
@@ -148,9 +183,11 @@ public sealed class AreaObjectTargets
         var version = session.Version;
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
-            or SessionObjectCondition.Off).Select(pair => pair.Key)
+            or SessionObjectCondition.Off || SceneryOff(session, pair.Value)).Select(pair => pair.Key)
             .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
-                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)).Select(pair => pair.Key)).ToHashSet();
+                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)
+                // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is no object of this map's lists (the original moves its record; this map's away change names where it stands).
+                || session.QueryMapChange(_map, AreaCompanionPlacement.MapKey(pair.Value.Entity)) is { } away and >= 1 && away != _map.RuntimeMap).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);
@@ -217,15 +254,22 @@ public sealed class AreaObjectTargets
         if (result.Life is { } life) return $"critical miss: the hero takes {life.HitPointDamage} damage";
         var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap goes off" : "";
         if (result.Object is { } hit)
-            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {Broke(hit.Break)}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
+            return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {(result.Host.HasFlag(SessionObjectHostSteps.DestroyKept) ? KeptBroke(hit.Break) : Broke(hit.Break))}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
         if (result.Item is { } item) return item.Break switch
         {
             Arcanum.Simulation.Items.ItemBreakStep.Broken => "hit: the item breaks",
-            Arcanum.Simulation.Items.ItemBreakStep.Deleted => "hit: the item is destroyed",
+            Arcanum.Simulation.Items.ItemBreakStep.Deleted => result.Host.HasFlag(SessionObjectHostSteps.DestroyKept) ? "hit: the destroy is refused, the item stays" : "hit: the item is destroyed",
             _ => $"hit: the item has {item.Condition?.HitPoints} hit points left",
         } + trap;
         return "attack: no damage";
     }
+
+    // ARC-SCRIPT-2686: a destroy the object's destroy point refused (the object stays, the break's other effects stand).
+    private static string KeptBroke(ObjectBreak kind) => kind switch
+    {
+        ObjectBreak.ContainerSpilled => "the container breaks, but it is not destroyed",
+        _ => "the destroy is refused, the object stays",
+    };
 
     private static string Broke(ObjectBreak kind) => kind switch
     {

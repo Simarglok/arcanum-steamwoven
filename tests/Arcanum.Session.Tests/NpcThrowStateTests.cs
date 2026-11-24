@@ -114,17 +114,7 @@ public sealed class NpcThrowStateTests
         }
     }
 
-    [TestMethod]
-    public void AThrowAtAnEmptyLocationLandsTheItemThereWithoutARoll()
-    {
-        using var owner = Owner();
-        var draws = owner.QueryRandom().Draws;
-        var tile = new CellCoord(98, 203);
-        var result = owner.ThrowByNpc(owner.Version, new(Combat(), Dagger, 15, ThrowerCell, tile) { ThrowerWorn = Wielded() });
-        Assert.AreEqual((GameSessionDisposition.Changed, (SessionAttackResult?)null, (CellCoord?)tile), (result.Disposition, result.Attack, result.Landed));
-        Assert.AreEqual(draws, owner.QueryRandom().Draws);
-        Assert.AreEqual(tile, Lying(owner, Dagger));
-    }
+    // ARC-COMBAT-2523: a throw at a location with no struck critter rolls (NpcThrowLocationTests).
 
     [TestMethod]
     public void AThrowAtAnotherNpcStrikesItWithTheThrowersSkill()
@@ -146,6 +136,53 @@ public sealed class NpcThrowStateTests
         }
         else Assert.AreNotEqual(cell, result.Landed, "a miss scatters away from it");
         Assert.AreEqual(result.Landed, Lying(owner, Dagger));
+    }
+
+    // ARC-COMBAT-2392 (TW8): an NPC's throw flies at a corpse too, rolled as at a living critter; a hit does no damage.
+    [TestMethod]
+    public void AThrowAtACorpseRollsAndDoesNoDamage()
+    {
+        using var owner = Owner(7);
+        var victim = Combat(Other, armed: false);
+        var cell = new CellCoord(99, 200);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, victim.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var result = owner.ThrowByNpc(owner.Version, new(Combat(), Dagger, 15, ThrowerCell, cell)
+        {
+            Struck = victim, StruckCell = cell, ThrowerWorn = Wielded(), LineOfFire = new(0, false),
+        });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, AttackRefusal.None), (result.Disposition, result.Failure, result.Attack!.Resolution!.Refusal));
+        Assert.IsNull(result.Attack.Resolution.Damage, "a corpse takes no damage");
+        Assert.IsNull(result.Attack.Resolution.DodgeCheck, "a corpse never dodges");
+        Assert.AreEqual(result.Landed, Lying(owner, Dagger));
+    }
+
+    // ARC-SCRIPT-2397 (IV15, IV18; throw node 0x42AB90 refuses flags & 3): an NPC's throw of an item switched off by a script's toggle or by the map data's own bit is refused before any roll, and the item stays in the thrower's list.
+    [TestMethod]
+    public void AnNpcDoesNotThrowASwitchedOffItem()
+    {
+        using var owner = Owner();
+        var draws = owner.QueryRandom().Draws;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, SessionItemOff.Key(Dagger), 1)]).Disposition);
+        var refused = owner.ThrowByNpc(owner.Version, AtHero());
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable), (refused.Disposition, refused.Failure));
+        Assert.AreEqual(draws, owner.QueryRandom().Draws, "no roll");
+        Assert.IsNotNull(owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == Thrower).Items.FirstOrDefault(i => i.Entity == Dagger), "the item stays in the list");
+        Assert.IsNull(Lying(owner, Dagger));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, SessionItemOff.Key(Dagger), 0)]).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.ThrowByNpc(owner.Version, AtHero()).Failure, "switched on again, it is thrown");
+    }
+
+    [TestMethod]
+    public void AnNpcDoesNotThrowAnItemTheMapDataStoresOffUntilAToggleSwitchesItOn()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new SessionMapInventorySeed(
+            [new(Thrower, SessionHolderKind.Npc, false, true, [], [Dagger]), new(Other, SessionHolderKind.Npc, false, true, [], [])],
+            [new(Dagger, Facts(SessionItemType.Weapon, 2001, location: 1004) with { OffInData = true }, null)])).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.ThrowByNpc(owner.Version, AtHero()).Failure);
+        Assert.IsNotNull(owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == Thrower).Items.FirstOrDefault(i => i.Entity == Dagger));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, SessionItemOff.Key(Dagger), 0)]).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.ThrowByNpc(owner.Version, AtHero()).Failure, "the toggle flipped the data's bit");
     }
 
     [TestMethod]
@@ -178,14 +215,23 @@ public sealed class NpcThrowStateTests
     [TestMethod]
     public void AGrenadeFliesAsAShotAndLandsWhereTheHostEndsIt()
     {
-        using var owner = Owner();
-        var draws = owner.QueryRandom().Draws;
         var tile = new CellCoord(98, 203);
-        var result = owner.ThrowByNpc(owner.Version, Lob(tile));
-        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (SessionAttackResult?)null, (CellCoord?)null, (CellCoord?)tile),
-            (result.Disposition, result.Failure, result.Attack, result.Landed, result.Destination));
+        // ARC-COMBAT-2523 (TW11): the lob rolls as a throw at a location; the seed is one whose lob hit, so the shot flies to the tile itself (a miss flies to its scatter tile, NpcThrowLocationTests).
+        GameSessionOwner? found = null;
+        SessionNpcThrowResult? first = null;
+        for (ulong seed = 1; seed <= 300 && found is null; seed++)
+        {
+            var candidate = Owner(seed);
+            var lobbed = candidate.ThrowByNpc(candidate.Version, Lob(tile));
+            if (lobbed.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) (found, first) = (candidate, lobbed);
+            else candidate.Dispose();
+        }
+        using var owner = found!;
+        var result = first!;
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (CellCoord?)null, (CellCoord?)tile),
+            (result.Disposition, result.Failure, result.Landed, result.Destination));
+        Assert.IsNotNull(result.Attack, "the roll's resolution is carried");
         var shot = result.Shots.Single();
-        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing is rolled: the dispatcher's check is not ready");
         Assert.IsTrue(owner.QueryItemInFlight(Grenade), "the grenade is hidden while it flies");
         Assert.AreEqual(shot, owner.QueryShotsInFlight().Single());
         var thrown = owner.QueryThrownShot(shot)!.Value;

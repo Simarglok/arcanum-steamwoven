@@ -16,6 +16,9 @@ public partial class TerrainViewerApp
     // ARC-DEV-1762: the NPC throws the viewer launched (shot, thrown item, the check's decided hit, thrower, the cells it flew between), for the npc-throw stage.
     private readonly List<(long Shot, string Item, bool Hit, string Thrower, CellCoord From, CellCoord To, bool InFlight, CellCoord? Lying)> _npcThrowLaunchesForSelfTest = [];
 
+    // ARC-COMBAT-2693: the critical misses of an NPC's throw the viewer noticed as the thrower's self-hit (the thrower, the damage the session dealt it, the floater lines it drew), for the npc-throw stage.
+    private readonly List<(string Thrower, int Damage, int Floaters, string Status)> _npcThrowSelfHitsForSelfTest = [];
+
     // ARC-DEV-1762 native observation (stage "npc-throw", only when named, map mode with --hero): a free NPC of the map whose wielded weapon is a seed item (the AI host throws no item the session added) is lent the
     // installed throwing dagger's own fields (prototype 6072, the "default throws" weapon with a projectile art; no NPC of the installed town wields one), and the hero stands four to six cells from it with a clear line;
     // the NPC is told of the hero's attack and fights. The attack starter throws the dagger (goal 37, ARC-COMBAT-1717) and the stage requires the whole chain through the real projectile host: the flight launches (the
@@ -89,7 +92,7 @@ public partial class TerrainViewerApp
                 Require(host!.ThrowableWeapon(entity) == dagger, $"throw {index}: the AI host answers the lent {dagger} as the thrower's throwable weapon ({host.ThrowableWeapon(entity)})");
                 session.Heal(session.Version, thrower.Target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 host.HeroAttacked(entity);
-                _npcThrowLaunchesForSelfTest.Clear(); _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear();
+                _npcThrowLaunchesForSelfTest.Clear(); _npcThrowSelfHitsForSelfTest.Clear(); _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear();
                 _areaSmokeTime *= 20; scaled = true; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
                 TickAreaClock(hostMs);
                 void Frame()
@@ -124,23 +127,32 @@ public partial class TerrainViewerApp
                 Require(lying == landing.Tile && !session.QueryItemInFlight(dagger) && session.QueryItemDecays().All(d => d.Entity != dagger),
                     $"throw {index}: the dagger lies where the flight ended without decay ({lying?.X},{lying?.Y} vs {landing.Tile.X},{landing.Tile.Y})");
                 Require(drawn, $"throw {index}: the dagger is drawn again where it landed");
-                // A hit the session decided strikes the hero through the AI host when the flight meets it; a miss flies on to its scatter tile and does not hurt the hero it was aimed at.
+                // ARC-COMBAT-2425 (ledger TW10, TW11): an NPC's throw holds the hero's tile as a location and no object, and the line of fire never names the critter on the target tile, so nothing is struck by name.
+                // ARC-COMBAT-2523 (TW11): the throw rolls as a throw at a location: a hit flies to the hero's tile, lands there and hurts nobody; a miss flies to its scatter tile, where a critter it passes takes a forced hit
+                // and a critical miss turns on the thrower; the dagger lies where the flight ended either way.
                 var lost = heroAtThrow - session.QueryHeroLife()!.Status.HitPoints;
-                if (!launch.Hit)
+                // A flight that met a scenery piece on the way ends there (an obstruction, as before): the stage judges the hero's tile only when the dagger flew to it.
+                var obstructed = end.Strike == ProjectileStrikeKind.Obstruction;
+                if (launch.Hit)
                 {
-                    Require(!(strike.Struck == AiSchedulerRules.Pc && strike.Damage is > 0) && end.Strike != ProjectileStrikeKind.Target, $"throw {index}: a missed throw did not hurt the hero it was aimed at ({end.Strike} {strike.Damage})");
-                    return false;
+                    Require(strike.Struck is null && end.Strike != ProjectileStrikeKind.Target && (obstructed || end.Struck is null),
+                        $"throw {index}: a hit at the hero's tile strikes nothing ({end.Strike} {end.Struck ?? "none"} {strike.Struck ?? "none"})");
+                    Require((obstructed || landing.Tile == launch.To) && lost == 0, $"throw {index}: the dagger landed on the hero's tile (or met an obstruction) and hurt nobody (landed {landing.Tile.X},{landing.Tile.Y} aimed {launch.To.X},{launch.To.Y}, lost {lost})");
                 }
-                Require(strike.Struck == AiSchedulerRules.Pc && strike.Disposition != GameSessionDisposition.Rejected, $"throw {index}: a hit throw struck the hero through the AI host ({strike.Struck ?? "none"} {strike.Disposition})");
-                Require(end.Strike == ProjectileStrikeKind.Target && end.Struck == AiSchedulerRules.Pc, $"throw {index}: the flight of a hit ended on its target ({end.Strike} {end.Struck ?? "none"})");
-                Require(strike.Damage is not > 0 || lost > 0, $"throw {index}: a hit that did damage lowered the hero's hit points (damage {strike.Damage}, lost {lost})");
-                GD.Print($"ARC-DEV-1962 npc-throw hit leg throw={index} struck={end.Struck} disposition={strike.Disposition} damage={strike.Damage} heroLost={lost} hp={heroAtThrow}->{session.QueryHeroLife()!.Status.HitPoints}"
-                    + $" landed={landing.Tile.X},{landing.Tile.Y} drawn={drawn}");
+                else
+                    Require(obstructed || ProjectileRules.Distance(landing.Tile, launch.To) <= 6, $"throw {index}: a miss lands within its scatter of the hero's tile or where an obstruction stopped its flight (landed {landing.Tile.X},{landing.Tile.Y} aimed {launch.To.X},{launch.To.Y})");
+                // ARC-COMBAT-2693 (TW11): a critical miss of the throw turned on the thrower and the viewer noticed it as the thrower's self-hit (not as a plain throw); judged when the roll gave one (the unit tests pin the roll).
+                var selfHit = _npcThrowSelfHitsForSelfTest.FirstOrDefault(h => h.Thrower == entity);
+                if (selfHit.Thrower is not null)
+                    Require(!launch.Hit && selfHit.Damage >= 0 && selfHit.Floaters >= 0, $"throw {index}: the critical miss was noticed as the thrower's self-hit ({selfHit.Status}, hit {launch.Hit})");
+                GD.Print($"ARC-COMBAT-2693 npc-throw self-hit leg throw={index} judged={selfHit.Thrower is not null} damage={selfHit.Damage} floaters={selfHit.Floaters}");
+                GD.Print($"ARC-DEV-1962 npc-throw tile leg throw={index} struck=none heroLost={lost} hp={heroAtThrow}->{session.QueryHeroLife()!.Status.HitPoints}"
+                    + $" hit={launch.Hit} landed={landing.Tile.X},{landing.Tile.Y} drawn={drawn}");
                 passLine = "ARC-DEV-1762 native-smoke npc-throw PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                    RuntimeMap = runtime, Thrower = thrower.Row.PrototypeNumber, Weapon = DaggerPrototype, Wielded = thrower.Prototype, Throws = index, MissesBeforeHit = index - 1, Hit = launch.Hit, Strike = end.Strike.ToString(), Struck = end.Struck ?? "none",
+                    RuntimeMap = runtime, Thrower = thrower.Row.PrototypeNumber, Weapon = DaggerPrototype, Wielded = thrower.Prototype, Throws = index, Skipped = index - 1, Hit = launch.Hit, Strike = end.Strike.ToString(), Struck = end.Struck ?? "none",
                     Damage = strike.Damage, HeroLost = lost, Landed = $"{landing.Tile.X},{landing.Tile.Y}", Drawn = drawn, ItemEvents = _shotEndItemEventsForSelfTest.Count,
                     Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" });
-                return true;
+                return launch.Hit;
             }
             finally
             {
@@ -167,7 +179,8 @@ public partial class TerrainViewerApp
                 if (hit) { decided = true; break; }
             }
             if (tried == 0) { GD.Print($"ARC-DEV-1762 native-smoke npc-throw NONE map={_readyMapName} (no thrower the hero can stand 4..6 cells from and see among {throwers.Count})"); return; }
-            Require(decided, $"no throw of {tried} (one per thrower) was decided a hit");
+            // ARC-COMBAT-2523: every judged throw rolled; a run of throwers that all missed is judged by the miss rules (a hit is not required: the unit tests pin the roll).
+            GD.Print($"ARC-COMBAT-2523 npc-throw judged={tried} decidedHit={decided}");
             GD.Print(passLine!);
         }
         finally

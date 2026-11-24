@@ -242,7 +242,7 @@ public partial class TerrainViewerApp
     {
         if (_floaters is { } layer) return layer;
         // ARC-DEV-156 (B28): the lines in the original's font art 229 when it read (the viewer's font without a game folder).
-        _floaters = new AreaFloaterLayer(TextFonts()?.Text) { Anchor = FloaterAnchor, BubbleAnchor = BubbleAnchorOf, BubbleView = () => new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size) };
+        _floaters = new AreaFloaterLayer(TextFonts()?.Text) { Anchor = FloaterAnchor, BubbleAnchor = BubbleAnchorOf, BubbleView = () => AreaGameBarPanel.FreeRect(GetViewport().GetVisibleRect().Size) };
         AddChild(_floaters);
         // First among the app's children: on its layer it draws under the diagnostic HUD.
         MoveChild(_floaters, 0);
@@ -325,8 +325,8 @@ public partial class TerrainViewerApp
         return _floaterCells.TryGetValue(owner, out var kept) ? kept : null;
     }
 
-    /// <summary>The screen point 90 px (at the view's zoom) above an owner's tile centre, the floater box's bottom centre.</summary>
-    private Vector2? FloaterAnchor(string owner) => ObjectScreenPoint(owner, FloaterRules.BoxRise);
+    /// <summary>ARC-UI-2289: an owner's tile centre on the screen, as for a bubble; the layer takes the 90 px rise itself, in the original's pixels at the screen's whole factor.</summary>
+    private Vector2? FloaterAnchor(string owner) => ObjectScreenPoint(owner, 0);
 
     /// <summary>ARC-UI-1997: a bubble's anchor, the owner's tile centre on the screen with the original's (40, 20), without the draw offset.</summary>
     private Vector2? BubbleAnchorOf(string owner) => ObjectScreenPoint(owner, 0);

@@ -19,10 +19,14 @@ public sealed class AreaBodyMoveTests
     public void TheMoveArtsAreTheBodysNameWithTheGaitLetters()
     {
         WithArchive([("art/critter/hmm/hmmuwsba.art", Art(1, 10, 4, 1)), ("art/critter/hmm/hmmuwxbb.art", Art(3, 10, 4, 1)),
-            ("art/critter/hmm/hmmuwxag.art", Art(2, 20, 4, 1))], (path, identity) =>
+            ("art/critter/hmm/hmmuwxag.art", Art(2, 20, 4, 1)), ("art/critter/hmm/hmmuwsad.art", Art(5, 10, 4, 1))], (path, identity) =>
         {
             var moves = AreaBodyMoveArt.Load(Visual(identity(0)), path);
             Assert.AreEqual(AreaBodyMoveStatus.Ready, moves.Status, moves.Detail);
+            // ARC-RENDER-2539: the stealth walk (animation 3, letter d) keeps the shield like the stand, and weapon 1 becomes weapon 0 (MA2).
+            Assert.AreEqual("art/critter/hmm/hmmuwsad.art", moves.Sneak!.Name);
+            Assert.AreEqual(3, moves.Sneak.Animation);
+            Assert.AreSame(moves.Sneak, moves.For(ActorDiagnosticAction.Sneak));
             Assert.AreEqual("art/critter/hmm/hmmuwxbb.art", moves.Walk!.Name, "walk clears the shield, keeps the weapon");
             Assert.AreEqual("art/critter/hmm/hmmuwxag.art", moves.Run!.Name, "run clears shield and weapon");
             Assert.AreEqual("art/critter/hmm/hmmuwsba.art", moves.Stand!.Name, "stand keeps both");
@@ -45,6 +49,9 @@ public sealed class AreaBodyMoveTests
             Assert.AreEqual("art/critter/hmm/hmmuwxab.art", moves.Walk!.Name);
             Assert.IsNull(moves.Run);
             Assert.AreSame(moves.Walk, moves.For(ActorDiagnosticAction.Run), "the missing-art repair draws the walk");
+            // ARC-RENDER-2539: a body without the stealth ART draws the walk (MA1 pair 3 to 1).
+            Assert.IsNull(moves.Sneak);
+            Assert.AreSame(moves.Walk, moves.For(ActorDiagnosticAction.Sneak));
         });
         WithArchive([("art/critter/hmm/hmmuwsba.art", Art(1, 10, 4, 1)), ("art/critter/hmm/hmmuwxag.art", Art(2, 20, 4, 1))], (path, identity) =>
         {
@@ -223,7 +230,7 @@ public sealed class AreaBodyMoveTests
             var stand = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 3, 1);
             Assert.AreEqual(("art/critter/hmm/hmmuwsda.art", 0), (stand.Art!.Name, stand.Animation), "the combat stand keeps weapon and shield");
             var missing = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 2, 0);
-            Assert.AreEqual(AreaBodyMoveStatus.WalkMissing, missing.Status);
+            Assert.AreEqual(AreaBodyMoveStatus.ArtMissing, missing.Status);
             Assert.IsNull(missing.Art);
             Assert.AreEqual(AreaBodyMoveStatus.SourceUnavailable, AreaBodyMoveArt.LoadArmed(visual, null, 20, 1, 0).Status);
             Assert.AreEqual(AreaBodyMoveStatus.NotACritterArt, AreaBodyMoveArt.LoadArmed(visual with { RawArt = 0x40000000 }, path, 20, 1, 0).Status);

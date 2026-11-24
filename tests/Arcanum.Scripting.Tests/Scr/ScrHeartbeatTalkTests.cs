@@ -144,16 +144,27 @@ public sealed class ScrHeartbeatTalkTests
     }
 
     [TestMethod]
-    public void A_call_ex_of_the_dialog_point_refuses_a_callee_that_calls_a_script()
+    public void A_script_called_from_the_dialog_point_meets_the_dialog_gates_of_its_attachee()
     {
-        // The called script would run at the dialog point without the dialog gates, as RunObject refuses for a dialog-point event.
-        var host = Host(0, Pc);
-        host.Inner.Attach(Npc, ScrPoint.Dialog, Talk, Program(0, Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
-            Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
-            Do(C(ScrCatalogue.Action.CallScript, N(Talk + 1), N(0), (Attachee, 0), (Attachee, 0))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
-        var run = Beat(host);
-        Assert.AreEqual(ScrStop.Refused, run.Stop);
-        Assert.IsNull(run.Effects.Dialog);
+        // ARC-SCRIPT-2198 (exe 0x44B030 -> 0x4449B0): the callee runs through the event runner at the caller's point, so at the dialog point a dead NPC without the callee's death-speech flag, or a surrendered one without
+        // its surrender-speech flag, runs the callee nothing; a mind-controlled one runs 2188 in place of the callee.
+        const int Callee = Talk + 1, Flag = 77;
+        static TalkHost Build(ScrDialogState state, uint calleeFlags, uint callerFlags)
+        {
+            var host = Host(callerFlags, Pc);
+            host.Inner.Attach(Npc, ScrPoint.Dialog, Talk, Program(callerFlags, Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
+                Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
+                Do(C(ScrCatalogue.Action.CallScript, N(Callee), N(0), (Attachee, 0), (Attachee, 0))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+            host.Inner.Scripts[Callee] = ScrScriptLookup.Of(Program(calleeFlags, Do(C(ScrCatalogue.Action.SetGlobalFlag, N(Flag))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+            host.Inner.Dialog = state;
+            return host;
+        }
+        static bool Ran(ScrRunResult run) => run.Effects.GlobalFlags.Any(f => f.Index == Flag);
+        Assert.IsTrue(Ran(Beat(Build(ScrDialogState.Normal, 0, 0))), "an ordinary NPC runs the callee");
+        Assert.IsFalse(Ran(Beat(Build(ScrDialogState.Dead, 0, ScrCatalogue.FileFlag.DeathSpeech))), "dead, the callee has no death-speech flag");
+        Assert.IsTrue(Ran(Beat(Build(ScrDialogState.Dead, ScrCatalogue.FileFlag.DeathSpeech, ScrCatalogue.FileFlag.DeathSpeech))), "dead, the callee has the flag");
+        Assert.IsFalse(Ran(Beat(Build(ScrDialogState.Surrendered, 0, ScrCatalogue.FileFlag.SurrenderSpeech))), "surrendered, the callee has no surrender-speech flag");
+        Assert.IsTrue(Ran(Beat(Build(ScrDialogState.Surrendered, ScrCatalogue.FileFlag.SurrenderSpeech, ScrCatalogue.FileFlag.SurrenderSpeech))), "surrendered, the callee has the flag");
     }
 
     [TestMethod]

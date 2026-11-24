@@ -27,7 +27,11 @@ public partial class TerrainViewerApp
         () => LootWindowOnContainer, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow, () => _readingData?.Data?.Texts,
         // ARC-MAGIC-1684: an NPC's best-items wield (its regeneration, the AI gate's re-wield) runs its items' move scripts through the shown map's item script host.
-        () => _areaSession is { } session ? _inventoryHost?.ItemScripts(session) : null);
+        () => _areaSession is { } session ? _inventoryHost?.ItemScripts(session) : null,
+        // ARC-WORLD-2358 (TT20): the conversation a deferred call's run started waits for the next frame (the original opens it inside the run, the ping applies the run's teleport a frame later).
+        callDialog: dialog => _callDialogs.Enqueue(dialog));
+
+    private readonly Queue<Arcanum.Scripting.Scr.ScrDialogStart> _callDialogs = new();
 
     // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
     private AreaRealStepHost? _realStepHost;
@@ -107,7 +111,27 @@ public partial class TerrainViewerApp
     // The hour's form posed at the animation time (AtHour first: a posed view keeps no day form). Pure: the draw-time
     // companion delegate calls it too.
     private AreaLocalLighting? LightsNow(AreaLocalLighting? local, AreaAmbientDriver driver) =>
-        local?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
+        SceneryLit(local)?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
+
+    // ARC-SCRIPT-2585 (ledger OT10): a scenery a script's toggle state (56) switched off or on keeps its lights in step with the flag. The sceneries' states are the session's
+    // (AreaObjectTargets.SceneryOffStates, one dictionary while nothing changes); the lighting made of them is kept per loaded lighting and per states, so a draw costs two reference tests.
+    private static readonly IReadOnlyDictionary<AreaObjectKey, bool> NoSceneryStates = new Dictionary<AreaObjectKey, bool>();
+    private IReadOnlyDictionary<AreaObjectKey, bool> _sceneryStatesPushed = NoSceneryStates;
+    private (AreaLocalLighting Basis, IReadOnlyDictionary<AreaObjectKey, bool> States, AreaLocalLighting Result)? _sceneryLit;
+
+    private IReadOnlyDictionary<AreaObjectKey, bool> SceneryLightStates() =>
+        _areaSession is { } session && ObjectTargets() is { } targets && targets.SceneryOffStates(session) is { Count: > 0 } states ? states : NoSceneryStates;
+
+    private AreaLocalLighting? SceneryLit(AreaLocalLighting? local)
+    {
+        if (local is null) return null;
+        var states = SceneryLightStates();
+        if (states.Count == 0) return local;
+        if (_sceneryLit is { } known && ReferenceEquals(known.Basis, local) && ReferenceEquals(known.States, states)) return known.Result;
+        var result = local.WithObjectsOff(states);
+        _sceneryLit = (local, states, result);
+        return result;
+    }
 
     /// <summary>Per frame, after the clock's frame: the animation time follows the frame clocks (<see cref="FrameClockTap"/>); a light
     /// that changed its frame or offsets pushes a new view.</summary>
@@ -218,7 +242,7 @@ public partial class TerrainViewerApp
     {
         if (!AreaRelight.Active) return;
         if (_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting && LightsNow(lighting.Local, driver) is { } now)
-            AreaRelight.SetMapLights(now.Field.Placements.Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, driver.Effective))
+            AreaRelight.SetMapLights(now.PosedPlacements.Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, driver.Effective))
                 .Where(light => light is not null).Select(light => light!.Value));
         else AreaRelight.SetMapLights([]);
     }
@@ -336,6 +360,8 @@ public partial class TerrainViewerApp
         var size = HeroCarriedSize();
         var glows = EyeCandyLightKey();
         var npcs = NpcCarriedLights().Key;
+        // ARC-SCRIPT-2585: a scenery's toggle changed the lights of the shown map: the canvas is given the lighting again.
+        if (SceneryLightStates() is var scenery && !ReferenceEquals(scenery, _sceneryStatesPushed)) { _sceneryStatesPushed = scenery; PushAreaAmbient(); }
         if (_carriedKey is { } known && known.Size == size && known.Lit == lit && known.EyeCandy == glows && known.Npcs == npcs && ReferenceEquals(known.Lighting, lighting)) return;
         _carriedKey = (size, lighting, lit, glows, npcs);
         _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));
@@ -457,6 +483,7 @@ public partial class TerrainViewerApp
 
     // ARC-WORLD-039: a line per pump call that took events (identifiers and counts only).
     private int _loggedCallRefusals;
+    private readonly SessionEventLogThrottle _sessionEventLog = new();
 
     private void LogAreaEvents(AreaAmbientDriver driver) => LogAreaEvents(driver.Events);
 
@@ -465,9 +492,15 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-047: a heartbeat's talk, asked for during the pump that just returned.
         OpenHeartbeatConversation();
         if (frame?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        // ARC-DEV-1397: the counts reach the log when something notable happened, else summed at most once a second (one line per frame filled the report's window).
+        var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
+        _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
+        var tally = _sessionEventLog.Offer(_clockHostMs, last.Fired, last.Dropped, last.ScriptCalls, last.ScriptCallsRun, last.Waits.Count, last.Decays.Count, last.Restocks.Count,
+            notable: last.Dropped > 0 || last.Waits.Count > 0 || last.Decays.Count > 0 || last.Restocks.Count > 0 || last.Coalesced || last.BudgetLeft || refused);
         // ARC-DEV-051: the session events that came due, for the bug report's log.
-        BugReportLog.Process.Add(BugReportLineKind.Event, $"session events fired={last.Fired} dropped={last.Dropped} scripts={last.ScriptCallsRun}/{last.ScriptCalls}"
-            + $" waits={last.Waits.Count} decays={last.Decays.Count} restocks={last.Restocks.Count}");
+        if (tally is not null)
+            BugReportLog.Process.Add(BugReportLineKind.Event, $"session events frames={tally.Frames} fired={tally.Fired} dropped={tally.Dropped} scripts={tally.ScriptCallsRun}/{tally.ScriptCalls}"
+                + $" waits={tally.Waits} decays={tally.Decays} restocks={tally.Restocks}");
         ReportCompanionWaits(last.Waits);
         // ARC-WORLD-062: a decayed item leaves the ground (the map's inventory and its drawn body).
         if (last.Decays.Count > 0)
@@ -486,13 +519,14 @@ public partial class TerrainViewerApp
         foreach (var restock in last.Restocks)
             foreach (var regeneration in restock.Regenerations)
             {
+                // ARC-SCRIPT-2887: and the lines the get and insert-item scripts of the items it created printed.
+                PostScriptLines(regeneration.Messages);
                 PostScriptLines(regeneration.Wield?.Messages ?? []);
                 // ARC-MAGIC-1830: and the eye candy those scripts made.
                 QueueScriptEyeCandies(regeneration.Wield?.EyeCandies ?? []);
             }
-        var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
-        _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
-        GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"
+        if (tally is null) return;
+        GD.Print($"ARC-WORLD-039 events frames={tally.Frames} steps={last.Steps} passes={last.Passes} fired={tally.Fired} dropped={tally.Dropped} calls={tally.ScriptCallsRun}/{tally.ScriptCalls}"
             + $" late={last.Coalesced} budgetLeft={last.BudgetLeft} pending={last.Pending}"
             + (refused ? $" refusal={_areaEventWorld!.LastCallRefusal}" : ""));
     }

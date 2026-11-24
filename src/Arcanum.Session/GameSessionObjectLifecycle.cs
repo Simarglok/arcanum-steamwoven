@@ -132,7 +132,7 @@ public sealed partial class GameSessionOwner
     /// pile no longer stays by a path that skipped the check).</item>
     /// <item><b>A junk pile</b>: the pile's record only; its items stay on the ground where they lie.</item>
     /// <item><b>A pool of blood</b>: the pool's record (a decayed pool is purged here; its number is never given again).</item>
-    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again. <b>A created critter</b> (ARC-DEV-359, ARC-DEV-371): its record and its written flags.</item>
+    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again. <b>A created critter</b> (ARC-DEV-359, ARC-DEV-371): its record and its written flags; the items of its list with object flag 0x400000 are taken out and dropped before it by <see cref="DestroyCreatedObject"/> (ARC-WORLD-2503), which the session's created-object destroys go through (a dead critter's body decay has its own drop rule, and a script's destroy of a created critter is not routed here).</item>
     /// </list>
     /// <paramref name="windowShowsContainer"/> is a caller that knows the host's loot window shows a container (the check then waits for
     /// the close); the session also reads it from the event world of the pass it runs in (the decay), and outside a pass it knows none, so
@@ -218,6 +218,7 @@ public sealed partial class GameSessionOwner
     {
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Hero.Remove(entity);
+        _inventory.Hero.ForgetLastDrop(entity);
         _inventory.RemoveFromNpc(entity);
         // ARC-WORLD-103: a deleted item an NPC wore is worn no more.
         _inventory.Unwear(entity);
@@ -243,9 +244,15 @@ public sealed partial class GameSessionOwner
         _durability.Records.Remove(entity);
         _durability.Uses.Remove(entity);
         _durability.Charges.Remove(entity);
+        _durability.ManaStores.Remove(entity);
+        _events.RemoveAll(SessionEventKinds.ItemRecharge, e => e.Payload.Entities[0].Code == entity);
         _durability.Destroyed.Add(entity);
         // ARC-SCRIPT-1826: the art id a script wrote on it goes too (a made item's record would otherwise stay in the save, counted against the budget).
         if (QueryObjectRecordMap(SessionObjectArt.Key(entity)) is { } artMap) _maps.Remove(artMap, SessionObjectArt.Key(entity));
+        // ARC-SCRIPT-2346: and the off flag a script toggled on it.
+        if (QueryObjectRecordMap(SessionItemOff.Key(entity)) is { } offMap) _maps.Remove(offMap, SessionItemOff.Key(entity));
+        // ARC-SCRIPT-2375: and the name number a script's rename gave it.
+        if (QueryObjectRecordMap(SessionItemName.Key(entity)) is { } nameMap) _maps.Remove(nameMap, SessionItemName.Key(entity));
         // ARC-WORLD-062: a deleted item no longer decays.
         CancelDecay(entity);
     }

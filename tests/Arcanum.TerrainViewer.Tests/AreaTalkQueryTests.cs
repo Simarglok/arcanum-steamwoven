@@ -70,7 +70,7 @@ public sealed class AreaTalkQueryTests
                 If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(7)), new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag)), new(ScrCatalogue.Action.DoNothing)),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             // Line 1's action field holds spaces only; line 2 acts.
-            Write("dlg/00790float.dlg", Encoding.Latin1.GetBytes("{1}{Not now, @pcname@.}{Not now, lady.}{}{}{}{  }\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
+            Write("dlg/00790float.dlg", Encoding.Latin1.GetBytes("{1}{Not now, @pcname@, said @npcname@.}{Not now, lady.}{}{}{}{  }\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
             // 792: get reaction of the attachee toward the triggerer into local 0, set global flag 100 when it is 62 (not the original's 50 for a non-NPC pair), skip default (ARC-DEV-178, B19).
             Write("scr/00792reaction.scr", Program(
                 Do(new(ScrCatalogue.Action.GetReaction, (Attachee, -1), (Triggerer, -1), (Local, 0))),
@@ -132,18 +132,35 @@ public sealed class AreaTalkQueryTests
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
     private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50,
         Func<string, int, int, bool, string>? damage = null, Func<string, int, string>? heal = null, Func<string, string, string>? attack = null,
-        Func<string?, string, int, bool, bool, string>? cast = null)
+        Func<string?, string, int, bool, bool, string>? cast = null, AreaObjectRecord? neighbour = null, Func<string, int?>? standardReaction = null, GameSessionOwner? heroSession = null, Func<AreaObjectRecord, string?>? npcName = null)
     {
-        var session = ConversationSessionFixture.Create(Map);
+        var session = heroSession ?? ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], reaction);
-        var use = new AreaUseScriptHost(session, useMap, [row], [], content,
+        var use = new AreaUseScriptHost(session, useMap, neighbour is null ? [row] : [row, neighbour], [], content,
             new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
-                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack, ScriptCast: cast));
-        var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
+                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack, ScriptCast: cast, StandardReaction: standardReaction));
+        var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use, NpcName = npcName };
         return new(session, speaker, host);
+    }
+
+    [TestMethod]
+    public void Get_reaction_of_an_NPC_that_is_no_speaker_reads_the_worlds_standard_reaction_through_the_dialog_host()
+    {
+        // ARC-SCRIPT-2505: the vicinity loop of Kerghan's script reads every critter's reaction; a neighbour that is no speaker is the use host's answer, the PC (no NPC) gives 50.
+        WithContent(content =>
+        {
+            var neighbour = Row(2, 0);
+            using var talk = Create(content, 792, (7, false), reaction: 62, neighbour: neighbour, standardReaction: _ => 71);
+            var other = new ScrObjectRef(Map, AreaConversationState.EntityId(neighbour));
+            Assert.AreEqual(71, talk.Host.ReactionOf(other, talk.Host.Pc), "a neighbour that is no dialog speaker");
+            Assert.AreEqual(62, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc), "the speaker keeps the dialog state's reaction");
+            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC as the looped object");
+            using var without = Create(content, 792, (7, false), neighbour: neighbour);
+            Assert.IsNull(without.Host.ReactionOf(other, without.Host.Pc), "a world without the answer is not modelled");
+        });
     }
 
     [TestMethod]
@@ -173,8 +190,27 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "get area read 7");
             // The diagnostic profile: a male PC named [PC]; the separators-only action field runs nothing.
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, [PC].", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, [PC], said [NPC].", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
             Assert.AreEqual(0, talk.Host.TakeFloats().Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_float_line_names_the_hero_and_the_speaker_from_the_session_and_the_name_source()
+    {
+        // ARC-SCRIPT-2787 (0x416B00): @pcname@ is the hero's player name and @npcname@ the speaker's shown name, not the diagnostic placeholders.
+        WithContent(content =>
+        {
+            var hero = ConversationSessionFixture.CreateWithHero(Map);
+            Assert.AreEqual(GameSessionDisposition.Changed, hero.SetHeroPlayerName(hero.Version, Encoding.Latin1.GetBytes("Zed")).Disposition);
+            using var talk = Create(content, 790, (7, false), heroSession: hero, npcName: row => "Wren of " + row.Type);
+            Assert.IsTrue(talk.Host.Apply(talk.Run().Effects));
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, Zed, said Wren of 16.", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
+
+            // A source with no text for the speaker prints an empty name; a hero with no name set prints an empty one.
+            using var bare = Create(content, 790, (7, false), heroSession: ConversationSessionFixture.CreateWithHero(Map), npcName: _ => null);
+            Assert.IsTrue(bare.Host.Apply(bare.Run().Effects));
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(bare.Host.Object(bare.Speaker), "Not now, , said .", bare.Host.Pc) }, bare.Host.TakeFloats().ToArray());
         });
     }
 
@@ -241,7 +277,7 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "the speaker's reaction is the state's 62");
             Assert.AreEqual(62, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc));
-            Assert.IsNull(talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no speaker");
+            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no NPC: 50");
             Assert.IsNull(talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Object(talk.Speaker)), "the second object is not the PC");
             Assert.IsNull(talk.Host.ReactionOf(new ScrObjectRef(Map + 1, "npc"), talk.Host.Pc), "an object of another map");
             // Without the query host the set has no get reaction and the talk is refused at it.
@@ -418,13 +454,15 @@ public sealed class AreaTalkQueryTests
             Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.FloatLine), (other.Run().Outcome, other.Run().Refusal!.Type));
             Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(AreaScriptHost.TalkAdmission) && AreaScriptHost.SkillAdmission.IsSubsetOf(AreaScriptHost.SkillTalkAdmission));
             // ARC-DEV-178: plus get reaction (29) of S23; ARC-MAGIC-030: plus give spell mastery (112) and the four spell conditions of S31.
-            Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S60));
+            Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest));
             // ARC-SCRIPT-1563: plus damage (60), apply unresistable damage (138) and heal hit points (75) of S30. ARC-SCRIPT-1620: plus attack (36) of S33. ARC-SCRIPT-1168: plus the six cast actions of S29. ARC-SCRIPT-1772: plus the critter getters (38, 39, 89) of S56.
             CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
                 ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
                 ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
                 ScrCatalogue.Action.CastUnresistableSpellOn,
-                ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction },
+                ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction, ScrCatalogue.Action.GetArmor }
+                // ARC-SCRIPT-2198: plus the ten state actions of Kerghan's dialog script 1105.
+                .Concat(AreaScriptHost.TalkStateActions).ToArray(),
                 AreaScriptHost.TalkAdmission.Actions.Except(AreaScriptHost.Admission.Actions).ToArray());
             // ARC-SCRIPT-1733: plus obj is animal, obj is in combat and the nine critter-state conditions, which the use host answers.
             CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions).ToArray(),

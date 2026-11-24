@@ -59,6 +59,7 @@ public partial class TerrainViewerApp
         if (_sheetPanel is null)
         {
             _sheetPanel = new AreaCharacterSheetPanel(); AddChild(_sheetPanel);
+            _sheetPanel.HolderView = InventoryHolderView;
             _sheetPanel.CloseRequested += EndSheet;
             _sheetPanel.SkillSpendRequested += row => PressSkill(row, spend: true);
             _sheetPanel.SkillRefundRequested += row => PressSkill(row, spend: false);

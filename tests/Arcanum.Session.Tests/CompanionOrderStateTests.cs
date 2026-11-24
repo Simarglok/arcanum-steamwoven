@@ -144,6 +144,38 @@ public sealed class CompanionOrderStateTests
         Assert.AreEqual(1, owner.Version.Revision, "nothing changed state");
     }
 
+    private static readonly BroadcastKeywords OrderWords = new([("wait", CompanionOrderType.Wait), ("stop", CompanionOrderType.BackOff)]);
+
+    [TestMethod]
+    public void A_typed_text_reaches_the_follower_it_names_or_every_follower_with_a_hash_ARC_UI_2305()
+    {
+        using var owner = Party("oid:first", "oid:second");
+        CompanionOrderFacts[] followers = [F("oid:first", name: "Wolf"), F("oid:second", name: "Bear")];
+        SessionCompanionOrderResult Text(string text) => owner.IssueCompanionOrder(owner.Version,
+            new(CompanionOrderType.None, CompanionOrderAddressing.Text, followers) { Text = text, Keywords = OrderWords });
+
+        var named = Text("bear WAIT");
+        Assert.AreEqual("oid:second", named.Outcomes.Single().Entity, "OL2: the first follower whose name prefixes the text takes it, case-insensitive");
+        Assert.AreEqual(CompanionStanding.Waiting, owner.QueryCompanion("oid:second").Standing);
+        Assert.AreEqual(CompanionStanding.Following, owner.QueryCompanion("oid:first").Standing);
+
+        Assert.AreEqual(0, Text("Nobody wait").Outcomes.Count, "no follower matched: nothing happens");
+        Assert.AreEqual(CompanionOrderEffect.NoOrder, Text("Wolf dance").Outcomes.Single().Effect, "an unknown word is type none (OL3)");
+
+        var all = Text("#wait");
+        Assert.AreEqual("oid:first", string.Join(' ', all.Outcomes.Select(o => o.Entity)), "OL2: # reaches every follower in the array (the waiting one is outside it)");
+        Assert.AreEqual(CompanionStanding.Waiting, owner.QueryCompanion("oid:first").Standing);
+    }
+
+    [TestMethod]
+    public void A_typed_text_needs_its_text_and_keywords_ARC_UI_2305()
+    {
+        using var owner = Party("oid:first");
+        var request = new CompanionOrderRequest(CompanionOrderType.None, CompanionOrderAddressing.Text, [F("oid:first", name: "Wolf")]);
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.IssueCompanionOrder(owner.Version, request).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.IssueCompanionOrder(owner.Version, request with { Text = "Wolf wait" }).Failure);
+    }
+
     [TestMethod]
     public void A_portrait_order_follows_the_d4_setting()
     {

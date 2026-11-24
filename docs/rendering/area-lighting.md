@@ -393,7 +393,9 @@ The best variant of the experiment is a part of the one **HD** option (ARC-UI-21
 line of `arcanum.cfg` is ignored and left alone). It is in force exactly while the visual profile is HD (`SyncRelitLook` follows the profile every frame: HD
 Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte; [HD lines](terrain-viewer.md)). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
 (`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
-luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The hero's carried light and the map's
+luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The ambient the weight reads leaves out the carried lights (ARC-RENDER-2298: the shader
+uniform `relight_weight`, from the body's colour before `AddCarried` and the hero's colour without the carried view), because the relit term takes those lights from its own list: a light's carrier
+then counts as dark like the ground round it, not as already lit by its own torch (the weight, and so the term, was zero on the carrier before). A companion body drawn from another map's plan (the moving-body path) keeps the weight it had: that path does not split out its carried light. The hero's carried light and the map's
 lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the look and use
 `ARC_RELIGHT_STRENGTH`). No gameplay luminance, clock or RNG is read or changed (FR-LIGHT-009 and FR-LIGHT-011 untouched).
 
@@ -408,6 +410,15 @@ The Steam Deck is not measured ([#2000](https://github.com/Simarglok/arcanum-ste
 
 Checks: stage `relight` (Legacy byte-identical with the setting off, also after the look was on and off; the setting On with HD Off is byte-identical to Legacy; On with HD On equals the night-weighted mode at the look's strength;
 the setting's saved value; frame times), the launcher self-test (the line's default, its saved line, shown again by the next launcher, Reset leaving it alone) and `ViewerSettingsConfigTests`.
+
+## Relit look: light sources, cap and culling (ARC-RENDER-2207)
+
+The relit light list has three groups, in this order: the carried lights (the hero's, every critter's saved or recalculated primary light, and the lit eye candy of ARC-MAGIC-1229, all from `AreaLocalLighting.CarriedPlacements`, with the wisps' glows
+of ARC-RENDER-2064 appended), then the map's lights (`AreaLocalLighting.PosedPlacements`: sector stationary lights and the main map's object lights in the form of the shown hour, ARC-RENDER-030, each at its animation pose, ARC-RENDER-031), then
+a smoke's synthetic extras. A light flagged OFF or DARK adds no relit term. Before ARC-RENDER-2207 the map's lights stood at their loaded pose, so an animated light (a flickering or swaying one) lit the relit look from a fixed rectangle while the
+Legacy lattice moved it; the relit list now reads the posed rectangle (the frame's size and hot spot with the pose's offsets), pushed whenever the animation key changes (not while the lighting is toggled off or a rest holds the light). The radius cap and the culling stay as ARC-RES-2007 set them: of the lights whose disk
+meets the shown view the 32 nearest the view's centre are uploaded (`AreaRelight.SetView`); on the largest installed map (5,083 object lights in k'na tha, 109 nocturnal) only the ones reaching the view count; the cap stays a bound on the shader loop, and the two known edges of the rule (with more than 32 lights in view the hero's torch can be dropped, and lights cut in and out at the 32nd as the view pans, see the experiment's findings) are unchanged and not a new decision of this slice. Legacy is untouched (the Legacy lattice reads the same poses as before). Stage `relight` checks that the relit map lights equal the lit posed placements and, on a map with an animated light, that the list changes when the animation moves it;
+test `Posed_placements_follow_the_animation_pose_for_the_relit_light_list`.
 
 ## Open reads (F0)
 

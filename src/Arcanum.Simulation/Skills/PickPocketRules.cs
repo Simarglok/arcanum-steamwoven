@@ -120,21 +120,35 @@ public static class PickPocketRules
     }
 
     /// <summary>
-    /// The thief's base alignment after a theft that moved something (0x45DC90 with flag 0, PP5), or null when it does not change. With
-    /// <c>a</c> the victim's effective alignment and <c>b</c> the thief's: <c>a ≥ 0</c> changes the thief by
-    /// <c>−trunc(trunc(a / 20) / 2)</c> with the bound <c>−100 − a</c>; <c>a &lt; 0</c> and <c>b ≤ a</c> by <c>trunc(trunc(a / 20) / 2)</c>
-    /// with the bound <c>a − 100</c>; <c>a &lt; 0</c> and <c>b &gt; a</c> not at all. Only a negative change is applied, to the base, and
-    /// not below the bound (a base already at or below it stays). A plant, and a victim the thief summoned, change nothing (the caller's).
+    /// The thief's base alignment after a theft that moved something (0x45DC90 with flag 0, PP5), or null when it does not change; the
+    /// step is <see cref="AlignmentStep"/> with the second halving. A plant, and a victim the thief summoned, change nothing (the caller's).
+    /// </summary>
+    public static int? AlignmentAfterTheft(int victim, int thief, int thiefBase) => AlignmentStep(victim, thief, thiefBase, halved: true);
+
+    /// <summary>
+    /// ARC-COMBAT-2873: the same step after a kill (0x45DA20 calls 0x45DC90 with flag 1): the killer's PC leader moves toward the victim's
+    /// alignment, without the second halving, so <c>a ≥ 0</c> changes it by <c>−trunc(a / 20)</c>. See <see cref="AlignmentStep"/>.
+    /// </summary>
+    public static int? AlignmentAfterKill(int victim, int killer, int killerBase) => AlignmentStep(victim, killer, killerBase, halved: false);
+
+    /// <summary>
+    /// The alignment step 0x45DC90 (thief or killer's PC leader, victim, flag): the leader's new base alignment, or null when it does not change. With
+    /// <c>a</c> the victim's effective alignment and <c>b</c> the leader's: <c>a ≥ 0</c> changes the leader by
+    /// <c>−trunc(a / 20)</c> (halved again, truncating, with <paramref name="halved"/>: a theft's flag 0) with the bound <c>−100 − a</c>;
+    /// <c>a &lt; 0</c> and <c>b ≤ a</c> by <c>trunc(a / 20)</c> (likewise halved) with the bound <c>a − 100</c>; <c>a &lt; 0</c> and <c>b &gt; a</c>
+    /// not at all. Only a negative change is applied, to the base, and not below the bound (a base already at or below it stays). The
+    /// summoned-victim skip is the caller's.
     /// </summary>
     [OriginalFunction(0x45DC90, OriginalFunctionScope.Partial)]
-    public static int? AlignmentAfterTheft(int victim, int thief, int thiefBase)
+    public static int? AlignmentStep(int victim, int leader, int leaderBase, bool halved)
     {
         int change, bound;
-        if (victim >= 0) (change, bound) = (-(victim / 20 / 2), -100 - victim);
-        else if (thief <= victim) (change, bound) = (victim / 20 / 2, victim - 100);
+        if (victim >= 0) (change, bound) = (-victim / 20, -100 - victim);
+        else if (leader <= victim) (change, bound) = (victim / 20, victim - 100);
         else return null;
-        if (change >= 0 || thiefBase <= bound) return null;
-        return (int)Math.Max((long)thiefBase + change, bound);
+        if (halved) change /= 2;
+        if (change >= 0 || leaderBase <= bound) return null;
+        return (int)Math.Max((long)leaderBase + change, bound);
     }
 
     /// <summary>

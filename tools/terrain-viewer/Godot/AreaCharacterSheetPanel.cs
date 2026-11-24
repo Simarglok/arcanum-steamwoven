@@ -72,6 +72,25 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public event Action<int>? SpellLearnRequested;
     public event Action<int>? SpellUnlearnRequested;
     public bool IsOpen => Visible;
+
+    // ARC-UI-2694: the lens's round view of the game, on a layer under the window (the component the inventory, barter and logbook windows share).
+    private AreaRoundView? _roundView;
+
+    /// <summary>The lens's holder, the hero: its foot point in canvas units and the game view's zoom, or null for none (no lens view).</summary>
+    public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+
+    /// <summary>The lens's round view is shown under the window.</summary>
+    internal bool RoundViewShown => _roundView?.Visible == true;
+
+    /// <summary>The lens shows the game view around the hero while the original look is up (the sheet's open turns the view-window mode 1 on, art 198).</summary>
+    private void UpdateRoundView()
+    {
+        if (_artView is null || _roundView is null) return;
+        var holder = IsOpen && ArtMode && !_creation ? HolderView?.Invoke() : null;
+        var (origin, side) = _artView.LensOnScreen;
+        _roundView.Update(origin, side, holder);
+        _artView.LensCut = holder is not null;
+    }
     /// <summary>ARC-UI-088: the NPC sheet of a dialog (the original's mode 2): no + or − button on any page, the next spell grey. Set before the open.</summary>
     public bool ReadOnly
     {
@@ -93,6 +112,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         return true;
     }
     internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
+    /// <summary>ARC-UI-3035: the smoke shows the page of a tab as a click on the tab does.</summary>
+    internal void SelectTabForSelfTest(AreaSheetTab tab) { _artView?.SelectTab(tab); ApplyTab(tab); }
     /// <summary>ARC-UI-147: the diagnostic panel is drawn (the editor's art look hides it).</summary>
     internal bool PanelVisibleForSelfTest => _panel.Visible;
     internal AreaCharacterSheetView? ViewForSelfTest => _view;
@@ -274,6 +295,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _view = null; _skillsView = null; _spellsView = null; _statsView = null; _schemesView = null; _skillMessage.Text = string.Empty; Hide();
         if (_artView is { RegionForSelfTest: not null }) HoverTextRequested?.Invoke(null);
         _artView?.CloseView();
+        _roundView?.Update(Vector2.Zero, 0, null);
         // The sheet always opens on the skills page (CHW7).
         _artView?.Pages.CloseView();
         _artView?.Spells.CloseView();
@@ -373,6 +395,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     {
         _artView = new AreaCharacterSheetArtView { MenuScreen = _creation };
         AddChild(_artView);
+        if (!_creation) { _roundView = new AreaRoundView(); AddChild(_roundView); }
         var (px, py, pw, ph) = AreaCharacterSheetArtLayout.Panel;
         _host = new ScrollContainer { Name = "RightPanel", Position = new(px, py), Size = new(pw, ph), CustomMinimumSize = new(pw, ph) };
         _notBuilt = new Label { Name = "NotBuilt", Position = new(px, py), Size = new(pw, ph), AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false,
@@ -468,9 +491,9 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
-    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    public override void _Process(double delta) { if (IsOpen) { ResizePanel(); UpdateRoundView(); } }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }

@@ -285,6 +285,33 @@ public sealed class SpellTargetRulesTests
     }
 
     [TestMethod]
+    public void Arc2655TheBeginAreaRefusalNamesTheBitsThatFailedForAnNpcParent()
+    {
+        // ARC-MAGIC-2655: the original refuses an NPC's cast whose target fails the BEGIN mask (IV6); the diagnostic names the bits whose removal alone lets the target pass.
+        const ulong damaged = 0x100000, poisoned = 0x400000, notPc = 0x20000000;
+        var world = new World();
+        var shaman = new SpellObjectFacts("shaman", 16, new(10, 10), Intelligence: 10);
+        var hero = new SpellObjectFacts("hero", 15, new(11, 10));
+        world.Objects.Add(new("shaman", 16, new(10, 10)));
+        world.Objects.Add(new("hero", 15, new(11, 10)));
+        world.Objects.Add(new("wolf", 16, new(12, 10)));
+        var wolf = new SpellObjectFacts("wolf", 16, new(12, 10));
+        ulong Failing(ulong mask, SpellObjectFacts target, SpellObjectFacts? parent = null) =>
+            new SpellInvocationAreas(world, _ => mask, (_, _) => new(0, null), MagicAnomalyProfile.Steamwoven)
+                .FailingBeginBits(new SpellInvocation(1, parent ?? shaman, parent ?? shaman, target, SpellLocation.None));
+
+        var heal = Critter | damaged | NotInvulnerable;
+        Assert.AreEqual(damaged | Object, Failing(heal, wolf), "an undamaged target fails the damaged bit (the object bit alone also skips the whole object test)");
+        world.Objects[2] = world.Objects[2] with { HitPointDamage = 5 };
+        Assert.AreEqual(0UL, Failing(heal, wolf), "the same target hurt passes");
+        Assert.AreEqual(poisoned | Critter, Failing(Critter | poisoned, wolf), "a cure asks for a poisoned target (the critter bit holds that test, so removing it passes too)");
+        Assert.AreEqual(Self, Failing(Self | NotInvulnerable, hero), "a self-only area refuses a target that is not the caster");
+        Assert.AreEqual(0UL, Failing(Self | NotInvulnerable, new SpellObjectFacts("shaman", 16, new(10, 10))), "and takes the caster itself");
+        Assert.AreEqual(notPc | Critter, Failing(Critter | notPc, hero), "an area that excludes PCs refuses the hero (the object bit too: it removes the whole test)");
+        Assert.AreEqual(AllParty, Failing(AllParty, wolf), "a party-only area refuses an NPC with no PC leader: the party bit fails, and so do the critter and object bits that hold its test");
+    }
+
+    [TestMethod]
     public void ReviewEdgesConeTypesMissingCentresAndTheLeaderClause()
     {
         var world = new World();

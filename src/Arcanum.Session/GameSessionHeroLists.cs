@@ -19,6 +19,30 @@ internal sealed class HeroLists
     private readonly List<SessionPlacedItem> _placed = [];
     private readonly Dictionary<string, HeroPlace> _placeOf = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, SessionGivenItem> _given = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, Arcanum.Simulation.Movement.CellCoord> _lastDrops = new(StringComparer.Ordinal);
+
+    /// <summary>ARC-SCRIPT-2594 (IV8): how many last-drop tiles the session keeps at once (the placed rows' bound: the hero's items and the script-created ones).</summary>
+    internal const int MaxLastDrops = GameSessionLimits.PolicyMaxPcItems + GameSessionLimits.PolicyMaxCreatedItems;
+
+    /// <summary>
+    /// ARC-SCRIPT-2594 (IV8): the tile an item last lay on after the session dropped it (or a script created it there) and a pickup took it up again, by entity in ordinal order. The original keeps the location field of a
+    /// held item (only a drop, an animation parameter and a cross-map teleport rewrite it), so an insert-item script's vicinity scans centre on this tile. The tile of an item still on the ground is its placed cell, not here.
+    /// </summary>
+    internal IReadOnlyDictionary<string, Arcanum.Simulation.Movement.CellCoord> LastDrops => _lastDrops;
+
+    /// <summary>Puts a saved last-drop tile back (the restore); false for an entity that already has one.</summary>
+    internal bool RestoreLastDrop(string entity, Arcanum.Simulation.Movement.CellCoord cell) => _lastDrops.TryAdd(entity, cell);
+
+    /// <summary>ARC-SCRIPT-2701 (IV8): remembers the tile a map-data item lay loose on when the hero took it up (dropped by an NPC, spilled, thrown, pushed); false when the bound is spent.</summary>
+    internal bool NoteLastDrop(string entity, Arcanum.Simulation.Movement.CellCoord cell)
+    {
+        if (_lastDrops.Count >= MaxLastDrops && !_lastDrops.ContainsKey(entity)) return false;
+        _lastDrops[entity] = cell;
+        return true;
+    }
+
+    /// <summary>Forgets the last-drop tile of an item that ceased to exist.</summary>
+    internal void ForgetLastDrop(string entity) => _lastDrops.Remove(entity);
 
     /// <summary>The starting kit in kit-number order as the hero keeps it.</summary>
     internal IReadOnlyList<SessionKitItem> Kit => _kit;
@@ -82,7 +106,7 @@ internal sealed class HeroLists
     internal void AddMade(SessionMadeItem item) { Enter(item.Entity, HeroPlace.Made); _made.Add(item); }
 
     /// <summary>Puts an item on the ground at the end of the placed items.</summary>
-    internal void AddPlaced(SessionPlacedItem item) { Enter(item.Entity, HeroPlace.Placed); _placed.Add(item); }
+    internal void AddPlaced(SessionPlacedItem item) { Enter(item.Entity, HeroPlace.Placed); _placed.Add(item); _lastDrops.Remove(item.Entity); }
 
     /// <summary>Replaces a placed item's record (a thrown item that landed) keeping its place in the order; false when it is not placed.</summary>
     internal bool ReplacePlaced(SessionPlacedItem item)
@@ -102,7 +126,11 @@ internal sealed class HeroLists
             case HeroPlace.Kit: _kit.RemoveAll(item => item.Entity == entity); break;
             case HeroPlace.Pc: _pc.RemoveAll(item => item.Entity == entity); break;
             case HeroPlace.Made: _made.RemoveAll(item => item.Entity == entity); break;
-            default: _placed.RemoveAll(item => item.Entity == entity); break;
+            default:
+                // ARC-SCRIPT-2594 (IV8): an item that leaves the ground (a pickup, an NPC's pickup or a give, a destroy) keeps the tile it lay on as its location field; a destroy forgets it again.
+                if (_placed.Find(item => item.Entity == entity) is { } lying && (_lastDrops.Count < MaxLastDrops || _lastDrops.ContainsKey(entity))) _lastDrops[entity] = lying.Cell;
+                _placed.RemoveAll(item => item.Entity == entity);
+                break;
         }
         return place;
     }

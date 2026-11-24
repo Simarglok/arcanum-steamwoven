@@ -20,9 +20,14 @@ public partial class TerrainViewerApp
     private AreaLoadResult? _areaRoofArea;
     private AreaStepCell? _areaRoofCell;
     private AreaStepCell? _areaRoofDeparture;
+    // ARC-RENDER-3063: the town-map render keeps every roof drawn whatever the hero cell is (no recalculation, no wall fade).
+    private bool _areaRoofsClosed;
     private HashSet<AreaObjectKey> _areaRoofWalls = new();
     private long _areaRoofRevision = -1;
     private string? _areaRoofCompanionCells;
+    // ARC-WORLD-2792: the AI host's walked NPCs are covered where they stand now; their cover flags (not their cells) decide a new publish, so a step inside one room costs nothing.
+    private string? _areaRoofMoverCells, _areaRoofPublishedMoverCells;
+    private (AreaAiHost? Host, long Movers, long Roofs, string Companions)? _areaRoofMoverStamp;
     private Dictionary<(long, long), AreaRoofDraw> _areaRoofDraws = new();
     private Dictionary<(long, long), AreaDrawCommand[]> _areaRoofTileCommands = new();
     private Dictionary<(long, long), AreaObjectKey[]> _areaRoofBodies = new();
@@ -45,26 +50,47 @@ public partial class TerrainViewerApp
         if (_areaRoofDeparture is { } departure) { grid.FillOff(departure.X, departure.Y); _areaRoofDeparture = null; }
         if (departed || _areaRoofCell != cell)
         {
-            grid.Recalc(cell.X, cell.Y);
+            if (!_areaRoofsClosed) grid.Recalc(cell.X, cell.Y);
             _areaRoofCell = cell;
         }
+        if (_areaRoofsClosed) foreach (var roof in grid.Records) { grid.FillOff(roof.BlockX, roof.BlockY); grid.FadeOff(roof.BlockX, roof.BlockY); }
         // Each wall the wall check holds (one whose flags forbid fading included) fades the roof block of its tile while it
         // is there (RF9).
         var walls = _areaWallCheck?.State.HeldWalls.Where(key => _areaRoofObjects.TryGetValue(key, out var row) && row.WorldX is not null && row.WorldY is not null)
             .ToHashSet() ?? [];
+        if (_areaRoofsClosed) walls = [];
         foreach (var key in walls.Except(_areaRoofWalls)) grid.AddWallFade(_areaRoofObjects[key].WorldX!.Value, _areaRoofObjects[key].WorldY!.Value);
         foreach (var key in _areaRoofWalls.Except(walls)) grid.ReleaseWallFade(_areaRoofObjects[key].WorldX!.Value, _areaRoofObjects[key].WorldY!.Value);
         _areaRoofWalls = walls;
         // ARC-WORLD-037: a companion is covered where it stands now, not on its T0 tile.
         var companions = _areaCompanions?.Companions.Select(c => (c.Key, Cell: session.Chart.ToWorld(c.Grid.State.CommittedCell))).ToArray() ?? [];
         var signature = string.Join(";", companions.Select(c => $"{c.Key.SourceIndex}@{c.Cell.X},{c.Cell.Y}"));
+        // ARC-WORLD-2792 (ledger RF10): an NPC the AI host walked is covered where it stands now, not on its T0 tile: one that came out of a roofed building is drawn, one that went in is hidden.
+        var host = _aiHost is { } ai && ai.Scene.RuntimeMap == CurrentAreaMap ? ai : null;
+        var moverStamp = (host, host?.Movers.Version ?? -1, grid.Revision, signature);
+        if (_areaRoofMoverStamp != moverStamp)
+        {
+            _areaRoofMoverStamp = moverStamp;
+            // The key is in the string: a window move re-keys a mover (AreaAiHost.Rebind) without changing its covered state, and the cover set is by key.
+            var held = companions.Select(c => c.Key).ToHashSet();
+            var cells = new System.Text.StringBuilder();
+            if (host is not null)
+                foreach (var m in host.Movers.All)
+                    if (!held.Contains(m.Key))
+                        cells.Append(m.Entity).Append('@').Append(m.Key.SourceIndex).Append(':').Append(m.Key.Offset).Append(grid.IsCovered(m.Cell.X, m.Cell.Y, true, AreaRoofIndoor) ? "+;" : "-;");
+            _areaRoofMoverCells = cells.ToString();
+        }
         lap?.Step("publish");
-        if (grid.Revision != _areaRoofRevision || signature != _areaRoofCompanionCells) { _areaRoofCompanionCells = signature; PublishAreaRoofs(area, grid, companions); }
+        if (grid.Revision != _areaRoofRevision || signature != _areaRoofCompanionCells || _areaRoofMoverCells != _areaRoofPublishedMoverCells)
+        {
+            _areaRoofCompanionCells = signature; _areaRoofPublishedMoverCells = _areaRoofMoverCells;
+            PublishAreaRoofs(area, grid, companions, host);
+        }
     }
 
     private void BindAreaRoofs(AreaLoadResult area)
     {
-        _areaRoofArea = area; _areaRoofCell = null; _areaRoofDeparture = null; _areaRoofWalls = new(); _areaRoofRevision = -1; _areaRoofCompanionCells = null;
+        _areaRoofArea = area; _areaRoofCell = null; _areaRoofDeparture = null; _areaRoofWalls = new(); _areaRoofRevision = -1; _areaRoofCompanionCells = null; _areaRoofMoverCells = null; _areaRoofPublishedMoverCells = null; _areaRoofMoverStamp = null;
         _areaRoofGrid = area.Plan.Roofs.Count == 0 ? null : new AreaRoofGrid(area.Plan.Roofs.Select(roof => roof.Roof));
         _areaRoofDraws = area.Plan.Roofs.ToDictionary(roof => (roof.Roof.BlockX >> 2, roof.Roof.BlockY >> 2));
         _areaRoofTileCommands = area.Plan.Commands.Where(command => command.Identity is null).GroupBy(command => ((long)command.MapX, (long)command.MapY))
@@ -94,7 +120,7 @@ public partial class TerrainViewerApp
         return (art >> 28) switch { 0 => (art & 0x100) == 0, 11 => (art & 0x2000000) == 0, _ => true };
     }
 
-    private void PublishAreaRoofs(AreaLoadResult area, AreaRoofGrid grid, IReadOnlyList<(AreaObjectKey Key, AreaStepCell Cell)> companions)
+    private void PublishAreaRoofs(AreaLoadResult area, AreaRoofGrid grid, IReadOnlyList<(AreaObjectKey Key, AreaStepCell Cell)> companions, AreaAiHost? host)
     {
         var shades = area.Snapshot.RoofShades ?? throw new InvalidOperationException("AREA_ROOF_SHADES_REQUIRED");
         var roofs = new List<(AreaDrawCommand, Vector4?)>(); var tiles = new List<AreaDrawCommand>(); var bodies = new HashSet<AreaObjectKey>();
@@ -117,11 +143,9 @@ public partial class TerrainViewerApp
                 if (grid.IsCovered(x, y, false, AreaRoofIndoor) && _areaRoofTileCommands.TryGetValue((x, y), out var terrain)) tiles.AddRange(terrain);
             }
         }
-        foreach (var (key, cell) in companions)
-        {
-            bodies.Remove(key);
-            if (grid.IsCovered(cell.X, cell.Y, true, AreaRoofIndoor)) bodies.Add(key);
-        }
+        // A companion is covered where it stands now (ARC-WORLD-037), and so is an NPC the AI host walked or made (ARC-WORLD-2792); a companion's own place wins over a mover entry of the same body.
+        var movers = host is null ? [] : host.Movers.All.Where(m => companions.All(c => c.Key != m.Key)).Select(m => (m.Key, (long)m.Cell.X, (long)m.Cell.Y));
+        AreaRoofCover.Place(bodies, movers.Concat(companions.Select(c => (c.Key, c.Cell.X, c.Cell.Y))), grid, AreaRoofIndoor);
         _areaRoofRevision = grid.Revision;
         _canvas!.SetAreaRoofs(roofs.AsReadOnly(), tiles.Distinct().ToArray(), bodies);
     }

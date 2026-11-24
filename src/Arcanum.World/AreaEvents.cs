@@ -37,11 +37,13 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <param name="newspaper">ARC-UI-1739: the module's written texts (the newspaper file's headlines), which arm the Newspapers chain and draw the default issue; null or a null answer: no chain is armed.</param>
     /// <param name="restock">ARC-WORLD-096: the restock host of the pass's session; null or a null answer: a restock event waits.</param>
     /// <param name="itemScripts">ARC-MAGIC-1684: the shown map's item script host, which an NPC's best-items wield runs its items' move scripts through; null or a null answer: such an item is not moved.</param>
+    /// <param name="callDialog">ARC-WORLD-2358: told the conversation an applied deferred call's run started (its dialog action, the original's opener 0x567460 inside the run), which the viewer opens at its next frame; null: such a conversation is not opened.</param>
     public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Action<SessionScriptCall>? prepareCall = null,
         Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null,
         Func<AreaRestockHost?>? restock = null, Func<AreaEncounterHost?>? encounter = null, Func<Arcanum.Data.Written.WrittenTexts?>? newspaper = null,
-        Func<ISessionItemScriptHost?>? itemScripts = null)
+        Func<ISessionItemScriptHost?>? itemScripts = null, Action<Arcanum.Scripting.Scr.ScrDialogStart>? callDialog = null)
     {
+        _callDialog = callDialog;
         _itemScripts = itemScripts;
         _newspaper = newspaper;
         _encounter = encounter;
@@ -92,6 +94,11 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
 
     private readonly Func<ISessionItemScriptHost?>? _itemScripts;
 
+    /// <summary>ARC-SCRIPT-2879: the shown map's item script host, for the remove-item scripts of a restock's clear and a body's inventory walk.</summary>
+    public ISessionItemScriptHost? ItemScriptHost => _itemScripts?.Invoke();
+    /// <summary>ARC-SCRIPT-2887: the item script host the regeneration's created items run their get and insert-item scripts through (null without one: such an item is then not created).</summary>
+    public ISessionItemScriptHost? ItemScripts(SessionMapId map) => _itemScripts?.Invoke();
+
     /// <summary>
     /// ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need: the item script host, the NPC's life target and its stored stats (the combat host's, with what a spell wrote laid over them); null when the host has
     /// no script host or does not know the NPC's combat values.
@@ -106,6 +113,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public IReadOnlyDictionary<string, Arcanum.Data.Lighting.CarriedLightSize>? NpcLights(SessionMapId map, IEnumerable<string> npcs) => Restock?.NpcLights(map, npcs, _combat());
 
     private readonly Action<SessionScriptCall>? _prepareCall;
+    private readonly Action<Arcanum.Scripting.Scr.ScrDialogStart>? _callDialog;
 
     /// <summary>The reason the last refused call did not run, or null; <see cref="CallRefusals"/> counts the refusals.</summary>
     public string? LastCallRefusal { get; private set; }
@@ -135,8 +143,16 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         if (_talk() is not { } host) { Refuse("no script host on this map"); return false; }
         var ran = host.RunCall(call, out var detail);
         if (!ran) Refuse(detail);
+        else if (host.LastCallDialog is { } talk)
+        {
+            if (_callDialog is null) CallDialogsDropped++;
+            else _callDialog(talk);
+        }
         return ran;
     }
+
+    /// <summary>ARC-WORLD-2358: conversations an applied call started that nobody was told of (no viewer callback, as in the headless passes); their runs stand.</summary>
+    public int CallDialogsDropped { get; private set; }
 
     private void Refuse(string detail)
     {
@@ -152,6 +168,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => _round?.Invoke()?.ScanCombatants(map) ?? [];
     public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => _round?.Invoke()?.CombatantFacts(map, entity);
     public long DistanceToPc(string npc) => Ai?.DistanceToPc(npc) ?? -1;
+    public bool Knows(string npc) => Ai?.Knows(npc) ?? true;
     public bool RunScript(Arcanum.Simulation.Ai.AiScriptPoint point, string npc, string? triggerer) => Ai?.RunScript(point, npc, triggerer) ?? true;
     public bool RunWaypoints(string npc) => Ai?.RunWaypoints(npc) ?? false;
     public void RunStandpoints(string npc) => Ai?.RunStandpoints(npc);

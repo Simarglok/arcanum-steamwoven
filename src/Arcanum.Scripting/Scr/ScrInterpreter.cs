@@ -24,6 +24,8 @@ internal sealed class ScrInterpreter
     private sealed class Shared
     {
         public ScrDialogStart? Dialog;
+        // ARC-SCRIPT-2440: the transforms (40) of the dispatch so far, which number the placeholders of the objects they make.
+        public int Transforms;
         public readonly List<ScrCallRequest> Calls = new();
         public readonly List<ScrPrintLine> Lines = new();
         public readonly List<ScrSound> Sounds = new();
@@ -46,6 +48,8 @@ internal sealed class ScrInterpreter
         public readonly HashSet<(ScrObjectRef Object, int Stat)> AdjustedStats = new();
         // ARC-SCRIPT-1163 (NS1): the objects the dispatch's critter disbands let go, which its later following tests read (the original removes the leader at once).
         public readonly HashSet<ScrObjectRef> Disbanded = new();
+        // ARC-SCRIPT-1899 (0x45DE90, 0x45DFC0): the dispatch's own make follows and disbands in order (a disband is a null leader), which its later following tests read: the original joins and leaves inline, the host applies after the run.
+        public readonly List<(ScrObjectRef Follower, ScrObjectRef? Leader)> InlineLeaders = new();
         // ARC-SCRIPT-1772 (CQ4, CQ5): the objects the dispatch's toggle invulnerability left flipped (odd count), which its later invulnerable tests read; the objects whose faction a set faction wrote, which a later get faction cannot read (the host applies after the run), so it
         // ends the dispatch as not modelled; and the name numbers its renames wrote, which a later is-named test of the same object reads (the original writes the field at once). A rename the host cannot apply refuses the whole run, so the read is only ever of an NPC.
         public readonly HashSet<ScrObjectRef> InvulnerabilityToggled = new(), FactionSet = new();
@@ -225,8 +229,11 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.LessOrEqual => Get(c, 0) <= Get(c, 1),
         ScrCatalogue.Condition.GlobalFlag => Flag(GlobalFlag(Get(c, 0), line)),
         // Following: the first object's leader is the second object (both single objects in the set).
-        ScrCatalogue.Condition.FollowingPc => (_shared.Disbanded.Contains(Object(c, 0, line)) ? null : _host.Leader(Object(c, 0, line))) == Object(c, 1, line),
+        ScrCatalogue.Condition.FollowingPc => FollowsObject(Object(c, 0, line), Object(c, 1, line)),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
+        // GF9, FK5 (SG1–SG6): a guard condition on a group or follower focus kind tests each object of the list by the list rule (kind 13 every one, kind 14 one is enough).
+        ScrCatalogue.Condition.PcQuestState or ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
+            when (ScrFocusKind)c.Kind(0) is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup or ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => ListHolds(c, obj => GuardHolds(c, obj)),
         // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
         // ARC-SCRIPT-1772 (CQ5): an object the run renamed answers its new name number (the guard's mind-control test stays the host's).
@@ -305,6 +312,16 @@ internal sealed class ScrInterpreter
                 var script = Get(a, 0); var at = Get(a, 1);
                 var triggerer = OptionalObject(a, 2); var attachee = OptionalObject(a, 3);
                 _calls.Add(new(ScrCallKind.Schedule, script, at, triggerer, attachee, CallDelay(Get(a, 4))));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CallScriptAt:
+            {
+                // ARC-SCRIPT-2824 (TQ17, TE2; case 55 of 0x447220, one body with call in): the same operands and the same kind-4 Script event, but the delay is the time to the operand's
+                // time of day (counted from the start hour) in game seconds, with no factor 8. The "now" is the clock the host answers; a host with none ends the dispatch with nothing applied.
+                var script = Get(a, 0); var at = Get(a, 1);
+                var triggerer = OptionalObject(a, 2); var attachee = OptionalObject(a, 3);
+                var time = (_host as IScrTimeQueries)?.Time() ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                _calls.Add(new(ScrCallKind.Schedule, script, at, triggerer, attachee, CallAtDelay(Get(a, 4), time)));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.RemoveScriptCall:
@@ -406,7 +423,7 @@ internal sealed class ScrInterpreter
             {
                 // SS2: the object operand 0 names, then the quest and the state; the run's attachee is the quest's giver.
                 var quest = Get(a, 1); var state = Get(a, 2);
-                foreach (var obj in Objects(a, 0)) _states.Add(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
+                foreach (var obj in Objects(a, 0)) AddQuestRequest(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MarkMapLocation:
@@ -687,6 +704,14 @@ internal sealed class ScrInterpreter
                 Set(a, 1, value, line);
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.GetArmor:
+            {
+                // AR1–AR3 (0x447220 case 0x20): the first object of operand 0 (0x44B960, one object: a group kind gives the first follower or the triggerer) and the store of operand 1 (0x44BB50); the value is the armour part of the object's current art
+                // id (field 1, 0x504030), 0 for an art that is no critter's or monster's. An absent object stops the run; a host that cannot answer ends the whole dispatch with nothing applied.
+                var value = CritterFields.ArmorOf(Object(a, 0, line)) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                Set(a, 1, value, line);
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.ToggleInvulnerability:
             {
                 // CQ4 (case 0x39): each object of operand 0 in list order (0x44B4E0); the flag 0x400000 is flipped at once in the original, so a later invulnerable test of the run reads the flipped state through the parity set. An empty list does nothing.
@@ -731,13 +756,19 @@ internal sealed class ScrInterpreter
                 // TI5: the run's attachee becomes a new object of the basic prototype of operand 0. The host applies it and reads the attachee in the later requests of the run as that object; an absent attachee changes nothing (a project choice:
                 // the original reads the null handle's location).
                 var prototype = Get(a, 0);
-                if (_roles.Attachee is { } attachee) _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                if (_roles.Attachee is { } attachee)
+                {
+                    _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                    // ARC-SCRIPT-2440 (TI5, F11): the original writes the new handle into the run's own record, so the later actions of the run (and of the scripts it calls) name the new object. A host that applies the transform
+                    // (IScrHost.RebindsTransformedAttachee) rebinds this placeholder to it; the other hosts keep the old attachee, which they read after the transform themselves.
+                    if (_host.RebindsTransformedAttachee) _roles = _roles with { Attachee = ScrTransformedObject.Placeholder(attachee.Map, ++_shared.Transforms) };
+                }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MakeFollow:
             {
                 // TI6: the first object of operand 0 follows the first object of operand 1, the follow check skipped (force 1); nothing without both (a project choice: the original reads null handles). The run goes on.
-                if (OptionalObject(a, 0) is { } follower && OptionalObject(a, 1) is { } leader) _shared.ObjectStates.Add(new(ScrObjectStateChange.MakeFollow, follower, Other: leader));
+                if (OptionalObject(a, 0) is { } follower && OptionalObject(a, 1) is { } leader) { _shared.ObjectStates.Add(new(ScrObjectStateChange.MakeFollow, follower, Other: leader)); _shared.InlineLeaders.Add((follower, leader)); }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.Attack:
@@ -750,7 +781,7 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.CritterDisband:
             {
                 // NS1: the first object of operand 0 goes to the disband (0x45DFC0, force 1); the run goes on. An absent object changes nothing (a project choice: the original reads the null handle's fields).
-                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.Disband, obj)); _shared.Disbanded.Add(obj); }
+                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.Disband, obj)); _shared.Disbanded.Add(obj); _shared.InlineLeaders.Add((obj, null)); }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.SetReaction:
@@ -1096,7 +1127,7 @@ internal sealed class ScrInterpreter
                 // does with the quest's own level), given to a PC (0x45F110). An absent object asks for nothing.
                 var who = OptionalObject(a, 0);
                 var level = Get(a, 1);
-                if (who is { } pc) _states.Add(new(ScrStateKind.QuestExperience, pc, level));
+                if (who is { } pc) AddQuestRequest(new(ScrStateKind.QuestExperience, pc, level));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GrantFatePoint:
@@ -1164,10 +1195,31 @@ internal sealed class ScrInterpreter
         // The runner's gates (E4, E5): a trap script and a monster generator attachee run nothing.
         if (ScrDispatcher.IsTrapScript(script, program)) return;
         if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
+        var number = script;
+        var fresh = new ScrSlot(script, program.InitialLocalFlags, program.InitialCounters);
+        // ARC-SCRIPT-2198 (exe read, 0x44B030 -> 0x4449B0): the callee runs through the event runner at the caller's point, so at the dialog point it meets the dialog gates on its attachee (E6) as an event does: a dead NPC without
+        // the callee's death-speech file flag or a surrendered one without its surrender-speech flag runs nothing, a mind-controlled one runs 2188 in place of the callee (the callee's own flags and counters kept).
+        if (_point == ScrPoint.Dialog && attachee is { } gated)
+        {
+            var state = _host.DialogState(gated);
+            if ((state & ScrDialogState.Dead) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) == 0) return;
+            if ((state & ScrDialogState.Surrendered) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.SurrenderSpeech) == 0) return;
+            if ((state & ScrDialogState.MindControlled) != 0)
+            {
+                number = ScrDispatcher.MindControlScript;
+                var swapped = _host.Script(number);
+                if (ScrDispatcher.Unavailable(swapped) is { } absent)
+                {
+                    if (absent == ScrStop.MissingScript) return;
+                    throw new CallRefusedStop(null, number, ScrStop.UnreadableScript);
+                }
+                program = swapped.Program!;
+            }
+        }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
-        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
+        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
         // ARC-SCRIPT-046: the callee runs at the caller's point (0x44B030 copies it), where its dialog action stores its flags.
-        new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
+        new ScrInterpreter(admission.Admitted!, number, fresh with { Script = number }, program.FileFlags,
             new(triggerer, attachee, null), _host, _options, _shared, _depth + 1, _point).Run(line);
     }
 
@@ -1203,6 +1255,7 @@ internal sealed class ScrInterpreter
     private void CallEx(ScrObjectRef? attachee, int point, int line, ScrObjectRef? triggerer, int at)
     {
         if (attachee is not { } obj) throw new MissingObjectStop(at);
+        if (ScrTransformedObject.Is(obj)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);   // ARC-SCRIPT-2440: the made object has no slot yet
         if (point is < 0 or >= ScrPoint.Count || point == ScrPoint.DialogOverride) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
         if (point == ScrPoint.Use)
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
@@ -1240,7 +1293,6 @@ internal sealed class ScrInterpreter
         }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
-        if (point == ScrPoint.Dialog) RefuseCallScriptIn(admission.Admitted!, number);
         var writes = _shared.SlotWrites.Count;
         var ran = new ScrInterpreter(admission.Admitted!, number, own, ownFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
         // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
@@ -1253,19 +1305,6 @@ internal sealed class ScrInterpreter
         for (var i = _shared.SlotWrites.Count - 1; i >= writes; i--)
             if (_shared.SlotWrites[i] is { Source: ScrSource.Object, Point: var p } w && p == point && w.Attachee == obj) _shared.SlotWrites.RemoveAt(i);
         _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
-    }
-
-    // As RunObject refuses a dialog-point event whose set holds call script, a call-ex of the dialog point refuses a callee that
-    // reaches one: the called script would run at the dialog point without the runner's dialog gates (E6), which call script skips.
-    private static void RefuseCallScriptIn(ScrAdmittedProgram admitted, int script)
-    {
-        foreach (var at in admitted.Region)
-        {
-            var row = admitted.Program.Lines[at];
-            var side = row.OnTrue.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnTrue
-                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
-            if (side is { } call) throw new CallRefusedStop(new(at, call, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScript), script, ScrStop.Refused);
-        }
     }
 
     [OriginalFunction(0x44BA70, OriginalFunctionScope.Partial)]
@@ -1342,6 +1381,13 @@ internal sealed class ScrInterpreter
         return _host.IsPc(obj) ? (obj, packed & 0xFFFF) : null;
     }
 
+    // ARC-SCRIPT-2410: a quest request is collected and, for a host that applies them as the run goes, told to it at once.
+    private void AddQuestRequest(ScrStateRequest request)
+    {
+        _states.Add(request);
+        (_host as IScrQuestWrites)?.QuestRequested(request);
+    }
+
     private IScrStoreQueries Stores => _host as IScrStoreQueries
         ?? throw new InvalidOperationException("SCR_STORE_QUERIES_REQUIRED: the admission set holds a global variable, PC variable or PC flag operand and the host cannot answer it.");
 
@@ -1365,6 +1411,10 @@ internal sealed class ScrInterpreter
         return globals.Length + variables.Length + flags.Length == 0 ? null : new ScrStoreWrites(globals, variables, flags);
     }
 
+    // One object of a guard condition's list (the single-object arms above, with the run's renames for is named).
+    private bool GuardHolds(ScrClause c, ScrObjectRef obj) => c.Type == ScrCatalogue.Condition.IsNamed && _shared.Names.TryGetValue(obj, out var renamed) ? !Queries.IsMindControlled(obj) && renamed == Get(c, 1)
+        : ScrGuards.Holds(c.Type, obj, Get(c, 1), c.Type == ScrCatalogue.Condition.PcQuestState ? Get(c, 2) : 0, Queries);
+
     private ScrObjectRef Object(ScrClause c, int slot, int line) => OptionalObject(c, slot) ?? throw new MissingObjectStop(line);
 
     // The original turns the seconds into a 32-bit millisecond count, raises 0 to 1 (sub_45A950) and multiplies by 8, so
@@ -1380,6 +1430,19 @@ internal sealed class ScrInterpreter
         return seconds <= 0 ? 8L : seconds * 8000L;
     }
 
+    // ARC-SCRIPT-2824 (TQ17): call script at. The operand is reduced to a day with the signed C remainder (a negative operand stays negative), the clock's seconds of the day
+    // (counted from the start hour) are taken off, a negative difference gets one day added, and the seconds become milliseconds with 0 raised to 1, as call in's
+    // (sub_45A950). Original keeps what a negative operand leaves (the 32-bit count read unsigned, a huge delay); Steamwoven reduces the operand to 0..86399 first, so every
+    // delay is at most a day. A target equal to now fires in 1 ms, not tomorrow.
+    private long CallAtDelay(int operand, ScrGameTime time)
+    {
+        var target = _options.Rules.CallDelayWraps ? operand % 86_400 : (int)(((long)operand % 86_400 + 86_400) % 86_400);
+        var seconds = target - time.SecondsSinceStartHour();
+        if (seconds < 0) seconds += 86_400;
+        var ms = unchecked((uint)(seconds * 1000));
+        return Math.Max(1L, _options.Rules.CallDelayWraps ? ms : seconds * 1000L);
+    }
+
     private ScrObjectRef? OptionalObject(ScrClause c, int slot) => FocusObject((ScrFocusKind)c.Kind(slot), c.Value(slot));
 
     [OriginalFunction(0x44B960, OriginalFunctionScope.Partial)]
@@ -1393,36 +1456,82 @@ internal sealed class ScrInterpreter
         ScrFocusKind.LocalObject => _objects[value],
         // PG7: the current looped object, none before the run's first loop.
         ScrFocusKind.CurrentLoopedObject => _looped,
+        // FK3: a leader's first direct follower (0x44B960), none without one.
+        ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers() is { Count: > 0 } followers ? followers[0] : null,
         // A group's first object (0x44B960), none for an empty one.
-        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+            or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity
             => Vicinity(kind) is { Count: > 0 } list ? list[0] : null,
+        // GF1, GF4: the group's first object, the triggerer's first follower, or the triggerer when it has none.
+        ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group() is { Count: > 0 } group ? group[0] : null,
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 
     // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
-    // one; ARC-WORLD-081: the vicinity's scenery for focus kind 15; ARC-SCRIPT-047: its PCs and NPCs for focus kinds 8 and 9.
+    // one; ARC-WORLD-081: the vicinity's scenery for focus kinds 15 and 16 (ARC-SCRIPT-2321: one case in the original, the condition tail tells them apart); ARC-SCRIPT-047: its PCs and NPCs for focus kinds 8 and 9.
     [OriginalFunction(0x44B4E0, OriginalFunctionScope.Partial)]
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
-        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
+        ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers(),
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+            or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
+        ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group(),
         _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
     };
+
+    // GF1–GF3: the triggerer's direct followers in array order (the host's answer, the first ScrWorld.VicinityListCap under the Original profile, where the builder's copy loop stops there), then the triggerer itself; no filter. The original reads no
+    // triggerer-less case (the object accessor has no null guard in the export), so the project's list is empty then.
+    private IReadOnlyList<ScrObjectRef> Group()
+    {
+        if (_roles.Triggerer is not { } leader) return [];
+        return [.. DirectFollowers(leader), leader];
+    }
+
+    // ARC-SCRIPT-1899: both operands are read first (a missing second object stops the run as before), then the leader is compared with the second object by the host's identity test.
+    private bool FollowsObject(ScrObjectRef critter, ScrObjectRef leader) => LeaderOf(critter) is { } found && _host.SameObject(found, leader);
+
+    // ARC-SCRIPT-1899: the critter's leader as the run has left it: the last make follow or disband of the dispatch on the same object (told by the host's identity test), else the host's own answer.
+    private ScrObjectRef? LeaderOf(ScrObjectRef critter)
+    {
+        for (var i = _shared.InlineLeaders.Count - 1; i >= 0; i--)
+            if (_host.SameObject(_shared.InlineLeaders[i].Follower, critter)) return _shared.InlineLeaders[i].Leader;
+        return _host.Leader(critter);
+    }
+
+    // The leader's direct followers from the host (GF2, FK2): the first ScrWorld.VicinityListCap under the Original profile; a follower the run itself disbanded (held until applied) is already off the array in the original.
+    private IEnumerable<ScrObjectRef> DirectFollowers(ScrObjectRef leader)
+    {
+        var followers = Groups.FollowersOf(leader) ?? throw new InvalidOperationException("SCR_GROUP_FOLLOWERS_NULL");
+        if (_shared.Disbanded.Count > 0) followers = followers.Where(follower => !_shared.Disbanded.Contains(follower)).ToArray();
+        return _options.Rules.VicinityListCapped ? followers.Take(ScrWorld.VicinityListCap) : followers;
+    }
 
     // PG3, TG4: the scenery (type mask 0x8) or the PCs and NPCs (0x18000) around the run's attachee (none without one), the first 100
     // under the original's rule.
     private IReadOnlyList<ScrObjectRef> Vicinity(ScrFocusKind kind)
     {
         if (_roles.Attachee is not { } centre) return [];
-        var list = (kind == ScrFocusKind.EverySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : World.CrittersInVicinity(centre))
+        // ARC-SCRIPT-2440: around the object a transform made (not made yet while the run is read) is not answerable; the run stops rather than loop over nobody.
+        if (ScrTransformedObject.Is(centre)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+        var list = (kind is ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : kind is ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity ? Containers.ContainersInVicinity(centre) : World.CrittersInVicinity(centre))
             ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
 
+    // FK1, FK2 (0x44B4E0 cases 2 and 3 over 0x4411C0): the direct followers of the run's triggerer (field +8, not the attachee), none without a triggerer (the original has no null test; what it does then is not read).
+    private IReadOnlyList<ScrObjectRef> Followers() => _roles.Triggerer is { } leader ? [.. DirectFollowers(leader)] : [];
+
     private IScrWorldQueries World => _host as IScrWorldQueries
         ?? throw new InvalidOperationException("SCR_WORLD_QUERIES_REQUIRED: the admission set holds random, loop for or a vicinity focus kind and the host cannot answer it.");
 
+    private IScrGroupQueries Groups => _host as IScrGroupQueries
+        ?? throw new InvalidOperationException("SCR_GROUP_QUERIES_REQUIRED: the admission set holds a group or follower focus kind and the host cannot answer it.");
+
     private IScrPortalQueries Portals => _host as IScrPortalQueries
         ?? throw new InvalidOperationException("SCR_PORTAL_QUERIES_REQUIRED: the admission set holds the portal vicinity focus kind and the host cannot answer it.");
+
+    private IScrContainerQueries Containers => _host as IScrContainerQueries
+        ?? throw new InvalidOperationException("SCR_CONTAINER_QUERIES_REQUIRED: the admission set holds a container vicinity focus kind and the host cannot answer it.");
 
     private IScrAreaQueries Areas => _host as IScrAreaQueries
         ?? throw new InvalidOperationException("SCR_AREA_QUERIES_REQUIRED: the admission set holds get area and the host cannot answer it.");

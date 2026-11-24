@@ -41,8 +41,8 @@ public sealed record HeroBodyLoad(HeroBody Body, ActorDiagnosticProfile Profile,
 public static class HeroBodyArt
 {
     /// <summary>Upper bounds of one body: distinct frames and their RGBA bytes (the five base actions of the human use 195 and 1,705,144; the whole installed body about 665 keys and 6 MB).</summary>
-    // ARC-COMBAT-1793: raised from 512 (the installed bodies need 665: 195 for the five, 150 fall and get-up, 90 low attack and throw, 40 stunned, 190 for the three bloody dying ARTs).
-    public const int MaxKeys = 768;
+    // ARC-RENDER-2539: raised from 768 for the stealth walk (80 more keys). ARC-COMBAT-1793: raised from 512 (the installed bodies need 665: 195 for the five, 150 fall and get-up, 90 low attack and throw, 40 stunned, 190 for the three bloody dying ARTs).
+    public const int MaxKeys = 896;
     public const long MaxRgbaBytes = 16L * 1024 * 1024;
 
     public static HeroBodyLoad Load(DatArchive resource, HeroBody body, CancellationToken token = default)
@@ -69,7 +69,9 @@ public static class HeroBodyArt
                 // ARC-COMBAT-1793: the bloody dying ARTs (17 decapitation, 18 blown-out chunk, 19 severed leg; weapon part cleared like the fall), each optional.
                 .Append((ActorDiagnosticAction.Decapitation, ActorDiagnosticProfile.HumanDecapitationSelector, true))
                 .Append((ActorDiagnosticAction.BlownOutChunk, ActorDiagnosticProfile.HumanBlownOutChunkSelector, true))
-                .Append((ActorDiagnosticAction.SeveredLeg, ActorDiagnosticProfile.HumanSeveredLegSelector, true));
+                .Append((ActorDiagnosticAction.SeveredLeg, ActorDiagnosticProfile.HumanSeveredLegSelector, true))
+                // ARC-RENDER-2539: the stealth walk ART (animation 3, weapon and shield kept like the stand), optional: a body without it draws the walk at the stealth rate (MA1 pair 3 to 1).
+                .Append((ActorDiagnosticAction.Sneak, ActorDiagnosticProfile.HumanSneakSelector, true));
             foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
@@ -79,6 +81,8 @@ public static class HeroBodyArt
                     .FirstOrDefault(found => found.Entries.Length != 0, (body.Selector(humanSelector), []));
                 // ARC-RENDER-039: a low attack the repair turned into the attack is the attack's ART, already read.
                 if (action == ActorDiagnosticAction.LowAttack && ((selector >> 6) & 31) != WeaponArtRules.LowAttackAnimation) continue;
+                // ARC-RENDER-2539: a stealth walk the repair turned into the walk (MA1 pair 3 to 1) is the walk's ART, already read.
+                if (action == ActorDiagnosticAction.Sneak && ((selector >> 6) & 31) != HeroBody.SneakAnimation) continue;
                 // ARC-COMBAT-1741: a stun the repair turned into the stand (MA1 pair 23 -> 0) is not a stunned ART: the stun then ends at once, as an unreadable header ends it (GT26).
                 if (action == ActorDiagnosticAction.Stunned && ((selector >> 6) & 31) != HeroBody.StunnedAnimation) continue;
                 if (entries.Length != 1)
@@ -99,7 +103,7 @@ public static class HeroBodyArt
                 }
                 var descriptor = new ActorDiagnosticResource(action, selector, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
                 {
-                    Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? Stride(metadata) : null,
+                    Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? Stride(metadata) : null,
                     ActionFrame = Attacks(action) ? h.ActionFrame : 0,
                 };
                 if (descriptor.Stride is { IsValid: false }) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
@@ -138,9 +142,11 @@ public static class HeroBodyArt
         // ARC-COMBAT-1793: the bloody dying ARTs are variants of the fall, so a body without the fall (nothing is drawn falling) does not take them.
         var decapitation = falls ? Extra(ActorDiagnosticAction.Decapitation) : null; var blownOut = falls ? Extra(ActorDiagnosticAction.BlownOutChunk) : null;
         var severed = falls ? Extra(ActorDiagnosticAction.SeveredLeg) : null;
+        // ARC-RENDER-2539: the stealth walk last, so no older action loses its place to it under the key cap.
+        var sneak = Extra(ActorDiagnosticAction.Sneak);
         var profile = ActorDiagnosticProfile.ForHeroBody(read[ActorDiagnosticAction.Idle].Resource, read[ActorDiagnosticAction.Walk].Resource,
             read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys,
-            falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown, stunned, decapitation, blownOut, severed);
+            falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown, stunned, decapitation, blownOut, severed, sneak);
         var frames = new List<ActorDiagnosticFrame>(keys);
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(keys);
         long rgbaBytes = 0;
@@ -169,7 +175,7 @@ public static class HeroBodyArt
             }
         }
         var timing = new GaitTiming(profile.Walk.Stride!, profile.Run!.Stride!, GaitTiming.BaseSpeed, profile.Vault!.FramesPerGroup,
-            profile.Vault.RawFramesPerSecond, body.GaitRateBonus);
+            profile.Vault.RawFramesPerSecond, body.GaitRateBonus, sneak?.Stride);
         return new(body, profile, timing, frames.AsReadOnly(), textures.AsReadOnly(), rgbaBytes);
     }
 
@@ -206,6 +212,8 @@ public static class HeroBodyArt
                 // ARC-COMBAT-1865: the stunned ART (23, unarmed, N1) and the bloody dying ARTs (17 decapitation, 18 blown-out chunk, 19 severed leg), each optional: a species without one stuns at once / falls plain.
                 (ActorDiagnosticAction.Stunned, (int)HeroBody.StunnedAnimation, true), (ActorDiagnosticAction.Decapitation, 17, true),
                 (ActorDiagnosticAction.BlownOutChunk, 18, true), (ActorDiagnosticAction.SeveredLeg, 19, true),
+                // ARC-RENDER-2564: the stealth walk ART (animation 3, the body's weapon part), optional: a species without one draws the walk at the stealth rate (MA1 pair 3 to 1, as the human body without it).
+                (ActorDiagnosticAction.Sneak, (int)HeroBody.SneakAnimation, true),
             ];
             foreach (var (action, animation, optional) in wanted)
             {
@@ -227,7 +235,7 @@ public static class HeroBodyArt
                     byte[] bytes;
                     // ARC-COMBAT-1865: a stunned or bloody dying ART over the archive's entry size limit (the air elemental's stunned ART is 1.2 MB) is no ART of the species: the body loads without it.
                     try { bytes = archive.ReadEntry(entries[0]); }
-                    catch (DatLimitExceededException) when (action is ActorDiagnosticAction.Stunned or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg) { continue; }
+                    catch (DatLimitExceededException) when (action is ActorDiagnosticAction.Stunned or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg or ActorDiagnosticAction.Sneak) { continue; }
                     ArtMetadata metadata;
                     try { metadata = ArtDecoder.Inspect(bytes, options); }
                     catch (ArtException) { continue; }
@@ -238,7 +246,7 @@ public static class HeroBodyArt
                         || (Attacks(action) && real && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup))) continue;
                     var descriptor = new ActorDiagnosticResource(action, real ? selector : own | 0xFu, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
                     {
-                        Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? Stride(metadata) : null,
+                        Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? Stride(metadata) : null,
                         ActionFrame = Attacks(action) && real ? h.ActionFrame : 0,
                     };
                     if (descriptor.Stride is { IsValid: false }) continue;

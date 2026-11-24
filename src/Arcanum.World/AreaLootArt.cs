@@ -1,3 +1,5 @@
+using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
 using Arcanum.Session;
 using Arcanum.Data.Combat;
 
@@ -5,7 +7,11 @@ namespace Arcanum.World;
 
 /// <summary>ARC-UI-052: one item of the looted holder's grid as the loot window draws it: its entity, its inventory location (row × 10 +
 /// column of the holder's grid), its size in cells, its name and its kind (for its inventory art).</summary>
-public sealed record AreaLootGridItem(string Entity, int Location, int Width, int Height, string Name, SessionItemKind Kind);
+public sealed record AreaLootGridItem(string Entity, int Location, int Width, int Height, string Name, SessionItemKind Kind)
+{
+    /// <summary>ARC-UI-2766: the coins of a gold pile as the session holds them (the item window's Quantity line); null for any other item.</summary>
+    public int? Quantity { get; init; }
+}
 
 /// <summary>ARC-UI-052: a point of the loot window: a cell of the hero's grid (as <see cref="AreaInventoryDrag"/>), a box, a location of the
 /// looted holder's grid (scroll included), the Take all button, or none. ARC-UI-1918: or a slot of the hero's own doll, with its toggle set
@@ -109,6 +115,60 @@ public static class AreaLootArtLayout
         CombatFieldReader.PcType or CombatFieldReader.NpcType => (critterFlags & 0x4) != 0 ? 384 : (critterFlags & 0x8000) != 0 ? 383
             : (critterFlags & 0x8) != 0 ? 385 : (critterFlags & 0x20000000) != 0 ? 434 : race >= 0 && race < RaceImages.Count ? RaceImages[race] : null,
         CombatFieldReader.ContainerType => ContainerImages.GetValueOrDefault(description, ContainerImage),
+        _ => null,
+    };
+
+    /// <summary>The critter slot of the stored portrait number (field 0xE7; the pre-made heroes' reader names it the same).</summary>
+    public const int PortraitSlot = 49;
+
+    /// <summary>The stored portrait of a PC or NPC record (its effective field 0xE7); null when it is not a critter or stores none (0, no plain number
+    /// or a negative one, the original's path bug PO2).</summary>
+    public static int? StoredPortrait(AreaObjectRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.Type is not (CombatFieldReader.PcType or CombatFieldReader.NpcType)) return null;
+        var field = record.EffectiveFields.FirstOrDefault(value => value.Slot == PortraitSlot);
+        return field is { Presence: AreaPresence.Value, Number: { } number and > 0 and <= int.MaxValue } ? (int)number : null;
+    }
+
+    private const int BaseStatsSlot = 38, GenderStat = 26, RaceStat = 27;
+
+    /// <summary>
+    /// ARC-UI-2444 (ledger PO10, CHW25, the portrait getter 0x4CEB80): the portrait number a draw shows for a critter record: its stored one
+    /// (<see cref="StoredPortrait"/>), except that an NPC (type 16) whose stored portrait equals the local PC's own (<paramref name="playerPortrait"/>,
+    /// the PC's raw field 0xE7: one level, no substitution on the PC side) shows the next portrait its own race and gender may take
+    /// (<see cref="PortraitCatalogue.Next"/>, the NPC code allowed), else the previous one, else none, so a follower never shows the PC's face.
+    /// The race and gender are the NPC's stored base stats 27 and 26 (the check 0x4CEAC0 reads them through 0x4B0740). ARC-UI-2492: with a <paramref name="session"/> the race and gender are the base stats a TraitIdx spell wrote into the NPC over the stored ones (<see cref="SessionCritterIndexedWrites"/>,
+    /// the way the hover window reads the race, ARC-MAGIC-1551; 0x4B0740 reads the object's base stat, which the spell's write 0x4B0980 changed); without one, the stored ones. The substitute is computed
+    /// on every call and never stored. A PC and any other type show their stored one; with no <paramref name="catalogue"/> (no game folder, nothing
+    /// can be drawn anyway) or a race or gender beyond the code table, the stored one. Null: nothing to draw.
+    /// </summary>
+    public static int? ShownPortrait(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait, GameSessionOwner? session = null)
+    {
+        var stored = StoredPortrait(record);
+        if (stored is not { } id || record.Type != CombatFieldReader.NpcType || playerPortrait != id || catalogue is null) return stored;
+        // The base stats array (critter slot 38, sparse: a missing element reads 0), not the whole critter block, so a row only needs this field.
+        if (record.EffectiveFields.FirstOrDefault(value => value.Slot == BaseStatsSlot) is not { Presence: AreaPresence.Array } stats) return stored;
+        // ARC-UI-2492: the written entries (asked only on a clash, here) win over the stored element.
+        var written = session?.QueryCritterIndexedWrites(AreaConversationState.EntityId(record)).Stats;
+        int Stat(int key) => written is not null && written.TryGetValue(key, out var over) ? over
+            : stats.Elements.FirstOrDefault(element => element.Key == key) is { Words: [var word] } ? unchecked((int)(uint)word) : 0;
+        int race = Stat(RaceStat), gender = Stat(GenderStat);
+        if (race is < 0 or >= PortraitCatalogue.RaceCount || gender is not (PortraitCatalogue.FemaleGender or PortraitCatalogue.MaleGender)) return stored;
+        return catalogue.Shown(id, new PortraitSubject(race, gender, npc: true), id) is var shown and > 0 ? shown : null;
+    }
+
+    /// <summary>
+    /// ARC-UI-1908 (IW27, ledger BW2, IS8; the image function of the original): the portrait the item windows (loot, barter, identify, repair) draw instead of the
+    /// <see cref="HolderImage"/> art. A PC takes its portrait; an NPC only when the chain of its leaders reaches the observing PC (followers
+    /// of followers too) and its stored portrait is not 0. Null: the art rule decides. The caller passes the portrait number to show
+    /// (<see cref="ShownPortrait"/>: the clash rule of 0x4CEB80 is applied before). NOT READY: a PC without a stored portrait (the original draws list
+    /// entry 1000; the observer is the PC, so a window never holds one).
+    /// </summary>
+    public static int? HolderPortrait(int type, bool pcLeads, int? storedPortrait) => type switch
+    {
+        CombatFieldReader.PcType => storedPortrait,
+        CombatFieldReader.NpcType when pcLeads => storedPortrait,
         _ => null,
     };
 

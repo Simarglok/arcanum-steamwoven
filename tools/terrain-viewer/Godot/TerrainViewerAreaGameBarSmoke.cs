@@ -59,7 +59,9 @@ public partial class TerrainViewerApp
         var savedInterfaceHd = _gameSettings.HdInterface;
         var savedGenerated = _gameSettings.GeneratedInterface;
         // ARC-UI-140: the generated interface runs the HD path with the pack (pictures from its redraw) and the chrome generated.
-        var verifyGenerated = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_GENERATED_VERIFY") == "1";
+        // ARC-UI-2452: ARC_AREA_BAR_STEAMWOVEN=1 runs the Steamwoven layout check (the generated interface on, the HD path with the pack) in place of the whole-factor generated check.
+        var verifySteamwoven = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_STEAMWOVEN") == "1";
+        var verifyGenerated = verifySteamwoven || System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_GENERATED_VERIFY") == "1";
         var verifyHd = verifyGenerated || System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_HD_VERIFY") == "1";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
@@ -124,9 +126,12 @@ public partial class TerrainViewerApp
             if (verifyHd)
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                // ARC-UI-2452: the older generated checks and the rest of this smoke measure the whole-factor geometry of the strips, which the Steamwoven layout replaces: it is suspended for them.
+                SteamwovenHud.Suspended = true;
                 _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = verifyGenerated };
                 SyncInterfaceHd();
-                if (verifyGenerated) await VerifyGeneratedInterfaceAsync(panel, Frames);
+                if (verifySteamwoven) await VerifySteamwovenLayoutAsync(panel, Frames);
+                else if (verifyGenerated) await VerifyGeneratedInterfaceAsync(panel, Frames);
                 await VerifyTopBarHdAsync(panel, Frames, Move, Button);
             }
             await CaptureHudAsync(verifyGenerated ? "generated" : verifyHd ? "hd" : "legacy", Frames);
@@ -228,6 +233,9 @@ public partial class TerrainViewerApp
                         var art = panel.ArtFrame(piece.Art);
                         Require(art is not null && width == (piece.WidthPercent >= 100 ? art.GetWidth() : AreaExperienceStripLayout.CutWidth(art.GetWidth(), piece.WidthPercent)), $"piece art {piece.Art} drew {width} px ({when})");
                     }
+                    // ARC-UI-3060: the remainder piece (art 772, no pack frame) is drawn by code under the HD option (three rows, whole device pixels), by its art otherwise.
+                    var remainderDrawn = drawn.Any(d => d.Piece.Art == AreaThinBarCode.ExperienceArt);
+                    Require((panel.ExperienceCodeRectsForSelfTest > 0) == (remainderDrawn && AreaThinBarDraw.Active) && panel.ExperienceCodeRectsForSelfTest <= AreaThinBarCode.Height, $"the remainder piece is {(AreaThinBarDraw.Active ? "drawn by code" : "the art")} ({when}): {panel.ExperienceCodeRectsForSelfTest} rectangles, remainder {remainderDrawn}, HD {verifyHd}");
                 }
                 var xpStart = xpSession.QueryHeroExperience();
                 Require(xpStart is { Progress: not null, ToNextLevel: > 20 }, $"the hero's progress is known with a next level ahead: {xpStart}");
@@ -435,13 +443,13 @@ public partial class TerrainViewerApp
             await Button(lensPoint, false);
             Require(!LogbookOpen && !WorldModal && !_logbookPanel.RoundViewShown, "a release in the lens closed the window");
             CloseLogbookByPlayer();
-            // The world map does not fit between the strips: the bars hide while it is open, and come back with the pointer state reset.
+            // ARC-UI-2306: the world map window lies between the strips (800 × 400 at (0, 41)), so the bars stay up while it is open (its note entry runs on the bottom strip).
             await Click(AreaBarButton.Map);
             await Frames(1);
-            Require(WorldMapOpen && !_gameBarPanel!.Visible, "Map opened the world map and the bars hid: " + _gameBarNotice);
+            Require(WorldMapOpen && _gameBarPanel!.Visible, "Map opened the world map and the bars stayed up: " + _gameBarNotice);
             CloseWorldMapByPlayer();
             await Frames(1);
-            Require(!WorldMapOpen && _gameBarPanel!.Visible && _gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "the bars came back with no hover");
+            Require(!WorldMapOpen && _gameBarPanel!.Visible, "the bars are up after the map closed");
             // ARC-UI-120: route a same-frame click through the GUI, then compare its rendered pixels to a held press.
             var combatControl = panel.GetNode<TextureRect>("BottomStrip/Combat");
             var combatRect = combatControl.GetGlobalRect();
@@ -601,7 +609,8 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGenerated }; SyncInterfaceHd(); }
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGenerated }; SyncInterfaceHd(); SteamwovenHud.Suspended = false; _gameBarPanel?.Relayout(); }
+            if (verifySteamwoven && InventoryOpen) EndInventory(); // a failed steamwoven check leaves no menu open
             _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }

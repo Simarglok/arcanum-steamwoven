@@ -119,8 +119,8 @@ public enum SpellCastQueueOutcome { Queued, Refused, NoRun }
 /// check or the session: <see cref="SpellCastAttempt.Run"/>), or the run started and waits for its casting goal.</summary>
 public enum SpellCastAttemptOutcome { Nothing, CannotAfford, NoLineOfFire, Refused, Started }
 
-/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot.</summary>
-public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null);
+/// <summary>The spell UI's cast: its outcome, the spell.mes message the UI showed, the run start and the started run's slot; since ARC-MAGIC-1835 the invocation check's refusal when the AI's cast was refused by it (None otherwise); a BEGIN-area refusal also names the mask and the failing bits in <c>RefusalNote</c> (ARC-MAGIC-2655, diagnostic).</summary>
+public sealed record SpellCastAttempt(SpellCastAttemptOutcome Outcome, int? Message = null, SessionSpellRunResult? Run = null, int? RunId = null, SpellInvocationRefusal Refusal = SpellInvocationRefusal.None, string? RefusalNote = null);
 
 public enum SpellCastEventKind
 {
@@ -152,6 +152,10 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-022: the session refused to save a payment's spent charge of the item <see cref="SpellCastEvent.Object"/>
     /// (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
     ChargeNotSaved,
+    /// <summary>ARC-MAGIC-2371: a payment drained the mana store (field 92) of the worn item <see cref="SpellCastEvent.Object"/> to <see cref="SpellCastEvent.Value"/> (the points it paid are the detail).</summary>
+    ManaStoreDrained,
+    /// <summary>ARC-MAGIC-2371: the session refused to save a payment's drained mana store of the worn item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
+    ManaStoreNotSaved,
     /// <summary>ARC-MAGIC-024: this many item events were dropped unfired (<see cref="SessionSpellCaster.FireItemEvents"/>): beyond
     /// <see cref="SessionSpellCaster.MaxItemEventsPerFiring"/> in one firing.</summary>
     ItemEventsDropped,
@@ -386,6 +390,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     }
 
     /// <summary>The invocation world over the map (MT7): the line of fire and the BEGIN area tests (MT8's areas).</summary>
+    /// <summary>ARC-MAGIC-2655: when set, an AI cast refused by the BEGIN-area test builds its <see cref="SpellCastAttempt.RefusalNote"/> (a smoke stage's diagnostic; off in play, the note costs dozens of area tests).</summary>
+    public bool RefusalDiagnostics { get; set; }
+
     public ISpellInvocationWorld InvocationWorld() =>
         new SpellInvocationAreas(_map, spell => _records(spell) is { } r && r.Areas.Length > 0 ? r.Areas[0].Targets : 0, _map.LineOfFire, Profile);
 
@@ -428,6 +435,13 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     public bool PlayerPerceptionExtraordinary => HeroStat(CharacterStat.Perception) >= CharacterStatRules.ExtraordinaryThreshold;
 
+    // The items a critter wears by slot number (1000..1008): the hero's from the session's equipment (any worn item, not only the starting kit's), an NPC's from the host's map.
+    private IEnumerable<(int Slot, string Id)> WornOf(string critter) => critter == Hero
+        ? _owner.QueryEquipment().Worn.Select(worn => ((int)worn.Slot, worn.Entity))
+        : _map.WornItems(critter).Select(worn => (worn.Slot, worn.Id));
+
+    private const int WornSlotFirst = (int)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet;
+
     public SpellPayer? Payer(SpellRunObject who)
     {
         ArgumentNullException.ThrowIfNull(who);
@@ -435,8 +449,11 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (!who.IsCritter) return Item(who.Id) is { } item ? new(SpellPayerKind.Item, ItemCharges: item.Charges) : new(SpellPayerKind.Other);
         if (Life(who.Id) is not { } life) return null;
         var limiting = who.Id != Hero && _map.Critter(who.Id) is { } npc && (npc.CritterFlags & unchecked((int)0x80000000)) != 0;
-        // Worn mana stores are not modelled yet (no item store state): the fatigue pays all.
-        return new(SpellPayerKind.Critter, limiting, null, life.Status.Fatigue, life.Record.State.FatigueDamage);
+        // ARC-MAGIC-2371 (BC10): the mana store (field 92) of the item worn in each of the nine slots, from the session's copy or else the item's own field.
+        var stores = new int[SpellPaymentRules.WornSlots];
+        foreach (var (slot, id) in WornOf(who.Id))
+            if (slot is >= WornSlotFirst and < WornSlotFirst + SpellPaymentRules.WornSlots && Item(id) is { } item) stores[slot - WornSlotFirst] = item.ManaStore;
+        return new(SpellPayerKind.Critter, limiting, stores, life.Status.Fatigue, life.Record.State.FatigueDamage);
     }
 
     public SpellResistRecord ResistRecord(int spell) => _records(spell)?.Resist ?? new(spell, false, false, false, 0, SpellResistanceRules.NoSave, 0);
@@ -1061,7 +1078,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         foreach (var firing in pass.Life) _itemEvents.AddRange(firing.Life.ItemEvents);
         // ARC-RENDER-1991 (ledger RH2, RH7): the poison tick's damage effect (0x4B1170 calls 0x433020 after its damage step) follows each tick that hurt its victim.
         foreach (var firing in pass.Life) PoisonTickHit(firing);
-        foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        ApplyPass(pass.SpellRuns.Where(f => f.Ran).Select(f => f.Notes), id => _owner.QuerySpellRuns()[id] ?? before[id]);
         RunTrapDevices(pass);
         FirePendingItems();
         return pass;
@@ -1173,6 +1190,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         public ISpellRunHost SpellRuns => caster;
         public ISessionEventWorld Wrapped => events;
+        // ARC-SCRIPT-2879: the wrapped world's item script host, for the remove-item scripts of the pass's body walks.
+        public ISessionItemScriptHost? ItemScriptHost => events.ItemScriptHost;
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => events.CritterFacts(map, entity);
         public ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => (events as ISessionPartyEventWorld)?.ReactionNpcFacts(map, entity);
         public ReactionPcFacts? ReactionPcFacts() => (events as ISessionPartyEventWorld)?.ReactionPcFacts();
@@ -1192,6 +1211,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => ai.ScanCombatants(map);
         public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => ai.CombatantFacts(map, entity);
         public long DistanceToPc(string npc) => ai.DistanceToPc(npc);
+        public bool Knows(string npc) => ai.Knows(npc);
         public bool RunScript(AiScriptPoint point, string npc, string? triggerer) => ai.RunScript(point, npc, triggerer);
         public bool RunWaypoints(string npc) => ai.RunWaypoints(npc);
         public void RunStandpoints(string npc) => ai.RunStandpoints(npc);
@@ -1230,22 +1250,24 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// Applies what the run rules left for the host (<see cref="SpellRunNote"/>): a payment's fatigue (the stage's from the run's
-    /// source, a reflection's from its payer; worn mana stores are not modelled yet), and records the local player's messages,
+    /// source, a reflection's from its payer; the payer's worn mana stores drain first, ARC-MAGIC-2371), and records the local player's messages,
     /// resisting targets and freed runs in <see cref="Log"/>.
     /// </summary>
     public void Apply(IReadOnlyList<SpellRunNote> notes, Func<int, SpellRun?> runs)
     {
         ArgumentNullException.ThrowIfNull(notes);
         ArgumentNullException.ThrowIfNull(runs);
+        // ARC-MAGIC-2403: the payers this call (or this event pass) already paid a critter payment for; a later payment of the same payer is planned again (Replanned).
+        var paid = _paidThisPass ?? new HashSet<string>(StringComparer.Ordinal);
         foreach (var note in notes)
         {
             switch (note.Kind)
             {
                 case SpellRunNoteKind.Payments when runs(note.Run)?.Source is { } source:
-                    foreach (var payment in note.Payments ?? []) Pay(note.Run, source.Id, payment);
+                    foreach (var payment in note.Payments ?? []) Pay(note.Run, source.Id, Replanned(source.Id, payment, paid));
                     break;
                 case SpellRunNoteKind.ReflectionPayment when note.Target?.Object is { } payer:
-                    foreach (var payment in note.Payments ?? []) Pay(note.Run, payer.Id, payment);
+                    foreach (var payment in note.Payments ?? []) Pay(note.Run, payer.Id, Replanned(payer.Id, payment, paid));
                     break;
                 case SpellRunNoteKind.Message: _log.Add(new(SpellCastEventKind.Message, note.Run, note.Value)); break;
                 case SpellRunNoteKind.Resisted:
@@ -1264,7 +1286,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         // ARC-MAGIC-022: an item source's spent charge (and with it the magical flag) is saved. The notes of an event pass are applied
         // after the pass, so two payments of one pass were both made against the count before it: one that finds no charge left
-        // spends nothing (the original refuses the second, NoCharges). A spend the session refuses (a full record budget) is logged.
+        // spends nothing (the original refuses the second, NoCharges). The spend is written for any item the host names (ARC-MAGIC-2434: no tracking, a budget of its own);
+        // it is refused (and logged) only for a deleted item, the 65,537th count or an exhausted revision counter.
         if (payment.ChargeSpent)
         {
             if (_items?.Invoke(payer) is not { } raw || raw.Entity != payer) return;
@@ -1275,11 +1298,63 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 : new(SpellCastEventKind.ChargeNotSaved, run, (int)spent.Failure, payer));
             return;
         }
+        // ARC-MAGIC-2371 (BC10): the worn mana stores the payment drained are written back and each gets its recharge event, also when the store is already settled (a paid 0 merges a 0).
+        // The stores drain first and stay drained when the fatigue part refuses (MG20).
+        foreach (var drain in payment.Drains) DrainWornStore(run, payer, drain);
         if (payment.FatigueDamageAdded <= 0 || LifeTarget(payer) is not { } target) return;
         var result = _owner.PaySpellFatigue(_owner.Version, target, payment.FatigueDamageAdded);
         if (result.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.FatiguePaid, run, payment.FatigueDamageAdded, payer));
         _itemEvents.AddRange(result.ItemEvents);
     }
+
+    // ARC-MAGIC-2403 (BC10): the notes of an event pass are applied after the pass, but the original pays at once, so a payment after another of the same payer (in one pass, or one step's stage and reflection payments) sees the stores and the
+    // fatigue the first left. The first critter payment of a payer keeps the plan its step made (the original pays at the stage, before the step's components); each later one is planned again against the state now with the same cost
+    // (the plan's last cost; a limited critter's half is taken again from the payer's flag), and that plan is written. A plan that is no critter's (cells, a charge, a payer that is no critter now) stays as it was. The status of a plan made
+    // again is not read (the first plan's decided the run, and the writes read only the drains and the fatigue; a fail-after-pay is not made again). The payer lookup sets the cell payer, which the plan's own cell source needs unchanged.
+    private SpellPayment Replanned(string payerId, SpellPayment planned, HashSet<string> paid)
+    {
+        if (planned.Cells is not null || planned.ChargeSpent || planned.MarksItemMagical || planned.LastCost is not { } cost || cost <= 0) return planned;
+        if (RunObject(payerId) is not { IsCritter: true } who || Payer(who) is not { Kind: SpellPayerKind.Critter } payer) return planned;
+        return paid.Add(payerId) ? planned : SpellPaymentRules.Pay(payer, cost, true, SpellPaymentRules.NoSpell, default, Cells);
+    }
+
+    private HashSet<string>? _paidThisPass;
+
+    /// <summary>ARC-MAGIC-2403: the notes of the firings of one event pass, applied in order after it: a payer's later critter payments are planned again (<see cref="Apply"/>).</summary>
+    internal void ApplyPass(IEnumerable<IReadOnlyList<SpellRunNote>> firings, Func<int, SpellRun?> runs)
+    {
+        _paidThisPass = new(StringComparer.Ordinal);
+        try { foreach (var notes in firings) Apply(notes, runs); }
+        finally { _paidThisPass = null; }
+    }
+
+    // The plan names the stores it drained against the stores now (a payment is planned just before it is written, or made again by Replanned): the store left is the plan's, written whatever the session's budget or tracking of the
+    // item, since the worn item is named by the payer's slot. A write that is still refused (a deleted item cannot be worn; the revision counter at its end) is logged.
+    private void DrainWornStore(int run, string payer, ManaStoreDrain drain)
+    {
+        var slot = WornSlotFirst + drain.Slot;
+        if (WornOf(payer).FirstOrDefault(worn => worn.Slot == slot) is not { Id: { } wornId } || Item(wornId) is not { } item) return;
+        var written = _owner.WriteWornManaStore(_owner.Version, wornId, item.ManaStore, drain.StoreAfter);
+        if (written.Disposition == GameSessionDisposition.Rejected)
+        {
+            _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId));
+            // The original drops the cached lists whatever the write did (0x4CCC40 at 0x45062B, ARC-AI-2402).
+            if (drain.StoreAfter == 0) ManaStoreEmptied?.Invoke(payer, wornId);
+            return;
+        }
+        if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, drain.StoreAfter, wornId, drain.Drained));
+        _owner.ScheduleManaRecharge(wornId, drain.Drained, merge: true);
+        if (drain.StoreAfter == 0) ManaStoreEmptied?.Invoke(payer, wornId);
+    }
+
+    /// <summary>
+    /// ARC-AI-2402 (ledger BC10, SP11): the host's AI, told after a payment drained a worn item's mana store (field 92) to 0 for <c>payer</c>
+    /// (the caster's object id) and <c>item</c> (the worn item's id). The payment 0x450420 calls 0x4CCC40 at 0x45062B for every worn item whose store
+    /// it leaves at 0, after the write-back, the recharge event and the bar refresh: a store that was already 0 is skipped (no call), a store the
+    /// cost does not exhaust is not told. The viewer drops the payer's slot of its AI list cache when one of the slot's lists holds the item
+    /// (<see cref="Arcanum.Simulation.Ai.AiListCache.ItemExhausted"/>). Null: no AI, nothing happens.
+    /// </summary>
+    public Action<string, string>? ManaStoreEmptied { get; set; }
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)
     {

@@ -52,6 +52,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     // switches between them and the panel's two backgrounds.
     private AreaInventoryArtLook? _look;
     private bool _diagnosticChosen;
+    private bool _diagnosticSwitch;
     private Button _lookToggle = null!;
     private StyleBoxFlat _diagnosticStyle = null!;
     private readonly StyleBoxEmpty _originalStyle = new();
@@ -61,6 +62,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-UI-054: the window's holder on the screen for the round view: its foot point in canvas units and the game view's
     /// zoom (canvas units per game pixel); null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1908: the stored portraits' small images the frame draws where the original's image function answers a portrait.</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get => _area.PortraitTextures; set => _area.PortraitTextures = value; }
     /// <summary>ARC-UI-029: the quantity window's Accept (or Enter) with the count shown, 0 too (QW4).</summary>
     public event Action<int>? QuantityAccepted;
     /// <summary>ARC-UI-029: the quantity window's Cancel: nothing moves.</summary>
@@ -144,6 +147,13 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
 
+    /// <summary>ARC-UI-2764: the "Diagnostic view" switch and the message line of the original look are a debug and self-test path; false (the default) draws neither in play.</summary>
+    public bool DiagnosticSwitch
+    {
+        get => _diagnosticSwitch;
+        set { _diagnosticSwitch = value; if (!value) _diagnosticChosen = false; if (_view is { } view && IsOpen) Render(view, _message.Text); }
+    }
+
     /// <summary>ARC-UI-051: the window shows the original look: its art read, the player's own window (mode 0) and the diagnostic view not
     /// chosen. ARC-UI-052: a loot window (mode 2) too when the loot arts read; ARC-UI-065: and the steal window (mode 3) on the same frame.</summary>
     public bool ArtMode => _look is not null && !_diagnosticChosen && OriginalAvailable;
@@ -224,6 +234,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
         _lookToggle.Pressed += () => Callable.From(() =>
         {
+            if (!_diagnosticSwitch) return;
             _diagnosticChosen = !_diagnosticChosen;
             if (_view is { } view) Render(view, _message.Text);
         }).CallDeferred();
@@ -412,7 +423,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         ShowMessageLine();
         // ARC-UI-051: in the original look only the switch takes focus, so a pad or the keyboard can reach the diagnostic buttons.
         var enabled = Focusable();
-        enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
+        if (enabled.Count > 0) enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel(); UpdateRoundView();
     }
 
@@ -422,7 +433,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     private void ShowMessageLine()
     {
         var art = ArtMode;
-        _message.Visible = true;
+        _message.Visible = !art || _diagnosticSwitch;
         _message.AutowrapMode = art ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart;
         _message.TextOverrunBehavior = art ? TextServer.OverrunBehavior.TrimEllipsis : TextServer.OverrunBehavior.NoTrimming;
     }
@@ -434,7 +445,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         var art = ArtMode;
         _area.SetLook(art ? _look : null);
         foreach (var control in new Control[] { _header, _scroll, _close, _hint }) control.Visible = !art;
-        _lookToggle.Visible = _look is not null && OriginalAvailable;
+        _lookToggle.Visible = _diagnosticSwitch && _look is not null && OriginalAvailable;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
@@ -444,7 +455,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         // ARC-UI-029: while the quantity window asks only its buttons take focus.
         if (_bar is not null) return _quantityButtons.ToList();
         // ARC-UI-051: the original look's diagnostic buttons are hidden; the switch to them is the one focusable control.
-        if (ArtMode) return [_lookToggle];
+        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
@@ -530,6 +541,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     public void Navigate(int direction)
     {
         var enabled = Focusable();
+        if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
     }
@@ -550,6 +562,8 @@ public partial class AreaInventoryPanel : CanvasLayer
             // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
             // shows besides the frame (the switch, the message line, the quantity row; PROJECT: the original prints no message in the
             // window). ARC-UI-054: the message line is one line whether a message is shown or not, so a message keeps the scale.
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the switch, the message line and the quantity row hang around it).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
             {
@@ -561,7 +575,7 @@ public partial class AreaInventoryPanel : CanvasLayer
             }
             _panel.Size = new(frameWidth, 0);
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, size.Y));
-            _panel.Position = new((size.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - frameWidth) / 2, top);
             return;
         }
         var width = Math.Max(1, Math.Min(960, size.X - 48));
@@ -570,7 +584,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta)

@@ -35,9 +35,12 @@ public partial class AreaItemServicePanel : CanvasLayer
     public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-1765: the window's holder (the hero) on the screen for the round view: its foot point in canvas units and the game view's zoom; null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1908: the stored portraits' small images the frame draws where the original's image function answers a portrait.</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get => _area.PortraitTextures; set => _area.PortraitTextures = value; }
     // ARC-UI-1765: the original look: the art, the owner's choice of the diagnostic view, the switch between them, the frame, the round view, the panel's two backgrounds and the frame's view.
     private AreaInventoryArtLook? _look;
     private bool _diagnosticChosen;
+    private bool _diagnosticSwitch;
     private Button _lookToggle = null!;
     private AreaInventoryGridArea _area = null!;
     private AreaRoundView _roundView = null!;
@@ -48,6 +51,13 @@ public partial class AreaItemServicePanel : CanvasLayer
     public AreaItemServiceView? View { get; private set; }
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
+
+    /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
+    public bool DiagnosticSwitch
+    {
+        get => _diagnosticSwitch;
+        set { _diagnosticSwitch = value; if (!value) _diagnosticChosen = false; if (View is { } view && IsOpen) Render(view, _art); }
+    }
     internal bool RoundViewShown => _roundView.Visible;
 
     /// <summary>ARC-UI-1765: the window shows the original look: the inventory art read, the hero's frame view given and the diagnostic view not chosen.</summary>
@@ -95,6 +105,7 @@ public partial class AreaItemServicePanel : CanvasLayer
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
         _lookToggle.Pressed += () => Callable.From(() =>
         {
+            if (!_diagnosticSwitch) return;
             _diagnosticChosen = !_diagnosticChosen;
             if (View is { } view) Render(view, _art);
         }).CallDeferred();
@@ -136,7 +147,7 @@ public partial class AreaItemServicePanel : CanvasLayer
             + "PROJECT diagnostic window: no grid, paperdoll or original-look quote line; original UI parity NOT_VERIFIED";
         ApplyLook();
         var enabled = Focusable();
-        enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
+        if (enabled.Count > 0) enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel(); UpdateRoundView();
     }
 
@@ -147,7 +158,7 @@ public partial class AreaItemServicePanel : CanvasLayer
         _area.SetLook(art ? _look : null);
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _close, _hint }) control.Visible = !art;
-        _lookToggle.Visible = _look is not null && _art is not null;
+        _lookToggle.Visible = _diagnosticSwitch && _look is not null && _art is not null;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
@@ -186,7 +197,7 @@ public partial class AreaItemServicePanel : CanvasLayer
     private List<Button> Focusable()
     {
         // ARC-UI-1765: in the original look the switch to the diagnostic buttons is the one focusable control.
-        if (ArtMode) return [_lookToggle];
+        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
         var list = _buttons.ToList();
         list.Add(_close);
         if (_lookToggle.Visible) list.Add(_lookToggle);
@@ -208,6 +219,7 @@ public partial class AreaItemServicePanel : CanvasLayer
     {
         if (ArtMode) { PadMove(direction); return; }
         var enabled = Focusable();
+        if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
     }
@@ -229,6 +241,8 @@ public partial class AreaItemServicePanel : CanvasLayer
         if (ArtMode)
         {
             // ARC-UI-1765: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it (as the inventory and barter windows' original look).
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the loot window hides the bars; the zone is the layout's all the same).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
@@ -240,7 +254,7 @@ public partial class AreaItemServicePanel : CanvasLayer
                 _panel.Size = new(frameWidth, 0);
             }
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, free.Y));
-            _panel.Position = new((free.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (free.X - frameWidth) / 2, top);
             return;
         }
         var size = GetViewport().GetVisibleRect().Size;

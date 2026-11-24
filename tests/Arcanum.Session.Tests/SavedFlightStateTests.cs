@@ -217,12 +217,15 @@ public sealed class SavedFlightStateTests
         using var owner = NpcThrowStateTests.Owner();
         var tile = new CellCoord(98, 203);
         var shot = owner.ThrowByNpc(owner.Version, NpcThrowStateTests.Lob(tile)).Shots.Single();
-        Fly(owner, shot, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
+        // ARC-COMBAT-2693: a grenade lobbed at a location carries its check as a weapon does (a stray strike), so its flight names its shooter and the arrow is saved with the throw.
+        Fly(owner, shot, NpcThrowStateTests.Thrower, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
         var capture = owner.Capture();
-        Assert.AreEqual((1, 0, 0), (capture.Flights.NpcThrows.Count, capture.Flights.HeroShots.Count, capture.Flights.NpcArrows.Count));
+        Assert.AreEqual((1, 0, 1), (capture.Flights.NpcThrows.Count, capture.Flights.HeroShots.Count, capture.Flights.NpcArrows.Count));
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
         Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcThrowStateTests.Seed()).Failure);
         Assert.AreEqual(owner.QueryThrownShot(shot), restored.QueryThrownShot(shot));
+        Assert.AreEqual(owner.QueryNpcShot(shot), restored.QueryNpcShot(shot), "the restored grenade's check is still a generic item's (ARC-COMBAT-2693)");
+        Assert.IsTrue(restored.QueryNpcShot(shot)!.Value.Generic);
         Assert.IsTrue(restored.QueryItemInFlight(NpcThrowStateTests.Grenade), "the grenade stays hidden while it flies");
         Assert.AreEqual(owner.QueryShotEndItemEvents(shot, tile).Single().Event, restored.QueryShotEndItemEvents(shot, tile).Single().Event, "it still goes off where it ends");
     }
@@ -255,6 +258,31 @@ public sealed class SavedFlightStateTests
         Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (strike.Failure, again.Failure));
         Assert.AreEqual(strike.Life!.HitPointDamage, again.Life!.HitPointDamage, "the strike lands the same hit after the load");
         Assert.AreEqual(GameSessionDisposition.Changed, restored.LandThrownItem(restored.Version, shot, NpcThrowStateTests.HeroCell).Disposition);
+        Assert.AreEqual(0, restored.QueryShotsInFlight().Count);
+    }
+
+    // ARC-COMBAT-2523: a thrown weapon aimed at a location (no struck critter) carries the location target; a save keeps it and the load accepts it.
+    [TestMethod]
+    public void An_npc_weapon_thrown_at_a_location_in_flight_round_trips_its_location_arrow()
+    {
+        var tile = new CellCoord(98, 203);
+        SessionNpcThrowResult? thrown = null;
+        GameSessionOwner? found = null;
+        for (ulong seed = 1; seed <= 300 && found is null; seed++)
+        {
+            var candidate = NpcThrowStateTests.Owner(seed);
+            thrown = candidate.ThrowByNpc(candidate.Version, new(NpcThrowStateTests.Combat(), NpcThrowStateTests.Dagger, 15, NpcThrowStateTests.ThrowerCell, tile) { ThrowerWorn = NpcThrowStateTests.Wielded(), Flight = true });
+            if (thrown.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) found = candidate; else candidate.Dispose();
+        }
+        using var owner = found ?? throw new AssertFailedException("no seed gave a hit");
+        var shot = thrown!.Shots.Single();
+        Fly(owner, shot, NpcThrowStateTests.Thrower, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
+        var capture = owner.Capture();
+        Assert.AreEqual(SessionNpcShotFacts.LocationTarget, capture.Flights.NpcArrows.Single().Target);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcThrowStateTests.Seed()).Failure);
+        Assert.AreEqual(owner.QueryNpcShot(shot), restored.QueryNpcShot(shot), "the restored shot carries the decided hit and the location target");
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.LandThrownItem(restored.Version, shot, tile).Disposition);
         Assert.AreEqual(0, restored.QueryShotsInFlight().Count);
     }
 

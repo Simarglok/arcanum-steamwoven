@@ -52,7 +52,7 @@ for this comparison was `artifacts/packages/macos` at commit d2899817a; any late
 | 1 | Cast Fireflash (spell 22) at empty ground. | A flash appears on the strike tile for about 0.75 s and goes away by itself. | open |
 | 2 | Cast Fireflash at a creature that stands on a tile. | No flash object, because the tile is not empty (`Tgt_Tile_Empty`). Note also what the creature itself gets (eye candy, damage): the Summon rules do not decide that, so it is part of the comparison. The owner does not remember this empty-tile rule, so it is the main thing to check. | open |
 | 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. ARC-MAGIC-054: the pieces are drawn additive, as the original's translucent flames. The owner saw 5 pieces in the retail game (2026-11-12) ([note](../research/wall-of-fire-look-magic-054.md)); ARC-MAGIC-055 drops pieces on blocking terrain. | same (5 pieces, owner 2026-11-12) |
-| 4 | Walk the hero or a creature through the wall. | The pieces do not block passage: their prototype carries the "no block" flag in the data. | open |
+| 4 | Walk the hero or a creature through the wall. | The pieces do not block passage: their prototype carries the "no block" flag in the data. | same (owner 2026-11-18, report 2026-11-18_22-02-38) |
 | 5 | Stand the caster and a companion in the wall, then a hostile creature. | The caster and creatures led by the caster's party are not burned. Other creatures burn each step, and in turn-based mode once per round. | open |
 | 6 | Stop maintaining Wall of Fire (or let it run out). | All pieces disappear at the same moment. | open |
 
@@ -375,7 +375,7 @@ Compare in both games with the same hero (Divination college: See Contents 6, Re
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick picks an item of the hero's own inventory window only; an item of a loot, steal or barter window is not a target (ARC-MAGIC-1128).
+- Divine Magick picks an item of the hero's own inventory window or of a loot window kept open (ARC-MAGIC-1336); the original closes a barter or steal window when a spell on an inventory item starts, so their items are not targets (0x57BC70).
 
 ## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
 
@@ -446,7 +446,7 @@ The triage changes no behaviour. These are the places where it found original in
 | 5 | Put a spell on a hotkey, unlearn it in the editor, look at the bar; put an armour on a hotkey while another armour is worn and press it; drop a weapon whose spell pane is open. | The unlearned spell's hotkey empties; the key swaps the worn item and puts the old one back when the new one is refused; dropping the weapon closes the pane and clears the two quick slots that name it (0x57F340, 0x550000, 0x5570D0). | open |
 | 6 | Open the hero's inventory with a heavy weapon and a low strength (for example strength 5 with a two-handed sword), then hover items in a shop and use the gamble button. | The damage and armour numbers, a weight line and an encumbrance line "Name (limit)", gold and four ammunition counts show beside the doll and the weapon is tinted red below its minimum strength; the barter hover writes a quote with a haggle percentage; the gamble button needs the merchant's gambling points and a limit by the merchant's gambling level (0x576520, 0x578330, 0x579840). | open |
 | 7 | Press Enter with a companion in the party and type the companion's name and a command; use a scroll or a lockpick from the inventory and click a target; press I twice with the inventory open. | The line is sent as a broadcast order with the tile under the pointer; an item that needs a target opens the target cursor and walks next to the target when charged or out of range, lockpicks take their own path unless Ctrl is held; the second I closes the window and puts a held item back (0x571950, 0x571AA0, 0x572340). | open |
-| 8 | With a party whose follower has a better disarm skill than the hero, use skill-bar Disarm Traps on a trap (once plain, once with Ctrl held); then repair an undamaged item from the skill bar with the same party. | Disarm Traps: the best follower does the job and a hand-over line floats over that follower, unless either Ctrl key is held, then the hero does it (0x57A620, called by 0x57A320 only for the disarm skill; the Follower Skills option, on by default, switches the hand-over off). Repair is **not** handed over: it stays with the hero even when a follower repairs better, and the "nothing to repair" line floats over the hero (0x57AB10); the other skill-bar skills (pick pocket and the rest) do not hand over either. The skill result lines float over the user (0x57A770 and copies). Ours: built by ARC-COMBAT-1777 for both jobs (the lockpick use as the follower's own pick goal; the viewer cannot tell the left Ctrl key from the right one, and the follower's critical-success device lands in the hero's pack) ([ledger OH4](../research/ledger/ui-audio.md#hidden-options-arc-res-1107), [plan E8-e5](missing-systems-plan.md#e8-c-and-e8-e-slices-read-by-arc-res-1107)). | open |
+| 8 | With a party whose follower has a better disarm skill than the hero, use skill-bar Disarm Traps on a trap (once plain, once with Ctrl held); then repair an undamaged item from the skill bar with the same party. | Disarm Traps: the best follower does the job and a hand-over line floats over that follower, unless either Ctrl key is held, then the hero does it (0x57A620, called by 0x57A320 only for the disarm skill; the Follower Skills option, on by default, switches the hand-over off). Repair is **not** handed over: it stays with the hero even when a follower repairs better, and the "nothing to repair" line floats over the hero (0x57AB10); the other skill-bar skills (pick pocket and the rest) do not hand over either. The skill result lines float over the user (0x57A770 and copies). Ours: built by ARC-COMBAT-1777 for both jobs (the lockpick use as the follower's use-item-with-skill goal 40; the left and right Ctrl keys are told apart, ARC-COMBAT-1878, and the follower's critical-success device lands in its own pack) ([ledger OH4](../research/ledger/ui-audio.md#hidden-options-arc-res-1107), [plan E8-e5](missing-systems-plan.md#e8-c-and-e8-e-slices-read-by-arc-res-1107)). | open |
 | 9 | Use a bed in a town (or press the wait key where the town map allows it) and rest to the chosen length. | The rest window steps one game hour per 200 ms, heals the sleeper and the followers each hour, drops maintained spells, fires script event 29 at the followers and ends at the chosen length, at 07:00, at 20:00 or at full life; an unconscious hero, combat that cannot be left, a refusing bed script or an occupied bed refuse (0x57B180, 0x57B710, 0x57B7F0, 0x57BAC0). Ours has no rest. | open |
 | 10 | Open the character sheet and click its fourth tab; close the sheet in the new-character editor with damage on the hero. | The tab lists every named auto-level scheme (15 rows, scrollbar) and a click sets the shown character's scheme; closing in creation mode clears hit-point and fatigue damage (0x55D060, 0x55D210, 0x55DF90, 0x55A150). | open |
 | 11 | Open Options from the main menu and in play. | Three pages of eight slots (module, difficulty, violence filter, combat mode, auto attack, auto switch weapons, always run, follower skills; brightness, text duration, floats, float speed, combat taunts; three volumes) and a combat mode with three values including fast turn-based (0x589280, 0x589610, 0x5896A0). Ours shows the Follower Skills line since ARC-COMBAT-1777 (on by default, saved as `follower skills`), fewer other slots and two combat values (ledger OP2). | open |
@@ -1127,7 +1127,7 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 
 ## ARC-SCRIPT-1481 — food that heals and cures poison (2026-11-13)
 
-The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click).
+The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click). Since ARC-SCRIPT-1590 an NPC that holds such a food and chooses an AI-action item to heal itself runs the same script (heals, cures, loses the food); watch for the `ARC-SCRIPT-1590 item-use` lines in the viewer output.
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
@@ -1258,7 +1258,7 @@ start a game and press `W` (the town map opens in the Crash Site; on the open gr
 
 Known differences (documented, not bugs):
 
-- The buttons (Zoom, Whole map, Travel, the compass) and the lens cover are generated since ARC-UI-1810 (the map pictures beside the lamps are kept art); the bottom cover is still art ([issue #2194](https://github.com/Simarglok/arcanum-steamwoven/issues/2194)).
+- The buttons (Zoom, Whole map, Travel, the compass) and the lens cover are generated since ARC-UI-1810 (the map pictures beside the lamps are kept art); the bottom cover and the brass pill under it (the two oval plates, the ring round the compass button, the screws) are generated since ARC-UI-2194 (the plates are flat brushed brass, without the original's painted grain and screw slots).
 - The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
 
 ## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
@@ -1520,14 +1520,14 @@ Moved here from the owner test checklist of 2026-11-14 (item A4). The scope was 
 | --- | --- | --- | --- |
 | 1 | With the HD interface on, look at the glyphs **W, 3, 2, S** on the world map at 2560×1440. | The glyphs have no ragged edges. | open |
 
-## ARC-DEV-343 — Main menu backdrop and the HD mirror (PR #917, 2026-11-10)
+## ARC-DEV-343 — HD mirror (PR #917, 2026-11-10; the main-menu backdrop part retired by ARC-UI-3003)
 
 Moved here from the owner test checklist of 2026-11-14 (item A5). The docs now name the **iCloud** copy as the default destination of `mirror` (it replaced the Google Drive copy, which stays untouched); say which one your terminal reads. Question for the owner: do you want a separate `hd_pack.py` command that installs the pack on another device (today the iCloud copy is carried over by hand)?
 
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | In a terminal that can read the pack folders run `python3 -B tools/hd_pack/hd_pack.py mirror --dry-run`. | It shows what it would copy and nothing is changed. | open |
-| 2 | Start the game with "HD interface" on. | The game log has one line `ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status=Used ...`. | open |
+| 2 | Start the game with "HD interface" on. | Moot since ARC-UI-3003 (the game no longer reads `main-menu-16x9.png` and logs no such line). | cannot-test (moot) |
 
 ## ARC-UI-1574 — Reload after death (optional, PR #1645, 2026-11-13)
 
@@ -1639,3 +1639,35 @@ Tooling, no original behaviour to compare: the steps check that the overlay and 
 | 1 | In a game press Ctrl+Q, pick a step in the list and press **Same**, then close with Escape and look at the page. | The overlay lists the steps with the current one first; the page shows that step as `same` within a moment; a plate with the current step stays at the top left of the game and takes no click. | open |
 | 2 | Press Ctrl+Q, pick another step, write a note, press **Send report**, then **Differs**. | A report folder appears in `artifacts/packages/macos/reports/` whose `report.md` has the line `Check: <step id>`; within about 20 seconds a GitHub issue for that step is created exactly once, and the page lists the report under the step. | open |
 | 3 | Stop the page and start the game without `./arcanum qa overlay on` (or after `./arcanum qa overlay off`), then press Ctrl+Q. | Nothing opens and nothing is drawn: a normal build is unchanged. | open |
+
+## ARC-RES-2815 — Where and when scripts fire (2026-11-19)
+
+Built from the [script trigger conditions](../research/script-trigger-conditions.md) (rows TQ1–TQ28, read in the original
+executable). Each step says where to go and what the original does. When a step goes wrong, send a Ctrl+B report from the
+overlay: its log shows a refused script by the lines of [section 5](../research/script-trigger-conditions.md#5-where-a-refused-run-shows-in-steamwoven)
+of that note (for example `heartbeat-refused`, `ScriptRefused`, `companion-tile ... Refused`, `item-use-refused`).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new game and stay by the plane wreck at the Crash Site. | Virgil starts talking by himself at once (his heartbeat opens his dialog, TQ13); the report log has no `heartbeat-refused` line for script 1100. | open |
+| 2 | At the Crash Site, with Virgil in the party, walk past the plane wreck so that Virgil steps onto the row of tiles beside it. | On Virgil's first step onto those tiles his remark on the flying machine opens (tile script 1695 waits for Virgil, not the hero); after you finish its last reply it does not come back (TQ5). | open |
+| 3 | Take Virgil to Shrouded Hills and walk him into the inn where Joachim stays. | Virgil's tile scripts at the inn run as he steps in (the scripts of the owner's report behind #2788); no `companion-tile ... Refused` in the log. A companion recruited on another map runs tile scripts like any critter (TQ5). | open |
+| 4 | Read "Joachim's Note to Virgil" from the inventory. | The reading window opens with the text (the note's use script runs first, TQ18). The note's script also schedules a call of Virgil's script for later (TQ17); whether and how Virgil reacts is the open gap #2806, so note what happens. | open |
+| 5 | With Virgil, repeat step 2 but leave his remark before its last reply; then let him step off the tiles and on again. | The remark opens again on his next step onto those tiles, because the script stops only when its own flag is set by the last reply; standing or turning on a tile does not re-run it (TQ5). | open |
+| 6 | Go near an NPC whose talk opens by itself (Wheel Clan, Vollinger's basement, the Void and Arronax's interior there, the Panarii temple, Drog's cave, Dernholm castle) and approach from farther than 30 tiles. | Nothing happens far away; within about 30 tiles the NPC starts the talk without a click (heartbeat, TQ13). If another dialog is open at that moment, that talk is lost, not opened later. | open |
+| 7 | Leave a town map, come back after a while (more than a few seconds of game time) and watch NPCs who stand at fixed posts. | On each return their sector's NPCs take the first heartbeat again: they go back to their posts or waypoints and re-equip their best items, and any first-heartbeat script runs again (TQ13). | open |
+| 8 | Click "talk" on a dead NPC, then on a surrendered one, then on a mind-controlled one (Charm). | Dead or surrendered: only a generic line floats over them and no dialog window opens, unless that NPC's script is written for it; mind-controlled: the special charmed dialog runs instead of its own (TQ27, TQ3). | open |
+| 9 | Try to sleep in several beds (inn beds, beds in houses). | A bed decides by its own use script with reversed polarity: a bed with no script, or whose script lets the default happen, says "You cannot sleep here."; only a bed whose script answers "skip default" lets you rest (TQ18). Note which beds let you sleep. | open |
+| 10 | In turn-based combat, open a door that has a script (for example a door that comments or refuses). | 2 AP are spent first, then the door's script decides whether it opens (TQ9). | open |
+| 11 | Watch an NPC walk through a scripted door in real time. | The door's use script runs for the NPC too (TQ9); its effect may differ from the hero's, since a script can test who opens. | open |
+| 12 | Fight an NPC whose weapon has a script (a poisoned or special weapon) and land a hit, then a miss. | The weapon's hit script runs on the hit (before the damage) and its miss script on the miss; a critical adds the critical point after it (TQ22). | open |
+| 13 | Kill an NPC with a death script (an NPC whose death starts a scene or sets a quest). | Its dying script runs at the kill, before the body falls; a script that answers "skip default" keeps the NPC alive (TQ25). | open |
+| 14 | Steal from an NPC with low Pick Pocket until you are caught, then pick a lock in view of a guard. | The robbed NPC (or the guard) reacts by its script; a plant is never caught at Master training (TQ16). | open |
+| 15 | Break a breakable object by attacking it (scenery such as a statue, a door, a weapon lying on the ground). | The object turns to its broken look and its bust script runs; an object with no broken look disappears (destroy script) (TQ26). | open |
+| 16 | Rest for some hours with followers in the party. | Each follower's "leader sleeping" script runs when you choose the duration (TQ26). | open |
+| 17 | With Virgil in the party, walk across any sector border (and take a map change with him). | On each sector entry Virgil's new-sector script (1568) runs; the log has an `ARC-SCRIPT-2822 new-sector` line for his script, with no `Refused` outcome (TQ7). | open |
+
+Known differences (documented, not bugs; each has its issue):
+
+- Will-KOS scripts never veto ([#2821](https://github.com/Simarglok/arcanum-steamwoven/issues/2821)).
+- NPC and holder item moves ([#2827](https://github.com/Simarglok/arcanum-steamwoven/issues/2827)) are not built (examine at dialog start and in the portrait hover is built: HK25, HK26).

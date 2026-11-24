@@ -208,6 +208,8 @@ public sealed class AreaGameBarTexts
     public const string IntgamePath = "mes/intgame.mes", SkillUiPath = "mes/skill_ui.mes";
     /// <summary>The spell hint's labels in <c>intgame.mes</c>.</summary>
     public const int CostLabel = 59, WillpowerLabel = 73, SecondLabel = 74, SecondsLabel = 75;
+    /// <summary>ARC-COMBAT-1943 (0x54ED30): line 25 of <c>intgame.mes</c>, the message bar's line (text kind 6) of a click that would attack while the hero is in Body of Air.</summary>
+    public const int BodyOfAirMessage = 25;
     /// <summary>The first skill-bar button name in <c>skill_ui.mes</c> (the skill bar init 0x579ED5..0x579F1C: 100 + button).</summary>
     public const int FirstSkillButtonName = 100;
     private const int MaxText = 64;
@@ -217,6 +219,7 @@ public sealed class AreaGameBarTexts
         [1005] = "Character Editor", [1006] = "Inventory", [1007] = "Maps", [1008] = "Fate Points", [1009] = "Sleep",
         // ARC-UI-1111 (GB11): the labels of the clock's time and date line.
         [AreaClockLayout.TimeMessage] = "Time", [AreaClockLayout.DateMessage] = "Date",
+        [BodyOfAirMessage] = "You cannot attack in this form", // the project's words until the game's file reads
         [CostLabel] = "Fatigue cost", [WillpowerLabel] = "Minimum willpower", [SecondLabel] = "second", [SecondsLabel] = "seconds",
         // ARC-UI-107: the lock line of a hovered portal or container (the project's words until the game's file reads).
         [AreaHoverWindow.LockedMessage] = "Locked", [AreaHoverWindow.UnlockedMessage] = "Unlocked", [AreaHoverWindow.JammedMessage] = "Jammed",
@@ -438,9 +441,9 @@ public sealed record AreaGameBarContent(IReadOnlyDictionary<int, AreaInterfaceAr
 {
     /// <summary>Every interface art number read for the bars: theirs (<see cref="AreaGameBarLayout.ArtNumbers"/>), the message
     /// window's (<see cref="AreaMessageLayout.ArtNumbers"/>, ARC-UI-023) and the maintain bar's slots
-    /// (<see cref="AreaMaintainBarLayout.ArtNumbers"/>, ARC-MAGIC-026) and the combat lamp panel's (<see cref="AreaCombatLampLayout.ArtNumbers"/>, ARC-UI-1888).</summary>
+    /// (<see cref="AreaMaintainBarLayout.ArtNumbers"/>, ARC-MAGIC-026) the combat lamp panel's (<see cref="AreaCombatLampLayout.ArtNumbers"/>, ARC-UI-1888) and the window arts whose wood the Steamwoven backdrops take their tone from (<see cref="SteamwovenBackdrops.ToneArts"/>, ARC-UI-2643).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Concat(AreaMaintainBarLayout.ArtNumbers).Concat(AreaCombatLampLayout.ArtNumbers).Distinct()];
+        [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Concat(AreaMaintainBarLayout.ArtNumbers).Concat(AreaCombatLampLayout.ArtNumbers).Concat(SteamwovenBackdrops.ToneArts).Distinct()];
 
     /// <summary>True when every art number of <see cref="ArtNumbers"/> read.</summary>
     public bool ArtReady => ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);

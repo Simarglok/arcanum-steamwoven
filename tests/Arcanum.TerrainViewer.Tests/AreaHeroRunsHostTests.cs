@@ -116,6 +116,9 @@ public sealed class AreaHeroRunsHostTests
         public AiAttackSwing? HeroBeginAttack(string target) { Attacks.Add("swing"); return new(300, 200); }
         public void HeroAttackHit(string target) => Attacks.Add("hit");
         public void AttackEnds(string target, AiExecutorReason reason) => Attacks.Add("ends " + reason);
+        // ARC-COMBAT-2736: the Shift use, loot or pickup out of reach ended at its first step.
+        public readonly List<(GoalType Goal, string Target)> NoWalkEnds = [];
+        public void HeroClickNoWalkEnds(GoalType goal, string target) => NoWalkEnds.Add((goal, target));
         // ARC-DEV-182: the throw goal 37 (animation: begin at once, action frame 300 ms, rest 200 ms).
         public readonly List<string> Throws = [];
         public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) { Throws.Add($"begin {item} {tile.X},{tile.Y}"); return new(300, 200); }
@@ -1121,6 +1124,118 @@ public sealed class AreaHeroRunsHostTests
         CollectionAssert.AreEqual(new[] { "swing", "hit" }, f.Feet.Attacks);
         f.Run(500);
         Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
+    }
+
+    // ARC-COMBAT-1949 (VC62): the start branch's reads and the repeated attack queued beneath the main run.
+    [TestMethod]
+    public void TheStartContextSeesAnEqualAttackAndItsAliasAndNothingOnAnotherTarget()
+    {
+        using var f = new Fixture();
+        Assert.IsFalse(f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1").EqualGoalQueued, "no run");
+        f.Host.Attack("atk:npc:1", run: true);
+        var context = f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1");
+        Assert.IsTrue(context.EqualGoalQueued);
+        Assert.AreEqual(0, context.MainDepth);
+        Assert.IsFalse(context.MainTopIdle);
+        Assert.IsTrue(f.Host.StartContext(HeroClickGoal.AttemptAttack, "atk:npc:1").EqualGoalQueued, "goals 18 and 19 are the same activity (0x44E710)");
+        Assert.IsFalse(f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:2").EqualGoalQueued);
+        Assert.IsFalse(f.Host.StartContext(HeroClickGoal.Talk, "atk:npc:1").EqualGoalQueued, "another goal type");
+    }
+
+    [TestMethod]
+    public void ARepeatedAttackIsQueuedAtTheBottomOfTheRunningOnesStackAndNothingIsQueuedWithoutAMainRun()
+    {
+        using var f = new Fixture();
+        Assert.IsFalse(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"), "no main run to queue under");
+        f.Host.Attack("atk:npc:1", run: true);
+        var handle = f.Host.AttackRun!.Handle;
+        Assert.IsTrue(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"));
+        var run = f.Host.AttackRun!;
+        Assert.AreEqual(handle, run.Handle, "the run stays");
+        Assert.AreEqual(2, run.Depth);
+        Assert.AreEqual(GoalType.Attack, run.Bottom.Goal);
+        Assert.AreEqual(1, f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1").MainDepth);
+    }
+
+    [TestMethod]
+    public void AQueuedRepeatAttackSwingsAgainWhenTheFirstSwingIsOverAndThenTheRunEnds()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        Assert.IsTrue(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"));
+        Assert.IsTrue(f.Host.AttackQueuedBeneath);
+        f.Run(2500);
+        CollectionAssert.AreEqual(new[] { "swing", "hit", "swing", "hit" }, f.Feet.Attacks, "the queued attack plays after the first one pops");
+        Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
+        Assert.IsFalse(f.Host.AttackQueuedBeneath);
+    }
+
+    [TestMethod]
+    public void TheClicksFlagsGoOntoTheExistingMainRunShiftAsNoWalkOtherwiseRunningAndUseAsNearOccupied()
+    {
+        using var f = new Fixture();
+        f.Host.ApplyClickFlags(shift: true, nearOccupied: false); // no main run: nothing
+        f.Host.Attack("atk:npc:1", run: false);
+        Assert.AreEqual(GoalRunFlags.None, f.Host.AttackRun!.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied));
+        f.Host.ApplyClickFlags(shift: true, nearOccupied: false);
+        Assert.AreEqual(GoalRunFlags.NoWalk, f.Host.AttackRun!.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running));
+        f.Host.ApplyClickFlags(shift: false, nearOccupied: true);
+        Assert.AreEqual(GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied, f.Host.AttackRun!.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied));
+    }
+
+    [TestMethod]
+    public void TheUseGoalsCarryRunFlag0x4000AndShiftAddsTheNoWalkFlagForUseAndPickup()
+    {
+        // ARC-COMBAT-1948 (0x436ED0, 0x436C50): use 38 and loot 81 always carry 0x4000; Shift gives 0x100 and no running; the pickup carries no 0x4000.
+        const GoalRunFlags Mask = GoalRunFlags.NoWalk | GoalRunFlags.Running | GoalRunFlags.NearOccupied;
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: true));
+        Assert.AreEqual(GoalRunFlags.Running | GoalRunFlags.NearOccupied, f.Host.UseRun!.Flags & Mask);
+        Assert.IsTrue(f.Host.Use("obj:1", container: true, run: false, noWalk: true));
+        Assert.AreEqual(GoalType.UseContainer, f.Host.UseRun!.Bottom.Goal);
+        Assert.AreEqual(GoalRunFlags.NoWalk | GoalRunFlags.NearOccupied, f.Host.UseRun.Flags & Mask);
+        Assert.IsTrue(f.Host.Pickup("obj:2", run: false, noWalk: true));
+        Assert.AreEqual(GoalRunFlags.NoWalk, f.Host.PickupRun!.Flags & Mask);
+        Assert.IsTrue(f.Host.Pickup("obj:2", run: true));
+        Assert.AreEqual(GoalRunFlags.Running, f.Host.PickupRun!.Flags & Mask);
+    }
+
+    [TestMethod]
+    public void AShiftUseLootOrPickupOutOfReachEndsAtItsFirstStepAndTellsTheViewer()
+    {
+        // ARC-COMBAT-2736 (GT148): the target stands 30 cells away; the no-walk flag ends the run at once, with no step, and the viewer is told so (its status line stops saying the goal started).
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: false, noWalk: true));
+        f.Run(400);
+        Assert.IsNull(f.Host.UseRun, "the run ended");
+        Assert.IsTrue(f.Host.Use("obj:1", container: true, run: false, noWalk: true));
+        f.Run(400);
+        Assert.IsTrue(f.Host.Pickup("obj:2", run: false, noWalk: true));
+        f.Run(400);
+        CollectionAssert.AreEqual(new[] { (GoalType.UseObject, "obj:1"), (GoalType.UseContainer, "obj:1"), (GoalType.PickupItem, "obj:2") }, f.Feet.NoWalkEnds);
+        Assert.AreEqual(0, f.Feet.Steps.Count);
+        Assert.AreEqual(0, f.Feet.Uses.Count + f.Feet.Pickups.Count);
+        // Without Shift the same click walks and acts, and the viewer is told nothing.
+        f.Feet.NoWalkEnds.Clear();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: false));
+        f.Run(4000);
+        Assert.AreEqual(1, f.Feet.Uses.Count);
+        Assert.AreEqual(0, f.Feet.NoWalkEnds.Count);
+    }
+
+    [TestMethod]
+    public void TheClicksRunningFlagIsRefusedAtEncumbranceFour()
+    {
+        using var f = new Fixture();
+        f.Host.Attack("atk:npc:1", run: false);
+        f.Feet.Encumbrance = 4;
+        f.Host.ApplyClickFlags(shift: false, nearOccupied: false);
+        Assert.AreEqual(GoalRunFlags.None, f.Host.AttackRun!.Flags & GoalRunFlags.Running);
+        f.Feet.Encumbrance = 3;
+        f.Host.ApplyClickFlags(shift: false, nearOccupied: false);
+        Assert.AreEqual(GoalRunFlags.Running, f.Host.AttackRun!.Flags & GoalRunFlags.Running);
     }
 
     // ARC-DEV-270: the Shift click's attempt attack 19 with run flag 0x100 (GS26, GS27).

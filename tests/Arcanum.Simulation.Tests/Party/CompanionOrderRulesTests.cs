@@ -48,6 +48,16 @@ public sealed class CompanionOrderRulesTests
             && CompanionOrderRules.IsCombat(CompanionOrderType.Curse) && !CompanionOrderRules.IsCombat(CompanionOrderType.Wait));
     }
 
+    // ARC-UI-1975: the label is the row's message of follower_ui.mes, whatever the language: the text "name label" still reaches its follower with the type.
+    [TestMethod]
+    public void A_localized_portrait_label_joins_the_name_and_still_reaches_the_follower()
+    {
+        CompanionOrderCandidate[] followers = [new("bo", "Бо", 4), new("bob", "Боб", 4)];
+        Assert.AreEqual(("bob", CompanionOrderType.Wait), CompanionOrderRules.PortraitReceiver(followers.Reverse().ToArray(), "bob", CompanionOrderType.Wait, "Ждать", Original));
+        Assert.AreEqual(("bo", CompanionOrderType.None), CompanionOrderRules.PortraitReceiver(followers, "bob", CompanionOrderType.Wait, "Ждать", Original), "the shorter name sharing the prefix reads the rest as its word");
+        Assert.AreEqual(("bob", CompanionOrderType.Wait), CompanionOrderRules.PortraitReceiver(followers, "bob", CompanionOrderType.Wait, "Ждать", Steamwoven));
+    }
+
     [TestMethod]
     public void The_original_portrait_addresses_by_name_prefix_and_steamwoven_the_clicked_follower()
     {

@@ -33,6 +33,45 @@ public sealed class AttackResolverTests
     }
 
     [TestMethod]
+    public void AThrownItemRollsAgainstACorpseWithoutDodgeAndItsHitDoesNoDamage()
+    {
+        // ARC-COMBAT-2392 (ledger TW8): the throw's hit resolve asks nothing of the target's life; the dead defender is easier to hit (-50), never dodges and takes no damage.
+        var alive = Melee() with { Skill = CombatSkill.Throwing, Distance = 1 };
+        var dead = alive with { Target = Npc() with { Conditions = CombatantConditions.Dead } };
+        var living = Run(alive, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100), (DodgeCheck, 100), (DodgeCritical, 100), (Normal, 5) }));
+        var corpse = Run(dead, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) }));
+        Assert.AreEqual(AttackRefusal.None, corpse.Refusal);
+        Assert.AreEqual(living.AttackCheck!.Difficulty - 50, corpse.AttackCheck!.Difficulty, "the corpse is 50 easier");
+        Assert.AreEqual(AttackOutcome.Hit, corpse.Outcome);
+        Assert.IsNull(corpse.DodgeCheck, "a corpse never dodges (nothing rolled)");
+        Assert.IsNull(corpse.Damage, "no damage to a corpse");
+        // Every other attack still refuses a corpse, and a thrown item landing on one hits it without damage.
+        Assert.AreEqual(AttackRefusal.TargetDead, AttackResolver.Resolve(dead with { Skill = CombatSkill.Melee }, new ScriptedRolls([])).Refusal);
+        var carried = Run(dead with { DeferHit = true }, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) }));
+        var landed = AttackResolver.LandHit(dead, carried, new ScriptedRolls([]));
+        Assert.AreEqual((AttackRefusal.None, AttackOutcome.Hit, (AttackDamage?)null), (landed.Refusal, landed.Outcome, landed.Damage));
+    }
+
+    [TestMethod]
+    public void AThrowAtALocationRollsHitAndCriticalWithNoDefenderTermsAndNoDodge()
+    {
+        // ARC-COMBAT-2435 (ledger TW11, 0x4C7160 with no defender): technology failure, magick cancel, hit, critical, and no dodge; the defender's armour class counts for nothing.
+        var request = Melee() with { Skill = CombatSkill.Throwing, Distance = 1, DeferHit = true, NoDefender = true };
+        var armoured = request with { Target = request.Target with { ArmorClass = 90 } };
+        var hit = Run(request, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) }));
+        var againstArmour = Run(armoured, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) }));
+        Assert.AreEqual((AttackOutcome.Hit, (AttackDamage?)null, (SkillCheck?)null), (hit.Outcome, hit.Damage, hit.DodgeCheck), "a hit carries no damage and rolls no dodge");
+        Assert.AreEqual(hit.AttackCheck!.Difficulty, againstArmour.AttackCheck!.Difficulty, "no armour class term");
+        Assert.AreEqual(hit.AttackCheck.Difficulty, Run(Melee() with { Skill = CombatSkill.Throwing, Distance = 1, DeferHit = true, NoDefender = true, Target = Npc() with { Conditions = CombatantConditions.Unconscious } },
+            Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100) })).AttackCheck!.Difficulty, "no awareness term");
+        // A miss: the critical roll is made too (a critical failure turns the throw on the thrower), still no dodge.
+        var miss = Run(request, Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 100) }));
+        Assert.AreEqual((AttackOutcome.Miss, AttackMissCause.SkillCheck, (SkillCheck?)null), (miss.Outcome, miss.MissCause, miss.DodgeCheck));
+        // Without the flag the same request still hits unrolled at a non-critter and meets a dodge at a critter.
+        Assert.IsNotNull(Run(request with { NoDefender = false }, Concat(Opening(), new[] { (AttackCheck, 1), (AttackCritical, 100), (DodgeCheck, 100), (DodgeCritical, 100) })).DodgeCheck);
+    }
+
+    [TestMethod]
     public void AProjectileCarriesTheHitAndItsDamageIsRolledOnArrival()
     {
         // ARC-COMBAT-016 (ledger PF1, PF5): the shot rolls its check only; the strike rolls the damage on the target as it is then.

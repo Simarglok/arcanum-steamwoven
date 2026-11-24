@@ -6,17 +6,17 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-SCRIPT-1294 (ledger RM6): the placed, heartbeat and dying sets hold stop spell on object (130) and stay inside S42; the opt-in check counts the installed scripts that carry it and how many each set admits whole.</summary>
+/// <summary>ARC-SCRIPT-1294 (ledger RM6): the placed, heartbeat and dying sets hold stop spell on object (130) and stay inside the latest set; the opt-in check counts the installed scripts that carry it and how many each set admits whole.</summary>
 [TestClass]
 public sealed class AreaStopSpellScriptAdmissionTests
 {
     [TestMethod]
-    public void The_placed_heartbeat_and_dying_sets_hold_the_spell_stop_and_stay_inside_S43()
+    public void The_placed_heartbeat_and_dying_sets_hold_the_spell_stop_and_stay_inside_the_latest_set()
     {
         foreach (var set in new[] { AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.Latest), set.Id);
         }
         // The use click's set holds the cast actions no more than this one, and the dialog host has no spell run to stop.
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject));

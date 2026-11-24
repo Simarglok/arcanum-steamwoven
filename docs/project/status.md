@@ -169,6 +169,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043, ARC-DEV-055, ARC-DEV-059 |
 | Packaged alpha build (macOS, Windows) | [Verification and tools](status/tools.md) | ARC-DEV-047, ARC-DEV-048, ARC-DEV-049, ARC-DEV-062 |
 | In-game bug report | [Verification and tools](status/tools.md) | ARC-DEV-051 |
+| Resource counters and soak | [Verification and tools](status/tools.md) | ARC-DEV-2279, ARC-DEV-1398 |
 
 ## Merged research, not production runtime
 

@@ -96,6 +96,24 @@ public sealed class AreaObjectTargetsTests
             .Target(session, stone.Key)!.Refusal, "bounds");
     }
 
+    // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is gone from the shown map's lists; an away change naming the shown map itself (another window of it) is not.
+    [TestMethod]
+    public void AnNpcAwayOnAnotherMapIsGoneFromTheShownMap()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var npc = AreaHeartbeatScriptTests.Row(1, 16, 781);
+        var targets = new AreaObjectTargets(1, [npc], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+        var entity = AreaHeartbeatScriptTests.Entity(1);
+        Assert.AreEqual(0, targets.Gone(session).Count);
+        void Away(long map) => Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new(1), AreaCompanionPlacement.MapKey(entity), map)]).Disposition);
+        Away(1);
+        Assert.AreEqual(0, targets.Gone(session).Count, "standing on the shown map's own number is not away");
+        Away(9);
+        CollectionAssert.AreEqual(new[] { npc.Key }, targets.Gone(session).ToArray());
+        Away(1);
+        Assert.AreEqual(0, targets.Gone(session).Count, "back on the map");
+    }
+
     [TestMethod]
     public void ADestroyedOrSwitchedOffObjectIsGoneAndNoLongerATarget()
     {
@@ -123,6 +141,31 @@ public sealed class AreaObjectTargetsTests
         Assert.AreSame(gone, targets.Gone(session), "an unrelated change keeps the set");
         Condition(AreaUseScriptHost.EntityId(statue), SessionObjectCondition.Destroyed);
         Assert.AreEqual(3, targets.Gone(session).Count);
+    }
+
+    [TestMethod]
+    public void TheSceneriesAScriptToggledAreListedWithTheirStateForTheirLights()
+    {
+        // ARC-SCRIPT-2585 (ledger OT10): only a scenery with a record of a toggle is listed (true off, false on over a data that stores it off); a scenery nobody toggled keeps the lights the map data loaded.
+        using var session = ConversationSessionFixture.Create();
+        var lamp = Row(0, 3);
+        var braziers = Row(1, 3, objectFlags: 0x2);
+        var statue = Row(2, 3);
+        var chest = Row(3, 2, flags: 0x11);
+        var targets = Targets(lamp, braziers, statue, chest);
+        Assert.AreEqual(0, targets.SceneryOffStates(session).Count);
+        Assert.IsNull(session.QueryObjectOffRecord(new(1), AreaUseScriptHost.EntityId(lamp)));
+        void Toggle(AreaObjectRecord row, long? value) => Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            [new(new(1), SessionItemOff.Key(AreaUseScriptHost.EntityId(row)), value)]).Disposition);
+        Toggle(lamp, 1); Toggle(braziers, 0); Toggle(chest, 1);
+        var states = targets.SceneryOffStates(session);
+        CollectionAssert.AreEquivalent(new[] { (lamp.Key, true), (braziers.Key, false) }, states.Select(p => (p.Key, p.Value)).ToArray(), "a container's record is no scenery's");
+        Assert.AreEqual(true, session.QueryObjectOffRecord(new(1), AreaUseScriptHost.EntityId(lamp)));
+        Assert.AreSame(states, targets.SceneryOffStates(session));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new(1), MapChangeKey.ForEntity("other", "use.lf"), 1)]).Disposition);
+        Assert.AreSame(states, targets.SceneryOffStates(session), "an unrelated change keeps the dictionary, so the lighting made of it stays valid");
+        Toggle(lamp, null);
+        CollectionAssert.AreEqual(new[] { (braziers.Key, false) }, targets.SceneryOffStates(session).Select(p => (p.Key, p.Value)).ToArray(), "the flag back at the data's state leaves no record");
     }
 
     [TestMethod]
@@ -172,10 +215,21 @@ public sealed class AreaObjectTargetsTests
             SessionObjectHostSteps.None, GameSessionFailure.None, default);
         Assert.AreEqual("hit: 4 damage", AreaObjectTargets.Describe(Hit(new(2, 6, false, ObjectBreak.None, 6))));
         Assert.AreEqual("hit: 4 damage, destroyed", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))));
+        // ARC-SCRIPT-2722: an item's deleting break that its destroy point refused.
+        SessionObjectAttackResult ItemHit(SessionObjectHostSteps host, bool kept) => new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null,
+            new ItemDurabilityResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Arcanum.Simulation.Items.ItemBreakStep.Deleted, null, default) { DestroyKept = kept }, null, null,
+            host, GameSessionFailure.None, default);
+        Assert.AreEqual("hit: the item is destroyed", AreaObjectTargets.Describe(ItemHit(SessionObjectHostSteps.DestroySound, false)));
+        Assert.AreEqual("hit: the destroy is refused, the item stays", AreaObjectTargets.Describe(ItemHit(SessionObjectHostSteps.DestroySound | SessionObjectHostSteps.DestroyKept, true)));
         Assert.AreEqual("hit: 4 damage, the window is busted", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.WindowBusted, 12))));
         // ARC-COMBAT-011: a trapped object's break names the trap the viewer does not run.
         Assert.AreEqual("hit: 4 damage, destroyed — its trap goes off", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))
             with { Host = SessionObjectHostSteps.TrapFires }));
+        // ARC-SCRIPT-2686: a destroy the object's destroy point refused is not called a destroy.
+        Assert.AreEqual("hit: 4 damage, the destroy is refused, the object stays", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.Destroyed, 12))
+            with { Host = SessionObjectHostSteps.DestroyKept }));
+        Assert.AreEqual("hit: 4 damage, the container breaks, but it is not destroyed", AreaObjectTargets.Describe(Hit(new(8, 12, true, ObjectBreak.ContainerSpilled, 12))
+            with { Host = SessionObjectHostSteps.DestroyKept }));
         Assert.AreEqual("attack refused: ObjectUnavailable", AreaObjectTargets.Describe(new(GameSessionDisposition.Rejected, GameSessionFailure.ObjectUnavailable,
             null, null, null, null, null, SessionObjectHostSteps.None, GameSessionFailure.None, default)));
     }

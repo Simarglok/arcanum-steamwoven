@@ -86,12 +86,14 @@ public static partial class GameSessionSnapshotCodec
     // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items. The junk piles (schema 46), the pools of blood (schema 58) and the number marks (schema 60)
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields", "holderSlots"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields", "holderSlots", "lastDrops"];
     // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote.
     private static readonly string[] ItemFieldFields = ["entity", "writtenStart", "displayFlipped"];
     // ARC-RES-1441 (schema 95): the arranged slots of seed holders.
     private static readonly string[] HolderSlotsFields = ["holder", "slots"];
     private static readonly string[] HolderSlotFields = ["item", "slot"];
+    // ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it.
+    private static readonly string[] LastDropFields = ["entity", "x", "y"];
     private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
     private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
@@ -114,9 +116,10 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item", "scripts", "itemSpells"];
-    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses", "charges"];
+    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses", "charges", "manaStores"];
     private static readonly string[] ItemUseFields = ["entity", "uses"];
     private static readonly string[] ItemChargeFields = ["entity", "charges"];
+    private static readonly string[] ItemManaStoreFields = ["entity", "store"];
     private static readonly string[] SchematicsFields = ["found"];
     private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
@@ -126,7 +129,7 @@ public static partial class GameSessionSnapshotCodec
         "ammoType", "ammoConsumption", "critHitChart", "critMissChart", "magicCritHitChance", "magicCritHitEffect", "magicCritMissChance",
         "magicCritMissEffect"];
     private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
-        "magicResistances", "unarmedBonus"];
+        "magicResistances", "unarmedBonus", "silentMove", "magicSilentMove"];
     private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses", "critters"];
     private static readonly string[] CritterEffectFields = ["entity", "entries", "definitions"];
     private static readonly string[] BlessingFields = ["number", "effect", "timeMs"];
@@ -667,6 +670,17 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            // ARC-SCRIPT-2594 (schema 105): the tile an item last lay on after the session dropped it, by entity in ordinal order.
+            w.WriteStartArray("lastDrops");
+            foreach (var row in snapshot.Inventory.LastDrops)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", row.Entity);
+                w.WriteNumber("x", row.Cell.X);
+                w.WriteNumber("y", row.Cell.Y);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records: junk piles and pools of blood with their number marks.
@@ -799,6 +813,15 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", item.Entity);
                 w.WriteNumber("charges", item.Charges);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("manaStores");
+            foreach (var item in snapshot.Durability.ManaStores)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("store", item.Store);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -2290,8 +2313,19 @@ public static partial class GameSessionSnapshotCodec
             }
             holderSlots[i] = new(holder, System.Array.AsReadOnly(slots));
         }
+        // ARC-SCRIPT-2594: the last-drop tiles by entity in strictly ascending ordinal order, each cell within the drop's packing (which entities may carry one is the owner's restore).
+        var dropRows = Array(f["lastDrops"], p + ".lastDrops", HeroLists.MaxLastDrops);
+        var lastDrops = new SessionItemDrop[dropRows.Length];
+        for (var i = 0; i < dropRows.Length; i++)
+        {
+            var path = $"{p}.lastDrops[{i}]";
+            var row = Fields(dropRows[i], path, LastDropFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(lastDrops[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastDrops[i] = new(entity, new(Int(row["x"], path + ".x", 0, (1 << 24) - 1), Int(row["y"], path + ".y", 0, (1 << 24) - 1)));
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields, HolderSlots = holderSlots };
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields, HolderSlots = holderSlots, LastDrops = lastDrops };
     }
 
     // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records, in the order they were made; the owner's restore checks the rest.
@@ -2501,6 +2535,8 @@ public static partial class GameSessionSnapshotCodec
             WriteResistances(w, "resistances", armor.Resistances);
             WriteResistances(w, "magicResistances", armor.MagicResistances);
             w.WriteNumber("unarmedBonus", armor.UnarmedBonusDamage);
+            w.WriteNumber("silentMove", armor.SilentMoveAdjustment);
+            w.WriteNumber("magicSilentMove", armor.MagicSilentMoveAdjustment);
             w.WriteEndObject();
         }
         else w.WriteNull("armor");
@@ -2600,7 +2636,7 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(entity, uses[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             uses[i] = new(entity, Int(item["uses"], path + ".uses", 1, SessionItemUseLimits.MaxUses));
         }
-        var spent = Array(f["charges"], p + ".charges", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var spent = Array(f["charges"], p + ".charges", GameSessionLimits.PolicyMaxItemCharges);
         var charges = new SessionItemCharges[spent.Length];
         for (var i = 0; i < spent.Length; i++)
         {
@@ -2610,7 +2646,17 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(entity, charges[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             charges[i] = new(entity, Int(item["charges"], path + ".charges", 0, SessionItemUseLimits.MaxUses));
         }
-        return new(items, destroyed, uses, charges);
+        var drained = Array(f["manaStores"], p + ".manaStores", GameSessionLimits.PolicyMaxManaStores);
+        var manaStores = new SessionItemManaStore[drained.Length];
+        for (var i = 0; i < drained.Length; i++)
+        {
+            var path = $"{p}.manaStores[{i}]";
+            var item = Fields(drained[i], path, ItemManaStoreFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(entity, manaStores[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            manaStores[i] = new(entity, Int(item["store"], path + ".store", int.MinValue, int.MaxValue));
+        }
+        return new(items, destroyed, uses, charges, manaStores);
     }
 
     // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.
@@ -2783,6 +2829,7 @@ public static partial class GameSessionSnapshotCodec
                     Resistances = ResistanceValues(a["resistances"], ap + ".resistances"),
                     MagicResistances = ResistanceValues(a["magicResistances"], ap + ".magicResistances"),
                     UnarmedBonusDamage = Num(a, "unarmedBonus", ap),
+                    SilentMoveAdjustment = Num(a, "silentMove", ap), MagicSilentMoveAdjustment = Num(a, "magicSilentMove", ap),
                 },
             };
         }

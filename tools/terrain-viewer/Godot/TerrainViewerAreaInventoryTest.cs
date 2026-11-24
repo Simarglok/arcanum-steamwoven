@@ -645,6 +645,17 @@ public partial class TerrainViewerApp
             Require(log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == ItemWindowTextsForSelfTest && ItemWindowLinesForSelfTest is { Weight.Length: > 0 }, $"the window shows the type icon, the name and the lines (icon {log.IconForSelfTest is not null}, texts {log.DrawnTextsForSelfTest})");
             area.StillAt(AreaInventoryGridArea.CellCentre(item.Slot));
             Require(_hotkeyDescriptionsForSelfTest == described + 1, "resting on the same item again draws nothing new");
+            // ARC-UI-2766 (FR-ITEM-003, FR-ITEM-008): the hero's gold pile is named by the gold prototype (no "[Gold: unnamed]") and shows the hero's coins.
+            if (view.Grid.FirstOrDefault(entry => entry.Entity == Arcanum.Session.SessionHeroGrid.GoldEntity) is { } pile)
+            {
+                area.StillAt(AreaInventoryGridArea.CellCentre(pile.Slot));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var shown = log.ShownTextForSelfTest;
+                var coins = _areaSession!.QueryGold();
+                Require(!shown.Contains("unnamed", StringComparison.OrdinalIgnoreCase) && ItemWindowLinesForSelfTest is { } goldLines
+                    && goldLines.Second.EndsWith(": " + coins.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal),
+                    $"the gold pile's window names it and shows {coins} coins (second line '{ItemWindowLinesForSelfTest?.Second}', texts '{shown.Replace('\n', '|')}')");
+            }
             int? free = Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).Cast<int?>().FirstOrDefault(cell => AreaInventoryDrag.ItemAt(view.Grid, cell!.Value) is null);
             if (free is { } cell) area.StillAt(AreaInventoryGridArea.CellCentre(cell));
             Require(log.ShownKindForSelfTest == AreaMessageKind.Item, "resting on a free cell keeps the description");
@@ -738,7 +749,7 @@ public partial class TerrainViewerApp
             InventoryMutationResult taken;
             if (held.Item is not null)
             {
-                taken = session.TakeAmmoFromNpc(session.Version, held.Entity, held.Item.Entity, 2, held.Item.Facts.Kind, _inventoryHost!.InsertCheck);
+                taken = session.TakeAmmoFromNpc(session.Version, held.Entity, held.Item.Entity, 2, held.Item.Facts.Kind, _inventoryHost!.InsertCheck, _inventoryHost!.ItemScripts(session));
                 lent = held.Item.Entity;
             }
             else if (ground is not null) { taken = _inventoryHost!.PickUp(session, ground.Entity); lent = ground.Entity; }
@@ -750,7 +761,7 @@ public partial class TerrainViewerApp
                 var arrows = PrototypeItems()!.Item(ArrowPrototype)!.Kind;
                 var added = session.AddItemToNpc(session.Version, npc!.Entity, arrows, _inventoryHost!.InsertCheck, (0, 5));
                 Require(added.Disposition == GameSessionDisposition.Changed, "an NPC's arrows: " + added.Failure);
-                taken = session.TakeAmmoFromNpc(session.Version, npc.Entity, added.Item!, 5, arrows, _inventoryHost.InsertCheck);
+                taken = session.TakeAmmoFromNpc(session.Version, npc.Entity, added.Item!, 5, arrows, _inventoryHost.InsertCheck, _inventoryHost!.ItemScripts(session));
                 lent = $"{ArrowPrototype}x5";
             }
             Require(taken.Disposition == GameSessionDisposition.Changed, "lending: " + taken.Failure);

@@ -39,6 +39,9 @@ public static class DialogReplyBand
     [OriginalFunction(0x4C9720, OriginalFunctionScope.Partial)]
     public static int BoxTop(int viewHeight) => viewHeight == 400 ? 299 : viewHeight - 181;
 
+    /// <summary>ARC-UI-2770 (0x4C9720, DB3): with the interface on the original's view is always 400 px tall and the band ends 1 px above the view's bottom, which is the bottom bar's top edge (y 299 + 100 = 399); the viewer rests the band on the bar at any view height (the exe's "view height minus 181" is the full-screen view of the interface off).</summary>
+    public const int BarGap = 1;
+
     /// <summary>ARC-UI-2022 (ledger DH4, DH13): the box left, centred in a view <paramref name="viewWidth"/> px wide: (view width - box width) / 2.</summary>
     public static int BoxLeft(int viewWidth, int boxWidth) => (viewWidth - boxWidth) / 2;
 

@@ -1,0 +1,170 @@
+using Arcanum.TerrainViewer.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+/// <summary>ARC-DEV-2279: the soak run's settings and summary.</summary>
+[TestClass]
+public sealed class ViewerSoakTests
+{
+    private static Func<string, string?> Env(params (string Name, string Value)[] values)
+        => name => values.Where(pair => pair.Name == name).Select(pair => pair.Value).FirstOrDefault();
+
+    [TestMethod]
+    public void NoLogVariableMeansNoSoak()
+    {
+        Assert.IsNull(ViewerSoakSettings.Read(Env(("ARC_SOAK_LOG", "  ")), out var blank));
+        Assert.IsNull(blank);
+        Assert.IsNull(ViewerSoakSettings.Read(Env(), out var problem));
+        Assert.IsNull(problem);
+        Assert.IsNull(ViewerSoakSettings.Read(Env(("ARC_SOAK_WINDOW", "editor")), out problem));
+        Assert.IsNull(problem);
+    }
+
+    [TestMethod]
+    public void DefaultsAndEveryVariable()
+    {
+        var plain = ViewerSoakSettings.Read(Env(("ARC_SOAK_LOG", "/tmp/soak.csv")), out var problem);
+        Assert.IsNull(problem);
+        Assert.AreEqual(new ViewerSoakSettings("/tmp/soak.csv", 30, null, ViewerSoakWindow.None), plain);
+        var full = ViewerSoakSettings.Read(Env(("ARC_SOAK_LOG", "/tmp/soak.csv"), ("ARC_SOAK_WINDOW", "editor"), ("ARC_SOAK_INTERVAL", "5"), ("ARC_SOAK_MINUTES", "31")), out problem);
+        Assert.IsNull(problem);
+        Assert.AreEqual(new ViewerSoakSettings("/tmp/soak.csv", 5, 31, ViewerSoakWindow.Editor), full);
+        Assert.AreEqual(ViewerSoakWindow.NewCharacter, ViewerSoakSettings.Read(Env(("ARC_SOAK_LOG", "x"), ("ARC_SOAK_WINDOW", "new-character")), out _)!.Window);
+    }
+
+    [TestMethod]
+    [DataRow("ARC_SOAK_WINDOW", "shop")]
+    [DataRow("ARC_SOAK_INTERVAL", "0")]
+    [DataRow("ARC_SOAK_INTERVAL", "3601")]
+    [DataRow("ARC_SOAK_INTERVAL", "-5")]
+    [DataRow("ARC_SOAK_INTERVAL", "abc")]
+    [DataRow("ARC_SOAK_MINUTES", "0")]
+    [DataRow("ARC_SOAK_MINUTES", "1441")]
+    [DataRow("ARC_SOAK_MINUTES", "1.5")]
+    public void BadValuesAreRefusedWithAReason(string name, string value)
+    {
+        Assert.IsNull(ViewerSoakSettings.Read(Env(("ARC_SOAK_LOG", "/tmp/soak.csv"), (name, value)), out var problem));
+        StringAssert.Contains(problem, name);
+    }
+
+    [TestMethod]
+    public void ALogPathWithAControlCharacterIsRefused()
+    {
+        Assert.IsNull(ViewerSoakSettings.Read(Env(("ARC_SOAK_LOG", "a\nb")), out var problem));
+        StringAssert.Contains(problem, "ARC_SOAK_LOG");
+    }
+
+    private static ViewerSoakSample Sample(int seconds, long texture, long gc = 100, long workingSet = 1000, string window = "CharacterEditor", int objects = -1, int files = 40, int threads = 33, long live = 50)
+        => new(seconds, window, 59.94, texture, 7, 8, objects >= 0 ? objects : 5000 + seconds, 700, 300, 0, 9, gc, live, 3, 2, 1, workingSet, threads, files);
+
+    [TestMethod]
+    public void RowMatchesTheHeaderColumns()
+    {
+        var row = Sample(30, 1048576).Line();
+        Assert.AreEqual(ViewerSoakSample.Header.Split(',').Length, row.Split(',').Length);
+        Assert.IsTrue(row.StartsWith("30,CharacterEditor,59.9,1048576,", StringComparison.Ordinal), row);
+    }
+
+    [TestMethod]
+    public void SummaryLeavesOutTheWarmupAndShowsTheChange()
+    {
+        var mib = 1024L * 1024;
+        var samples = new[] { Sample(0, 5 * mib), Sample(60, 9 * mib), Sample(120, 10 * mib, workingSet: 100 * mib), Sample(1800, 12 * mib, workingSet: 103 * mib) };
+        var summary = ViewerSoakReport.Summary(samples);
+        StringAssert.Contains(summary, "samples=4 span=1800s window=CharacterEditor");
+        StringAssert.Contains(summary, "texture 10.0MiB -> 12.0MiB (+2.0MiB)");
+        StringAssert.Contains(summary, "workingSet 100.0MiB -> 103.0MiB (+3.0MiB)");
+        StringAssert.Contains(summary, "threads 33.0 -> 33.0 (0.0)");
+        Assert.IsFalse(summary.Contains("warm-up", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void SummaryGivesTheMaximumAndTheOpenFiles()
+    {
+        // ARC-DEV-1398: first, last and maximum of each counter after the warm-up (the maximum is of the readings kept).
+        var mib = 1024L * 1024;
+        var samples = new[] { Sample(0, 99 * mib), Sample(120, 10 * mib, files: 40), Sample(300, 15 * mib, files: 44), Sample(600, 12 * mib, files: 41) };
+        var summary = ViewerSoakReport.Summary(samples);
+        StringAssert.Contains(summary, "texture 10.0MiB -> 12.0MiB (+2.0MiB) max 15.0MiB");
+        StringAssert.Contains(summary, "openFiles 40.0 -> 41.0 (+1.0) max 44.0");
+        // A system that cannot read the descriptors (-1) leaves the counter out.
+        Assert.IsFalse(ViewerSoakReport.Summary([Sample(0, 1, files: -1), Sample(130, 1, files: -1)]).Contains("openFiles", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ResourceLineHasEveryCounterAndTheDescriptorCount()
+    {
+        var mib = 1024L * 1024;
+        var line = Sample(90, 3 * mib, workingSet: 500 * mib, files: 52).Text();
+        Assert.IsTrue(line.StartsWith(ViewerResourceLine.Prefix + " t=90s fps=59.9 texture=3.0MiB video=0.0MiB", StringComparison.Ordinal), line);
+        foreach (var part in new[] { "objects=5090", "resources=700", "nodes=300", "orphans=0", "workingSet=500.0MiB", "threads=33", "openFiles=52", "gc=3/2/1" })
+            StringAssert.Contains(line, part);
+        StringAssert.Contains(Sample(0, 0, files: -1).Text(), "openFiles=?");
+    }
+
+    [TestMethod]
+    public void OpenFileDescriptorsAreCountedWhereTheSystemListsThem()
+    {
+        var count = ViewerResourceLine.OpenFileDescriptors();
+        if (OperatingSystem.IsWindows()) { Assert.AreEqual(-1, count); return; }
+        Assert.IsTrue(count >= 3, "a process holds at least stdin, stdout and stderr: " + count);
+        var before = count;
+        var files = Enumerable.Range(0, 5).Select(_ => File.OpenRead(typeof(ViewerSoakTests).Assembly.Location)).ToList();
+        try { Assert.IsTrue(ViewerResourceLine.OpenFileDescriptors() >= before + 5, "five opened files show"); }
+        finally { foreach (var file in files) file.Dispose(); }
+    }
+
+    [TestMethod]
+    public void ASteadyRunPassesTheLimits()
+    {
+        var mib = 1024L * 1024;
+        var samples = new[] { Sample(0, 5 * mib, live: 10 * mib), Sample(130, 30 * mib, live: 100 * mib, files: 60, threads: 40), Sample(400, 31 * mib, live: 101 * mib, files: 61, threads: 41), Sample(700, 30 * mib, live: 130 * mib, files: 60, threads: 40) };
+        Assert.AreEqual(0, ViewerSoakLimits.Exceeded(samples).Count, string.Join("; ", ViewerSoakLimits.Exceeded(samples)));
+    }
+
+    [TestMethod]
+    public void ACounterThatClimbsPastItsAllowanceFailsAfterTheWarmupOnly()
+    {
+        var mib = 1024L * 1024;
+        // The early rise (before 120 s) is the warm-up; the climb after it is the leak: live heap +60 MiB (allowed 48), descriptors +20 (allowed 16).
+        var samples = new[] { Sample(0, 1, live: 1 * mib, files: 10), Sample(130, 1, live: 100 * mib, files: 40), Sample(700, 1, live: 160 * mib, files: 60) };
+        var problems = ViewerSoakLimits.Exceeded(samples);
+        Assert.AreEqual(2, problems.Count, string.Join("; ", problems));
+        StringAssert.Contains(problems[0], "gcLive grew by 62914560");
+        StringAssert.Contains(problems[1], "openFiles grew by 20");
+        // Objects grown past 2000 fail too, and the unreadable descriptor count is not a failure.
+        Assert.AreEqual(1, ViewerSoakLimits.Exceeded([Sample(130, 1, objects: 5000, files: -1), Sample(300, 1, objects: 7001, files: -1)]).Count);
+    }
+
+    [TestMethod]
+    public void ATooShortRunProvesNothingAndSaysSo()
+    {
+        var problems = ViewerSoakLimits.Exceeded([Sample(0, 1), Sample(60, 1), Sample(150, 1)]);
+        Assert.AreEqual(1, problems.Count);
+        StringAssert.Contains(problems[0], "too few readings after the 120s warm-up (1)");
+    }
+
+    [TestMethod]
+    public void TheStageLengthDefaultsAndIsRangeChecked()
+    {
+        Assert.AreEqual(6, ViewerSoakSettings.StageMinutes(Env(), out var problem));
+        Assert.IsNull(problem);
+        Assert.AreEqual(30, ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", "30")), out problem));
+        Assert.AreEqual(4, ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", "4")), out problem));
+        foreach (var bad in new[] { "0", "1", "3", "121", "-1", "2.5", "abc" })
+        {
+            Assert.IsNull(ViewerSoakSettings.StageMinutes(Env(("ARC_SOAK_STAGE_MINUTES", bad)), out problem), bad);
+            StringAssert.Contains(problem, "ARC_SOAK_STAGE_MINUTES");
+        }
+    }
+
+    [TestMethod]
+    public void AShortRunUsesEveryReadingAndSaysSo()
+    {
+        var summary = ViewerSoakReport.Summary([Sample(0, 1048576), Sample(30, 2097152)]);
+        StringAssert.Contains(summary, "run shorter than 120s of warm-up");
+        StringAssert.Contains(summary, "texture 1.0MiB -> 2.0MiB (+1.0MiB)");
+        Assert.AreEqual("ARC-DEV-2279 soak summary: no samples", ViewerSoakReport.Summary([]));
+    }
+}
