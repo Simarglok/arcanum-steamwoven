@@ -203,15 +203,29 @@ class SurfaceComposeTests(unittest.TestCase):
             self.assertEqual(spec.kit_parts[0]["id"], "plate.x")
             for bad in ({"id": "a"}, {"id": "a", "screen": "s", "extra": 1}, {"id": "a", "screen": "s", "erase_boxes": [[5, 5, 5, 9]]},
                         {"id": "a", "screen": "s", "kit_parts": [{"id": "p", "file": "f"}]}, {"id": "a", "screen": "s", "joins": [0]},
-                        {"id": "a", "screen": "s", "bevel_band": [9, 3]}):
+                        {"id": "a", "screen": "s", "bevel_band": [9, 3]}, {"id": "../../x", "screen": "s"}, {"id": ".hidden", "screen": "s"}, {"id": "a/b", "screen": "s"},
+                        {"id": "a", "screen": "s", "joins": []}, {"id": "a", "screen": "s", "erase_boxes": None}, {"id": "a", "screen": "s", "bevel_band": ["a", "b"]},
+                        {"id": "a", "screen": "s", "kit_parts": [{"id": "p", "file": 5, "x": 0, "y": 0}]}, {"id": "a", "screen": "s", "erase_boxes": [[True, 0, 3, 3]]},
+                        {"id": "a", "screen": "s", "joins": [True]}, {"id": "a", "screen": "s", "kit_parts": None}, None, 5, [1]):
                 path.write_text(json.dumps(bad), encoding="utf-8")
                 with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
                     surface_compose.load_spec(path)
 
     def test_the_inventory_spec_is_the_prototype_and_a_spec_defaults_to_no_chip(self):
-        self.assertEqual((surface_compose.INVENTORY.screen, surface_compose.INVENTORY.joins, surface_compose.INVENTORY.chip_boxes),
-                         ("ctx-inventory", surface_compose.JOINS, surface_compose.CHIP_BOXES))
+        self.assertEqual((surface_compose.INVENTORY.screen, surface_compose.INVENTORY.joins, surface_compose.INVENTORY.bevel_band, surface_compose.INVENTORY.chip_boxes),
+                         ("ctx-inventory", (148, 1588), (0, 148), ((1900, 0, 1930, 18),)))     # the prototype's literal values, as of ARC-UI-3104
         self.assertEqual(surface_compose.ZoneSpec(id="x").chip_boxes, ())
+
+    def test_erase_box_at_the_image_corner_uses_the_clipped_ring_and_not_its_own_interior(self):
+        image = self._flat(8, 8, 90)
+        for y in range(0, 3):
+            for x in range(0, 3):
+                image.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 3] = bytes((255, 255, 255))     # box interior, bigger than the clipped ring
+        for x in range(3, 5):
+            for y in range(0, 5):
+                image.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 3] = bytes((40, 40, 40))        # ring column x=3,4 dark, row y=3,4 stays 90
+        surface_compose.erase_boxes(image, ((0, 0, 3, 3),))
+        self.assertEqual(image.pixel(1, 1)[:3], (40, 40, 40))        # median of the ring cells {x=3,4 for y=0..4: 10 cells of 40; y=3,4 for x=0..2: 6 cells of 90}
 
     def test_erase_boxes_fill_with_the_median_of_the_ring_and_stay_inside(self):
         image = self._flat(20, 10, 80)
@@ -247,6 +261,26 @@ class SurfaceComposeTests(unittest.TestCase):
             image = self._flat(1, 1, 0)
             surface_compose.lay_kit_parts(image, ({"id": "e", "file": str(part), "x": 0, "y": 0},))
             self.assertEqual(image.pixel(0, 0)[0], 100)
+
+    def test_no_measured_join_is_no_passed_seam_gate(self):
+        self.assertFalse(surface_compose.evaluate_gates([], {"pass": True, "failed": []})["passed"])
+
+    def test_main_exit_codes_error_two_gate_failure_one_pass_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bad = root / "bad.json"
+            bad.write_text("[1]", encoding="utf-8")
+            argv = ["build", "--original", "o.png", "--a", "a.png", "--out", str(root / "out.png"), "--work", str(root / "w"), "--provenance", str(root / "rec.json")]
+            self.assertEqual(surface_compose.main(argv + ["--spec", str(bad)]), 2)                  # a wrong spec: an error, not a traceback
+            saved = surface_compose.build
+            try:
+                for passed, code in ((False, 1), (True, 0)):
+                    record = {"zone": "z", "seams": [], "wood": {"after": {"mean_l": 1.0, "std_l": 1.0}, "target": {"mean_l": 1.0, "std_l": 1.0}}, "counts": {"erased_pixels": 0},
+                              "kit_parts": [], "gates": {"passed": passed, "seam_target": 1.8, "seams_within_swi_ver_5": True, "tone_pass": passed, "tone_failed": []}}
+                    surface_compose.build = lambda *a, **k: record
+                    self.assertEqual(surface_compose.main(argv), code)
+            finally:
+                surface_compose.build = saved
 
     def test_gates_need_every_seam_within_the_target_and_the_tone_check(self):
         tone = {"pass": True, "failed": []}

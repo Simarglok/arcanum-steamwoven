@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +44,9 @@ Goal: the parts, blended, are compared with other methods by seam, repetition an
 REFERENCE SLOTS FOR THIS PROMPT
 - ORIGINAL: the original art of the part, upscaled to the master size, given as the image to edit and as the layout truth
 """
+
+
+SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")   # a batch name is a folder name: no path parts, no leading dot
 
 
 class StudyError(Exception):
@@ -108,6 +112,10 @@ def add_item(inbox: Path, batch: str, original: Path, item_id: str, title: str, 
 
 def zones_inbox(original: Path, local_root: Path, batch: str = ZONE_BATCH, zones: tuple[str, ...] | None = None, screen_name: str = "inventory") -> dict:
     """The inbox of method A zones (ARC-UI-3100: for any screen, any subset of the zones: the strips are made once from the HUD screen, a window zone per family)."""
+    if not SAFE_NAME.fullmatch(batch):
+        raise StudyError(f"the batch name {batch!r} must be a plain folder name ({SAFE_NAME.pattern})")
+    if not (screen_name.isascii() and SAFE_NAME.fullmatch(screen_name)):
+        raise StudyError(f"the screen name {screen_name!r} must be ASCII letters, digits, dots, dashes and underscores (it goes into the prompt text)")
     unknown = [z for z in (zones or ()) if z not in ZONES]
     if unknown:
         raise StudyError(f"unknown zones {unknown}; the zones are {list(ZONES)}")
@@ -125,6 +133,9 @@ def zones_inbox(original: Path, local_root: Path, batch: str = ZONE_BATCH, zones
 def assemble(zone_files: dict[str, Path], out: Path) -> dict:
     """Method A assembled: each zone image resized (Lanczos) to its rectangle and placed in the 2880 x 2160 composition; every zone is needed (the strips of one
     screen's A are the same in every family, so the files may come from different batches)."""
+    extra = [z for z in zone_files if z not in ZONES]
+    if extra:
+        raise StudyError(f"unknown zones {extra}; the zones are {list(ZONES)}")
     missing = [z for z in ZONES if z not in zone_files]
     if missing:
         raise StudyError(f"zones missing: {missing}")
@@ -186,8 +197,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "assemble":
-            pairs = dict(item.partition("=")[::2] for item in args.zone)
-            info = assemble({zone: Path(file) for zone, file in pairs.items()}, args.out)
+            pairs = [item.partition("=") for item in args.zone]
+            if any(not sep or not file for _, sep, file in pairs):
+                raise StudyError("each --zone is ZONE=FILE")
+            info = assemble({zone: Path(file) for zone, _, file in pairs}, args.out)
             print(f"ASSEMBLE wrote {info['out']} from {info['zones']} zones")
             return 0
         local = args.local_root or default_local_root()

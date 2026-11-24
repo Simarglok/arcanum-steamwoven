@@ -12,6 +12,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from bisect import bisect_left, bisect_right
@@ -60,6 +61,7 @@ SEAM_TARGET = 1.8         # owner condition 4 (2026-11-21): the seam at a strip 
 SEAM_GATE = 1.5
 ERASE_RING = 2            # px: the ring just outside an erase box whose per-channel median fills it
 SCHEMA = "steamwoven-surface/1"
+SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")   # a zone id is a file name: no path parts, no leading dot
 
 
 @dataclass(frozen=True)
@@ -79,34 +81,52 @@ class ZoneSpec:
 INVENTORY = ZoneSpec(id="ctx-inventory", chip_boxes=CHIP_BOXES)
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def load_spec(path: Path) -> ZoneSpec:
-    """A zone spec from JSON: `id` and `screen` are required; the rest default as `ZoneSpec` (no chip boxes, no erase boxes, no kit parts)."""
+    """A zone spec from JSON: `id` (a plain file name) and `screen` are required; the rest default as `ZoneSpec` (no chip boxes, no erase boxes, no kit parts).
+    Any wrong shape is a ComposeError, never a traceback."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise ComposeError(f"cannot read the spec {path}: {error}") from error
+    if not isinstance(raw, dict):
+        raise ComposeError(f"spec {path}: the top level is an object")
     unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts"}
     if unknown or "id" not in raw or "screen" not in raw:
         raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
+    if not (isinstance(raw["id"], str) and SAFE_ID.fullmatch(raw["id"]) and isinstance(raw["screen"], str)):
+        raise ComposeError(f"spec {path}: id is a plain file name ({SAFE_ID.pattern}) and screen a string")
+
     def boxes(name: str) -> tuple:
+        value = raw.get(name, [])
+        if not isinstance(value, list):
+            raise ComposeError(f"spec {path}: {name} is a list")
         out = []
-        for box in raw.get(name, []):
-            if not (isinstance(box, list) and len(box) == 4 and all(isinstance(v, int) for v in box) and box[0] < box[2] and box[1] < box[3] and min(box) >= 0):
+        for box in value:
+            if not (isinstance(box, list) and len(box) == 4 and all(_is_int(v) for v in box) and box[0] < box[2] and box[1] < box[3] and min(box) >= 0):
                 raise ComposeError(f"spec {path}: {name} entries are [x0, y0, x1, y1] with x0 < x1, y0 < y1")
             out.append(tuple(box))
         return tuple(out)
+
+    parts_raw = raw.get("kit_parts", [])
+    if not isinstance(parts_raw, list):
+        raise ComposeError(f"spec {path}: kit_parts is a list")
     parts = []
-    for part in raw.get("kit_parts", []):
-        if not (isinstance(part, dict) and set(part) == {"id", "file", "x", "y"} and isinstance(part["x"], int) and isinstance(part["y"], int) and part["x"] >= 0 and part["y"] >= 0):
-            raise ComposeError(f"spec {path}: kit_parts entries are {{id, file, x, y}} with x, y >= 0")
+    for part in parts_raw:
+        if not (isinstance(part, dict) and set(part) == {"id", "file", "x", "y"} and isinstance(part["id"], str) and isinstance(part["file"], str) and part["file"]
+                and _is_int(part["x"]) and _is_int(part["y"]) and part["x"] >= 0 and part["y"] >= 0):
+            raise ComposeError(f"spec {path}: kit_parts entries are {{id, file, x, y}} (strings and integers) with x, y >= 0")
         parts.append(dict(part))
     band = raw.get("bevel_band", list(BEVEL_BAND))
-    if band is not None and not (isinstance(band, list) and len(band) == 2 and 0 <= band[0] < band[1]):
+    if band is not None and not (isinstance(band, list) and len(band) == 2 and all(_is_int(v) for v in band) and 0 <= band[0] < band[1]):
         raise ComposeError(f"spec {path}: bevel_band is [top, bottom] or null")
     joins = raw.get("joins", list(JOINS))
-    if not (isinstance(joins, list) and all(isinstance(j, int) and j > 0 for j in joins)):
-        raise ComposeError(f"spec {path}: joins are rows (positive integers)")
-    return ZoneSpec(id=str(raw["id"]), screen=str(raw["screen"]), joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
+    if not (isinstance(joins, list) and joins and all(_is_int(j) and j > 0 for j in joins)):
+        raise ComposeError(f"spec {path}: joins are a non-empty list of rows (positive integers)")
+    return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
                     erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts))
 
 
@@ -527,8 +547,8 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
 def evaluate_gates(seams: list[dict], tone: dict) -> dict:
     """The gates of a production surface: every join's seam ratio at most SEAM_TARGET (owner condition 4; SWI-VER-5's SEAM_GATE is recorded beside it, not a gate here:
     the original's own joins are 1.82 and 1.73) and the tone check of the whole screen (`tone_check.compare_screen`) passing."""
-    seam_pass = all(s["ratio"] <= SEAM_TARGET for s in seams)
-    return {"seam_target": SEAM_TARGET, "seams_pass": seam_pass, "seams_within_swi_ver_5": all(s["ratio"] <= SEAM_GATE for s in seams),
+    seam_pass = bool(seams) and all(s["ratio"] <= SEAM_TARGET for s in seams)      # no join measured is no seam gate passed
+    return {"seam_target": SEAM_TARGET, "seams_pass": seam_pass, "seams_within_swi_ver_5": bool(seams) and all(s["ratio"] <= SEAM_GATE for s in seams),
             "tone_pass": bool(tone["pass"]), "tone_failed": list(tone["failed"]), "passed": seam_pass and bool(tone["pass"])}
 
 
@@ -604,7 +624,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def default_provenance_path(spec: ZoneSpec) -> Path:
-    from prompt_library import default_local_root  # noqa: PLC0415  (found by the script's own folder; see the import block)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from prompt_library import default_local_root  # noqa: PLC0415
     return default_local_root() / "provenance" / "surface" / f"{spec.id}.json"
 
 

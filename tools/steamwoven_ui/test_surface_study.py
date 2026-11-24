@@ -59,6 +59,17 @@ class SurfaceStudyTests(unittest.TestCase):
         with self.assertRaises(surface_study.StudyError):
             surface_study.zones_inbox(Path("o.png"), Path("local"), zones=("middle",))
 
+    def test_names_that_leave_the_inbox_or_the_prompt_charset_are_refused(self):
+        for batch, screen in (("../x", "logbook"), ("a/b", "logbook"), (".hidden", "logbook"), ("ok", "log book"), ("ok", "k\u00e4se"), ("ok", "../x")):
+            with self.assertRaises(surface_study.StudyError, msg=(batch, screen)):
+                surface_study.zones_inbox(Path("o.png"), Path("local"), batch=batch, zones=("window",), screen_name=screen)
+
+    def test_assemble_refuses_a_misspelled_zone_and_main_refuses_a_zone_without_a_file(self):
+        with self.assertRaises(surface_study.StudyError):
+            surface_study.assemble({"top-strip": Path("a"), "window": Path("b"), "bottom-strip": Path("c"), "windw": Path("d")}, Path("out.png"))
+        self.assertEqual(surface_study.main(["assemble", "--zone", "window", "--out", "o.png"]), 2)
+        self.assertEqual(surface_study.main(["assemble", "--zone", "window=", "--out", "o.png"]), 2)
+
     def test_assemble_needs_every_zone(self):
         with self.assertRaises(surface_study.StudyError):
             surface_study.assemble({"window": Path("w.png")}, Path("out.png"))
