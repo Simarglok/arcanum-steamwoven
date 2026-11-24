@@ -20,6 +20,8 @@ internal static class Program
         + "             the redraws of portrait\\*.bmp, written as 'portrait' entries; a portrait plan replaces only the portraits it names and leaves the pack's other entries\n"
         + "             or (ARC-RENDER-3079) arcanum-steamwoven-hd-map-plan: the redraws of worldmap\\*.bmp (the 64 tiles and the continent picture), written as 'worldmap' and 'map-zoomed' entries,\n"
         + "             replacing only the bitmaps the plan names\n"
+        + "             or (ARC-RENDER-3106) arcanum-steamwoven-hd-townmap-plan: the redraws of townmap\\<town>\\<town>NNNNNN.bmp (the tiles of the town render), written as 'townmap' entries,\n"
+        + "             replacing only the tiles the plan names\n"
         + "  --pack     the pack directory: an existing pack gets the 'interface' slice added or replaced, a missing one is created\n"
         + "  --dry-run  build and report every frame, write nothing";
 
@@ -48,7 +50,9 @@ internal static class Program
         HdPortraitPlan? portraits = null;
         var mapPlan = Encoding.UTF8.GetString(planBytes).Contains(HdMapPlan.Kind, StringComparison.Ordinal);
         HdMapPlan? maps = null;
-        try { if (portraitPlan) portraits = HdPortraitPlan.Parse(planBytes); else if (mapPlan) maps = HdMapPlan.Parse(planBytes); else parsed = HdInterfacePlan.Parse(planBytes); }
+        var townPlan = Encoding.UTF8.GetString(planBytes).Contains(HdTownMapPlan.Kind, StringComparison.Ordinal);
+        HdTownMapPlan? towns = null;
+        try { if (portraitPlan) portraits = HdPortraitPlan.Parse(planBytes); else if (townPlan) towns = HdTownMapPlan.Parse(planBytes); else if (mapPlan) maps = HdMapPlan.Parse(planBytes); else parsed = HdInterfacePlan.Parse(planBytes); }
         catch (Exception error) when (error is FormatException or IOException or UnauthorizedAccessException)
         { stderr.WriteLine("hd-interface-import: plan: " + error.Message); return 2; }
 
@@ -71,6 +75,7 @@ internal static class Program
         }
         if (portraits is not null) return RunPortraits(portraits, stack, Image, pack, dry, stdout, stderr);
         if (maps is not null) return RunMaps(maps, stack, Image, pack, dry, stdout, stderr);
+        if (towns is not null) return RunTownMaps(towns, stack, Image, pack, dry, stdout, stderr);
         var interfacePlan = parsed!;
         var arts = new Dictionary<string, HdInterfaceArt?>(StringComparer.OrdinalIgnoreCase);
         HdInterfaceArt? Art(string name)
@@ -133,6 +138,27 @@ internal static class Program
         var written = HdInterfacePackWriter.Write(pack, plan.PackId, plan.Scale, [], DateTimeOffset.UtcNow, maps: built.Maps);
         if (written.Status != HdInterfaceWriteStatus.Written) { stderr.WriteLine($"hd-interface-import: FAIL {written.Status} {written.Detail}"); return 3; }
         stdout.WriteLine($"PASS {written.Entries} world-map bitmaps written ({written.Replaced} replaced); {written.Detail}");
+        return 0;
+    }
+
+    // ARC-RENDER-3106: a town-map plan: each redraw is checked against the original's tile read from the content stack (the winner of townmap/<town>/<town>NNNNNN.bmp, as the viewer reads it).
+    private static int RunTownMaps(HdTownMapPlan plan, ContentStack stack, Func<string, HdRgbImage?> image, string pack, bool dry, TextWriter stdout, TextWriter stderr)
+    {
+        byte[]? Bitmap(string path)
+        {
+            if (stack.Resolve(path).Winner is not { } winner || winner.Length > AreaTownMapSource.MaxTileBytes) return null;
+            var read = stack.Read(winner);
+            return read.Status == ContentReadStatus.Read ? read.Bytes : null;
+        }
+        var built = HdTownMapImport.Build(plan, Bitmap, image);
+        stdout.WriteLine($"built {built.Tiles.Count} town-map tiles of {built.Tiles.Select(t => HdTownMapKey.TryParse(t.Path, out var town, out _) ? town : "?").Distinct().Count()} town(s) at {HdTownMapKey.TileWidth * plan.Scale}x{HdTownMapKey.TileHeight * plan.Scale} (render scale {plan.Scale / 4.0:0.##})");
+        foreach (var problem in built.Problems.Take(20)) stderr.WriteLine("hd-interface-import: " + problem);
+        if (built.Problems.Count > 20) stderr.WriteLine($"hd-interface-import: ... and {built.Problems.Count - 20} more problems");
+        if (!built.Ok) { stderr.WriteLine("hd-interface-import: FAIL (nothing written)"); return 3; }
+        if (dry) { stdout.WriteLine($"PASS dry run, {built.Tiles.Count} town-map tiles"); return 0; }
+        var written = HdInterfacePackWriter.Write(pack, plan.PackId, plan.Scale, [], DateTimeOffset.UtcNow, townTiles: built.Tiles);
+        if (written.Status != HdInterfaceWriteStatus.Written) { stderr.WriteLine($"hd-interface-import: FAIL {written.Status} {written.Detail}"); return 3; }
+        stdout.WriteLine($"PASS {written.Entries} town-map tiles written ({written.Replaced} replaced); {written.Detail}");
         return 0;
     }
 }
