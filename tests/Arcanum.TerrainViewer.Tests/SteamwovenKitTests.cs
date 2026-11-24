@@ -157,6 +157,25 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    public void The_map_view_the_continent_view_and_the_town_map_are_one_window_of_the_kit()
+    {
+        // ARC-UI-3036 (census G12 to G14): the three views of the map window are interface mode 5 (WorldMap, AreaWorldMapKind Map, Continent and Town are kinds inside it), so one kit window serves all of them.
+        Assert.AreEqual(SteamwovenKitWindow.WorldMap, SteamwovenKitComposer.WindowOf(InterfaceMode.WorldMap));
+        Assert.AreEqual(SteamwovenKitWindow.WorldMap, SteamwovenKitComposer.WindowOf([InterfaceMode.WorldMap]));
+        Assert.AreEqual(SteamwovenKitWindow.WorldMap, SteamwovenKitComposer.WindowOf([InterfaceMode.Game, InterfaceMode.WorldMap]));
+        Assert.AreEqual(SteamwovenBackdropFamily.WorldMap, SteamwovenBackdrops.FamilyOf(InterfaceMode.WorldMap));
+        // A dialog over the map (a script opens one while the map is up) takes the window's background away with it.
+        Assert.IsNull(SteamwovenKitComposer.WindowOf([InterfaceMode.WorldMap, InterfaceMode.Dialog]));
+        var spec = SteamwovenKitTable.Windows[SteamwovenKitWindow.WorldMap];
+        CollectionAssert.AreEqual(new[] { ("backdrop.mapmain", 2880) }, spec.Pieces.ToArray());
+        // The part and its art are the census rows of kit.json (G12 to G14, art 138).
+        var kit = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(FindKit())).RootElement;
+        var part = kit.GetProperty("parts").EnumerateArray().Single(p => p.GetProperty("id").GetString() == "backdrop.mapmain");
+        CollectionAssert.AreEqual(new[] { "G12", "G13", "G14" }, part.GetProperty("used_by").EnumerateArray().Select(u => u.GetString()).ToArray());
+        CollectionAssert.AreEqual(new[] { "138" }, part.GetProperty("source_arts").EnumerateArray().Select(u => u.GetString()).ToArray());
+    }
+
+    [TestMethod]
     public void Every_covered_window_adds_up_to_the_composition_width()
     {
         foreach (var (window, spec) in SteamwovenKitTable.Windows)
