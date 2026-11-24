@@ -103,9 +103,22 @@ for the production surfaces, which the composite below already meets with the or
 
 `tools/steamwoven_ui/surface_compose.py compose` builds the prototype of that composition (local, 2880 x 2160): the Codex wood replaces the ORIGINAL only where
 the original is wood (the wood class as solid regions, a 6 px margin and a 3 px soft edge); everything else, text and fields and metal parts, is the original's
-pixels, the stand-in for the kit parts until the pilot chain delivers them. In the wood: dark specks (more than 12 levels below the 9 px horizontal median) are
-replaced by that median, so the grain running along x survives; the original's rows of dots (faint dark dots, six or more in a row, found at 6 levels) are put
-back; L*, contrast and chroma are fitted by the wood mask the tone check uses; about 3 px each side of both strip joins stay fully the original's (a 12 px band, blended by a 2 px soft edge). On the inventory screen 98 650 speck pixels were replaced and 388 dots of the original's rows kept.
+pixels, the stand-in for the kit parts until the pilot chain delivers them. In the wood: single dark specks (a small compact component, at most 8 pixels in a 4 x 4 box, of pixels more than 12 levels below the 9 px horizontal median) are
+removed pointwise, each pixel and its 1 px halo taking the mean of its row neighbours outside the speck, and only where it is darker than both of them (a pixel beside a
+bright line is left), so the grain running along x survives and grain strokes are not touched (the first version replaced every such pixel by the median, which
+left even corduroy-like hatching on narrow wood strips; ARC-UI-3104); the original's rows of dots (faint dark dots, six or more in a row, found at 6 levels) are put
+back; L*, contrast and chroma are fitted by the wood mask the tone check uses; about 3 px each side of both strip joins stay fully the original's (a 12 px band, blended by a 2 px soft edge). On the inventory screen 388 dots of the original's rows were kept (the first version replaced 98 650 speck pixels; the pointwise version removes 10 551 specks).
+
+Owner review of 2026-11-21 (ARC-UI-3104, issue #3104) added three fixes to the top strip, all in `surface_compose.py` and local-only like the rest:
+
+- **Blotches.** The dark sharp blotches on the wood were the original's darkest stains, which the wood class does not take: holes in the wood weight where the
+  original's dark smear showed against the sharp Codex wood. The wood weight is closed (a 10 px disk) before the joins are kept, so a non-wood notch too narrow to hold the disk is wood.
+- **Square bevel.** The original's squares have a light right and bottom bevel; the wood weight (blurred, eroded 6 px) swallowed the 5 px right line and the Codex
+  wood redrew it thinner. The light vertical lines of the top strip (rows 0 to 148, at least 40 px tall, at most 10 px wide, found by an opening with a 1 x 30 line so
+  the bottom bevel is not taken) are put back from the original, by default under the Codex line (`--bevel lighten`: the lighter of the two) or alone (`--bevel original`).
+- **Chip.** The white rim at the right plate's tip (a box of the inventory master, `CHIP_BOXES`) is filled with the plate's darkest metal to its right. Other windows need their own boxes. The light glint at that plate tip is part of the kit's metal (production condition 3), not of the wood; filling it with dark metal is temporary, until the kit parts replace the original's stand-ins.
+
+
 
 | | wood L* | wood contrast | wood chroma | seam y=148 | seam y=1588 | sharp. x1 / x1/3 | repetition x / y | tone_check dL* / contrast / dE mean, p95 |
 |---|---|---|---|---|---|---|---|---|
@@ -114,7 +127,7 @@ back; L*, contrast and chroma are fitted by the wood mask the tone check uses; a
 | A as the player sees it | 20.04 | 3.82 | 9.44 | 0.96 | 1.11 | 8.67 / 9.60 | 0.072 / 0.111 | +0.06 / -0.3 % / 0.97, 5.02 |
 
 The remaining gap to the production state: the kit parts replace the original's metal stand-ins (pilot #3058, [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459));
-the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step ([#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));
+the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step (`codex_batch.py crop`, [#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));
 the composition is a script today, not a pipeline step. Repetition and sharpness bounds are not added to SWI-VER-5 here; the seam ratio stays the only gate.
 
 ## Reproduction
@@ -132,5 +145,6 @@ python3 -B tools/steamwoven_ui/surface_metrics.py --mask MASK.png --join y=148 -
 python3 -B tools/steamwoven_ui/tone_check.py compare ORIG_2880x2160.png RESULT.png
 ```
 
-The three strip results of A are made from the work folder files by a fuzz trim, a shave and a Lanczos resize with ImageMagick (this page's "Codex at the
-extreme aspects"); that step is not yet a tool command.
+The two strip results of A are made from the work folder files by the tool step `codex_batch.py crop IMAGE --size WxH --out OUT.png` (fuzz trim, shave of 2 to 4 px, band aspect check
+within 1 %, Lanczos resize; [TRD](steamwoven-interface-trd.md#codex-batch-runner-arc-dev-3001), "Band crop"), and `codex_batch.py run BATCH --crop-band` does it inside a batch; the shave is now chosen per canvas to
+bring the band closest to the asked aspect (7 px for the 19.5:1 canvas, 4 px for the 5:1 one) instead of a fixed 4 px.

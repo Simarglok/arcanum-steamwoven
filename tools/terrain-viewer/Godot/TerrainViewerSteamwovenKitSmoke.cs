@@ -19,7 +19,8 @@ public partial class TerrainViewerApp
         KitDoll = new(0.15f, 0.6f, 0.15f), KitInventory = new(0.6f, 0.15f, 0.6f), KitPlate = new(0.9f, 0.5f, 0.1f), KitOptionsPlate = new(0.1f, 0.5f, 0.5f), KitHover = new(0.9f, 0.9f, 0.9f), KitMap = new(0.8f, 0.75f, 0.1f),
         KitBarter = new(0.55f, 0.35f, 0.15f), KitBarterFollower = new(0.15f, 0.55f, 0.55f),
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
-        KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f);
+        KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
+        KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -37,6 +38,8 @@ public partial class TerrainViewerApp
         // ARC-UI-3035: the character window's backdrop and the sheets of its four pages (846 x 1170 master px each).
         ("backdrop.char_maint", 2880, 1440, KitCharacter), ("sheet.skills_window", 846, 1170, KitSkillsSheet), ("sheet.disciplines_window", 846, 1170, KitTechSheet),
         ("sheet.char_spells", 846, 1170, KitSpellsSheet), ("sheet.scheme_rot", 846, 1170, KitSchemesSheet),
+        // ARC-UI-3037: the logbook's two pieces and the schematic window's backdrop.
+        ("backdrop.logbooks_side", 594, 1440, KitLogSide), ("backdrop.book_main", 2286, 1440, KitLogBook), ("backdrop.schematic_base", 2880, 1440, KitSchematic),
     ];
 
     /// <summary>Writes the synthetic set of <paramref name="step"/> under <paramref name="root"/> (parts named in <paramref name="without"/> left out, their records too).</summary>
@@ -253,11 +256,73 @@ public partial class TerrainViewerApp
         require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("sheet.", StringComparison.Ordinal)), $"[{tag}] no kit sheet stays resident after the window closes");
     }
 
+    /// <summary>
+    /// ARC-UI-3037 (census G01, G05, G10 to G12, G15, G17): each covered window, opened for real, draws no background art of its own over a complete kit background and draws it otherwise. The kit's parts are flat colours, so the share
+    /// of the zone's pixels (sampled) that are the window's kit colours says which one shows: most of the zone with the kit, none without (<paramref name="kit"/> false: the set lacks each window's backdrop, the generated backdrop and the
+    /// window's own art stand). The window's controls, text and holes are drawn either way. The identify and repair windows are the inventory's draw path (<c>WindowOf</c> is unit-tested).
+    /// </summary>
+    private async Task CheckKitWindowBackgroundsAsync(AreaGameBarPanel panel, SteamwovenHudPlan plan, string tag, Func<int, Task> frames, Action<bool, string> require, bool kit)
+    {
+        var zone = SteamwovenWindowZone.ZoneOf(plan);
+        (string Name, Action Open, Func<bool> IsOpen, Action Close, SteamwovenKitWindow Window, Color[] Colours)[] windows =
+        [
+            ("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, SteamwovenKitWindow.Inventory, [KitDoll, KitInventory]),
+            ("sheet", OpenSheet, () => SheetOpen, EndSheet, SteamwovenKitWindow.Character, [KitCharacter]),
+            ("logbook", OpenLogbook, () => LogbookOpen, CloseLogbookByPlayer, SteamwovenKitWindow.Logbook, [KitLogSide, KitLogBook]),
+            ("schematics", () => OpenSchematics(), () => SchematicsOpen, CloseSchematicsByPlayer, SteamwovenKitWindow.Schematic, [KitSchematic]),
+        ];
+        foreach (var (name, open, isOpen, close, window, colours) in windows)
+        {
+            if (isOpen()) close();
+            await frames(3);
+            AreaKitStandIns.ResetForSelfTest();
+            open();
+            await frames(6);
+            require(isOpen(), $"[{tag}] the {name} window opens");
+            require(AreaGameBarPanel.KitBackgroundWindow == (kit ? window : null) && (panel.KitForSelfTest.Background.Count > 0) == kit, $"[{tag}] the {name} window is {(kit ? "published as standing over its kit background" : "left to its own art (no complete kit background)")} (got {AreaGameBarPanel.KitBackgroundWindow})");
+            await frames(3);
+            // The window's own draw took the kit branch (it drew its stand-ins for the elements the old art held) exactly when the kit's background shows.
+            require(AreaKitStandIns.DrawnForSelfTest.Contains(window) == kit, $"[{tag}] the {name} window {(kit ? "drew its stand-in fields over the kit's background" : "drew its own art, no stand-in fields")}");
+            using (var shot = GetViewport().GetTexture().GetImage())
+            {
+                var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
+                int total = 0, hits = 0;
+                var perColour = new int[colours.Length];
+                for (var y = zone.Y + 6; y < zone.Bottom - 6; y += 6)
+                    for (var x = zone.X + 6; x < zone.Right - 6; x += 6)
+                    {
+                        var pixel = shot.GetPixel(Math.Clamp((int)(x * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, shot.GetHeight() - 1));
+                        total++;
+                        if (colours.Any(colour => Near(pixel, colour))) hits++;
+                        for (var c = 0; c < colours.Length; c++) if (Near(pixel, colours[c])) perColour[c]++;
+                    }
+                var share = total == 0 ? 0 : (double)hits / total;
+                // Every piece of the window's background shows (a window that still drew only one of its two old arts would hide the other piece).
+                require(!kit || perColour.All(count => total > 0 && (double)count / total > 0.02), $"[{tag}] every piece of the {name} window's kit background shows (shares {string.Join(", ", perColour.Select(count => ((double)count / Math.Max(1, total)).ToString("F3")))})");
+                GD.Print($"ARC-UI-3037 {tag} {name} kit-colour share {share:F3}");
+                require(kit ? share > 0.10 : share < 0.01, $"[{tag}] the {name} window's pixels are {(kit ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kit ? "not drawn" : "drawn")}");
+                // ARC-UI-3037: the sheet's three gauges stand in (a point of each, in window units): the health heart, the fatigue cross, the alignment dial's face and the ruler's parchment.
+                if (kit && name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } sheetView)
+                    foreach (var (what, wx, wy, expected) in new (string, float, float, Color)[] { ("health heart", 449, 164, new(.72f, .12f, .1f)), ("fatigue cross", 449, 236, new(.1f, .1f, .8f)), ("alignment dial face", 30, 170, new(.8f, .74f, .58f)), ("magic-technology ruler", 783, 300, new(.8f, .74f, .58f)) })
+                    {
+                        var at = sheetView.GetGlobalTransform() * new Vector2(wx, wy);
+                        var probe = shot.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, shot.GetHeight() - 1));
+                        require(Math.Abs(probe.R - expected.R) < .12f && Math.Abs(probe.G - expected.G) < .12f && Math.Abs(probe.B - expected.B) < .12f, $"[{tag}] the sheet's {what} stand-in is drawn at ({wx}, {wy}) (got {probe})");
+                    }
+            }
+            await CaptureHudAsync("steamwoven-" + tag + "-" + name + (kit ? "-kit" : "-own"), frames);
+            close();
+            await frames(4);
+            require(!isOpen() && AreaGameBarPanel.KitBackgroundWindow is null, $"[{tag}] the {name} window's kit background goes with it");
+        }
+    }
+
     private async Task CaptureSteamwovenKitAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
         var root = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-").FullName;
         var fallbackRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fallback-").FullName;
         var sheetlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-sheetless-").FullName;
+        var backdroplessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-backdropless-").FullName;
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var (savedHd, savedGenerated) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface);
         var done = new HashSet<(string, SteamwovenStep)>();
@@ -418,6 +483,16 @@ public partial class TerrainViewerApp
                 panel.Relayout();
                 await frames(4);
                 await CheckKitSheetPagesAsync(panel, tag, frames, require, kitSheets: false);
+                // ARC-UI-3037: the covered windows draw none of their own background art over the kit's, and all of it without.
+                SteamwovenKitStore.UseRoot(root);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitWindowBackgroundsAsync(panel, plan, tag, frames, require, kit: true);
+                Ensure("backdropless", backdroplessRoot, step, "backdrop.pdoll", "backdrop.char_maint", "backdrop.book_main", "backdrop.schematic_base");
+                SteamwovenKitStore.UseRoot(backdroplessRoot);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitWindowBackgroundsAsync(panel, plan, tag, frames, require, kit: false);
                 SteamwovenKitStore.UseRoot(root);
                 panel.Relayout();
                 await frames(4);
@@ -461,7 +536,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }
