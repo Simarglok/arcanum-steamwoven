@@ -447,7 +447,7 @@ otherwise the BMP. Import: `hd_pack.py portraits-plan` writes the plan (kind `ar
 
 The world-map window draws the 64 map tiles (`worldmap/smallmapchunksNNN.bmp`, 250 × 250, 8 × 8) and the continent picture (`Map_Zoomed`, 365 × 365) from bitmaps of the
 module. The owner decided on 2026-11-21 ([decisions](../architecture/decisions.md), [#2952](https://github.com/Simarglok/arcanum-steamwoven/issues/2952)) that these get HD entries, and that
-none is redrawn by a generator; the picture itself (a non-generative upscale, [ARC-RES-2992](../rendering/hd-world-town-map.md)) is staged by [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065).
+none is redrawn by a generator; the picture itself (a non-generative upscale, [ARC-RES-2992](../rendering/hd-world-town-map.md)) was staged by [#3065](https://github.com/Simarglok/arcanum-steamwoven/issues/3065).
 The pack holds a bitmap as an entry of kind `worldmap` (one tile) or `map-zoomed` (the continent picture), built exactly like a portrait entry:
 
 ```json
