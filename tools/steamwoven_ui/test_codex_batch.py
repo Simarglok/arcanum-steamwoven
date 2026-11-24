@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+from tools.steamwoven_ui import band_crop, pngio
 from tools.steamwoven_ui import codex_batch as cb
 
 FAKE = r'''#!{python}
@@ -25,6 +27,16 @@ def png(w, h):
     def chunk(kind, body):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
     raw = b"".join(b"\x00" + b"\x80\x40\x20\xff" * w for _ in range(h))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+def padded_png(w, h, bar_rows, bar):
+    """A canvas of `h` rows with `bar_rows` bar rows above and below the band: a light anti-aliasing line, art rows, a light line (ARC-UI-3083)."""
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    art_rows = h - 2 * bar_rows
+    rows = [bar] * bar_rows + [(200, 200, 200, 255)] + [(60, 40, 20, 255)] * (art_rows - 2) + [(200, 200, 200, 255)] + [bar] * bar_rows
+    raw = b"".join(b"\x00" + bytes(row) * w for row in rows)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
@@ -66,7 +78,9 @@ elif args[:1] == ["exec"]:
     if mode == "exit1":
         print("boom", file=sys.stderr)
         sys.exit(3)
-    if mode in ("ok", "nofile_ok", "aspect", "notpng", "badjson", "truncated"):
+    if mode in ("ok", "nofile_ok", "aspect", "notpng", "badjson", "truncated", "padded"):
+        if mode == "padded":
+            open(item + ".png", "wb").write(padded_png(420, 153, 64, tuple(spec.get("bar", [255, 255, 255, 255]))))
         if mode == "ok" or mode == "aspect":
             w, h = spec.get("size", [64, 48])
             open(item + ".png", "wb").write(png(w, h))
@@ -393,6 +407,128 @@ class DryRunAndCli(RunnerCase):
         self.assertEqual(1, cb.main(base))
         self.assertEqual(2, cb.main(["run", "missing", "--local-root", str(self.local), "--codex", str(self.fake)]))
         self.assertEqual(0, cb.main(["check", "--codex", str(self.fake)]))
+
+
+class BandCropGeometry(unittest.TestCase):
+    """ARC-UI-3083: the pure geometry of the crop, with the numbers measured on the two real Codex canvases (2103 x 748) of #2457; no ImageMagick."""
+
+    def test_strip_19_5_to_1_with_white_bars(self) -> None:
+        plan = band_crop.plan((2103, 748), (0, 306, 2103, 115), [2880, 148])
+        self.assertEqual(7, plan["shave"]["top"] + plan["shave"]["bottom"])
+        self.assertEqual([2102, 108], plan["band"])  # one column cut to land on the aspect exactly
+        self.assertEqual(1, plan["columns_cut"])
+        self.assertLess(abs(plan["aspect_error"]), 0.001)
+
+    def test_strip_5_to_1_with_black_bars(self) -> None:
+        plan = band_crop.plan((2103, 748), (0, 141, 2103, 421), [2880, 572])
+        self.assertEqual({"top": 2, "bottom": 2, "left": 0, "right": 0}, plan["shave"])
+        self.assertEqual([2100, 417], plan["band"])
+        self.assertLessEqual(abs(plan["aspect_error"]), band_crop.TOLERANCE)
+
+    def test_shave_stays_inside_two_to_four_pixels_per_edge(self) -> None:
+        for height in range(100, 130):
+            try:
+                plan = band_crop.plan((2103, 748), (0, 300, 2103, height), [2880, 148])
+            except band_crop.CropError:
+                continue
+            self.assertTrue(all(2 <= plan["shave"][edge] <= 4 for edge in ("top", "bottom")), (height, plan["shave"]))
+            self.assertLessEqual(abs(plan["aspect_error"]), band_crop.TOLERANCE)
+
+    def test_a_band_that_is_too_tall_is_refused_not_stretched(self) -> None:
+        with self.assertRaises(band_crop.CropError) as caught:
+            band_crop.plan((2103, 748), (0, 141, 2103, 421), [2880, 148])
+        self.assertIn("cannot reach the asked aspect", str(caught.exception))
+
+    def test_a_band_much_wider_than_asked_is_refused_not_cut_down(self) -> None:
+        with self.assertRaises(band_crop.CropError) as caught:
+            band_crop.plan((420, 153), (0, 64, 420, 25), [200, 100])
+        self.assertIn("much wider", str(caught.exception))
+
+    def test_a_canvas_without_bars_is_refused(self) -> None:
+        with self.assertRaises(band_crop.CropError) as caught:
+            band_crop.plan((1774, 887), (0, 0, 1774, 887), [2880, 1440])
+        self.assertIn("not padded", str(caught.exception))
+
+    def test_only_wide_bands_are_cropped(self) -> None:
+        with self.assertRaises(band_crop.CropError):
+            band_crop.plan((748, 2103), (141, 0, 421, 2103), [1, 5])
+
+    def test_trim_box_text(self) -> None:
+        self.assertEqual((0, 306, 2103, 115), band_crop.parse_box("2103x115+0+306\n"))
+        with self.assertRaises(band_crop.CropError):
+            band_crop.parse_box("")
+
+
+@unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+class BandCropRun(RunnerCase):
+    """ARC-UI-3083: a padded canvas from the fake Codex (420 x 153, bars of 64 rows, a 25-row dark band with a light line at each edge) asked at 20:1."""
+
+    def padded_batch(self, **kw):
+        self.make_batch(size=(200, 10))
+        self.plan({"a": {"mode": "padded", **kw}, "b": {"mode": "ok", "size": [200, 10]}})
+        return self.run_batch(crop_band=True)
+
+    def test_padded_canvas_is_cropped_resized_and_recorded(self) -> None:
+        code, results, lines = self.padded_batch()
+        self.assertEqual("ok", results["a"].outcome)
+        out = self.local / "outbox" / "t-batch" / "a.png"
+        self.assertEqual((200, 10), cb.png_size(out))
+        image = pngio.read(out)
+        for y in (0, 9):  # the light anti-aliasing line is gone at both edges
+            r, g, b, _ = image.pixel(100, y)
+            self.assertLess(abs(r - 60) + abs(g - 40) + abs(b - 20), 12, (y, (r, g, b)))
+        record = json.loads((self.local / "outbox" / "t-batch" / "a.provenance.json").read_text())
+        self.assertEqual("ok", record["outcome"])
+        self.assertEqual([420, 153], record["raw_pixel_size"])
+        self.assertEqual(cb.sha256_file(out), record["image_sha256"])
+        self.assertEqual(cb.sha256_file(next((self.local / "codex-work" / "t-batch").glob("*/a.png"))), record["crop"]["raw_sha256"])
+        self.assertEqual(record["crop"]["cropped_sha256"], record["image_sha256"])
+        self.assertTrue(record["raw_file"].endswith("/a.png"))
+        self.assertLessEqual(abs(record["crop"]["aspect_error"]), band_crop.TOLERANCE)
+        self.assertTrue(any("ITEM a: ok" in line and "band" in line for line in lines))
+
+    def test_black_bars_are_trimmed_too(self) -> None:
+        code, results, _ = self.padded_batch(bar=[0, 0, 0, 255])
+        self.assertEqual("ok", results["a"].outcome)
+
+    def test_without_the_option_the_canvas_stays_wrong_aspect(self) -> None:
+        self.make_batch(size=(200, 10))
+        self.plan({"a": {"mode": "padded"}, "b": {"mode": "ok", "size": [200, 10]}})
+        code, results, _ = self.run_batch()
+        self.assertEqual("wrong-aspect", results["a"].outcome)
+        self.assertFalse((self.local / "outbox" / "t-batch" / "a.png").exists())
+
+    def test_a_canvas_without_bars_stays_wrong_aspect_with_the_reason(self) -> None:
+        self.make_batch(size=(64, 64))
+        self.plan({"a": {"mode": "aspect", "size": [64, 48]}, "b": {"mode": "ok", "size": [64, 64]}})
+        code, results, _ = self.run_batch(crop_band=True)
+        self.assertEqual("wrong-aspect", results["a"].outcome)
+        self.assertIn("band crop refused", results["a"].detail)
+        self.assertFalse((self.local / "outbox" / "t-batch" / "a.png").exists())
+
+    def test_crop_command_writes_the_image_and_a_record(self) -> None:
+        source = Path(self.tmp.name) / "canvas.png"
+        source.write_bytes(padded_png_bytes())
+        out = Path(self.tmp.name) / "strip.png"
+        lines: list[str] = []
+        self.assertEqual(0, cb.crop_command(source, out, "200x10", None, band_crop.DEFAULT_FUZZ))
+        self.assertEqual((200, 10), cb.png_size(out))
+        record = json.loads((Path(self.tmp.name) / "strip.crop.json").read_text())
+        self.assertEqual(cb.sha256_file(source), record["crop"]["raw_sha256"])
+        self.assertEqual([420, 153], record["raw_pixel_size"])
+        self.assertEqual(1, cb.crop_command(source, Path(self.tmp.name) / "no.png", "200x100", None, band_crop.DEFAULT_FUZZ))
+        self.assertFalse((Path(self.tmp.name) / "no.png").exists())
+
+
+def padded_png_bytes() -> bytes:
+    import struct
+    import zlib
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    rows = [(255, 255, 255, 255)] * 64 + [(200, 200, 200, 255)] + [(60, 40, 20, 255)] * 23 + [(200, 200, 200, 255)] + [(255, 255, 255, 255)] * 64
+    raw = b"".join(b"\x00" + bytes(row) * 420 for row in rows)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 420, 153, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
 class Helpers(unittest.TestCase):

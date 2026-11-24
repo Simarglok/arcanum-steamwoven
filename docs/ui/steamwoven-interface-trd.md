@@ -301,7 +301,12 @@ Part kinds:
   The owner can still fill the outbox by hand and run `prompt_library.py provenance`.
 - **SWI-GEN-8** The result of an item is accepted only as a PNG at the asked aspect (within 1 %); the generator keeps a budget of about 1.57 MP per
   image, so a master size above it is reached by the fit tool, never by an upscale inside the generation session. A refusal or a failure is
-  logged with Codex's own text; the prompt is never reworded automatically.
+  logged with Codex's own text; the prompt is never reworded automatically. **Extreme aspects** (decision of ARC-UI-3083,
+  [#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083), FR-UI-007): for the strips (19.5:1, 5:1) the generator returns a 2103 × 748 canvas with the piece drawn
+  at the right proportion between white or black bars. The cropped band is accepted as the result when the tool step (`codex_batch.py run --crop-band`, or `codex_batch.py crop`) produced it:
+  the band's aspect is within 1 % of the asked one before the resize, the columns cut to land on it are at most 2 % of the band's width, nothing is stretched, and the provenance record
+  keeps the crop section and the hash of the canvas Codex returned. A canvas with no bars, or a band that cannot reach the aspect, stays `wrong-aspect`. The resize of the band to the zone size
+  is part of that step (Lanczos, an upscale of about x1.37 for the two strips); it is not an upscale inside the generation session.
 - **SWI-GEN-9** A context image is a refinement of its ORIGINAL (owner decision 2026-11-20, [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)): the upscaled ORIGINAL is
   given to Codex as the one image to edit ("refine this image, raise its detail, do not change its colour or its shape"), and the redraw adds only resolution and surface texture: the same
   palette, brightness, contrast and shapes, no new ornament, shine or detail; brass is dull, dark and matte, glass slightly cloudy, the whole look dusty and muted. A tone check follows every
@@ -329,6 +334,12 @@ runs one inbox batch and writes the outbox. It never writes into the inbox and n
 - **Per item**: exit code, the final JSON `{"ok", "path", "error"}`, the file `<id>.png` in the work folder, a PNG, the aspect within 1 %. Outcomes: `ok`, `refused` (ok false, with Codex's text), `failed`, `timeout` (`--timeout`, default 900 s, the process group is killed), `bad-result`, `missing-file`, `not-png`, `wrong-aspect`. The batch goes on after a failed item. Only an `ok` image is copied to the outbox, and an existing outbox file is kept unless `--overwrite`.
 - **Provenance** `outbox/<batch>/<id>.provenance.json`: generator `codex-cli <version> image_gen`, date, batch, id, `prompt_sha256`, each reference with its sha256, `thread_id`, pixel size, asked size and aspect, outcome, refusal text, image sha256.
 - **Commands**: `codex_batch.py check`; `codex_batch.py run BATCH --dry-run [--only ID,ID]` prints the commands and sends nothing; `codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite] [--model M]`. Every `exec` and `exec resume` pins `-m gpt-6.1-sol -c model_reasoning_effort="medium"` (owner decision 2026-11-20, [#3043](https://github.com/Simarglok/arcanum-steamwoven/issues/3043)); `--model` overrides only with the owner's approval. Exit 0 all ok, 1 an item not ok, 2 pre-check or batch file failed.
+- **Band crop** (ARC-UI-3083, `tools/steamwoven_ui/band_crop.py`, needs ImageMagick; only used with the option below): `run BATCH --crop-band` turns an item judged `wrong-aspect` whose canvas has bars above and below into `ok`
+  (the file is cropped from the canvas in the work folder, a refusal or a failure by Codex is not cropped); `codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz P]` does the same for one file and
+  writes `OUT.crop.json`. Steps: a 4 % fuzz trim of the colour at the canvas corner (each bar must be at least 5 % of the canvas height); a shave of 2 to 4 px at the top and the bottom (the light anti-aliasing line; the shave that
+  brings the band closest to the asked aspect, 2 px at each side at least) and 2 px at a trimmed side edge; equal columns cut at both sides when the band is still wider than the asked aspect (at most 2 % of its width);
+  a band aspect within 1 % of the asked one, else the band is refused with the reason in `detail`; a Lanczos resize to the item's `size` (8 bit RGBA PNG). Measured on the two canvases of #2457: 19.5:1 → band 2102 × 108 (bars 306/327 px, shave 4/3 px, 1 column cut, aspect +0.02 %),
+  5:1 → band 2100 × 417 (bars 141/186 px, shave 2/2 px, 3 columns cut, +0.02 %). The provenance record adds `crop` (canvas, trim box, bars, shave, columns cut, band, aspect error, fuzz, filter, tool, `raw_sha256`, `cropped_sha256`), `raw_file` and `raw_pixel_size`.
 - First real run (2026-11-19): a two-item synthetic text batch, both items `ok` in one resumed session; the tool returned 1448 × 1086 px (1.57 MP) for a 4:3 ask. Reference attachment (repeated `--image=PATH` before the `-` prompt, on `exec` and on `exec resume`) was checked once with two tiny synthetic images against the real CLI.
 - The agent skill that drives it, `.claude/skills/steamwoven-codex-images/SKILL.md`, is narrow: only running ready interface image batches.
 

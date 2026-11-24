@@ -7,10 +7,16 @@ key, no API fallback). Standard library only. Never writes into the inbox, never
 
     python3 -B tools/steamwoven_ui/codex_batch.py check
     python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]
-    python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout SECONDS] [--overwrite] [--local-root DIR] [--codex PATH] [--model M]
+    python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout SECONDS] [--overwrite] [--crop-band] [--local-root DIR] [--codex PATH] [--model M]
+    python3 -B tools/steamwoven_ui/codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz PERCENT]
 
 The model is pinned (owner decision 2026-11-20): `gpt-6.1-sol` at reasoning effort `medium`, passed on every `exec` and `exec resume`. `--model` is an explicit override and
 needs the owner's approval for any other model; the effort is never changed. `~/.codex/config.toml` is not read or written here.
+
+Extreme aspects (ARC-UI-3083, `band_crop.py`, needs ImageMagick): for 19.5:1 and 5:1 the generator returns a 2103 x 748 canvas with white or black bars and the art drawn at the
+right proportion inside. With `--crop-band` an item judged `wrong-aspect` is cropped to that band (fuzz trim, a shave of 2 to 4 px for the light anti-aliasing line, the band's aspect
+within 1 %) and resized to the item's size; the item is then `ok`, the outbox file is the cropped image and the provenance record holds the `crop` section and the raw file's hash.
+`crop` does the same for one file (a canvas left in a work folder) and writes `OUT.crop.json` beside it.
 
 Exit codes: 0 every item ok, 1 at least one item did not produce a good image, 2 the pre-check or the batch file failed (nothing was sent).
 """
@@ -32,8 +38,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    from tools.steamwoven_ui import prompt_library
+    from tools.steamwoven_ui import band_crop, prompt_library
 except ImportError:  # run as a script from its own folder
+    import band_crop  # type: ignore[no-redef]
     import prompt_library  # type: ignore[no-redef]
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -89,6 +96,7 @@ class ItemResult:
     seconds: float = 0.0
     codex_text: str = ""
     commands: list[str] = field(default_factory=list)
+    crop: dict | None = None  # ARC-UI-3083: the band crop report of an item that came back padded (--crop-band)
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -376,6 +384,11 @@ def write_provenance(local_root: Path, batch: str, item: Item, result: ItemResul
     if result.outcome == "ok":
         record["image"] = item.outbox_file
         record["image_sha256"] = sha256_file(local_root / item.outbox_file)
+    if result.crop:
+        record["crop"] = result.crop  # the image above is the cropped band; the canvas Codex returned stays in the work folder
+        record["raw_file"] = f"codex-work/{batch}/{run_stamp}/{item.id}.png"
+        record["raw_pixel_size"] = result.pixel_size
+        record["detail"] = "padded canvas cropped to the band: " + band_crop.describe(result.crop)
     path = outbox / f"{item.id}.provenance.json"
     if result.outcome != "ok" and (outbox / f"{item.id}.png").exists():
         path = outbox / f"{item.id}.provenance.{run_stamp}.{result.outcome}.json"  # the old image keeps its own record
@@ -383,8 +396,29 @@ def write_provenance(local_root: Path, batch: str, item: Item, result: ItemResul
     return path
 
 
+def crop_padded(item: Item, workdir: Path, result: ItemResult) -> Path | None:
+    """ARC-UI-3083: a `wrong-aspect` canvas with bars is cropped to its band (and resized to the item's size); on success `result` becomes `ok` and the cropped file is
+    returned, else the item stays `wrong-aspect` with the reason added to its detail."""
+    want = asked_aspect(item)
+    try:
+        size = list(item.size) if item.size else None
+        if size and not aspect_within((size[0], size[1]), want):
+            raise band_crop.CropError(f"the asked size {size[0]} x {size[1]} is not at the asked aspect {want[0]}:{want[1]}")
+        target = workdir / f"{item.id}.cropped.png"
+        report = band_crop.crop_file(workdir / f"{item.id}.png", target, (result.pixel_size[0], result.pixel_size[1]), want, size)
+        final = png_size(target)
+        if not aspect_within(final, want):
+            raise band_crop.CropError(f"the cropped file is {final[0]} x {final[1]}, not within 1 % of {want[0]}:{want[1]}")
+    except (band_crop.CropError, ValueError, OSError) as error:
+        result.detail += f"; band crop refused: {error}"
+        return None
+    result.crop = report
+    result.outcome, result.detail = "ok", band_crop.describe(report)
+    return target
+
+
 def run_batch(local_root: Path, batch: str, codex: str = "codex", only: list[str] | None = None, timeout: float = DEFAULT_TIMEOUT,
-              overwrite: bool = False, model: str | None = None, dry_run: bool = False, out=print) -> tuple[int, list[ItemResult]]:
+              overwrite: bool = False, model: str | None = None, dry_run: bool = False, out=print, crop_band: bool = False) -> tuple[int, list[ItemResult]]:
     inbox, items = load_batch(local_root, batch)
     if only is not None:
         unknown = [name for name in only if name not in {item.id for item in items}]
@@ -433,6 +467,7 @@ def run_batch(local_root: Path, batch: str, codex: str = "codex", only: list[str
         (workdir / f"events-{item.id}.jsonl").write_text(stdout, encoding="utf-8")
         (workdir / f"stderr-{item.id}.txt").write_text(stderr, encoding="utf-8")
         result = judge(item, workdir, result_file, code, timed_out, codex_text)
+        cropped = crop_padded(item, workdir, result) if crop_band and result.outcome == "wrong-aspect" else None
         result.seconds = (datetime.datetime.now() - started).total_seconds()
         result.commands = [shlex.join(command)]
         if thread_id is None:
@@ -444,16 +479,45 @@ def run_batch(local_root: Path, batch: str, codex: str = "codex", only: list[str
             target = local_root / item.outbox_file
             target.parent.mkdir(parents=True, exist_ok=True)
             temp = target.with_name(target.name + ".part")
-            shutil.copyfile(workdir / f"{item.id}.png", temp)
+            shutil.copyfile(cropped or workdir / f"{item.id}.png", temp)
             os.replace(temp, target)
         write_provenance(local_root, batch, item, result, text, refs, version, result.thread_id, stamp)
         size = f" {result.pixel_size[0]} x {result.pixel_size[1]} px ({result.pixel_size[0] * result.pixel_size[1] / 1e6:.2f} MP)" if result.pixel_size else ""
-        out(f"ITEM {item.id}: {result.outcome}{size} in {result.seconds:.0f} s{': ' + result.detail if result.detail and result.outcome != 'ok' else ''}")
+        shown = result.detail if result.detail and (result.outcome != "ok" or result.crop) else ""
+        out(f"ITEM {item.id}: {result.outcome}{size} in {result.seconds:.0f} s{': ' + shown if shown else ''}")
         results.append(result)
     (workdir / "summary.json").write_text(json.dumps([r.__dict__ for r in results], indent=2) + "\n", encoding="utf-8")
     failed = [r for r in results if r.outcome not in ("ok", "skipped")]
     out(f"CODEX BATCH {batch}: {sum(r.outcome == 'ok' for r in results)} ok, {len(failed)} not ok, {sum(r.outcome == 'skipped' for r in results)} skipped; outbox {local_root / 'outbox' / batch}")
     return (1 if failed else 0), results
+
+
+def parse_pair(text: str, separators: str) -> list[int]:
+    found = re.fullmatch(rf"(\d+)[{separators}](\d+)", text.strip())
+    if not found or not all(int(v) > 0 for v in found.groups()):
+        raise BatchError(f"{text!r} is not two positive numbers")
+    return [int(v) for v in found.groups()]
+
+
+def crop_command(image: Path, out_file: Path, size: str, aspect: str | None, fuzz: float) -> int:
+    """`crop`: one padded canvas (for example one left in a work folder) to its band at the zone size, with a provenance sidecar `OUT.crop.json`."""
+    want_size = parse_pair(size, "xX,")
+    want = parse_pair(aspect, ":xX") if aspect else want_size
+    try:
+        canvas = png_size(image)
+        report = band_crop.crop_file(image, out_file, canvas, want, want_size, fuzz)
+    except (band_crop.CropError, ValueError) as error:
+        print(f"CODEX CROP FAIL: {error}")
+        return 1
+    final = png_size(out_file)
+    if not aspect_within(final, want):
+        print(f"CODEX CROP FAIL: the result is {final[0]} x {final[1]}, not within 1 % of {want[0]}:{want[1]}")
+        return 1
+    sidecar = out_file.with_name(out_file.stem + ".crop.json")
+    sidecar.write_text(json.dumps({"date": datetime.datetime.now(datetime.timezone.utc).date().isoformat(), "source": image.name, "image": out_file.name,
+                                   "asked_size": want_size, "asked_aspect": want, "raw_pixel_size": list(canvas), "crop": report}, indent=2) + "\n", encoding="utf-8")
+    print(f"CODEX CROP ok: {out_file.name} {final[0]} x {final[1]}: {band_crop.describe(report)}; record {sidecar.name}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -470,8 +534,17 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--overwrite", action="store_true", help="replace an outbox file that already exists")
             p.add_argument("--model", help=f"override the pinned model {DEFAULT_MODEL} (only with the owner's approval)")
             p.add_argument("--dry-run", action="store_true", help="print the commands, send nothing")
+            p.add_argument("--crop-band", action="store_true", help="crop a canvas with bars (extreme aspects) to its band instead of refusing it (needs ImageMagick)")
+    crop = sub.add_parser("crop", help="crop one padded canvas to its band and resize it to the zone")
+    crop.add_argument("image", type=Path)
+    crop.add_argument("--size", required=True, help="the zone size WxH the band is resized to")
+    crop.add_argument("--aspect", help="the asked aspect W:H (default: the aspect of --size)")
+    crop.add_argument("--out", type=Path, required=True)
+    crop.add_argument("--fuzz", type=float, default=band_crop.DEFAULT_FUZZ, help="trim fuzz in percent")
     args = parser.parse_args(argv)
     try:
+        if args.command == "crop":
+            return crop_command(args.image, args.out, args.size, args.aspect, args.fuzz)
         if args.command == "check":
             print(f"PRECHECK ok: {precheck(args.codex)}, image_generation on, logged in")
             return 0
@@ -479,7 +552,7 @@ def main(argv: list[str] | None = None) -> int:
         only = [name for name in args.only.split(",") if name] if args.only is not None else None
         if only is not None and not only:
             raise BatchError("--only names no item")
-        code, _ = run_batch(local, args.batch, args.codex, only, args.timeout, args.overwrite, args.model, args.dry_run)
+        code, _ = run_batch(local, args.batch, args.codex, only, args.timeout, args.overwrite, args.model, args.dry_run, crop_band=args.crop_band)
         return code
     except BatchError as error:
         print(f"CODEX BATCH FAIL: {error}")
