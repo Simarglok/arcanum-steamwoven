@@ -18,7 +18,12 @@ internal static class AreaKitStandIns
     /// <summary>The windows whose stand-ins were drawn since <see cref="ResetForSelfTest"/>, for the smoke (a window that draws none of its own art over the kit has passed here).</summary>
     internal static IReadOnlyCollection<SteamwovenKitWindow> DrawnForSelfTest => [.. Drawn];
 
-    internal static void ResetForSelfTest() => Drawn.Clear();
+    internal static void ResetForSelfTest() { Drawn.Clear(); DrawnScreens.Clear(); }
+
+    private static readonly HashSet<SteamwovenKitScreen> DrawnScreens = [];
+
+    /// <summary>ARC-UI-3038: the two-strip screens whose stand-ins were drawn since <see cref="ResetForSelfTest"/>.</summary>
+    internal static IReadOnlyCollection<SteamwovenKitScreen> DrawnScreensForSelfTest => [.. DrawnScreens];
 
     private static void Field(CanvasItem canvas, float scale, float x, float y, float w, float h, Color? fill = null, bool edge = true)
     {
@@ -245,4 +250,18 @@ internal static class AreaKitStandIns
 
     /// <summary>The logbook (arts 264 and 260): nothing the kit's two pieces do not carry (the pages are the book's own picture); only the mark for the smoke.</summary>
     internal static void Logbook() => Drawn.Add(SteamwovenKitWindow.Logbook);
+
+    /// <summary>
+    /// ARC-UI-3038: the save and load screen (art 745 and the strip 335, census M05, M06): the preview's black field (the window's (281, 55) 468 × 300, on the 800 × 600 screen at y 96), which the original's background leaves as a hole over the
+    /// screen's black and the info texts, the portrait and the picture stand on, and the message box in the middle of the bottom strip (the screen's black below the strip art's 47 rows: the save's details and the overwrite and delete
+    /// questions are written on it). The list's black is drawn by the screen itself (MW13), the lens and the cover are their own arts, the scroll bar is not read (F0). In the view's units (the screen's 800 × 600).
+    /// </summary>
+    internal static void SaveLoad(CanvasItem canvas)
+    {
+        DrawnScreens.Add(SteamwovenKitScreen.SaveLoad);
+        var (x, y, width, height) = AreaSaveListArtLayout.Preview;
+        Field(canvas, 1, x, y, width, height);
+        var (bx, by, bw, bh) = AreaSaveListArtLayout.MessageBox;
+        Field(canvas, 1, bx, by, bw, bh);
+    }
 }

@@ -136,7 +136,7 @@ Nothing of this exists in the viewer today. Follow-ups: the render path [#3063](
 
 Status: **built and measured on Ashbury, 2026-11-21** ([#3063](https://github.com/Simarglok/arcanum-steamwoven/issues/3063)). Owner decisions: render scale
 **1.0** (the 1:1 frame, no reduction; 0.5 by a 2 × 2 box from the same frame only if space is needed later, nearest at 0.5 is not taken); no hero, NPCs or
-critters, roofs closed. The pack entry kind, the writer into the pack and the loader are the next slice ([#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106)), the other towns another ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107)); this section is the render itself.
+critters, roofs closed. The pack entry kind, the writer into the pack and the loader are [#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106) (done, ARC-RENDER-3106), the other towns another ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107)); this section is the render itself.
 
 **Parts.** `ARC_TOWNCAP=JOB.json` through the `door-close` stage of the map smoke (`tools/terrain-viewer/Godot/TerrainViewerTownCapture.cs`): the capture
 takes the viewport at camera centres given as picture offsets from the town map's origin location, with the hero not drawn (`SetActorVisibilityForReadback`),
@@ -180,11 +180,13 @@ that scales to about **4.3 hours at most and 2.4 GB at 1.0** (0.8 GB at 0.5), Ta
 is a window run of the main map: the interior maps among the 125 (for example "Ashbury Crematorium - Lev 1") are separate maps of the module, so their capture needs `--area-map` and its own sector, which
 the plan does not know yet ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107); Vormantown is its own module).
 
-**Drawing a tile of 256 × 128 (not built here).** The town-map panel sizes a tile from tile 000000's bitmap (`AreaTownMapPlan.TileWidth`, `TileHeight`) and draws it 1:1 in the
-panel's units; a tile of 256 × 128 therefore needs the scale carried with the entry (the layout stays at the original's 64 × 32 grid, the pixel maths stays in the `.tmi`'s scale
-0.25) and, on a 1080p screen where the composition is enlarged by 1.8, a draw at 0.45 device pixels per picture pixel. Drawn straight that rings; the tiles are
-resampled once per device scale on a worker with the area filter ([#3091](https://github.com/Simarglok/arcanum-steamwoven/pull/3091), `InterfaceHd.DirectFor`), then drawn 1:1 from that copy. The loader slice ([#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106)) does this
-and also replaces the 8-bit BMP, 64 KB, 512 px limits (`AreaTownMapLayout.TryTileSize`, `MaxTileBytes`) for pack tiles (24-bit PNG).
+**Drawing a tile of 256 × 128 (ARC-RENDER-3106).** Built: the tiles are entries of kind `townmap` of the pack ([format](../formats/hd-pack.md#town-map-entries-arc-render-3106)), the scale is the pack's (256 × 128 at the
+4× pack, render scale 1.0), and the viewer keeps the **original's grid**: the texture of a tile keeps its Legacy size (64 × 32), so the plan's tile size, `ToPixel`, `CellOf`, `ToLocation`, the scroll and the party marker
+stay in the `.tmi`'s own scale 0.25 and nothing about the fog or the marker changes with the pack (the loader slice therefore needed no scale in the layout maths). On a 1080p screen the composition is enlarged by 1.8, so the tile is drawn at 0.45
+device pixels per picture pixel, and a straight draw of it rings; the tiles are resampled once per device scale on a worker with the area filter ([#3091](https://github.com/Simarglok/arcanum-steamwoven/pull/3091),
+`InterfaceHd.DirectFor`) and drawn 1:1 from that copy; the Legacy pixels draw for the moment a tile's copy is made; the copy is made at every device scale (whole scales included) up to the pack's own, so no PNG decode or mip chain is built on the main thread for the hundreds of visible tiles. The
+limits of the original loader (an 8-bit BMP of at most 512 pixels and 64 KB, `AreaTownMapLayout.TryTileSize`, `MaxTileBytes`) stay for the original's tiles; the pack's 24-bit PNG tiles never pass through them.
+Measured on Ashbury (2,991 tiles staged, `verify --deep` passes, 88 MB): in the map smoke at device scale 1.333 all 126 tiles of the opened window draw from the area copy, and the same run without the pack's tiles draws the BMPs.
 
 ## World map: one picture, non-generative upscale (AC3)
 
@@ -283,7 +285,7 @@ The 8000 x 8000 picture is cut by `world_map_upscale.py cut` into the 64 tiles `
 
 Not tested after the fix: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
 super-resolution tool installed), x2 or x3 variants, test-time augmentation, a comparison on the owner's 4K screen against the stopgap of
-[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles; the owner's look on the 4K screen moved to [#3154](https://github.com/Simarglok/arcanum-steamwoven/issues/3154), which removes that stopgap).
+[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles; the owner's look on the 4K screen moved to [#3154](https://github.com/Simarglok/arcanum-steamwoven/issues/3154), which removes that stopgap; done in ARC-UI-3154: with a redraw for every tile in the pack the map view draws at the composition's scale, otherwise the stopgap stays).
 
 ## Recommendation (AC4)
 

@@ -265,6 +265,33 @@ python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interfa
 - A staged map bitmap needs no row in `layout-map.tsv`: it is placed at `interface/world-map/maps/` as `<kind>-<stem>-f000.png` and `apply` appends its row. `--no-base-check` is right for the first add (only new entries); a later new picture of one tile is a replacement and goes in with `--base` as usual.
 - The device cache (`hd-cache`) converts these entries too, which it does by itself a few seconds after the pack attaches. A bitmap whose original changed (another game version, a mod) draws the BMP without a message beyond the pack's usual per-frame refusal; without the HD option or without entries the window draws the original pixels as before.
 
+### Town-map tiles (ARC-RENDER-3106)
+
+The HD town maps (the tiles of a town rendered by our engine at scale 1.0, [render path](../rendering/hd-world-town-map.md#render-path-arc-render-3063)) enter the installed pack as entries of kind `townmap`
+([format](../formats/hd-pack.md#town-map-entries-arc-render-3106)), **one town per plan**, built into their own staging pack and added with `apply --add-new`, like the portraits and the world map. The tiles stay under `local/`
+(never in git). `TOWN` is the town's folder name in `rules/townmap.mes` (`Ashbury`), `TILES` the render's `tiles-1.0` folder, `N` the town's tile count (`.tmi` tiles that exist; `town_render.py` prints it). Dry run first at every step:
+
+```sh
+python3 -B tools/hd_pack/hd_pack.py townmap-plan --tiles TILES --town TOWN --expect N --out local/hd-maps/ARC-RENDER-3106/TOWN/plan.json --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-maps/ARC-RENDER-3106/TOWN/plan.json --staging local/res095/pack-out/interface-townmaps-TOWN --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-maps/ARC-RENDER-3106/TOWN/plan.json --staging local/res095/pack-out/interface-townmaps-TOWN --fresh
+python3 -B tools/hd_pack/hd_pack.py verify --installed local/res095/pack-out/interface-townmaps-TOWN --deep
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-townmaps-TOWN --add-new
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-townmaps-TOWN --add-new --no-base-check --task ARC-RENDER-3106 --dry-run
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-townmaps-TOWN --add-new --no-base-check --task ARC-RENDER-3106
+```
+
+(the paths are the main checkout's `local/`, as in the sections above; the plan's image paths are relative to it.)
+
+- `townmap-plan` takes the folder of one town's tiles (`<Town>NNNNNN.png`, tile 000000 included), checks every file's PNG header (8-bit RGB or RGBA, not interlaced, exactly `64 × scale` by `32 × scale`: 256 × 128 at the 4× pack) and the folder's
+  `SHA256SUMS.txt` when there is one, and refuses a count other than `--expect` unless `--partial`. The default scale is 4 (render scale 1.0); a render at 0.5 is made for a 2× pack, never for the installed 4× pack. It writes only a plan file under a checkout's `local/`.
+- `stage` runs the importer: it reads each original tile from the game (the content stack's winner), refuses a tile that is not 64 × 32 and a picture that is not exactly the pack scale times that size, and writes the pictures as they are, opaque. It holds one decoded picture at a time (a town has thousands).
+  Ashbury (2,991 tiles) stages in about 90 s into about 88 MB.
+- The installed 4× pack grows by about 30 KB per tile (Ashbury: 88 MB; all 125 towns: about 1.9 GB). The device cache does **not** convert these entries.
+- Without the HD setting, without an entry for a tile, or for a tile whose original changed (another game version, a mod) the window draws the original BMP, tile by tile.
+- To look before touching the installed pack: copy the pack to a folder under `local/` (never inside `hd-packs/`), `apply` into the copy with `--backup-root` under `local/`, and start a smoke with `ARC_HD_PACK=<copy>` and `ARC_AREA_WORLDMAP_HD_VERIFY=generated`
+  (`./arcanum smoke map Arcanum1-024-fixed --stages worldmap --sector 503,976 --hero human-male`, the town part of the stage runs in a town-map sector).
+
 ### Back up and roll back
 
 Every `apply` writes `<backup-root>/<TASK>-<old manifest sha12>/` with

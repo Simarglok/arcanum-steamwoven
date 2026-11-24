@@ -14,6 +14,10 @@ public sealed record HdBuiltPortrait(string Path, int Width, int Height, byte[] 
 /// <paramref name="Rgba"/> the opaque redraw at exactly the pack's scale times that size.</summary>
 public sealed record HdBuiltMapBitmap(HdEntryKind Kind, string Path, int Width, int Height, byte[] LegacyRgba, byte[] Rgba);
 
+/// <summary>ARC-RENDER-3106: one town-map tile redraw ready to write: <paramref name="Path"/> the original's tile (<c>townmap/ashbury/ashbury000748.bmp</c>), <paramref name="LegacyRgba"/> its decoded pixels
+/// (64 × 32), <paramref name="Redraw"/> the opaque redraw at exactly the pack's scale times that size, produced when the writer asks (a town has thousands of tiles; they are not all held at once).</summary>
+public sealed record HdBuiltTownTile(string Path, int Width, int Height, byte[] LegacyRgba, Func<byte[]?> Redraw);
+
 public enum HdInterfaceWriteStatus { Written, InvalidPack, RecipeConflict, WriteFailed, VerifyFailed }
 
 /// <param name="Detail">The refusal's reason, or the pack's identity on success.</param>
@@ -36,15 +40,17 @@ public static class HdInterfacePackWriter
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static HdInterfaceWriteResult Write(string directory, string packId, int scale, IReadOnlyList<HdBuiltInterfaceFrame> frames, DateTimeOffset now,
-        IReadOnlyList<HdBuiltPortrait>? portraits = null, IReadOnlyList<HdBuiltMapBitmap>? maps = null)
+        IReadOnlyList<HdBuiltPortrait>? portraits = null, IReadOnlyList<HdBuiltMapBitmap>? maps = null, IReadOnlyList<HdBuiltTownTile>? townTiles = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory); ArgumentNullException.ThrowIfNull(frames);
-        portraits ??= []; maps ??= [];
+        portraits ??= []; maps ??= []; townTiles ??= [];
         // ARC-UI-2865: a write of interface frames replaces the pack's interface sprites and leaves its portraits; a write of portraits replaces only the portraits it names (by path)
         // and leaves the sprites and every other portrait.
         // ARC-RENDER-3079: a write of world-map bitmaps likewise replaces only the ones it names, and a write of frames or portraits leaves them.
         var portraitPaths = portraits.Select(p => p.Path).ToHashSet(StringComparer.Ordinal);
         var mapPaths = maps.Select(m => m.Path).ToHashSet(StringComparer.Ordinal);
+        // ARC-RENDER-3106: likewise the town-map tiles: a write names the tiles it replaces and leaves every other entry.
+        var townPaths = townTiles.Select(t => t.Path).ToHashSet(StringComparer.Ordinal);
         if (!new HdPackOptions().Scales.Contains(scale)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"scale {scale} is not an accepted pack scale");
         var manifestPath = Path.Combine(directory, HdPack.ManifestFile);
         var written = new List<string>();
@@ -92,7 +98,8 @@ public static class HdInterfacePackWriter
                 {
                     "portrait" => portraitPaths.Contains((string?)entries[i]!["portrait"]?["path"] ?? ""),
                     "worldmap" or "map-zoomed" => mapPaths.Contains((string?)entries[i]![entryKind]?["path"] ?? ""),
-                    _ => frames.Count > 0 || (portraits.Count == 0 && maps.Count == 0),
+                    "townmap" => townPaths.Contains((string?)entries[i]!["townmap"]?["path"] ?? ""),
+                    _ => frames.Count > 0 || (portraits.Count == 0 && maps.Count == 0 && townTiles.Count == 0),
                 };
                 if ((string?)entries[i]!["slice"] == SliceName && remove)
                 { oldFiles.Add((string)entries[i]!["file"]!); entries.RemoveAt(i); replaced++; }
@@ -158,6 +165,32 @@ public static class HdInterfacePackWriter
                     ["review"] = "unreviewed",
                 }));
             }
+            var townKeys = new HashSet<string>(StringComparer.Ordinal); var townStems = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var tile in townTiles.OrderBy(t => t.Path, StringComparer.Ordinal))
+            {
+                if (!HdTownMapKey.TryParse(tile.Path, out var town, out var tileIndex) || HdTownMapKey.Path(town, tileIndex) != tile.Path)
+                    return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{tile.Path} is not an acceptable town-map tile path");
+                if (!townKeys.Add(tile.Path)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{tile.Path} is given twice");
+                // The pack file name carries the town with other characters turned into '-': two towns that come out alike must not share a tile name.
+                var stem = $"{HdTownMapKey.FileTown(town)}-{tileIndex.ToString("D6", System.Globalization.CultureInfo.InvariantCulture)}";
+                if (!townStems.Add(stem)) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{tile.Path} would take the file name of another tile ({stem})");
+                if (tile.Width != HdTownMapKey.TileWidth || tile.Height != HdTownMapKey.TileHeight) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{tile.Path} is {tile.Width}x{tile.Height}, expected {HdTownMapKey.TileWidth}x{HdTownMapKey.TileHeight}");
+                var rgba = tile.Redraw();
+                if (rgba is null || rgba.Length != (long)tile.Width * scale * tile.Height * scale * 4 || tile.LegacyRgba.Length != tile.Width * tile.Height * 4)
+                    return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{tile.Path} has the wrong pixel count for scale {scale}");
+                for (var i = 3; i < rgba.Length; i += 4)
+                    if (rgba[i] != byte.MaxValue) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{tile.Path} is not opaque");
+                var png = HdPng.EncodeRgba(tile.Width * scale, tile.Height * scale, rgba);
+                var sha = HdPackPath.Sha256(png);
+                var file = $"interface/townmap-{stem}-f0-{sha[..8]}.png";
+                files.Add((file, png, new JsonObject
+                {
+                    ["kind"] = "townmap", ["file"] = file, ["sha256"] = sha, ["bytes"] = png.Length, ["slice"] = SliceName,
+                    ["townmap"] = new JsonObject { ["path"] = tile.Path },
+                    ["legacy"] = new JsonObject { ["width"] = tile.Width, ["height"] = tile.Height, ["rgbaSha256"] = HdPackPath.Sha256(tile.LegacyRgba) },
+                    ["review"] = "unreviewed",
+                }));
+            }
             var taken = new HashSet<string>(entries.Select(e => (string)e!["file"]!), StringComparer.Ordinal);
             var fresh = new HashSet<string>(StringComparer.Ordinal);
             if (files.Any(f => taken.Contains(f.File) || !fresh.Add(f.File))) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, "two interface frames would be written to one file");
@@ -191,11 +224,11 @@ public static class HdInterfacePackWriter
                 try { File.Delete(HdPackPath.Full(directory, old)); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
             var check = HdPack.Open(directory);
-            if (check.Status != HdPackOpenStatus.Opened) return new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count + maps.Count, replaced, $"{check.Status} {check.Detail}");
+            if (check.Status != HdPackOpenStatus.Opened) return new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count + maps.Count + townTiles.Count, replaced, $"{check.Status} {check.Detail}");
             var integrity = check.Pack!.VerifyIntegrity();
             return integrity.Intact
-                ? new(HdInterfaceWriteStatus.Written, frames.Count + portraits.Count + maps.Count, replaced, $"{check.Pack.Id} {check.Pack.Scale}x manifest {check.Pack.Identity.ManifestSha256}")
-                : new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count + maps.Count, replaced, $"{integrity.Valid}/{integrity.Entries} entries intact");
+                ? new(HdInterfaceWriteStatus.Written, frames.Count + portraits.Count + maps.Count + townTiles.Count, replaced, $"{check.Pack.Id} {check.Pack.Scale}x manifest {check.Pack.Identity.ManifestSha256}")
+                : new(HdInterfaceWriteStatus.VerifyFailed, frames.Count + portraits.Count + maps.Count + townTiles.Count, replaced, $"{integrity.Valid}/{integrity.Entries} entries intact");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {

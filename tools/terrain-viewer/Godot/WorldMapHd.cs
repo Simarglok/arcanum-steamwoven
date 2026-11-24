@@ -26,6 +26,16 @@ public static class WorldMapHd
         return ImageTexture.CreateFromImage(image);
     }
 
+    /// <summary>ARC-UI-3154: true when <paramref name="tiles"/> is not empty and every tile is a world-map texture that <paramref name="pack"/> holds a redraw entry for (same path key and Legacy pixels).
+    /// Only then does the map view draw the tiles at the composition's scale; a missing or partial set keeps the 1:1 stopgap of ARC-UI-2993.</summary>
+    internal static bool AllTilesHaveEntries(IReadOnlyList<Texture2D> tiles, HdPack pack)
+    {
+        if (tiles.Count == 0) return false;
+        var entries = new HashSet<(HdSpriteKey? Key, HdLegacyFrame Legacy)>(
+            pack.Entries.Where(e => e.Kind == HdEntryKind.WorldMap && e.Key is not null).Select(e => (e.Key, e.Legacy)));
+        return tiles.All(t => t is HdInterfaceTexture { FrameForBoard.Hd: { } q } && entries.Contains((q.Key, q.Legacy)));
+    }
+
     /// <summary>The smoke's check of one drawn world-map texture against <paramref name="pack"/>: the texture keeps <paramref name="size"/> (250 or 365), and when the pack holds an
     /// entry for exactly this bitmap (same path key and Legacy pixels) the texture draws HD at the pack's scale. A texture with no HD question, or a bitmap the pack has no entry for, is fine and says so.</summary>
     internal static (bool Ok, string Detail) Check(Texture2D? texture, HdPack pack, int size)
