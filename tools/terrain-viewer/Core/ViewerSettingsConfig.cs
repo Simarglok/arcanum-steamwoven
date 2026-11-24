@@ -19,8 +19,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// volumes <c>effects volume</c>, <c>voice volume</c> and <c>music volume</c> 0–10. The project's own settings have project names:
 /// <c>pad scheme</c> (<c>off</c>, <c>direct</c>, <c>pointer</c>), <c>touch scheme</c> (<c>off</c>, <c>touchpad</c>) and <c>prompt style</c> (<c>auto</c>, <c>xbox</c>,
 /// <c>playstation</c>, <c>nintendo</c>, <c>steamdeck</c>; ARC-GPAD-1374, the controller scheme choice of <see cref="ControlSchemeSettings"/>),
-/// <c>hd</c> (0 or 1, ARC-UI-2174: the one HD setting: the HD interface art and fonts and the relit lighting together), <c>generated interface</c> (0 or 1,
-/// experimental, honoured only while <c>hd</c> is 1), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>, and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
+/// <c>hd</c> (0 or 1, ARC-UI-2174: the one HD setting: the HD interface art and fonts and the relit lighting together; ARC-UI-3142: HD On is the Steamwoven interface, and an old <c>generated interface</c> line is not read and is kept), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>, and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
 /// absent or has a value outside its range reads as that setting's default and no other setting changes (the old files lost a whole group
 /// to one bad value). A group is saved at once; a save writes only its own lines. The earlier <c>hd interface</c> and <c>visual profile</c> lines
 /// are never written again and are left in place: a file with no <c>hd</c> line reads <c>hd</c> as On exactly when <c>hd interface</c> was 1

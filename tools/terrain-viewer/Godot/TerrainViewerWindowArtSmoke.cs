@@ -63,6 +63,12 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the hd frames are not all read ({drawn.Count} of {arts.Count})");
                 throw new InvalidOperationException("ARC-UI-1194 window art smoke: an hd frame is missing");
             }
+            // ARC-UI-3143: with the generated mode gone the frames are the pack's redraw (at least one, hd) or only the Legacy art (legacy).
+            if (mode == "hd" ? !drawn.Any(texture => texture.IsHd) : drawn.Any(texture => texture.IsHd) || drawn.Count != arts.Count)
+            {
+                GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the frames do not match the {mode} look (hd {drawn.Count(texture => texture.IsHd)} of {drawn.Count}, {arts.Count} arts)");
+                throw new InvalidOperationException("ARC-UI-1194 window art smoke: the frames do not match the " + mode + " look");
+            }
             GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Count} hd={drawn.Count(texture => texture.IsHd)}");
             await Capture("first");
         }
