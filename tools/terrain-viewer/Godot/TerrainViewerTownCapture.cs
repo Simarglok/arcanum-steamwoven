@@ -34,7 +34,7 @@ public partial class TerrainViewerApp
             if (source.Table.Find(number) is { } entry && source.Prepare(number) is { } plan)
                 tsv.Append($"{number}\t{entry.Name}\t{plan.Info.Width}\t{plan.Info.Height}\t{plan.Info.Columns}\t{plan.Info.Rows}\t{plan.Info.OriginX}\t{plan.Info.OriginY}\t{plan.Info.Scale}\n");
         System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "tmi-all.tsv"), tsv.ToString());
-        if (root.TryGetProperty("scan", out var scanProperty) && scanProperty.GetBoolean())
+        if (root.TryGetProperty("scan", out var scanProperty) && scanProperty.ValueKind == System.Text.Json.JsonValueKind.True)
         {
             // ARC-RENDER-3107: which map each town map belongs to (the sectors whose metadata word names it), for every map of the run's module.
             var scan = AreaTownMapScan.Scan(_arguments!.ModulePath!, out var scanDetail);

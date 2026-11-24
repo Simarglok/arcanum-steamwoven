@@ -208,7 +208,7 @@ sectors that carry it (`townmap-sectors.tsv`), with every `.tmi` record (`tmi-al
 runs the same way in every map. The clock hour has **no effect** in an interior map (Bates Tunnel and Bessie Toones give the same error at hours 0, 3, 15 and 21), so an interior map differs from the original by its light scheme and lights, not by the clock ([#3180](https://github.com/Simarglok/arcanum-steamwoven/issues/3180)).
 The viewer's void grey (76, 76, 76) shows where a whole map has nothing to draw; the stitch treats grey regions of at least 5 x 5 pixels as filler like the other filler colours (a grey pixel of a stone texture stays), so tile 000000 and the stair-step edge of a town stay black like the original's.
 
-**Vormantown (11 towns, [#3176](https://github.com/Simarglok/arcanum-steamwoven/issues/3176)).** The module's 11 town maps (6,677 tiles) are all in one map, `multiplayer-map` (32 x 32 sectors, 78 sector files; the sectors that carry each number were read with the same scan class on that module). They cannot be rendered yet:
+**Vormantown (11 towns, [#3176](https://github.com/Simarglok/arcanum-steamwoven/issues/3176)).** The module's 11 town maps (6,677 tiles) are all in one map, `multiplayer-map` (32 x 32 sectors, 78 sector files; the sectors that carry each number were read by running `AreaTownMapScan` and `AreaTownMapSource` on `Vormantown.dat` in a throwaway console host over the Core project, since the viewer cannot start that module; the host is not in git). They cannot be rendered yet:
 `AreaMapLoadOperation` and three other area loads mount the content with the default module Arcanum, so a run on `Vormantown.dat` (`--env ARC_SMOKE_MODULE=Vormantown` of a map smoke, new in this slice) stops at `AREA_MAP_SOURCES_MISMATCH` before a map is read. Their plan is in the table (status `blocked`).
 
 **The run (AC2, AC3), measured on the Mac, 2026-11-24.** 114 towns, 57,522 tiles, 184 windows, 1,163 shots of 5120 x 1296:
@@ -219,7 +219,7 @@ The viewer's void grey (76, 76, 76) shows where a whole map has nothing to draw;
 | Stitch with the 64 x 64 check, all towns | 0.23 h (numpy; Tarant, 35,840 x 17,920, the longest) |
 | Bytes, 24-bit PNG tiles at 1.0 | 2.26 GB (39 KB per tile on average); Vormantown would add about 0.25 GB by tile count |
 | Mean error against the original at 0.25 (all compared pixels) | median over the towns 1.44, highest 25.2 (Bates Tunnel, a dark interior) |
-| 64 x 64 window limit (10) | **78 of 114 pass** (worst window among them 8.7); 36 fail, classified below |
+| 64 x 64 window limit (10) | **78 of 114 pass** (worst window among them 8.7; three tiny maps, Bates Mansion Lev 2, Caladon Mafia Underground and Tulla Interior - Simeons Hallway, have no 64 x 64 window with a quarter of its pixels compared, so only their mean error checks them); 36 fail, classified below |
 
 **The 36 towns over the window limit (AC2).** Classified by looking at the worst window of each (labelled composites, `town_render.py composite`) and at the numbers; the class is in the result column of the table.
 
@@ -229,7 +229,7 @@ The viewer's void grey (76, 76, 76) shows where a whole map has nothing to draw;
   the original tile holds its own missing-art placeholder (a red and blue striped square with the text "bad art"), which is not rendered and must not be copied. Judged by eye; there is no executable check of why the objects differ.
 - No **capture artefact** class was left once the void grey was filtered (before it, Void-islands, Dernholm - Castle and Uncharted Cave failed on grey tiles).
 
-The tiles of all towns but Ashbury (already staged by #3106) are staged into a **test copy** of the pack with the commands of [the pack workflow](../workflow/hd-pack.md#town-map-tiles-arc-render-3106), not into the installed pack; installing them is the owner's call.
+The tiles of all towns but Ashbury (already staged by #3106) are staged, one town per plan, into a **test copy** of the pack with the commands of [the pack workflow](../workflow/hd-pack.md#town-map-tiles-arc-render-3106), not into the installed pack; installing them is the owner's call. Result: 57,522 `townmap` entries (114 towns), 1.73 GB of entries, `verify --deep` passes. Three town names are too long for a 64-character path segment in the staging file name (Void-Kerghans Castle Lev Final Chamber, Ashbury Haunted Castle - Ground Floor, Caladon - Panarrii Temple Basement); the pack writer now shortens such a name with a hash (`HdTownMapKey.FileTown`).
 
 ## World map: one picture, non-generative upscale (AC3)
 

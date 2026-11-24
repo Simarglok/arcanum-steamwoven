@@ -251,7 +251,7 @@ def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, se
         raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
                          + "; run ./arcanum setup again)")
     if module is not None:
-        # ARC-RENDER-3107: another module of the same installation (`<game>/modules/<module>.dat`, e.g. Vormantown); the file is checked like the configured one.
+        # ARC-RENDER-3107: another module of the same installation (`<game>/modules/<module>.dat`, e.g. Vormantown); the file must exist and not be a link, but unlike the configured module it is not pinned by size and hash.
         if not MODULE_NAME.fullmatch(module):
             raise ValueError("module must be one plain module name")
         inputs = {**inputs, "module": str(Path(_local(inputs, "gameRoot", directory=True)) / "modules" / f"{module}.dat")}

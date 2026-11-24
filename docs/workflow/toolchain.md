@@ -138,7 +138,7 @@ history held about 500 runs of such copies of one template).
   the sounds still start and play, and the audio checks (`audible=True`, the loop and voice "is playing" checks) hold, as
   they would not under the Dummy driver. `--env ARC_SMOKE_SOUND=1` on a smoke lets it be heard.
   `--env ARC_SMOKE_MODULE=NAME` (ARC-RENDER-3107) names another module archive of the same installation (`<game>/modules/NAME.dat`, for example `Vormantown`) for the viewer's `--module`;
-  the launcher reads it, the file is checked like the configured module, and the viewer's area load still opens the Arcanum module only (the Vormantown maps do not load yet, see the town-map note).
+  the launcher reads it, the file must exist and not be a link (it is not pinned by size and hash like the configured module), and the viewer's area load still opens the Arcanum module only (the Vormantown maps do not load yet, see the town-map note).
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11; `slides` since ARC-DEV-3116, 2026-11-24).** `container-click` and `walk` took 675 s and 525 s of the

@@ -222,8 +222,12 @@ def cmd_capture(args):
         print(f"window {n}: {'ok' if ok else 'FAILED'} {seconds:.0f}s, {len(window['shots'])} shots")
         if not ok:
             raise SystemExit(1)
-    (out / "capture.json").write_text(json.dumps({"windows": len(plan["windows"]), "shots": sum(len(w["shots"]) for w in plan["windows"]),
-                                                  "seconds": round(total, 1), "seconds_by_window": seconds_by_window}))
+    capture_path = out / "capture.json"
+    if seconds_by_window or not capture_path.exists():      # a resume that found every window done keeps the seconds of the run that made them
+        earlier = json.loads(capture_path.read_text())["seconds_by_window"] if capture_path.exists() else {}
+        merged = {**earlier, **seconds_by_window}
+        capture_path.write_text(json.dumps({"windows": len(plan["windows"]), "shots": sum(len(w["shots"]) for w in plan["windows"]),
+                                            "seconds": round(sum(merged.values()), 1), "seconds_by_window": merged}))
     print(f"capture total {total:.0f}s")
 
 
@@ -307,7 +311,7 @@ def compare_original(full, plan, original: Path):
     worst = [{"x4": int(i % mean.shape[1] * block), "y4": int(i // mean.shape[1] * block), "mean_error": round(float(mean.ravel()[i]), 2)} for i in order]
     d = err[both]
     worst_mean = worst[0]["mean_error"] if worst else 0.0
-    return {"window_limit": WINDOW_LIMIT, "window_ok": worst_mean < WINDOW_LIMIT, "compared_pixels": int(both.sum()), "mean_error": round(float(d.mean()), 3), "below_5": round(float((d < 5).mean()), 4),
+    return {"window_limit": WINDOW_LIMIT, "window_ok": worst_mean < WINDOW_LIMIT, "windows_checked": int((window_c >= 64 * 64 // 4).sum()), "compared_pixels": int(both.sum()), "mean_error": round(float(d.mean()), 3), "below_5": round(float((d < 5).mean()), 4),
             "below_10": round(float((d < 10).mean()), 4), "worst_64x64_windows": worst,
             "orig_only_nonblack": int(((orig.sum(2) > 0) & ~(ours.sum(2) > 0)).sum()), "ours_only_nonblack": int((~(orig.sum(2) > 0) & (ours.sum(2) > 0)).sum())}
 
@@ -397,6 +401,9 @@ def cmd_towns(args):
     """The plan table of every town map: its game map, the opening kind (window of the main map or a whole map), the sector the window run needs and the windows and shots of the plan."""
     scan = Path(args.scan)
     tmis = {int(r["number"]): r for r in read_tsv(scan / "tmi-all.tsv")}
+    names = [r["name"].lower() for r in tmis.values()]
+    if len(set(names)) != len(names):                    # the tools find a town's record by its name
+        raise SystemExit("two town maps of this module share a name: the lookup by name needs a number")
     by_number = {}
     for row in read_tsv(scan / "townmap-sectors.tsv"):
         by_number.setdefault(int(row["townmap"]), []).append(row)
@@ -434,10 +441,14 @@ RESULT_COLUMNS = ["module", "number", "name", "map", "kind", "tiles", "windows",
 
 
 def town_result(out: Path, town: dict, result: str, classification: str = "") -> dict:
-    report = json.loads((out / "render.json").read_text()) if (out / "render.json").exists() else {}
-    capture = json.loads((out / "capture.json").read_text()) if (out / "capture.json").exists() else {}
+    finished = result in ("pass", "window-fail")          # the files of an earlier run say nothing about a run that failed
+    report = json.loads((out / "render.json").read_text()) if finished and (out / "render.json").exists() else {}
+    capture = json.loads((out / "capture.json").read_text()) if finished and (out / "capture.json").exists() else {}
     against = report.get("against_original_0.25", {})
     worst = against.get("worst_64x64_windows") or [{}]
+    if result == "pass" and against and not against.get("windows_checked", 1):
+        classification = classification or "no 64 x 64 window had a quarter of its pixels compared (a small town): the mean error is the only check"
+        worst = [{}]
     return {"module": town["module"], "number": town["number"], "name": town["name"], "map": town["map"], "kind": town["kind"], "tiles": town["tiles"],
             "windows": capture.get("windows", ""), "shots": capture.get("shots", ""), "capture_s": capture.get("seconds", ""), "stitch_s": report.get("stitch_seconds", ""),
             "bytes": report.get("bytes", ""), "mean_error": against.get("mean_error", ""), "worst_window": worst[0].get("mean_error", ""), "result": result, "classification": classification}
@@ -450,12 +461,16 @@ def cmd_all(args):
     towns = [t for t in read_tsv(Path(args.towns)) if t["status"] == "render"]
     if args.only:
         wanted = [int(n) for n in args.only.split(",")]
+        missing = [n for n in wanted if not any(int(t["number"]) == n for t in towns)]
+        if missing:
+            raise SystemExit(f"--only: no town marked `render` with number {missing}")
         towns = [t for n in wanted for t in towns if int(t["number"]) == n]
     results_path = root / "results.tsv"
-    done = {r["number"]: r for r in read_tsv(results_path)} if results_path.exists() else {}
+    done = {(r["module"], r["number"]): r for r in read_tsv(results_path)} if results_path.exists() else {}
     for town in towns:
         number = town["number"]
-        if number in done and done[number]["result"] in ("pass", "window-fail") and not args.redo:
+        key = (town["module"], number)
+        if key in done and done[key]["result"] in ("pass", "window-fail") and not args.redo:
             continue
         out = root / f"{int(number):03d}-{slug(town['name'])}"
         original = Path(args.originals) / town["module"] / town["name"]
@@ -464,8 +479,13 @@ def cmd_all(args):
         print(label, flush=True)
         try:
             ns = argparse.Namespace(out=str(out), town=town["name"], map=town["map"], scan=args.scan, info_sector=None, force=False, scale="1.0", original=str(original))
-            if not args.stitch_only:             # (the captures of an earlier run are kept; a plan would clear them)
-                cmd_plan(ns); cmd_capture(ns)
+            for stale in ("render.json", "capture.json"):
+                if not args.stitch_only and (out / stale).exists():
+                    (out / stale).unlink()
+            if not args.stitch_only:             # a plan clears the captures: an earlier plan of this town is kept, so a retry resumes at the windows it lacks
+                if not (out / "plan.json").exists():
+                    cmd_plan(ns)
+                cmd_capture(ns)
             try:
                 cmd_stitch(ns); result = "pass"
             except SystemExit as stop:
@@ -475,10 +495,14 @@ def cmd_all(args):
         except Exception as error:                   # one town never stops the run
             result = f"error: {type(error).__name__}: {error}"
         row = town_result(out, town, result)
-        done[number] = row
-        with open(results_path, "w", newline="", encoding="utf-8") as handle:
+        if not row["classification"] and key in done and done[key]["result"] == result:
+            row["classification"] = done[key]["classification"]      # a classification written by hand stays while the verdict is the same
+        done[key] = row
+        temporary = results_path.with_suffix(".tmp")
+        with open(temporary, "w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=RESULT_COLUMNS, delimiter="\t")
-            writer.writeheader(); writer.writerows(sorted(done.values(), key=lambda r: int(r["number"])))
+            writer.writeheader(); writer.writerows(sorted(done.values(), key=lambda r: (r["module"], int(r["number"]))))
+        os.replace(temporary, results_path)
         print(f"  -> {result} in {time.time() - started:.0f}s", flush=True)
 
 

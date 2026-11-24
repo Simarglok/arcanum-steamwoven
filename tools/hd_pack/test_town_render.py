@@ -135,6 +135,38 @@ class TownRenderTests(unittest.TestCase):
             result = tr.town_result(out, rows["Inner Room"], "pass")
             self.assertEqual((result["capture_s"], result["worst_window"], result["bytes"], result["result"]), (20.0, 3.0, 99, "pass"))
 
+    def test_a_failed_run_keeps_no_numbers_of_an_earlier_run_and_a_town_without_a_checked_window_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "render.json").write_text('{"stitch_seconds": 2.5, "bytes": 99, "against_original_0.25": {"mean_error": 1.5, "windows_checked": 0, "worst_64x64_windows": [{"mean_error": 0.0}]}}')
+            (out / "capture.json").write_text('{"windows": 1, "shots": 2, "seconds": 20.0}')
+            town = {"module": "Arcanum", "number": "7", "name": "Tiny", "map": "m", "kind": "whole", "tiles": "2"}
+            failed = tr.town_result(out, town, "capture-error: boom")
+            self.assertEqual((failed["bytes"], failed["capture_s"], failed["mean_error"]), ("", "", ""))
+            passed = tr.town_result(out, town, "pass")
+            self.assertEqual(passed["worst_window"], "")
+            self.assertIn("no 64 x 64 window", passed["classification"])
+
+    def test_all_resumes_a_town_with_its_plan_and_refuses_a_number_that_is_not_in_the_table(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            towns = Path(tmp) / "towns.tsv"
+            header = "\t".join(tr.TOWN_COLUMNS)
+            towns.write_text(header + "\n" + "\t".join(["Arcanum", "7", "Tiny", "2", "5120x2560", "m", "whole", "1,1", "", "", "1", "1", "1", "render", ""]) + "\n")
+            args = type("A", (), {"towns": str(towns), "scan": "s", "originals": tmp, "out": str(root), "only": None, "redo": False, "stitch_only": False})()
+            out = root / "007-tiny"
+            out.mkdir(parents=True)
+            (out / "plan.json").write_text("{}")                          # an earlier plan: kept, so the captures it holds are kept too
+            with mock.patch.object(tr, "cmd_plan") as plan, mock.patch.object(tr, "cmd_capture") as capture, mock.patch.object(tr, "cmd_stitch"):
+                tr.cmd_all(args)
+            plan.assert_not_called(); capture.assert_called_once()
+            rows = tr.read_tsv(root / "results.tsv")
+            self.assertEqual([(r["module"], r["number"], r["result"]) for r in rows], [("Arcanum", "7", "pass")])
+            args.only = "99"
+            with self.assertRaises(SystemExit):
+                tr.cmd_all(args)
+
 
 if __name__ == "__main__":
     unittest.main()
