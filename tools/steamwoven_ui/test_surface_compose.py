@@ -386,55 +386,13 @@ class SurfaceComposeTests(unittest.TestCase):
                 with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
                     surface_compose.load_spec(path)
 
-    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
-    def test_a_plate_lays_dark_corner_triangles_cut_by_the_larger_ellipse_and_nothing_else(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            image = Path(tmp) / "i.png"
-            subprocess.run(["magick", "-size", "200x200", "xc:gray(100)", str(image)], check=True)
-            disc = (20, 20, 180, 160, 40, 40, 160, 140)       # the ring's rim box: centre (100, 90), semi-axes 60 and 50
-            plate = (40, 40, 160, 140, 70, 58)                 # the plate's rectangle and the corner ellipse (70, 58), concentric and larger than the ring
-            painted = surface_compose.lay_plates(image, (plate,), (disc,), 200, 200)
-            data = surface_compose.gray_bytes(image)
-            self.assertEqual(surface_compose.lay_plates(image, (), (disc,), 200, 200), 0)       # no plate: nothing to do
-            for bad, discs in (((40, 40, 260, 140, 70, 58), (disc,)), ((10, 10, 30, 30, 70, 58), (disc,)), (plate, ())):     # outside the image; in no disc box
-                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
-                    surface_compose.lay_plates(image, (bad,), discs, 200, 200)
-        at = lambda x, y: data[y * 200 + x]
-        self.assertGreater(painted, 600)
-        fill = round(100 * surface_compose.PLATE_DEPTH)
-        self.assertTrue(fill - 6 <= at(46, 46) <= fill + 6, msg=str(at(46, 46)))     # a corner triangle: the dark fill (a share of the wood's luma)
-        self.assertTrue(fill - 6 <= at(154, 134) <= fill + 6, msg=str(at(154, 134)))
-        self.assertGreater(at(42, 45), at(46, 46) + 5)    # the thin rim 2 px inside the straight left leg is lighter than the fill
-        self.assertLess(at(42, 45), 100)                  # and darker than the wood
-        self.assertEqual(at(42, 90), 100)                 # the middle of the plate's side: no plate (the corner ellipse is wider than the rectangle there)
-        self.assertEqual(at(100, 41), 100)                # the middle of its top: none either
-        self.assertEqual(at(60, 80), 100)                 # inside the ring: untouched
-        self.assertEqual(at(30, 30), 100)                 # outside the rectangle: untouched
-        self.assertEqual(at(39, 45), 100)                 # the leg is hard: one pixel outside it is the wood
-        self.assertTrue(fill - 6 <= at(40, 45) <= fill + 6, msg=str(at(40, 45)))     # the leg's outermost pixel is plate
-        edge = [at(x, y) for y in range(44, 62) for x in range(44, 66) if fill + 4 < at(x, y) < 97]
-        self.assertTrue(edge, msg="the arc is anti-aliased: a partly covered pixel between the fill and the wood")
-
-    def test_load_spec_reads_plate_boxes_and_refuses_a_bad_one(self):
+    def test_a_spec_with_the_retired_plate_boxes_is_refused(self):
+        """ARC-UI-3205: the inventory ovals are kit parts now (`plate.use_box_off`, `plate.drop_off`, laid by `kit_parts`), the analytic triangles of #3290 are gone."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "spec.json"
-            disc = [0, 0, 120, 120, 10, 10, 110, 110]          # ring semi-axes 50 and 50
-            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [disc], "plate_boxes": [[10, 10, 110, 110, 70, 60]]}), encoding="utf-8")
-            self.assertEqual(surface_compose.load_spec(path).plate_boxes, ((10, 10, 110, 110, 70, 60),))
-            # a 4-number entry, an empty box, no list, a plate outside every disc box, a corner ellipse not larger than the ring, a non-positive axis
-            for bad in ([[10, 10, 110, 110]], [[50, 0, 50, 100, 70, 60]], "x", [[10, 10, 130, 110, 70, 60]], [[10, 10, 110, 110, 50, 60]], [[10, 10, 110, 110, 70, 0]]):
-                path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [disc], "plate_boxes": bad}), encoding="utf-8")
-                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
-                    surface_compose.load_spec(path)
-            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": [[10, 10, 110, 110, 70, 60]]}), encoding="utf-8")      # no disc box at all
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": [[10, 10, 110, 110, 70, 60]]}), encoding="utf-8")
             with self.assertRaises(surface_compose.ComposeError):
                 surface_compose.load_spec(path)
-
-    def test_the_inventory_plates_lie_inside_their_disc_boxes(self):
-        spec = surface_compose.load_spec(Path(__file__).parent / "zone_specs" / "ctx-inventory.json")
-        self.assertEqual(len(spec.plate_boxes), 2)
-        for plate in spec.plate_boxes:
-            self.assertTrue(any(d[0] <= plate[0] and d[1] <= plate[1] and plate[2] <= d[2] and plate[3] <= d[3] for d in spec.disc_boxes), msg=str(plate))
 
     def test_the_committed_specs_load_and_their_discs_lie_in_the_master(self):
         for path in sorted((Path(__file__).parent / "zone_specs").glob("ctx-*.json")):

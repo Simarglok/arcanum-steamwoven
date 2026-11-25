@@ -31,9 +31,12 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
+from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
+from tools.steamwoven_ui import parchment_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import school_kit  # noqa: E402
+from tools.steamwoven_ui import small_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
@@ -143,7 +146,16 @@ def new_parts() -> list[dict]:
     parts.extend(round_hud_parts())
     parts.extend(hud_hardware_parts())
     parts.extend(lens_ring_parts())
+    parts.append(wide_button_part())
     return parts
+
+
+def wide_button_part() -> dict:
+    """ARC-UI-3271, B-BUTTONS: the schematic window's wide round button (bar, ring, two wells; baked into art 365) as one part, PACK FIRST: the old HD pack's frame, an analytic alpha and the soft shadow, by `wide_button_kit.py`."""
+    return new_part(wide_button_kit.PART, "plate", "window", ["G15"], "BD-F", "B-BUTTONS",
+                    "the schematic window's wide round button (brass bar, ring round the dome, two wells open); pack first: the old HD pack's frame of art 365 + analytic alpha + soft shadow, "
+                    "wide_button_kit.py, 600 x 354; size open",
+                    master=True, provenance=f"rule:wide_button_kit:{wide_button_kit.PART}")
 
 
 def hud_hardware_parts() -> list[dict]:
@@ -233,10 +245,33 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
+def small_parts(plates: dict[str, dict]) -> list[dict]:
+    """ARC-UI-3206, slice 6 of B-BUTTONS: the glyph and the hover and pressed plate of every small stone and dark button (the round skill and slider buttons, the spell and technology Add / Remove, the olive
+    plus and minus, the scroll arrows, the follower strips), BY THE PACK-FIRST RULE (`small_kit.py`): the old HD pack's frame of each state, no Codex. The glyph is an empty layer (the symbol is in the frames)."""
+    parts = []
+    for b in small_kit.SMALL:
+        plate = plates.get(f"plate.{b.name}")
+        if plate is None:  # a census without the button (a test's synthetic one)
+            continue
+        canvas = f"a {b.master[0]} x {b.master[1]} canvas"
+        rows = [("glyph", "", "glyph", ["idle"], f"EMPTY: the symbol of art {b.art} is in the pack's frames")]
+        for state in ("hover", "pressed"):
+            if state in b.frames:
+                rows.append(("plate", f"_{state}", "plate", [state], f"the pack's {state} frame of art {b.art}, a full frame laid over the idle plate"))
+        for prefix, suffix, kind, st, what in rows:
+            ident = f"{prefix}.{b.name}{suffix}"
+            parts.append(new_part(ident, kind, plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
+                                  f"{what}; small_kit.py, pack-first, {canvas}, so the size is open", states=st, master=True, provenance=f"rule:small_kit:{ident}"))
+    return parts
+
+
+SMALL_PLATES = {f"plate.{b.name}": b for b in small_kit.SMALL}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
 DISC_PLATES = {f"plate.{m.name}": (f, m) for f in disc_kit.FAMILIES for m in f.members}
 SCHOOL_PLATES = {f"plate.{t.name}": t for t in school_kit.TABS}
+BOX_PLATES = {f"plate.{b.name}": b for b in parchment_kit.BOXES}
+BOX_STATES = {f"state.{n}": b for b in parchment_kit.BOXES for n in (b.on_name, b.ill_name)}
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
@@ -297,6 +332,13 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["note"] = ("the pack's own idle frame of the button as it is, cut to the ring's circle by an analytic round alpha (school_kit.py, ARC-UI-3204, owner 2026-11-25); the states are the pack's frames"
                             if ident.removeprefix("plate.") not in school_kit.CODEX_SYMBOLS else
                             "the pack's frame with its symbol redrawn by Codex (the pack read it wrongly), cut to the ring's circle by an analytic round alpha (school_kit.py, ARC-UI-3204); the states are redrawn the same way")
+        if ident in BOX_PLATES or ident in BOX_STATES:  # ARC-UI-3205: pack-first (owner rule 2026-11-25): the old HD pack's frame with an analytic alpha, no Codex
+            part["status"], part["provenance"] = "master", f"rule:parchment_kit:{ident}"
+            part["note"] = (f"the idle face of art {part['source_arts'][-1]}: the old HD pack's frame (pack-first rule) resampled to the master, the alpha the ring's ellipse united with the four corner triangles (parchment_kit.py, ARC-UI-3205); the symbol is in the frame" if ident in BOX_PLATES else
+                            f"the {'lit' if ident.endswith('_on') else 'refused'} face of art {part['source_arts'][-1]}: the old HD pack's frame of that state (green or red corners kept), the same alpha (parchment_kit.py, ARC-UI-3205)")
+        if ident in SMALL_PLATES:
+            part["status"], part["provenance"] = "master", f"rule:small_kit:{ident}"
+            part["note"] = "the old HD pack's idle frame at the master size, with the analytic ellipse alpha on a round button (pack-first rule, small_kit.py, ARC-UI-3206); the symbol is in the frame"
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
@@ -312,6 +354,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         parts.append(part)
     parts.extend(new_parts())
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES or p["id"] in SCHOOL_PLATES}))
+    parts.extend(small_parts({p["id"]: p for p in parts if p["id"] in SMALL_PLATES}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
