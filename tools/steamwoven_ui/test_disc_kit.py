@@ -48,6 +48,19 @@ def cells(x0: int, x1: int, y0: int = 8, y1: int = 12) -> list[tuple[int, int]]:
     return [(x, y) for x in range(x0, x1) for y in range(y0, y1)]
 
 
+BRASS = (140, 105, 55)
+
+
+def ring_master() -> pngio.Image:
+    """A stand-in for the strip's brass ring: a band between the radii 12 and 19 pixels in a 40 x 40 picture, a hole inside."""
+    image = pngio.Image(40, 40, bytearray(40 * 40 * 4))
+    for y in range(40):
+        for x in range(40):
+            if 12.0 <= math.hypot(x + 0.5 - 20.0, y + 0.5 - 20.0) <= 19.5:
+                image.data[(y * 40 + x) * 4:(y * 40 + x) * 4 + 4] = bytes((*BRASS, 255))
+    return image
+
+
 SYMBOLS = {"1-a": cells(6, 11), "2-b": cells(9, 14), "4-c": cells(5, 9, 6, 14)}
 
 
@@ -214,6 +227,54 @@ class GeometryTests(unittest.TestCase):
         self.assertTrue(any(layer.data[3::4]))
         self.assertEqual(layer.data[(FAM.master[1] - 1) * FAM.master[0] * 4 + (FAM.master[0] - 1) * 4 + 3], 0)  # nothing at the lower right
 
+    def test_the_crescent_is_read_from_the_originals_brass_cells(self):
+        profile = dk.crescent_profile(FAM, frame())
+        self.assertGreaterEqual(len(profile), 10)
+        for r0, r1 in profile.values():
+            self.assertAlmostEqual(r0, 10.5, delta=1.6)
+            self.assertGreater(r1 - r0, 0.8)
+        with self.assertRaises(dk.DiscError):
+            dk.crescent_profile(dk.Family("n", "p", FAM.units, FAM.master, (10.0, 10.0), 10.0, (1, 1), FAM.members), pngio.Image(W, H, bytearray(W * H * 4)))
+
+    def test_the_crescent_layer_is_thin_brass_with_a_dark_gap_at_the_lower_right_only(self):
+        layer = dk.crescent_layer(FAM, frame(), ring_master())
+        self.assertEqual((layer.w, layer.h), FAM.master)
+        brass = gap = 0
+        for y in range(layer.h):
+            for x in range(layer.w):
+                o = (y * layer.w + x) * 4
+                if not layer.data[o + 3]:
+                    continue
+                self.assertGreater((x + 0.5) * W / layer.w + (y + 0.5) * H / layer.h, 20.0)  # nothing on the upper-left half
+                if layer.data[o + 3] > 200 and bk.distance(tuple(layer.data[o:o + 3]), BRASS) < 6:
+                    brass += 1
+                if layer.data[o + 3] > 150 and sum(layer.data[o:o + 3]) < 40:
+                    gap += 1
+        self.assertGreater(brass, 30)
+        self.assertGreater(gap, 10)
+        self.assertLess(brass, layer.w * layer.h * 0.15)  # a crescent, not a disc
+
+    def test_the_ring_geometry_finds_the_band(self):
+        cx, cy, inner, outer = dk.ring_geometry(ring_master())
+        self.assertAlmostEqual((cx, cy), (20.0, 20.0), delta=0.6)
+        self.assertAlmostEqual(inner, 12.0, delta=1.0)
+        self.assertAlmostEqual(outer, 19.5, delta=1.0)
+        with self.assertRaises(dk.DiscError):
+            dk.ring_geometry(pngio.Image(8, 8, bytearray(256)))
+
+    def test_an_overlay_never_takes_the_originals_brass_cells(self):
+        self.assertTrue(dk.is_brass(FAM, frame(), 19, 14))
+        self.assertFalse(dk.is_brass(FAM, frame(), 10, 10))
+        self.assertFalse(dk.is_brass(FAM, frame(), 2, 2))
+
+    def test_the_dome_reference_has_no_brass_and_is_clear_outside_the_disc(self):
+        ref = dk.dome_reference(FAM, frame(), (60, 60))
+        self.assertEqual(ref.data[3], 0)  # the corner
+        self.assertEqual(ref.data[(30 * 60 + 30) * 4 + 3], 255)
+        for i in range(0, len(ref.data), 4):
+            if ref.data[i + 3]:
+                self.assertFalse(ref.data[i] - ref.data[i + 2] >= 100 and ref.data[i] > 100)
+
     def test_the_families_name_the_slice_buttons(self):
         self.assertEqual(dk.all_names(), ["cncl_big", "done_big", "cler_big", "big_grn_l", "big_grn_r"])
         self.assertEqual({f.master for f in dk.FAMILIES}, {(138, 132), (120, 120)})
@@ -236,6 +297,8 @@ class CommandTests(unittest.TestCase):
         write_frames(self.local / "census" / "frames", arc=True)
         self.patch = mock.patch.object(dk, "FAMILIES", (FAM,))
         self.patch.start()
+        (self.local / "masters").mkdir()
+        pngio.write(self.local / "masters" / f"{dk.RING_MASTER}.png", ring_master())
 
     def tearDown(self):
         self.patch.stop()
@@ -265,6 +328,7 @@ class CommandTests(unittest.TestCase):
         code, text = self.run_main("build")
         self.assertEqual(code, 0, text)
         masters, rules = self.local / "masters", self.local / "provenance" / "rule"
+        self.assertEqual(json.loads((self.local / "provenance" / "fit" / "plate.a_btn.json").read_text())["crescent"]["ring_master"], f"{dk.RING_MASTER}.png")
         self.assertEqual(len(list(masters.glob("glyph.*.png"))), 3)
         glyph = json.loads((rules / "glyph.b_btn.json").read_text())
         hover = json.loads((rules / "plate.b_btn_hover.json").read_text())
@@ -286,7 +350,7 @@ class CommandTests(unittest.TestCase):
         code, text = self.run_main("gloss")
         self.assertEqual(code, 2)
         self.assertIn("no fit record", text)
-        self.assertFalse((self.local / "masters").exists())
+        self.assertFalse((self.local / "masters" / "plate.a_btn.png").exists())
         (self.local / "provenance" / "fit" / "plate.c_btn.json").write_text("{}")
         pngio.write(fitted / "plate.a_btn.png", pngio.Image(6, 6, bytearray(144)))
         code, text = self.run_main("gloss", "--dry-run")
@@ -297,7 +361,14 @@ class CommandTests(unittest.TestCase):
         self.fitted()
         code, _ = self.run_main("gloss", "--dry-run")
         self.assertEqual(code, 0)
-        self.assertFalse((self.local / "masters").exists())
+        self.assertFalse((self.local / "masters" / "plate.a_btn.png").exists())
+
+    def test_gloss_refuses_without_the_ring_master(self):
+        self.fitted()
+        (self.local / "masters" / f"{dk.RING_MASTER}.png").unlink()
+        code, text = self.run_main("gloss")
+        self.assertEqual(code, 2)
+        self.assertIn("no ring master", text)
 
     def test_only_and_family_must_agree(self):
         code, text = self.run_main("build", "--only", "nope")
@@ -310,12 +381,10 @@ class CommandTests(unittest.TestCase):
         with self.assertRaises(dk.DiscError):
             dk.chosen_families("nope", None)
 
-    def test_stretch_leaves_a_square_master_alone(self):
-        import dataclasses
-        with mock.patch.object(dk, "FAMILIES", (dataclasses.replace(FAM, master=(84, 84)),)):
-            code, text = self.run_main("stretch")
-        self.assertEqual(code, 0, text)
-        self.assertIn("nothing to stretch", text)
+    def test_place_refuses_a_dome_with_no_generator_record(self):
+        code, text = self.run_main("place")
+        self.assertEqual(code, 2)
+        self.assertIn("no generator record", text)
 
     def test_build_with_missing_frames_fails_cleanly(self):
         for path in (self.local / "census" / "frames" / "4-c").glob("*.png"):

@@ -270,7 +270,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
                             "symbol and states by rule (round_kit.py, ARC-UI-3203)")
         if ident in DISC_PLATES:
             part["status"], part["provenance"] = "master", f"fit:{ident}"
-            part["note"] = (f"the empty dark dome with its brass crescent: one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; symbol and states by rule (disc_kit.py, ARC-UI-3203)"
+            part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"

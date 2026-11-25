@@ -4,16 +4,18 @@ of discs whose frames are NOT square and whose dome does not sit in the middle o
 a generated plate per family and size, and the glyph, the state overlays BY RULE from the original's own frames.
 
     python3 -B tools/steamwoven_ui/disc_kit.py refs   [--family KEY,...] [--frames DIR] [--local-root DIR]
-    python3 -B tools/steamwoven_ui/disc_kit.py stretch [--family KEY,...] [--source FILE] [--out FILE] [--local-root DIR]   (a generated square canvas -> the master's aspect, with the derived provenance record; needs ImageMagick)
-    python3 -B tools/steamwoven_ui/disc_kit.py gloss  [--family KEY,...] [--fitted-dir DIR] [--out DIR] [--dry-run] [--frames DIR] [--local-root DIR]
+    python3 -B tools/steamwoven_ui/disc_kit.py place  [--family KEY,...] [--source FILE] [--out FILE] [--local-root DIR]   (the generated dome -> the master's canvas at the original's place, with the derived provenance record; needs ImageMagick)
+    python3 -B tools/steamwoven_ui/disc_kit.py gloss  [--family KEY,...] [--ring FILE] [--fitted-dir DIR] [--out DIR] [--dry-run] [--frames DIR] [--local-root DIR]
     python3 -B tools/steamwoven_ui/disc_kit.py build  [--family KEY,...] [--out DIR] [--only NAME,...] [--dry-run] [--frames DIR] [--local-root DIR] [--plate-dir DIR]
     python3 -B tools/steamwoven_ui/disc_kit.py sheet  --out FILE [--family KEY,...] [--zoom N] [--plate-dir DIR] ...   (before / after composite with English labels, needs ImageMagick)
     python3 -B tools/steamwoven_ui/disc_kit.py self-test
 
 The parts of a button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitComposer.ButtonLayers`: the face, over it the glyph, over both the overlay `<face>_hover` or `<face>_pressed`; all parts of a button are at the face's size):
 
-* `plate.<name>` the empty plate: ONE Codex item per family (`plate-crescent-hud`, `plate-crescent-small-hud`), fitted by `fit.py` to the face of every button of the family. The brass crescent is part of the plate (it is part of the original's
-  frame and of its hit shape); the gloss arc of the dome is laid over the fitted plate by `gloss` from the original (shape and brightness).
+* `plate.<name>` the empty plate: ONE Codex item per family (`plate-dome-hud`, `plate-dome-small-hud`: the dark dome only), placed on the master's canvas where the original's disc stands (`place`) and fitted by `fit.py` to the face of every button
+  of the family. `gloss` then lays over the fitted dome the original's gloss arc (shape and brightness) and the BRASS CRESCENT at the lower right, made by rule: its outline is read from the original (per angle the inner and outer radius of its cells, smooth, tapering to
+  points), its surface is the strip's own brass ring (`masters/hardware.hud_ring.png`, #2481: the ring's texture and warm tone and its light, mapped along the same angle), and a dark gap of one cell lies between the dome and the crescent. The crescent is part of
+  the original's frame and of its hit shape.
 * `glyph.<name>` the symbol as the idle frame shows it over the plate, a layer on the whole frame: the cells that differ from the plate template by `SOLID_DE`, in the original's own flat cell colours, with a smooth sharp outline.
   The plate template of a family is voted per cell from the idle and hover frames of ALL its buttons (a symbol covers a cell in one button, the plate shows in the others; a cell fewer than two buttons show plain is filled from its neighbours; the colour test and the speck clean act on the middle of the dome, `SPECK_SHARE` of the radius, where every symbol of these families lies).
 * `plate.<name>_hover` what the hover frame shows over the IDLE frame (the symbol lights up and glows): the lit symbol's own cells, the glow a separate soft layer under it.
@@ -53,6 +55,15 @@ MIN_SUPPORT = 2          # a plate colour needs this many BUTTONS (a button's id
 SPECK_DE = 3.0           # inside the middle of the dome (where the symbols are) a template cell this far from the median of its 7 x 7 neighbourhood is a trace of a symbol's edge (two buttons' glows agreeing) and takes the median
 DOME_DE = 14.0           # in the middle of the dome a plate colour is within this of the dome's median: two buttons whose symbols have the same colour (the two red arrows) must not vote it into the plate
 SPECK_SHARE = 0.75       # the middle of the dome, where the symbols lie (the Big Green arrows' tips reach 0.70 of the radius): this share of the disc's radius; the colour test, the speck clean and what a glyph or an overlay may take stop there (the bevel, the gloss arc and the crescent outside it are the plate's)
+CRESCENT_BIN = 5.0       # degrees: the crescent's radii are read from the original in bins of this width
+ANGLE_SHIFT = 90.0       # degrees added to an angle before it is binned: the crescent (from about -15 to 95 degrees) then lies in one run of bins, not across the turn
+MAX_GAP_BINS = 3         # a break of the crescent's profile longer than this many bins is an error, not a gap to bridge
+CRESCENT_TAPER = 14.0    # degrees: the crescent's ends taper to points over this angle
+GAP_CELLS = 1.0          # cells: the dark gap between the dome and the crescent
+GAP_COLOUR = (8, 6, 3)
+GAP_ALPHA = 0.9
+RING_TURN = 180.0        # degrees: the crescent takes the ring's LIT side (the upper left), the side that shows the brass; at its own angle it would be the ring's shaded lower right, dark and thin to the eye
+RING_MASTER = "hardware.hud_ring"  # the strip's brass ring (kit hardware, #2481): the crescent is cut from the same brass
 LABEL_FONT = button_kit.LABEL_FONT
 Image = pngio.Image
 
@@ -77,14 +88,14 @@ class Family:
     master: tuple[int, int]           # the plate's master size (kit.json)
     centre: tuple[float, float]       # the dome's middle in cells (a cell's middle at +0.5), fitted once to the frames' outline (a circle fit of its upper-left boundary)
     radius: float                     # the disc's radius in cells
-    refs: tuple[int, int]             # the size the original is shown to Codex at (the master's aspect, or a square when the generator refuses that aspect: `stretch` squeezes the result back)
+    refs: tuple[int, int]             # the size the original's dome is shown to Codex at (a square: the dome is a circle that fills the canvas, `place` puts it where the original's stands)
     members: tuple[Disc, ...]
 
 
 FAMILIES = (
-    Family("crescent-big", "plate-crescent-hud", (38, 37), (138, 132), (17.4, 17.7), 17.65, (1014, 1014),
+    Family("crescent-big", "plate-dome-hud", (38, 37), (138, 132), (17.4, 17.7), 17.65, (1014, 1014),
            (Disc(32, "32-cncl_big", "cncl_big", "202-cncl_big"), Disc(33, "33-done_big", "done_big", "203-done_big"), Disc(201, "201-Cler_Big", "cler_big"))),
-    Family("crescent-small", "plate-crescent-small-hud", (34, 33), (120, 120), (15.9, 15.3), 15.88, (990, 990),
+    Family("crescent-small", "plate-dome-small-hud", (34, 33), (120, 120), (15.9, 15.3), 15.88, (1014, 1014),
            (Disc(283, "283-Big_Grn_L", "big_grn_l"), Disc(284, "284-Big_Grn_R", "big_grn_r"))),
 )
 STATES = ((0, "idle"), (1, "pressed"), (2, "hover"))  # the original's frame rule (OF9): idle 0, pressed 1, hover 2
@@ -147,7 +158,15 @@ def radius_of(fam: Family, x: int, y: int) -> float:
 def own_cells(fam: Family, frame: Image, everything: bool):
     """The cells a layer of this frame may take: the opaque ones within the symbol's reach of the dome's middle, or (a pressed overlay, which changes the whole plate) every opaque one."""
     reach = fam.radius * SPECK_SHARE
-    return lambda x, y: alpha_at(frame, x, y) > 0 and (everything or radius_of(fam, x, y) <= reach)
+    return lambda x, y: alpha_at(frame, x, y) > 0 and (everything or radius_of(fam, x, y) <= reach) and not is_brass(fam, frame, x, y)
+
+
+def is_brass(fam: Family, frame: Image, x: int, y: int) -> bool:
+    """A cell of the original's brass crescent (red over blue, not dark, lower right, outside the dome's inner part): the crescent is made by rule, no overlay takes its cells."""
+    if (x + 0.5 - fam.centre[0]) + (y + 0.5 - fam.centre[1]) <= 0 or radius_of(fam, x, y) < fam.radius * 0.92:
+        return False
+    red, green, blue = frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3]
+    return red - blue >= 25 and red >= green and button_kit.lab(red, green, blue)[0] >= 18
 
 
 def check_twin(frames: Path, fam: Family, disc: Disc) -> None:
@@ -289,6 +308,125 @@ def gloss_layer_of(frames: Path, fam: Family) -> Image:
     return layer
 
 
+# --- the crescent (by rule) --------------------------------------------------------------------------------------------------
+
+def crescent_profile(fam: Family, template: Image) -> dict[int, tuple[float, float]]:
+    """The brass crescent of the original, as radii: per bin of angle (about the dome's middle, the lower-right half) the inner and the outer radius, in cells, of the brass cells outside the dome (a cell is brass when it is red over blue
+    and not dark: the gloss arc of the dome is excluded by the half-plane); the radii of a bin and its neighbours are averaged [1 2 1]. Raises when the frames show no crescent."""
+    cx, cy = fam.centre
+    bins: dict[int, list[float]] = {}
+    for y in range(template.h):
+        for x in range(template.w):
+            o = (y * template.w + x) * 4
+            if not template.data[o + 3] or (x + 0.5 - cx) + (y + 0.5 - cy) <= 0:
+                continue
+            r = radius_of(fam, x, y)
+            red, green, blue = template.data[o:o + 3]
+            if r < fam.radius * 0.92 or red - blue < 25 or red < green or button_kit.lab(red, green, blue)[0] < 18:
+                continue
+            bins.setdefault(int(((math.degrees(math.atan2(y + 0.5 - cy, x + 0.5 - cx)) + ANGLE_SHIFT) % 360.0) / CRESCENT_BIN), []).append(r)
+    if len(bins) < 6:
+        raise DiscError(f"the {fam.key} frames show no brass crescent to read")
+    raw = {k: (min(v) - 0.5, max(v) + 0.5) for k, v in bins.items()}
+    out = {}
+    for k, (r0, r1) in raw.items():
+        group = [(2.0, (r0, r1))] + [(1.0, raw[k + d]) for d in (-1, 1) if (k + d) in raw]
+        total = sum(w for w, _ in group)
+        out[k] = (sum(w * g[0] for w, g in group) / total, sum(w * g[1] for w, g in group) / total)
+    return out
+
+
+def ring_geometry(ring: Image) -> tuple[float, float, float, float]:
+    """The strip ring master's middle (x, y) and the radii of its band (inner, outer), in pixels."""
+    xs = [x for y in range(ring.h) for x in range(ring.w) if ring.data[(y * ring.w + x) * 4 + 3] > 128]
+    ys = [y for y in range(ring.h) for x in range(ring.w) if ring.data[(y * ring.w + x) * 4 + 3] > 128]
+    if not xs:
+        raise DiscError("the ring master is empty")
+    cx, cy = (min(xs) + max(xs) + 1) / 2.0, (min(ys) + max(ys) + 1) / 2.0
+    outer = (max(xs) - min(xs) + 1) / 2.0
+    inner = 0.0
+    for step in range(int(outer)):  # from the middle outward along the row: the first opaque pixel is the band's inner edge
+        if ring.data[(int(cy) * ring.w + int(cx + step)) * 4 + 3] > 128:
+            inner = float(step)
+            break
+    if not 0 < inner < outer:
+        raise DiscError("the ring master has no hole")
+    return cx, cy, inner, outer
+
+
+def sample(image: Image, x: float, y: float) -> tuple[float, float, float, float]:
+    """Bilinear colour and alpha of a picture at (x, y) in pixels (a pixel's middle at +0.5)."""
+    x, y = x - 0.5, y - 0.5
+    x0, y0 = int(math.floor(x)), int(math.floor(y))
+    fx, fy = x - x0, y - y0
+    acc = [0.0, 0.0, 0.0, 0.0]
+    for dx, dy, w in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
+        xx, yy = min(image.w - 1, max(0, x0 + dx)), min(image.h - 1, max(0, y0 + dy))
+        o = (yy * image.w + xx) * 4
+        a = image.data[o + 3] / 255.0
+        for k in range(3):
+            acc[k] += w * a * image.data[o + k]
+        acc[3] += w * a
+    return (acc[0] / acc[3], acc[1] / acc[3], acc[2] / acc[3], acc[3]) if acc[3] > 1e-6 else (0.0, 0.0, 0.0, 0.0)
+
+
+def crescent_layer(fam: Family, template: Image, ring: Image) -> Image:
+    """The brass crescent and the dark gap between it and the dome, at the master size: per angle the original's inner and outer radius (smooth, tapering to points at both ends), the surface cut from the strip's brass ring at the SAME angle
+    (the ring's texture, warm tone and light, its band mapped across the crescent's width), a dark gap of `GAP_CELLS` inside the crescent over the dome's rim."""
+    profile = crescent_profile(fam, template)
+    first, last = min(profile), max(profile)
+    for k in range(first, last + 1):  # a bin the cells of a small frame happen to miss takes the line between its neighbours (a gap of up to MAX_GAP_BINS)
+        if k in profile:
+            continue
+        lo = max(j for j in range(first, k) if j in profile)
+        hi = min((j for j in range(k + 1, last + 1) if j in profile), default=None)
+        if hi is None or hi - lo - 1 > MAX_GAP_BINS:
+            raise DiscError(f"the {fam.key} crescent has a break")
+        t = (k - lo) / (hi - lo)
+        profile[k] = (profile[lo][0] * (1 - t) + profile[hi][0] * t, profile[lo][1] * (1 - t) + profile[hi][1] * t)
+    rcx, rcy, rin, rout = ring_geometry(ring)
+    pw, ph = fam.master
+    cx, cy = fam.centre
+    sx, sy = fam.units[0] / pw, fam.units[1] / ph
+    edge = max(sx, sy)  # one master pixel in cells: the width of the soft edge
+    out = Image(pw, ph, bytearray(pw * ph * 4))
+    for py in range(ph):
+        for px in range(pw):
+            dx, dy = (px + 0.5) * sx - cx, (py + 0.5) * sy - cy
+            theta = (math.degrees(math.atan2(dy, dx)) + ANGLE_SHIFT) % 360.0 / CRESCENT_BIN - 0.5  # bin middles at whole numbers
+            k0 = int(math.floor(theta))
+            t = theta - k0
+            if k0 + 1 < first or k0 > last:
+                continue
+            a, b = profile.get(k0), profile.get(k0 + 1)
+            if a is None:
+                a = b
+            if b is None:
+                b = a
+            r0, r1 = a[0] * (1 - t) + b[0] * t, a[1] * (1 - t) + b[1] * t
+            degrees = (theta + 0.5) * CRESCENT_BIN
+            span0, span1 = first * CRESCENT_BIN, (last + 1) * CRESCENT_BIN
+            taper = button_kit.smoothstep(0.0, CRESCENT_TAPER, min(degrees - span0, span1 - degrees))
+            r = math.hypot(dx, dy)
+            centre_r, half = (r0 + r1) / 2.0, (r1 - r0) / 2.0 * taper
+            gap = max(0.0, min(1.0, (r - (r0 - GAP_CELLS)) / edge + 0.5)) * max(0.0, min(1.0, (r0 - r) / edge + 0.5)) * button_kit.smoothstep(0.0, CRESCENT_TAPER * 0.5, min(degrees - span0, span1 - degrees)) * GAP_ALPHA
+            brass = max(0.0, min(1.0, (half - abs(r - centre_r)) / edge + 0.5)) if half > 0 else 0.0
+            if brass <= 0.0 and gap <= 0.0:
+                continue
+            o = (py * pw + px) * 4
+            colour, alpha = GAP_COLOUR, gap
+            if brass > 0.0:
+                u = max(0.0, min(1.0, (r - (centre_r - half)) / max(2.0 * half, 1e-6)))
+                rr = rin + u * (rout - rin)
+                phi = math.atan2(dy, dx) + math.radians(RING_TURN)
+                tint = sample(ring, rcx + rr * math.cos(phi), rcy + rr * math.sin(phi))
+                if tint[3] > 0.0:
+                    alpha = brass + gap * (1.0 - brass)
+                    colour = tuple((tint[k] * brass + GAP_COLOUR[k] * gap * (1.0 - brass)) / alpha for k in range(3))
+            out.data[o:o + 4] = bytes((*(max(0, min(255, int(round(c)))) for c in colour), int(round(min(1.0, alpha) * 255))))
+    return out
+
+
 def source_folders(ident: str) -> tuple[Family, list[str], int]:
     """The family, the original frames a part reads (the folders) and the number of frames each has."""
     for name in all_names():
@@ -323,43 +461,52 @@ def need_magick() -> None:
         raise DiscError("ImageMagick `magick` is not installed")
 
 
+def dome_reference(fam: Family, template: Image, size: tuple[int, int]) -> Image:
+    """The original's dome alone, as the image to edit: the disc's box (the dome's middle and radius) of the voted template at `size`, the brass crescent and everything outside the disc cleared (the crescent is made by rule afterwards)."""
+    cx, cy = fam.centre
+    r = fam.radius
+    out = Image(size[0], size[1], bytearray(size[0] * size[1] * 4))
+    for py in range(size[1]):
+        v = cy - r + (py + 0.5) / size[1] * 2 * r
+        for px in range(size[0]):
+            u = cx - r + (px + 0.5) / size[0] * 2 * r
+            if math.hypot(u - cx, v - cy) > r + 0.25:
+                continue
+            xx, yy = int(math.floor(u)), int(math.floor(v))
+            if not (0 <= xx < template.w and 0 <= yy < template.h) or not alpha_at(template, xx, yy):
+                continue
+            o = (yy * template.w + xx) * 4
+            red, green, blue = template.data[o:o + 3]
+            brass = (xx + 0.5 - cx) + (yy + 0.5 - cy) > 0 and radius_of(fam, xx, yy) >= r * 0.92 and red - blue >= 25 and red >= green and button_kit.lab(red, green, blue)[0] >= 18
+            out.data[(py * size[0] + px) * 4:(py * size[0] + px) * 4 + 4] = bytes((*(GAP_COLOUR if brass else (red, green, blue)), 255))  # a cell of the crescent's inner edge is the dome's dark rim here
+    return out
+
+
 def cmd_refs(args: argparse.Namespace) -> int:
     local = args.local_root
     frames = args.frames or local / "census" / "frames"
-    need_magick()
     refs = local / "refs"
     refs.mkdir(parents=True, exist_ok=True)
-    brass = local / "material-sheet" / "cutouts" / "brass-edge.png"
-    if not brass.is_file():
-        raise DiscError(f"missing {brass}")
     for fam in families_of(args.family):
-        with tempfile.TemporaryDirectory() as tmp:
-            raw = Path(tmp) / "template.png"
-            pngio.write(raw, vote_template(fam, plate_frames(frames, fam)))
-            subprocess.run(["magick", str(raw), "-filter", "point", "-resize", f"{fam.refs[0]}x{fam.refs[1]}!", str(refs / f"{fam.prompt}-original.png")], check=True)
-        shutil.copyfile(brass, refs / f"{fam.prompt}-sheet-1-brass-edge.png")
+        pngio.write(refs / f"{fam.prompt}-original.png", dome_reference(fam, vote_template(fam, plate_frames(frames, fam)), fam.refs))
         for path in sorted(refs.glob(f"{fam.prompt}-*.png")):
             print(f"{path.name}  {prompt_library.png_size(path)}  {button_kit.sha256_file(path)[:12]}")
     print("DISC KIT refs PASS: build the inbox with prompt_library.py inbox B-BUTTONS")
     return 0
 
 
-def stretched_path(local: Path, fam: Family) -> Path:
-    return local / "work" / "B-BUTTONS" / f"{fam.prompt}-master-aspect.png"
+def placed_path(local: Path, fam: Family) -> Path:
+    return local / "work" / "B-BUTTONS" / f"{fam.prompt}-placed.png"
 
 
-def cmd_stretch(args: argparse.Namespace) -> int:
-    """The generator draws a square canvas (it refuses an exact 23:22 one) from the original stretched to a square; the cells of the original and the master's pixels map one to one whatever the canvas, so the square is stretched
-    to the master's aspect by one resize, and the result is the `--source` of `fit.py fit plate.<name>` (with the generator's record, extended by the step that made the file). A family whose master is square is left alone."""
+def cmd_place(args: argparse.Namespace) -> int:
+    """The generator draws the dome as a circle that fills a square canvas; the original's dome stands in its frame with the crescent's room beside it. The dome is resized into the disc's box (the dome's middle and radius, in the master's aspect) on a transparent
+    canvas of the master's aspect, the result is the `--source` of `fit.py fit plate.<name>` (with the generator's record, extended by the step that made the file)."""
     local = args.local_root
     need_magick()
-    done = 0
     for fam in families_of(args.family):
-        if fam.master[0] == fam.master[1]:
-            print(f"{fam.key}: the master is square, nothing to stretch")
-            continue
         source = args.source or local / "outbox" / "B-BUTTONS" / f"{fam.prompt}.png"
-        out = args.out or stretched_path(local, fam)
+        out = args.out or placed_path(local, fam)
         generator = source.with_name(source.stem + ".provenance.json")
         if not generator.is_file():
             raise DiscError(f"no generator record {generator} (SWI-GEN-6)")
@@ -367,31 +514,39 @@ def cmd_stretch(args: argparse.Namespace) -> int:
         if record.get("image_sha256") != button_kit.sha256_file(source):
             raise DiscError(f"{source.name} differs from the image its record {generator.name} describes")
         width, height = prompt_library.png_size(source)
-        target = (width, int(round(width * fam.master[1] / fam.master[0])))
+        canvas = (width, int(round(width * fam.master[1] / fam.master[0])))
+        cx, cy = fam.centre
+        box_w, box_h = 2 * fam.radius * canvas[0] / fam.units[0], 2 * fam.radius * canvas[1] / fam.units[1]
+        left, top = (cx - fam.radius) * canvas[0] / fam.units[0], (cy - fam.radius) * canvas[1] / fam.units[1]
         out.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["magick", str(source), "-filter", "Lanczos", "-resize", f"{target[0]}x{target[1]}!", f"PNG32:{out}"], check=True)
+        subprocess.run(["magick", "-size", f"{canvas[0]}x{canvas[1]}", "xc:none", "(", str(source), "-filter", "Lanczos", "-resize", f"{int(round(box_w))}x{int(round(box_h))}!", ")",
+                        "-geometry", f"{int(round(left)):+d}{int(round(top)):+d}", "-composite", f"PNG32:{out}"], check=True)
         derived = out.with_name(out.stem + ".provenance.json")
-        record["derived_from"] = {"image": record.get("image"), "image_sha256": record["image_sha256"], "step": f"disc_kit.py stretch ({width} x {height} -> {target[0]} x {target[1]}, the master's {fam.master[0]}:{fam.master[1]} aspect)"}
+        record["derived_from"] = {"image": record.get("image"), "image_sha256": record["image_sha256"], "pixel_size": record.get("pixel_size"),
+                                  "step": f"disc_kit.py place ({width} x {height} dome -> {int(round(box_w))} x {int(round(box_h))} at {int(round(left)):+d}{int(round(top)):+d} on a {canvas[0]} x {canvas[1]} canvas, the master's {fam.master[0]}:{fam.master[1]} aspect)"}
         record["image"], record["image_sha256"] = str(out.relative_to(local)) if out.is_relative_to(local) else out.name, button_kit.sha256_file(out)
-        record["derived_from"]["pixel_size"] = record.get("pixel_size")
-        record["pixel_size"] = list(target)  # the size of the image the record hashes
+        record["pixel_size"] = list(canvas)  # the size of the image the record hashes
         derived.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-        print(f"{out.name}  {target[0]} x {target[1]}  {button_kit.sha256_file(out)[:12]}  (record {derived.name})")
-        done += 1
-    print(f"DISC KIT stretch PASS ({done} written)")
+        print(f"{out.name}  {canvas[0]} x {canvas[1]}  {button_kit.sha256_file(out)[:12]}  (record {derived.name})")
+    print("DISC KIT place PASS")
     return 0
 
 
 def cmd_gloss(args: argparse.Namespace) -> int:
-    """The plates, fitted from the generator's output, get the original's gloss arc laid over them: reads the fitted masters (`fit.py ... --masters DIR`, default `work/B-BUTTONS/fitted`), writes the final plate masters
+    """The domes, fitted from the generator's output, get the original's gloss arc and the brass crescent laid over them: reads the fitted masters (`fit.py ... --masters DIR`, default `work/B-BUTTONS/fitted`), writes the final plate masters
     and records the step in each plate's fit record (`gloss`, the fitted master's hash, the halo gate's relaxed limits)."""
     local = args.local_root
     frames = args.frames or local / "census" / "frames"
     fitted = args.fitted_dir or local / "work" / "B-BUTTONS" / "fitted"
     out = args.out or local / "masters"
+    ring_path = args.ring or local / "masters" / f"{RING_MASTER}.png"
+    if not ring_path.is_file():
+        raise DiscError(f"no ring master {ring_path} (the strip's brass ring, kit hardware #2481)")
+    ring = pngio.read(ring_path)
     plan = []
     for fam in families_of(args.family):  # every source is checked before anything is written
         layer = gloss_layer_of(frames, fam)
+        crescent = crescent_layer(fam, vote_template(fam, plate_frames(frames, fam)), ring)
         for m in fam.members:
             source = fitted / f"plate.{m.name}.png"
             if not source.is_file():
@@ -401,14 +556,14 @@ def cmd_gloss(args: argparse.Namespace) -> int:
                 raise DiscError(f"{source}: {plate.w} x {plate.h}, the plate master is {fam.master[0]} x {fam.master[1]}")
             if args.out is None and not (local / "provenance" / "fit" / f"plate.{m.name}.json").is_file():
                 raise DiscError(f"no fit record provenance/fit/plate.{m.name}.json: the glossed master would have no provenance (fit it with fit.py first)")
-            plan.append((fam, m, source, plate, layer))
-    for fam, m, source, plate, layer in plan:
+            plan.append((fam, m, source, plate, layer, crescent))
+    for fam, m, source, plate, layer, crescent in plan:
         shaped = Image(layer.w, layer.h, bytearray(layer.data))
-        for i in range(3, len(shaped.data), 4):  # the arc never leaves the plate's silhouette
+        for i in range(3, len(shaped.data), 4):  # the arc never leaves the dome's silhouette
             shaped.data[i] = shaped.data[i] * plate.data[i] // 255
-        final = button_kit.composite(plate, shaped)
+        final = button_kit.composite(button_kit.composite(plate, shaped), crescent)
         covered = sum(1 for i in range(3, len(shaped.data), 4) if shaped.data[i] > 0) / (plate.w * plate.h)
-        print(f"plate.{m.name:20s} gloss covers {covered * 100:4.1f} % of the canvas")
+        print(f"plate.{m.name:20s} gloss covers {covered * 100:4.1f} % of the canvas, crescent {sum(1 for i in range(3, len(crescent.data), 4) if crescent.data[i] > 0) / (plate.w * plate.h) * 100:4.1f} %")
         if args.dry_run:
             continue
         out.mkdir(parents=True, exist_ok=True)
@@ -422,6 +577,8 @@ def cmd_gloss(args: argparse.Namespace) -> int:
             record["gloss"] = {"rule": "disc_kit gloss", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "fitted_master_sha256": button_kit.sha256_file(source),
                                "min_lighter_de": round_kit.GLOSS_MIN_LIGHTER, "bin_degrees": round_kit.GLOSS_BIN, "sigma_cells": list(round_kit.GLOSS_SIGMA),
                                "sources": [f"{x.folder}/f{k}" for x in fam.members for k in (0, 2)]}
+            record["crescent"] = {"rule": "disc_kit crescent", "tool_version": TOOL_VERSION, "ring_master": ring_path.name, "ring_master_sha256": button_kit.sha256_file(ring_path), "bin_degrees": CRESCENT_BIN, "taper_degrees": CRESCENT_TAPER,
+                                  "gap_cells": GAP_CELLS, "gap_colour": list(GAP_COLOUR), "gap_alpha": GAP_ALPHA}
             record["halo_gate"] = {"relaxed": True, "issue": "#3073", "limits": record.get("limits"), "note": "the gate fails the plate's real rim shading by design; fitted through a wrapper, the repository's limits are unchanged"}
             record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print("DISC KIT gloss " + ("DRY-RUN " if args.dry_run else "") + "PASS")
@@ -537,18 +694,19 @@ def self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("refs", "stretch", "gloss", "build", "sheet"):
+    for name in ("refs", "place", "gloss", "build", "sheet"):
         s = sub.add_parser(name)
         s.add_argument("--family")
-        if name == "stretch":
+        if name == "place":
             s.add_argument("--source", type=Path)
             s.add_argument("--out", type=Path)
         s.add_argument("--frames", type=Path)
         s.add_argument("--local-root", type=Path, default=None)
-        if name not in ("refs", "gloss", "stretch"):
+        if name not in ("refs", "gloss", "place"):
             s.add_argument("--plate-dir", type=Path)
         if name == "gloss":
             s.add_argument("--fitted-dir", type=Path)
+            s.add_argument("--ring", type=Path)
             s.add_argument("--out", type=Path)
             s.add_argument("--dry-run", action="store_true")
         if name == "build":
@@ -565,7 +723,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "self-test":
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
-        return {"refs": cmd_refs, "stretch": cmd_stretch, "gloss": cmd_gloss, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
+        return {"refs": cmd_refs, "place": cmd_place, "gloss": cmd_gloss, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
     except (DiscError, button_kit.ButtonError, pngio.PngError, OSError, subprocess.CalledProcessError) as error:
         print(f"DISC KIT FAIL: {error}")
         return 2
