@@ -109,8 +109,8 @@ def fixture_part(fixture: fixtures.Fixture) -> dict:
     """ARC-UI-3098: a required detail the old window arts painted into themselves, a part of its own at the size of its place in the original (`fixtures.py` draws it by rule)."""
     batch = FIXTURE_BATCH.get(fixture.windows[0], "BD-A")
     kind = "grid" if fixture.ident.startswith("grid.") else "fixture"
-    part = new_part(fixture.ident, kind, "zone" if kind == "grid" else "window", list(fixture.windows), batch, batch,
-                    f"{fixture.note}; no original art, drawn by fixtures.py (ARC-UI-3098)")
+    how = "cut from the player's own HD frame by label_parts.py (ARC-UI-3299)" if fixture.cut else "no original art, drawn by fixtures.py (ARC-UI-3098)"
+    part = new_part(fixture.ident, kind, "zone" if kind == "grid" else "window", list(fixture.windows), batch, batch, f"{fixture.note}; {how}")
     part["size"], part["size_basis"] = list(fixture.master), "placed"
     return part
 

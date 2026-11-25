@@ -89,7 +89,7 @@ public partial class TerrainViewerApp
             else
             {
                 using var image = Image.CreateEmpty(baked, bakedHeight, false, Image.Format.Rgba8);
-                if (id.StartsWith("glyph.", StringComparison.Ordinal))
+                if (id.StartsWith("glyph.", StringComparison.Ordinal) || id.StartsWith("fixture.sheet_stat_names_", StringComparison.Ordinal) || id == "fixture.sheet_dial_letters")  // ARC-UI-3299: a label part is lettering on nothing: transparent round a small mark
                 {
                     image.Fill(new Color(0, 0, 0, 0));
                     image.FillRect(new Rect2I(baked / 4, bakedHeight / 4, baked / 2, bakedHeight / 2), colour);
@@ -651,8 +651,13 @@ public partial class TerrainViewerApp
                 // ARC-UI-3165 (method A condition 1): the words and numbers art 22 had baked in are the sheet's own text over the kit's background (the eight stat names, the dial's E and G, the ruler's seven divisions), none with the art's own background.
                 if (name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } labelView)
                 {
-                    var expectedLabels = AreaKitStandIns.SheetLabels().Select(label => label.Text).ToArray();
-                    require(expectedLabels.Length == 17 && string.Join(" ", expectedLabels) == "ST IN CN WP DX PE BE CH E G 75 50 25 0 25 50 75", $"[{tag}] the baked-in text of art 22 the sheet owes is 8 stat names, E, G and 7 ruler divisions (got {string.Join(" ", expectedLabels)})");
+                    var allLabels = AreaKitStandIns.SheetLabels().Select(label => label.Text).ToArray();
+                    require(allLabels.Length == 17 && string.Join(" ", allLabels) == "ST IN CN WP DX PE BE CH E G 75 50 25 0 25 50 75", $"[{tag}] the baked-in text of art 22 the sheet owes is 8 stat names, E, G and 7 ruler divisions (got {string.Join(" ", allLabels)})");
+                    // ARC-UI-3299: a group whose kit part is in the set is drawn from the part and its text is not written (all parts with the real fixtures, none with the stand-ins); the ruler's divisions are always text.
+                    var partIds = AreaKitStandIns.SheetLabelPartPlaces.Select(place => place.Id).ToArray();
+                    var expectedParts = kit && fixtures ? partIds.Order().ToArray() : [];
+                    require(labelView.KitLabelPartsDrawnForSelfTest.SequenceEqual(expectedParts), $"[{tag}] the sheet laid {(expectedParts.Length > 0 ? "the kit's label parts" : "no kit label part")} over the background (got {string.Join(", ", labelView.KitLabelPartsDrawnForSelfTest)})");
+                    var expectedLabels = AreaKitStandIns.SheetLabels(expectedParts.ToHashSet()).Select(label => label.Text).ToArray();
                     require(kit ? labelView.KitLabelsDrawnForSelfTest.SequenceEqual(expectedLabels) : labelView.KitLabelsDrawnForSelfTest.Count == 0, $"[{tag}] the sheet {(kit ? "wrote its own stat names, dial letters and ruler divisions over the kit's background" : "wrote none of them over its own art")} (drew {string.Join(" ", labelView.KitLabelsDrawnForSelfTest)})");
                 }
                 // ARC-UI-3037: the sheet's three gauges stand in (a point of each, in window units): the health heart, the fatigue cross, the alignment dial's face and the ruler's parchment.
