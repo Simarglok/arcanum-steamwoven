@@ -18,14 +18,14 @@ public partial class TerrainViewerApp
     private AreaInventoryHost? _shopInventoryHost;
     private GameSessionOwner? _shopInventorySession;
 
-    // ARC-UI-1806: the script content the shop merchant's bet lines are read from (the generated dialog texts and its override dialog), opened at the first line and
+    // ARC-UI-1806: the script content the shop merchant's bet lines are read from (the generated dialog texts and its override dialog), opened at the first line (or at the first item-script run of the opening regeneration, ARC-SCRIPT-3242) and
     // owned by the shop (the game's conversation content is another, which the shop never releases); released when the shop's window ends.
     private AreaScriptContentLoad? _shopContent;
 
     private Arcanum.Data.Scripts.ScriptContent? ShopScriptContent()
     {
-        // Only while the shop's window is open: a line asked after its end opens nothing.
-        if (!_barterInShop || (_launchArguments ?? _arguments)?.ModulePath is not { } module) return null;
+        // Only while the shop's window is open (or the shop is opening, whose regeneration may run an item script, ARC-SCRIPT-3242): a line asked after its end opens nothing.
+        if (!_barterInShop && !_shopOpening || (_launchArguments ?? _arguments)?.ModulePath is not { } module) return null;
         if (_shopContent is null)
         {
             _shopContent = AreaContentRoot.OpenScripts(module);
@@ -33,6 +33,9 @@ public partial class TerrainViewerApp
         }
         return _shopContent.Content;
     }
+
+    // ARC-SCRIPT-3242: set while OpenShopSession runs, so the regeneration's item scripts may open the shop's script content before the window shows.
+    private bool _shopOpening;
 
     private void ReleaseShopContent() { _shopContent?.Content?.Dispose(); _shopContent = null; }
 
@@ -122,12 +125,20 @@ public partial class TerrainViewerApp
         // created wares out by their inventory art (0x461780) and not as 1 x 1 cells drawn over each other; the shop's host rows name their art.
         (_shopInventoryHost, _shopInventorySession) = (names, owner);
         owner.AttachItemArtSizes((item, kind) => InventoryItemArtSize(owner, item, kind));
-        var shop = AreaShopSession.Open(owner, map, data,
-            (item, kind) => map.Inventory.TryGetRow(item, out _) ? names.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog),
-            AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why, hero.Effects, ShopScriptContent,
-            // ARC-SCRIPT-2811 (NM3): the bet lines' @npcname@ is the merchant's recognized description, the window's name its not-yet-met one.
-            AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog));
-        if (shop is null) { owner.Dispose(); (_shopInventoryHost, _shopInventorySession) = (null, null); return null; }
+        // ARC-SCRIPT-3242: a created ware reads its prototype's script array (the get and insert-item points the regeneration runs), as the session does wherever the viewer builds one (ARC-DEV-099).
+        owner.AttachItemScripts(prototype => PrototypeItems()?.Item(prototype)?.Scripts);
+        AreaShopSession? shop;
+        _shopOpening = true;
+        try
+        {
+            shop = AreaShopSession.Open(owner, map, data,
+                (item, kind) => map.Inventory.TryGetRow(item, out _) ? names.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog),
+                AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why, hero.Effects, ShopScriptContent,
+                // ARC-SCRIPT-2811 (NM3): the bet lines' @npcname@ is the merchant's recognized description, the window's name its not-yet-met one.
+                AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog));
+        }
+        finally { _shopOpening = false; }
+        if (shop is null) { owner.Dispose(); ReleaseShopContent(); (_shopInventoryHost, _shopInventorySession) = (null, null); return null; }
         return shop;
     }
 

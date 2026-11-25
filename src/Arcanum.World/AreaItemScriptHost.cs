@@ -21,8 +21,11 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
 {
     private readonly GameSessionOwner _session;
     private readonly IReadOnlyCollection<AreaInventoryMap> _maps;
-    private readonly ScriptContent? _content;
+    private readonly ScriptContent? _contentGiven;
+    private readonly Func<ScriptContent?>? _contentSource;
     private readonly Func<int, EffectRule?>? _effectRules;
+    // The game's scripts: the given content, else what the source answers when asked (a run asks; a host that never runs a script opens nothing).
+    private ScriptContent? Content => _contentGiven ?? _contentSource?.Invoke();
     private readonly Func<AreaUseScriptHost?>? _shown;
     private const int ObjectFlagsSlot = 18;
 
@@ -38,9 +41,22 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         _shown = shownScripts;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _maps = maps ?? throw new ArgumentNullException(nameof(maps));
-        _content = content;
+        _contentGiven = content;
         _effectRules = effectRules;
     }
+
+    private AreaItemScriptHost(GameSessionOwner session, IReadOnlyCollection<AreaInventoryMap> maps, Func<ScriptContent?> contentSource, Func<int, EffectRule?>? effectRules)
+        : this(session, maps, (ScriptContent?)null, effectRules)
+    {
+        _contentSource = contentSource;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-3242: a host whose script content is asked of <paramref name="contentSource"/> when a script or a line is read, not when the host is made, for a caller that opens the content on first use (the opening shop's regeneration: most shops
+    /// create no scripted item, and then no content is opened). A source that answers null is a host without content (every script missing, no line printed). The content is the source's, borrowed.
+    /// </summary>
+    public static AreaItemScriptHost Lazy(GameSessionOwner session, IReadOnlyCollection<AreaInventoryMap> maps, Func<ScriptContent?> contentSource, Func<int, EffectRule?>? effectRules = null) =>
+        new(session, maps, contentSource ?? throw new ArgumentNullException(nameof(contentSource)), effectRules);
 
     /// <summary>ARC-DEV-366: the rule of an effect number from the effect tables (the tech books' effects 168 to 175, ledger XA8), or null without
     /// tables, for a number the tables do not hold or one the session refuses; the session then refuses the move.</summary>
@@ -129,9 +145,9 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);
 
     /// <summary>ARC-MAGIC-042: whether the host has the game's scripts (without them every script is missing).</summary>
-    public bool HasContent => _content is not null;
+    public bool HasContent => Content is not null;
 
-    public ScrScriptLookup Script(int number) => AreaScriptHost.Lookup(_content, number);
+    public ScrScriptLookup Script(int number) => AreaScriptHost.Lookup(Content, number);
 
     public bool GlobalFlag(int index)
     {
@@ -176,8 +192,8 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// </summary>
     private SessionPrintedLine ReadLine(int script, int line, bool npcTriggerer, ScrObjectRef? triggerer, ScrObjectRef? attachee)
     {
-        if (_content is null) return new(SessionPrintedLineStatus.NoDialog, string.Empty, "no script content");
-        var read = _content.Dialog(script, _session.Rules.Data);
+        if (Content is not { } content) return new(SessionPrintedLineStatus.NoDialog, string.Empty, "no script content");
+        var read = content.Dialog(script, _session.Rules.Data);
         switch (read.Status)
         {
             case ScriptContentStatus.Read: break;
