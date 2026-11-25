@@ -28,6 +28,12 @@ public sealed record SessionWaitOrder(string Entity, PartyWaitFacts? Timer);
 public sealed record SessionMoveList(IReadOnlyList<SessionWaitOrder> Waiting, IReadOnlyList<string> Travelling)
 {
     public static SessionMoveList Empty { get; } = new([], []);
+
+    /// <summary>
+    /// ARC-WORLD-2969 (ledger TQ30): the direct followers that carry the WAIT bit while they follow (<see cref="SessionCompanion.WaitFlag"/>): the walk skips them, so each stays on the map the hero leaves, with its record unchanged and its place in the
+    /// hero's follower array (the original's array keeps the member, and it is counted; Steamwoven keeps it by entity, so nothing dangles).
+    /// </summary>
+    public IReadOnlyList<string> Left { get; init; } = [];
 }
 
 public sealed partial class GameSessionOwner
@@ -41,8 +47,8 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(facts);
-        var list = TransferMoveListRules.Build(_party.Order, facts.NoFatigue ?? (_ => false), facts.FollowersOf, facts.NoWaitOrders);
-        return new(list.Waiting.Select(entity => new SessionWaitOrder(entity, facts.WaitFacts?.Invoke(entity))).ToArray(), list.Travelling);
+        var list = TransferMoveListRules.Build(_party.Order, facts.NoFatigue ?? (_ => false), facts.FollowersOf, facts.NoWaitOrders, entity => _party.Get(entity).WaitFlag);
+        return new(list.Waiting.Select(entity => new SessionWaitOrder(entity, facts.WaitFacts?.Invoke(entity))).ToArray(), list.Travelling) { Left = list.Left };
     }
 
     // The staged result of a move list against the state (checked before any write): the wait orders with their timer delays and the
@@ -59,7 +65,7 @@ public sealed partial class GameSessionOwner
     private GameSessionFailure PlanTransfer(SessionMoveList list, out TransferPlan? plan)
     {
         plan = null;
-        if (list.Waiting is null || list.Travelling is null) return GameSessionFailure.InvalidCompanion;
+        if (list.Waiting is null || list.Travelling is null || list.Left is null) return GameSessionFailure.InvalidCompanion;
         var order = _party.Order;
         var waiting = new HashSet<string>(StringComparer.Ordinal);
         foreach (var wait in list.Waiting)
@@ -71,8 +77,13 @@ public sealed partial class GameSessionOwner
         var travelling = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in list.Travelling)
             if (!SessionEventKinds.AiTickNpc(entity) || waiting.Contains(entity) || !travelling.Add(entity)) return GameSessionFailure.InvalidCompanion;
-        // Every direct follower that is not told to wait travels.
-        if (order.Any(entity => !waiting.Contains(entity) && !travelling.Contains(entity))) return GameSessionFailure.InvalidCompanion;
+        // ARC-WORLD-2969: a member left behind carries the WAIT bit while it follows, is neither ordered to wait nor travelling, and nothing is written for it.
+        var left = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entity in list.Left)
+            if (!order.Contains(entity) || !_party.Get(entity).WaitFlag || waiting.Contains(entity) || travelling.Contains(entity) || !left.Add(entity)) return GameSessionFailure.InvalidCompanion;
+        // Every direct follower that is not told to wait or left behind travels; one with the WAIT bit is left behind.
+        if (order.Any(entity => !waiting.Contains(entity) && !travelling.Contains(entity) && !left.Contains(entity))) return GameSessionFailure.InvalidCompanion;
+        if (order.Any(entity => _party.Get(entity).WaitFlag && !left.Contains(entity))) return GameSessionFailure.InvalidCompanion;
         var waits = new List<(string, long?, int)>();
         foreach (var wait in list.Waiting)
         {

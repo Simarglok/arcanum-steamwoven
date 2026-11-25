@@ -50,6 +50,56 @@ public sealed class TransferParityStateTests
         Assert.AreEqual(before, owner.Version);
     }
 
+    // ARC-WORLD-2969 (ledger TQ30): a follower that carries the WAIT bit while it follows is skipped by the walk 0x4D3760 and stays on the closing map, in the hero's array.
+    private static GameSessionOwner PartyWithFlagged(string flagged, params string[] others)
+    {
+        var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, flagged).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, flagged).Disposition);
+        foreach (var entity in others) Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, entity).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(flagged).WaitFlag);
+        return owner;
+    }
+
+    [TestMethod]
+    public void A_following_follower_with_the_wait_bit_is_left_behind_and_stays_in_the_array()
+    {
+        using var owner = PartyWithFlagged(Sogg, Virgil);
+        var before = owner.QueryCompanion(Sogg);
+        var list = owner.QueryTransferMoveList(new());
+        CollectionAssert.AreEqual(new[] { Sogg }, list.Left.ToArray());
+        CollectionAssert.AreEqual(new[] { Virgil }, list.Travelling.ToArray());
+        Assert.AreEqual(0, list.Waiting.Count);
+        var result = owner.ApplyChanges(owner.Version, Inside, [], list);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.AreEqual(before, owner.QueryCompanion(Sogg), "nothing is written for it: leader, standing and the bit stay");
+        CollectionAssert.AreEqual(new[] { Sogg, Virgil }, owner.QueryParty().Followers.Select(f => f.Entity).ToArray(), "still in the array and counted");
+    }
+
+    [TestMethod]
+    public void An_unconscious_follower_that_already_has_the_wait_bit_is_left_behind_not_ordered_to_wait()
+    {
+        // 0x4AA7A0 returns at once when the bit is set, so the wait order changes nothing for it and the walk skips it.
+        using var owner = PartyWithFlagged(Sogg);
+        var list = owner.QueryTransferMoveList(new() { NoFatigue = _ => true });
+        Assert.AreEqual(0, list.Waiting.Count);
+        CollectionAssert.AreEqual(new[] { Sogg }, list.Left.ToArray());
+        Assert.AreEqual(0, list.Travelling.Count);
+        Assert.AreEqual(CompanionStanding.Following, owner.QueryCompanion(Sogg).Standing);
+    }
+
+    [TestMethod]
+    public void A_move_list_that_carries_or_waits_a_member_with_the_wait_bit_is_refused()
+    {
+        using var owner = PartyWithFlagged(Sogg, Virgil);
+        var revision = owner.Version.Revision;
+        var carried = new SessionMoveList([], [Sogg, Virgil]);
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], carried).Failure);
+        var left = new SessionMoveList([], [Virgil]) { Left = [Sogg, Virgil] };
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], left).Failure, "a member without the bit is not left behind");
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
     [TestMethod]
     public void A_move_to_another_map_clears_FM6_links_of_the_travellers_and_keeps_the_danger_word()
     {

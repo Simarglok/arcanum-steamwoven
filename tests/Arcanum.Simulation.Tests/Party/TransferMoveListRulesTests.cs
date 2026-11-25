@@ -75,4 +75,30 @@ public sealed class TransferMoveListRulesTests
         var list = TransferMoveListRules.Build([], _ => throw new AssertFailedException("no follower to ask"), null, noWaitOrders: false);
         Assert.AreEqual(0, list.Waiting.Count + list.Travelling.Count);
     }
+
+    // ARC-WORLD-2969 (ledger TQ30): the walk skips a member with the WAIT bit before it descends; the wait order skips it too.
+    [TestMethod]
+    public void A_direct_follower_with_the_wait_bit_is_left_with_its_own_followers_and_is_not_ordered_to_wait()
+    {
+        var tree = new Dictionary<string, string[]> { ["a"] = ["a1"], ["b"] = ["b1"] };
+        var list = TransferMoveListRules.Build(["a", "b", "c"], npc => npc is "a" or "c", npc => Below(tree, npc), noWaitOrders: false, waitBit: npc => npc == "a");
+        CollectionAssert.AreEqual(new[] { "a" }, list.Left.ToArray());
+        CollectionAssert.AreEqual(new[] { "c" }, list.Waiting.ToArray(), "a is not ordered to wait: the order returns at once for a set bit");
+        CollectionAssert.AreEqual(new[] { "b1", "b" }, list.Travelling.ToArray(), "a1 below the skipped a is not listed");
+    }
+
+    [TestMethod]
+    public void A_nested_member_with_the_wait_bit_is_not_walked_and_not_listed_as_left()
+    {
+        var tree = new Dictionary<string, string[]> { ["a"] = ["a1", "a2"], ["a1"] = ["a1x"] };
+        var list = TransferMoveListRules.Build(["a"], _ => false, npc => Below(tree, npc), noWaitOrders: false, waitBit: npc => npc == "a1");
+        CollectionAssert.AreEqual(new[] { "a2", "a" }, list.Travelling.ToArray());
+        Assert.AreEqual(0, list.Left.Count);
+    }
+
+    [TestMethod]
+    public void No_wait_bit_function_leaves_nobody()
+    {
+        Assert.AreEqual(0, TransferMoveListRules.Build(["a"], _ => false, null, noWaitOrders: false).Left.Count);
+    }
 }

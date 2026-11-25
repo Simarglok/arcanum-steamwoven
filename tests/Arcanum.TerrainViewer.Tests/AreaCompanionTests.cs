@@ -511,6 +511,33 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(0, along.MoveList.Waiting.Count);
     }
 
+    // ARC-WORLD-2969 (ledger TQ30): a follower that carries the WAIT bit while it follows is left behind by the change of place, standing where it is, and keeps its place in the hero's array.
+    [TestMethod]
+    public void AFollowingFollowerWithTheWaitBitStaysOnTheMapTheHeroLeaves()
+    {
+        var f = Load();
+        var templates = Templates(f);
+        SessionMapId home = new(1), away = new(2);
+        var entity = templates[0].Entity;
+        var arrival = AreaChart.Exterior.ToWorld(new CellCoord(12, 3));
+        var world = new CellCoord((int)arrival.X, (int)arrival.Y);
+
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, entity).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        var group = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0));
+        var carry = group.Carry(session, away, world, new SessionTransferFacts());
+        Assert.AreEqual(0, carry.Carried.Count, "the walk skips it");
+        CollectionAssert.AreEqual(new[] { entity }, carry.MoveList.Left.ToArray());
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            session.ApplyChanges(session.Version, new ActorPlacement(away, world, NeighborDirection.XPlus), carry.Changes, carry.MoveList).Disposition);
+        Assert.AreEqual(home, AreaCompanionPlacement.Where(session, home, entity).Map, "it never left its map");
+        Assert.AreEqual(1, session.QueryParty().Followers.Count, "still in the array, counted");
+        Assert.AreEqual((CompanionStanding.Following, true), (session.QueryCompanion(entity).Standing, session.QueryCompanion(entity).WaitFlag));
+        Assert.AreEqual(0, AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, away, SimulationTime.At(0)).Companions.Count, "no body on the destination");
+        Assert.AreEqual(1, AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0)).Companions.Count, "its body stands on its own map");
+    }
+
     [TestMethod]
     public void AnUnreadableAwayMapOrAMissingAwayPlacementIsReportedNotGuessed()
     {
