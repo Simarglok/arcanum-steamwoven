@@ -1,9 +1,12 @@
+using System.Buffers.Binary;
 using System.Text;
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Messages;
+using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Character;
@@ -238,5 +241,89 @@ public sealed class AreaShopMerchantTests
             + $"wares {view.Wares.Count}, merchant gold {view.MerchantGold}, hero lines {view.Hero.Count}");
         Assert.AreEqual(SessionRestockOutcome.Regenerated, shop.ContainerRegeneration?.Regeneration?.Outcome);
         Assert.IsTrue(view.Wares.Count > 0, "the chest's set made wares");
+    }
+    // ARC-SCRIPT-3242 (exe 0x463E20 → 0x4617F0 → 0x461810 / 0x466640): the opening shop's regeneration runs the created ware's insert-item script (21) through the shop map's item script host: the script prints a line and runs the default.
+    private const int InsertScript = 600;
+
+    private static byte[] PrintThenRunDefault()
+    {
+        var bytes = new byte[64 + 2 * 132];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), 2);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), 2);
+        var print = bytes.AsSpan(64 + 44, 44);
+        BinaryPrimitives.WriteInt32LittleEndian(print, ScrCatalogue.Action.PrintLine);
+        print[4] = 3; print[5] = 3;
+        BinaryPrimitives.WriteInt32LittleEndian(print[12..], 1); BinaryPrimitives.WriteInt32LittleEndian(print[16..], 6);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(64 + 132 + 44), ScrCatalogue.Action.ReturnRunDefault);
+        return bytes;
+    }
+
+    private static T WithScripts<T>(Func<ScriptContent, T> test)
+    {
+        var root = Directory.CreateTempSubdirectory("arc-script-3242-");
+        try
+        {
+            void Write(string relative, byte[] bytes)
+            {
+                var path = Path.Combine(root.FullName, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, bytes);
+            }
+            Write("tig.dat", AreaOwnerFixture.Dat());
+            Write("modules/Syn.dat", AreaOwnerFixture.Dat());
+            Write("scr/00600ware.scr", PrintThenRunDefault());
+            Write("dlg/00600ware.dlg", Encoding.Latin1.GetBytes("{1}{The ware hums.}{The ware hums.}{}{}{}{}"));
+            using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
+            return test(content);
+        }
+        finally { root.Delete(true); }
+    }
+
+    private static IReadOnlyList<SessionPrototypeScript>? ScriptedAxe(int prototype) => prototype == Axe ? [new(SessionScriptPoint.InsertItem, InsertScript, 0, 0)] : null;
+
+    [TestMethod]
+    public void The_shop_open_regeneration_runs_the_created_wares_insert_script_through_the_shop_maps_host()
+    {
+        WithScripts(content =>
+        {
+            var map = Shop();
+            var owner = Session(map);
+            owner.AttachItemScripts(ScriptedAxe);
+            var asked = 0;
+            using var shop = AreaShopSession.Open(owner, map, Data(), (entity, _) => entity, "Smith", out var refused, scriptContent: () => { asked++; return content; })
+                ?? throw new AssertFailedException(refused ?? "refused");
+            var chest = shop.ContainerRegeneration!.Regeneration!;
+            Assert.AreEqual((25, 0, 0, 1), (chest.Coins, chest.Refused, chest.Skipped, chest.Created.Count), "the axe is created, not skipped for want of a host");
+            CollectionAssert.AreEqual(new[] { "The ware hums." }, chest.Messages.Select(message => message.Text).ToArray(), "its insert-item script printed its line");
+            Assert.IsTrue(asked > 0, "the script content was asked for the run");
+            Assert.IsNotNull(shop.Barter.View().Wares.SingleOrDefault(line => line.Kind.Prototype == Axe), "the ware is in the merchant's window");
+            owner.Dispose();
+            return 0;
+        });
+    }
+
+    [TestMethod]
+    public void The_shop_open_regeneration_without_a_script_source_skips_a_ware_that_carries_scripts_and_a_plain_shop_asks_for_none()
+    {
+        WithScripts(content =>
+        {
+            var map = Shop();
+            var owner = Session(map);
+            owner.AttachItemScripts(ScriptedAxe);
+            using (var bare = AreaShopSession.Open(owner, map, Data(), (entity, _) => entity, "Smith", out var refused) ?? throw new AssertFailedException(refused ?? "refused"))
+            {
+                var chest = bare.ContainerRegeneration!.Regeneration!;
+                Assert.AreEqual((25, 0, 1, 0), (chest.Coins, chest.Refused, chest.Skipped, chest.Created.Count), "no source: the scripted axe is skipped (ItemScriptUnsupported), the coins are made");
+            }
+            owner.Dispose();
+            // A shop whose wares carry no script never opens the content (the host asks when a script runs).
+            var plain = Session(map);
+            var asked = 0;
+            using var shop = AreaShopSession.Open(plain, map, Data(), (entity, _) => entity, "Smith", out var why, scriptContent: () => { asked++; return content; })
+                ?? throw new AssertFailedException(why ?? "refused");
+            Assert.AreEqual((1, 0), (shop.ContainerRegeneration!.Regeneration!.Created.Count, asked), "the unscripted axe is created and the content is not asked for");
+            plain.Dispose();
+            return 0;
+        });
     }
 }

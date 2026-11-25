@@ -183,7 +183,10 @@ public sealed class AreaShopSession : IDisposable
         if (forgot.Disposition == GameSessionDisposition.Rejected) { refused = $"the merchant did not forget the PC ({forgot.Failure})"; return null; }
         var inventory = new AreaInventoryHost([map.Inventory]);
         var restock = new AreaRestockHost(owner, inventory, data, NoScreen.Instance);
-        var world = new AreaEventWorld(() => null, () => null, restock: () => restock);
+        // ARC-SCRIPT-3242 (exe 0x463E20 → 0x4617F0 → 0x461810 / 0x466640): the regeneration of the merchant and its container runs the created items' get (4) and insert-item (21) scripts and the clear's remove-item scripts (28), with the holder as the triggerer. The shop
+        // map is the actor's map and the only map the host reads rows of, so its inventory map is the host's (the content is asked when a script runs; no shown map's use host exists before the game starts, see the limits in docs/world/inventory-runtime.md).
+        var itemScripts = scriptContent is null ? null : AreaItemScriptHost.Lazy(owner, [map.Inventory], scriptContent, effects);
+        var world = new AreaEventWorld(() => null, () => null, restock: () => restock, itemScripts: () => itemScripts);
         var merchantRegeneration = owner.RegenerateInventory(owner.Version, map.Merchant, world);
         if (merchantRegeneration.Disposition == GameSessionDisposition.Rejected) { refused = $"the merchant's inventory did not regenerate ({merchantRegeneration.Failure})"; return null; }
         var row = map.MerchantRow;
