@@ -170,6 +170,21 @@ public sealed partial class GameSessionOwner
         var newRecords = deleted.Count(entity => !_durability.Records.ContainsKey(entity));
         if (_durability.Count + newRecords > _limits.MaxDurabilityRecords) return RejectAssembly(GameSessionFailure.BudgetExceeded, plan);
         if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
+        // ARC-SCRIPT-2900 (exe read 0x56E720 → 0x4658E0, 0x43CCA0 → 0x466E00 → 0x467860): a component the assembly deletes (a non-ammunition item, or the last unit of a stack) is destroyed out of the hero's list, which runs its remove-item script (28) with the hero as the triggerer, in
+        // the components' order; one run set committed with the assembly. The host is the standing one (the assembly is given none): a deleted component with the script and no host refuses the assembly whole.
+        var removing = deleted.Where(entity => HeldItemPoints(entity).Contains(SessionScriptPoint.RemoveItem)).Select(entity => (entity, (IReadOnlyList<int>)[SessionScriptPoint.RemoveItem])).ToArray();
+        ItemScriptRuns? removalRuns = null;
+        var standing = false;
+        if (removing.Length > 0)
+        {
+            var host = ResolveItemScripts(null, out standing);
+            if (host is null) return RejectAssembly(GameSessionFailure.ItemScriptUnsupported, plan);
+            var removal = RunRemovalScripts(removing, null, host);
+            if (removal.Done is { } refusedRemoval) return RejectAssembly(refusedRemoval.Failure, plan);
+            removalRuns = removal.Runs;
+            if (_revision == long.MaxValue) return RejectAssembly(GameSessionFailure.RevisionExhausted, plan);
+        }
+        removalRuns?.Commit();
         foreach (var (entity, stack) in spent)
         {
             if (stack is { Units: > 1 } s) _inventory.Ammo[entity] = s with { Units = s.Units - 1 };
@@ -183,6 +198,7 @@ public sealed partial class GameSessionOwner
             if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
         Revise();
+        if (standing) DeliverStanding(removalRuns);
         return Assembled(plan, units, components, firstRefusal);
     }
 

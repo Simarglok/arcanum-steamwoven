@@ -228,7 +228,10 @@ public sealed partial class GameSessionOwner
         var points = worn?.ScriptPoints ?? facts.ScriptPoints;
         // ARC-COMBAT-1955: the removal's scripts (0x467860: wield off for a worn item, then remove-item; the stack path of the split runs none, QW5) and the throw script (point 6) run under the host. ARC-COMBAT-2182: the throw script of a split
         // stack runs for the stack the split makes (its entity is planned before the scripts, RunHeroThrowScripts). ARC-COMBAT-2183: a throw script that refuses gives the item back (0x4617F0), which runs its insert-item script after the throw script. ARC-SCRIPT-2855: a split stack (ammunition, gold) whose throw script refuses gives its units back by a merge, which runs the insert-item script (21) on the incoming stack before it is destroyed.
-        var removal = worn is not null && points.Contains(SessionScriptPoint.WieldOff) || !split && points.Contains(SessionScriptPoint.RemoveItem);
+        // ARC-SCRIPT-2900 (exe read 0x578EA0 → 0x464830/0x4658E0 → 0x43CCA0 → 0x466E00 → 0x467860): the lift of the WHOLE gold pile or ammunition stack destroys the source and makes the new object that is thrown, so the source's remove-item script (28) runs at the lift with the hero as the
+        // triggerer (the destroy script, point 2, first and not run: #2759); a part of a stack lowers its count and runs none.
+        var wholeStack = split && request.Count is { } thrownCount && (gold ? thrownCount == _inventory.Gold : _inventory.Ammo.TryGetValue(request.Item, out var held) && held.Units == thrownCount);
+        var removal = worn is not null && points.Contains(SessionScriptPoint.WieldOff) || (!split ? points.Contains(SessionScriptPoint.RemoveItem) : wholeStack && StackRemovesOnLift(request.Item, points));
         // A worn item's own record keeps only the wear events' points (21, 24, 25, 28), so the throw and insert-item points are read from the host's facts too.
         var throwScript = points.Contains(SessionScriptPoint.Throw) || facts.ScriptPoints.Contains(SessionScriptPoint.Throw);
         if ((removal || throwScript) && request.Scripts is null) return Refused(GameSessionFailure.ItemScriptUnsupported);

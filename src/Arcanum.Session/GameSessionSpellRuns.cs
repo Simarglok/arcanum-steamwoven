@@ -502,6 +502,14 @@ public sealed partial class GameSessionOwner
     /// </summary>
     public Func<ISessionItemScriptHost?>? HeroWearerScripts { get; set; }
 
+    /// <summary>
+    /// ARC-SCRIPT-2900 (exe read 0x467860, ledger IE3, TQ20): the host's standing item script host, for the item events a session call runs when its caller gave it no script host of its own: the remove-item script (28) of the gold pile or ammunition stack a spend or a move empties
+    /// (the shot, the cell payment, the assembly's component, a script's ammunition use, the hero's coins paid to an NPC) and the insert-item script (21) of a pile or stack a move takes from. A call that is given a host uses it; with none given and none set here, a scripted pile or stack
+    /// is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), never emptied with the script skipped. The runs' printed lines and eye candy of a call that used this host go to <see cref="ItemRunOutput"/> after the change is applied (not into the call's result, which its caller
+    /// never asked for them). Null for none; a host that throws counts as none.
+    /// </summary>
+    public Func<ISessionItemScriptHost?>? StandingItemScripts { get; set; }
+
     /// <summary>ARC-SCRIPT-2856: where the host takes the printed lines and the eye candy requests of the item scripts a drop's removal ran (<see cref="NpcWearerScripts"/>), after their changes are applied; the drop's results carry no such lines.</summary>
     public Action<IReadOnlyList<SessionScriptMessage>, IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy>>? ItemRunOutput { get; set; }
 
