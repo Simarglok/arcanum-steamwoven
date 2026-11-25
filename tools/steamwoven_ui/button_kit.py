@@ -207,18 +207,21 @@ def axis_weights(cells: int, pixels: int, sigma: float) -> list[tuple[int, list[
     return result
 
 
-def resample_plane(plane: list[float], cells: int, pixels: int, sigma: float) -> list[float]:
-    wts = axis_weights(cells, pixels, sigma)
-    tmp = [0.0] * (cells * pixels)  # rows of cells, columns of pixels
-    for y in range(cells):
-        row = plane[y * cells:(y + 1) * cells]
-        for x, (first, ws) in enumerate(wts):
-            tmp[y * pixels + x] = sum(w * row[first + k] for k, w in enumerate(ws))
-    out = [0.0] * (pixels * pixels)
-    for x in range(pixels):
-        column = [tmp[y * pixels + x] for y in range(cells)]
-        for y, (first, ws) in enumerate(wts):
-            out[y * pixels + x] = sum(w * column[first + k] for k, w in enumerate(ws))
+def resample_plane(plane: list[float], cells: int | tuple[int, int], pixels: int | tuple[int, int], sigma: float) -> list[float]:
+    """A plane of cells at the master size; `cells` and `pixels` are a side (a square) or a (width, height) pair (ARC-UI-3203: the frames of the dark-dome buttons are not square)."""
+    cw, ch = cells if isinstance(cells, tuple) else (cells, cells)
+    pw, ph = pixels if isinstance(pixels, tuple) else (pixels, pixels)
+    wx, wy = axis_weights(cw, pw, sigma), axis_weights(ch, ph, sigma)
+    tmp = [0.0] * (ch * pw)  # rows of cells, columns of pixels
+    for y in range(ch):
+        row = plane[y * cw:(y + 1) * cw]
+        for x, (first, ws) in enumerate(wx):
+            tmp[y * pw + x] = sum(w * row[first + k] for k, w in enumerate(ws))
+    out = [0.0] * (pw * ph)
+    for x in range(pw):
+        column = [tmp[y * pw + x] for y in range(ch)]
+        for y, (first, ws) in enumerate(wy):
+            out[y * pw + x] = sum(w * column[first + k] for k, w in enumerate(ws))
     return out
 
 
@@ -248,17 +251,18 @@ def render_layer(colours: list[tuple[int, int, int]], alphas: list[float], look:
     return out
 
 
-def outside_cells(core: list[bool], units: int = UNITS) -> list[bool]:
+def outside_cells(core: list[bool], units: int = UNITS, rows: int | None = None) -> list[bool]:
     """The cells a 4-connected walk from the frame's border reaches without crossing a core cell: what lies OUTSIDE the symbol (a closed outline keeps its inside out of the set)."""
-    out = [False] * (units * units)
-    stack = [i for i in range(units * units) if (i % units in (0, units - 1) or i // units in (0, units - 1)) and not core[i]]
+    rows = units if rows is None else rows
+    out = [False] * (units * rows)
+    stack = [i for i in range(units * rows) if (i % units in (0, units - 1) or i // units in (0, rows - 1)) and not core[i]]
     for i in stack:
         out[i] = True
     while stack:
         i = stack.pop()
         x, y = i % units, i // units
         for xx, yy in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-            if 0 <= xx < units and 0 <= yy < units and not out[yy * units + xx] and not core[yy * units + xx]:
+            if 0 <= xx < units and 0 <= yy < rows and not out[yy * units + xx] and not core[yy * units + xx]:
                 out[yy * units + xx] = True
                 stack.append(yy * units + xx)
     return out
@@ -277,7 +281,7 @@ def shade_share(pressed: tuple[int, int, int], base: tuple[int, int, int]) -> fl
     return None if share > 1.0 - SHADE_MIN_LOSS else max(0.0, share)
 
 
-def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixels: int = MASTER, halo: bool = False, owned_cell=None, shade: Image | bool = False, clip: Image | None = None, solid_cell=None, silhouette_mask: list[bool] | None = None) -> Image:
+def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixels: int | tuple[int, int] = MASTER, halo: bool = False, owned_cell=None, shade: Image | bool = False, clip: Image | None = None, solid_cell=None, silhouette_mask: list[bool] | None = None) -> Image:
     """The pilot's symbol rule (#3058, v4, `glyph_cells.py`) for a layer of `frame` over `base`: the SYMBOL is the cells that differ from the base by `SOLID_DE` or more. Their colours stay the original's flat
     cells (so every inner line, dot, fold and continent of the original survives as it is drawn); the OUTLINE is a smooth sharp curve: a small Gaussian of the symbol's mask and a one-pixel soft threshold
     (no stair of original pixels, no blur; a hole or a dot of one original pixel survives: a 1-cell hole blurs to 0.38 < 0.5). With `glow` the cells that differ a little (the glow of a lit symbol, the darkening of
@@ -285,16 +289,17 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
     With `halo` (the glyph layers of high contrast) the symbol is only the CORE (`CORE_DE` or more, plus whatever the core encloses) and the cells outside it within `HALO_REACH` cells that differ by more than `DEAD_DE` are a soft layer
     under it (alpha = the distance from the base over the core threshold, `CORE_SHARE` of the layer's 90th-percentile contrast but at most `CORE_DE`, the colour that lays the base's colour back to the frame's): the original's soft edge (the globe's shadow ring, the glow of a lit symbol) falls off outward with no plateau
     and no rim.
-    Round frames (ARC-UI-3202): the frame may be of any square size (`units` is its width); `owned_cell(x, y)` says which cells the layer may take (default: all but the outermost `RIM` rows and columns, unless
+    Round frames (ARC-UI-3202): the frame may be of any square size (`units` is its width; ARC-UI-3203: or any width and height); `owned_cell(x, y)` says which cells the layer may take (default: all but the outermost `RIM` rows and columns, unless
     `rim`); with `shade` the cells that are the base DARKENED (`shade_share`) and lie outside the footprint of the symbol (the cells where the frame `shade` differs from the base, e.g. the hover frame; with `shade=True` there is
     none) are not symbol: they are a soft black layer under the symbol, alpha = the share lost (a pressed ring darkens the plate, it does not repaint it in the original's flat colours); `solid_cell(x, y)` narrows the cells
     that may be SYMBOL (default: the owned ones: a ring that brightens stays a soft layer, never flat stair cells); `silhouette_mask` (ARC-UI-3202) is a per-cell mask of the symbol's SHAPE (read from the lit frames, where the checker is strong): a dull idle symbol whose edge cells fall under `SOLID_DE` takes its outline from it, in its own idle colours, and a dark speck outside it is dropped; `clip` (a picture of the output's size) multiplies the layer's alpha by its own, so a soft layer never leaves the plate's silhouette."""
-    units = frame.w
-    n = units * units
+    units, rows = frame.w, frame.h  # ARC-UI-3203: the frame may be any size; `pixels` is its master's side or (width, height)
+    pw, ph = pixels if isinstance(pixels, tuple) else (pixels, pixels)
+    n = units * rows
     p_cells, b_cells = cells_of(frame), cells_of(base)
     dist = [distance(p, b) for p, b in zip(p_cells, b_cells)]
     if owned_cell is None:
-        owned = [rim or (RIM <= i % units < units - RIM and RIM <= i // units < units - RIM) for i in range(n)]  # the outermost frame lines are the plate's, never the symbol's or its glow (unless `rim`)
+        owned = [rim or (RIM <= i % units < units - RIM and RIM <= i // units < rows - RIM) for i in range(n)]  # the outermost frame lines are the plate's, never the symbol's or its glow (unless `rim`)
     else:
         owned = [bool(owned_cell(i % units, i // units)) for i in range(n)]
     may_be_symbol = owned if solid_cell is None else [owned[i] and bool(solid_cell(i % units, i // units)) for i in range(n)]
@@ -309,13 +314,13 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
     if halo:
         core_de = max(SOLID_DE, min(CORE_DE, CORE_SHARE * contrast))
         core = [(d >= core_de or (d >= SOLID_DE and lab(*p_cells[i])[0] < lab(*b_cells[i])[0] - DARK_DL)) and owned[i] for i, d in enumerate(dist)]
-        outside = outside_cells(core, units)
+        outside = outside_cells(core, units, rows)
         solid = [core[i] or (not outside[i] and dist[i] >= SOLID_DE and owned[i]) for i in range(n)]
         for i in range(n):
             if solid[i] or not outside[i] or dist[i] <= DEAD_DE or not owned[i]:
                 continue
             x, y = i % units, i // units
-            if any(core[yy * units + xx] for yy in range(max(0, y - HALO_REACH), min(units, y + HALO_REACH + 1)) for xx in range(max(0, x - HALO_REACH), min(units, x + HALO_REACH + 1))):
+            if any(core[yy * units + xx] for yy in range(max(0, y - HALO_REACH), min(rows, y + HALO_REACH + 1)) for xx in range(max(0, x - HALO_REACH), min(units, x + HALO_REACH + 1))):
                 halo_cells.add(i)
     else:
         solid = [d >= SOLID_DE and may_be_symbol[i] and shares[i] is None for i, d in enumerate(dist)]
@@ -331,13 +336,13 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
             continue
         x, y = i % units, i // units
         for reach in (1, 2):
-            near = [p_cells[yy * units + xx] for yy in range(max(0, y - reach), min(units, y + reach + 1)) for xx in range(max(0, x - reach), min(units, x + reach + 1)) if solid[yy * units + xx]]
+            near = [p_cells[yy * units + xx] for yy in range(max(0, y - reach), min(rows, y + reach + 1)) for xx in range(max(0, x - reach), min(units, x + reach + 1)) if solid[yy * units + xx]]
             if near:
                 cell_colour[i] = tuple(sum(c[k] for c in near) / len(near) for k in range(3))
                 break
-    silhouette = resample_plane([1.0 if x else 0.0 for x in solid], units, pixels, CRISP_SIGMA)
-    ga = [0.0] * (pixels * pixels)
-    gc = [[0.0] * (pixels * pixels) for _ in range(3)]
+    silhouette = resample_plane([1.0 if x else 0.0 for x in solid], (units, rows), (pw, ph), CRISP_SIGMA)
+    ga = [0.0] * (pw * ph)
+    gc = [[0.0] * (pw * ph) for _ in range(3)]
     sigma = HALO_SIGMA if halo else GLOW_SIGMA
     if glow or halo or shade:
         alphas, colours = [0.0] * n, [(0, 0, 0)] * n
@@ -354,14 +359,14 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
                 a = min(1.0, dist[i] / FULL_DE)
                 alphas[i] = a
                 colours[i] = tuple(max(0, min(255, int(round(bc + (pc - bc) / a)))) for pc, bc in zip(p_cells[i], b_cells[i]))
-        ga = resample_plane(alphas, units, pixels, sigma)
-        gc = [resample_plane([c[k] * a for c, a in zip(colours, alphas)], units, pixels, sigma) for k in range(3)]
-    out = Image(pixels, pixels, bytearray(pixels * pixels * 4))
-    for py in range(pixels):
-        cy = min(units - 1, int((py + 0.5) * units / pixels))
-        for px in range(pixels):
-            i = py * pixels + px
-            cell = cell_colour[cy * units + min(units - 1, int((px + 0.5) * units / pixels))]
+        ga = resample_plane(alphas, (units, rows), (pw, ph), sigma)
+        gc = [resample_plane([c[k] * a for c, a in zip(colours, alphas)], (units, rows), (pw, ph), sigma) for k in range(3)]
+    out = Image(pw, ph, bytearray(pw * ph * 4))
+    for py in range(ph):
+        cy = min(rows - 1, int((py + 0.5) * rows / ph))
+        for px in range(pw):
+            i = py * pw + px
+            cell = cell_colour[cy * units + min(units - 1, int((px + 0.5) * units / pw))]
             ac = smoothstep(0.5 - EDGE_HALF, 0.5 + EDGE_HALF, silhouette[i]) if cell is not None else 0.0
             g = min(1.0, ga[i])
             oa = ac + g * (1.0 - ac)
