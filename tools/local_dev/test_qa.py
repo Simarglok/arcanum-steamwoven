@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import io
 import json
 from pathlib import Path
@@ -607,6 +608,59 @@ class OverlayTests(unittest.TestCase):
             fresh = Path(tmp) / "fresh"
             self.assertEqual(0, CommandTests.run_qa(self, "sync", data=fresh, reports=reports).returncode)
             self.assertFalse((fresh / qa.CHECKS_FILE).exists())         # sync alone writes no snapshot either
+
+    def test_a_snapshot_is_aged_by_its_ts_else_by_its_file_time(self) -> None:
+        # ARC-DEV-3130: the game refuses a list older than qa.LIST_MAX_AGE_HOURS; the page side measures the same way.
+        with tempfile.TemporaryDirectory() as tmp:
+            store = qa.Store(Path(tmp))
+            self.assertIsNone(store.checks_age_hours())
+            old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            (Path(tmp) / qa.CHECKS_FILE).write_text(json.dumps({"version": 1, "commit": "x", "ts": old, "steps": []}), encoding="utf-8")
+            self.assertGreater(store.checks_age_hours(), qa.LIST_MAX_AGE_HOURS)
+            (Path(tmp) / qa.CHECKS_FILE).write_text('{"version":1,"steps":[]}', encoding="utf-8")        # no ts: the file is fresh
+            self.assertLess(store.checks_age_hours(), 1)
+            (Path(tmp) / qa.CHECKS_FILE).write_text("not json", encoding="utf-8")
+            self.assertLess(store.checks_age_hours(), 1)
+
+    def test_the_limit_matches_the_viewers(self) -> None:
+        source = (REPO / "tools" / "terrain-viewer" / "Core" / "OwnerQa.cs").read_text(encoding="utf-8")
+        self.assertIn(f"MaxListAge = TimeSpan.FromDays({qa.LIST_MAX_AGE_HOURS // 24})", source)
+        self.assertEqual(0, qa.LIST_MAX_AGE_HOURS % 24)
+
+    def test_refresh_rebuilds_the_snapshot_and_drops_a_stray_active_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data, reports = Path(tmp) / "data", Path(tmp) / "reports"
+            data.mkdir()
+            old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            (data / qa.CHECKS_FILE).write_text(json.dumps({"version": 1, "commit": "stale", "ts": old, "steps": []}), encoding="utf-8")
+            (data / qa.ACTIVE_FILE).write_text("ARC-DEV-999999#1\n", encoding="utf-8")
+            dry = CommandTests.run_qa(self, "refresh", "--dry-run", data=data, reports=reports)
+            self.assertEqual(0, dry.returncode, dry.stderr)
+            self.assertIn("would rebuild", dry.stdout)
+            self.assertIn("stale", (data / qa.CHECKS_FILE).read_text(encoding="utf-8"))
+            self.assertTrue((data / qa.ACTIVE_FILE).exists())
+            done = CommandTests.run_qa(self, "refresh", data=data, reports=reports)
+            self.assertEqual(0, done.returncode, done.stderr)
+            self.assertIn("rebuilt", done.stdout)
+            self.assertIn("removed", done.stdout)
+            snapshot = json.loads((data / qa.CHECKS_FILE).read_text(encoding="utf-8"))
+            self.assertNotEqual("stale", snapshot["commit"])
+            self.assertLess(qa.Store(data).checks_age_hours(), 1)
+            self.assertFalse((data / qa.ACTIVE_FILE).exists())
+            # a step the list has stays active
+            step = snapshot["steps"][0]["id"]
+            (data / qa.ACTIVE_FILE).write_text(step + "\n", encoding="utf-8")
+            self.assertEqual(0, CommandTests.run_qa(self, "refresh", data=data, reports=reports).returncode)
+            self.assertEqual(step + "\n", (data / qa.ACTIVE_FILE).read_text(encoding="utf-8"))
+
+    def test_overlay_on_rebuilds_a_stale_snapshot_and_keeps_a_fresh_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data, reports = Path(tmp) / "data", Path(tmp) / "reports"
+            data.mkdir()
+            old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            (data / qa.CHECKS_FILE).write_text(json.dumps({"version": 1, "commit": "stale", "ts": old, "steps": []}), encoding="utf-8")
+            self.assertEqual(0, CommandTests.run_qa(self, "overlay", "on", data=data, reports=reports).returncode)
+            self.assertNotEqual("stale", json.loads((data / qa.CHECKS_FILE).read_text(encoding="utf-8"))["commit"])
 
     def test_a_differs_step_that_left_the_list_is_named_not_silently_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

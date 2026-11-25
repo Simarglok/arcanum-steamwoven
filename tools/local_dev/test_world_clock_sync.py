@@ -42,9 +42,9 @@ class WorldClockSyncTests(unittest.TestCase):
         # TerrainViewerWorld.cs: the clock source (WorldTime's fallback, the AI host's own clock until S5) and the restore of a smoke's
         # time; TerrainViewerPacing.cs: frame pacing, a presentation matter; TerrainViewerPressTrace.cs (ARC-INPUT-1400): the real-time stamp
         # of a logged mouse press, a diagnostic line that decides no rule; TerrainViewerRelightSmoke.cs, TerrainViewerRelightCitySmoke.cs and TerrainViewerRelightCycleSmoke.cs
-        # (ARC-RENDER-2076, ARC-DEV-2199, ARC-RES-2000): the smoke's frame-time measurement of a relight, timing only, no rule reads it.
+        # (ARC-RENDER-2076, ARC-DEV-2199, ARC-RES-2000): the smoke's frame-time measurement of a relight, timing only, no rule reads it; TerrainViewerSoak.cs (ARC-DEV-3128): the real-time frame cost of the bug report's Resources line, a diagnostic that decides no rule.
         allowed = {"TerrainViewerWorld.cs", "TerrainViewerPacing.cs", "TerrainViewerPressTrace.cs",
-                   "TerrainViewerRelightSmoke.cs", "TerrainViewerRelightCitySmoke.cs", "TerrainViewerRelightCycleSmoke.cs"}
+                   "TerrainViewerRelightSmoke.cs", "TerrainViewerRelightCitySmoke.cs", "TerrainViewerRelightCycleSmoke.cs", "TerrainViewerSoak.cs"}
         found = {p.name for p in GODOT.glob("*.cs") if any(re.search(r"\bTime\.GetTicksUsec\b", line) for _, line in code_lines(p))}
         self.assertEqual(set(), found - allowed, "the microsecond host clock is the world clock's fallback only")
 

@@ -1165,6 +1165,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Process(double delta)
     {
+        RecordFrameCost(); // ARC-DEV-3128
         PaceFrames();
         SyncControllerPrompts();
         TickAudio();

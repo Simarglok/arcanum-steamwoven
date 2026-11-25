@@ -48,6 +48,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     // ARC-UI-2968: the note over the art menus (name-typing and creation refusals) in the original's font 229, on the plate's scale.
     private Control _noteScreen = null!;
     private AreaArtParagraph _artNote = null!;
+    private Control _messageHost = null!;
+    private AreaMessageLogView _messageView = null!;
     private Control _modal = null!, _dialogScreen = null!;
     private AreaDialogBoxView _dialog = null!;
     public event Action<int>? ButtonPressed;
@@ -64,6 +66,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     public event Action<AreaNewCharacterButton>? CreationPressed;
     /// <summary>ARC-UI-030: the new-character window's Accept.</summary>
     public event Action? AcceptRequested;
+    /// <summary>ARC-UI-3120: the pointer entered (or, null, left) the Accept or Back art button of the editor and the opening shop: the app writes its hint to the message window.</summary>
+    public event Action<AreaShopArtButton?>? ShopButtonHovered;
     /// <summary>ARC-UI-033: a click on the new-character window's name field.</summary>
     public event Action? NameClicked;
     public bool IsOpen => Visible;
@@ -107,6 +111,11 @@ public partial class AreaMainMenuPanel : CanvasLayer
     internal bool PanelVisibleForSelfTest => Visible && _panel.Visible;
     internal string ArtNoteForSelfTest => _artNote.Text;
     internal AreaArtParagraph ArtNoteViewForSelfTest => _artNote;
+    /// <summary>ARC-UI-3120: the message log the editor's and the shop's bottom message window draws (the menu's own: its entries go with the window).</summary>
+    public AreaMessageLog MessageLog { get; } = new();
+    /// <summary>ARC-UI-3120: the message window's view (for the self-tests): shown while the editor or the opening shop is drawn in the original's look.</summary>
+    internal AreaMessageLogView MessageViewForSelfTest => _messageView;
+    internal bool MessageWindowShownForSelfTest => Visible && _messageHost.IsVisibleInTree();
     /// <summary>ARC-UI-013: the options window's controls as "label: value" (ARC-UI-061: the art's when it draws them).</summary>
     internal IReadOnlyList<string> ControlsForSelfTest => _optionsArt ? _art.ControlsForSelfTest : _controls.Visible
         ? _controls.GetChildren().OfType<HBoxContainer>().Select(row => row.GetChildren().OfType<Label>().ToArray()).Select(labels => $"{labels[0].Text}: {labels[1].Text}").ToArray() : [];
@@ -169,11 +178,18 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _shopArt = new AreaShopArtView();
         _shopArt.ButtonPressed += button => (button == AreaShopArtButton.Accept ? AcceptRequested : BackRequested)?.Invoke();
         _shopArt.SoundRequested += id => SoundRequested?.Invoke(id);
+        _shopArt.HoverChanged += button => ShopButtonHovered?.Invoke(button);
         _shopArt.KitBodyChanged += () => ShopKitChanged?.Invoke();
         AddChild(_shopArt);
         _noteScreen = new Control { Name = "MainMenuArtNoteScreen", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore, Size = new Vector2(NoteScreenWidth, 600) };
         _artNote = new AreaArtParagraph { Name = "MainMenuArtNote", WrapWidth = NoteScreenWidth - 2 * NoteMargin };
         _noteScreen.AddChild(_artNote);
+        // ARC-UI-3120: the message window of the bottom strip (the in-game window's view, ledger ML4) at the strip's origin of the 800 × 600 screen, over the editor's and the shop's strip.
+        _messageHost = new Control { Name = "MainMenuMessageHost", Position = new Vector2(0, AreaGameBarLayout.BottomTop), MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _messageView = new AreaMessageLogView();
+        _messageView.Bind(MessageLog, new Dictionary<int, Texture2D[]>());
+        _messageHost.AddChild(_messageView);
+        _noteScreen.AddChild(_messageHost);
         AddChild(_noteScreen);
         // ARC-DEV-047: which build this is (ARC-DEV-050: and the debug mode); above the art (ARC-UI-058), which may cover the corner.
         AddChild(ViewerBuild.MakeLabel(DebugMode));
@@ -339,11 +355,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         // ARC-UI-058: outside the original's screen the window is black, as the original's 800 × 600 screen has no margin.
         _backdrop.Color = art ? Colors.Black : DiagnosticBackdrop;
         // ARC-UI-2968: the art menus show the refusal's text only; the developer's "Not offered" list stays in the diagnostic window's note.
-        // The character editor and the opening shop show it in the bottom message window as the original does (the refusal posts of 0x550750, ML4 text rectangle),
-        // white; the other art menus keep it at the top.
-        _noteAtBottom = shopWindow;
-        (_artNote.WrapWidth, _artNote.Room) = _noteAtBottom ? (NoteBox.Width, NoteBox.Height) : (NoteScreenWidth - 2 * NoteMargin, 1 << 20);
-        _artNote.SetText(art ? menu.Notice ?? "" : "", _noteAtBottom ? NoteBoxColour : NoteColour);
+        // ARC-UI-3120: the character editor's and the opening shop's refusals and hints are posts to the bottom message window (0x550750, ML4), not this note; the other art menus keep it at the top.
+        if (_messageHost.Visible && !shopWindow) { MessageLog.Clear(); _messageView.Render(); }
+        _messageHost.Visible = shopWindow;
+        _artNote.SetText(art ? menu.Notice ?? "" : "", NoteColour);
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
                 : shopping ? "the kit the shop made for the character (the original's item_generate_inventory); Accept or Return starts the game "
                     + "with it, Back or Escape returns to the character editor, where every point is still free; item names from the game when loaded"
@@ -482,7 +497,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _noteScreen.Visible = false; _artNote.SetText("", NoteColour); _optionsArt = false; _sides.Clear();
+        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _noteScreen.Visible = false; _artNote.SetText("", NoteColour); _messageHost.Visible = false; MessageLog.Clear(); _messageView.Render(); _optionsArt = false; _sides.Clear();
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -513,8 +528,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
             // At the top, away from the build line at the bottom right, on the scale of the plate the visible art stands on.
             Control plate = _art.Visible ? _art : _premadeArt.Visible ? _premadeArt : _newCharacterArt.Visible ? _newCharacterArt : _shopArt;
             _noteScreen.Scale = plate.Scale; _noteScreen.Position = plate.Position;
-            _artNote.Position = _noteAtBottom ? new(NoteBox.X, NoteBox.Y)
-                : new(_artNote.LineCount == 1 ? (NoteScreenWidth - _artNote.FirstLineWidth) / 2f : NoteMargin, NoteTop);
+            _noteScreen.TextureFilter = plate.TextureFilter;
+            _artNote.Position = new(_artNote.LineCount == 1 ? (NoteScreenWidth - _artNote.FirstLineWidth) / 2f : NoteMargin, NoteTop);
         }
         var width = Math.Max(1, Math.Min(560, size.X - 48));
         _panel.Size = new(width, 0);
@@ -535,12 +550,16 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     private const int NoteScreenWidth = 800, NoteMargin = 24, NoteTop = 8;
     private static readonly (byte R, byte G, byte B) NoteColour = (224, 214, 190);
-    private static readonly (byte R, byte G, byte B) NoteBoxColour = (255, 255, 255);
-    private static readonly (int X, int Y, int Width, int Height) NoteBox = (290, 504, 291, 78);
-    private bool _dockedBelow, _optionsArt, _noteAtBottom;
+    private bool _dockedBelow, _optionsArt;
 
     /// <summary>ARC-UI-2968: the original's text font (art 229) for the art menus' note; without it the note draws nothing.</summary>
-    public void SetNoteFonts(AreaTextFonts? fonts) => _artNote.SetFonts(fonts);
+    public void SetNoteFonts(AreaTextFonts? fonts) { _artNote.SetFonts(fonts); _messageView.SetFonts(fonts); }
+
+    /// <summary>ARC-UI-3120: the interface arts the message window draws (its background and the entries' icons), by number.</summary>
+    public void SetMessageArt(IReadOnlyDictionary<int, Texture2D[]> art) => _messageView.Bind(MessageLog, art);
+
+    /// <summary>ARC-UI-3120: draws the message window again after a post or a clear.</summary>
+    public void RenderMessageWindow() => _messageView.Render();
 
     /// <summary>ARC-UI-038: the opening shop's window at the bottom, below the docked barter window, with its text compact.</summary>
     public void SetDockedBelow(bool docked)

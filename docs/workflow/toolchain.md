@@ -717,6 +717,13 @@ library only). It lists the steps of [the owner re-check list](owner-checks.md) 
   The page lists the answered steps in a collapsed "Answered (n)" group at the end, each with the day of the mark or report; the
   progress bars and the open count count them as checked. **Reopen** (button or `o`) appends an `open` result with `"reopen":true`,
   no report and the note kept: the step is listed again, and reports older than that event no longer answer it. `POST /api/reopen`.
+- **Stale list and stale check (ARC-DEV-3130).** A `checks.json` older than 72 hours (its `ts`, else the file time) is the list of an earlier
+  build: the overlay shows no steps and says so, clears `active-check.txt` and picks no current step (the game used to rewrite the file at
+  every start with the first unanswered step of that old list, so a check of 2026-11-15 was stamped on every later report). A Ctrl+B
+  report is tagged with the active step only when the folder's list is fresh and has the step and the step was not answered more than 12 hours ago (a mark or report of the last 12 hours still tags, so marking then describing with Ctrl+B works); a bare
+  active file with no `checks.json` beside it (an automated run) is taken as it is. `./arcanum qa refresh` (`--dry-run` first)
+  rebuilds `checks.json` from the ref without starting the page and removes an `active-check.txt` that names a step the list does not
+  have; `overlay on` rebuilds a missing or stale snapshot too. The page rewrites it as before at start and Reload.
 - **Later.** The write-back of statuses to the list works from the same results file.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_qa` (synthetic list, fake `gh`, a real localhost socket); the page itself is
