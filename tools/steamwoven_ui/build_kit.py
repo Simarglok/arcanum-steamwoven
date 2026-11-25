@@ -30,6 +30,12 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
+
+# ARC-UI-2485 (B-ICONS, owner decision 2026-11-24): the pictures the pack cannot serve are made BY RULE from the original's own frames (`icon_rule.py upscale`, no Codex),
+# so these parts are masters: the eight map indicators (jump, turn-based, waypoint, scroll lines in the iso and top-down looks) and the nine arts the pack has no frame for
+# (the eight scroll cursors and `scroll_not`). `hoverover` (468) and `BlockedShot` (845) are NOT here: the pack serves them through the identical arts `hoverunder` and
+# `magic-tech-penalty` (the audit #3144 looked them up by name and listed them as frameless), and its redraws are better than a rule's. Art numbers of the census.
+ICON_RULE_ARTS = frozenset({"350", "351", "475", "476", "614", "615", "672", "673", "678", "679", "680", "681", "682", "683", "684", "685", "686"})
 PLATE_STATES = ["idle", "hover", "pressed", "disabled"]  # SWI-KIT-5: one button size's states are generated together
 FAMILY_OF_BATCH = {"B-BOARD": "BOARD", **{f"BD-{c}": f"BD-{c}" for c in "ABCDEFGH"}}
 
@@ -156,6 +162,10 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         notes = [ART_NOTES[a.ident] for a in group if a.ident in ART_NOTES]
         if notes:
             part["note"] = notes[0]
+        if ICON_RULE_ARTS.issuperset(part["source_arts"]) and part["source_arts"]:
+            part["provenance"], part["status"] = f"rule:icon_rule:{ident}", "master"
+            part["note"] = ("by rule from the original's own frames (icon_rule.py upscale, no Codex), square or smooth colour, exact alpha; "
+                            "HD frames at x4 of each original frame (ARC-UI-2485)")
         if lead.kind == "board":
             part["size_basis"] = "provisional"
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4): open question of the TRD, fixed by #2927"
