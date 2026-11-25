@@ -211,7 +211,7 @@ class PopupKitTests(unittest.TestCase):
     def test_coverage_and_notes(self):
         self.assertEqual(set(popup_kit.coverage()), {s.ident for s in popup_kit.SPECS})
         for spec in popup_kit.SPECS:
-            self.assertIn("no Codex", popup_kit.note_of(spec.ident))
+            self.assertIn("ARC-UI-3278", popup_kit.note_of(spec.ident))
 
 
 if __name__ == "__main__":

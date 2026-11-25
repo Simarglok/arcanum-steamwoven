@@ -113,8 +113,8 @@ SPECS: tuple[Spec, ...] = (
     Spec("hardware.combine_rot", "288", "Combine_Rot", "rot", pack="schematics/buttons/combine_rot", rings=((277.6, 42.1, 17.3),), wells=((9, 7, 106, 72), (155, 7, 254, 72), (303, 7, 402, 72)),
          emboss=((35, 18, 76, 62), (190, 18, 220, 62), (328, 18, 376, 62), (120, 28, 142, 50)), note="three recessed piece wells, a plus sign, a round socket opening and a text window"),
     Spec("hardware.trap_rot", "290", "Trap_Rot", "rot", pack="logbook/buttons/trap_rot", note="four square openings (transparent) over a text window"),
-    Spec("hardware.broadcast_rot", "291", "Broadcast_Rot", "rot", rivets=RIV_L + ((396.0, 30.0), (396.0, 56.0), (396.0, 79.5)), note="the big window with the riveted side tabs (the pack frame's window is smaller than the original's, so no pack frame)"),
-    Spec("hardware.dialoguewindow", "354", "DialogueWindow", "rot", note="the big window in a brass frame (the pack frame's window is smaller than the original's, so no pack frame)"),
+    Spec("hardware.broadcast_rot", "291", "Broadcast_Rot", "rot", rivets=RIV_L + ((396.0, 30.0), (396.0, 56.0), (396.0, 79.5)), note="the big window with the riveted side tabs (pack window too small)"),
+    Spec("hardware.dialoguewindow", "354", "DialogueWindow", "rot", note="the big window in a brass frame (pack window too small)"),
     Spec("hardware.magickweapon_rot", "564", "MagickWeapon_Rot", "rot", pack="logbook/buttons/magickweapon_rot", pack_clear=((33, 58, 127, 94),), force_w=((32, 58, 128, 95),), wells=((155, 48, 191, 84), (204, 48, 240, 84), (253, 48, 289, 84), (303, 48, 339, 84), (352, 48, 388, 84)), note="a window, a picture field, a text window and five recessed slots"),
     Spec("hardware.privmes_window", "642", "PrivMes_Window", "rot", force_w=((90, 68, 366, 94),), rings=((391.5, 28.4, 11.9),), copies=(face(391.5, 28.4, 11.9),), note="the private message window with a small round socket"),
     Spec("hardware.mp_kickbanrotwindow", "842", "MP_KickBanRotWindow", "rot", pack="multiplayer/panels/mp_kickbanrotwindow", rings=((119.0, 63.0, 32.4), (288.0, 63.0, 32.4)), copies=(face(119.0, 63.0, 32.4), face(288.0, 63.0, 32.4)), note="two big round buttons on the plain plate"),
@@ -141,12 +141,10 @@ def provenance_of(part: str) -> str:
 def note_of(part: str) -> str:
     spec = BY_ID[part]
     if not spec.pack:
-        how = "no good pack frame: iron, brass, wells and sockets by rule from the original art's own shapes"
+        how = "no pack frame that fits: by rule"
     else:
-        how = "the old HD pack's frame of the art (pack-first) at the master's size with the original's alpha enlarged analytically"
-        if spec.pack_clear:
-            how += "; the pack frame's baked sample icon painted out"
-    return f"{spec.note}; {how}; popup_kit.py, ARC-UI-3278, no Codex"
+        how = "old HD pack frame + analytic alpha (pack-first)" + ("; sample icon painted out" if spec.pack_clear else "")
+    return f"{spec.note}; {how}; popup_kit.py, ARC-UI-3278"
 
 
 # --- small numeric helpers -----------------------------------------------------------------------------------------------------------
