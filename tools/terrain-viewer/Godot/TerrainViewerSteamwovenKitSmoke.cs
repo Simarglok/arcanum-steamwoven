@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
         KitLoot = new(0.45f, 0.35f, 0.1f), KitLootDoll = new(0.1f, 0.3f, 0.75f), KitDollCover = new(0.75f, 0.1f, 0.4f),
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
         KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
-        KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f),
+        KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f), KitNewCharBody = new(0.25f, 0.6f, 0.6f),
         KitFixture = new(0.95f, 0.95f, 0.2f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
@@ -48,6 +48,8 @@ public partial class TerrainViewerApp
         ("board.charcreatetopbar", 2880, 150, KitSaveTop), ("backdrop.saveloadbackground", 2880, 1440, KitSaveBody), ("board.charcreatebottombar", 2880, 570, KitSaveBottom),
         // ARC-UI-3039: the pre-made browser's body (its strips are the save screen's).
         ("backdrop.pregencharacterbase", 2880, 1440, KitPremadeBody),
+        // ARC-UI-3040: the new character screen's body (its strips are the save screen's).
+        ("backdrop.createcharacterbase", 2880, 1440, KitNewCharBody),
         // ARC-UI-3098: the fixtures, flat (a part the windows draw at its place is the one colour; ARC_STEAMWOVEN_KIT_FIXTURES=DIR takes the real ones of tools/steamwoven_ui/fixtures.py from a baked root for a look capture).
         .. SteamwovenKitTable.FixtureUnits.Select(pair => (pair.Key, SteamwovenKitTable.MasterOf(pair.Value.Width), SteamwovenKitTable.MasterOf(pair.Value.Height), KitFixture)),
     ];
@@ -162,28 +164,41 @@ public partial class TerrainViewerApp
         require(art.KitScreenForSelfTest is not null, $"[{tag}] the kit screen is back with the HD option on");
     }
 
+    /// <summary>The view of a character-family two-strip screen the kit smoke probes: the pre-made browser (ARC-UI-3039) and the new character screen (ARC-UI-3040) expose the same self-test surface.</summary>
+    private sealed record KitCharacterView(string Name, SteamwovenKitScreen Screen, string Body, Color BodyColor, int[] OwnArts, Action Place, Action QueueRedraw, Func<IReadOnlyList<SteamwovenKitDraw>?> Kit,
+        Func<IReadOnlyList<int>> OwnDrawn, Func<int, bool> Nearest, Func<IReadOnlyDictionary<int, Texture2D[]>> Textures);
+
+    private static KitCharacterView KitPremadeView(AreaPremadeBrowserArtView art) => new("premade", SteamwovenKitScreen.PremadeBrowser, "backdrop.pregencharacterbase", KitPremadeBody,
+        [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt], art.Place, art.QueueRedraw, () => art.KitScreenForSelfTest,
+        () => art.OwnBackdropDrawnForSelfTest, art.KitSampledNearestForSelfTest, () => art.TexturesForSelfTest);
+
+    private static KitCharacterView KitNewCharacterView(AreaNewCharacterArtView art) => new("newcharacter", SteamwovenKitScreen.NewCharacter, "backdrop.createcharacterbase", KitNewCharBody,
+        [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt], art.Place, art.QueueRedraw, () => art.KitScreenForSelfTest,
+        () => art.OwnBackdropDrawnForSelfTest, art.KitSampledNearestForSelfTest, () => art.TexturesForSelfTest);
+
     /// <summary>
-    /// ARC-UI-3039 (census M07; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the menu column pass, the "premade" screen): the real pre-made browser over the synthetic kit's three parts. At each size the view draws the composer's plan (the strips and the
-    /// pre-made body tiling the plate, the body sampled nearest exactly where its draw is exact), none of the original's arts 336, 335 and 766, and the pixels read back are the kit's colours in each of the three rows and across both seams, with the
+    /// ARC-UI-3039, ARC-UI-3040 (census M07 and M08; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the menu column pass, the "premade" and "newcharacter" screens): the real screen over the synthetic kit's three parts. At each size the view draws the composer's plan (the strips and the
+    /// screen's own body tiling the plate, the body sampled nearest exactly where its draw is exact), none of the original's own arts, and the pixels read back are the kit's colours in each of the three rows and across both seams, with the
     /// portrait's and the story's fields black (the character draw fills them). With <paramref name="firstSize"/> it also checks the fallback (a bottom strip that does not load after the body did gives the screen's own three arts whole and
-    /// no resident pre-made body; the kit is back when the set is) and the HD option off (no kit at all); the body part goes with the screen (SWI-RUN-5) at the caller's close.
+    /// no resident body of its own; the kit is back when the set is) and the HD option off (no kit at all); the body part goes with the screen (SWI-RUN-5) at the caller's close.
     /// </summary>
-    private async Task CheckKitPremadeScreenAsync(string tag, SteamwovenFullScreenPlan plan, AreaPremadeBrowserArtView art, bool firstSize, string kitRoot, Func<int, Task> frames, Action<bool, string> require)
+    private async Task CheckKitCharacterScreenAsync(string tag, SteamwovenFullScreenPlan plan, KitCharacterView art, bool firstSize, string kitRoot, Func<int, Task> frames, Action<bool, string> require)
     {
-        const string Body = "backdrop.pregencharacterbase";
-        bool BodyResident() => SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith(Body, StringComparison.Ordinal));
+        var bodyId = art.Body;
+        bool BodyResident() => SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith(bodyId, StringComparison.Ordinal));
         art.Place(); art.QueueRedraw();
         await frames(3);
         var set = SteamwovenKitStore.SetFor(plan.Layout.Step);
-        var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.PremadeBrowser).Value;
-        require(composed is not null, $"[{tag}] the synthetic set composes the pre-made browser");
-        var drawn = art.KitScreenForSelfTest;
-        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the pre-made browser draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
-        require(art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] over the kit the screen draws none of its own arts 336, 335 and 766 (drew {string.Join(",", art.OwnBackdropDrawnForSelfTest)})");
+        var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, art.Screen).Value;
+        require(composed is not null, $"[{tag}] the synthetic set composes the {art.Name} screen");
+        var drawn = art.Kit();
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the {art.Name} screen draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(art.OwnDrawn().Count == 0, $"[{tag}] over the kit the screen draws none of its own arts (drew {string.Join(",", art.OwnDrawn())})");
         if (composed is null || drawn is null) return;
-        require(art.KitSampledNearestForSelfTest(1) == composed.Body.Exact, $"[{tag}] the body is sampled {(composed.Body.Exact ? "nearest" : "linear")} as its draw is {(composed.Body.Exact ? "exact" : "scaled")}");
+        require(art.Nearest(1) == composed.Body.Exact, $"[{tag}] the body is sampled {(composed.Body.Exact ? "nearest" : "linear")} as its draw is {(composed.Body.Exact ? "exact" : "scaled")}");
         require(BodyResident(), $"[{tag}] the screen's own body is resident while it is open");
-        require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.saveloadbackground", StringComparison.Ordinal)), $"[{tag}] the save screen's body is not resident");
+        foreach (var other in SteamwovenKitTable.Screens.Values.Select(screen => screen.Body).OfType<string>().Where(other => other != bodyId))
+            require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith(other, StringComparison.Ordinal)), $"[{tag}] the body {other} of another screen is not resident");
         using (var image = GetViewport().GetTexture().GetImage())
         {
             var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
@@ -192,20 +207,20 @@ public partial class TerrainViewerApp
             // Clear of every field and button: the left margin of the body, the right margin below the story, the top strip row, the bottom strip row at its right end.
             var (top, body, bodyRight, bottom) = (AtUnit(400, 20), AtUnit(20, 60), AtUnit(775, 420), AtUnit(790, 465));
             require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
-            require(Near(body, KitPremadeBody) && Near(bodyRight, KitPremadeBody), $"[{tag}] the body's margins are the kit's pre-made body (got {body} and {bodyRight})");
+            require(Near(body, art.BodyColor) && Near(bodyRight, art.BodyColor), $"[{tag}] the body's margins are the kit's {art.Name} body (got {body} and {bodyRight})");
             require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             var x = (int)Math.Round(plan.ToDevice(20, 0).X);
             var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
-            require(Near(aboveTop, KitSaveTop) && Near(belowTop, KitPremadeBody), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
-            require(Near(aboveBottom, KitPremadeBody) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            require(Near(aboveTop, KitSaveTop) && Near(belowTop, art.BodyColor), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(Near(aboveBottom, art.BodyColor) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
             // The character draw fills its fields black itself, so nothing of the kit's body shows in the story's field.
             var story = AtUnit(AreaPremadeBrowserArtLayout.Description.X + AreaPremadeBrowserArtLayout.Description.Width - 6, AreaPremadeBrowserArtLayout.Description.Y + AreaPremadeBrowserArtLayout.Description.Height - 6);
             require(story.R8 + story.G8 + story.B8 < 12, $"[{tag}] the story's field is black (got {story})");
         }
         if (!firstSize) return;
         // Fallback: a set whose bottom strip file is another size than its manifest says (the body loads first, then the strip does not) gives the screen's own arts whole and no resident body (SWI-RUN-5); the same set whole is the kit again.
-        var broken = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-premade-broken-").FullName;
+        var broken = System.IO.Directory.CreateTempSubdirectory($"arc-steamwoven-kit-{art.Name}-broken-").FullName;
         try
         {
             WriteSyntheticKitSet(broken, plan.Layout.Step);
@@ -214,29 +229,139 @@ public partial class TerrainViewerApp
             SteamwovenKitStore.UseRoot(broken);
             art.QueueRedraw();
             await frames(3);
-            var ownArts = new[] { AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt }.Where(number => art.TexturesForSelfTest.ContainsKey(number)).ToArray();
-            require(art.KitScreenForSelfTest is null && art.OwnBackdropDrawnForSelfTest.SequenceEqual(ownArts) && ownArts.Length > 0,
-                $"[{tag}] a strip that does not load: the screen draws its own arts whole (kit {(art.KitScreenForSelfTest is null ? "none" : "drawn")}, own {string.Join(",", art.OwnBackdropDrawnForSelfTest)} of {string.Join(",", ownArts)})");
+            var ownArts = art.OwnArts.Where(number => art.Textures().ContainsKey(number)).ToArray();
+            require(art.Kit() is null && art.OwnDrawn().SequenceEqual(ownArts) && ownArts.Length > 0,
+                $"[{tag}] a strip that does not load: the screen draws its own arts whole (kit {(art.Kit() is null ? "none" : "drawn")}, own {string.Join(",", art.OwnDrawn())} of {string.Join(",", ownArts)})");
             require(!BodyResident(), $"[{tag}] a strip that does not load leaves no kit body resident (the body was loaded first)");
         }
         finally
         {
             SteamwovenKitStore.UseRoot(kitRoot);
-            try { System.IO.Directory.Delete(broken, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3039 kit smoke: temporary folder not removed: " + exception.Message); }
+            try { System.IO.Directory.Delete(broken, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3040 kit smoke: temporary folder not removed: " + exception.Message); }
         }
         art.QueueRedraw();
         await frames(3);
-        require(art.KitScreenForSelfTest is not null && art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] the kit is back with a whole set");
+        require(art.Kit() is not null && art.OwnDrawn().Count == 0, $"[{tag}] the kit is back with a whole set");
         // The HD option off (the Original look): nothing of the kit is drawn or resident, the screen's own arts are the original's.
         var savedHd = _gameSettings.HdInterface;
         _gameSettings = _gameSettings with { HdInterface = false };
         SyncInterfaceHd();
         await frames(4);
-        require(art.KitScreenForSelfTest is null && !BodyResident(), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
+        require(art.Kit() is null && !BodyResident(), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
         _gameSettings = _gameSettings with { HdInterface = savedHd };
         SyncInterfaceHd();
         await frames(4);
-        require(art.KitScreenForSelfTest is not null, $"[{tag}] the kit screen is back with the HD option on");
+        require(art.Kit() is not null, $"[{tag}] the kit screen is back with the HD option on");
+    }
+
+    /// <summary>The view of a window-bodied two-strip screen the kit smoke probes (ARC-UI-3041): the creation editor and the opening shop draw their strips and their window's kit background through the shop's view; the window frame over it is probed by
+    /// <paramref name="FrameOwnArt"/> (true while that frame draws its own backdrop art).</summary>
+    private sealed record KitWindowScreenView(string Name, SteamwovenKitScreen Screen, IReadOnlyList<string> BodyParts, IReadOnlyList<string> Overlays, Func<IReadOnlyList<Color>> BodyColors, IReadOnlyList<(double X, double Y)> BodyPoints,
+        Action Place, Action QueueRedraw, Func<IReadOnlyList<SteamwovenKitDraw>?> Kit, Func<IReadOnlyList<int>> OwnDrawn, Func<int, bool> Nearest, Func<IReadOnlyDictionary<int, Texture2D[]>> Textures, Func<bool> FrameOwnArt, Action ResetFrame);
+
+    private KitWindowScreenView KitEditorView() => new("editor", SteamwovenKitScreen.CharacterEditor, ["backdrop.char_maint"], [], () => [KitCharacter], [(4, 41 + 395)],
+        _mainMenuPanel!.ShopArtForSelfTest.Place, _mainMenuPanel.ShopArtForSelfTest.QueueRedraw, () => _mainMenuPanel.ShopArtForSelfTest.KitScreenForSelfTest, () => _mainMenuPanel.ShopArtForSelfTest.OwnBackdropDrawnForSelfTest,
+        _mainMenuPanel.ShopArtForSelfTest.KitSampledNearestForSelfTest, () => _mainMenuPanel.ShopArtForSelfTest.TexturesForSelfTest,
+        () => _editorPanel!.ArtViewForSelfTest!.OwnBackgroundDrawnForSelfTest,
+        () => { AreaKitStandIns.ResetForSelfTest(); _editorPanel!.ArtViewForSelfTest!.QueueRedraw(); });
+
+    private KitWindowScreenView KitShopView() => new("shop", SteamwovenKitScreen.OpeningShop, ["backdrop.barter", "backdrop.inventor"], [SteamwovenKitTable.BarterDoll.Part, SteamwovenKitTable.HeroDollCover.Part], () => [KitBarter, KitInventory],
+        [(4, 41 + 395), (796, 41 + 395)], _mainMenuPanel!.ShopArtForSelfTest.Place, _mainMenuPanel.ShopArtForSelfTest.QueueRedraw, () => _mainMenuPanel.ShopArtForSelfTest.KitScreenForSelfTest, () => _mainMenuPanel.ShopArtForSelfTest.OwnBackdropDrawnForSelfTest,
+        _mainMenuPanel.ShopArtForSelfTest.KitSampledNearestForSelfTest, () => _mainMenuPanel.ShopArtForSelfTest.TexturesForSelfTest,
+        () => _barterPanel!.GridAreaForSelfTest.KitDrawForSelfTest is { Background: true } or { Pack: true },
+        () => _barterPanel!.GridAreaForSelfTest.QueueRedraw());
+
+    /// <summary>
+    /// ARC-UI-3041 (census M09 and M10; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the editor's and the shop's column pass): the real creation editor and the real opening shop over the synthetic kit. At each size the strips view draws the composer's plan (the top
+    /// strip, the window's kit background pieces tiling the body, the bottom strip, each sampled nearest exactly where its draw is exact), none of the original's strip arts 336 and 335, the window over it skips only its own backdrop (the sheet's art 22; the barter frame's
+    /// background and pack art) and the pixels read back are the kit's colours in the three rows, in the body's margins and across the seams (and across the barter window's two pieces). The kit's body, and its overlays for the barter window, are resident only while the
+    /// screen is open and no other screen's body is. With <paramref name="firstSize"/> it also checks the fallback (a bottom strip that does not load after the body did gives the screen's own strips whole, the window over it draws its own backdrop again and no body of
+    /// the screen stays resident; the kit is back when the set is) and the HD option off (no kit at all).
+    /// </summary>
+    private async Task CheckKitWindowScreenAsync(string tag, SteamwovenFullScreenPlan plan, KitWindowScreenView art, bool firstSize, string kitRoot, Func<int, Task> frames, Action<bool, string> require)
+    {
+        IEnumerable<string> ResidentBackdrops() => SteamwovenKitStore.ResidentForSelfTest.Select(System.IO.Path.GetFileName).OfType<string>().Where(name => name.StartsWith("backdrop.", StringComparison.Ordinal)).Select(name => name[..^4]);
+        var expected = art.BodyParts.Concat(art.Overlays).Order().ToList();
+        art.Place(); art.QueueRedraw(); art.ResetFrame();
+        await frames(3);
+        var set = SteamwovenKitStore.SetFor(plan.Layout.Step);
+        var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, art.Screen).Value;
+        require(composed is not null, $"[{tag}] the synthetic set composes the {art.Name} screen");
+        var drawn = art.Kit();
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the {art.Name} screen draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(art.OwnDrawn().Count == 0, $"[{tag}] over the kit the screen draws none of its own strip arts (drew {string.Join(",", art.OwnDrawn())})");
+        require(!art.FrameOwnArt(), $"[{tag}] the window over the {art.Name} body draws none of its own backdrop art");
+        if (composed is null || drawn is null) return;
+        for (var i = 0; i < drawn.Count; i++)
+            require(art.Nearest(i) == drawn[i].Exact, $"[{tag}] part {drawn[i].PartId} is sampled {(drawn[i].Exact ? "nearest" : "linear")} as its draw is {(drawn[i].Exact ? "exact" : "scaled")}");
+        require(ResidentBackdrops().Order().SequenceEqual(expected), $"[{tag}] only the {art.Name} body and its overlays are resident (got {string.Join(",", ResidentBackdrops().Order())}, expected {string.Join(",", expected)})");
+        using (var image = GetViewport().GetTexture().GetImage())
+        {
+            var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+            Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
+            Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
+            var (top, bottom) = (AtUnit(400, 20), AtUnit(400, 500));
+            require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
+            require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
+            var colours = art.BodyColors();
+            for (var i = 0; i < art.BodyPoints.Count; i++)
+            {
+                var point = AtUnit(art.BodyPoints[i].X, art.BodyPoints[i].Y);
+                require(Near(point, colours[Math.Min(i, colours.Count - 1)]), $"[{tag}] the body's margin at {art.BodyPoints[i]} is the kit's {art.Name} body (got {point})");
+            }
+            // The seams of the strips with the body: two device rows either side of its top and bottom edges, at the body's left margin.
+            var x = (int)Math.Round(plan.ToDevice(art.BodyPoints[0].X, 0).X);
+            var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
+            var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
+            require(Near(aboveTop, KitSaveTop) && Near(belowTop, colours[0]), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(Near(aboveBottom, colours[0]) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            if (composed.BodyPieces.Count > 1)
+            {
+                // The barter window's two pieces meet at their joint: the pixel row just below the strip's seam, one device pixel either side.
+                var joint = composed.BodyPieces[0].Rect.Right;
+                var y = composed.Body.Rect.Y + 3;
+                var (leftOfJoint, rightOfJoint) = (Pixel(joint - 2, y), Pixel(joint + 1, y));
+                require(Near(leftOfJoint, colours[0]) && Near(rightOfJoint, colours[1]), $"[{tag}] the merchant's side meets the inventory's piece with no gap (left {leftOfJoint}, right {rightOfJoint})");
+            }
+        }
+        if (!firstSize) return;
+        // Fallback: a set whose bottom strip file is another size than its manifest says (the body loads first, then the strip does not) gives the screen's own strips whole, the window over it its own backdrop and no resident body (SWI-RUN-5); the same
+        // set whole is the kit again.
+        var broken = System.IO.Directory.CreateTempSubdirectory($"arc-steamwoven-kit-{art.Name}-broken-").FullName;
+        try
+        {
+            WriteSyntheticKitSet(broken, plan.Layout.Step);
+            using (var wrong = Image.CreateEmpty(10, 10, false, Image.Format.Rgba8))
+                require(wrong.SavePng(System.IO.Path.Combine(broken, SteamwovenKitSet.FolderName(plan.Layout.Step), "board.charcreatebottombar.png")) == Error.Ok, $"[{tag}] the broken strip file written");
+            SteamwovenKitStore.UseRoot(broken);
+            art.QueueRedraw(); art.ResetFrame();
+            await frames(3);
+            var ownArts = new[] { AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt }.Where(number => art.Textures().ContainsKey(number)).ToArray();
+            require(art.Kit() is null && art.OwnDrawn().SequenceEqual(ownArts) && ownArts.Length > 0,
+                $"[{tag}] a strip that does not load: the screen draws its own strips whole (kit {(art.Kit() is null ? "none" : "drawn")}, own {string.Join(",", art.OwnDrawn())} of {string.Join(",", ownArts)})");
+            require(art.FrameOwnArt(), $"[{tag}] a strip that does not load: the window over the body draws its own backdrop art again");
+            require(!ResidentBackdrops().Any(), $"[{tag}] a strip that does not load leaves no kit body resident (the body was loaded first): {string.Join(",", ResidentBackdrops())}");
+        }
+        finally
+        {
+            SteamwovenKitStore.UseRoot(kitRoot);
+            try { System.IO.Directory.Delete(broken, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3041 kit smoke: temporary folder not removed: " + exception.Message); }
+        }
+        art.QueueRedraw(); art.ResetFrame();
+        await frames(3);
+        require(art.Kit() is not null && art.OwnDrawn().Count == 0 && !art.FrameOwnArt(), $"[{tag}] the kit is back with a whole set");
+        // The HD option off (the Original look): nothing of the kit is drawn or resident, the screen's own arts are the original's.
+        var savedHd = _gameSettings.HdInterface;
+        _gameSettings = _gameSettings with { HdInterface = false };
+        SyncInterfaceHd();
+        art.ResetFrame();
+        await frames(4);
+        require(art.Kit() is null && !ResidentBackdrops().Any(), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
+        _gameSettings = _gameSettings with { HdInterface = savedHd };
+        SyncInterfaceHd();
+        art.ResetFrame();
+        await frames(4);
+        require(art.Kit() is not null, $"[{tag}] the kit screen is back with the HD option on");
     }
 
     /// <summary>ARC-UI-2461 (SWI-BDR-6): the full-screen plates of the column menu pass (ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the menu smoke): the synthetic kit's main and options plates are the ones drawn, at the plate's corners, and

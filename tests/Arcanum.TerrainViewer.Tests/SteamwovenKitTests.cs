@@ -33,8 +33,10 @@ public sealed class SteamwovenKitTests
         foreach (var screen in SteamwovenKitTable.Screens.Values)
         {
             // ARC-UI-3039: the screens share the two strips; a part is added once.
-            foreach (var part in new SteamwovenKitPart[] { new(screen.TopStrip, B(2880), B(150)), new(screen.BottomStrip, B(2880), B(570)), new(screen.Body, B(2880), B(1440)) })
+            foreach (var part in new SteamwovenKitPart[] { new(screen.TopStrip, B(2880), B(150)), new(screen.BottomStrip, B(2880), B(570)) })
                 if (parts.All(existing => existing.Id != part.Id)) parts.Add(part);
+            // ARC-UI-3041: a screen whose body is a game window has no body part of its own (the window's pieces are added above).
+            if (screen.Body is { } body && parts.All(existing => existing.Id != body)) parts.Add(new(body, B(2880), B(1440)));
         }
         foreach (var overlay in new[] { SteamwovenKitTable.BarterDoll, SteamwovenKitTable.HeroDollCover }) parts.Add(new(overlay.Part, B(overlay.MasterWidth), B(overlay.MasterHeight)));
         return SteamwovenKitSet.FromParts(step, "/kit/" + SteamwovenKitSet.FolderName(step), parts.Where(part => !without.Contains(part.Id)));
@@ -565,6 +567,177 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(2560, 1440, SteamwovenStep.TwoThirds)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(1280, 1024, SteamwovenStep.Third)]
+    public void The_new_character_screen_is_the_same_two_strips_around_its_own_create_body_tiling_the_plate(int width, int height, SteamwovenStep step)
+    {
+        // ARC-UI-3040 (census M08): the strips are the creation family's (shared with the save and pre-made screens), the body is the new character background.
+        var plan = Screen(width, height);
+        var composed = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.NewCharacter);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        CollectionAssert.AreEqual(new[] { "board.charcreatetopbar", "backdrop.createcharacterbase", "board.charcreatebottombar" }, screen.Draws.Select(draw => draw.PartId).ToArray());
+        Assert.AreEqual(plan.Zone.Y, screen.Top.Rect.Y); Assert.AreEqual(plan.Zone.Bottom, screen.Bottom.Rect.Bottom);
+        Assert.AreEqual(screen.Top.Rect.Bottom, screen.Body.Rect.Y); Assert.AreEqual(screen.Body.Rect.Bottom, screen.Bottom.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(41 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(441 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Bottom);
+        // The pre-made browser's plan over the same set differs only in the body part.
+        var premade = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.PremadeBrowser).Value!;
+        Assert.AreEqual(premade.Top, screen.Top); Assert.AreEqual(premade.Bottom, screen.Bottom);
+        Assert.AreEqual(premade.Body.Rect, screen.Body.Rect); Assert.AreNotEqual(premade.Body.PartId, screen.Body.PartId);
+    }
+
+    [TestMethod]
+    [DataRow("board.charcreatetopbar")]
+    [DataRow("backdrop.createcharacterbase")]
+    [DataRow("board.charcreatebottombar")]
+    public void The_new_character_screen_with_any_part_missing_has_no_kit_screen_and_names_the_part(string missingPart)
+    {
+        var plan = Screen(1920, 1080);
+        var set = Full(SteamwovenStep.Half, missingPart);
+        var result = SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.NewCharacter);
+        Assert.IsFalse(result.Complete);
+        CollectionAssert.AreEqual(new[] { missingPart }, result.Missing.ToArray());
+        // The pre-made browser and the save screen are held back only by a strip they share, not by the new character body.
+        foreach (var other in new[] { SteamwovenKitScreen.PremadeBrowser, SteamwovenKitScreen.SaveLoad })
+            Assert.AreEqual(missingPart == "backdrop.createcharacterbase", SteamwovenKitComposer.Screen(plan, set, other).Complete);
+    }
+
+    [TestMethod]
+    public void The_new_character_screen_draws_none_of_its_own_backdrop_arts_over_a_kit_screen_and_all_three_without()
+    {
+        CollectionAssert.AreEquivalent(new[] { 336, 335, 765 }, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.NewCharacter, false).ToArray());
+        Assert.AreEqual(0, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.NewCharacter, true).Count);
+        CollectionAssert.AreEquivalent(new[] { AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt }, SteamwovenKitTable.Screens[SteamwovenKitScreen.NewCharacter].OwnArts.ToArray());
+    }
+
+    [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(2560, 1440, SteamwovenStep.TwoThirds)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(1280, 1024, SteamwovenStep.Third)]
+    public void The_character_editor_is_the_same_two_strips_around_the_character_window_s_kit_background_tiling_the_plate(int width, int height, SteamwovenStep step)
+    {
+        // ARC-UI-3041 (census M09): the strips are the creation family's, the body is the character sheet window's one-piece kit background in the plate's 800 x 400.
+        var plan = Screen(width, height);
+        var composed = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.CharacterEditor);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        CollectionAssert.AreEqual(new[] { "board.charcreatetopbar", "backdrop.char_maint", "board.charcreatebottombar" }, screen.Draws.Select(draw => draw.PartId).ToArray());
+        Assert.AreEqual(1, screen.BodyPieces.Count);
+        Assert.AreEqual(plan.Zone.Y, screen.Top.Rect.Y); Assert.AreEqual(plan.Zone.Bottom, screen.Bottom.Rect.Bottom);
+        Assert.AreEqual(screen.Top.Rect.Bottom, screen.Body.Rect.Y); Assert.AreEqual(screen.Body.Rect.Bottom, screen.Bottom.Rect.Y);
+        Assert.AreEqual(plan.Zone.X, screen.Body.Rect.X); Assert.AreEqual(plan.Zone.Right, screen.Body.Rect.Right);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(41 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(441 * plan.Factor, MidpointRounding.AwayFromZero), screen.Body.Rect.Bottom);
+        // The same rectangle as the new character screen's body.
+        var newCharacter = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.NewCharacter).Value!;
+        Assert.AreEqual(newCharacter.Body.Rect, screen.Body.Rect); Assert.AreEqual(newCharacter.Top, screen.Top); Assert.AreEqual(newCharacter.Bottom, screen.Bottom);
+    }
+
+    [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One, false)]
+    [DataRow(2560, 1440, SteamwovenStep.TwoThirds, false)]
+    [DataRow(1920, 1080, SteamwovenStep.Half, true)]
+    [DataRow(1280, 1024, SteamwovenStep.Third, true)]
+    [DataRow(1024, 768, SteamwovenStep.Third, false)]
+    public void The_opening_shop_lays_the_barter_window_s_two_kit_pieces_across_the_body_meeting_at_the_1290_px_joint(int width, int height, SteamwovenStep step, bool follower)
+    {
+        // ARC-UI-3041 (census M10): the merchant's side (1290 master px) and the inventory's right piece (1590) are the body; a follower merchant's side is the follower background.
+        var plan = Screen(width, height);
+        var composed = SteamwovenKitComposer.Screen(plan, Full(step), SteamwovenKitScreen.OpeningShop, null, follower ? SteamwovenKitWindow.BarterFollower : null);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        CollectionAssert.AreEqual(new[] { "board.charcreatetopbar", follower ? "backdrop.barter_follower" : "backdrop.barter", "backdrop.inventor", "board.charcreatebottombar" }, screen.Draws.Select(draw => draw.PartId).ToArray());
+        Assert.AreEqual(2, screen.BodyPieces.Count);
+        var (left, right) = (screen.BodyPieces[0], screen.BodyPieces[1]);
+        Assert.AreEqual(plan.Zone.X, left.Rect.X); Assert.AreEqual(left.Rect.Right, right.Rect.X, "no gap between the two pieces"); Assert.AreEqual(plan.Zone.Right, right.Rect.Right);
+        var plateHeight = plan.Zone.Bottom - plan.Zone.Y;
+        Assert.AreEqual(plan.Zone.X + (int)new Ratio(1290 * plateHeight, 2160).RoundHalfUp(), left.Rect.Right, "the joint is at the 1290 px master position, rounded half up exactly");
+        Assert.AreEqual(left.Rect.Y, right.Rect.Y); Assert.AreEqual(left.Rect.Bottom, right.Rect.Bottom);
+        Assert.AreEqual(screen.Top.Rect.Bottom, left.Rect.Y); Assert.AreEqual(left.Rect.Bottom, screen.Bottom.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(41 * plan.Factor, MidpointRounding.AwayFromZero), left.Rect.Y);
+        Assert.AreEqual(plan.Zone.Y + (int)Math.Round(441 * plan.Factor, MidpointRounding.AwayFromZero), left.Rect.Bottom);
+    }
+
+    [TestMethod]
+    [DataRow(2496, 1404)]
+    [DataRow(2624, 1476)]
+    [DataRow(3008, 1692)]
+    public void The_opening_shop_s_joint_rounds_half_up_exactly_where_the_plate_height_makes_a_tie(int width, int height)
+    {
+        // ARC-UI-3041: at these plate heights 1290 px master is an exact half device pixel; a double computation lands just below it.
+        var plan = Screen(width, height);
+        var composed = SteamwovenKitComposer.Screen(plan, Full(plan.Layout.Step), SteamwovenKitScreen.OpeningShop);
+        Assert.IsTrue(composed.Complete, string.Join(", ", composed.Missing));
+        var screen = composed.Value!;
+        var plateHeight = plan.Zone.Bottom - plan.Zone.Y;
+        Assert.AreEqual(height, plateHeight);
+        Assert.AreEqual(plan.Zone.X + (int)new Ratio(1290 * plateHeight, 2160).RoundHalfUp(), screen.BodyPieces[0].Rect.Right);
+    }
+
+    [TestMethod]
+    public void A_screen_with_a_body_part_of_its_own_ignores_the_window_variant()
+    {
+        var plan = Screen(1920, 1080);
+        var set = Full(SteamwovenStep.Half);
+        Assert.AreEqual(SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.NewCharacter).Value, SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.NewCharacter, null, SteamwovenKitWindow.BarterFollower).Value);
+        // The character editor's window is not switchable either way: the variant names the shop's barter window alone.
+        Assert.AreEqual("backdrop.char_maint", SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.CharacterEditor).Value!.Body.PartId);
+    }
+
+    [TestMethod]
+    [DataRow(SteamwovenKitScreen.CharacterEditor, "backdrop.char_maint", null)]
+    [DataRow(SteamwovenKitScreen.OpeningShop, "backdrop.barter", null)]
+    [DataRow(SteamwovenKitScreen.OpeningShop, "backdrop.inventor", null)]
+    [DataRow(SteamwovenKitScreen.OpeningShop, "backdrop.barter_follower", SteamwovenKitWindow.BarterFollower)]
+    [DataRow(SteamwovenKitScreen.OpeningShop, "backdrop.inventor", SteamwovenKitWindow.BarterFollower)]
+    public void A_window_body_screen_with_any_piece_missing_has_no_kit_screen_and_names_the_piece(SteamwovenKitScreen screen, string missingPart, SteamwovenKitWindow? variant)
+    {
+        var plan = Screen(1920, 1080);
+        var result = SteamwovenKitComposer.Screen(plan, Full(SteamwovenStep.Half, missingPart), screen, null, variant);
+        Assert.IsFalse(result.Complete);
+        CollectionAssert.AreEqual(new[] { missingPart }, result.Missing.ToArray());
+    }
+
+    [TestMethod]
+    public void The_opening_shop_with_the_plain_follower_background_missing_is_still_a_kit_screen_for_a_plain_merchant()
+    {
+        // Only the variant asked for is needed: a set without the follower side composes the plain merchant's shop (the same rule as the barter window itself).
+        var plan = Screen(1920, 1080);
+        var set = Full(SteamwovenStep.Half, "backdrop.barter_follower");
+        Assert.IsTrue(SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.OpeningShop).Complete);
+        Assert.IsFalse(SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.OpeningShop, null, SteamwovenKitWindow.BarterFollower).Complete);
+    }
+
+    [TestMethod]
+    public void A_window_body_screen_with_a_wrong_sized_piece_has_no_kit_screen()
+    {
+        var plan = Screen(1920, 1080);
+        var full = Full(SteamwovenStep.Half);
+        var parts = full.Ids.Select(id => { full.TryGet(id, out var part); return id == "backdrop.inventor" ? new SteamwovenKitPart(part.Id, part.Width, part.Height - 1) : part; }).ToList();
+        var set = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", parts);
+        var result = SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.OpeningShop);
+        Assert.IsFalse(result.Complete);
+        CollectionAssert.AreEqual(new[] { "backdrop.inventor (wrong size)" }, result.Missing.ToArray());
+        Assert.IsTrue(SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.CharacterEditor).Complete, "the editor does not use the inventory's piece");
+    }
+
+    [TestMethod]
+    public void The_editor_and_the_shop_draw_none_of_their_own_backdrop_arts_over_a_kit_screen_and_the_strips_and_the_window_s_art_without()
+    {
+        CollectionAssert.AreEquivalent(new[] { 336, 335, 22 }, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.CharacterEditor, false).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 336, 335, 235, 221 }, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.OpeningShop, false).ToArray());
+        Assert.AreEqual(0, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.CharacterEditor, true).Count);
+        Assert.AreEqual(0, SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.OpeningShop, true).Count);
+        Assert.IsNull(SteamwovenKitTable.Screens[SteamwovenKitScreen.CharacterEditor].Body);
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitTable.Screens[SteamwovenKitScreen.CharacterEditor].BodyWindow);
+        Assert.AreEqual(SteamwovenKitWindow.Barter, SteamwovenKitTable.Screens[SteamwovenKitScreen.OpeningShop].BodyWindow);
+    }
+
+    [TestMethod]
     public void The_save_screen_s_message_box_is_the_bottom_strip_below_the_middle_window_s_47_rows()
     {
         var box = AreaSaveListArtLayout.MessageBox;
@@ -581,7 +754,7 @@ public sealed class SteamwovenKitTests
         var ids = SteamwovenKitTable.Strips.Values.SelectMany(strip => new[] { strip.Board, strip.CapLeft, strip.CapRight })
             .Concat(SteamwovenKitTable.Windows.Values.SelectMany(window => window.Pieces.Select(piece => piece.Part)))
             .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).Concat(SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)).Concat(SteamwovenKitTable.Covers.Values.Select(cover => cover.Part))
-            .Concat(SteamwovenKitTable.Screens.Values.SelectMany(screen => new[] { screen.TopStrip, screen.Body, screen.BottomStrip })).ToList();
+            .Concat(SteamwovenKitTable.Screens.Values.SelectMany(screen => new[] { screen.TopStrip, screen.Body, screen.BottomStrip }.OfType<string>())).ToList();
         Assert.IsTrue(ids.All(SteamwovenKitSet.ValidId));
         // Every id is a row of the committed kit manifest (identifiers only), so a renamed part cannot leave the table behind.
         var manifest = System.IO.File.ReadAllText(FindKit());
