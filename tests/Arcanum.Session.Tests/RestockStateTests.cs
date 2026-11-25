@@ -42,7 +42,13 @@ public sealed class RestockStateTests
         public List<(SessionMapId Map, string Holder)> Checks { get; } = [];
 
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
-        public RestockHolder? RestockFacts(SessionMapId map, string entity) => Facts.TryGetValue(entity, out var facts) ? facts : null;
+        /// <summary>ARC-SCRIPT-2913: run once by the first facts question of a pass (which then answers "no such object"), to move the actor between two firings.</summary>
+        public Action? BeforeFirstFacts { get; set; }
+        public RestockHolder? RestockFacts(SessionMapId map, string entity)
+        {
+            if (BeforeFirstFacts is { } hook) { BeforeFirstFacts = null; hook(); return null; }
+            return Facts.TryGetValue(entity, out var facts) ? facts : null;
+        }
         public string? RestockMerchant(SessionMapId map, string container) => Merchant;
         public bool Persistent(SessionMapId map, string item) => Kept.Contains(item);
         public SessionRestockSet RestockSet(int source) => Sets[source];
@@ -571,5 +577,54 @@ public sealed class RestockStateTests
         var done = Fire(owner, world).Restocks.Single().Regenerations.Single();
         Assert.AreEqual((1, 10), (done.Refused, owner.QueryAmmo("made:3")!.Value.Units), "the merged line is refused by the host's check, as a new item would be");
         CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6" }, done.Messages.Select(message => message.Text).ToArray(), "a refused line reports no lines (a restock keeps the made ones only)");
+    }
+
+    // ARC-SCRIPT-2913 (TL33): the restock event of a holder of another map is parked there as the original parks it: the queue fires it only while the PC is on that map, so an off-screen map's restock never runs the created items' scripts through the
+    // shown map's host. It stays pending while the PC is away and runs, scripts included, when the map is shown again.
+    private static void Place(GameSessionOwner owner, ActorPlacement placement) =>
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, placement).Disposition);
+
+    private static SessionMapInventorySeed CaveSeed() => new(
+        [new("cave-smith", SessionHolderKind.Npc, false, true, [], ["cave-purse", "cave-hammer"])],
+        [new("cave-purse", Facts(SessionItemType.Gold, 3200, quantity: 10), null), new("cave-hammer", Facts(SessionItemType.Weapon, 2001, location: 1004), null)]);
+
+    [TestMethod]
+    public void A_restock_of_another_maps_holder_stays_parked_until_its_map_is_shown_and_then_runs_the_created_items_scripts()
+    {
+        using var owner = Owner();
+        owner.AttachItemScripts(ScriptedAmmoPrototype);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Cave, CaveSeed()).Failure);
+        var world = new World { Scripts = new CreatedItemScriptTests.Host(owner) };
+        world.Facts["cave-smith"] = world.Facts["smith"];
+        Place(owner, new(Cave, new(5, 5), Start.Facing));
+        Schedule(owner, "cave-smith");
+        Place(owner, Start);
+        var away = Fire(owner, world);
+        Assert.AreEqual(0, away.Restocks.Count, "the event of the map the PC left is not due while the PC is away");
+        Assert.AreEqual((1, Cave), (owner.QueryRestocks().Count, owner.QueryRestocks().Single().Map), "it stays pending on its map");
+        CollectionAssert.AreEqual(new[] { "cave-purse", "cave-hammer" }, owner.QueryMapInventory(Cave)!.Holders.Single().Items.Select(item => item.Entity).ToArray(), "its list is untouched");
+        Place(owner, new(Cave, new(5, 5), Start.Facing));
+        var shown = owner.ProcessEvents(world).Restocks.Single();
+        Assert.AreEqual((Cave, "cave-smith", false), (shown.Map, shown.Holder, shown.Postponed));
+        var done = shown.Regenerations.Single();
+        Assert.AreEqual((25, 0, 0), (done.Coins, done.Refused, done.Skipped), "no created item is lost");
+        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6", "npc reads 5", "npc reads 6" }, done.Messages.Select(message => message.Text).ToArray(), "the scripts of the created ammunition ran on the shown map");
+    }
+
+    // The actor's map cannot change during a pass (the session refuses it), so no firing of one map is ever answered on another.
+    [TestMethod]
+    public void The_actor_cannot_leave_the_map_between_two_firings_of_one_pass()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Cave, CaveSeed()).Failure);
+        Schedule(owner, "smith");
+        Schedule(owner, "chest");
+        var world = new World();
+        GameSessionMutationResult? moved = null;
+        world.BeforeFirstFacts = () => moved = owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing));
+        var pass = Fire(owner, world);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidEventPass), (moved!.Value.Disposition, moved.Value.Failure));
+        Assert.AreEqual(Exterior, owner.QueryActor().Map);
+        Assert.AreEqual(2, pass.Restocks.Count);
     }
 }
