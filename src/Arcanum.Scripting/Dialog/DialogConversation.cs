@@ -100,6 +100,76 @@ public sealed partial class DialogConversation
         return conversation;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2965 (ledger FL4): plans the one NPC-line step a script's float line runs for <paramref name="request"/>'s entry record
+    /// (any role) with no conversation open: the line's action string, then its text. Nothing is called on a port here, so a refusal
+    /// (<see cref="Frontier"/> or <see cref="Failure"/>, <see cref="DialogConversationPhase"/> not <see cref="DialogConversationPhase.AwaitingSelection"/>)
+    /// leaves every effect unrun. Generated text (<c>g:</c>, <c>m:</c>, <c>r:</c>, a whole <c>i:</c>) and the operations that need an open
+    /// conversation (reaction, quest, known area, items, gold, companions, kill, windows, join, expert teacher, combat) are refused as a frontier. Run it with
+    /// <see cref="RunNpcLine"/>.
+    /// </summary>
+    public static DialogConversation PrepareNpcLine(
+        DlgDocument document,
+        DialogConversationRequest request,
+        DialogConversationPorts ports,
+        DialogConversationOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Participants);
+        ArgumentNullException.ThrowIfNull(request.Pc);
+        ArgumentNullException.ThrowIfNull(request.Names);
+        ArgumentNullException.ThrowIfNull(request.Names.PcName);
+        ArgumentNullException.ThrowIfNull(request.Names.NpcName);
+        ArgumentNullException.ThrowIfNull(ports);
+        ArgumentNullException.ThrowIfNull(ports.LocalFlags);
+        ArgumentNullException.ThrowIfNull(ports.Commands);
+        if (!Enum.IsDefined(request.Pc.Gender)) throw new ArgumentOutOfRangeException(nameof(request), "Unknown PC gender.");
+        if (!Enum.IsDefined(request.Encoding)) throw new ArgumentOutOfRangeException(nameof(request), "Unknown text encoding.");
+        var effective = options ?? new DialogConversationOptions();
+        effective.Validate();
+        var conversation = new DialogConversation(document, request, ports, effective);
+        if (!document.TryGetRecord(request.Entry.Value, out var record) || record is null)
+        {
+            conversation.Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidEntry, request.Entry));
+            return conversation;
+        }
+        var plan = conversation.PlanStep(record, out var frontier, out var failure, withReplies: false, nested: true);
+        if (plan is null)
+        {
+            conversation.Stop(frontier, failure);
+            return conversation;
+        }
+        if (plan.Action.FirstOrDefault(operation => !RunsWithoutConversation(operation)) is { } needsConversation)
+        {
+            conversation.Stop(new DialogConversationFrontier(DialogFrontierKind.UnsupportedOperation, request.Entry, needsConversation.Source), null);
+            return conversation;
+        }
+        if (!conversation.Admit(plan, 0)) return conversation;
+        conversation._step = plan;
+        conversation.CurrentNode = new DialogNodeId(plan.Npc.Id);
+        conversation.NpcLine = new DialogNpcLine(conversation.CurrentNode, plan.NpcText);
+        return conversation;
+    }
+
+    /// <summary>The operations of an action string a float line runs: the writes of the story state that need no open conversation
+    /// (local flags and counters, global flags, rumors, script variables, the story number).</summary>
+    private static bool RunsWithoutConversation(ConversationOperation operation) =>
+        operation is ConversationLocalFlag or ConversationCounter or ConversationGlobalFlag or ConversationRumor
+            or ConversationQuellRumor or ConversationScriptStore or ConversationStoryState;
+
+    /// <summary>Whether <see cref="PrepareNpcLine"/> planned a step, and nothing ran yet.</summary>
+    public bool NpcLinePrepared => _step is not null && Turn == 0 && Phase == DialogConversationPhase.AwaitingSelection;
+
+    /// <summary>Runs the prepared NPC-line step's action string (ARC-SCRIPT-2965): true when every operation applied; a port's refusal
+    /// leaves the conversation <see cref="DialogConversationPhase.Failed"/> with the applied operations in <see cref="Effects"/>.</summary>
+    public bool RunNpcLine()
+    {
+        if (!NpcLinePrepared) throw new InvalidOperationException("No prepared NPC line.");
+        Turn++;
+        return Execute(_step!.Action);
+    }
+
     /// <summary>Re-evaluates the current reply gates without effects. Old tokens become NotOffered.</summary>
     public DialogConversationStepResult RefreshOptions()
     {

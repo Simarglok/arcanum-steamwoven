@@ -187,4 +187,43 @@ public sealed class CreatedItemScriptTests
         CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:1") }, Points(refused));
         Assert.AreEqual(false, ReadFlag(owner, 3) == true);
     }
+
+    [TestMethod]
+    public void An_item_the_session_adds_to_an_npc_runs_the_get_then_the_insert_script_with_the_npc_as_the_triggerer()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        var added = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10), host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, "made:1"), (added.Disposition, added.Failure, added.Item));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:1"), (SessionScriptPoint.InsertItem, "made:1") }, Points(added));
+        Assert.IsNotNull(added.InsertScript);
+        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6" }, added.Messages.Select(message => message.Text).ToArray());
+        Assert.AreEqual(true, ReadFlag(owner, 3), "the get run's flag applies with the move");
+        Assert.AreEqual(10, owner.QueryAmmo("made:1")?.Units);
+    }
+
+    [TestMethod]
+    public void A_get_script_that_skips_the_default_refuses_an_item_added_to_an_npc_and_nothing_is_made()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        host.Programs[GetScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var revision = owner.Version.Revision;
+        var refused = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10), host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, (int?)SessionScriptPoint.Get), (refused.Disposition, refused.Failure, refused.DeclinedBy));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:1") }, Points(refused), "the insert-item script is not run");
+        Assert.AreEqual((revision, (SessionAmmoRecord?)null), (owner.Version.Revision, owner.QueryAmmo("made:1")));
+        Assert.AreEqual(false, ReadFlag(owner, 3) == true);
+    }
+
+    [TestMethod]
+    public void An_item_added_to_an_npc_whose_prototype_has_scripts_is_refused_without_a_host_and_one_without_a_source_runs_none()
+    {
+        using var owner = Hero();
+        var refused = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
+        using var plain = Hero(attach: false);
+        var added = plain.AddItemToNpc(plain.Version, "virgil", Bullets, Accept, (0, 10), new Host(plain));
+        Assert.AreEqual((GameSessionDisposition.Changed, 0), (added.Disposition, added.Scripts.Count));
+    }
 }

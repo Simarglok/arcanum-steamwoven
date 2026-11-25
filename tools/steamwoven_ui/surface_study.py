@@ -142,7 +142,7 @@ def assemble(zone_files: dict[str, Path], out: Path) -> dict:
     command = ["magick", "-size", f"{MASTER[0]}x{MASTER[1]}", "xc:black"]
     for zone, (x, y, w, h, _) in ZONES.items():
         command += ["(", str(zone_files[zone]), "-alpha", "off", "-filter", "Lanczos", "-resize", f"{w}x{h}!", ")", "-geometry", f"+{x}+{y}", "-composite"]
-    run(command + ["-alpha", "off", str(out)])
+    run(command + ["-alpha", "off", "-depth", "8", str(out)])  # xc:black is Q16: without -depth 8 the PNG is 16 bit and surface_compose refuses it
     return {"out": str(out), "zones": len(ZONES)}
 
 
