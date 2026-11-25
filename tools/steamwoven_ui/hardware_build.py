@@ -1,6 +1,10 @@
 """ARC-UI-2481: the hardware of the kit strips (batch B-HARDWARE, slice 1: the two HUD strips, arts 185 and 184).
 
-    python3 -B tools/steamwoven_ui/hardware_build.py refs  [--sheet hud-bottom|hud-top] [--local-root DIR]
+    python3 -B tools/steamwoven_ui/hardware_build.py refs  [--sheet hud-bottom|hud-top|hud-top-parts] [--local-root DIR]
+    python3 -B tools/steamwoven_ui/hardware_build.py cut [--sheet NAME]   # the details out of the generated sheets, placements.json
+    python3 -B tools/steamwoven_ui/hardware_build.py strips            # the strip arts without the original's metal, the preview with the parts laid
+    python3 -B tools/steamwoven_ui/hardware_build.py fit [--only ID]   # fit gates of the parts
+    python3 -B tools/steamwoven_ui/hardware_build.py art               # fit gates of the two strip arts
     python3 -B tools/steamwoven_ui/hardware_build.py self-test
 
 The strip art of the kit (`board.*`, ARC-UI-2927) is wood and the original's openings; its metal, rings, sockets and housings were the original's own pixels as stand-ins. This
@@ -376,8 +380,8 @@ def cmd_cut(args) -> int:
     tones: dict[str, dict] = {}
     for name in args.sheet or sorted(SHEETS):
         sheet = SHEETS[name]
-        layout = json.loads((work / f"sheet-{name}.layout.json").read_text(encoding="utf-8"))
         try:
+            layout = json.loads((work / f"sheet-{name}.layout.json").read_text(encoding="utf-8"))
             result, _ = sheet_file(root, sheet)
         except (HardwareError, FileNotFoundError) as err:
             print(f"SKIP sheet {name}: {err}")
@@ -446,10 +450,13 @@ def cmd_cut(args) -> int:
             layers.append([strip, round_grid(ox - px), round_grid(oy - py)])
         canvases[part_id] = {"size": [w, h], "content": [ew, eh], "pad": [px, py], "layers": layers, "strip": part["strip"], "tone_shift": tones.get(part_id)}
         print(f"PART {part_id}: canvas {w} x {h}, {len(layers)} place(s)")
-    (work / "placements.json").write_text(json.dumps(canvases, indent=2) + "\n", encoding="utf-8")
+    placed_file = work / "placements.json"
+    kept = json.loads(placed_file.read_text(encoding="utf-8")) if placed_file.exists() else {}   # a cut of one sheet keeps the other sheets' places
+    placed_file.write_text(json.dumps({**kept, **canvases}, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
+# Leftovers of the original's metal that no part stands for. Bottom: the lone square before the rail's first unit. Top: two scraps (1900, 0 and 2026, 96) found in the strip preview after the first erase.
 ERASE_BOXES = {"board.intbotom": [(752, 146, 778, 178)], "board.inttop": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)]}   # leftovers of the original's metal that no part stands for: the lone square before the rail's first unit
 ERASE_GROW = 8            # px: the original's metal is erased this far beyond a part's alpha (its fringe of old shadow and wood), the wood beside it fills the gap
 

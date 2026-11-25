@@ -783,8 +783,8 @@ public sealed class SteamwovenKitTests
                 Assert.AreEqual(0, width % 6, layer.Part + " width on the 6 px grid");
                 Assert.AreEqual(0, partHeight % 6, layer.Part + " height on the 6 px grid");
                 Assert.IsTrue(layer.MasterX >= 0 && layer.MasterY >= 0 && layer.MasterY + partHeight <= height, layer.Part + " inside the strip's height");
-                // The left edge is inside the strip's 2880 px; a part may overhang the right edge by one grid step at most (it is clipped to the strip).
-                Assert.IsTrue(layer.MasterX + width <= SteamwovenKitTable.CompositionMasterWidth + 6, layer.Part + " inside the strip's width");
+                // Inside the strip's 2880 px, except the top strip's right plate: its 948 px canvas (the original's plate on the 6 px grid) starts at 1938 and its last 6 px are padding the draw clips away.
+                Assert.IsTrue(layer.MasterX + width <= SteamwovenKitTable.CompositionMasterWidth + (layer.Part == "hardware.hud_plate_right" ? 6 : 0), layer.Part + " inside the strip's width");
             }
         }
         // Every sized part is laid somewhere, so a part of the manifest never lies unused.
@@ -805,7 +805,16 @@ public sealed class SteamwovenKitTests
             var composed = SteamwovenKitComposer.Strip(plan, Full(step), strip).Value!;
             Assert.AreEqual(spec.Layers.Count, composed.Layers.Count);
             var rect = strip == AreaBarStrip.Top ? plan.Column.TopStrip : plan.Column.BottomStrip;
-            foreach (var layer in composed.Layers) Assert.IsTrue(layer.Clip.X >= rect.X && layer.Clip.Right <= rect.Right && layer.Clip.Y >= rect.Y && layer.Clip.Bottom <= rect.Bottom, layer.PartId);
+            for (var i = 0; i < composed.Layers.Count; i++)
+            {
+                var (layer, laid) = (composed.Layers[i], spec.Layers[i]);
+                Assert.AreEqual(laid.Part, layer.PartId);
+                Assert.IsTrue(layer.Clip.Width > 0 && layer.Clip.Height > 0, layer.PartId + " shows");
+                Assert.IsTrue(layer.Clip.X >= rect.X && layer.Clip.Right <= rect.Right && layer.Clip.Y >= rect.Y && layer.Clip.Bottom <= rect.Bottom, layer.PartId);
+                // The layer starts where its master position says: the strip's corner plus the position in device pixels (rounded from the master pixels at the plan's scale).
+                var factor = (double)rect.Width / SteamwovenKitTable.CompositionMasterWidth;
+                Assert.IsTrue(Math.Abs(layer.Rect.X - (rect.X + laid.MasterX * factor)) <= 1 && Math.Abs(layer.Rect.Y - (rect.Y + laid.MasterY * factor)) <= 1, $"{layer.PartId} at ({laid.MasterX}, {laid.MasterY}) is at {layer.Rect}");
+            }
             var gone = spec.Layers[0].Part;
             var result = SteamwovenKitComposer.Strip(plan, Full(step, gone), strip);
             Assert.IsFalse(result.Complete);
