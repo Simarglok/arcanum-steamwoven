@@ -523,11 +523,13 @@ def remove_islands(solid: Path, out: Path, min_area: int) -> None:
     a few pixels is an island too, and grown back by the same disk inside the original weight. Only white is removed, never a hole of the wood."""
     if min_area <= 0:
         return
-    binary, kept = solid.with_name("island-bin.png"), solid.with_name("island-kept.png")
+    binary, kept, dropped = solid.with_name("island-bin.png"), solid.with_name("island-kept.png"), solid.with_name("island-dropped.png")
     run(["magick", str(solid), "-colorspace", "Gray", "-threshold", "50%", "-morphology", "Erode", f"Disk:{ISLAND_ERODE}", str(binary)])
     run(["magick", str(binary), "-define", f"connected-components:area-threshold={min_area}", "-define", "connected-components:mean-color=true",
-         "-connected-components", str(ISLAND_CONNECTIVITY), "-morphology", "Dilate", f"Disk:{ISLAND_ERODE}", str(kept)])
-    run(["magick", str(solid), str(kept), "-colorspace", "Gray", "-compose", "Multiply", "-composite", str(out)])
+         "-connected-components", str(ISLAND_CONNECTIVITY), "-colorspace", "Gray", str(kept)])
+    # only the dropped islands (white in the eroded weight, black after the count) are taken out, grown back and feathered: the rest of the soft weight, its edges included, is untouched
+    run(["magick", str(binary), str(kept), "-compose", "Difference", "-composite", "-morphology", "Dilate", f"Disk:{ISLAND_ERODE + 2}", "-blur", f"0x{MASK_FEATHER}", "-negate", str(dropped)])
+    run(["magick", str(solid), str(dropped), "-colorspace", "Gray", "-compose", "Multiply", "-composite", str(out)])
 
 
 def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, width: int, height: int) -> None:
@@ -541,12 +543,14 @@ def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, wid
         draw += ["-draw", f"rectangle {x0},{y0} {x1 - 1},{y1 - 1}"]
     inside, items, protect, fill = (solid.with_name(n) for n in ("fill-box.png", "fill-items.png", "fill-protect.png", "fill-weight.png"))
     run(["magick", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *draw, "-colorspace", "Gray", str(inside)])
-    bright, dark = round(FILL_BRIGHT / 255 * 100), round(FILL_DARK / 255 * 100)
+    bright, dark = f"{FILL_BRIGHT / 255 * 100:.2f}", f"{FILL_DARK / 255 * 100:.2f}"
     run(["magick", str(original), "-alpha", "off", "-colorspace", "Gray", "(", "+clone", "-threshold", f"{bright}%", ")", "(", "-clone", "0", "-threshold", f"{dark}%", "-negate", ")",
          "-delete", "0", "-compose", "Lighten", "-composite", str(inside), "-compose", "Multiply", "-composite",
          "-morphology", "Dilate", f"Disk:{FILL_DILATE}", "-morphology", "Close", f"Disk:{FILL_CLOSE}", str(items)])
     # holes of the items (a knob inside a rim): the background reached from the corner is outside; whatever black is not reached is inside an item
-    run(["magick", str(items), "-fill", "gray50", "-draw", "color 0,0 floodfill", "-fill", "white", "-opaque", "black", "-fill", "black", "-opaque", "gray50", str(protect)])
+    # (a black 1 px border first, so the corner pixel the flood starts from is background even when a box and an item touch the image corner)
+    run(["magick", str(items), "-bordercolor", "black", "-border", "1", "-fill", "gray50", "-draw", "color 0,0 floodfill", "-fill", "white", "-opaque", "black", "-fill", "black", "-opaque", "gray50",
+         "-shave", "1x1", str(protect)])
     run(["magick", str(protect), "-negate", str(inside), "-compose", "Multiply", "-composite", "-blur", f"0x{MASK_FEATHER}", str(fill)])
     run(["magick", str(solid), str(fill), "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
 

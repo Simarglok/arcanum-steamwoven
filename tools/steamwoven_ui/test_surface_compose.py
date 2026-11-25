@@ -241,7 +241,31 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertLess(at(255, 75), 60)      # the leak: dropped
         self.assertGreater(at(350, 180), 200)  # the wood: kept
         self.assertGreater(at(10, 10), 200)
-        surface_compose.remove_islands(src, out, 0)  # off: nothing written, nothing dropped
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_remove_islands_leaves_the_feathered_edge_of_the_wood_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            src, out = tmp_path / "w.png", tmp_path / "w2.png"
+            subprocess.run(["magick", "-size", "200x100", "xc:white", "-fill", "black", "-draw", "rectangle 80,0 199,99", "-blur", "0x3", str(src)], check=True)
+            before = surface_compose.gray_bytes(src)
+            surface_compose.remove_islands(src, out, 700)
+            after = surface_compose.gray_bytes(out)
+        row = 50 * 200
+        self.assertEqual(list(before[row + 70:row + 90]), list(after[row + 70:row + 90]))   # the soft edge: no hard step at 50 %
+        surface_compose.remove_islands(src, out, 0)                                         # off: returns at once
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_fill_between_items_with_an_item_and_a_box_at_the_image_corner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, solid, out = tmp_path / "o.png", tmp_path / "s.png", tmp_path / "f.png"
+            subprocess.run(["magick", "-size", "120x80", "xc:gray(60)", "-fill", "gray(200)", "-draw", "rectangle 0,0 10,10", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "120x80", "xc:black", str(solid)], check=True)
+            surface_compose.fill_between_items(orig, solid, ((0, 0, 100, 70),), out, 120, 80)
+            data = surface_compose.gray_bytes(out)
+        self.assertLess(data[5 * 120 + 5], 60)        # the corner item stays the original's
+        self.assertGreater(data[50 * 120 + 60], 200)  # wood elsewhere in the box
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
     def test_fill_between_items_puts_wood_between_letters_and_keeps_the_items_and_the_outside(self):

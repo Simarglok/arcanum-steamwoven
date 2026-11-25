@@ -155,9 +155,9 @@ Each family's A was assembled with the inventory screen's two strip results (`su
 
 | Screen | seam y=148 | seam y=1588 | wood L\* (original / result) | wood contrast (original / result) | tone | wood dE mean / p95 |
 |---|---|---|---|---|---|---|
-| character | 0.66 | 1.48 | 19.63 / 19.69 | 3.77 / 3.67 | PASS | 3.02 / 6.86 |
-| logbook | 1.00 | 1.49 | 19.72 / 19.69 | 4.76 / 4.57 | PASS | 2.82 / 6.10 |
-| reading | 1.15 | 1.25 | 19.75 / 19.81 | 4.96 / 4.95 | PASS | 2.10 / 4.59 |
+| character | 0.67 | 1.47 | 19.63 / 19.69 | 3.77 / 3.67 | PASS | 3.02 / 6.85 |
+| logbook | 1.00 | 1.49 | 19.72 / 19.68 | 4.76 / 4.58 | PASS | 2.82 / 6.10 |
+| reading | 1.16 | 1.26 | 19.75 / 19.80 | 4.96 / 4.95 | PASS | 2.09 / 4.57 |
 | schematic | 1.03 | 1.08 | 20.01 / 20.02 | 3.87 / 3.75 | PASS | 3.08 / 6.71 |
 
 All four gates hold (seams at most 1.49, so the target 1.8 and SWI-VER-5's 1.5 are both met; tone PASS). `surface_study.py assemble` wrote a 16-bit PNG (the Q16 canvas `xc:black`), which `surface_compose.py` refuses; it now sets `-depth 8`.
@@ -166,7 +166,7 @@ Records: `provenance/surface/ctx-<family>.json`; the composites are local, under
 **Owner look check, 2026-11-25:** the backgrounds were accepted with three fixes, all in `surface_compose.py` and shown as 1:1 crops (original, before, after):
 
 - **Character: patch around the stat labels and fields.** The tone mask excludes the label and field boxes whole, so the original's lighter panel wood stood there as a patch with a sharp edge against the Codex wood. A spec's `fill_boxes` (master pixels, the tone mask's boxes grown by 24 px) put the Codex wood between the items of each box: an item is an original pixel brighter than luma 105 or darker than 14 (letters, brass rims, black fields; the colour class cannot say it, the panel wood is no wood class), grown by 4 px, closed by 4 px and filled inside (a knob in a rim); the wood weight is the max of the old weight and the box's wood.
-- **Schematics: leaks of the wood class into the gears, and specks in the wood.** `island_min`: the wood weight is eroded by 6 px, white islands under that many pixels are dropped, and the weight is grown back inside the original: a leak inside a gear or a bay joined to the wood by a few pixels is the original's metal again (a plain island count missed the bay above the hat, its channel was 5 px). The dark specks on the wood were the original's "rows of dots" restored (`original_dots`): in the window the faint grain specks chain into false rows, so `dot_bands` keep the dots only in the strips (rows 0 to 148 and 1588 to 2160); the Codex specks are removed pointwise as in [ARC-UI-3104](https://github.com/Simarglok/arcanum-steamwoven/issues/3104). The dark halo around the gears is [#3101](https://github.com/Simarglok/arcanum-steamwoven/issues/3101).
+- **Schematics: leaks of the wood class into the gears, and specks in the wood.** `island_min`: the wood weight is eroded by 6 px, white islands under that many pixels are dropped, and the weight is grown back inside the original: a leak inside a gear or a bay joined to the wood by a few pixels is the original's metal again (a plain island count missed the bay above the hat, its channel was 5 px); only the dropped islands are taken out of the soft weight, so its feathered edges stay). The dark specks on the wood were the original's "rows of dots" restored (`original_dots`): in the window the faint grain specks chain into false rows, so `dot_bands` keep the dots only in the strips (rows 0 to 148 and 1588 to 2160); the Codex specks are removed pointwise as in [ARC-UI-3104](https://github.com/Simarglok/arcanum-steamwoven/issues/3104). The dark halo around the gears is [#3101](https://github.com/Simarglok/arcanum-steamwoven/issues/3101).
 - **Logbook, reading: page edges.** The same leak: the book's page-edge strip lies outside the tone mask's book zone, and blobs of it came out as wood; `island_min` drops them. The reading window's edges and both windows' right edges were clean.
 
 The spec fields default to the old behaviour (`island_min` 0, no `fill_boxes`, `dot_bands` null), so the inventory result is unchanged.
