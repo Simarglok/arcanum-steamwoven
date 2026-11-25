@@ -405,9 +405,7 @@ the start map), one per tile.
   open (logged); the player's steps still queued wait until it closes, a companion's remaining steps of that drive run nothing.
   A dialog action with no NPC of the shown map to talk to (a tile script's own, which has no attachee), or with a teleport, applies
   nothing and counts as a refused run (so a tile's unconditional teleport still fires); a stored use slot of an NPC with no loaded
-  use element leaves the run unapplied. Such a conversation's "return to script" does not resume a script (not modelled; the
-  speaker's dialog script is not the one that started it), and a DLG with an LF operation is refused (which local flags it reads
-  for such a start is not read in the executable). Log lines: `ARC-SCRIPT-046 companion-tile` (a companion's run that did something),
+  use element leaves the run unapplied. Such a conversation's "return to script" resumes the speaker's dialog slot (point 9) at the reply's line or the held line + 1, as a talk's does (ARC-SCRIPT-2961, ledger TG10: the held line is the starting script's own line, applied to the dialog script), and its DLG's LF and LC read that slot; a DLG with an LF or LC operation is refused only when the speaker's dialog slot holds no script. Log lines: `ARC-SCRIPT-046 companion-tile` (a companion's run that did something),
   `ARC-SCRIPT-046 scripted conversation`. Installed original: at the plane wreck of the Crash Site, script 1695 on a row of tiles
   waits for Virgil (name 6409) to step on one, then calls 1696, whose dialog asks for node 1 of DLG 1696 (his remark on the
   flying machine; its last replies set flag 2304, which ends 1695 at once from then on); the player stepping there runs it to

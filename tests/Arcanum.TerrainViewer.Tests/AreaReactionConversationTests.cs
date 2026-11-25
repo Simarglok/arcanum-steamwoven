@@ -115,7 +115,7 @@ public sealed class AreaReactionConversationTests
         public AreaConversationHost Host { get; }
         public string Entity => AreaConversationState.EntityId(Speaker.Row);
 
-        public static Fixture Create(string? dialog = null, bool npc = false, bool hero = false, bool deathSpeech = false)
+        public static Fixture Create(string? dialog = null, bool npc = false, bool hero = false, bool deathSpeech = false, int dialogSlotScript = 777)
         {
             var root = Directory.CreateTempSubdirectory("arc-world-043-");
             void Write(string relative, byte[] bytes)
@@ -131,7 +131,7 @@ public sealed class AreaReactionConversationTests
             using var source = new AreaOwnerFixture(motionBodies: true);
             var area = source.Owner.LoadStrict();
             var row = area.Objects.First(o => o.WorldX is not null && o.WorldY is not null);
-            var scripts = new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dialog, [4, 0x0201, 777])], null);
+            var scripts = new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dialog, [4, 0x0201, dialogSlotScript])], null);
             var speaker = new AreaSpeaker(0, row with { Type = npc ? 16 : row.Type, EffectiveFields = [.. row.EffectiveFields.Where(field => field.Slot != 31), scripts] }, 777, row.WorldX!.Value, row.WorldY!.Value);
             var session = hero ? ConversationSessionFixture.CreateWithHero(area.RuntimeMap) : ConversationSessionFixture.Create(area.RuntimeMap);
             return new(root, load.Content!, session, speaker, new AreaConversationHost(area, [speaker], load.Content, session));

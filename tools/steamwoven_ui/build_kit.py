@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 from tools.steamwoven_ui import button_kit  # noqa: E402
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
+from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
@@ -134,6 +135,7 @@ def new_parts() -> list[dict]:
                                   "a 156 x 156 canvas of the whole frame, so the size is open",
                                   states=states, master=True, provenance=f"rule:glyph_cells:{ident}"))
     parts.extend(square_hud_parts())
+    parts.extend(round_hud_parts())
     return parts
 
 
@@ -156,6 +158,28 @@ def square_hud_parts() -> list[dict]:
     return parts
 
 
+def round_hud_parts() -> list[dict]:
+    """ARC-UI-3202, slice 2 of B-BUTTONS: the four round buttons of the bottom strip (arts 470 to 473) and the ball of the Fate Points and Sleep buttons (art 137). Besides the plates (rows from the census, set to
+    master below) each round button has its glyph and the hover and pressed overlays, the ball its two empty glyphs and the pressed overlay, made BY RULE from the original's frames by `round_kit.py` (no Codex)."""
+    parts = []
+    for b in round_kit.ROUND_BUTTONS:
+        for ident, kind, states, what in ((f"glyph.{b.name}", "glyph", ["idle"], f"the symbol of art {b.art} as the idle frame shows it over the plate"),
+                                          (f"plate.{b.name}_hover", "plate", ["hover"], f"overlay of art {b.art}'s hover frame over its idle frame (the symbol turns lit and glows)"),
+                                          (f"plate.{b.name}_pressed", "plate", ["pressed"], f"overlay of art {b.art}'s pressed frame over its idle frame (the lit symbol, and the plate darkened where the original darkens it)")):
+            parts.append(new_part(ident, kind, "bottom-strip", ["H02"], None, "B-BUTTONS",
+                                  f"{what}; round_kit.py draws it from the original frames (no Codex), a 138 x 138 canvas, so the size is open",
+                                  states=states, master=True, provenance=f"rule:round_kit:{ident}"))
+    for glyph in round_kit.BALL_GLYPHS:
+        parts.append(new_part(f"glyph.{glyph}", "glyph", "top-strip", ["H01"], None, "B-BUTTONS",
+                              f"the {glyph.split('_')[0]} button's glyph on art 137: EMPTY (the ball has no symbol; the strip art 185 holds the infinity sign and the hourglass); an 84 x 84 layer so the runtime composes the face; size open",
+                              states=["idle"], master=True, provenance=f"rule:round_kit:glyph.{glyph}"))
+    parts.append(new_part("plate.lilgrnbut_pressed", "plate", "top-strip", ["H01"], None, "B-BUTTONS",
+                          "overlay of art 137's pressed frame over its idle frame (the dome darkens, the rim brightens); round_kit.py draws it from the original frames (no Codex), 84 x 84, size open",
+                          states=["pressed"], master=True, provenance="rule:round_kit:plate.lilgrnbut_pressed"))
+    return parts
+
+
+ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 
@@ -196,6 +220,11 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if ident in SQUARE_HUD_PLATES:
             part["status"], part["provenance"] = "master", f"fit:{ident}"
             part["note"] = "the empty square plate: one Codex item (plate-square-hud), fitted to this part; the symbol, its states and the lit faces are made by rule (button_kit.py, ARC-UI-2482)"
+        if ident in ROUND_HUD_PLATES:
+            part["status"], part["provenance"] = "master", f"fit:{ident}"
+            part["note"] = ("the empty ball: one Codex item (plate-ball-hud), fitted to this part; the pressed overlay is made by rule (round_kit.py, ARC-UI-3202)"
+                            if ident == "plate.lilgrnbut" else
+                            "the empty round face (no ring: the strip draws the socket): one Codex item (plate-round-hud), fitted to this part; symbol and states by rule (round_kit.py, ARC-UI-3202)")
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
