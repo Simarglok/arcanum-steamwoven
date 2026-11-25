@@ -250,17 +250,17 @@ public partial class AreaInventoryGridArea : Control
     }
 
     /// <summary>
-    /// ARC-UI-2575: with the Steamwoven layout on, puts <paramref name="panel"/> (whose <paramref name="area"/> is the 800 × 400 frame) so the frame lies in the window zone at the layout's unit scale, whatever the panel
-    /// holds around the frame (the switch, the message and quantity rows); false while that layout is not in use (nothing is changed). The one placement of the inventory, loot and barter windows.
+    /// ARC-UI-2575: with the Steamwoven layout on, puts <paramref name="panel"/> (whose <paramref name="area"/> is the 800 × 400 frame) on the window zone at the layout's unit scale, and ARC-UI-2615: docks
+    /// <paramref name="rows"/> (what the panel shows around the frame) over the frame's edges, so the panel is the frame; false while that layout is not in use (the rows go back to the panel's column). The one placement
+    /// of the inventory, loot, barter and item service windows.
     /// </summary>
-    public static bool PlaceInZone(PanelContainer panel, AreaInventoryGridArea area, Vector2 viewSize)
+    internal static bool PlaceInZone(PanelContainer panel, AreaInventoryGridArea area, AreaZoneRows rows, Vector2 viewSize)
     {
-        if (AreaGameBarPanel.ZoneWindow(viewSize, (int)AreaInventoryDrag.FrameWidth, (int)AreaInventoryDrag.FrameHeight) is not { } zone) return false;
+        if (AreaGameBarPanel.ZoneWindow(viewSize, (int)AreaInventoryDrag.FrameWidth, (int)AreaInventoryDrag.FrameHeight) is not { } zone) { rows.Undock(); return false; }
         area.FitScale((float)zone.Scale);
-        var offset = area.GlobalPosition - panel.GlobalPosition;
-        panel.Size = new((float)(AreaInventoryDrag.FrameWidth * zone.Scale) + offset.X * 2, 0);
-        panel.Size = new(panel.Size.X, panel.GetCombinedMinimumSize().Y);
-        panel.Position = new((float)zone.X - offset.X, (float)zone.Y - offset.Y);
+        rows.Dock((float)zone.Scale);
+        panel.Size = new((float)(AreaInventoryDrag.FrameWidth * zone.Scale), (float)(AreaInventoryDrag.FrameHeight * zone.Scale));
+        panel.Position = new((float)zone.X, (float)zone.Y);
         return true;
     }
 

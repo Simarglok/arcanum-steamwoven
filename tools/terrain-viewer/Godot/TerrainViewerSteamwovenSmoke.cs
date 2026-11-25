@@ -575,6 +575,7 @@ public partial class TerrainViewerApp
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
             if (plan is not null) CheckBackdrop(tag, name, window.Family, plan, panel, require);
+            if (plan is not null && name is "inventory" or "loot" or "barter") await CheckWindowRowsAsync(tag, name, plan, frames, waitPainted, require);
             // ARC-UI-2694: the lens of the sheet and the map window is a close spot (a mouse-up in its square closes the window): a click on its centre, at the zone place, closes it.
             if (plan is not null && name is "sheet" or "map")
             {
@@ -588,6 +589,60 @@ public partial class TerrainViewerApp
             }
             if (window.IsOpen()) window.Close();
             await frames(3);
+        }
+    }
+
+    // ARC-UI-2615: with the debug switch on, the rows the inventory, loot and barter windows show around their frame (the quantity row, drawn while the bottom strip's pane is hidden, the message line and
+    // the look switch) lie inside the window zone, so inside the middle band and under no strip; the capture is steamwoven-VARIANT-WxH-WINDOW-rows.png.
+    // The switch then goes to the diagnostic window (the rows back in the panel's column) and back, where the switch keeps the focus.
+    private async Task CheckWindowRowsAsync(string tag, string name, SteamwovenHudPlan plan, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
+    {
+        var barter = name == "barter";
+        if (barter) _barterPanel!.DiagnosticSwitch = true;
+        else
+        {
+            _inventoryPanel!.DiagnosticSwitch = true;
+            _quantityPaneHiddenForCapture = true;
+            _inventoryPanel.AskQuantity("Arrows", 120, "took 1 item(s)");
+        }
+        try
+        {
+            await frames(4);
+            await waitPainted();
+            await CaptureHudAsync("steamwoven-" + tag + "-" + name + "-rows", frames);
+            var rows = (barter ? _barterPanel!.RowsForSelfTest : _inventoryPanel!.RowsForSelfTest).Where(row => row.IsVisibleInTree()).ToList();
+            var zone = plan.WindowZone;
+            var places = string.Join(" ", rows.Select(row => { var r = row.GetGlobalRect(); return $"({r.Position.X:F0},{r.Position.Y:F0},{r.Size.X:F0}x{r.Size.Y:F0})"; }));
+            GD.Print($"ARC-UI-2615 steamwoven rows [{tag}] {name} count={rows.Count} rows={places} zone={zone}");
+            require(rows.Count == (barter ? 1 : 3), $"[{tag}] the {name} window shows its rows around the frame with the debug switch on ({rows.Count})");
+            foreach (var rect in rows.Select(row => row.GetGlobalRect()))
+                require(rect.Position.X >= zone.X - 1 && rect.Position.Y >= zone.Y - 1 && rect.End.X <= zone.Right + 1 && rect.End.Y <= zone.Bottom + 1,
+                    $"[{tag}] a row of the {name} window lies inside the window zone {zone}: {rect}");
+            if (!barter) _inventoryPanel!.CancelQuantity();
+            await frames(2);
+            var toggle = barter ? _barterPanel!.LookToggleForSelfTest : _inventoryPanel!.LookToggleForSelfTest;
+            foreach (var art in new[] { false, true })
+            {
+                toggle.GrabFocus();
+                toggle.EmitSignal(BaseButton.SignalName.Pressed);
+                await frames(3);
+                var (shown, docked) = barter ? (_barterPanel!.ArtMode, _barterPanel.RowsDockedForSelfTest) : (_inventoryPanel!.ArtMode, _inventoryPanel.RowsDockedForSelfTest);
+                require(shown == art && docked == art && (!art || toggle.HasFocus()),
+                    $"[{tag}] the {name} switch changes to the {(art ? "original" : "diagnostic")} look, the rows {(art ? "docked with the focus on the switch" : "in the column")} (art {shown}, docked {docked}, focus {toggle.HasFocus()})");
+            }
+            var back = toggle.GetGlobalRect();
+            require(back.Position.Y >= zone.Y - 1 && back.End.Y <= zone.Bottom + 1, $"[{tag}] the {name} switch is back inside the window zone {zone}: {back}");
+        }
+        finally
+        {
+            if (barter) _barterPanel!.DiagnosticSwitch = false;
+            else
+            {
+                _inventoryPanel!.CancelQuantity();
+                _quantityPaneHiddenForCapture = false;
+                _inventoryPanel.DiagnosticSwitch = false;
+            }
+            await frames(2);
         }
     }
 

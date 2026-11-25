@@ -17,6 +17,7 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaBarterPanel : CanvasLayer
 {
     private PanelContainer _panel = null!;
+    private AreaZoneRows _rows = null!;
     private Label _header = null!;
     private Label _heroHeader = null!;
     private Label _waresHeader = null!;
@@ -99,6 +100,8 @@ public partial class AreaBarterPanel : CanvasLayer
     }
     private AreaKitBackdrop? _shopKit;
     internal Button LookToggleForSelfTest => _lookToggle;
+    internal IReadOnlyList<Control> RowsForSelfTest => [_message, _lookToggle];
+    internal bool RowsDockedForSelfTest => _rows.Docked;
 
     /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
     public bool DiagnosticSwitch
@@ -167,6 +170,7 @@ public partial class AreaBarterPanel : CanvasLayer
             if (View is { } view) Render(view, _message.Text, _art);
         }).CallDeferred();
         foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
+        _rows = new(_panel, contents, [], [_lookToggle, _message]);
         _roundView = new AreaRoundView(); AddChild(_roundView);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -298,6 +302,7 @@ public partial class AreaBarterPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (!ArtMode || _docked) _rows.Undock();
         if (ArtMode && _docked)
         {
             // ARC-UI-069: the window's 800 × 400 at the screen's (0, 41) of the menu's 800 × 600 screen, at the bars' whole factor (as the
@@ -325,7 +330,7 @@ public partial class AreaBarterPanel : CanvasLayer
         {
             // ARC-UI-064: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it
             // (as the inventory window's original look).
-            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, _rows, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)

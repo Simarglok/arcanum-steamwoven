@@ -19,6 +19,7 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaInventoryPanel : CanvasLayer
 {
     private PanelContainer _panel = null!;
+    private AreaZoneRows _rows = null!;
     private Label _header = null!;
     private Label _pc = null!;
     private VBoxContainer _use = null!;
@@ -125,6 +126,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     }
     internal IReadOnlyList<Button> QuantityButtonsForSelfTest => _quantityButtons;
     internal string QuantityTextForSelfTest => _quantityLabel.Text;
+    internal IReadOnlyList<Control> RowsForSelfTest => [_quantity, _message, _lookToggle];
+    internal bool RowsDockedForSelfTest => _rows.Docked;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
 
@@ -239,6 +242,7 @@ public partial class AreaInventoryPanel : CanvasLayer
             if (_view is { } view) Render(view, _message.Text);
         }).CallDeferred();
         foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
+        _rows = new(_panel, contents, [_quantity], [_lookToggle, _message]);
         _roundView = new AreaRoundView(); AddChild(_roundView);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -557,6 +561,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (!ArtMode) _rows.Undock();
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         if (ArtMode)
@@ -564,8 +569,8 @@ public partial class AreaInventoryPanel : CanvasLayer
             // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
             // shows besides the frame (the switch, the message line, the quantity row; PROJECT: the original prints no message in the
             // window). ARC-UI-054: the message line is one line whether a message is shown or not, so a message keeps the scale.
-            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the switch, the message line and the quantity row hang around it).
-            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (ARC-UI-2615: the switch, the message line and the quantity row lie over its edges).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, _rows, GetViewport().GetVisibleRect().Size)) return;
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
             {

@@ -17,6 +17,7 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaItemServicePanel : CanvasLayer
 {
     private PanelContainer _panel = null!;
+    private AreaZoneRows _rows = null!;
     private Label _header = null!;
     private VBoxContainer _items = null!;
     private Label _message = null!;
@@ -110,6 +111,7 @@ public partial class AreaItemServicePanel : CanvasLayer
             if (View is { } view) Render(view, _art);
         }).CallDeferred();
         foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
+        _rows = new(_panel, contents, [], [_lookToggle, _message]);
         _roundView = new AreaRoundView(); AddChild(_roundView);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -240,11 +242,12 @@ public partial class AreaItemServicePanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (!ArtMode) _rows.Undock();
         if (ArtMode)
         {
             // ARC-UI-1765: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it (as the inventory and barter windows' original look).
             // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the loot window hides the bars; the zone is the layout's all the same).
-            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, _rows, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
