@@ -95,9 +95,9 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-350: a player who asked for HD and gets no usable pack is told (log and a box); the run draws Legacy and the settings stay.
         // An automated run (self-test, smoke) keeps its own pack arrangements: the HD toggle tests rely on a profile with no pack.
-        // ARC-UI-140: the generated interface needs no pack (it takes the Legacy pictures without one), so it alone asks nothing.
+        // ARC-UI-3142: HD On is the Steamwoven interface and needs the pack's frames (the Legacy art stands where the pack lacks one), so HD alone asks for it.
         var problem = AutomatedVisualRun ? HdPackProblem.None
-            : HdPackProblem.Check(profile == VisualProfile.Hd || (_gameSettings.HdInterface && !_gameSettings.GeneratedInterface), fromEnvironment, pack, open, _hdPackChoice);
+            : HdPackProblem.Check(profile == VisualProfile.Hd || _gameSettings.HdInterface, fromEnvironment, pack, open, _hdPackChoice);
         if (problem.Message is not null)
         {
             GD.Print("ARC-DEV-350 hd pack problem: " + problem.Message);
@@ -182,8 +182,8 @@ public partial class TerrainViewerApp
         // ARC-UI-2221: a request the canvas finds no change in (a fallback to Legacy while HD is saved On) still changes the saved value when it differs.
         if (outcome != VisualRequestOutcome.NoOp || on != _gameSettings.HdInterface)
         {
-            // ARC-UI-2174: the one HD value; the interface follows at once (the experimental generated interface is honoured only while HD is On, so Off clears it).
-            SaveGameSettings(_gameSettings with { HdInterface = on, GeneratedInterface = _gameSettings.GeneratedInterface && on });
+            // ARC-UI-2174: the one HD value; the interface follows at once (HD On is the Steamwoven interface, ARC-UI-3142).
+            SaveGameSettings(_gameSettings with { HdInterface = on });
             if (_visualStore is { } store)
                 _visualNotice = !store.Persistent ? "not saved (automated run)" : store.Save(target) ? null : "save FAILED, this run only";
         }
@@ -217,7 +217,7 @@ public partial class TerrainViewerApp
     {
         // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
         HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
-        if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
+        if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface)) InterfaceHd.RedrawAll(GetTree().Root);
         SyncOriginalComposition();
         SyncSteamwovenWorldZoom();
     }
@@ -230,7 +230,7 @@ public partial class TerrainViewerApp
         return size.X > 0 && size.Y > 0 ? SteamwovenColumnMenu.Fit((int)size.X, (int)size.Y).Factor : 1;
     }
 
-    /// <summary>ARC-UI-3059: whether the world is drawn at the player's whole zoom step: the Steamwoven look (the HD option with the generated interface) in the game window.</summary>
+    /// <summary>ARC-UI-3059: whether the world is drawn at the player's whole zoom step: the Steamwoven look (the HD option) in the game window.</summary>
     internal bool SteamwovenWorldZoomActive => AreaGameBarPanel.SteamwovenOn && OriginalCompositionFactor == 0;
 
     /// <summary>ARC-UI-3059: the whole step the game setting resolves to at the window's scale now.</summary>

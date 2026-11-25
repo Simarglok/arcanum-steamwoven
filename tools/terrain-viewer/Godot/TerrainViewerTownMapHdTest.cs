@@ -76,10 +76,10 @@ public static partial class TerrainViewerSelfTest
             scaled.ScaleSource = () => device;
             Require(!scaled.IsHd || scaled.IsAreaResampled, "a copy pending: the Legacy pixels draw, no mip chain is built on the main thread (a copy already there is the only HD that may draw)");
             for (var wait = 0; wait < 900 && !(scaled.IsAreaResampled && InterfaceHd.DirectPending == 0); wait++) await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            var (width, height) = InterfaceChromeRenderer.PixelSize(64, 32, 1.8);
+            var (width, height) = InterfaceResample.PixelSize(64, 32, 1.8);
             Require(scaled.IsHd && scaled.IsAreaResampled && scaled.AreaPixelSize == new Vector2I(width, height) && scaled.GetSize() == new Vector2(64, 32),
                 $"the tile draws from the area copy of {width}x{height} device pixels and keeps 64 x 32 ({scaled.AreaPixelSize})");
-            var expected = InterfaceChromeRenderer.ResampleStraight(Redraw(tile), 256, 128, width, height);
+            var expected = InterfaceResample.ResampleStraight(Redraw(tile), 256, 128, width, height);
             Require(scaled.AreaImageBytes() is { } drawn && drawn.AsSpan().SequenceEqual(expected), "the uploaded pixels are the area resample of the 256 x 128 redraw");
             Require(TownMapHd.Check(scaled, pack) is (true, "HD") && scaled.DrawSource() is { } copySource && (!rids || copySource.GetRid().IsValid), "the checked, drawing tile has a polygon texture: " + TownMapHd.Check(scaled, pack));
             // Whole scales and the pack's own scale and above are made on the worker too (no PNG decode and mip chain per tile on the main thread): 2 gives 128 x 64, 4 gives the redraw's own 256 x 128.

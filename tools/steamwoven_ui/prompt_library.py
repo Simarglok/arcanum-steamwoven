@@ -31,7 +31,7 @@ ROOT = HERE.parents[1]
 TRD = ROOT / "docs" / "ui" / "steamwoven-interface-trd.md"
 
 KINDS = ("material", "board", "backdrop", "cap", "hardware", "plate", "glyph", "state", "sheet", "grid", "picture", "gauge", "decor", "cursor")
-GROUPS = ("context", "kind", "material")
+GROUPS = ("context", "part", "kind", "material")
 PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
 MASTER_GRID = 6  # SWI-LAY-7: every master length is a multiple of 6 px
 MASTER_WIDTH, MASTER_HEIGHT = 2880, 2160

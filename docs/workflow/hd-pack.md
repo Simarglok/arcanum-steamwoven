@@ -331,7 +331,7 @@ device. Importing the copy on another device is `HdPackImport` (the format page)
 
 ### Which main-menu PNG the game loads (ARC-DEV-343, retired)
 
-None. Until ARC-UI-3003 the viewer read `main-menu-16x9.png` at the root of the active pack and logged an `ARC-DEV-343 main menu backdrop ...` line; the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`) and the log line are gone, and the table-scene menus draw the pack's 4× art (Steamwoven layout) or the original's whole-factor plate (generated interface off). Which *pack* is active is still chosen as described under [HD pack source](#hd-pack-source-arc-dev-350); the startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
+None. Until ARC-UI-3003 the viewer read `main-menu-16x9.png` at the root of the active pack and logged an `ARC-DEV-343 main menu backdrop ...` line; the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`) and the log line are gone, and the table-scene menus draw the pack's 4× art (Steamwoven layout) or the original's whole-factor plate (HD off). Which *pack* is active is still chosen as described under [HD pack source](#hd-pack-source-arc-dev-350); the startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
 
 ### HD pack source (ARC-DEV-350)
 
@@ -481,6 +481,33 @@ python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interfa
 - `--pack-id` (default `interface-redraw-4x`) is the staging pack's id. The plan is replaced only when the existing `plan.json` is an importer plan.
 - Frames the staging build replaces in the installed pack show in `plan` as differing entries; frames the installed pack lacks need `--add-new`. The plan must name exactly the frames the assembly wrote.
 - Checks: `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan` (synthetic frames only; also in the batched `tools/local_dev/run_tests.py`).
+
+## Icon repairs and arts by rule (ARC-UI-2485)
+
+`tools/steamwoven_ui/icon_rule.py` (standard library only; frames derived from the player's own art stay under `local/`, the tool refuses an output folder inside the checkout) writes
+the same `<art>-fNNN.png` and `<art>.assembly.json` records as the kit assembly, so the whole path is the [kit-assembled path above](#kit-assembled-frames-in-the-pack-arc-ui-3077):
+`icon_rule.py ...` -> `pack_plan.py` -> `hd_pack.py stage --fresh` -> `plan` / `apply --dry-run` with `--base INSTALLED`.
+
+```sh
+FR=<main checkout>/local/steamwoven-ui/census/frames   # the census frames of the originals (local)
+python3 -B tools/steamwoven_ui/icon_rule.py check   --frames $FR --pack INSTALLED ART...                       # the audit's ghost share per frame, exit 1 at 0.3 % or more
+python3 -B tools/steamwoven_ui/icon_rule.py ghost   --frames $FR --pack INSTALLED --out DIR ART...             # Part A: the pack frame with the original's black restored
+python3 -B tools/steamwoven_ui/icon_rule.py upscale --frames $FR --out DIR --mode square|smooth ART...         # Part B: an art the pack cannot serve, from the original's frames
+```
+
+- **Ghost repair.** The pack's redraw of an icon with a black background keeps faint outlines of the redraw sheet's neighbouring icons on that black. Where the original frame is black (luma below 14, an
+  outline of 2 HD pixels kept back from its content and rounded by a Gaussian of 3 HD pixels) the pack's pixels take the original's black; alpha and everything else stay the pack's, and the frame is written
+  with `alphaMode` `legacySmooth` (no mask, the importer's own alpha, as the installed frames have). Measured by the audit's ghost metric ([audit](../rendering/hd-pack-picture-quality-audit.md)): 11 arts
+  (`Ammo_Icon_Arrows`, `_Gold`, `_Fuel`, `_Bullets`, `_Mana`, `TechSkillIcon`, `E_EarthIcon`, `SocialIcon`, `CombatIcon`, `Cont_Junk`, `racedarkelficon`) from 0.3 to 4.2 % to 0.00 %. Side effect to look at:
+  where the original's black is part of the object (the shadow side of the `SocialIcon` hat) the pack's shading there goes black too, as in the original.
+- **Arts by rule.** The importer cuts every HD alpha to the texels the original leaves opaque (`HdAlphaMasks.Resolve`), so a rule cannot grow or smooth a silhouette beyond the original's. `square` copies every original
+  pixel as one 4 x 4 block (colour and alpha exact: the one-pixel lines and the square dots of the indicators stay exact, `tb_td`'s dots are square again); `smooth` blends the colour between the cells
+  (bilinear, weighted by the cell's alpha, so a transparent cell lends no colour) and keeps the exact alpha. Both write `alphaMode` `legacy` (the mask is the original's own alpha). The eight
+  indicators and the nine arts with no pack frame (`scroll-0` to `scroll-7`, `scroll_not`) are kit parts with status `master` (`build_kit.py`, `ICON_RULE_ARTS`); the frames of arts
+  the pack lacks need `--add-new` at `apply`. **Twin names:** the pack names an entry by one of the arts that share its content, so `plan` replaces entries under another name than the one you staged: `hoverover` (468) is the pack's
+  `hoverunder` (15 frames) and `BlockedShot` (845) is `magic-tech-penalty`; the audit #3144 looked them up by name, listed them as frameless, and they are not: the pack serves both with a good redraw, so they are no part of this batch. Read the
+  plan's replaced paths against what you staged.
+- Tests: `python3 -B -m unittest tools.steamwoven_ui.test_icon_rule` (synthetic frames only; also in the batched `run_tests.py`).
 
 ## Producing and repairing art (who does what)
 

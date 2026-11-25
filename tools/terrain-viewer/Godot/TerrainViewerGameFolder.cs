@@ -145,7 +145,6 @@ public partial class TerrainViewerApp
             _launcherPanel.HoldToQuitRequested += on => LauncherChange(launcher => launcher.SetHoldToQuit(on));
             // ARC-UI-143: the HD lines, saved at once in the settings files.
             _launcherPanel.HdRequested += LauncherHd;
-            _launcherPanel.HdGeneratedRequested += LauncherHdGenerated;
             _launcherPanel.HdWorldZoomRequested += LauncherHdWorldZoom;
             _launcherPanel.HdPackRequested += LauncherHdPack;
             _launcherPanel.InstallRequested += LauncherInstallRequested;

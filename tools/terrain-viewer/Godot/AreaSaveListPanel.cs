@@ -27,7 +27,14 @@ public partial class AreaSaveListPanel : CanvasLayer
     private Button _close = null!;
     private HBoxContainer _question = null!;
     private Label _hint = null!;
-    private Label _artDetail = null!;
+    // ARC-UI-2968: in the original's look the selected save's details, the notice and the Yes/No question are drawn with the original's
+    // text font (art 229) and the original's dialog box, on the plate (children of the art view, so on its scale); the Labels and
+    // Buttons above only hold the state (and are the diagnostic window's).
+    private AreaArtParagraph _detailArt = null!, _noticeArt = null!;
+    private AreaDialogBoxView _dialog = null!;
+    private AreaTextFonts? _fonts;
+    private static readonly (byte R, byte G, byte B) DetailColour = (219, 204, 173), NoticeColour = (255, 153, 102);
+    private const int BoxLeft = 208, BoxTop = AreaSaveListArtLayout.BottomStripTop + 49, BoxWidth = 384, BoxHeight = AreaSaveListArtLayout.ScreenHeight - BoxTop - 3;
     private HBoxContainer _buttons = null!;
     private Control _body = null!;
     private Control _contents = null!;
@@ -56,7 +63,12 @@ public partial class AreaSaveListPanel : CanvasLayer
     internal AreaSaveListArtView ArtForSelfTest => _art;
     /// <summary>ARC-UI-2891: for the self-test: the column's surroundings of the list.</summary>
     internal SteamwovenColumnSidesView ColumnSidesForSelfTest => _sides;
-    internal string ArtDetailForSelfTest => _artDetail.Visible ? _artDetail.Text : "";
+    internal string ArtDetailForSelfTest => _art.Visible ? _detailArt.Text : "";
+    /// <summary>ARC-UI-2968: the notice as the original's look shows it (the dialog box's text while a question is open).</summary>
+    internal string ArtNoticeForSelfTest => !_art.Visible ? "" : _dialog.Visible ? _dialog.TextForSelfTest : _noticeArt.Text;
+    internal AreaDialogBoxView DialogForSelfTest => _dialog;
+    internal AreaArtParagraph DetailArtForSelfTest => _detailArt;
+    internal AreaArtParagraph NoticeArtForSelfTest => _noticeArt;
     /// <summary>True while the description field has the keyboard (typed keys go to it, not to the list).</summary>
     public bool TypingDescription => IsOpen && _description.Visible && _description.HasFocus();
     internal IReadOnlyList<string> RowsForSelfTest => Enumerable.Range(0, _rows.ItemCount).Select(_rows.GetItemText).ToArray();
@@ -89,6 +101,11 @@ public partial class AreaSaveListPanel : CanvasLayer
             }
         };
         _art.SoundRequested += id => SoundRequested?.Invoke(id);
+        _detailArt = new AreaArtParagraph { Name = "SaveDetailArt", Position = new(BoxLeft, BoxTop), WrapWidth = BoxWidth, Room = BoxHeight };
+        _noticeArt = new AreaArtParagraph { Name = "SaveNoticeArt", Position = new(BoxLeft, BoxTop), WrapWidth = BoxWidth, Room = BoxHeight };
+        _dialog = new AreaDialogBoxView();
+        _dialog.AnswerRequested += yes => AnswerRequested?.Invoke(yes);
+        _art.AddChild(_detailArt); _art.AddChild(_noticeArt); _art.AddChild(_dialog);
         AddChild(_art);
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
@@ -134,8 +151,7 @@ public partial class AreaSaveListPanel : CanvasLayer
                 "is typed on the new-save row | PROJECT window over the original's " +
                 "save list rules (auto-save first, newest first, auto-save not deletable); original art and layout NOT_VERIFIED",
         };
-        _artDetail = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.86f, .8f, .68f), Visible = false };
-        foreach (var control in new Control[] { _header, body, _artDetail, _description, buttons, _question, _notice, _hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _header, body, _description, buttons, _question, _notice, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -154,13 +170,18 @@ public partial class AreaSaveListPanel : CanvasLayer
         AreaSaveDateOrder dateOrder, IReadOnlyDictionary<int, string> storyTexts)
     {
         _art.SetArt(art, font, messages, dateOrder);
+        _fonts = new AreaTextFonts(font, font);
+        _detailArt.SetFonts(_fonts); _noticeArt.SetFonts(_fonts);
         _newSaveLabel = newSaveLabel ?? throw new ArgumentNullException(nameof(newSaveLabel));
         _storyTexts = storyTexts ?? throw new ArgumentNullException(nameof(storyTexts));
     }
 
+    /// <summary>ARC-UI-2968: the original's dialog box art for the overwrite and delete questions; without it the question is a line of the box and the keys answer.</summary>
+    public void SetDialogArt(AreaDialogBoxArt art) => _dialog.SetArt(art);
+
     public void CloseView()
     {
-        Hide(); _preview.Texture = null; _previewOf = null; _art.CloseView(); _sides.Clear();
+        Hide(); _preview.Texture = null; _previewOf = null; _art.CloseView(); _sides.Clear(); _dialog.Close();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -187,7 +208,8 @@ public partial class AreaSaveListPanel : CanvasLayer
         var entry = list.SelectedEntry;
         _detail.Text = entry is null ? save ? "A new numbered save of the game as it is now." : "" : AreaSaveList.Detail(entry);
         _delete.Disabled = entry is null || entry.IsAuto;
-        _question.Visible = list.Prompt != AreaSavePrompt.None;
+        var asking = list.Prompt != AreaSavePrompt.None;
+        _question.Visible = asking && !_art.ArtSet;
         _confirm.Disabled = list.Prompt != AreaSavePrompt.None || (!save && entry is null);
         _notice.Text = list.Notice ?? "";
         ShowPreview(entry is null ? null : (entry.Name, entry.SavedAtUtc), preview);
@@ -200,11 +222,23 @@ public partial class AreaSaveListPanel : CanvasLayer
             _art.Render(list.Mode, [.. rows.Select(row => row.Entry is { } listed ? listed.DisplayDescription : NewSaveRow(list.Description))],
                 list.Selected, _preview.Texture, list.Prompt != AreaSavePrompt.None, info,
                 info is { Portrait: > 0 } ? PortraitSource?.Invoke(info.Portrait) : null, unread: entry is not null && info is null);
-            _artDetail.Text = _detail.Text;
-            // The box is small: a question shows without the details.
-            _artDetail.Visible = list.Prompt == AreaSavePrompt.None;
+            ShowArtTexts(asking);
         }
+        else { _dialog.Close(); _detailArt.SetText("", DetailColour); _noticeArt.SetText("", NoticeColour); }
         ResizePanel();
+    }
+
+    /// <summary>The box's texts in the original's font: the details, then the notice under them; a question is the dialog box (the box is small, so the details wait).</summary>
+    private void ShowArtTexts(bool asking)
+    {
+        var notice = _notice.Text;
+        var boxed = asking && _dialog.HasArt;
+        if (boxed) _dialog.Show(notice, AreaDialogBoxKind.YesNo, AreaDialogBoxLayout.QuitPoint); else _dialog.Close();
+        _detailArt.SetText(asking ? "" : _detail.Text, DetailColour);
+        _noticeArt.SetText(boxed ? "" : notice, NoticeColour);
+        var used = _fonts is { } fonts ? _detailArt.LineCount * fonts.TextLineHeight : 0;
+        _noticeArt.Position = new(BoxLeft, BoxTop + used);
+        _noticeArt.Room = Math.Max(1, BoxHeight - used);
     }
 
     private void ShowPreview((string, DateTime)? of, byte[]? png)
@@ -226,16 +260,18 @@ public partial class AreaSaveListPanel : CanvasLayer
     /// <summary>The diagnostic window, or the original's look with the panel shrunk to the bottom strip's middle box (PROJECT).</summary>
     private void SetLook(bool art)
     {
+        // ARC-UI-2968: the diagnostic look (no art) is Godot's default font, so it is developer-only (AreaFallbackLook): transparent in a player's run, its state and keys unchanged.
+        _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
         if (_artLook == art) return;
         _artLook = art;
         if (!art) _art.CloseView();
         foreach (var control in new Control[] { _header, _body, _buttons, _hint }) control.Visible = !art;
-        _artDetail.Visible = art;
         _panelStyle.BgColor = art ? new Color(0, 0, 0, 0) : new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f);
         (_panelStyle.ContentMarginLeft, _panelStyle.ContentMarginRight, _panelStyle.ContentMarginTop, _panelStyle.ContentMarginBottom) = art ? (14, 14, 6, 4) : (16, 16, 12, 12);
         _panel.ClipContents = art;
         _contents.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Pass;
-        _notice.Modulate = art ? new Color(1f, .6f, .4f) : new Color(.45f, .1f, .05f);
+        _notice.Visible = !art;
+        _notice.Modulate = new Color(.45f, .1f, .05f);
         // The field keeps the keyboard in the original's look but is not seen: its text is drawn in the new-save row.
         _description.Modulate = art ? new Color(1, 1, 1, 0) : Colors.White;
         _description.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;

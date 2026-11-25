@@ -6,10 +6,10 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-UI-1194: opt-in part of the native barter, container and loot-room smokes (ARC_AREA_WINDOW_ART=legacy|hd|generated, with ARC_HD_PACK for the last two; the
-    // run is otherwise unchanged). With the open window's frames (the arts of its look) it turns the HD and generated interface on or off, checks in generated mode that
-    // every frame draws generated chrome at the window's own device scale and again after a resize (VerifyGeneratedWindowAsync), saves the viewport (first size, bigger window, back) as
-    // PREFIX-WINDOW-MODE[-STAGE].png when ARC_AREA_WINDOW_CAPTURE=PREFIX (local, never in git), and puts the settings back. A window without the variable is left alone.
+    // ARC-UI-1194, ARC-UI-3143: opt-in part of the native barter, container and loot-room smokes (ARC_AREA_WINDOW_ART=legacy|hd, with ARC_HD_PACK for hd; the
+    // run is otherwise unchanged). With the open window's frames (the arts of its look) it turns the HD interface on or off, checks that the frames are the pack's redraw (hd) or
+    // the Legacy art (legacy), saves the viewport as PREFIX-WINDOW-MODE.png when ARC_AREA_WINDOW_CAPTURE=PREFIX (local, never in git), and puts the settings back.
+    // A window without the variable is left alone. The generated mode of ARC-UI-140 is retired (ARC-UI-3143).
     private static bool WindowArtSmokeRequested => System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") is { Length: > 0 };
 
     private Task WindowArtSmokeAsync(string window, AreaInventoryGridArea area, IReadOnlyList<int> arts) =>
@@ -22,10 +22,10 @@ public partial class TerrainViewerApp
     {
         var mode = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART");
         if (string.IsNullOrEmpty(mode)) return;
-        if (mode is not ("legacy" or "hd" or "generated"))
+        if (mode is not ("legacy" or "hd"))
         {
-            GD.Print($"ARC-UI-1194 window art smoke FAIL ARC_AREA_WINDOW_ART={mode} is not legacy, hd or generated");
-            throw new InvalidOperationException("ARC-UI-1194 window art smoke: ARC_AREA_WINDOW_ART must be legacy, hd or generated");
+            GD.Print($"ARC-UI-1194 window art smoke FAIL ARC_AREA_WINDOW_ART={mode} is not legacy or hd");
+            throw new InvalidOperationException("ARC-UI-1194 window art smoke: ARC_AREA_WINDOW_ART must be legacy or hd");
         }
         async Task Frames(int count) { for (var i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
         var saved = _gameSettings;
@@ -49,7 +49,7 @@ public partial class TerrainViewerApp
                 throw new InvalidOperationException("ARC-UI-1194 window art smoke: HD verification needs ARC_HD_PACK");
             }
             SteamwovenHud.Suspended = true; // ARC-UI-2452: these checks measure the whole-factor geometry
-            _gameSettings = _gameSettings with { HdInterface = mode != "legacy", GeneratedInterface = mode == "generated" };
+            _gameSettings = _gameSettings with { HdInterface = mode != "legacy" };
             SyncInterfaceHd();
             await Frames(3);
             if (!shown())
@@ -57,23 +57,20 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the window does not show the original's look");
                 throw new InvalidOperationException("ARC-UI-1194 window art smoke: the window does not show the original's look");
             }
-            if (mode == "generated")
+            var drawn = textures();
+            if (mode == "hd" && (drawn.Count == 0 || drawn.Count != arts.Count))
             {
-                var found = textures();
-                await VerifyGeneratedTexturesAsync("ARC-UI-1194", window, found, arts, deviceScale, Frames, SetSmokeWindowSizeAsync, Capture, biggerTo);
+                GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the hd frames are not all read ({drawn.Count} of {arts.Count})");
+                throw new InvalidOperationException("ARC-UI-1194 window art smoke: an hd frame is missing");
             }
-            else
+            // ARC-UI-3143: with the generated mode gone the frames are the pack's redraw (at least one, hd) or only the Legacy art (legacy).
+            if (mode == "hd" ? !drawn.Any(texture => texture.IsHd) : drawn.Any(texture => texture.IsHd) || drawn.Count != arts.Count)
             {
-                // In the legacy and HD runs no frame of the window is generated chrome.
-                var drawn = textures();
-                if (drawn.Count == 0 || drawn.Count != arts.Count || drawn.Any(texture => texture.IsGenerated))
-                {
-                    GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the {mode} frames are not generated ({drawn.Count} of {arts.Count} read)");
-                    throw new InvalidOperationException("ARC-UI-1194 window art smoke: a " + mode + " frame is generated");
-                }
-                GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Count} hd={drawn.Count(texture => texture.IsHd)}");
-                await Capture("first");
+                GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the frames do not match the {mode} look (hd {drawn.Count(texture => texture.IsHd)} of {drawn.Count}, {arts.Count} arts)");
+                throw new InvalidOperationException("ARC-UI-1194 window art smoke: the frames do not match the " + mode + " look");
             }
+            GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Count} hd={drawn.Count(texture => texture.IsHd)}");
+            await Capture("first");
         }
         finally
         {
@@ -84,10 +81,9 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-UI-1196: the same opt-in for the open logbook (called by the loot-room smoke after the inventory part). Its drawn frames (the side panel, the book, the page art, the seven
-    // tabs: the shown tab's pressed frame, the others' idle one; the page buttons are drawn only with more than one spread, so the renderer's own tests cover them): in the
-    // generated mode every one is generated chrome at round(size x paint scale) pixels of the window's own device scale, again after a bigger window; in the HD and Legacy modes none is.
-    // ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-logbook-MODE[-big|-back].png (local, never in git).
+    // ARC-UI-1196, ARC-UI-3143: the same opt-in for the open logbook (called by the loot-room smoke after the inventory part). Its drawn frames (the side panel, the book, the page art, the seven
+    // tabs: the shown tab's pressed frame, the others' idle one) are the pack's redraw in the hd mode and the Legacy art in the legacy mode.
+    // ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-logbook-MODE.png (local, never in git).
     private async Task LogbookArtSmokeAsync()
     {
         var mode = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART");
@@ -97,7 +93,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-1196 logbook art smoke FAIL {why}");
             throw new InvalidOperationException("ARC-UI-1196 logbook art smoke: " + why);
         }
-        if (mode is not ("legacy" or "hd" or "generated")) Fail($"ARC_AREA_WINDOW_ART={mode} is not legacy, hd or generated");
+        if (mode is not ("legacy" or "hd")) Fail($"ARC_AREA_WINDOW_ART={mode} is not legacy or hd");
         async Task Frames(int count) { for (var i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
         if (mode != "legacy" && _canvas?.HdSource?.Pack is null) Fail($"the {mode} interface needs ARC_HD_PACK");
         var saved = _gameSettings;
@@ -106,7 +102,7 @@ public partial class TerrainViewerApp
             if (InventoryOpen) EndInventory();
             if (LogbookOpen) CloseLogbookByPlayer();
             SteamwovenHud.Suspended = true; // ARC-UI-2452: these checks measure the whole-factor geometry
-            _gameSettings = _gameSettings with { HdInterface = mode != "legacy", GeneratedInterface = mode == "generated" };
+            _gameSettings = _gameSettings with { HdInterface = mode != "legacy" };
             SyncInterfaceHd();
             // The logbook builds its textures when its art is read: drop them so the book is read again in the mode under test.
             _logbookArtContent = null; _logbookArtTextures = null;
@@ -114,7 +110,6 @@ public partial class TerrainViewerApp
             OpenLogbook();
             await Frames(3);
             if (!(LogbookOpen && _logbookPanel is { ArtMode: true } panel && _logbookArtTextures is { } art)) { Fail("the logbook shows the original's look"); return; }
-            var view = panel.ArtViewForSelfTest;
             var shown = panel.ViewForSelfTest!.Tab;
             var numbers = new List<int> { AreaLogbookArtLayout.SideArt, AreaLogbookArtLayout.BookArt, AreaLogbookArtLayout.PageArt };
             var textures = numbers.Select(number => art[number][0]).ToList();
@@ -135,18 +130,9 @@ public partial class TerrainViewerApp
                 if (image is null || image.SavePng(path) != Error.Ok) Fail("readback not saved: " + path);
                 GD.Print($"ARC-UI-1196 logbook capture {mode} {at} {image!.GetWidth()}x{image.GetHeight()}");
             }
-            if (mode == "generated")
-            {
-                var hd = textures.Select((texture, i) => texture as HdInterfaceTexture ?? throw new InvalidOperationException($"ARC-UI-1196 logbook art smoke: art {numbers[i]} is no interface texture")).ToArray();
-                await VerifyGeneratedTexturesAsync("ARC-UI-1196", "logbook", hd, numbers, view.DeviceScale, Frames, SetSmokeWindowSizeAsync, Capture, new Vector2I(1600, 1200)); // the bars' whole factor (and the logbook's) steps to 2 only from 1200 high
-            }
-            else
-            {
-                await Frames(2);
-                if (textures.OfType<HdInterfaceTexture>().Any(texture => texture.IsGenerated)) Fail($"a frame is generated in the {mode} run");
-                GD.Print($"ARC-UI-1196 logbook art {mode} frames={textures.Count} hd={textures.OfType<HdInterfaceTexture>().Count(texture => texture.IsHd)} generated=0");
-                await Capture("first");
-            }
+            await Frames(2);
+            GD.Print($"ARC-UI-1196 logbook art {mode} frames={textures.Count} hd={textures.OfType<HdInterfaceTexture>().Count(texture => texture.IsHd)}");
+            await Capture("first");
         }
         finally
         {
