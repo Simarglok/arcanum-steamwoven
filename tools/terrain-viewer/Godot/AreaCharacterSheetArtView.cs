@@ -84,6 +84,8 @@ public partial class AreaCharacterSheetArtView : Control
         ? AreaCharacterSheetArtLayout.Texts(view, _texts, (font, text) => fonts.For(font).Font.Measure(text).Width) : [];
     /// <summary>The window position of a window-relative point of the sheet.</summary>
     internal Vector2 PointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
+    /// <summary>ARC-UI-2924: the button the pointer lights now (its kind and index), or null.</summary>
+    internal (string Kind, int Index)? HoveredForSelfTest => _hovered is { } hit ? (hit.Kind.ToString(), hit.Index) : null;
 
     public override void _Ready()
     {
@@ -169,8 +171,9 @@ public partial class AreaCharacterSheetArtView : Control
         {
             // ARC-UI-147: the menu's 800 × 600 screen at the bars' whole factor, centred; the window under the top strip (as AreaShopArtLayout.Window).
             var screen = GetViewportRect().Size;
-            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
-            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale; ARC-UI-2924: the editor is a two-strip screen like the shop it shares its strips with, so
+            // the whole 800 × 600 screen is the fitted plate (SteamwovenColumnMenu.Fit), black beside it.
+            if (AreaGameBarPanel.TwoStripScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
             {
                 Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
                 Position = new Vector2((float)zone.X, (float)Math.Round(zone.Y + AreaShopArtLayout.Window.Y * zone.Scale));
@@ -268,16 +271,31 @@ public partial class AreaCharacterSheetArtView : Control
     internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
-    /// <summary>ARC-UI-3037: the kit's character background shows under this window (never on the new-character screen, which has no kit).</summary>
-    private bool KitBackgroundShown => !MenuScreen && AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
+    /// <summary>ARC-UI-3037: the kit's character background shows under this window. ARC-UI-3041: the creation editor's sheet (<see cref="MenuScreen"/>) follows the editor screen's own kit body (<see cref="KitBody"/>), not the bars' window (the menu has none).</summary>
+    private bool KitBackgroundShown => MenuScreen ? _kitBody : AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Character;
+
+    /// <summary>ARC-UI-3041 (census M09): the creation editor's kit body (the character window's kit background, drawn by the screen's strips view under this window) shows now: the sheet draws no art 22 of its own and its stand-ins and stat names instead.
+    /// Meaningful only on the editor's sheet.</summary>
+    internal bool KitBackgroundShownForSelfTest => KitBackgroundShown;
+    /// <summary>ARC-UI-3041: the last draw painted the original's art 22 (false over the kit's background).</summary>
+    internal bool OwnBackgroundDrawnForSelfTest { get; private set; }
+
+    public bool KitBody
+    {
+        get => _kitBody;
+        set { if (_kitBody == value) return; _kitBody = value; QueueRedraw(); }
+    }
+    private bool _kitBody;
 
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
         ClaimScale();
         // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
+        OwnBackgroundDrawnForSelfTest = false;
         if (!KitBackgroundShown && Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
         {
+            OwnBackgroundDrawnForSelfTest = true;
             float width = window.GetWidth(), height = window.GetHeight();
             if (!_lensCut) DrawTextureRect(window, new Rect2(0, 0, width, height), false);
             else

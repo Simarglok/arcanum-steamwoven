@@ -242,6 +242,7 @@ public partial class TerrainViewerApp
             HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
             var portraitSeen = await PortraitHoverStageAsync(_areaSession, Require);
             GD.Print($"ARC-UI-1281 native-smoke hover-portrait {portraitSeen}");
+            GD.Print($"ARC-UI-3136 native-smoke hover-art-tip {await ArtTipStageAsync(Require)}");
             _messageLog.ClearHover();
             // A window with no hoverable body of any kind (the generated wilderness has none) has nothing to observe: NONE, not a failure.
             if (seen.All(s => s.EndsWith("=none", StringComparison.Ordinal)) && !index.Bodies.Any(c => c.Identity is { } id && AreaHoverWindow.Highlighted(index.Row(id))

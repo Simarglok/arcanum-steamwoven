@@ -44,6 +44,13 @@ public static class AreaReadingArtLayout
 
     /// <summary>The font arts the fixed texts use: the telegram's form (481 and 479, 0x5CA538) and body (480), the newspaper's masthead (485, 484, 482; the alternate's 815) and the note (497).</summary>
     public const int NoteFont = 497, TelegramBodyFont = 480, TelegramFormFont = 481, TelegramNameFont = 479, MastheadFont = 485, MastheadSideFont = 484, MastheadLineFont = 482;
+    /// <summary>ARC-UI-2765 (owner decision 2026-11-24): the readable face of a note's body with the generated interface, art 840 (NewTimes16, a plain serif of the player's set; the pack's HD version in HD). An optional font: the
+    /// window loads it with the others and draws the original's Pepper20 note when it did not read.</summary>
+    public const int NoteBodyFont = 840;
+
+    /// <summary>ARC-UI-2765 (owner decision 2026-11-24): the readable faces a letter tries in order, <see cref="NoteBodyFont"/> then 301 (Nick16, smaller) for a letter NewTimes16 does not hold; one neither holds keeps Pepper20.</summary>
+    public static IReadOnlyList<int> NoteBodyFonts { get; } = [NoteBodyFont, 301];
+
     public static IReadOnlyList<int> FixedFontArts { get; } = [TelegramNameFont, TelegramBodyFont, TelegramFormFont, MastheadLineFont, MastheadSideFont, MastheadFont, NoteFont, WrittenTexts.NewspaperAlternateFont];
 
     /// <summary>The arts without which the window is not drawn in the original's look (the alternate newspaper's 817 and 815 are optional).</summary>
@@ -91,8 +98,9 @@ public static class AreaReadingArtLayout
     /// <summary>The lens's rectangle test (0x551000 over the window's point): left and top edges in, right and bottom out.</summary>
     public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
-    /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts.</summary>
-    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
+    /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts, and Garmond9 (<see cref="AreaReadingText.SubstituteFont"/>, optional: without it a small font keeps its own glyphs).</summary>
+    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) =>
+        [.. FixedFontArts.Concat(NoteBodyFonts).Concat(markupFonts).Append(AreaReadingText.SubstituteFont).Where(font => font > 0).Distinct().Order()];
 }
 
 /// <summary>
@@ -306,19 +314,93 @@ public static class AreaReadingFlow
         return lines;
     }
 
-    /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none).</summary>
-    public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf)
+    /// <summary>ARC-UI-2765: a note's body. The original's draw (Pepper20, a handwriting face) unless <paramref name="readable"/> (the generated interface with the face loaded): then the address (first line, ending in a comma) and
+    /// the signature (<see cref="AreaReadingNoteRule"/>) stay in Pepper20 and the body between them is in the first of <see cref="AreaReadingArtLayout.NoteBodyFonts"/> that holds the letter; a letter that does not fit the rule, or whose address, body and signature do not fit the rectangle in a face, is tried whole in that face before the next face;
+    /// a letter no readable face holds in the note's rectangle keeps the original's draw.</summary>
+    public static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, bool readable)
+    {
+        var rect = AreaReadingArtLayout.NoteText;
+        var pepper = AreaReadingArtLayout.NoteFont;
+        var text = document.Joined;
+        var pepperFont = fontOf(pepper);
+        if (!readable) return Draw(pepperFont, pepper, text, rect, false);
+        var rule = AreaReadingNoteRule.Split(text);
+        foreach (var face in AreaReadingArtLayout.NoteBodyFonts)
+        {
+            var bodyFont = fontOf(face);
+            if (rule is { } parts)
+            {
+                // The text's own blank lines are the gaps; a body that begins or ends on text gets a small one.
+                int gapAbove = parts.Body.StartsWith('\n') ? 0 : 6, gapBelow = parts.Body.EndsWith('\n') ? 0 : 6;
+                int headingHeight = Height(pepperFont, parts.Heading, rect.Width), bodyHeight = Height(bodyFont, parts.Body, rect.Width), signatureHeight = Height(pepperFont, parts.Signature, rect.Width);
+                if (headingHeight > 0 && bodyHeight > 0 && signatureHeight > 0 && headingHeight + gapAbove + bodyHeight + gapBelow + signatureHeight <= rect.Height)
+                {
+                    var widest = parts.Signature.Split('\n').Max(line => pepperFont.Measure(line).Width);
+                    var indent = Math.Max(0, rect.Width - widest - 4 - AreaPremadeBrowserArtLayout.TabAdvance * parts.Signature.Count(c => c == '\t'));
+                    return
+                    [
+                        .. Draw(pepperFont, pepper, parts.Heading, rect with { Height = headingHeight }, false),
+                        .. Draw(bodyFont, face, parts.Body, new(rect.X, rect.Y + headingHeight + gapAbove, rect.Width, bodyHeight), false),
+                        // Laid out at the full width (as measured) and moved right, so the draw breaks the lines where Height counted them.
+                        .. Draw(pepperFont, pepper, parts.Signature, new(rect.X, rect.Y + headingHeight + gapAbove + bodyHeight + gapBelow, rect.Width, signatureHeight), false).Select(line => line with { X = line.X + indent }),
+                    ];
+                }
+            }
+            // A word wider than the rectangle measures 0 high and would count as a fit that stops the draw there: no fit.
+            if (FitText(bodyFont, face, text, false, rect) is { Whole: true, Amount: > 0 } whole) return whole.Lines;
+        }
+        return Draw(pepperFont, pepper, text, rect, false);
+    }
+
+    /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none); a note takes <see cref="Note"/>'s draw (<paramref name="readableNote"/>, ARC-UI-2765).</summary>
+    public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, bool readableNote = false)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontOf);
         return document.Subtype switch
         {
-            WrittenSubtype.Note => Draw(fontOf(AreaReadingArtLayout.NoteFont), AreaReadingArtLayout.NoteFont, document.Joined, AreaReadingArtLayout.NoteText, false),
+            WrittenSubtype.Note => Note(document, fontOf, readableNote),
             WrittenSubtype.Telegram => Telegram(document, fontOf),
             WrittenSubtype.Newspaper => Newspaper(document, fontOf),
             WrittenSubtype.Plaque => Page(document.Body, (0, 0), AreaReadingArtLayout.PlaqueText, fontOf).Lines,
             _ => [],
         };
+    }
+}
+
+/// <summary>
+/// ARC-UI-2765: which lines of a letter keep the handwriting face when its body is drawn in a readable one (owner decision 2026-11-24): the address, the first line, when it ends in a comma, and the signature, the last short line (at most <see cref="MaxSignatureLine"/> characters) and, before it, a short closing line ending in a comma when a body line remains. A letter with no such address, no body line or a long last line
+/// does not fit the rule and is drawn whole in the readable face.
+/// </summary>
+public static class AreaReadingNoteRule
+{
+    public const int MaxSignatureLine = 40;
+
+    public readonly record struct Parts(string Heading, string Body, string Signature);
+
+    /// <summary>A short line ending in a comma ("Love always,"): the second signature line from the end.</summary>
+    public static bool IsClosing(string line) => line.Trim() is { Length: > 0 and <= MaxSignatureLine } trimmed && trimmed.EndsWith(',');
+
+    public static Parts? Split(string text) => Check(text).Parts;
+
+    /// <summary>The split and, when there is none, why: "short" (fewer than three lines), "no-comma" (the first line does not end in a comma), "long-last" (the last line is over <see cref="MaxSignatureLine"/> characters) or "no-body".</summary>
+    public static (Parts? Parts, string? Reason) Check(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var lines = text.Split('\n');
+        int first = 0, last = lines.Length - 1;
+        while (first <= last && lines[first].Trim().Length == 0) first++;
+        while (last >= first && lines[last].Trim().Length == 0) last--;
+        if (last - first < 2) return (null, "short");
+        if (!lines[first].TrimEnd().EndsWith(',')) return (null, "no-comma");
+        if (lines[last].Trim().Length > MaxSignatureLine) return (null, "long-last");
+        // The signature starts at the last line, or at the closing line before it ("Love always,") when only blank lines lie between.
+        var start = last;
+        var before = last - 1;
+        while (before > first && lines[before].Trim().Length == 0) before--;
+        if (before > first + 1 && IsClosing(lines[before]) && string.Join('\n', lines[(first + 1)..before]).Trim().Length > 0) start = before;
+        var body = string.Join('\n', lines[(first + 1)..start]);
+        return body.Trim().Length == 0 ? (null, "no-body") : (new Parts(lines[first], body, string.Join('\n', lines[start..(last + 1)])), null);
     }
 }
 

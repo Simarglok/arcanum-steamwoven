@@ -53,7 +53,9 @@ class Window:
     name: str
     fonts: tuple[int, ...]       # interface ART numbers of the fonts the window draws
     source: str                  # the file whose constants name them (checked to mention every number)
-    text_factor: bool = False    # a font under the minimum may take the text-only whole factor (ARC-UI-1428, the reading windows)
+    text_factor: bool = False    # a font under the minimum may take the text-only whole factor (ARC-UI-1428, the reading windows' fallback panel)
+    substitute: int = 0          # a font under the minimum is drawn with this font art instead (ARC-UI-1462, Garmond9 483 in the reading windows' original look)
+    exempt: tuple[int, ...] = () # fonts kept at their own size on purpose (ARC-UI-1462, owner decision: Garmond6 481, the telegram's printed legend)
 
 
 WINDOWS = (
@@ -70,11 +72,12 @@ WINDOWS = (
     Window("schematic window", (371, 229, 370, 300), "src/Arcanum.World/AreaSchematicWindowLayout.cs"),
     Window("world map", (840,), "tools/terrain-viewer/Core/AreaWorldMapArt.cs"),
     # ARC-UI-1428: the reading windows (telegram 480, note 497, newspaper masthead 485/484/482 (815 alternate) and text 483/492/490, book and plaque
-    # markup 478/479/28/37/171/229, Garmond6 481 for any markup that names it); the viewer draws them with its fallback font at these
-    # sizes, a line under 9 px at the screen factor takes the text-only factor (`AreaReadingText.HeaderLinePx`).
+    # markup 478/479/28/37/171/229, Garmond6 481 for the telegram form and any markup that names it); the fallback panel draws them with its
+    # fallback font at these sizes, a line under 9 px at the screen factor takes the text-only factor (`AreaReadingText.HeaderLinePx`); the
+    # original-look window (ARC-UI-1462) draws such a line with Garmond9 (483, `AreaReadingText.ShownFont`).
     Window("reading windows (telegram, newspaper, note, book, plaque)",
            (480, 481, 482, 483, 484, 485, 815, 492, 497, 490, 478, 479, 28, 37, 171, 229),
-           "tools/terrain-viewer/Core/AreaReadingText.cs", text_factor=True),
+           "tools/terrain-viewer/Core/AreaReadingText.cs", text_factor=True, substitute=483, exempt=(481,)),
 )
 
 # A line carrying this marker is not text a player reads (the save list's transparent keyboard field keeps size 1).
@@ -185,8 +188,17 @@ def report(sizes, facts: dict[int, FontFact], labels, minimum: int = MINIMUM_PX,
                 size = fact.nominal if fact.nominal is not None else fact.line
                 shown = size * factor
                 text = text_only_factor(size, factor) if window.text_factor and fact.nominal is not None and shown < minimum else 1
-                ok = shown * text >= minimum
-                if text > 1:
+                # ARC-UI-1462: the original-look window draws a font under the minimum with the substitute font (`AreaReadingText.ShownFont`).
+                swap = facts[window.substitute] if window.substitute and fact.nominal is not None and shown < minimum and number not in window.exempt else None
+                if number in window.exempt and shown < minimum:
+                    lines.append(f"   {window.name[:42]:<42} {number:>3} {fact.file:<30} {shown:>4} {fact.line * factor:>4} {fact.capital * factor:>4}  pass (exempt: printed legend)")
+                    continue
+                swap_shown = (swap.nominal if swap.nominal is not None else swap.line) * factor if swap else 0
+                ok = swap_shown >= minimum if swap else shown * text >= minimum
+                if swap:
+                    verdict = f"pass (substitute {swap.file}, {swap_shown} px)" if ok else "FAIL"
+                    shown = swap_shown if ok else shown
+                elif text > 1:
                     verdict = f"pass (text x{text} = {shown * text} px)"
                 else:
                     verdict = "PASS" if ok and shown >= PREFERRED_PX else "pass (below 12 px)" if ok else "FAIL"
@@ -228,7 +240,8 @@ def self_test() -> int:
     assert not failures and any("PASS" in line or "pass" in line for line in lines)
     synthetic[483] = FontFact(483, "Garmond8Font.ART", 8, 10, 7)
     _, failures = report([(1280, 800)], synthetic, [])
-    assert len(failures) == 1 and "Garmond8Font" in failures[0]
+    # the sheet's font and, as the substitute that is itself under the minimum, the reading windows' (ARC-UI-1462)
+    assert len(failures) == 2 and all("Garmond8Font" in failure for failure in failures)
     _, failures = report([(1280, 800)], {**synthetic, 483: FontFact(483, "Garmond8Font.ART", 8, 10, 7)}, [("a.cs", 5, 8)])
     assert any("a.cs:5" in failure for failure in failures)
     _, failures = report([(640, 480)], {n: FontFact(n, "SyntheticFont.ART", 12, 12, 9) for window in WINDOWS for n in window.fonts}, [])
@@ -238,7 +251,9 @@ def self_test() -> int:
     reading[482] = FontFact(482, "Garmond8Font.ART", 8, 10, 7)
     reading[481] = FontFact(481, "Garmond6Font.ART", 6, 7, 5)
     lines, failures = report([(1280, 800), (1920, 1080)], reading, [])
-    assert not failures and any("text x2 = 16 px" in line for line in lines) and any("text x2 = 12 px" in line for line in lines), failures
+    assert not failures and sum("substitute Synthetic" in line for line in lines) >= 1 and any("exempt: printed legend" in line for line in lines), failures
+    # without the substitute font the same lines would take the text-only factor of the fallback panel, and without both they fail
+    assert any(window.substitute for window in WINDOWS)
     # a window without the text factor still fails on the same font
     assert any(window.text_factor for window in WINDOWS) and not all(window.text_factor for window in WINDOWS)
     scan, unresolved = scan_label_sizes()

@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -15,6 +16,9 @@ namespace Arcanum.TerrainViewer;
 /// button opens up (0x5C4790 is set only by the toggle).
 /// PROJECT: the wheel over the list scrolls it (the scroll bar widget's art is not read, F0), and while a question is open the buttons,
 /// the toggle and the rows do nothing (the original's question box is modal, not read here).
+/// ARC-UI-3038 (census M05, M06): over a complete kit (<see cref="SteamwovenKitScreen.SaveLoad"/>: the top strip, the body background and the bottom strip of the baked set) the screen draws none of the original's arts 336, 335 and 745
+/// (<see cref="SteamwovenKitComposer.OwnBackdropArts"/>) and the kit's three parts instead, in the plate's device rectangles; the preview's field and the bottom strip's message box are plain black stand-ins until the kit has them (<see cref="AreaKitStandIns"/>), and
+/// the preview, the list, the lens, the cover and the buttons are drawn as before. A part the set lacks, holds at another size or does not load gives the screen's own art whole.
 /// </summary>
 public partial class AreaSaveListArtView : Control
 {
@@ -36,6 +40,9 @@ public partial class AreaSaveListArtView : Control
     private int _selected = -1, _top;
     private bool _blocked;
     private AreaSaveListArtButton? _hovered, _pressed;
+    // ARC-UI-3038: the kit's three parts of the screen (the shared two-strip layer, ARC-UI-3039).
+    private readonly AreaKitTwoStripLayer _kit = new(SteamwovenKitScreen.SaveLoad, "twostrip-saveload");
+    private IReadOnlyList<int> _ownBackdropDrawn = [];
 
     /// <summary>A press on a row (its index in the list).</summary>
     public event Action<int>? RowPressed;
@@ -51,6 +58,12 @@ public partial class AreaSaveListArtView : Control
     internal IReadOnlyList<string> ShownRowsForSelfTest => Visible && _font is { } font
         ? [.. Enumerable.Range(_top, Math.Clamp(_rows.Count - _top, 0, AreaSaveListArtLayout.ShownRows))
             .Select(row => AreaSaveListArtLayout.Fit(font, _rows[row], AreaSaveListArtLayout.Row(0).Width))] : [];
+    /// <summary>ARC-UI-3038: the kit's three draws of the screen as of the last draw (top strip, body, bottom strip), null while the screen draws its own art.</summary>
+    internal IReadOnlyList<SteamwovenKitDraw>? KitScreenForSelfTest => _kit.DrawsForSelfTest;
+    /// <summary>ARC-UI-3038: the original arts drawn as the backdrop in the last draw (336, 335, 745 as far as the pack has them; none over the kit).</summary>
+    internal IReadOnlyList<int> OwnBackdropDrawnForSelfTest => _ownBackdropDrawn;
+    /// <summary>ARC-UI-3038: true when the kit part drawn for <paramref name="index"/> (0 top, 1 body, 2 bottom) is sampled nearest (its draw is exact).</summary>
+    internal bool KitSampledNearestForSelfTest(int index) => _kit.SampledNearestForSelfTest(index);
     internal int FrameForSelfTest(AreaSaveListArtButton button) => Frame(button);
     internal int ToggleFrameForSelfTest => ToggleFrame();
     internal bool InfoShownForSelfTest => _infoShown;
@@ -113,6 +126,8 @@ public partial class AreaSaveListArtView : Control
     {
         Visible = false;
         (_hovered, _pressed, _preview, _portrait, _info) = (null, null, null, null, null);
+        _kit.Release();
+        _ownBackdropDrawn = [];
     }
 
     /// <summary>The screen at the bars' whole factor, centred in the viewport.</summary>
@@ -174,11 +189,21 @@ public partial class AreaSaveListArtView : Control
         if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
         if (_font is null || _face is null) return;
         DrawRect(new Rect2(0, 0, AreaSaveListArtLayout.ScreenWidth, AreaSaveListArtLayout.ScreenHeight), Colors.Black);
-        if (Art(AreaSaveListArtLayout.TopStripArt) is { } top) DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false);
-        if (Art(AreaSaveListArtLayout.BottomStripArt) is { } bottom)
+        // ARC-UI-3038: over a complete kit the strips and the body are the kit's and the screen's own arts 336, 335 and 745 are not drawn.
+        var kit = _kit.Compose(_zoned, GetViewportRect().Size);
+        var own = SteamwovenKitComposer.OwnBackdropArts(SteamwovenKitScreen.SaveLoad, kit);
+        var ownDrawn = new List<int>(3);
+        _kit.Draw(this, Position, Scale);
+        if (own.Contains(AreaSaveListArtLayout.TopStripArt) && Art(AreaSaveListArtLayout.TopStripArt) is { } top) { DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false); ownDrawn.Add(AreaSaveListArtLayout.TopStripArt); }
+        if (own.Contains(AreaSaveListArtLayout.BottomStripArt) && Art(AreaSaveListArtLayout.BottomStripArt) is { } bottom)
+        {
             foreach (var (x, y, width, height) in AreaSaveListArtLayout.BottomStripParts)
                 DrawTextureRectRegion(bottom, new Rect2(x, y, width, height), new Rect2(x, 0, width, height));
+            ownDrawn.Add(AreaSaveListArtLayout.BottomStripArt);
+        }
         var (px, py, pw, ph) = AreaSaveListArtLayout.Preview;
+        // ARC-UI-3038: the preview's field, which the original's background leaves as a hole over its black, and the bottom strip's message box stand as plain black fields over the kit's background.
+        if (kit) AreaKitStandIns.SaveLoad(this);
         // MW23: the picture at its own size (the original's fills the 468 × 300 rectangle from its corner); none, the new-save row or
         // an unread info leave the preview black. PROJECT: the stored picture is the screen fitted into 468 × 300 keeping its shape, so
         // a narrower or lower one is centred; kept within the preview.
@@ -188,8 +213,12 @@ public partial class AreaSaveListArtView : Control
             DrawTextureRectRegion(_preview, new Rect2(px + (pw - w) / 2, py + (ph - h) / 2, w, h), new Rect2(0, 0, w, h));
         }
         // The background's preview hole is transparent: the preview shows through it.
-        if (Art(AreaSaveListArtLayout.BackgroundArt) is { } background)
+        if (own.Contains(AreaSaveListArtLayout.BackgroundArt) && Art(AreaSaveListArtLayout.BackgroundArt) is { } background)
+        {
             DrawTextureRect(background, new Rect2(0, AreaSaveListArtLayout.WindowTop, background.GetWidth(), background.GetHeight()), false);
+            ownDrawn.Add(AreaSaveListArtLayout.BackgroundArt);
+        }
+        _ownBackdropDrawn = ownDrawn;
         // MW13: the list's rectangle, five rows taller, is filled black before the rows.
         var (lx, ly, lw, lh) = AreaSaveListArtLayout.List;
         DrawRect(new Rect2(lx, ly, lw, lh + AreaSaveListArtLayout.ListFillExtra), Colors.Black);

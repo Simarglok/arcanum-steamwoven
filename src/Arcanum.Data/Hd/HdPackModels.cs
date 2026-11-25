@@ -1,7 +1,7 @@
 namespace Arcanum.Data.Hd;
 
 public enum HdReviewStatus { Unreviewed, Approved, Rejected }
-public enum HdEntryKind { Sprite, TerrainChunk, Portrait }
+public enum HdEntryKind { Sprite, TerrainChunk, Portrait, WorldMap, MapZoomed, TownMap }
 
 /// <summary>A pack's identity: a rebuild, a review mark or any other manifest change is a
 /// new identity. HD texture caches are keyed by it (ARC-RENDER-013, Budgets).</summary>
@@ -29,13 +29,20 @@ public sealed record HdLegacyFrame(int Width, int Height, string RgbaSha256);
 /// frame's Legacy alpha, so the alpha check is <see cref="HdAlphaMode.Masked"/> and not the slice's policy.</param>
 /// <param name="PortraitPath">ARC-UI-2865, portraits only (<c>"kind":"portrait"</c>): the lowercase path of the original's bitmap this entry redraws,
 /// <c>portrait/&lt;name&gt;.bmp</c> (<see cref="HdPortraitKey"/>); <see cref="Key"/> and <see cref="NameSha256"/> are derived from it.</param>
+/// <param name="MapPath">ARC-RENDER-3079, world-map bitmaps only (<c>"kind":"worldmap"</c> or <c>"map-zoomed"</c>): the lowercase path of the original's bitmap this entry
+/// redraws, <c>worldmap/&lt;name&gt;.bmp</c> (<see cref="HdMapKey"/>); <see cref="Key"/> and <see cref="NameSha256"/> are derived from it. ARC-RENDER-3106, town-map tiles
+/// (<c>"kind":"townmap"</c>): <c>townmap/&lt;town&gt;/&lt;town&gt;NNNNNN.bmp</c> (<see cref="HdTownMapKey"/>).</param>
 /// <param name="ChunkX">Terrain chunks only (reserved entry kind, never bound in this
 /// slice): chunk coordinates as <c>AreaTerrainChunks</c> uses them.</param>
 /// <param name="TileRgbaSha256">Terrain chunks only: Legacy RGBA SHA-256 of every tile and
 /// facade frame composed into the chunk, in plan order.</param>
 public sealed record HdPackEntry(int Index, HdEntryKind Kind, string File, string Sha256, long Bytes, string Slice,
     HdSpriteKey? Key, string? NameSha256, HdLegacyFrame Legacy, HdReviewStatus Review,
-    int? ChunkX = null, int? ChunkY = null, int? ChunkPadding = null, IReadOnlyList<string>? TileRgbaSha256 = null, bool AlphaMasked = false, string? PortraitPath = null);
+    int? ChunkX = null, int? ChunkY = null, int? ChunkPadding = null, IReadOnlyList<string>? TileRgbaSha256 = null, bool AlphaMasked = false, string? PortraitPath = null, string? MapPath = null)
+{
+    /// <summary>True for the kinds that are keyed by an <see cref="HdSpriteKey"/> and resolved by <see cref="HdPack.ResolveSprite"/>: sprites, portraits, the world-map bitmaps and the town-map tiles.</summary>
+    public bool IsSpriteLike => Kind is HdEntryKind.Sprite or HdEntryKind.Portrait or HdEntryKind.WorldMap or HdEntryKind.MapZoomed or HdEntryKind.TownMap;
+}
 
 public enum HdPackOpenStatus
 {

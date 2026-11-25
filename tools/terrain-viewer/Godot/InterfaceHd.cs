@@ -163,7 +163,9 @@ public static class InterfaceHd
             if (entry.HdOn && entry.Pack is { } pack
                 && pack.ResolveSprite(query, frame.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } hd
                 && hd.Width == frame.Width * pack.Scale && hd.Height == frame.Height * pack.Scale)
-                picture = InterfaceChromeRenderer.ResamplePicture(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight);
+                picture = recipe.WholePicture
+                    ? InterfaceChromeRenderer.ResampleStraight(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight)
+                    : InterfaceChromeRenderer.ResamplePicture(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight);
             entry.Pixels = InterfaceChromeRenderer.Render(recipe, frame.Width, frame.Height, frame.Rgba, picture, query.Key.Frame, scale);
             // The big strips only: the log line says how long a worker painted (the main thread did not wait for it).
             if ((long)pixelWidth * pixelHeight > 200_000)
@@ -244,6 +246,22 @@ public static class InterfaceHd
         var whole = Math.Round(scale);
         if (Math.Abs(scale - whole) >= 0.01) return scale;
         return whole >= 1 && packScale % (int)whole != 0 ? whole : null;
+    }
+
+    /// <summary>ARC-RENDER-3106: the scale (rounded to 1/1000) a frame of an <see cref="HdInterfaceTexture.AreaFirst"/> texture is resampled to on a worker for the device scale <paramref name="device"/>:
+    /// the device scale itself, at most the pack's (a whole scale that divides the pack's and a scale at or above it included: decoding the redraw is the worker's job, never the main thread's, for the
+    /// thousands of tiles of a town); null for a bad number or a pack that is not a redraw at 2× or more.</summary>
+    internal static double? DirectScaleFirst(double device, int packScale)
+    {
+        if (!double.IsFinite(device) || device <= 0 || packScale < 2) return null;
+        var scale = Math.Round(device, 3);
+        return scale <= 0 ? null : Math.Min(scale, packScale);
+    }
+
+    /// <summary>ARC-RENDER-3106: forgets the resampled copies and queued resamples of <paramref name="frame"/> (its texture is gone): a worker that has not started drops its entry.</summary>
+    internal static void ForgetDirect(AreaInterfaceFrame frame)
+    {
+        lock (DirectFrames) if (DirectFrames.TryGetValue(frame, out var entries)) entries.Clear();
     }
 
     /// <summary>The entry of <paramref name="frame"/> for <paramref name="pack"/> at <paramref name="scale"/> (<see cref="DirectScale"/>): <c>Pixels</c> are set when ready, <c>Failed</c>
@@ -517,6 +535,29 @@ public partial class HdInterfaceTexture : Texture2D
 
     internal HdInterfaceTexture Greyed() => new(ImageTexture.CreateFromImage(InterfaceHd.GreyImage(_legacy.GetImage())), _frame, true, _premultipliedAlpha) { ScaleSource = ScaleSource };
 
+    /// <summary>ARC-RENDER-3106: what a <c>DrawPolygon</c> takes as its texture: the canvas texture that draws now (HD redraw or area copy) or the Legacy texture. This texture's own RID is empty
+    /// (only its <c>Draw*</c> calls work), so a polygon (the faded tile of a town map) draws this instead.</summary>
+    internal Texture2D DrawSource() => Source();
+
+    /// <summary>ARC-RENDER-3106: set on a texture of thousands (a town-map tile): while the area copy for its window's device scale is being resampled on a worker the Legacy pixels draw,
+    /// and the mip chain (a PNG decode and mip generation on the main thread per tile) is not built. The copy is made at every device scale up to the pack's own
+    /// (<see cref="InterfaceHd.DirectScaleFirst"/>); the mip chain draws only where a view claims no scale or the pack has no usable redraw.</summary>
+    internal bool AreaFirst { get; set; }
+    private bool _areaPending;
+    private bool _released;
+
+    /// <summary>ARC-RENDER-3106: the owner is done with this texture (a town-map tile of a town that is gone): it stops answering <see cref="Refresh"/>, frees the images it owns (the HD image, its
+    /// area copy, the generated frame and the Legacy texture) at once, and its queued area copy is forgotten (a worker that has not started drops it). It is not drawn again.</summary>
+    internal void Release()
+    {
+        _released = true;
+        InterfaceHd.ForgetDirect(_frame);
+        _hdCanvas = null; _areaCanvas = null; _generatedCanvas = null; _hdFor = null; _areaFrom = null; _generatedFrom = null;
+        var owned = new Resource?[] { _hd, _area, _generated, _legacy };
+        _hd = null; _area = null; _generated = null;
+        foreach (var resource in owned) resource?.Dispose();
+    }
+
     /// <summary>True when the next draw uses the HD redraw.</summary>
     public bool IsHd => Active() is not null;
 
@@ -555,6 +596,7 @@ public partial class HdInterfaceTexture : Texture2D
     // The HD image is kept only while HD draws, so a switch back to Legacy frees what the windows decoded.
     internal void Refresh()
     {
+        if (_released) return;
         if (!InterfaceHd.Enabled) { _hd = null; _hdCanvas = null; _hdFor = null; _failed = false; DropArea(); }
         // The generated frame is looked up again at the next draw (its entry says whether pack, HD setting or scale changed); the uploaded image of
         // the old entry keeps drawing while the new one is painted, and goes when the generated interface is off.
@@ -565,6 +607,7 @@ public partial class HdInterfaceTexture : Texture2D
     // The canvas texture of the HD image (null while Legacy draws); built with the image, so the two are dropped together.
     private CanvasTexture? Active()
     {
+        if (_released) return null;
         if (InterfaceHd.Generated && _frame?.Hd is { } generatedQuery && InterfaceChromeRecipes.For(generatedQuery) is { } recipe)
         {
             if (GeneratedCanvas(recipe, generatedQuery, out var painting) is { } generated)
@@ -582,6 +625,8 @@ public partial class HdInterfaceTexture : Texture2D
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; DropArea(); }
         // ARC-RENDER-3002: a plain frame at a fractional device scale below the pack's draws from its area-resampled copy once a worker has it (the mip chain is freed then).
         if (!_premultipliedAlpha && AreaCanvas(pack, query) is { } area) return area;
+        // ARC-RENDER-3106: a copy is being made for this window's scale and no earlier one draws: the Legacy pixels draw meanwhile (the copy's arrival refreshes the texture).
+        if (AreaFirst && _areaPending && _hdCanvas is null) { _activeScale = 1; _activeRatio = 1; return null; }
         if (_hdCanvas is null && !_failed)
         {
             // ARC-DEV-369: a worker may have resolved this frame already; only the upload is left.
@@ -625,8 +670,9 @@ public partial class HdInterfaceTexture : Texture2D
     // or at least the pack's, the pack has no usable redraw, or nothing is ready yet and no earlier scale draws (the mip chain draws then, as before).
     private CanvasTexture? AreaCanvas(HdPack pack, HdSpriteQuery query)
     {
+        _areaPending = false;
         // Only a view that claims its device scale: a texture with no claim may be drawn at any scale, and a copy for the wrong one is blurrier than the mip chain.
-        if (ScaleSource is not { } source || InterfaceHd.DirectScale(source(), pack.Scale) is not { } scale) { DropArea(); return null; }
+        if (ScaleSource is not { } source || (AreaFirst ? InterfaceHd.DirectScaleFirst(source(), pack.Scale) : InterfaceHd.DirectScale(source(), pack.Scale)) is not { } scale) { DropArea(); return null; }
         var real = (double)source();
         // Settled: the copy of this pack and scale is uploaded, so the draw takes no lock and no lookup.
         if (_areaCanvas is not null && _areaFrom is { } held && ReferenceEquals(held.Pack, pack) && held.Scale == scale && !held.Failed)
@@ -640,7 +686,7 @@ public partial class HdInterfaceTexture : Texture2D
         if (entry.Pixels is not { } pixels)
         {
             // Still resampling: an earlier scale's copy keeps drawing, stretched into the same Legacy rectangle, until the new one is ready.
-            if (_areaCanvas is null) return null;
+            if (_areaCanvas is null) { _areaPending = true; return null; }
         }
         else if (!ReferenceEquals(_areaFrom, entry) || _areaCanvas is null)
         {

@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -72,9 +73,18 @@ def load_manifest(pack: Path) -> tuple[dict, str]:
     return manifest, hashlib.sha256(raw).hexdigest()
 
 
+MAP_KINDS = ("worldmap", "map-zoomed")  # ARC-RENDER-3079: the entry kinds of the world map's 64 tiles and of Map_Zoomed
+MAP_ROW = ("world-map", "maps", False)  # their default layout row: interface/world-map/maps/<art>-f000.png
+TOWN_KIND = "townmap"  # ARC-RENDER-3106: the entry kind of a town-map tile redraw (docs/formats/hd-pack.md#town-map-entries)
+
+
 def entry_key(e: dict) -> tuple:
     if e.get("kind") == "portrait":  # ARC-UI-2865: a portrait redraw is keyed by the original bitmap's path (docs/formats/hd-pack.md#portrait-entries)
         return ("portrait", e["portrait"]["path"])
+    if e.get("kind") == TOWN_KIND:  # ARC-RENDER-3106: a town-map tile redraw is keyed by the original tile's path (docs/formats/hd-pack.md#town-map-entries)
+        return (TOWN_KIND, e[TOWN_KIND]["path"])
+    if e.get("kind") in MAP_KINDS:  # ARC-RENDER-3079: a world-map bitmap redraw is keyed by the original bitmap's path too (docs/formats/hd-pack.md#world-map-entries)
+        return (e["kind"], e[e["kind"]]["path"])
     return (e["art"]["sha256"], e["group"], e["frame"], e["palette"])
 
 
@@ -301,6 +311,35 @@ def portrait_rows(keyed_entries: dict) -> dict:
     return rows
 
 
+def map_rows(keyed_entries: dict) -> dict:
+    """ARC-RENDER-3079: the default layout row (screen `world-map`, kind `maps`) of every `worldmap` and `map-zoomed` entry among `keyed_entries`, by the ART name `art_of` finds in its staged file."""
+    rows = {}
+    for e in keyed_entries.values():
+        if e.get("kind") in MAP_KINDS:
+            try:
+                rows[layout.art_of(e["file"])] = MAP_ROW
+            except layout.LayoutError as err:
+                raise PackError(str(err)) from err
+    return rows
+
+
+def town_rows(keyed_entries: dict) -> dict:
+    """ARC-RENDER-3106: the default layout row (screen `town-map`, kind = the town's file name part) of every `townmap` entry among `keyed_entries`, by the ART name `art_of` finds in its staged
+    file (`townmap-<town>-NNNNNN`): the thousands of tiles of one town share a folder, interface/town-map/<town>/."""
+    rows = {}
+    for e in keyed_entries.values():
+        if e.get("kind") == TOWN_KIND:
+            try:
+                art = layout.art_of(e["file"])
+            except layout.LayoutError as err:
+                raise PackError(str(err)) from err
+            m = re.fullmatch(r"townmap-(?P<town>.+)-\d{6}", art)
+            if not m:
+                raise PackError(f"{e['file']}: not a town-map tile file name (townmap-<town>-NNNNNN-f0-<hash>.png)")
+            rows[art] = ("town-map", m["town"], False)
+    return rows
+
+
 def place_entry(e: dict, lm: "layout.LayoutMap") -> str:
     try:
         return layout.place(layout.art_of(e["file"]), e, lm)
@@ -376,7 +415,7 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
         raise PackError("--map only applies to a pack with a layout-map.tsv (run relayout first)")
     pack_rows = dict(lm.rows) if lm is not None else {}
     if lm is not None:  # ARC-UI-2865: a staged portrait needs no row in the map: it goes to interface/portraits/<heroes|npcs>/ and apply appends the row
-        lm = layout.LayoutMap({**portrait_rows(ks), **lm.rows})
+        lm = layout.LayoutMap({**portrait_rows(ks), **map_rows(ks), **town_rows(ks), **lm.rows})  # ARC-RENDER-3079: a staged world-map bitmap likewise goes to interface/world-map/maps/
     if lm is not None and extra_map is not None:  # the pack's own rows win; the file only adds ARTs the pack's map lacks
         lm = layout.LayoutMap({**{a: r for a, r in extra_map.rows.items() if a not in lm.rows}, **lm.rows})
 
@@ -1122,6 +1161,157 @@ def cmd_portraits_plan(a) -> int:
     return 0
 
 
+MAP_PLAN_KIND = "arcanum-steamwoven-hd-map-plan"
+TILE_SIDE, ZOOMED_SIDE, TILE_COUNT = 250, 365, 64  # the original's world-map bitmaps (docs/formats/hd-pack.md#world-map-entries)
+_TILE_NAME = re.compile(r"^(?P<base>[a-z0-9_-]*?)(?P<n>\d{3})$")
+
+
+def map_plan(maps: Path, out: Path, pack_id: str, scale: int, zoomed_name: str, partial: bool) -> tuple[dict, dict]:
+    """ARC-RENDER-3079: the importer plan for a delivery of HD world-map pictures: `<base>001.png` .. `<base>064.png` (the 64 tiles, `250 x scale` square) and `<zoomed_name>.png`
+    (`365 x scale`, optional). Every file used is a plain PNG (8-bit RGB or RGBA, not interlaced) of exactly that size, checked against SHA256SUMS.txt when the folder has one; the 64 tiles
+    must be there with one base name and no gap unless `partial`. The plan names the original bitmaps `worldmap/<name>.bmp`; the importer checks each size against the bitmap it
+    reads from the game. Image paths are relative to OUT."""
+    if scale not in (2, 4):
+        raise PackError(f"scale {scale} is not an accepted pack scale (2 or 4)")
+    sums = read_sums(maps) if (maps / "SHA256SUMS.txt").is_file() else None
+    items, tiles, bases = [], {}, set()
+
+    def add(png: Path, bmp: str, side: int) -> None:
+        if not png.is_file() or png.is_symlink():
+            raise PackError(f"{png} is missing or not a plain file")
+        if sums is not None and sums.get(png.name) != sha256(png):
+            raise PackError(f"{png} is not listed in {maps}/SHA256SUMS.txt or differs from it; the delivery changed after it was packed")
+        w, h, depth, ctype, interlace = png_header(png)
+        expect = side * scale
+        if (w, h) != (expect, expect) or depth != 8 or ctype not in (2, 6) or interlace:
+            raise PackError(f"{png}: {w}x{h}, depth {depth}, colour type {ctype}; expected {expect}x{expect}, 8-bit RGB or RGBA, not interlaced")
+        items.append({"bmp": bmp, "image": os.path.relpath(png, out.parent).replace(os.sep, "/")})
+
+    for png in sorted(maps.glob("*.png")):
+        if png.stem == zoomed_name:
+            continue
+        m = _TILE_NAME.match(png.stem)
+        if not m:
+            raise PackError(f"{png.name}: not a tile name (<base>NNN.png) nor the continent picture ({zoomed_name}.png)")
+        bases.add(m["base"])
+        tiles[int(m["n"])] = png
+    if len(bases) > 1:
+        raise PackError(f"{maps}: the tiles carry more than one base name ({sorted(bases)})")
+    if not partial and sorted(tiles) != list(range(1, TILE_COUNT + 1)):
+        missing = [n for n in range(1, TILE_COUNT + 1) if n not in tiles]
+        raise PackError(f"{maps}: expected the {TILE_COUNT} tiles 001..{TILE_COUNT:03d}, missing {missing[:8]}{'...' if len(missing) > 8 else ''} (--partial stages what is there)")
+    for n, png in sorted(tiles.items()):
+        if not 1 <= n <= TILE_COUNT:
+            raise PackError(f"{png.name}: tile number {n} is outside 001..{TILE_COUNT:03d}")
+        add(png, f"worldmap/{png.stem}.bmp", TILE_SIDE)
+    zoomed = maps / f"{zoomed_name}.png"
+    if zoomed.exists():
+        add(zoomed, f"worldmap/{zoomed_name}.bmp", ZOOMED_SIDE)
+    if not items:
+        raise PackError(f"no world-map picture in {maps}")
+    for it in items:
+        if not all(c.islower() or c.isdigit() or c in "_-/." for c in it["bmp"]):
+            raise PackError(f"{it['bmp']} is not a lowercase world-map bitmap name")
+    return {"schema": 1, "kind": MAP_PLAN_KIND, "packId": pack_id, "scale": scale, "items": items}, {"tiles": len(tiles), "map-zoomed": 1 if zoomed.exists() else 0}
+
+
+def cmd_maps_plan(a) -> int:
+    out = a.out
+    real = out.resolve()
+    anchored = any(p.name == "local" and (p.parent / ".git").exists() for p in real.parents)
+    if out.is_symlink() or not anchored or GAME_SUPPORT.resolve() in (real, *real.parents) \
+            or {"hd-packs", "hd_pack", "pack-out"} & set(real.parts):
+        raise PackError(f"{out} must be a plain file under a checkout's local/ directory, never inside an installed pack, a staging pack or a pack collection")
+    if out.suffix != ".json":
+        raise PackError(f"{out} must be a .json file")
+    if out.exists():
+        try:
+            if json.loads(out.read_text()).get("kind") != MAP_PLAN_KIND:
+                raise ValueError("not a world-map plan")
+        except (OSError, ValueError, AttributeError) as e:
+            raise PackError(f"{out} exists and is not a world-map plan of this tool; refusing to overwrite it ({e})") from e
+    plan, counts = map_plan(a.maps.resolve(), real, a.pack_id, a.scale, a.zoomed_name, a.partial)
+    for group, n in sorted(counts.items()):
+        print(f"  {group}: {n} images")
+    print(f"plan {out}: {len(plan['items'])} world-map bitmaps, scale {a.scale}x, pack id {plan['packId']}")
+    if a.dry_run:
+        print("DRY-RUN: nothing written")
+        return 0
+    real.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(real, (json.dumps(plan, indent=1) + "\n").encode())
+    print(f"PASS maps-plan; next: stage --plan {out} --staging local/res095/pack-out/{a.pack_id} --dry-run")
+    return 0
+
+
+TOWN_PLAN_KIND = "arcanum-steamwoven-hd-townmap-plan"
+TOWN_TILE_W, TOWN_TILE_H = 64, 32  # the original's town-map tile (docs/formats/hd-pack.md#town-map-entries)
+_TOWN_CHARS = re.compile(r"^[a-z0-9 '._-]{1,40}$")
+
+
+def townmap_plan(tiles: Path, out: Path, town: str, pack_id: str, scale: int, partial_ok: bool, expect: int | None) -> tuple[dict, int]:
+    """ARC-RENDER-3106: the importer plan for the tiles of one rendered town (`tools/hd_pack/town_render.py stitch`, 24-bit or RGBA PNG `<Town>NNNNNN.png` at `64 x 4 x render scale`).
+    Every file is a plain PNG (8-bit RGB or RGBA, not interlaced) of exactly `64 x scale` by `32 x scale` (256 x 128 at the 4x pack: render scale 1.0), checked against SHA256SUMS.txt when the
+    folder has one. The plan names the original tiles `townmap/<town>/<town>NNNNNN.bmp` (lowercase, as the viewer reads them); the importer checks each against the tile it reads from the game.
+    Image paths are relative to OUT. `expect` is the town's tile count (`.tmi` tiles that exist): a gap is refused unless `partial_ok`."""
+    if scale not in (2, 4):
+        raise PackError(f"scale {scale} is not an accepted pack scale (2 or 4)")
+    low = town.strip().lower()
+    if not _TOWN_CHARS.match(low) or low[0] in " ." or low[-1] in " .":
+        raise PackError(f"town {town!r}: an HD entry names a town of at most 40 characters of a-z 0-9 space ' . _ - (no leading or trailing space or dot)")
+    sums = read_sums(tiles) if (tiles / "SHA256SUMS.txt").is_file() else None
+    name_re = re.compile(rf"^{re.escape(low)}(?P<n>\d{{6}})\.png$", re.IGNORECASE)
+    found: dict[int, Path] = {}
+    for png in sorted(tiles.glob("*.png")):
+        m = name_re.match(png.name)
+        if not m:
+            raise PackError(f"{png.name}: not a tile of {town} ({town}NNNNNN.png)")
+        if int(m["n"]) in found:
+            raise PackError(f"{png.name} and {found[int(m['n'])].name} are the same tile (tile names are matched without regard to case)")
+        found[int(m["n"])] = png
+    if not found:
+        raise PackError(f"no tile of {town} in {tiles}")
+    if expect is not None and not partial_ok and len(found) != expect:
+        raise PackError(f"{tiles}: {len(found)} tiles, the town has {expect} (--partial stages what is there)")
+    items = []
+    for n, png in sorted(found.items()):
+        if png.is_symlink() or not png.is_file():
+            raise PackError(f"{png} is missing or not a plain file")
+        if sums is not None and sums.get(png.name) != sha256(png):
+            raise PackError(f"{png} is not listed in {tiles}/SHA256SUMS.txt or differs from it; the delivery changed after it was packed")
+        w, h, depth, ctype, interlace = png_header(png)
+        ew, eh = TOWN_TILE_W * scale, TOWN_TILE_H * scale
+        if (w, h) != (ew, eh) or depth != 8 or ctype not in (2, 6) or interlace:
+            raise PackError(f"{png}: {w}x{h}, depth {depth}, colour type {ctype}; expected {ew}x{eh}, 8-bit RGB or RGBA, not interlaced")
+        items.append({"bmp": f"townmap/{low}/{low}{n:06d}.bmp", "image": os.path.relpath(png, out.parent).replace(os.sep, "/")})
+    return {"schema": 1, "kind": TOWN_PLAN_KIND, "packId": pack_id, "scale": scale, "items": items}, len(found)
+
+
+def cmd_townmap_plan(a) -> int:
+    out = a.out
+    real = out.resolve()
+    anchored = any(p.name == "local" and (p.parent / ".git").exists() for p in real.parents)
+    if out.is_symlink() or not anchored or GAME_SUPPORT.resolve() in (real, *real.parents) \
+            or {"hd-packs", "hd_pack", "pack-out"} & set(real.parts):
+        raise PackError(f"{out} must be a plain file under a checkout's local/ directory, never inside an installed pack, a staging pack or a pack collection")
+    if out.suffix != ".json":
+        raise PackError(f"{out} must be a .json file")
+    if out.exists():
+        try:
+            if json.loads(out.read_text()).get("kind") != TOWN_PLAN_KIND:
+                raise ValueError("not a town-map plan")
+        except (OSError, ValueError, AttributeError) as e:
+            raise PackError(f"{out} exists and is not a town-map plan of this tool; refusing to overwrite it ({e})") from e
+    plan, count = townmap_plan(a.tiles.resolve(), real, a.town, a.pack_id, a.scale, a.partial, a.expect)
+    print(f"plan {out}: {count} tiles of {a.town}, scale {a.scale}x (render scale {a.scale / 4:g}), pack id {plan['packId']}")
+    if a.dry_run:
+        print("DRY-RUN: nothing written")
+        return 0
+    real.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(real, (json.dumps(plan, indent=1) + "\n").encode())
+    print(f"PASS townmap-plan; next: stage --plan {out} --staging local/res095/pack-out/{a.pack_id} --dry-run")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="hd_pack.py", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1180,6 +1370,23 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
     s.add_argument("--pack-id", default="interface-portraits", help="id of the staging pack the plan builds (default interface-portraits)")
     s.add_argument("--dry-run", action="store_true", help="read and check the images, print the counts, write nothing")
+    s = add("maps-plan", cmd_maps_plan, "write the importer plan for HD world-map pictures (ARC-RENDER-3079)")
+    s.add_argument("--maps", type=Path, required=True, help="the delivery folder: <base>001.png .. <base>064.png (250 x scale) and the continent picture (365 x scale), SHA256SUMS.txt optional")
+    s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
+    s.add_argument("--pack-id", default="interface-maps", help="id of the staging pack the plan builds (default interface-maps)")
+    s.add_argument("--scale", type=int, default=4, help="the pack scale the pictures are drawn at (2 or 4; default 4)")
+    s.add_argument("--zoomed-name", default="map_zoomed", help="the continent picture's file stem, the original's ZoomedName lowercased (default map_zoomed)")
+    s.add_argument("--partial", action="store_true", help="accept fewer than the 64 tiles")
+    s.add_argument("--dry-run", action="store_true", help="read and check the images, print the counts, write nothing")
+    s = add("townmap-plan", cmd_townmap_plan, "write the importer plan for the rendered tiles of one town map (ARC-RENDER-3106)")
+    s.add_argument("--tiles", type=Path, required=True, help="the folder of the town render's tiles: <Town>NNNNNN.png at 64 x scale by 32 x scale, SHA256SUMS.txt optional")
+    s.add_argument("--town", required=True, help="the town's name as the original names its folder (rules/townmap.mes, e.g. Ashbury)")
+    s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
+    s.add_argument("--pack-id", default="interface-townmaps", help="id of the staging pack the plan builds (default interface-townmaps)")
+    s.add_argument("--scale", type=int, default=4, help="the pack scale the tiles are rendered at (2 or 4; 4 = render scale 1.0; default 4)")
+    s.add_argument("--expect", type=int, default=None, help="the number of tiles the town has (the .tmi tiles that exist); fewer is refused unless --partial")
+    s.add_argument("--partial", action="store_true", help="accept fewer tiles than --expect")
+    s.add_argument("--dry-run", action="store_true", help="read and check the images, print the count, write nothing")
     return p
 
 

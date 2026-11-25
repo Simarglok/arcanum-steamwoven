@@ -16,9 +16,17 @@ public partial class TerrainViewerApp
     {
         if (DebugMode) return;
         DebugMode = true;
+        SyncFallbackLook();
         GD.Print($"ARC-DEV-050 debug mode on source={source}");
         _hud?.ShowPanel("debug mode");
         if (_canvas is not null) _canvas.ShowActorGuides = true;
+    }
+
+    /// <summary>ARC-UI-3136: the diagnostic windows' fallback boxes (Godot's default font) are shown only in a developer run (debug mode, self-test, smoke); the original's fonts are what the windows with their own text draw with.</summary>
+    private void SyncFallbackLook()
+    {
+        AreaFallbackLook.Allowed = DebugMode || AutomatedVisualRun;
+        AreaFallbackLook.Fonts = () => IsInstanceValid(this) ? TextFonts() : null;
     }
 
     /// <summary>ARC-DEV-064: a self-test raster oracle that checks the actor's guides turns them on without the debug mode.</summary>

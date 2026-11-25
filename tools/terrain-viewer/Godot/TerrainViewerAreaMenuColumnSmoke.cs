@@ -40,6 +40,10 @@ public partial class TerrainViewerApp
             require(image.SavePng($"{capture}-{name}.png") == Error.Ok, "the capture saved: " + name);
         }
         var checkedCases = 0;
+        var firstPremade = true;
+        var premadeKitCases = 0;
+        var firstNewCharacter = true;
+        var newCharacterKitCases = 0;
         string? syntheticKit = null;
         try
         {
@@ -50,20 +54,24 @@ public partial class TerrainViewerApp
             window.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
             window.ContentScaleFactor = 1;
             // The screens: name, open (from the main window), is open, the drawn plate (position, scale) of its view, the sides view that surrounds it, close (back to the main window).
-            var screens = new (string Name, Action Open, Func<bool> IsOpen, Func<(Vector2, float)?> Plate, Func<SteamwovenColumnSidesView> Sides, Action Close)[]
+            var screens = new (string Name, Action Open, Func<bool> IsOpen, Func<(Vector2, float)?> Plate, Func<SteamwovenColumnSidesView> Sides, Action Close, Func<string?>? Hovered, IReadOnlyList<(string Name, int X, int Y)> Spots)[]
             {
-                ("main", () => { }, () => art.Visible && _mainMenu?.Window == AreaMenuWindow.Main, () => (art.Position, art.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, () => { }),
+                ("main", () => { }, () => art.Visible && _mainMenu?.Window == AreaMenuWindow.Main, () => (art.Position, art.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, () => { }, null, []),
                 ("options", () =>
                 {
                     var options = _mainMenu!.Shown.ToList().FindIndex(button => button.Message == 12);
                     require(options >= 0, "the main window offers Options");
                     MainMenuCommand(() => _mainMenu.Activate(options));
                 }, () => art.Visible && _mainMenu?.Window == AreaMenuWindow.Options, () => (art.Position, art.Scale.X), () => panel.ColumnSidesForSelfTest.Sides,
-                    () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; })),
+                    () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; }), null, []),
                 ("premade", () => SteamwovenOpenMenuWindow(420, require), () => panel.PremadeArtMode,
-                    () => (panel.PremadeArtForSelfTest.Position, panel.PremadeArtForSelfTest.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, ReopenMainForColumnSmoke),
+                    () => (panel.PremadeArtForSelfTest.Position, panel.PremadeArtForSelfTest.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, ReopenMainForColumnSmoke,
+                    () => panel.PremadeArtForSelfTest.HoveredForSelfTest?.ToString(),
+                    [.. Enum.GetValues<AreaPremadeBrowserButton>().Select(button => (button.ToString(), AreaPremadeBrowserArtLayout.Button(button).X, AreaPremadeBrowserArtLayout.Button(button).Y))]),
                 ("newcharacter", () => SteamwovenOpenMenuWindow(421, require), () => panel.NewCharacterArtMode,
-                    () => (panel.NewCharacterArtForSelfTest.Position, panel.NewCharacterArtForSelfTest.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, ReopenMainForColumnSmoke),
+                    () => (panel.NewCharacterArtForSelfTest.Position, panel.NewCharacterArtForSelfTest.Scale.X), () => panel.ColumnSidesForSelfTest.Sides, ReopenMainForColumnSmoke,
+                    () => panel.NewCharacterArtForSelfTest.HoveredForSelfTest?.ToString(),
+                    [.. Enum.GetValues<AreaNewCharacterArtButton>().Select(button => (button.ToString(), AreaNewCharacterArtLayout.Button(button).X, AreaNewCharacterArtLayout.Button(button).Y))]),
             };
             {
                 var options = SteamwovenLayoutOptions.ColumnOriginal;
@@ -93,8 +101,13 @@ public partial class TerrainViewerApp
                         await frames(2);
                         await CheckColumnCaseAsync(tag, layout, screen.Sides(), screen.Plate() ?? throw new InvalidOperationException($"[{tag}] the {screen.Name} view is not drawn"),
                             screen.Name is "main" or "options" ? art : null, frames, require);
+                        // ARC-UI-2924: the two-strip screens' buttons are hit where the plan draws them.
+                        if (screen.Hovered is { } hovered) await CheckTwoStripHitsAsync(tag, layout, screen.Spots, hovered, frames, require);
                         // ARC-UI-2461: with the synthetic kit the full-screen menus draw its plates.
                         if (syntheticKit is not null && screen.Name is "main" or "options") await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
+                        // ARC-UI-3039, ARC-UI-3040: with the synthetic kit the pre-made browser and the new character screen draw their two strips and their bodies.
+                        if (syntheticKit is not null && screen.Name == "premade") { await CheckKitCharacterScreenAsync(tag, layout, KitPremadeView(panel.PremadeArtForSelfTest), firstPremade, syntheticKit, frames, require); firstPremade = false; premadeKitCases++; }
+                        if (syntheticKit is not null && screen.Name == "newcharacter") { await CheckKitCharacterScreenAsync(tag, layout, KitNewCharacterView(panel.NewCharacterArtForSelfTest), firstNewCharacter, syntheticKit, frames, require); firstNewCharacter = false; newCharacterKitCases++; }
                         await SaveAsync($"column-{tag}");
                         checkedCases++;
                     }
@@ -137,6 +150,8 @@ public partial class TerrainViewerApp
             require(!InterfaceHd.Enabled && art.FullScreenPlan is null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) is null && !panel.ColumnSidesForSelfTest.Shown,
                 "with the HD option off the Steamwoven layout draws nothing: no plan, no surroundings");
             GD.Print($"ARC-UI-2891 native-smoke menu column PASS cases={checkedCases}");
+            if (syntheticKit is not null) GD.Print($"ARC-UI-3039 native-smoke premade kit PASS cases={premadeKitCases}");
+            if (syntheticKit is not null) GD.Print($"ARC-UI-3040 native-smoke newcharacter kit PASS cases={newCharacterKitCases}");
         }
         finally
         {
@@ -166,6 +181,7 @@ public partial class TerrainViewerApp
         var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         var cases = 0;
+        string? syntheticKit = null;
         try
         {
             _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
@@ -175,6 +191,14 @@ public partial class TerrainViewerApp
             window.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
             window.ContentScaleFactor = 1;
             SteamwovenHud.Options = SteamwovenLayoutOptions.ColumnOriginal;
+            if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_SYNTHETIC") == "1")
+            {
+                // ARC-UI-3038: every step the sizes need, written before the store reads any (a step is read once).
+                syntheticKit = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-save-").FullName;
+                foreach (var step in ColumnMenuSizes().Select(size => SteamwovenColumnMenu.Plan(size.X, size.Y, SteamwovenLayoutOptions.ColumnOriginal)!.Layout.Step).Distinct()) WriteSyntheticKitSet(syntheticKit, step);
+                SteamwovenKitStore.UseRoot(syntheticKit);
+            }
+            var firstSize = true;
             foreach (var size in ColumnMenuSizes())
             {
                 window.ContentScaleSize = size;
@@ -186,6 +210,8 @@ public partial class TerrainViewerApp
                 require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the save list is laid out by the column plan");
                 var art = panel.ArtForSelfTest;
                 await CheckColumnCaseAsync(tag, plan!, panel.ColumnSidesForSelfTest, (art.Position, art.Scale.X), null, frames, require);
+                // ARC-UI-3038: with the synthetic kit the screen draws its strips and body.
+                if (syntheticKit is not null) { await CheckKitSaveScreenAsync(tag, plan!, art, firstSize, syntheticKit, frames, require); firstSize = false; }
                 if (capture is not null)
                 {
                     using var image = GetViewport().GetTexture().GetImage();
@@ -194,6 +220,7 @@ public partial class TerrainViewerApp
                 cases++;
             }
             GD.Print($"ARC-UI-2891 native-smoke save list column PASS cases={cases}");
+            if (syntheticKit is not null) GD.Print($"ARC-UI-3038 native-smoke save screen kit PASS cases={cases}");
         }
         finally
         {
@@ -202,6 +229,11 @@ public partial class TerrainViewerApp
             _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
+            if (syntheticKit is not null)
+            {
+                SteamwovenKitStore.ClearOverride();
+                try { System.IO.Directory.Delete(syntheticKit, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-3038 kit smoke: temporary folder not removed: " + exception.Message); }
+            }
             // The window and its views take the restored size and layout before the caller measures them again.
             await frames(4);
         }
@@ -253,6 +285,108 @@ public partial class TerrainViewerApp
             require(Sum(far) == 0 && Sum(near) == 0, $"[{tag}] the black is black (far {far}, near {near})");
         }
     }
+
+    /// <summary>
+    /// ARC-UI-2924: the hit tests of a two-strip screen's buttons. The pointer is put at the device point the plan gives for each button (its top left plus a few units in) and the view must light that button
+    /// (<paramref name="hovered"/> names the lit one); on the black beside the plate it lights none.
+    /// </summary>
+    private async Task CheckTwoStripHitsAsync(string tag, SteamwovenFullScreenPlan layout, IReadOnlyList<(string Name, int X, int Y)> spots, Func<string?> hovered, Func<int, Task> frames, Action<bool, string> require)
+    {
+        require(spots.Count > 0, $"[{tag}] the screen has buttons to hit");
+        foreach (var (name, x, y) in spots)
+        {
+            var (dx, dy) = layout.ToDevice(x + 4, y + 4);
+            var at = new Vector2((float)dx, (float)dy);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at }, true);
+            await frames(1);
+            require(hovered() == name, $"[{tag}] the pointer at {at} lights {name}, got {hovered() ?? "none"}");
+        }
+        var side = new Vector2(Math.Max(1, layout.Zone.X / 2), layout.Zone.Y + layout.Zone.Height / 2);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = side, GlobalPosition = side }, true);
+        await frames(1);
+        require(hovered() is null, $"[{tag}] the pointer on the black lights no button, got {hovered()}");
+    }
+
+    /// <summary>
+    /// ARC-UI-2924: the creation editor and the opening shop in the column layout, called from the new-character smoke while the screen is open: at each size of the menu pass the 800 × 600 screen is the fitted plate
+    /// (the place and scale of <paramref name="plate"/>, the 800 × 400 body at <paramref name="body"/>), black beside it, and the buttons are hit where the plan draws them. The layout options, the HD option and the window's size
+    /// are put back at the end (the screen is open the whole time, so the views place themselves at each size). Opt-in: ARC_AREA_MENU_COLUMN=1.
+    /// </summary>
+    private async Task TwoStripScreenColumnForSmoke(string name, Func<(Vector2 Position, float Scale)> plate, Func<Vector2> body, Func<string?> hovered, IReadOnlyList<(string Name, int X, int Y)> spots,
+        Action<bool, string> require, Func<int, Task> frames, Func<KitWindowScreenView>? kitView = null)
+    {
+        var panel = _mainMenuPanel!;
+        var window = GetWindow();
+        var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
+        var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        var savedOptions = SteamwovenHud.Options;
+        var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
+        string? syntheticKit = null;
+        var cases = 0;
+        var kitCases = 0;
+        try
+        {
+            _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+            SteamwovenHud.Suspended = false;
+            SyncInterfaceHd();
+            window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
+            window.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
+            window.ContentScaleFactor = 1;
+            var options = SteamwovenLayoutOptions.ColumnOriginal;
+            SteamwovenHud.Options = options;
+            if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_SYNTHETIC") == "1")
+            {
+                syntheticKit = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-menu-").FullName;
+                foreach (var step in ColumnMenuSizes().Select(size => SteamwovenColumnMenu.Plan(size.X, size.Y, options)!.Layout.Step).Distinct()) WriteSyntheticKitSet(syntheticKit, step);
+                SteamwovenKitStore.UseRoot(syntheticKit);
+            }
+            foreach (var size in ColumnMenuSizes())
+            {
+                window.ContentScaleSize = size;
+                for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
+                require((Vector2I)window.GetVisibleRect().Size == size, $"the viewport is {size}, got {window.GetVisibleRect().Size}");
+                await frames(4);
+                var tag = $"{name}-{size.X}x{size.Y}";
+                var plan = SteamwovenColumnMenu.Plan(size.X, size.Y, options);
+                require(plan is not null && AreaGameBarPanel.ColumnMenuPlan(window.GetVisibleRect().Size) == plan, $"[{tag}] the screen is laid out by the column plan");
+                var layout = plan!;
+                await CheckColumnCaseAsync(tag, layout, panel.ColumnSidesForSelfTest.Sides, plate(), null, frames, require);
+                // The 800 × 400 body (the editor's sheet, the shop's barter window) starts at the screen's (0, 41), on the plate.
+                var (bx, by) = layout.ToDevice(0, AreaShopArtLayout.Window.Y);
+                require(Math.Abs(body().X - bx) <= 1.01 && Math.Abs(body().Y - by) <= 1.01, $"[{tag}] the body stands at ({bx:F1}, {by:F1}), got {body()}");
+                await CheckTwoStripHitsAsync(tag, layout, spots, hovered, frames, require);
+                // ARC-UI-3041: with the synthetic kit the editor and the shop draw their two strips and their window's kit background.
+                if (syntheticKit is not null && kitView is not null) { await CheckKitWindowScreenAsync(tag, layout, kitView(), kitCases == 0, syntheticKit, frames, require); kitCases++; }
+                if (capture is not null)
+                {
+                    await frames(2);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    require(image.SavePng($"{capture}-column-{tag}.png") == Error.Ok, "the capture saved: " + tag);
+                }
+                cases++;
+            }
+            GD.Print($"ARC-UI-2924 native-smoke {name} column PASS cases={cases}");
+            if (syntheticKit is not null && kitView is not null) GD.Print($"ARC-UI-3041 native-smoke {name} kit PASS cases={kitCases}");
+        }
+        finally
+        {
+            if (syntheticKit is not null)
+            {
+                SteamwovenKitStore.ClearOverride();
+                try { System.IO.Directory.Delete(syntheticKit, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + syntheticKit); }
+            }
+            window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
+            SteamwovenHud.Options = savedOptions;
+            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            SyncInterfaceHd();
+            SteamwovenHud.Suspended = savedSuspended;
+            await frames(4);
+        }
+    }
+
+    /// <summary>ARC-UI-2924: the shop strips' buttons (Accept and Back) as hit spots, for the opening shop and for the editor, which shares them.</summary>
+    private static (string Name, int X, int Y)[] ShopStripSpots() =>
+        [.. Enum.GetValues<AreaShopArtButton>().Select(button => (button.ToString(), AreaShopArtLayout.Button(button).X, AreaShopArtLayout.Button(button).Y))];
 
     // Back to the main window after a screen the smoke opened through the main menu's buttons.
     private void ReopenMainForColumnSmoke()

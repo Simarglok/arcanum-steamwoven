@@ -63,7 +63,7 @@ public partial class AreaSchematicsPanel : CanvasLayer
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
         _artView.HoverEntryRequested += entry => HoverEntryRequested?.Invoke(entry);
         _roundView = new AreaRoundView(); AddChild(_roundView);
-        _panel = new PanelContainer { Name = "AreaSchematics", MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel = new AreaFallbackBox { Name = "AreaSchematics", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(214 / 255f, 205 / 255f, 186 / 255f, .97f),
@@ -161,7 +161,7 @@ public partial class AreaSchematicsPanel : CanvasLayer
             AssemblyButton.ItemMissing => "Assemble (an item is missing)",
             _ => "Assemble (expertise lacking)",
         };
-        _assemble.TooltipText = view.HoverText;
+        AreaArtTip.Set(_assemble, view.HoverText);
         _message.Text = message ?? "";
     }
 

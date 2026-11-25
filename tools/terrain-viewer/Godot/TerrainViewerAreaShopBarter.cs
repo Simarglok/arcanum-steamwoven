@@ -178,6 +178,10 @@ public partial class TerrainViewerApp
         var (wx, wy, _, _) = AreaShopArtLayout.Window;
         var expected = art.ScreenPointForSelfTest(wx, wy);
         require(corner.DistanceTo(expected) < 1, $"the barter window stands at the screen's (0, 41): {corner} (expected {expected})");
+        // ARC-UI-2924: in the column layout the shop stands in the fitted plate: its place, the black beside it, the strips' buttons and the barter window at the screen's (0, 41), per size.
+        if (ColumnMenuSmokeOn())
+            await TwoStripScreenColumnForSmoke("shop", () => (art.Position, art.Scale.X), () => _barterPanel!.GridAreaForSelfTest.GetGlobalRect().Position,
+                () => art.HoveredForSelfTest?.ToString(), ShopStripSpots(), require, Frames, KitShopView);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_SHOP_CAPTURE") is { Length: > 0 } capture)
         {
             using var image = GetViewport().GetTexture().GetImage();

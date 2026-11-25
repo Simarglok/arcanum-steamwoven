@@ -136,7 +136,7 @@ Nothing of this exists in the viewer today. Follow-ups: the render path [#3063](
 
 Status: **built and measured on Ashbury, 2026-11-21** ([#3063](https://github.com/Simarglok/arcanum-steamwoven/issues/3063)). Owner decisions: render scale
 **1.0** (the 1:1 frame, no reduction; 0.5 by a 2 × 2 box from the same frame only if space is needed later, nearest at 0.5 is not taken); no hero, NPCs or
-critters, roofs closed. The pack entry kind, the writer into the pack and the loader are the next slice ([#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106)), the other towns another ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107)); this section is the render itself.
+critters, roofs closed. The pack entry kind, the writer into the pack and the loader are [#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106) (done, ARC-RENDER-3106), the other towns [#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107) (done, [all town maps](#all-town-maps-arc-render-3107)); this section is the render itself.
 
 **Parts.** `ARC_TOWNCAP=JOB.json` through the `door-close` stage of the map smoke (`tools/terrain-viewer/Godot/TerrainViewerTownCapture.cs`): the capture
 takes the viewport at camera centres given as picture offsets from the town map's origin location, with the hero not drawn (`SetActorVisibilityForReadback`),
@@ -176,15 +176,60 @@ and the scale of the `.tmi`, which the loader slice carries), other towns.
 **Cost (AC3), measured on Ashbury:** capture 692 s for 7 windows (26–184 s each) on a Mac whose window queue was shared with other threads, so queue waits are in it and it is an upper
 bound; stitch with the check 24 s on a quiet Mac (289 s once while the Mac was busy; numpy, not tuned); 24-bit PNG tiles at 1.0 are 37.7 KB each (112.7 MB for the town), about
 12.6 KB at 0.5 by a box. A second full run with the final tool gave the same pixels and bytes. For all 125 towns (64,199 tiles; `town_render.py cost --index townmap-index.tsv` prints each)
-that scales to about **4.3 hours at most and 2.4 GB at 1.0** (0.8 GB at 0.5), Tarant (6,191 tiles) about 25 minutes and 233 MB. This is an extrapolation by tile count; it assumes every town
+that scaled to about **4.3 hours at most and 2.4 GB at 1.0** (measured later for all towns: 1.07 h of capture and 2.26 GB, [all town maps](#all-town-maps-arc-render-3107)) (0.8 GB at 0.5), Tarant (6,191 tiles) about 25 minutes and 233 MB. This is an extrapolation by tile count; it assumes every town
 is a window run of the main map: the interior maps among the 125 (for example "Ashbury Crematorium - Lev 1") are separate maps of the module, so their capture needs `--area-map` and its own sector, which
 the plan does not know yet ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107); Vormantown is its own module).
 
-**Drawing a tile of 256 × 128 (not built here).** The town-map panel sizes a tile from tile 000000's bitmap (`AreaTownMapPlan.TileWidth`, `TileHeight`) and draws it 1:1 in the
-panel's units; a tile of 256 × 128 therefore needs the scale carried with the entry (the layout stays at the original's 64 × 32 grid, the pixel maths stays in the `.tmi`'s scale
-0.25) and, on a 1080p screen where the composition is enlarged by 1.8, a draw at 0.45 device pixels per picture pixel. Drawn straight that rings; the tiles are
-resampled once per device scale on a worker with the area filter ([#3091](https://github.com/Simarglok/arcanum-steamwoven/pull/3091), `InterfaceHd.DirectFor`), then drawn 1:1 from that copy. The loader slice ([#3106](https://github.com/Simarglok/arcanum-steamwoven/issues/3106)) does this
-and also replaces the 8-bit BMP, 64 KB, 512 px limits (`AreaTownMapLayout.TryTileSize`, `MaxTileBytes`) for pack tiles (24-bit PNG).
+**Drawing a tile of 256 × 128 (ARC-RENDER-3106).** Built: the tiles are entries of kind `townmap` of the pack ([format](../formats/hd-pack.md#town-map-entries-arc-render-3106)), the scale is the pack's (256 × 128 at the
+4× pack, render scale 1.0), and the viewer keeps the **original's grid**: the texture of a tile keeps its Legacy size (64 × 32), so the plan's tile size, `ToPixel`, `CellOf`, `ToLocation`, the scroll and the party marker
+stay in the `.tmi`'s own scale 0.25 and nothing about the fog or the marker changes with the pack (the loader slice therefore needed no scale in the layout maths). On a 1080p screen the composition is enlarged by 1.8, so the tile is drawn at 0.45
+device pixels per picture pixel, and a straight draw of it rings; the tiles are resampled once per device scale on a worker with the area filter ([#3091](https://github.com/Simarglok/arcanum-steamwoven/pull/3091),
+`InterfaceHd.DirectFor`) and drawn 1:1 from that copy; the Legacy pixels draw for the moment a tile's copy is made; the copy is made at every device scale (whole scales included) up to the pack's own, so no PNG decode or mip chain is built on the main thread for the hundreds of visible tiles. The
+limits of the original loader (an 8-bit BMP of at most 512 pixels and 64 KB, `AreaTownMapLayout.TryTileSize`, `MaxTileBytes`) stay for the original's tiles; the pack's 24-bit PNG tiles never pass through them.
+Measured on Ashbury (2,991 tiles staged, `verify --deep` passes, 88 MB): in the map smoke at device scale 1.333 all 126 tiles of the opened window draw from the area copy, and the same run without the pack's tiles draws the BMPs.
+
+## All town maps (ARC-RENDER-3107)
+
+Status: **render path run on all 114 town maps of the Arcanum module, 2026-11-24** ([#3107](https://github.com/Simarglok/arcanum-steamwoven/issues/3107)); the table of every town (125 with Vormantown) is
+[hd-world-town-map-all-towns.md](hd-world-town-map-all-towns.md) (generated by `town_render.py report` from the measured run). Slice 3 of #3063; the owner decisions are unchanged (scale 1.0, no NPCs, critters or hero, roofs closed).
+
+**Which map a town map is drawn from (AC1).** The original shows the town map whose number is the first metadata word of the sector the party stands in
+(`AreaWorldMap.ReadAreaTownMaps`). `AreaTownMapScan` (run through the `ARC_TOWNCAP` job with `"scan": true`) reads every sector file of every map of a module and writes, per town map number, the map and the
+sectors that carry it (`townmap-sectors.tsv`), with every `.tmi` record (`tmi-all.tsv`) and every town's tile list (`tiles-all/NUMBER.txt`); the plan of all towns needs that one run. Result for the Arcanum module (81 maps):
+
+- All 114 town maps have a map; none is without one. **20** are towns of the main map (`Arcanum1-024-fixed`; `crash-site` is town map 2); their `.tmi` origin is main-map coordinates and they run as before (a lattice of 3 x 3 sector windows,
+  `--sector`). **94** are interior maps of 54 other map folders; one map holds several town maps (`wheel clan` 7, `k'na tha` 6 and `vendigroth underground` 6, at different origins; `bmc` 4, `caladon-castle main floor` 4, `void-kerghans castle` 4, `tulla interior` 3,
+  `ashbury haunted castle` 3 and others). The origin of the `.tmi` (for example 96, 96 or 672, 96) is in that map's own coordinates, so the sector it names is the one the plan needs.
+- K'na Tha 2 (73) is the only number on two maps: interior sectors of `k'na tha` carry it too, but its origin (95872, 92352) is main-map coordinates, so the plan takes the main map (of the maps whose carrying sectors exist, the one nearest the origin: `pick_map`).
+- Every interior map has at most 78 sector files, below the limit above which a map opens as a window (`AreaMapPlans.MaxSectorFiles`), so it **loads whole**: one run, no `--sector`, no window edge, so no lattice and no "deepest window" rule are needed (`plan_windows(whole=True)`).
+  The picture geometry, the tile list (`AreaTownMapSource.TileExists`) and the stitch are the same as in the main-map path.
+
+**Differences from the main-map path.** The hero starts at the map's own start tile (any cell works: the origin of the picture is found from the hero's foot anchor and the isometric difference of the two cells, as before); the roofs are closed by the same capture code; the `door-close` stage that hosts the capture
+runs the same way in every map. The clock hour has **no effect** in an interior map (Bates Tunnel and Bessie Toones give the same error at hours 0, 3, 15 and 21), so an interior map differs from the original by its light scheme and lights, not by the clock ([#3180](https://github.com/Simarglok/arcanum-steamwoven/issues/3180)).
+The viewer's void grey (76, 76, 76) shows where a whole map has nothing to draw; the stitch treats grey regions of at least 5 x 5 pixels as filler like the other filler colours (a grey pixel of a stone texture stays), so tile 000000 and the stair-step edge of a town stay black like the original's.
+
+**Vormantown (11 towns, [#3176](https://github.com/Simarglok/arcanum-steamwoven/issues/3176)).** The module's 11 town maps (6,677 tiles) are all in one map, `multiplayer-map` (32 x 32 sectors, 78 sector files; the sectors that carry each number were read by running `AreaTownMapScan` and `AreaTownMapSource` on `Vormantown.dat` in a throwaway console host over the Core project, since the viewer cannot start that module; the host is not in git). They cannot be rendered yet:
+`AreaMapLoadOperation` and three other area loads mount the content with the default module Arcanum, so a run on `Vormantown.dat` (`--env ARC_SMOKE_MODULE=Vormantown` of a map smoke, new in this slice) stops at `AREA_MAP_SOURCES_MISMATCH` before a map is read. Their plan is in the table (status `blocked`).
+
+**The run (AC2, AC3), measured on the Mac, 2026-11-24.** 114 towns, 57,522 tiles, 184 windows, 1,163 shots of 5120 x 1296:
+
+| Measure | Result |
+| --- | --- |
+| Capture, all towns (sum of the viewer runs; queue waits included) | 3,852 s (1.07 h): the interior towns 5-40 s each, the largest main-map towns 190-400 s (Tarant 399 s, 11 windows). The extrapolation of #3063 (4.3 h) was four times too high |
+| Stitch with the 64 x 64 check, all towns | 0.23 h (numpy; Tarant, 35,840 x 17,920, the longest) |
+| Bytes, 24-bit PNG tiles at 1.0 | 2.26 GB (39 KB per tile on average); Vormantown would add about 0.25 GB by tile count |
+| Mean error against the original at 0.25 (all compared pixels) | median over the towns 1.44, highest 25.2 (Bates Tunnel, a dark interior) |
+| 64 x 64 window limit (10) | **78 of 114 pass** (worst window among them 8.7; three tiny maps, Bates Mansion Lev 2, Caladon Mafia Underground and Tulla Interior - Simeons Hallway, have no 64 x 64 window with a quarter of its pixels compared, so only their mean error checks them); 36 fail, classified below |
+
+**The 36 towns over the window limit (AC2).** Classified by looking at the worst window of each (labelled composites, `town_render.py composite`) and at the numbers; the class is in the result column of the table.
+
+- **Render difference of ours, light (24; [#3180](https://github.com/Simarglok/arcanum-steamwoven/issues/3180)).** Objects, walls and floors are the same as in the original tile; the original is darker, warmer or tinted differently (the interior's light scheme and lights, not the clock): 21 interior maps and Dernholm, Vendigroth Ruins and Bedokaan Village.
+- **Render difference of ours, sectors without a file (4; [#3179](https://github.com/Simarglok/arcanum-steamwoven/issues/3179)).** Qintarra, Tsen Ang, K'na Tha 1 and 4: the original holds terrain (water, ground) at the edge of the town where the whole-map load draws nothing for a sector without a file.
+- **Original content state (8).** Black Root, Tulla, Roseborough, Thanatos and K'na Tha 2 show another set of objects than the viewer (a gate where the original has a tree, palms, a cliff where it has grass; the open question of [#3086](https://github.com/Simarglok/arcanum-steamwoven/issues/3086)); Wheel Clan 3, Kree and Iron Clan HQ:
+  the original tile holds its own missing-art placeholder (a red and blue striped square with the text "bad art"), which is not rendered and must not be copied. Judged by eye; there is no executable check of why the objects differ.
+- No **capture artefact** class was left once the void grey was filtered (before it, Void-islands, Dernholm - Castle and Uncharted Cave failed on grey tiles).
+
+The tiles of all towns but Ashbury (already staged by #3106) are staged, one town per plan, into a **test copy** of the pack with the commands of [the pack workflow](../workflow/hd-pack.md#town-map-tiles-arc-render-3106), not into the installed pack; installing them is the owner's call. Result: 57,522 `townmap` entries (114 towns), 1.73 GB of entries, `verify --deep` passes. Three town names are too long for a 64-character path segment in the staging file name (Void-Kerghans Castle Lev Final Chamber, Ashbury Haunted Castle - Ground Floor, Caladon - Panarrii Temple Basement); the pack writer now shortens such a name with a hash (`HdTownMapKey.FileTown`).
 
 ## World map: one picture, non-generative upscale (AC3)
 
@@ -219,7 +264,7 @@ picture itself. A low-strength re-detail pass was **not** tested (the owner rule
 filter, 5.2 with Lanczos). The same downscale of the upscaled picture gives 7.1 (box), so deriving it from the big picture keeps the two views
 consistent as well as the original does. The original scales a `Map_Zoomed` of another size to its 365 rectangle (ledger row WM53), but our viewer draws the texture at its
 own size and keeps 365 constants for the dots and the hover box (`AreaWorldMapArt.cs`, `AreaWorldMapArtView.cs`), so a larger `Map_Zoomed` (x4 = 1460 × 1460) needs a
-draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079)); the black margins of 68 pixels are added by the window.
+draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079), done: the texture of a tile or of `Map_Zoomed` keeps the bitmap's own size, 250 or 365, and draws the pack's picture into that rectangle, so the dots, the hover box and the clicks stay in the original's coordinates; [format](../formats/hd-pack.md#world-map-entries-arc-render-3079)); the black margins of 68 pixels are added by the window.
 
 **Cut back.** The 8000 × 8000 picture was cut into 64 tiles of 1000 × 1000 (about 112 MB as PNG for the whole set; the single 8000 × 8000 picture is 164 MB as PNG); the cut took
 6 s. A single large picture is equally possible; the tile split only follows the original's file layout.
@@ -228,11 +273,11 @@ draw-to-rectangle change ([#3079](https://github.com/Simarglok/arcanum-steamwove
 turns the canvas weave of the parchment into a grid and the plain Lanczos picture is soft, so the picture takes the network only on strong ink lines and
 lettering and Lanczos everywhere else (still non-generative: a super-resolution network and a resampler, no text prompt). Plain `animevideov3` and the wider
 mask ("Blend B") are dropped; plain Lanczos is the fallback. The recipe is the script [`tools/hd_pack/world_map_upscale.py`](../../tools/hd_pack/world_map_upscale.py)
-(`blend` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
+(`blend`, `cut` and `outline` commands; needs numpy, opencv-python-headless and Pillow; tests `python3 -B -m unittest tools.hd_pack.test_world_map_upscale`):
 
 1. The 2000 x 2000 map is upscaled x4 with `realesrgan-ncnn-vulkan -n realesr-animevideov3 -s 4 -t 250` (the network picture) and with Pillow's Lanczos (the baseline).
 2. The mask is made on the original: Gaussian blur sigma 1.0, Canny 100/200, edge components under 30 pixels dropped (paper grain), dilation by an ellipse of radius 2
-   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map).
+   original pixels, Gaussian feather sigma 1.2 original pixels, then cubic resize to 8000 x 8000. About 27 % of the picture is covered (measured on the owner's local map; the thickness gate of the final recipe below narrows this to about 14 %).
 3. Result = mask x network + (1 - mask) x Lanczos, per channel, rounded.
 4. Outline check (rebuilt, the script of ARC-RES-2992 was lost, [#3080](https://github.com/Simarglok/arcanum-steamwoven/issues/3080)): the candidate is box-downscaled back to
    2000 x 2000 and compared with the original; Canny 40/100 (chosen so that Lanczos gives F1 0.965, close to 0.964 above), tolerance as an elliptical dilation of radius 1 and 2
@@ -249,9 +294,41 @@ The thresholds differ from the lost script, so the absolute numbers differ a lit
 fine canvas weave has the same strength in the blend's transition band as in plain Lanczos (ratio of the weave to the far field 0.93 against 0.92 for Lanczos), so no
 step in the texture was measured at the mask border; Blend A and Lanczos were also compared at the display scales 0.9 (4K) and 0.6 (1440p) of the x4 texture.
 
-Not tested: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
+**Sea-hatching fix and the final picture (owner review 2026-11-21 and 2026-11-24, ARC-RENDER-3065).** The owner's look at the 0.9 crops found one defect in Blend A: the dense grey
+hatching of the sea beside the coasts (strokes 1 to 2 pixels wide) is caught by the mask as edges, and the network turns it into thick black-and-white blotches
+(the `Lanczos` picture keeps it as soft grey hatching). What was tried, each judged by eye on four hatching crops and by the numbers below:
+
+- A mask gate on dark ink (a pixel counts only near luma below 90): not enough, the hatching has dark strokes too.
+- A limit on the network's move from Lanczos, `L + clamp(V - L, -k, k)`, and a local min/max limiter: the blotches are inside both limits; only a tiny `k` removes them, and then the gain is gone.
+- **Back-projection onto the original** (option "Q"): after the blend, the original minus the box downscale of the picture is added back (bicubic), once. The picture then agrees
+  with the original at its own resolution; the thick blotches shrink to fine strokes. Back-projecting only the network picture (option "P") gave the same look on the crops and leaves
+  flat paper exactly Lanczos, but a lower outline score (below).
+- At the display scale 0.9 (4K) the owner chose Q, with the condition that thin light halos around the hatching strokes would send dense hatching to Lanczos. They are visible.
+  Rather than detecting hatching zones (a hatching detector on orientation, saturation or network deviation also took tree shadows, frames and the compass, or missed the enclosed straits),
+  the mask itself was changed: **the network counts only near thick dark ink**. A pixel is a core when it is dark (luma below 100) and at least 1.5 original pixels from a non-dark pixel (a stroke about 3 pixels
+  wide or more); the mask is the old edge mask times the dilated cores (radius 3, feather sigma 1.0). Shoreline, trees, mountains and the stems of lettering are cores; the 1 to 2 pixel sea hatching, thin roads and grid lines are not, so they stay Lanczos
+  without a zone map.
+
+**The final recipe is Blend A with the thickness gate and one back-projection (`world_map_upscale.py blend`).** Measured on the owner's map with the script (the canvas column is new and uses the mask of the final recipe for its flat zone, so Blend A reads 1.16 here):
+
+| Picture (x4) | MAE | Edge F1 (1 px / 2 px) | Blotch pixels (luma more than 60 from Lanczos) | Canvas strength vs Lanczos |
+| --- | ---: | --- | ---: | ---: |
+| Lanczos | 4.16 | 0.965 / 0.991 | 0 | 1.00 |
+| `animevideov3` plain | 7.17 | 0.945 / 0.982 | not measured | 1.36 |
+| Blend A (before the fix) | 5.07 | 0.960 / 0.989 | 0.35 % | 1.16 |
+| Q: Blend A, back-projected | 1.86 | 0.986 / 0.997 | 0.12 % | 1.26 |
+| **Final: Q with the thickness gate** | **1.77** | **0.986 / 0.997** | **0.03 %** | 1.20 |
+
+The canvas strength is the high-pass energy of flat paper and water (the mask is 0 there) over that of Lanczos; the original drawn at x4 with nearest pixels reads 1.27 and with bicubic 0.95, so the final
+picture is not stronger than the original's own canvas. Outline gates of the owner's decision: edge F1 at 1 px above the Lanczos baseline (0.986 against 0.965, met), canvas not stronger than the original (met), MAE next to the earlier rows (above; the SSIM column exists only in the first model table).
+Lanczos stays the fallback. Cost of the fix: thin ornaments and hairline serifs of lettering get less of the network (mask coverage 0.136 against 0.27), the compass rose is softer than in Blend A; the lettering and coasts are as crisp as in Q.
+
+The 8000 x 8000 picture is cut by `world_map_upscale.py cut` into the 64 tiles `smallmapchunks001.png` .. `064.png` (1000 x 1000, row-major) and `map_zoomed.png` (1460 x 1460, Lanczos from the whole picture), with a `SHA256SUMS.txt`; `hd_pack.py maps-plan`, `stage` and `apply --add-new` put them into the installed pack
+([workflow](../workflow/hd-pack.md#world-map-pictures-arc-render-3079)); installed 2026-11-24 (backup `ARC-UI-3065-c3bc53185579`, `verify --deep` 7141 entries, 0 problems).
+
+Not tested after the fix: a further free model (only the three bundled with the project's `realesrgan-ncnn-vulkan` were run; the project has no other
 super-resolution tool installed), x2 or x3 variants, test-time augmentation, a comparison on the owner's 4K screen against the stopgap of
-[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles).
+[#2993](https://github.com/Simarglok/arcanum-steamwoven/issues/2993) (a 1:1 draw of the original tiles; the owner's look on the 4K screen moved to [#3154](https://github.com/Simarglok/arcanum-steamwoven/issues/3154), which removes that stopgap; done in ARC-UI-3154: with a redraw for every tile in the pack the map view draws at the composition's scale, otherwise the stopgap stays).
 
 ## Recommendation (AC4)
 
@@ -260,7 +337,7 @@ super-resolution tool installed), x2 or x3 variants, test-time augmentation, a c
    the scale in the pack entry. Ship it as a follow-up task (#2952 was decided on 2026-11-21).
 2. **World map: Blend A (the edge-masked blend above), the tile split and the derived `Map_Zoomed`**, picked by the owner on the crops (2026-11-21); plain Lanczos is the
    fallback, the original pixels stay the stopgap of #2993. Do not use the `x4plus` models. A re-detail pass stays an option only if
-   the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079).
+   the outline check still passes. The pack loader for the kinds `worldmap` and `map-zoomed` and the draw of `Map_Zoomed` into its rectangle: [#3079](https://github.com/Simarglok/arcanum-steamwoven/issues/3079) (done, ARC-RENDER-3079).
 3. **Both** are local derived bitmaps of the player's own installation: never in git or distributed ([hard rules](../../CLAUDE.md)); the pack holds
    them.
 

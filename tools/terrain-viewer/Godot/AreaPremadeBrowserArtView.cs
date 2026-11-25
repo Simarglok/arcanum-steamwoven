@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -13,6 +14,9 @@ public sealed record AreaPremadeBrowserFonts(AreaArtFontFace Text, AreaArtFontFa
 /// its fifteen stats, each field filled black first; the four art buttons with their idle, down and lit frames (GB4) and push
 /// behaviour (GB3: down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). ARC-UI-070: the
 /// text in the original's blend (MW31). A story shows the lines its field holds, as the original's text draw (MW26).
+/// ARC-UI-3039 (census M07, BD-G): over a complete kit (<see cref="SteamwovenKitScreen.PremadeBrowser"/>: <c>board.charcreatetopbar</c>, <c>backdrop.pregencharacterbase</c>, <c>board.charcreatebottombar</c> of the baked set, <see cref="AreaKitTwoStripLayer"/>)
+/// the screen draws none of the original's arts 336, 335 and 766 (<see cref="SteamwovenKitComposer.OwnBackdropArts"/>) and the kit's three parts instead, in the plate's device rectangles; the character draw (every field is filled black by the draw itself, so no
+/// stand-in is needed), the name and the buttons are as before. A part the set lacks, holds at another size or does not load gives the screen's own art whole.
 /// </summary>
 public partial class AreaPremadeBrowserArtView : Control
 {
@@ -26,6 +30,9 @@ public partial class AreaPremadeBrowserArtView : Control
     private AreaPremadeBrowserView? _view;
     private Texture2D? _portrait;
     private AreaPremadeBrowserButton? _hovered, _pressed;
+    // ARC-UI-3039: the kit's three parts of the screen and the original arts the last draw painted as its backdrop.
+    private readonly AreaKitTwoStripLayer _kit = new(SteamwovenKitScreen.PremadeBrowser, "twostrip-premade");
+    private IReadOnlyList<int> _ownBackdropDrawn = [];
 
     /// <summary>A button released over itself after its press.</summary>
     public event Action<AreaPremadeBrowserButton>? ButtonPressed;
@@ -35,7 +42,17 @@ public partial class AreaPremadeBrowserArtView : Control
     public bool ArtSet => _fonts is not null;
     internal AreaPremadeBrowserView? ViewForSelfTest => Visible ? _view : null;
     internal bool PortraitForSelfTest => Visible && _portrait is not null;
+    /// <summary>ARC-UI-3039: the kit's three draws of the screen as of the last draw (top strip, body, bottom strip), null while the screen draws its own art.</summary>
+    internal IReadOnlyList<SteamwovenKitDraw>? KitScreenForSelfTest => _kit.DrawsForSelfTest;
+    /// <summary>ARC-UI-3039: the original arts drawn as the backdrop in the last draw (336, 335, 766 as far as the pack has them; none over the kit).</summary>
+    internal IReadOnlyList<int> OwnBackdropDrawnForSelfTest => _ownBackdropDrawn;
+    /// <summary>ARC-UI-3039: true when the kit part drawn for <paramref name="index"/> (0 top, 1 body, 2 bottom) is sampled nearest (its draw is exact).</summary>
+    internal bool KitSampledNearestForSelfTest(int index) => _kit.SampledNearestForSelfTest(index);
+    /// <summary>The art frames the view holds, by number.</summary>
+    internal IReadOnlyDictionary<int, Texture2D[]> TexturesForSelfTest => _art;
     internal int FrameForSelfTest(AreaPremadeBrowserButton button) => Frame(button);
+    /// <summary>ARC-UI-2924: the button the pointer lights now, or null.</summary>
+    internal AreaPremadeBrowserButton? HoveredForSelfTest => _hovered;
     /// <summary>The window position of a screen point of the 800 × 600 screen.</summary>
     internal Vector2 ScreenPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 
@@ -73,6 +90,9 @@ public partial class AreaPremadeBrowserArtView : Control
     {
         Visible = false;
         (_hovered, _pressed, _view, _portrait) = (null, null, null, null);
+        // ARC-UI-3039 (SWI-RUN-5): the body part goes with the screen.
+        _kit.Release();
+        _ownBackdropDrawn = [];
     }
 
     /// <summary>The screen at the bars' whole factor, centred in the viewport.</summary>
@@ -107,7 +127,9 @@ public partial class AreaPremadeBrowserArtView : Control
         // ARC-UI-2575: the art is shared among the screens of the pre-made family, so the view on screen claims its frames at every draw (only while the Steamwoven layout places it).
         if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
         if (_fonts is not { } fonts || _view is not { } view) return;
-        AreaCharacterArtDraw.Window(this, _art, AreaPremadeBrowserArtLayout.BackgroundArt);
+        // ARC-UI-3039: over a complete kit the strips and the body are the kit's and the original's arts 336, 335 and 766 are not drawn.
+        _kit.Compose(_zoned, GetViewportRect().Size);
+        _ownBackdropDrawn = AreaCharacterArtDraw.Window(this, _art, AreaPremadeBrowserArtLayout.BackgroundArt, (_kit, Position, Scale));
         AreaCharacterArtDraw.Character(this, fonts, view, _portrait, AreaCharacterDescription.Of(view));
         // The redraw 0x5458D0: the player name over the character draw.
         AreaCharacterArtDraw.Centred(this, AreaPremadeBrowserArtLayout.Name, view.Name, fonts.Name, AreaPremadeBrowserArtLayout.Red);
@@ -130,6 +152,8 @@ public partial class AreaPremadeBrowserArtView : Control
 
     public override void _Notification(int what)
     {
+        // ARC-UI-3039 (SWI-RUN-5): a view hidden by any route (not only CloseView) lets the kit's body go.
+        if (what == NotificationVisibilityChanged && !IsVisibleInTree()) _kit.Release();
         if (what != NotificationMouseExit || _hovered is null) return;
         _hovered = null;
         QueueRedraw();

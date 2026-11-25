@@ -26,7 +26,7 @@ SCHEMA = 1
 
 # The asset kit's kinds (TRD "Asset kit"): `board` is the strip art (2880 px wide), `backdrop` a window background (inside the 2880 x 1440
 # zone) or a full-screen plate (2880 x 2160), `cap` the end cap of a strip.
-KINDS = ("material", "board", "backdrop", "cap", "hardware", "plate", "glyph", "state", "sheet", "grid", "picture", "gauge", "decor", "cursor")
+KINDS = ("material", "board", "backdrop", "cap", "hardware", "plate", "glyph", "state", "sheet", "grid", "picture", "gauge", "decor", "cursor", "fixture")
 STRIP_ANCHORS = ("top-strip", "bottom-strip")
 CAP_ANCHORS = ("top-strip-left-end", "top-strip-right-end", "bottom-strip-left-end", "bottom-strip-right-end")
 ANCHORS = STRIP_ANCHORS + CAP_ANCHORS + ("window-edge", "zone", "composition", "world", "overlay", "cursor", "window", "none")
@@ -35,7 +35,7 @@ STATUSES = ("planned", "generated", "master", "baked")
 FAMILIES = ("BOARD", "BD-A", "BD-B", "BD-C", "BD-D", "BD-E", "BD-F", "BD-G", "BD-H")
 BATCHES = ("B-BOARD", "BD-A", "BD-B", "BD-C", "BD-D", "BD-E", "BD-F", "BD-G", "BD-H", "B-HARDWARE", "B-BUTTONS", "B-GAUGES",
            "B-ICONS-SPELL", "B-ICONS", "B-SCHEMATIC", "B-CURSORS")
-SIZE_BASES = ("units", "provisional", "open")
+SIZE_BASES = ("units", "provisional", "open", "placed")  # placed: a new part whose size is the original's place of the element it stands for (a fixture, ARC-UI-3098)
 EXCLUDED_REASONS = ("font", "out-of-scope", "unused")
 GRID = 6  # SWI-LAY-7: every master length is a multiple of 6 px
 COMPOSITION = (2880, 2160)  # master px of the centred 4:3 composition
@@ -49,7 +49,7 @@ TOP_KEYS = ("schema", "windows", "parts", "excluded")
 WINDOW_KEYS = ("name", "anchor")
 ID_PATTERN = re.compile(r"^[a-z]+\.[a-z0-9_]+(-[a-z0-9_]+)?$")
 SOURCE_PATTERN = re.compile(r"^(\d+|file:[A-Za-z0-9_.-]+)$")
-NEW_PART_KINDS = ("cap", "material", "grid", "decor", "hardware")  # parts no original art feeds (TRD asset kit, SWI-LAY-12, SWI-LAY-16)
+NEW_PART_KINDS = ("cap", "material", "grid", "decor", "hardware", "plate", "glyph", "fixture")  # parts no original art feeds (TRD asset kit, SWI-LAY-12, SWI-LAY-16; the shared button plate and the button glyphs, ARC-UI-3058; the fixtures, ARC-UI-3098)
 CAP_ID = re.compile(r"^cap\.(top|bottom)_strip_(left|right)$")
 WINDOW_ID = re.compile(r"^[HGM]\d\d$")
 BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")  # 40 characters with no space: an encoded blob, not a note
@@ -185,6 +185,8 @@ def _check_part(part: dict, where: str, known_windows: set[str], errors: list[st
         errors.append(f"{where}: a part made from original art has a size from the census, not an open one")
     elif basis in ("units", "provisional") and isinstance(sources_list, list) and not fed:
         errors.append(f"{where}: a new part (no source art) has an open size until its batch fixes it")
+    elif basis == "placed" and (fed or kind not in ("grid", "fixture")):
+        errors.append(f"{where}: only a grid or a fixture with no source art takes the size of its place in the original")
     if basis == "provisional" and kind != "board":
         errors.append(f"{where}: only the strips' heights are provisional (open question of the TRD)")
     if basis == "open":

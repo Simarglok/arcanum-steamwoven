@@ -260,6 +260,8 @@ public partial class AreaSaveListPanel : CanvasLayer
     /// <summary>The diagnostic window, or the original's look with the panel shrunk to the bottom strip's middle box (PROJECT).</summary>
     private void SetLook(bool art)
     {
+        // ARC-UI-2968: the diagnostic look (no art) is Godot's default font, so it is developer-only (AreaFallbackLook): transparent in a player's run, its state and keys unchanged.
+        _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
         if (_artLook == art) return;
         _artLook = art;
         if (!art) _art.CloseView();

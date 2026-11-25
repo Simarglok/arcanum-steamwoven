@@ -194,28 +194,13 @@ public partial class AreaInventoryGridArea : Control
     private bool _menuUp;
 
     /// <summary>
-    /// ARC-UI-3033: what the original's window arts paint into their background and the kit has no layer for yet (kit.json <c>grid.inventory_cells</c>, size open): the two item grids' black cells with their grid lines, the five
-    /// counter fields and the quote line's field (barter). Drawn under the content while the kit's background shows, so the grids and fields do not vanish with the old art; a stand-in until the kit's grid layer lands.
+    /// ARC-UI-3033, ARC-UI-3098: what the original's window arts paint into their background: the two item grids with their pits, the five count fields with their signs and the quote line's field (barter). The kit's parts
+    /// (<see cref="AreaKitFixtures"/>) where the set has them, else the plain stand-ins (<see cref="AreaKitStandIns"/>); drawn under the content while the kit's background shows.
     /// </summary>
     private void KitFields(bool barter)
     {
-        var black = new Color(0f, 0f, 0f);
-        var line = new Color(.2f, .24f, .32f);
-        void Field(float x, float y, float w, float h) => DrawRect(new Rect2(x * _scale, y * _scale, w * _scale, h * _scale), black);
-        void Grid(float x, float y, int columns, int rows)
-        {
-            Field(x, y, columns * AreaInventoryDrag.CellPixels, rows * AreaInventoryDrag.CellPixels);
-            for (var column = 0; column <= columns; column++)
-                DrawLine(new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, y * _scale), new Vector2((x + column * AreaInventoryDrag.CellPixels) * _scale, (y + rows * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
-            for (var row = 0; row <= rows; row++)
-                DrawLine(new Vector2(x * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), new Vector2((x + columns * AreaInventoryDrag.CellPixels) * _scale, (y + row * AreaInventoryDrag.CellPixels) * _scale), line, Math.Max(1f, _scale * .6f));
-        }
-        // The hero's pack grid, and the holder's (the merchant's or the body's) grid below the holder's lines.
-        Grid(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, Arcanum.Session.SessionHeroGrid.Columns, Arcanum.Session.SessionHeroGrid.Rows);
-        if (barter) Grid(AreaBarterArtLayout.GridX, AreaBarterArtLayout.GridY, AreaBarterArtLayout.Columns, AreaBarterArtLayout.ShownRows);
-        else Grid(AreaLootArtLayout.GridX, AreaLootArtLayout.GridY, AreaLootArtLayout.Columns, AreaLootArtLayout.ShownRows);
-        foreach (var (x, y, w, h) in AreaInventoryArtLayout.Counts) Field(x, y, w, h);
-        if (barter) { var quote = AreaBarterArtLayout.QuoteLine; Field(quote.X - 7, quote.Y - 3, quote.Width + 14, quote.Height + 6); }
+        AreaKitStandIns.Pack(this, _scale);
+        AreaKitStandIns.Holder(this, _scale, barter);
     }
 
     // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.
@@ -765,13 +750,12 @@ public partial class AreaInventoryGridArea : Control
     {
         if (LootLook || BarterLook) { DrawLoot(Look!); return; }
         if (Look is { } look) { DrawOriginal(look); return; }
-        var font = GetThemeDefaultFont();
-        var size = Math.Max(8, (int)(11 * _scale));
         var line = new Color(.35f, .4f, .45f);
-        var text = new Color(.85f, .88f, .9f);
+        // ARC-UI-3136: the diagnostic look's labels are the original's art font (text font 229) in white, or nothing without the font; never Godot's default font.
+        var face = AreaFallbackLook.Fonts?.Invoke()?.Text;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
-        void Label(Rect2 rect, string label, Color color) =>
-            DrawString(font, rect.Position + new Vector2(3, size + 2), label, HorizontalAlignment.Left, Math.Max(1, rect.Size.X - 6), size, color);
+        void Label(Rect2 rect, string label) =>
+            Block(face, label, ((int)MathF.Round(rect.Position.X / _scale) + 2, (int)MathF.Round(rect.Position.Y / _scale) + 1, Math.Max(1, (int)(rect.Size.X / _scale) - 4), Math.Max(1, (int)(rect.Size.Y / _scale) - 2)));
         foreach (var (slot, r) in AreaInventoryDrag.SlotRects)
         {
             var rect = Scaled(r.X, r.Y, r.Width, r.Height);
@@ -779,14 +763,14 @@ public partial class AreaInventoryGridArea : Control
             var shown = worn?.Entity is { } entity && entity != Held?.Entity;
             DrawRect(rect, shown ? new Color(.25f, .22f, .14f) : new Color(.1f, .11f, .14f));
             DrawRect(rect, line, false);
-            Label(rect, shown ? worn!.Name ?? "?" : AreaInventoryHost.SlotName(slot), shown ? text : new Color(.5f, .55f, .6f));
+            Label(rect, shown ? worn!.Name ?? "?" : AreaInventoryHost.SlotName(slot));
         }
         foreach (var (icon, y) in new[] { (AreaInventoryIcon.Drop, AreaInventoryDrag.DropIconY), (AreaInventoryIcon.Use, AreaInventoryDrag.UseIconY) })
         {
             var rect = Scaled(AreaInventoryDrag.IconX, y, AreaInventoryDrag.IconWidth, AreaInventoryDrag.IconHeight);
             DrawRect(rect, new Color(.16f, .14f, .1f));
             DrawRect(rect, line, false);
-            Label(rect, icon.ToString(), new Color(1f, .85f, .55f));
+            Label(rect, icon.ToString());
         }
         var grid = Scaled(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, AreaInventoryDrag.GridRight - AreaInventoryDrag.GridX,
             AreaInventoryDrag.GridBottom - AreaInventoryDrag.GridY);
@@ -803,7 +787,7 @@ public partial class AreaInventoryGridArea : Control
             var rect = Item(item).Grow(-2 * _scale);
             DrawRect(rect, new Color(.2f, .3f, .38f));
             DrawRect(rect, new Color(.5f, .65f, .75f), false);
-            Label(rect, item.Name, text);
+            Label(rect, item.Name);
         }
         if (Held is { } held)
         {
@@ -815,7 +799,7 @@ public partial class AreaInventoryGridArea : Control
             var rect = new Rect2(origin, new Vector2(w, h) * cell);
             DrawRect(rect, new Color(.45f, .38f, .18f, .85f));
             DrawRect(rect, new Color(1f, .85f, .55f), false);
-            Label(rect, name, text);
+            Label(rect, name);
         }
 
         Rect2 Item(AreaGridItem item) => Scaled(AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
@@ -840,7 +824,8 @@ public partial class AreaInventoryGridArea : Control
                 var box = (origin is { } start ? new Rect2(start, new Vector2(rect.Width, rect.Height) * _scale) : Scaled(rect.X, rect.Y, rect.Width, rect.Height)).Grow(-2 * _scale);
                 DrawRect(box, new Color(.2f, .3f, .38f, .85f));
                 DrawRect(box, new Color(.5f, .65f, .75f), false);
-                if (name is not null) DrawString(GetThemeDefaultFont(), box.Position + new Vector2(3, 11 * _scale + 2), name, HorizontalAlignment.Left, Math.Max(1, box.Size.X - 6), Math.Max(8, (int)(11 * _scale)), AreaInventoryArtLook.TextColour);
+                // ARC-UI-3136: the name in the original's art font (text font 229), nothing without the font; never Godot's default font.
+                if (name is not null) Block(look.Fonts?.Text, name, ((int)MathF.Round(box.Position.X / _scale) + 2, (int)MathF.Round(box.Position.Y / _scale) + 1, Math.Max(1, (int)(box.Size.X / _scale) - 4), Math.Max(1, (int)(box.Size.Y / _scale) - 2)));
                 return;
             }
             var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
@@ -982,7 +967,8 @@ public partial class AreaInventoryGridArea : Control
                 var box = Scaled(rect.X, top, rect.Width, bottom - top).Grow(-2 * _scale);
                 DrawRect(box, new Color(.2f, .3f, .38f, .85f));
                 DrawRect(box, new Color(.5f, .65f, .75f), false);
-                DrawString(GetThemeDefaultFont(), box.Position + new Vector2(3, 11 * _scale + 2), name, HorizontalAlignment.Left, Math.Max(1, box.Size.X - 6), Math.Max(8, (int)(11 * _scale)), AreaInventoryArtLook.TextColour);
+                // ARC-UI-3136: the name in the original's art font (text font 229), nothing without the font or where the scroll clips the box; never Godot's default font.
+                if (top == rect.Y && bottom == rect.Y + rect.Height) Block(look.Fonts?.Text, name, ((int)MathF.Round(box.Position.X / _scale) + 2, (int)MathF.Round(box.Position.Y / _scale) + 1, Math.Max(1, (int)(box.Size.X / _scale) - 4), Math.Max(1, (int)(box.Size.Y / _scale) - 2)));
                 return;
             }
             var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
@@ -1176,6 +1162,4 @@ public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Ar
     /// <summary>ARC-UI-2795: the original's text fonts (art 27 for the merchant's name, 229 for the lines and quotes, 171 for the counts, 486 for the PC's ratings); null draws no window text.</summary>
     public AreaTextFonts? Fonts { get; init; }
 
-    /// <summary>PROJECT: the colour of the diagnostic look's texts and of an item's name when its art did not read (the windows' own texts are white, in the original's fonts).</summary>
-    public static readonly Color TextColour = new(.92f, .86f, .72f);
 }

@@ -257,6 +257,8 @@ One issue per batch, created by this census ([FR-UI-007](../requirements/ui-medi
 | B-SCHEMATIC | [#2486](https://github.com/Simarglok/arcanum-steamwoven/issues/2486) | schematic record pictures | 134 |
 | B-CURSORS | [#2487](https://github.com/Simarglok/arcanum-steamwoven/issues/2487) | cursors | 12 |
 
+Picture sources decided on 2026-11-24 ([#3144](https://github.com/Simarglok/arcanum-steamwoven/issues/3144), [audit](../rendering/hd-pack-picture-quality-audit.md), [TRD](steamwoven-interface-trd.md)): B-ICONS-SPELL pack as it is (#2484 closed); B-ICONS pack with fixes plus kit by rule for the indicators and the 11 frameless arts (#2485 rewritten); B-SCHEMATIC remade as a constructor ([#3152](https://github.com/Simarglok/arcanum-steamwoven/issues/3152), #2486 blocked by it); B-CURSORS Legacy (#2487 closed).
+
 The game window itself (the world, 800 x 400 at (0, 41)) is not a window of the kit, and the hidden-interface message line and combat bar of ARC-RES-093 table A exist only under `-fullscreen` (H14, text only). Fonts (33 bitmap font arts) are the scope of [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462); arts of network play (24) and eight unused tab arts have no batch.
 
 ## Findings and open points

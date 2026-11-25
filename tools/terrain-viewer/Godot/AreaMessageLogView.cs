@@ -164,7 +164,7 @@ public partial class AreaMessageLogView : Control
         // A hover's name in a pane mode: the mode's text area cleared to black and the name centred in it (0x5509C0, flags 0x4 | 0x8).
         _paneShown = _log.PaneMode && _log.PaneName is not null;
         _paneClear.Visible = _paneShown;
-        _paneName.Visible = _paneShown && _fonts is null;
+        _paneName.Visible = _paneShown && _fonts is null && AreaFallbackLook.Allowed;
         var items = new List<AreaArtTextItem>();
         _artTexts.Clear();
         _paneText = "";
@@ -217,7 +217,8 @@ public partial class AreaMessageLogView : Control
             // A rectangle at least one of the viewer's lines high: Godot draws no line taller than the label (the original's fonts
             // are smaller than the stand-in's).
             label.Size = new(text.Rect.Width, Math.Max(text.Rect.Height, label.GetLineHeight()));
-            label.Visible = true;
+            // ARC-UI-3136: Godot's default font is the developer-only fallback; a player's run without the original's font draws nothing.
+            label.Visible = AreaFallbackLook.Allowed;
             var shown = text.Text;
             // The wide layout cuts characters from the end until the text fits (flag 0x20 of 0x550A10).
             while (text.Truncate && shown.Length > 0 && !Fits(label)) { shown = shown[..^1]; label.Text = shown; }

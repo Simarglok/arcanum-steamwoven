@@ -74,7 +74,8 @@ public partial class AreaBarterPanel : CanvasLayer
     {
         get => _docked;
         // Above the menu's backdrop (layer 4), whichever panel the tree made first.
-        set { _docked = value; if (value) _area?.SetKitBackdrop(null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
+        // ARC-UI-3041: docking takes the kit body of the shop (when it shows) in place of the in-game window's; undocking drops it.
+        set { var was = _docked; _docked = value; if (value != was) _area?.SetKitBackdrop(value && ArtMode ? _shopKit : null); Layer = value ? 5 : 4; if (_close is not null) ApplyLook(); ResizePanel(); }
     }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;
@@ -87,7 +88,16 @@ public partial class AreaBarterPanel : CanvasLayer
     internal SteamwovenKitBarterState KitState => new(_art?.Frame.Background ?? AreaBarterArtLayout.BarterArt, IsOpen && ArtMode && !_docked);
 
     /// <summary>ARC-UI-3033: the kit background under the frame, or null (the frame draws its own art).</summary>
-    internal void SetKitBackdrop(AreaKitBackdrop? kit) => _area?.SetKitBackdrop(ArtMode && !_docked ? kit : null);
+    internal void SetKitBackdrop(AreaKitBackdrop? kit) { if (!_docked) _area?.SetKitBackdrop(ArtMode ? kit : null); }
+
+    /// <summary>ARC-UI-3041 (census M10): the kit's body of the opening shop lies under the docked frame (the shop's view draws it, <see cref="AreaShopArtView"/>): the frame then draws none of its own background art (the merchant's side, the hero's
+    /// inventory) and takes the kit's overlays for its doll view and doll cover; null (the screen draws its own art, or the frame is not docked): the frame draws its own art as before.</summary>
+    internal void SetShopKitBackdrop(AreaKitBackdrop? kit)
+    {
+        _shopKit = kit;
+        if (_docked) _area?.SetKitBackdrop(ArtMode ? kit : null);
+    }
+    private AreaKitBackdrop? _shopKit;
     internal Button LookToggleForSelfTest => _lookToggle;
 
     /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
@@ -214,6 +224,8 @@ public partial class AreaBarterPanel : CanvasLayer
         var art = ArtMode;
         // ARC-UI-069: in the opening shop the main menu is up: no round view and no release in its square (IW33, IW34).
         _area.MenuUp = _docked;
+        // ARC-UI-3041: the docked frame (the opening shop's) follows the shop's kit body from the first render on.
+        if (_docked) _area.SetKitBackdrop(art ? _shopKit : null);
         _area.SetLook(art ? _look : null);
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _hint }) control.Visible = !art;
@@ -221,6 +233,8 @@ public partial class AreaBarterPanel : CanvasLayer
         _lookToggle.Visible = _diagnosticSwitch && _look is { BarterReady: true } && _art is not null && !_docked;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
+        // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
+        _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
     }
 
     /// <summary>ARC-UI-1740: the bet gate's answer for the item held over the bet box: the box shows its "on" art (passes) or "refused" art.</summary>
@@ -289,8 +303,9 @@ public partial class AreaBarterPanel : CanvasLayer
             // ARC-UI-069: the window's 800 × 400 at the screen's (0, 41) of the menu's 800 × 600 screen, at the bars' whole factor (as the
             // shop's strips, AreaShopArtView).
             var screen = GetViewport().GetVisibleRect().Size;
-            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
-            if (AreaGameBarPanel.ZoneScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
+            // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale; ARC-UI-2924: the docked window is the opening shop's barter, a two-strip screen,
+            // so it stands on the fitted plate with the shop's strips (AreaShopArtView).
+            if (AreaGameBarPanel.TwoStripScreen(screen, AreaShopArtLayout.Window.Y) is { } zone)
             {
                 var unit = (float)zone.Scale;
                 _area.FitScale(unit);

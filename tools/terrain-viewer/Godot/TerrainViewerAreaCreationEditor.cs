@@ -48,6 +48,7 @@ public partial class TerrainViewerApp
             _editorPanel = new AreaCharacterSheetPanel(creation: true); AddChild(_editorPanel);
             // ARC-UI-147: only with the strips and buttons it shares with the shop (an editor whose strips did not read keeps the diagnostic panel).
             if (CharacterEditorArtReady) AttachSheetArt(_editorPanel);
+            SyncShopKit(); // ARC-UI-3041: the editor's sheet follows the screen's kit body from its first draw on
             _editorPanel.SoundRequested += id => PlayBarSound(id, "editor button");
             _editorPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
             _editorPanel.CloseRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
@@ -157,6 +158,20 @@ public partial class TerrainViewerApp
         require(art.ViewForSelfTest is { UnspentPoints: 5 } && art.PortraitForSelfTest, $"the draft's sheet and portrait: {art.ViewForSelfTest?.UnspentPoints} portrait={art.PortraitForSelfTest}");
         var (wx, wy, _, _) = AreaShopArtLayout.Window;
         require(art.PointForSelfTest(0, 0).DistanceTo(panel.ShopArtForSelfTest.ScreenPointForSelfTest(wx, wy)) < 1, "the sheet stands at the menu screen's (0, 41)");
+        if (ColumnMenuSmokeOn())
+        {
+            // ARC-UI-2924: in the column layout the editor stands in the fitted plate like the shop it shares its strips with: the screen's place, the black beside it, the strips' Accept and Back and the sheet's + − and tab hit where the plan draws them.
+            var (plusX, plusY) = AreaCharacterSheetArtLayout.Plus(7);
+            var (minusX, minusY) = AreaCharacterSheetArtLayout.Minus(3);
+            var tabSpells = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);
+            (string Name, int X, int Y)[] spots =
+            [
+                .. ShopStripSpots(),
+                ($"Plus:7", plusX, plusY + wy), ($"Minus:3", minusX, minusY + wy), ($"Tab:{(int)AreaSheetTab.Spells}", tabSpells.X, tabSpells.Y + wy),
+            ];
+            await TwoStripScreenColumnForSmoke("editor", () => (art.Position - new Vector2(0, wy * art.Scale.X), art.Scale.X), () => art.PointForSelfTest(0, 0),
+                () => panel.ShopArtForSelfTest.HoveredForSelfTest is { } shopButton ? shopButton.ToString() : art.HoveredForSelfTest is { } hit ? $"{hit.Kind}:{hit.Index}" : null, spots, require, Frames, KitEditorView);
+        }
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture)
         {
             using var image = GetViewport().GetTexture().GetImage();

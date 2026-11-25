@@ -184,10 +184,40 @@ class SyntheticManifestTests(unittest.TestCase):
         self.assertFails(self.edit(2, size=[600, 150], size_basis="units"), "new part (no source art)")
         self.assertFails(self.edit(0, size_basis="provisional"), "only the strips' heights are provisional")
 
+    def test_placed_size_is_for_a_grid_or_a_fixture_without_source_art(self) -> None:
+        """ARC-UI-3098: a fixture takes the size of its place in the original; nothing else does."""
+        manifest = valid()
+        manifest["parts"].append(part("fixture.pit", "fixture", size_basis="placed", size=[1164, 1398], batch="BD-A"))
+        manifest["parts"].append(part("grid.cells", "grid", size_basis="placed", size=[114, 114], batch="BD-A"))
+        self.assertEqual(self.check(manifest, census=False), [])
+        self.assertFails(self.edit(0, size_basis="placed"), "only a grid or a fixture")
+        manifest = valid()
+        manifest["parts"].append(part("decor.rivet", "decor", size_basis="placed", size=[60, 60], batch="B-HARDWARE"))
+        self.assertFails(manifest, "only a grid or a fixture")
+        manifest = valid()
+        manifest["parts"].append(part("fixture.pit", "fixture", size_basis="open", size=None, batch="BD-A"))
+        self.assertEqual(self.check(manifest, census=False), [], "a fixture whose size is still open is a valid new part")
+
     def test_part_without_source_art_must_be_a_new_part(self) -> None:
         manifest = valid()
         manifest["parts"].append(part("picture.ghost", size=None, size_basis="open"))
         self.assertFails(manifest, "must be a new part")
+
+    def test_plate_and_glyph_without_source_art_are_new_parts(self) -> None:
+        # the shared round plate and the button glyphs of the pilot ARC-UI-3058 feed no original art: an open size, a batch, no source art
+        manifest = valid()
+        manifest["parts"].append(part("plate.round", "plate", size=None, size_basis="open", states=["idle"], batch="B-BUTTONS"))
+        manifest["parts"].append(part("glyph.key", "glyph", size=None, size_basis="open", states=["hover"], batch="B-BUTTONS"))
+        self.assertEqual(self.check(manifest, census=False), [])
+        self.assertFails(self.edit(5, source_arts=["33"], size=None, size_basis="open"), "from original art has a size")
+
+    def test_pilot_parts_are_masters_with_a_record(self) -> None:
+        parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
+        for ident in ("plate.round_button", "plate.round_button_pressed"):
+            self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"fit:{ident}", []), ident)
+        for glyph in ("key", "gear", "arrows", "shield"):
+            for ident in (f"glyph.{glyph}", f"glyph.{glyph}_lit"):  # drawn by rule from the original's frame (round 3), no fit record
+                self.assertEqual((parts[ident]["status"], parts[ident]["provenance"], parts[ident]["source_arts"]), ("master", f"rule:glyph_cells:{ident}", []), ident)
 
     def test_cap_agrees_with_its_id_strip_and_window(self) -> None:
         self.assertFails(self.edit(2, anchor="bottom-strip-right-end"), "to match its id")

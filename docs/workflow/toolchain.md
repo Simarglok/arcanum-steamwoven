@@ -4,7 +4,7 @@ Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `
 
 The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 The Steamwoven kit manifest (ARC-DEV-2454, `tools/steamwoven_ui/kit.json`, made from the [census](../ui/steamwoven-interface-census.md) by `python3 -B tools/steamwoven_ui/build_kit.py`, `--check` fails on drift) is validated by `python3 -B tools/steamwoven_ui/kit_check.py` (`KIT CHECK PASS`); tests `python3 -B -m unittest tools.steamwoven_ui.test_kit_check`. These three are task checks, run by a change to the manifest, the census tables or these tools, and are not in the root check list. It holds identifiers, sizes and verdicts only, never pixels.
-The Steamwoven context tone check (ARC-RES-2455, `tools/steamwoven_ui/tone_check.py`, [SWI-GEN-9](../ui/steamwoven-interface-trd.md); masks `tools/steamwoven_ui/prompts/tone_masks.json`) is standard library only: `python3 -B tools/steamwoven_ui/tone_check.py batch --originals local/steamwoven-ui/refs --results local/steamwoven-ui/outbox/style-anchors-contexts` (about 5 s per screen; exit 1 = a region over a limit) and `... fit SCREEN ORIGINAL RESULT OUTPUT --material paper`; tests `python3 -B -m unittest tools.steamwoven_ui.test_tone_check` (about 55 s, a task check, not in `run_tests.py`).
+The Steamwoven context tone check (ARC-RES-2455, `tools/steamwoven_ui/tone_check.py`, [SWI-GEN-9](../ui/steamwoven-interface-trd.md); masks `tools/steamwoven_ui/prompts/tone_masks.json`) is standard library only: `python3 -B tools/steamwoven_ui/tone_check.py batch --originals local/steamwoven-ui/refs --results local/steamwoven-ui/outbox/style-anchors-contexts` (about 5 s per screen; exit 1 = a region over a limit) and `... fit SCREEN ORIGINAL RESULT OUTPUT --material paper`; tests `python3 -B -m unittest tools.steamwoven_ui.test_tone_check` (about 55 s, a task check, not in `run_tests.py`). The glyph tools (ARC-UI-3058, standard library only; [what they do](../ui/steamwoven-kit-pilot.md)): `tools/steamwoven_ui/glyph_cells.py mask|cells|plate` draws a button glyph by rule from the original's frame and the kit plate with a soft shadow, `glyph_tone.py measure|fit|report` fits the tone; their synthetic-image tests are in `run_tests.py` (`test_steamwoven_glyph_cells.py`, `test_steamwoven_glyph_tone.py`).
 The Steamwoven material cut-outs and tiles (ARC-RES-2455, `tools/steamwoven_ui/cutouts.py`, [SWI-GEN-10](../ui/steamwoven-interface-trd.md); list `tools/steamwoven_ui/prompts/cutouts.json`) are standard library only: `check`, `cut` (the cut-outs, the context crop of each small one, the provenance record), `tiles-inbox` (then `codex_batch.py run style-anchors-tiles`) and `tile-check`; tests `python3 -B -m unittest tools.steamwoven_ui.test_cutouts` (task check, under a second).
 The Steamwoven kit assembly tool (ARC-DEV-2972, `tools/steamwoven_ui/assemble.py`, [page](../ui/steamwoven-kit-assembly.md)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_assemble` also run in the batched `tools/local_dev/run_tests.py`. Its sibling `tools/steamwoven_ui/pack_plan.py` (ARC-UI-3077, standard library only, tests `python3 -B -m unittest tools.steamwoven_ui.test_pack_plan`, batched the same way) writes the pack importer's plan and alpha masks from the assembled frames ([workflow](hd-pack.md#kit-assembled-frames-in-the-pack-arc-ui-3077)).
 The Steamwoven kit fit tool (ARC-DEV-2459, `tools/steamwoven_ui/fit.py`, [section](#steamwoven-kit-fit-arc-dev-2459)) is standard library only; its tests `python3 -B -m unittest tools.steamwoven_ui.test_fit` (about 5 s) also run in the batched `tools/local_dev/run_tests.py`.
@@ -137,6 +137,8 @@ history held about 500 runs of such copies of one template).
   line `ARC-DEV-403 automated run: Master bus muted`), so the tests are not heard: the audio device stays the real one,
   the sounds still start and play, and the audio checks (`audible=True`, the loop and voice "is playing" checks) hold, as
   they would not under the Dummy driver. `--env ARC_SMOKE_SOUND=1` on a smoke lets it be heard.
+  `--env ARC_SMOKE_MODULE=NAME` (ARC-RENDER-3107) names another module archive of the same installation (`<game>/modules/NAME.dat`, for example `Vormantown`) for the viewer's `--module`;
+  the launcher reads it, the file must exist and not be a link (it is not pinned by size and hash like the configured module), and the viewer's area load still opens the Arcanum module only (the Vormantown maps do not load yet, see the town-map note).
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11; `slides` since ARC-DEV-3116, 2026-11-24).** `container-click` and `walk` took 675 s and 525 s of the
@@ -463,6 +465,12 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   The viewer's start line `ARC-DEV-392 map-cache folder=...` names the folder, and the load's `ARC-WORLD-031 load stage=transitions` line says `source=memory|device|content|content+stored`.
   `ARC_MAP_CACHE=0` (`--env ARC_MAP_CACHE=0` on a smoke) turns only this store off, `ARC_AREA_RESIDENT=0` turns it off with the resident stores, `ARC_MAP_CACHE_DIR=<folder>`
   names another folder; a smoke drops the owner's `ARC_*` variables, so pass them with `--env`. Deleting the folder only costs one read; at most 96 files are kept.
+- **Animated-light line (ARC-RENDER-3126).** With the probe on, the viewer prints one line a second on every map, lit or not (`lights=0` without animated lights; not in a smoke):
+  `ARC-DEV-367 perf light-anim switch=on|off lights=N frames=F fps-avg=A fps-engine=E pushes=P push-ms-total=T push-ms-max=M push-alloc-kib=K view-rebuilds=R view-ms-total=V view-ms-max=W gc=G0/G1/G2 t=MS`
+  (`lights` = the map's animated lights, `pushes` = the lighting views the animated lights pushed in the window, `push-*` the main-thread time and
+  managed bytes of `PushAreaAmbient` for them, which only stores the view; `view-*` the canvas's rebuilds of its visible view in the window (the lattice and body colours, made at the next draw, on the main thread) and `fps-avg` the frames counted in the window). `ARC_LIGHT_ANIM=0` is a diagnostic switch: the animation
+  time still runs but no new pose is pushed (`switch=off`); any other value or none keeps the default behaviour. It is read once at start.
+  `LightAnimationProbe` in `src/Arcanum.World`, tests `LightAnimationProbeTests`.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
@@ -938,6 +946,13 @@ test places the pointer. The hotkey bar smoke checks
 the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
 every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
 
+The bar smoke's first button hover (the Character button, `ARC-UI-018 bar smoke FAIL hover: '' frame 0` once in a rolling
+run, ARC-UI-3108) no longer trusts the hover state read right after the move: it waits up to 30 more frames, pushing the same
+motion again (nudged by a pixel and back), and prints `ARC-UI-3108 bar smoke Character hover seen after N extra frames`.
+The top bar HD check prints its own failing sentence (`ARC-UI-116 top bar HD smoke FAIL ...`) instead of the frontier
+fault's `(withheld)` (ARC-DEV-3093; the kit/Steamwoven bar smoke passes with the installed `interface-redraw-4x`, which
+carries the top bar frames, 2026-11-24).
+
 Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
 (mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.
 
@@ -1274,6 +1289,16 @@ python3 -B tools/steamwoven_ui/codex_batch.py run BATCH --dry-run [--only ID,ID]
 python3 -B tools/steamwoven_ui/codex_batch.py run BATCH [--only ID,ID] [--timeout S] [--overwrite] [--crop-band]
 python3 -B tools/steamwoven_ui/codex_batch.py crop IMAGE --size WxH --out OUT.png [--aspect W:H] [--fuzz PERCENT]   # one padded strip canvas to its band (ARC-UI-3083, ImageMagick)
 ```
+
+## Steamwoven surface pipeline (ARC-UI-3100)
+
+Method A ([SWI-GEN-5](../ui/steamwoven-interface-trd.md), [study](../ui/steamwoven-surface-method-study.md)) as a pipeline step: `tools/steamwoven_ui/surface_study.py` builds the zone inbox of any screen
+(`zones-inbox --batch B --zones window --screen-name NAME`) and puts the zone results together (`assemble --zone top-strip=F --zone window=F --zone bottom-strip=F --out A.png`), and
+`tools/steamwoven_ui/surface_compose.py build --original O.png --a A.png --out OUT.png --work DIR [--spec SPEC.json] [--provenance FILE]` composes the wood of the Codex result over the
+original (the original's pixels are the stand-in for the non-wood parts), lays the kit parts of the spec over it, erases the boxes the game draws text into, measures the joins and the tone, and writes the record
+`local/steamwoven-ui/provenance/surface/<zone id>.json` ([fields and gates](../ui/steamwoven-surface-method-study.md#production-pipeline-step-arc-ui-3100)); exit 0 = both gates hold, 1 = a gate failed (the picture and the record are still written), 2 = an error.
+Standard-library Python plus ImageMagick (`magick`), no Godot and no `dotnet`, so no launch queue; the tests (`python3 -B -m unittest tools.steamwoven_ui.test_surface_compose tools.steamwoven_ui.test_surface_study`, about 3 s) run in the batched `tools/local_dev/run_tests.py`;
+a real inventory screen takes about 3 minutes. All images stay under `local/steamwoven-ui/`.
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

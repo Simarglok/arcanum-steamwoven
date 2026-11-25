@@ -67,6 +67,8 @@ def settings_file(name: str) -> str:
 # (the complete run and the daily build always do).
 SAMPLED_STAGES = frozenset({"container-click", "slides", "walk"})
 ALL_ENV = "ARC_SMOKE_ALL"
+# ARC-RENDER-3107: `--env ARC_SMOKE_MODULE=Vormantown` runs a map smoke on another module of the installation (the launcher reads it; the viewer gets --module).
+MODULE_ENV = "ARC_SMOKE_MODULE"
 # The owner's opt-in data, smoke and settings variables never reach a smoke (as in the player package); the queue's stay.
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_", "ALWAYS_RUN_",
                     "AUDIO_VOLUMES_", "GAME_SETTINGS_", "VISUAL_PROFILE_")
@@ -405,7 +407,8 @@ def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, st
              hero: str | None, sector: str | None, stages: Sequence[str] = (), main_menu: bool = False,
              extra: Sequence[tuple[str, str]] = ()) -> Step:
     viewer = ["--native-smoke", *launch.map_arguments(inputs, map_name, hero=hero, sector=sector, main_menu=main_menu,
-                                                      debug_mode=any(stage in DEBUG_STAGES for stage in stages))]
+                                                      debug_mode=any(stage in DEBUG_STAGES for stage in stages),
+                                                      module=dict(extra).get(MODULE_ENV))]
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
                 start_line(map_name, main_menu), settings=name, timeout=soak_timeout(stages, extra) if stages else BATTERY_MINUTES,
                 requires=tuple(stages) or BATTERY_STAGES,

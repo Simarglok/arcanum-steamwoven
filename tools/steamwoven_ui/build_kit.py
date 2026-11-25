@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
+from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
@@ -76,10 +77,24 @@ def part_anchor(kind: str, size: tuple[int, int], windows: tuple[str, ...], clas
 
 
 def new_part(ident: str, kind: str, anchor: str, used_by: list[str], family: str | None, batch: str | None, note: str,
-             layers: list[str] | None = None) -> dict:
-    return {"id": ident, "kind": kind, "size": None, "size_basis": "open", "anchor": anchor, "layers": layers or [], "states": [],
-            "used_by": used_by, "source_arts": [], "family": family, "batch": batch, "provenance": None, "status": "planned", "frames": 1,
+             layers: list[str] | None = None, states: list[str] | None = None, master: bool = False, provenance: str | None = None) -> dict:
+    return {"id": ident, "kind": kind, "size": None, "size_basis": "open", "anchor": anchor, "layers": layers or [], "states": states or [],
+            "used_by": used_by, "source_arts": [], "family": family, "batch": batch, "provenance": provenance or (f"fit:{ident}" if master else None),
+            "status": "master" if master else "planned", "frames": 1,
             "note": note}
+
+
+FIXTURE_BATCH = {"G05": "BD-B", "G15": "BD-F"}  # the window family of a fixture's first window; every other fixture is the inventory family's (BD-A)
+
+
+def fixture_part(fixture: fixtures.Fixture) -> dict:
+    """ARC-UI-3098: a required detail the old window arts painted into themselves, a part of its own at the size of its place in the original (`fixtures.py` draws it by rule)."""
+    batch = FIXTURE_BATCH.get(fixture.windows[0], "BD-A")
+    kind = "grid" if fixture.ident.startswith("grid.") else "fixture"
+    part = new_part(fixture.ident, kind, "zone" if kind == "grid" else "window", list(fixture.windows), batch, batch,
+                    f"{fixture.note}; no original art, drawn by fixtures.py (ARC-UI-3098)")
+    part["size"], part["size_basis"] = list(fixture.master), "placed"
+    return part
 
 
 def new_parts() -> list[dict]:
@@ -91,13 +106,24 @@ def new_parts() -> list[dict]:
     for material in ("wood", "dark_wood", "brass", "iron", "paper", "parchment"):
         parts.append(new_part(f"material.{material}", "material", "none", [], None, None,
                               "surface of the material sheet (#2455, #2456); no original art; size fixed with the sheet"))
-    parts.append(new_part("grid.inventory_cells", "grid", "zone", ["G01", "G02", "G03", "G04", "G17", "M10"], "BD-A", "BD-A",
-                          "inventory cell grid as its own layer over the BD-A window background (painted into the pack arts today); no original art"))
-    parts.append(new_part("grid.schematic", "grid", "zone", ["G15"], "BD-F", "BD-F",
-                          "schematic page grid as its own layer over art 365 (painted in today); no original art"))
+    parts.extend(fixture_part(fixture) for fixture in fixtures.FIXTURES)
     for decor in ("corner_piece", "rivet"):
         parts.append(new_part(f"decor.{decor}", "decor", "none", [], None, "B-HARDWARE",
                               "ornament that is not hardware; no original art; size fixed by #2481"))
+    # the round button of the bottom strip (pilot ARC-UI-3058, #3058): one plate for the round buttons, idle (also the hover plate: the original's hover frame
+    # shares the idle ring) and pressed, and a glyph in two looks, idle (dull) and lit (hover and pressed frames), each its own picture
+    for ident, states, what in (("plate.round_button", ["idle", "hover"], "the shared round plate of the bottom strip's buttons (arts 470 to 473), idle and hover look"),
+                                ("plate.round_button_pressed", ["pressed"], "the same plate in its pressed look (the unlit rim of the original's pressed frame)")):
+        parts.append(new_part(ident, "plate", "bottom-strip", ["H02"], None, "B-BUTTONS", f"{what}; no symbol on it (the glyph is its own part); size 138 x 138 fixed by the pilot #3058",
+                              states=states, master=True))
+    # the glyphs are drawn by a rule from the original's own frame (no Codex, round 3 of the pilot): `glyph_cells.py cells`, a canvas of the whole 39-unit frame, so the glyph
+    # lies where the original's does (the checker is one original pixel wide, the silhouette smooth); `flat` and `bevel` are two looks of the same rule
+    for glyph, art in (("key", "472"), ("gear", "471"), ("arrows", "473"), ("shield", "470")):
+        for ident, states, what in ((f"glyph.{glyph}", ["idle"], "the idle frame's tone"), (f"glyph.{glyph}_lit", ["hover", "pressed"], "the tone of the hover and pressed frames")):
+            parts.append(new_part(ident, "glyph", "bottom-strip", ["H02"], None, "B-BUTTONS",
+                                  f"the {glyph} symbol of round button art {art}, {what}: glyph_cells.py draws it from the original frame (no Codex), "
+                                  "a 156 x 156 canvas of the whole frame, so the size is open",
+                                  states=states, master=True, provenance=f"rule:glyph_cells:{ident}"))
     return parts
 
 

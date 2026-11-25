@@ -258,6 +258,7 @@ public partial class TerrainViewerApp
                 // AC2: at a whole scale the picture is exactly the nearest-pixel one (every whole x whole block of the virtual screen's strips is uniform apart from the art's smooth parts).
                 if (Math.Abs(OriginalComposition.Scale(size.X, size.Y) - whole) < 1e-9) await CheckNearestBlocksAsync(tag, whole, panel, frames, require);
                 await CaptureHudAsync("steamwoven-" + tag, frames);
+                await CaptureBottomButtonStatesAsync(tag, panel, frames, require);
                 OpenInventory(); await frames(3); await WaitSettledAsync();
                 await CaptureHudAsync("steamwoven-" + tag + "-menu", frames);
                 EndInventory(); await frames(3);
@@ -303,6 +304,52 @@ public partial class TerrainViewerApp
         require(share >= 0.85, $"[{tag}] the Legacy strips are drawn with nearest pixels at the whole scale {whole} ({share:P1} of the blocks are uniform)");
     }
 
+    // ARC-UI-3058 (kit pilot): ARC_STEAMWOVEN_BUTTON_STATES=1 with ARC_AREA_BAR_CAPTURE=PREFIX saves the whole viewport once per bottom-strip round button (Combat, Skills, Spells, Schematics)
+    // and state: PREFIX-hud-steamwoven-TAG-btn-BUTTON-idle|hover|down.png (local, never in git). The pointer is moved onto the button (Hover, frame 2), the left button is held there (Down, frame 1) and
+    // released outside the button, which cancels the press (no window opens, no toggle changes), as the bar smoke does. Off by default; the other captures are unchanged.
+    private async Task CaptureBottomButtonStatesAsync(string tag, AreaGameBarPanel panel, Func<int, Task> frames, Action<bool, string> require)
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_BUTTON_STATES") != "1" || System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE") is not { Length: > 0 }) return;
+        var stripRect = panel.StripRectForSelfTest(AreaBarStrip.Bottom);
+        void Motion(Vector2 at) => GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at }, true);
+        void Press(Vector2 at, bool pressed) => GetViewport().PushInput(new InputEventMouseButton
+        {
+            ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+        }, true);
+        foreach (var button in new[] { AreaBarButton.Combat, AreaBarButton.Skills, AreaBarButton.Spells, AreaBarButton.Schematics })
+        {
+            // The frames are printed, not required, for rest and hover: the events are pushed in viewport coordinates (PushInput in local coordinates): the window of a size wider than the screen is scaled down by the content scale, and window coordinates then miss the button; the held frame is required (it assumes the play screen is up, so that a toggle press is accepted).
+            var push = AreaGameBarLayout.Spec(button).Kind == AreaBarButtonKind.Push;
+            var at = panel.BallCentreForSelfTest(button);
+            var outside = new Vector2(at.X, stripRect.Position.Y - 40);
+            Motion(outside); await frames(6);
+            var idle = panel.FrameForSelfTest(button);
+            await CaptureHudAsync($"steamwoven-{tag}-btn-{button}-idle", frames);
+            Motion(at); await frames(3);
+            var hover = panel.FrameForSelfTest(button);
+            await CaptureHudAsync($"steamwoven-{tag}-btn-{button}-hover", frames);
+            Press(at, true); await frames(3);
+            var down = panel.FrameForSelfTest(button);
+            require(down == 1, $"[{tag}] {button} held shows frame 1, got {down}");
+            await CaptureHudAsync($"steamwoven-{tag}-btn-{button}-down", frames);
+            Motion(outside); await frames(2);
+            Press(outside, false); await frames(3);
+            // A toggle is on after its press: click it off at once, so the next button is captured with the bar at rest (the Skills pane open would show in the Spells and Schematics captures).
+            if (!push && _gameBar.IsOn(button)) { Motion(at); await frames(2); Press(at, true); await frames(2); Press(at, false); await frames(4); Motion(outside); await frames(3); }
+            GD.Print($"ARC-UI-3058 steamwoven {tag} {button} kind={(push ? "Push" : "Toggle")} frames idle={idle} hover={hover} down={down}");
+        }
+        // Pressing a toggle turns it on at the press (the cancelled press leaves it on, and the Spells pane open): a click on each toggle that stayed on turns it off again, so the bar is as it was.
+        foreach (var toggle in new[] { AreaBarButton.Skills, AreaBarButton.Spells })
+        {
+            if (!_gameBar.IsOn(toggle)) continue;
+            var centre = panel.BallCentreForSelfTest(toggle);
+            Motion(centre); await frames(2); Press(centre, true); await frames(2); Press(centre, false); await frames(4);
+        }
+        Motion(new Vector2(0, 0)); await frames(3);
+        require(!_gameBar.IsOn(AreaBarButton.Skills) && !_gameBar.IsOn(AreaBarButton.Spells) && _gameBar.Held is null, $"[{tag}] the toggles are off again after the button states capture");
+        GD.Print($"ARC-UI-3058 steamwoven {tag} bottom button states captured held={_gameBar.Held} skills-on={_gameBar.IsOn(AreaBarButton.Skills)} spells-on={_gameBar.IsOn(AreaBarButton.Spells)} combat={HeroInCombatMode}");
+    }
+
     // ARC-UI-2890 (AC2, AC3, AC4): the play screen of the column mode. The strips stand in the column (the original's width at the strips' scale), no wood sides are drawn (the only board is the sliver above the top strip),
     // the generated end caps stand on the strips' outer ends, the world is drawn over the whole frame; the edge elements (spell pane, combat list, bubbles) are placed against the frame's edges and the follower group stays in the column (ARC-UI-2925); an open menu
     // takes the column's window zone, the wood of the gaps and the dimmed, desaturated world at the sides (read back: its mean brightness falls).
@@ -332,6 +379,7 @@ public partial class TerrainViewerApp
         await CheckSteamwovenColumnPartsAsync(tag, plan, size, frames, require);
         await CaptureSteamwovenPartsAsync(tag, frames);
         await CaptureHudAsync("steamwoven-" + tag, frames);
+        await CaptureBottomButtonStatesAsync(tag, panel, frames, require);
         // Read back: the brass edge of the top strip's end, and the world's brightness at the sides for the dimming comparison below.
         double worldBefore;
         using (var image = GetViewport().GetTexture().GetImage())
@@ -493,10 +541,13 @@ public partial class TerrainViewerApp
     }
 
     // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none.
-    private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null)
+    private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null, int? noteLine = null)
     {
         if (_areaSession is not { } session || _readingData?.Data is not { } data) return null;
-        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || p.Value.Subtype == (int)only))
+        // ARC-UI-2765: a note named by its start line (a local capture) is read from the text file, whatever prototype or script opens it.
+        if (noteLine is { } line) return session.QueryWrittenDocument(new((int)WrittenSubtype.Note, line), data.Texts) is { Readable: true } named ? named : null;
+        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell)
+            .Where(p => ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype) && (only is null || p.Value.Subtype == (int)only))
             .Select(p => (p.Value.Subtype, Document: session.QueryWrittenDocument(p.Value, data.Texts))).Where(p => p.Document is { Readable: true, Body.Count: > 0 })
             .OrderBy(p => p.Subtype != (int)WrittenSubtype.Book).Select(p => p.Document).FirstOrDefault();
     }
@@ -517,6 +568,9 @@ public partial class TerrainViewerApp
     private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
         for (var wait = 0; wait < 1800 && (_barterData is null || _readingData is null); wait++) { AdoptBarterData(); AdoptReadingData(); await frames(1); }
+        // ARC-UI-2765: a local census of the note address and signature rule (counts and prototype numbers only), and ARC_AREA_READING_NOTE_LINES=A,B captures the notes with those start lines as reading-note-N.
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_CENSUS") is { Length: > 0 } censusFile) ReadingNoteCensus(censusFile);
+        var noteLines = (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_LINES") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(part => int.TryParse(part, out var n) ? n : -1).Where(n => n >= 0).ToArray();
         SteamwovenWindowProbe[] windows =
         [
             new("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody, SteamwovenBackdropFamily.Inventory),
@@ -535,6 +589,8 @@ public partial class TerrainViewerApp
             .. new[] { (WrittenSubtype.Note, "letter"), (WrittenSubtype.Newspaper, "newspaper"), (WrittenSubtype.Telegram, "telegram"), (WrittenSubtype.Plaque, "plaque") }.Select(kind =>
                 new SteamwovenWindowProbe("reading-" + kind.Item2, () => { if (SteamwovenReading(kind.Item1) is { } document) OpenReading(document, "steamwoven", replaceWindows: true); }, () => ReadingOpen, CloseReadingByPlayer,
                     () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading, SteamwovenBackdropFamily.Reading, Optional: true)),
+            .. noteLines.Select(line => new SteamwovenWindowProbe("reading-note-" + line, () => { if (SteamwovenReading(WrittenSubtype.Note, line) is { } document) OpenReading(document, "steamwoven", replaceWindows: true); },
+                () => ReadingOpen, CloseReadingByPlayer, () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading, SteamwovenBackdropFamily.Reading, Optional: true)),
             new("premade", () => SteamwovenOpenMenuWindow(420, require), () => _mainMenu is { Window: AreaMenuWindow.PickCharacter }, () => EndMainMenu("steamwoven smoke"),
                 () => _mainMenuPanel is { PremadeArtMode: true } m ? (m.PremadeArtForSelfTest.Position, m.PremadeArtForSelfTest.Scale.X) : null, ZoneScreen),
             new("newcharacter", () => SteamwovenOpenMenuWindow(421, require), () => _mainMenu is { Window: AreaMenuWindow.NewCharacter }, () => EndMainMenu("steamwoven smoke"),

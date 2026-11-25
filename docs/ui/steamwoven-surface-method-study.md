@@ -103,9 +103,22 @@ for the production surfaces, which the composite below already meets with the or
 
 `tools/steamwoven_ui/surface_compose.py compose` builds the prototype of that composition (local, 2880 x 2160): the Codex wood replaces the ORIGINAL only where
 the original is wood (the wood class as solid regions, a 6 px margin and a 3 px soft edge); everything else, text and fields and metal parts, is the original's
-pixels, the stand-in for the kit parts until the pilot chain delivers them. In the wood: dark specks (more than 12 levels below the 9 px horizontal median) are
-replaced by that median, so the grain running along x survives; the original's rows of dots (faint dark dots, six or more in a row, found at 6 levels) are put
-back; L*, contrast and chroma are fitted by the wood mask the tone check uses; about 3 px each side of both strip joins stay fully the original's (a 12 px band, blended by a 2 px soft edge). On the inventory screen 98 650 speck pixels were replaced and 388 dots of the original's rows kept.
+pixels, the stand-in for the kit parts until the pilot chain delivers them. In the wood: single dark specks (a small compact component, at most 8 pixels in a 4 x 4 box, of pixels more than 12 levels below the 9 px horizontal median) are
+removed pointwise, each pixel and its 1 px halo taking the mean of its row neighbours outside the speck, and only where it is darker than both of them (a pixel beside a
+bright line is left), so the grain running along x survives and grain strokes are not touched (the first version replaced every such pixel by the median, which
+left even corduroy-like hatching on narrow wood strips; ARC-UI-3104); the original's rows of dots (faint dark dots, six or more in a row, found at 6 levels) are put
+back; L*, contrast and chroma are fitted by the wood mask the tone check uses; about 3 px each side of both strip joins stay fully the original's (a 12 px band, blended by a 2 px soft edge). On the inventory screen 388 dots of the original's rows were kept (the first version replaced 98 650 speck pixels; the pointwise version removes 10 551 specks).
+
+Owner review of 2026-11-21 (ARC-UI-3104, issue #3104) added three fixes to the top strip, all in `surface_compose.py` and local-only like the rest:
+
+- **Blotches.** The dark sharp blotches on the wood were the original's darkest stains, which the wood class does not take: holes in the wood weight where the
+  original's dark smear showed against the sharp Codex wood. The wood weight is closed (a 10 px disk) before the joins are kept, so a non-wood notch too narrow to hold the disk is wood.
+- **Square bevel.** The original's squares have a light right and bottom bevel; the wood weight (blurred, eroded 6 px) swallowed the 5 px right line and the Codex
+  wood redrew it thinner. The light vertical lines of the top strip (rows 0 to 148, at least 40 px tall, at most 10 px wide, found by an opening with a 1 x 30 line so
+  the bottom bevel is not taken) are put back from the original, by default under the Codex line (`--bevel lighten`: the lighter of the two) or alone (`--bevel original`).
+- **Chip.** The white rim at the right plate's tip (a box of the inventory master, `CHIP_BOXES`) is filled with the plate's darkest metal to its right. Other windows need their own boxes. The light glint at that plate tip is part of the kit's metal (production condition 3), not of the wood; filling it with dark metal is temporary, until the kit parts replace the original's stand-ins.
+
+
 
 | | wood L* | wood contrast | wood chroma | seam y=148 | seam y=1588 | sharp. x1 / x1/3 | repetition x / y | tone_check dL* / contrast / dE mean, p95 |
 |---|---|---|---|---|---|---|---|---|
@@ -115,7 +128,27 @@ back; L*, contrast and chroma are fitted by the wood mask the tone check uses; a
 
 The remaining gap to the production state: the kit parts replace the original's metal stand-ins (pilot #3058, [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459));
 the game draws text and counters over the surface; the extreme-aspect strips are cropped by a tool step (`codex_batch.py crop`, [#3083](https://github.com/Simarglok/arcanum-steamwoven/issues/3083));
-the composition is a script today, not a pipeline step. Repetition and sharpness bounds are not added to SWI-VER-5 here; the seam ratio stays the only gate.
+the composition was a script then, now a pipeline step ([below](#production-pipeline-step-arc-ui-3100)). Repetition and sharpness bounds are not added to SWI-VER-5 here; the seam ratio stays the only gate.
+
+## Production pipeline step (ARC-UI-3100)
+
+Issue [#3100](https://github.com/Simarglok/arcanum-steamwoven/issues/3100), parent of the production batches (strips [#2927](https://github.com/Simarglok/arcanum-steamwoven/issues/2927), windows). The prototype's composition is now a tool step,
+`surface_compose.py build` ([toolchain](../workflow/toolchain.md#steamwoven-surface-pipeline-arc-ui-3100)); the conditions of the owner pick map onto it like this:
+
+| Condition | In the step |
+|---|---|
+| 1. Text, counters, digits, fields drawn by the game | `erase_boxes` of the zone spec: a box is filled with the per-channel median of the 2 px ring outside it, so a baked text or counter is not part of the surface and the game draws it. The boxes are per window (the census column `baked_text`, [#3037 table](steamwoven-interface-trd.md#elements-the-old-arts-held-arc-ui-3037)); none is set for the inventory, whose original art has no baked text. |
+| 2. Zones filled in play by the original's mask | unchanged: only the original's wood class is taken from the Codex result, everything else is the original's pixels (the portrait circle, plates, grids, counter windows). The mask is the tone check's wood class of the zone's screen (`screen` of the spec, `prompts/tone_masks.json`), so each window family has its own. |
+| 3. Metal parts from the kit | `kit_parts` of the spec: a kit master laid over the result at master pixels (straight alpha, over), replacing the original's stand-in; its file hash is in the record. Until a part exists (the hardware batch [#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481); the pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058) made the round bottom-strip buttons, which reach the game inside the pack's frames) the original's pixels stand. |
+| 4. Seams | measured at every join of the spec (`joins`, default the two strip joins), gate: at most 1.8; SWI-VER-5's 1.5 is recorded beside it (`seams_within_swi_ver_5`). |
+| 5. Wood tone | as the prototype (mean L*, contrast, chroma fitted by the wood mask, single dark specks removed pointwise, the original's rows of dots kept); the numbers of the original, the Codex wood and the result are in the record, and the tone check of the whole screen (`tone_check.compare_screen`) is the second gate. |
+
+The record `provenance/surface/<zone id>.json` (schema `steamwoven-surface/1`, local, no pixels): the tool and the date, the zone spec, the file names and SHA-256 of the ORIGINAL, of method A's assembled image and of the result, the counts (specks, dots, bevel lines, chip and erased
+pixels), the kit parts laid (id, hash, size, place), the wood numbers, the seams, the tone regions and the gates. The record is written whatever the gates say; exit 1 tells the caller a gate failed (a join list that is empty, or a spec of the wrong shape, is an error, exit 2: no join measured is no seam gate passed). The zone id and the batch name are plain file names. Codex's own provenance (SWI-GEN-6) stays with the zone image in the outbox; its hash is the method A input's.
+
+`surface_study.py zones-inbox --batch B --zones window --screen-name NAME` makes the inbox of any screen's zones and `assemble` puts the three zone results into the 2880 x 2160 composition (the strips' results of one screen are reused for every family: the strips of the character, logbook, reading and schematic contexts differ from the inventory's by at most 0.2 % RMSE, and the compose step takes the Codex wood only where the screen's own wood mask says wood).
+
+**Run, 2026-11-24:** the inventory screen through `build` with the prototype's inputs: seams 0.95 and 1.10, tone PASS, wood L\* 20.08 against 20.13, contrast 3.84 against 3.94 (the same as the prototype within the changes of ARC-UI-3104). The other families' window zones (character sheet, logbook, reading window, schematics) were made into Codex batches (`surface-3100-character`, `-logbook`, `-reading`, `-schematic`) but the four runs failed at once with the subscription's usage limit (Codex text: usage limit reached, back at 2026-11-25 02:17 local); nothing was generated, no prompt was changed, and the runs are filed as a follow-up. The spec path (another screen, an erase box, a kit part) was exercised on the character screen with the inventory's wood as a stand-in for the missing generation (a code-path check, not a result): 6000 px erased, one kit part laid, and the gates fail as they should (seam 2.24 at the bottom join, tone FAIL on the wood, because the inventory's wood is not this window's).
 
 ## Reproduction
 

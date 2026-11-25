@@ -48,6 +48,7 @@ public sealed class AreaReadingArtTests
         Assert.AreEqual(AreaReadingArtLayout.White, AreaReadingArtLayout.Colour(WrittenSubtype.Plaque));
         Assert.AreEqual(AreaReadingArtLayout.Black, AreaReadingArtLayout.Colour(WrittenSubtype.Book));
         Assert.IsFalse(AreaReadingArtLayout.RequiredArtNumbers.Contains(817) || AreaReadingArtLayout.RequiredArtNumbers.Contains(815), "the alternate newspaper's arts are optional");
+        Assert.IsFalse(AreaReadingArtLayout.RequiredArtNumbers.Contains(AreaReadingText.SubstituteFont), "Garmond9, the small fonts' substitute at screen factor 1, is optional (ARC-UI-1462)");
     }
 
     [TestMethod]
@@ -233,6 +234,52 @@ public sealed class AreaReadingArtTests
         Assert.AreEqual((327, 126, 480), (lines[12].X, lines[12].Y, lines[12].Font), "the body");
     }
 
+    /// <summary>ARC-UI-2765: the address and signature rule on invented letters.</summary>
+    [TestMethod]
+    public void The_note_rule_splits_an_address_a_body_and_a_signature()
+    {
+        var one = AreaReadingNoteRule.Split("Dear X,\n   body one\n   body two\nYours, Y\n");
+        Assert.AreEqual(("Dear X,", "   body one\n   body two", "Yours, Y"), (one!.Value.Heading, one.Value.Body, one.Value.Signature), "a short body line is not a closing line");
+        var two = AreaReadingNoteRule.Split("Dear X,\nbody\nLove always,\nY");
+        Assert.AreEqual(("body", "Love always,\nY"), (two!.Value.Body, two.Value.Signature), "two short last lines are the signature");
+        var blank = AreaReadingNoteRule.Split("Dear X,\n\nbody\n\nForever yours,\n\nY\n");
+        Assert.AreEqual(("\nbody\n", "Forever yours,\n\nY"), (blank!.Value.Body, blank.Value.Signature), "a closing line and the name after a blank line are one signature");
+        var keepsBody = AreaReadingNoteRule.Split("Dear X,\nbody\nY");
+        Assert.AreEqual("body", keepsBody!.Value.Body, "a body line stays");
+        Assert.AreEqual("Y", keepsBody.Value.Signature);
+        Assert.AreEqual("short", AreaReadingNoteRule.Check("Dear X,\nY").Reason);
+        Assert.AreEqual("no-comma", AreaReadingNoteRule.Check("Dear X\nbody\nY").Reason);
+        Assert.AreEqual("long-last", AreaReadingNoteRule.Check("Dear X,\nbody\n" + new string('w', 41)).Reason);
+        Assert.AreEqual("no-body", AreaReadingNoteRule.Check("Dear X,\n\n\n   \nY").Reason, "blank lines are not a body");
+    }
+
+    /// <summary>ARC-UI-2765: a note's body on synthetic frames: Pepper20 (497) 10 high, NewTimes16 (840) 8 high, Nick16 (301) 5 high, every glyph advancing 6.</summary>
+    [TestMethod]
+    public void A_note_body_is_drawn_in_the_readable_face_between_a_handwritten_address_and_signature()
+    {
+        AreaArtFont FontOf(int art) => art == 840 ? Font(8) : art == 301 ? Font(5) : Font(10);
+        AreaReadingArtDocument Note(string text) => new(WrittenSubtype.Note, 489, false, [], [Message(text)], [], text);
+        var letter = Note("Dear X,\nbody body body\nYours, Y");
+        Assert.IsTrue(AreaReadingFlow.Single(letter, FontOf).All(line => line.Font == 497), "the original's look draws Pepper20");
+        var mixed = AreaReadingFlow.Single(letter, FontOf, readableNote: true);
+        CollectionAssert.AreEqual(new[] { 497, 840, 497 }, mixed.Select(line => line.Font).ToArray());
+        Assert.AreEqual((349, 49), (mixed[0].X, mixed[0].Y));
+        Assert.AreEqual(49 + 10 + 6, mixed[1].Y, "the body follows the address by a gap");
+        Assert.IsTrue(mixed[2].X > mixed[0].X && mixed[2].Y > mixed[1].Y, "the signature stands to the right under the body");
+        // A letter that does not fit the rule is drawn whole in the readable face.
+        var plain = AreaReadingFlow.Single(Note("one line only"), FontOf, readableNote: true);
+        Assert.IsTrue(plain.Count == 1 && plain[0].Font == 840);
+        // Too long for NewTimes16: Nick16 (the rule's address and signature stay Pepper20); too long for both: the original's draw. A word wider than the rectangle is no fit.
+        var long400 = AreaReadingFlow.Single(Note(string.Join(' ', Enumerable.Repeat("word", 400))), FontOf, readableNote: true);
+        Assert.IsTrue(long400.Count > 0 && long400.All(line => line.Font == 301), "Nick16 holds what NewTimes16 does not");
+        var longMixed = AreaReadingFlow.Single(Note("Dear X,\n" + string.Join(' ', Enumerable.Repeat("word", 350)) + "\nYours, Y"), FontOf, readableNote: true);
+        Assert.IsTrue(longMixed[0].Font == 497 && longMixed[^1].Font == 497 && longMixed.Count(line => line.Font == 301) > 10, "address and signature in Pepper20 around a Nick16 body");
+        Assert.IsTrue(AreaReadingFlow.Single(Note(string.Join(' ', Enumerable.Repeat("word", 1000))), FontOf, readableNote: true).All(line => line.Font == 497));
+        Assert.IsTrue(AreaReadingFlow.Single(Note("a " + new string('w', 40) + " b"), FontOf, readableNote: true).All(line => line.Font == 497), "an unbreakable word keeps the original's draw");
+        // Other kinds ignore the flag.
+        Assert.AreEqual(0, AreaReadingFlow.Single(new(WrittenSubtype.Picture, 700, false, [], [], [], ""), FontOf, readableNote: true).Count);
+    }
+
     [TestMethod]
     public void A_note_and_a_plaque_draw_in_their_rectangles()
     {
@@ -295,6 +342,6 @@ public sealed class AreaReadingArtTests
     {
         var texts = WrittenTexts.Create(Mes("{100}{12 A}{101}{1c B}{102}{12 C}{103}{Plain}"), Mes("{200}{9 note}"), Mes("{0}{482 x}{1}{5 y}"), null, Mes("{500}{40c p}"));
         CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 482 }, texts.MarkupFonts().ToArray(), "the note's file has no markup; a message with no prefix is font 0 and left out");
-        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 479, 480, 481, 482, 484, 485, 497, 815 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 5, 12, 40, 301, 479, 480, 481, 482, 483, 484, 485, 497, 815, 840 }, AreaReadingArtLayout.FontArts(texts.MarkupFonts()).ToArray());
     }
 }

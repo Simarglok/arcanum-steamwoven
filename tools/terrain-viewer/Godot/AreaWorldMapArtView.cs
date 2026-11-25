@@ -1,3 +1,4 @@
+using Arcanum.Data.Hd;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -105,10 +106,27 @@ public partial class AreaWorldMapArtView : Control
     public (int X, int Y) Offset => _offset;
     public (int X, int Y) MaxOffset => MapMax;
 
-    /// <summary>ARC-UI-2993 (stopgap of #2992): picture pixels per window unit of the map view. 1 in the original look; under the HD option (the Steamwoven layout) the window lies at the
-    /// composition's scale s and the picture is drawn at 1:1 device pixels, so it is the window's device scale: the view shows more of the continent, sharp, and the markers, labels,
-    /// route lines and the frame stay at s. The town map, the continent view and every rule read picture pixels as before.</summary>
-    public double PixelsPerUnit => _pixelsPerUnitForSelfTest ?? (AreaGameBarPanel.SteamwovenOn && IsInsideTree() ? Math.Max(.25, DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit);
+    /// <summary>ARC-UI-3154 (ends the stopgap of ARC-UI-2993 where the pack allows): picture pixels per window unit of the map view. With the HD world map (every tile of the look has its
+    /// redraw in the pack, <see cref="HdTilesDrawn"/>) it is 1 like the original look, and the tiles, which draw their redraw into the original's 250-unit rectangles, are drawn at the
+    /// composition's scale s with the window: the same part of the map as the original shows, larger and sharp. Without the HD world map the stopgap stays: under the HD option (the
+    /// Steamwoven layout) the window lies at s and the Legacy picture is drawn at 1:1 device pixels, so it is the window's device scale (the view shows more of the continent, never
+    /// blown up blurred), and the markers, labels, route lines and the frame stay at s. The town map, the continent view and every rule read picture pixels as before.</summary>
+    public double PixelsPerUnit => _pixelsPerUnitForSelfTest ?? (AreaGameBarPanel.SteamwovenOn && IsInsideTree() && !HdTilesDrawn ? Math.Max(.25, DeviceScale()) : AreaWorldMapArtLayout.OriginalPixelsPerUnit);
+
+    // ARC-UI-3154: whether the HD option is on with a pack that holds a redraw for every tile of the look (checked once per look, pack and setting; a partial pack draws as the Legacy does).
+    private (AreaWorldMapArtLook? Look, HdPack? Pack, bool Enabled, bool Result) _hdTiles;
+
+    /// <summary>ARC-UI-3154: the map view's tiles draw HD (the HD option is on and the pack has a redraw for every tile).</summary>
+    public bool HdTilesDrawn
+    {
+        get
+        {
+            var (look, pack, enabled) = (_look, InterfaceHd.Pack, InterfaceHd.Enabled);
+            if (!ReferenceEquals(_hdTiles.Look, look) || !ReferenceEquals(_hdTiles.Pack, pack) || _hdTiles.Enabled != enabled)
+                _hdTiles = (look, pack, enabled, look is not null && enabled && pack is not null && WorldMapHd.AllTilesHaveEntries(look.Tiles, pack));
+            return _hdTiles.Result;
+        }
+    }
     private double? _pixelsPerUnitForSelfTest;
     private double _fittedPixelsPerUnit = AreaWorldMapArtLayout.OriginalPixelsPerUnit;
     private (int X, int Y) MapMax => _map is { } map ? AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width, PixelsPerUnit) : AreaWorldMapArtLayout.MaxOffset();
@@ -256,8 +274,8 @@ public partial class AreaWorldMapArtView : Control
     // WM72, WM75: each load of a town starts afresh (the original leaks the earlier tile buffers; the viewer frees its textures).
     private void SetTown(AreaTownMapShow? town)
     {
-        foreach (var texture in _townTextures.Values) texture?.Dispose();
-        _townTextures.Clear(); _townFiles.Clear();
+        DropTownTextures();
+        _townFiles.Clear();
         EndQuill();
         _town = town;
         if (town is null) { _townOffset = _townMax = _townParty = default; return; }
@@ -456,6 +474,22 @@ public partial class AreaWorldMapArtView : Control
                 hd.ScaleSource = _deviceScale;
                 if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
             }
+        // ARC-RENDER-3079: the map tiles and the continent picture may draw HD redraws too; they are watched (an HD setting or pack change redraws the window). Under the stopgap picture
+        // scale a tile is drawn into 250 / unit window units, which no device scale describes, so the trilinear draw of a mip chain serves that.
+        // ARC-UI-3154: with the HD world map the tiles are drawn at the window's own scale (picture scale 1), so they claim it: below the pack's scale the area copy of ARC-RENDER-3045 draws
+        // them, where the mip chain would over-blur a fractional scale. The continent picture is always drawn into its 365 window units, so it claims it too.
+        var tilesAtWindowScale = HdTilesDrawn && PixelsPerUnit == AreaWorldMapArtLayout.OriginalPixelsPerUnit;
+        foreach (var tile in _look.Tiles)
+            if (tile is HdInterfaceTexture hd)
+            {
+                hd.ScaleSource = tilesAtWindowScale ? _deviceScale : null;
+                if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+            }
+        if (_look.Zoomed is HdInterfaceTexture zoomed)
+        {
+            zoomed.ScaleSource = _deviceScale;
+            if (_watched.Add(zoomed)) zoomed.Changed += _onTextureChanged;
+        }
     }
 
     /// <summary>ARC-UI-1197: the textures of the given art numbers that the window holds, every frame, with the art number of each (the native smoke).</summary>
@@ -944,7 +978,7 @@ public partial class AreaWorldMapArtView : Control
         var (first, endColumn, firstRow, endRow) = AreaTownMapLayout.VisibleTiles(plan, _townOffset);
         var columns = plan.Info.Columns;
         // The cache is trimmed before the draw (a texture freed inside it would blank the tiles already issued).
-        if (_townTextures.Count >= MaxTownTextures - 512) { foreach (var old in _townTextures.Values) old?.Dispose(); _townTextures.Clear(); }
+        if (_townTextures.Count >= MaxTownTextures - 512) DropTownTextures();
         bool Revealed(int index) => town.CellRevealed(index) && TownFile(index);
         for (var row = firstRow; row < endRow; row++)
             for (var column = first; column < endColumn; column++)
@@ -958,7 +992,7 @@ public partial class AreaWorldMapArtView : Control
                 var (w, h) = (plan.TileWidth, plan.TileHeight);
                 Color Corner(int bit) => (corners & bit) != 0 ? Colors.White : Colors.Black;
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
-                    [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
+                    [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture is HdInterfaceTexture hd ? hd.DrawSource() : texture);
             }
         // WM82: the notes next, each with the art of its type (ARC-UI-2330; the original's town map draws all with 143, WM79, WM142, but the scenery notes are the only ones it makes there) centred on its pixel
         // (no label: the text shows on hover, WM59).
@@ -988,19 +1022,41 @@ public partial class AreaWorldMapArtView : Control
     }
 
     // WM74: a tile reads when first drawn, a missing file standing in as tile 000000; a tile that does not decode stays unread (drawn black).
+    // ARC-RENDER-3106: the texture keeps the tile's 64 x 32 (the grid, the scroll and the clicks stay in the original's coordinates) and, with HD on and a pack entry for the tile that was read
+    // (the stand-in's entry is tile 000000's), draws the redraw into the same rectangle from the area copy of the window's device scale.
     private Texture2D? TownTexture(int index)
     {
         if (_townTextures.TryGetValue(index, out var cached)) return cached;
-        ImageTexture? texture = null;
-        if (_town!.Source.ReadTile(_town.Plan.Entry, index) is { } bytes)
+        Texture2D? texture = null;
+        var entry = _town!.Plan.Entry;
+        if (_town.Source.ReadTile(entry, index) is { } bytes)
         {
-            var image = new Image();
-            if (image.LoadBmpFromBuffer(bytes) == Error.Ok) { image.Convert(Image.Format.Rgba8); texture = ImageTexture.CreateFromImage(image); }
-            image.Dispose();
+            texture = TownMapHd.Texture(AreaTownMapLayout.TilePath(entry.Name, TownFile(index) ? index : 0), bytes);
+            if (texture is HdInterfaceTexture hd)
+            {
+                hd.ScaleSource = _deviceScale ??= DeviceScale;
+                _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) Redraw(); };
+                hd.Changed += _onTextureChanged;
+            }
         }
         _townTextures[index] = texture;
         return texture;
     }
+
+    // Frees the tile textures of the town (an HD tile's handler is taken off first: it holds this view).
+    private void DropTownTextures()
+    {
+        foreach (var texture in _townTextures.Values)
+        {
+            // An HD tile is registered with the HD layer (a refresh may still reach it): it lets go of its images and is freed by the collector; the others are freed now.
+            if (texture is HdInterfaceTexture hd) { if (_onTextureChanged is not null) hd.Changed -= _onTextureChanged; hd.Release(); }
+            else texture?.Dispose();
+        }
+        _townTextures.Clear();
+    }
+
+    /// <summary>ARC-RENDER-3106: the town map's tile textures held now (index and texture; a native smoke checks them against the pack).</summary>
+    internal IReadOnlyList<(int Index, Texture2D Texture)> TownTextureList() => [.. _townTextures.Where(pair => pair.Value is not null).Select(pair => (pair.Key, pair.Value!))];
 
     private void DrawMapView(CanvasItem canvas)
     {

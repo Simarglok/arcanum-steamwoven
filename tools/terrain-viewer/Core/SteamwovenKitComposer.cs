@@ -53,6 +53,38 @@ public sealed record SteamwovenKitOverlay(string Part, int MasterWidth, int Mast
     public double UnitHeight => MasterHeight / 3.6;
 }
 
+/// <summary>The two-strip screens whose kit parts the viewer composes (ARC-UI-3038, ARC-UI-3039, ARC-UI-3040, ARC-UI-3041).</summary>
+public enum SteamwovenKitScreen
+{
+    /// <summary>The save and load windows (census M05, M06): <c>board.charcreatetopbar</c>, <c>backdrop.saveloadbackground</c> (art 745), <c>board.charcreatebottombar</c> (ARC-UI-3038).</summary>
+    SaveLoad,
+    /// <summary>The pre-made character browser (census M07, BD-G): <c>board.charcreatetopbar</c>, <c>backdrop.pregencharacterbase</c> (art 766), <c>board.charcreatebottombar</c> (ARC-UI-3039).</summary>
+    PremadeBrowser,
+    /// <summary>The new character screen (census M08, BD-G): <c>board.charcreatetopbar</c>, <c>backdrop.createcharacterbase</c> (art 765), <c>board.charcreatebottombar</c> (ARC-UI-3040).</summary>
+    NewCharacter,
+    /// <summary>The creation editor (census M09, BD-B): <c>board.charcreatetopbar</c>, the kit background of the character sheet window (<see cref="SteamwovenKitWindow.Character"/>, <c>backdrop.char_maint</c>, art 22), <c>board.charcreatebottombar</c> (ARC-UI-3041).</summary>
+    CharacterEditor,
+    /// <summary>The opening shop (census M10, BD-A): <c>board.charcreatetopbar</c>, the kit background of the barter window (<see cref="SteamwovenKitWindow.Barter"/>, or <see cref="SteamwovenKitWindow.BarterFollower"/> for a follower merchant: the merchant's side <c>backdrop.barter</c>
+    /// and <c>backdrop.inventor</c>), <c>board.charcreatebottombar</c> (ARC-UI-3041).</summary>
+    OpeningShop,
+}
+
+/// <summary>The kit parts a two-strip screen's 800 × 600 plate is made of, top to bottom: the top strip (the strip art, 2880 px wide), the body background (2880 × 1440, SWI-BDR-3) and the bottom strip. <paramref name="OwnArts"/> are the
+/// original arts the screen draws itself for the same places (the two strips and the body): none of them is drawn while the kit has the whole screen (ARC-UI-3038 AC2).</summary>
+/// <remarks>ARC-UI-3041 (census M09, M10): a screen whose body is a game window (the creation editor's sheet, the opening shop's barter window) names <paramref name="BodyWindow"/> and has no <paramref name="Body"/> part of its own: its body is that
+/// window's kit background (<see cref="SteamwovenKitTable.Windows"/>, 2880 × 1440 over its pieces) laid in the plate's 800 × 400 body.</remarks>
+public sealed record SteamwovenKitScreenSpec(string TopStrip, string? Body, string BottomStrip, IReadOnlyList<int> OwnArts, SteamwovenKitWindow? BodyWindow = null);
+
+/// <summary>The three kit parts of a two-strip screen in device pixels (the window's, from the plate's place): the strips scaled into the family's 41 and 159 units, the body exactly the 800 × 400 body.</summary>
+/// <remarks>ARC-UI-3041: <paramref name="Body"/> is the body's (first) piece; a body that is a two-piece window background (the barter window) has its other pieces in <paramref name="MoreBody"/>, left to right, each the body's height.</remarks>
+public sealed record SteamwovenKitScreenPlan(SteamwovenKitDraw Top, SteamwovenKitDraw Body, SteamwovenKitDraw Bottom, IReadOnlyList<SteamwovenKitDraw>? MoreBody = null)
+{
+    /// <summary>Every piece of the body, left to right.</summary>
+    public IReadOnlyList<SteamwovenKitDraw> BodyPieces => [Body, .. MoreBody ?? []];
+
+    public IReadOnlyList<SteamwovenKitDraw> Draws => [Top, .. BodyPieces, Bottom];
+}
+
 /// <summary>
 /// ARC-UI-2461: what the kit is made of at run time, keyed by the original's art numbers and the interface modes (the baked manifest names parts, the viewer knows arts and windows; the census rows are the source,
 /// <c>tools/steamwoven_ui/kit.json</c> holds the same ids and art numbers). The hardware layers of the strips are placed by the hardware batch ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481)),
@@ -104,6 +136,40 @@ public static class SteamwovenKitTable
         [AreaHeroDollToggle.CoverArt] = new("backdrop.pd_cover4inven", 1230, 1440),
     };
 
+    /// <summary>
+    /// ARC-UI-3098 (owner decision 2026-11-24, option A): the required details the old window arts painted into themselves are kit parts of their own (<c>fixture.*</c> and the two grids, kit.json, drawn by
+    /// <c>tools/steamwoven_ui/fixtures.py</c>): part id to its size in original units. The master size is the unit size on the 6 px grid (<see cref="MasterOf"/>); the window draws the part at its place in its own units (the places are
+    /// the old art's, TRD "Elements the old arts held"). A test pins the ids and sizes to kit.json.
+    /// </summary>
+    public static IReadOnlyDictionary<string, (int Width, int Height)> FixtureUnits { get; } = new Dictionary<string, (int, int)>
+    {
+        ["grid.inventory_cells"] = (32, 32), ["fixture.pack_pit"] = (324, 388), ["fixture.doll_pit"] = (330, 300), ["fixture.holder_pit_loot"] = (324, 260), ["fixture.holder_pit_barter"] = (324, 228),
+        ["fixture.name_pit"] = (223, 55), ["fixture.quote_field"] = (267, 36), ["fixture.count_pit"] = (61, 17), ["fixture.count_icons"] = (38, 115), ["fixture.weapon_frame"] = (112, 97),
+        ["fixture.shield_frame"] = (114, 97), ["fixture.arrange_legend"] = (78, 32), ["fixture.sheet_name_box"] = (360, 87), ["fixture.sheet_derived_box"] = (452, 113), ["fixture.stat_oval"] = (70, 31),
+        ["fixture.align_dial"] = (100, 100), ["fixture.health_disc"] = (76, 56), ["fixture.fatigue_disc"] = (76, 56), ["fixture.mt_ruler"] = (46, 330), ["fixture.schem_page"] = (506, 367),
+        ["grid.schematic"] = (506, 367), ["fixture.schem_slot"] = (103, 71), ["fixture.schem_channel"] = (126, 30), ["fixture.gear_hat"] = (90, 70), ["fixture.gear_scroll"] = (96, 72),
+    };
+
+    /// <summary>The master pixels of a length in original units: units x 3.6 on the 6 px grid, halves up (the census' rule, <c>kit_check.snap</c>).</summary>
+    public static int MasterOf(int units) => 6 * ((6 * units + 5) / 10);
+
+    private static readonly string[] InventoryFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.doll_pit", "fixture.name_pit", "fixture.count_pit", "fixture.count_icons", "fixture.weapon_frame", "fixture.shield_frame", "fixture.arrange_legend"],
+        LootFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.holder_pit_loot", "fixture.count_pit", "fixture.count_icons"],
+        BarterFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.holder_pit_barter", "fixture.quote_field", "fixture.count_pit", "fixture.count_icons"],
+        CharacterFixtures = ["fixture.sheet_name_box", "fixture.sheet_derived_box", "fixture.stat_oval", "fixture.align_dial", "fixture.health_disc", "fixture.fatigue_disc", "fixture.mt_ruler"],
+        SchematicFixtures = ["fixture.schem_page", "grid.schematic", "fixture.schem_slot", "fixture.schem_channel", "fixture.gear_hat", "fixture.gear_scroll"];
+
+    /// <summary>The fixtures a covered window draws over its kit background (they stay resident with it, SWI-RUN-5); the logbook and the world map have none here (the map's are <a href="https://github.com/Simarglok/arcanum-steamwoven/issues/3112">#3112</a>).</summary>
+    public static IReadOnlyList<string> FixturesOf(SteamwovenKitWindow window) => window switch
+    {
+        SteamwovenKitWindow.Inventory => InventoryFixtures,
+        SteamwovenKitWindow.Loot => LootFixtures,
+        SteamwovenKitWindow.Barter or SteamwovenKitWindow.BarterFollower => BarterFixtures,
+        SteamwovenKitWindow.Character => CharacterFixtures,
+        SteamwovenKitWindow.Schematic => SchematicFixtures,
+        _ => [],
+    };
+
     /// <summary>The master pixels of one original unit in the window zone (2880 over the 800-unit frame, SWI-BDR-2).</summary>
     public const double MasterPerUnit = CompositionMasterWidth / 800.0;
 
@@ -126,6 +192,31 @@ public static class SteamwovenKitTable
         [330] = "backdrop.multiplayerback",
     };
 
+    /// <summary>
+    /// ARC-UI-3038 (census M05, M06, BD-G): the two-strip screens' kit parts. The screen is the original's 800 × 600 plate (the column menu's fitted plate, <see cref="SteamwovenColumnMenu"/>): the top strip over the first 41 units, the body
+    /// over the 400 units of its own 800 × 400 window and the bottom strip over the last 159 (the family's geometry, <see cref="TwoStripBodyTopUnits"/> and <see cref="TwoStripBodyBottomUnits"/>); the master heights 150 + 1440 + 570
+    /// make the plate's 2160. The strips are drawn scaled into their 41 and 159 units like the HUD strips (their master heights are the provisional 150 and 570, SWI-LAY-7's open exception), so the window's own content keeps the
+    /// positions of the original's body.
+    /// </summary>
+    public static IReadOnlyDictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec> Screens { get; } = new Dictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec>
+    {
+        [SteamwovenKitScreen.SaveLoad] = new("board.charcreatetopbar", "backdrop.saveloadbackground", "board.charcreatebottombar",
+            [AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt]),
+        [SteamwovenKitScreen.PremadeBrowser] = new("board.charcreatetopbar", "backdrop.pregencharacterbase", "board.charcreatebottombar",
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt]),
+        [SteamwovenKitScreen.NewCharacter] = new("board.charcreatetopbar", "backdrop.createcharacterbase", "board.charcreatebottombar",
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt]),
+        // ARC-UI-3041 (census M09, M10): the creation editor and the opening shop take their strips from the same pair and their body from the kit background of the window they hold: the sheet's, the barter window's. The own arts are the strips
+        // the shop view draws and the window's own backdrop (the sheet's art 22; the barter frame's art 235 and the pack art 221).
+        [SteamwovenKitScreen.CharacterEditor] = new("board.charcreatetopbar", null, "board.charcreatebottombar",
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaCharacterSheetArtLayout.BackgroundArt], SteamwovenKitWindow.Character),
+        [SteamwovenKitScreen.OpeningShop] = new("board.charcreatetopbar", null, "board.charcreatebottombar",
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaBarterArtLayout.BarterArt, AreaInventoryArtLayout.PackArt], SteamwovenKitWindow.Barter),
+    };
+
+    /// <summary>The top and the bottom of the body of a two-strip screen, in the 800 × 600 plate's units (the strips are 41 and 159 units high).</summary>
+    public const int TwoStripBodyTopUnits = 41, TwoStripBodyBottomUnits = 441;
+
     /// <summary>The faces of the bar buttons by the art the bar shows: the plates (idle faces) and the lit faces of the light buttons (census H01, H02).</summary>
     public static IReadOnlyDictionary<int, string> ButtonFaces { get; } = new Dictionary<int, string>
     {
@@ -133,6 +224,28 @@ public static class SteamwovenKitTable
         [187] = "plate.log_but", [169] = "plate.char_but", [186] = "plate.invn_but", [193] = "plate.tmap_but", [194] = "plate.wmap_but", [137] = "plate.lilgrnbut",
         [561] = "state.char_on", [560] = "state.log_on", [558] = "state.tmap_on", [195] = "state.wmap_on", [559] = "state.invn_on",
     };
+
+    /// <summary>
+    /// ARC-UI-3096 (SWI-KIT-5): the glyph of a bar button by the art it shows, one part per button, drawn over the face at the face's size (a symbol on a transparent background); the lit face of a light button takes the glyph of
+    /// its idle face. The names are this runtime's convention until the buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) makes the rows: <c>glyph.&lt;plate name&gt;</c>. Art 137 is shared by two
+    /// buttons with two symbols, so it has none here: <see cref="SharedArtGlyphs"/> names theirs by button.
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> ButtonGlyphs { get; } = new Dictionary<int, string>
+    {
+        [472] = "glyph.skills_button", [473] = "glyph.spells_button", [470] = "glyph.combat_button", [471] = "glyph.schematics_button",
+        [187] = "glyph.log_but", [169] = "glyph.char_but", [186] = "glyph.invn_but", [193] = "glyph.tmap_but", [194] = "glyph.wmap_but",
+        [561] = "glyph.char_but", [560] = "glyph.log_but", [558] = "glyph.tmap_but", [195] = "glyph.wmap_but", [559] = "glyph.invn_but",
+    };
+
+    /// <summary>ARC-UI-3096: the glyphs of the two buttons that stand on art 137 (the Fate Points and Sleep balls), by button.</summary>
+    public static IReadOnlyDictionary<AreaBarButton, string> SharedArtGlyphs { get; } = new Dictionary<AreaBarButton, string>
+    {
+        [AreaBarButton.FatePoints] = "glyph.fate_but", [AreaBarButton.Sleep] = "glyph.sleep_but",
+    };
+
+    /// <summary>The glyph part of the bar button <paramref name="button"/> showing <paramref name="art"/>, or null when the art has none.</summary>
+    public static string? GlyphOf(AreaBarButton? button, int art) =>
+        ButtonGlyphs.TryGetValue(art, out var glyph) ? glyph : button is { } b && SharedArtGlyphs.TryGetValue(b, out glyph) ? glyph : null;
 }
 
 /// <summary>
@@ -230,6 +343,74 @@ public static class SteamwovenKitComposer
         return new(draws, []);
     }
 
+    /// <summary>
+    /// ARC-UI-3038 (census M05, M06): the kit parts of a two-strip screen on its plate in the window: the top strip, the body background and the bottom strip, each with its rectangle in device pixels. The plate is the column menu's fitted
+    /// 800 × 600 (<paramref name="plan"/>: its zone and its device pixels per unit); the strips and the body meet at edges rounded from their unit positions (41 and 441, halves up) and together are exactly the plate (no gap), the strips scaled into
+    /// their rows, the body exactly its own 800 × 400. The strip arts must be the composition's 2880 px wide at the step (their heights are the provisional 150 and 570 master px and are not checked, as the HUD strips'); the body must be
+    /// 2880 × 1440. A part the set lacks or holds at another size makes the whole screen missing and names it, so the viewer draws the screen's own art whole (SWI-RUN-3): a half kit, half original screen never happens.
+    /// </summary>
+    /// <summary>ARC-UI-3041: the device offset of a body joint at <paramref name="masterX"/> master px (3.6 an original unit) on a plate <paramref name="plateHeight"/> device px high (600 units), halves up, in exact integer arithmetic.</summary>
+    internal static int JointDevice(int masterX, int plateHeight) => (int)((2L * masterX * plateHeight + 2160) / 4320);
+
+    /// <remarks>ARC-UI-3041: a screen whose body is a game window (<see cref="SteamwovenKitScreenSpec.BodyWindow"/>) lays that window's kit background in the body: its pieces left to right across the plate, meeting at edges rounded from their master
+    /// position (3.6 master px an original unit) and together exactly the body (SWI-BDR-5); <paramref name="bodyWindow"/> picks the window's variant (the barter window of a follower merchant, <see cref="SteamwovenKitWindow.BarterFollower"/>) and is ignored by
+    /// a screen with a body part of its own. A piece the set lacks or holds at another size makes the whole screen missing, as any other part.</remarks>
+    public static SteamwovenKitResult<SteamwovenKitScreenPlan> Screen(SteamwovenFullScreenPlan plan, SteamwovenKitSet set, SteamwovenKitScreen screen, IReadOnlyDictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec>? table = null,
+        SteamwovenKitWindow? bodyWindow = null)
+    {
+        var spec = (table ?? SteamwovenKitTable.Screens)[screen];
+        var missing = new List<string>();
+        var width = SteamwovenGrid.BakedLength(SteamwovenKitTable.CompositionMasterWidth, set.Step);
+        var bodyHeight = SteamwovenGrid.BakedLength(SteamwovenKitTable.ZoneMasterHeight, set.Step);
+        SteamwovenKitPart? Strip(string id)
+        {
+            if (!set.TryGet(id, out var part)) { missing.Add(id); return null; }
+            if (part.Width != width) { missing.Add(id + " (not 2880 px wide at the step)"); return null; }
+            return part;
+        }
+        var top = Strip(spec.TopStrip);
+        var bottom = Strip(spec.BottomStrip);
+        // The body: a part of its own (2880 × 1440), or the pieces of the kit background of its window (each its own master width, 1440 high).
+        var window = spec.BodyWindow is { } own ? bodyWindow ?? own : (SteamwovenKitWindow?)null;
+        var bodyPieces = new List<(SteamwovenKitPart Part, int MasterEnd)>();
+        if (window is { } held)
+        {
+            var cursor = 0;
+            foreach (var (id, pieceWidth) in SteamwovenKitTable.Windows[held].Pieces)
+            {
+                cursor += pieceWidth;
+                if (!set.TryGet(id, out var piece)) missing.Add(id);
+                else if (piece.Width != SteamwovenGrid.BakedLength(pieceWidth, set.Step) || piece.Height != bodyHeight) missing.Add(id + " (wrong size)");
+                else bodyPieces.Add((piece, cursor));
+            }
+        }
+        else if (spec.Body is not { } bodyId) throw new InvalidOperationException($"ARC-UI-3041: the {screen} screen names neither a body part nor a body window");
+        else if (!set.TryGet(bodyId, out var bodyPart)) missing.Add(bodyId);
+        else if (bodyPart.Width != width || bodyPart.Height != bodyHeight) missing.Add(bodyId + " (wrong size)");
+        else bodyPieces.Add((bodyPart, SteamwovenKitTable.CompositionMasterWidth));
+        if (missing.Count > 0 || top is not { } topPart || bottom is not { } bottomPart || bodyPieces.Count == 0) return new(null, missing);
+        var zone = plan.Zone;
+        int Edge(int units) => zone.Y + (int)Math.Round(units * plan.Factor, MidpointRounding.AwayFromZero);
+        var (bodyTop, bodyBottom) = (Edge(SteamwovenKitTable.TwoStripBodyTopUnits), Edge(SteamwovenKitTable.TwoStripBodyBottomUnits));
+        var topRect = PixelRect.FromEdges(zone.X, zone.Y, zone.Right, bodyTop);
+        var bottomRect = PixelRect.FromEdges(zone.X, bodyBottom, zone.Right, zone.Bottom);
+        var bodyDraws = new List<SteamwovenKitDraw>(bodyPieces.Count);
+        var left = zone.X;
+        for (var i = 0; i < bodyPieces.Count; i++)
+        {
+            // The pieces meet at the master position of their joint (3.6 master px an original unit); the last one ends at the plate's right edge.
+            var right = i == bodyPieces.Count - 1 ? zone.Right : zone.X + JointDevice(bodyPieces[i].MasterEnd, zone.Bottom - zone.Y);
+            var rect = PixelRect.FromEdges(left, bodyTop, right, bodyBottom);
+            bodyDraws.Add(Draw(bodyPieces[i].Part, rect, rect));
+            left = right;
+        }
+        return new(new SteamwovenKitScreenPlan(Draw(topPart, topRect, topRect), bodyDraws[0], Draw(bottomPart, bottomRect, bottomRect), bodyDraws.Count > 1 ? bodyDraws.Skip(1).ToList() : null), []);
+    }
+
+    /// <summary>ARC-UI-3038 (AC2): the original arts a two-strip screen draws itself as its backdrop: its two strips and its body background, or none while the kit has the whole screen (the screen's own content, the preview, the list,
+    /// the buttons, stays as before).</summary>
+    public static IReadOnlyList<int> OwnBackdropArts(SteamwovenKitScreen screen, bool kitScreen) => kitScreen ? [] : SteamwovenKitTable.Screens[screen].OwnArts;
+
     /// <summary>The window of an interface mode stack (bottom first) that has a kit background: the mode nearest the top that is one of the covered windows; a dialog or sleep view on top, or another window (the loot window) on top, has none (the generated backdrop stays until its integration issue; the barter window has its own, ARC-UI-3033).</summary>
     public static SteamwovenKitWindow? WindowOf(IReadOnlyList<InterfaceMode> stack) => WindowOf(stack, null);
 
@@ -276,6 +457,11 @@ public static class SteamwovenKitComposer
         SteamwovenKitTable.Covers.TryGetValue(art, out var cover) && set.TryGet(cover.Part, out var part)
         && part.Width == SteamwovenGrid.BakedLength(cover.MasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(cover.MasterHeight, set.Step) ? part : null;
 
+    /// <summary>ARC-UI-3098: the kit part of a fixture when the set holds it at the table's size at the step, else null (the window draws its plain stand-in for that detail, <c>AreaKitStandIns</c>).</summary>
+    public static SteamwovenKitPart? Fixture(SteamwovenKitSet set, string id) =>
+        SteamwovenKitTable.FixtureUnits.TryGetValue(id, out var units) && set.TryGet(id, out var part)
+        && part.Width == SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units.Width), set.Step) && part.Height == SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units.Height), set.Step) ? part : null;
+
     /// <summary>The size of a cover in original units: its master size over 3.6 master px per unit.</summary>
     public static (double Width, double Height) CoverUnits(SteamwovenKitCover cover) => (cover.MasterWidth / SteamwovenKitTable.MasterPerUnit, cover.MasterHeight / SteamwovenKitTable.MasterPerUnit);
 
@@ -299,14 +485,17 @@ public static class SteamwovenKitComposer
         && part.Width == SteamwovenGrid.BakedLength(SteamwovenKitTable.CompositionMasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(SteamwovenKitTable.FullScreenMasterHeight, set.Step) ? part : null;
 
     /// <summary>
-    /// The layers of a bar button the bar shows with <paramref name="art"/>: its face (the plate, or the lit face of a light button) and, over it, the overlay of the look when the set has one (<c>&lt;face&gt;_hover</c> for a hovered button,
-    /// <c>&lt;face&gt;_pressed</c> for a pressed one; the original has no disabled frame, SWI-KIT-5). Empty when the set has no face: the button keeps its generated or legacy art. The overlay names are the convention of this runtime until the
-    /// buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) fixes the sheets.
+    /// The layers of a bar button the bar shows with <paramref name="art"/>, bottom first: its face (the plate, or the lit face of a light button), its glyph (the symbol on a transparent background at the face's size, ARC-UI-3096)
+    /// and, over them, the overlay of the look when the set has one (<c>&lt;face&gt;_hover</c> for a hovered button, <c>&lt;face&gt;_pressed</c> for a pressed one; the original has no disabled frame, SWI-KIT-5). All or nothing: empty
+    /// when the set has no face, or no glyph at the face's size, because a plate alone is a button without its symbol; the button then keeps its generated or legacy art. The ring round a button is the strip's hardware layer
+    /// (SWI-LAY-12), not a layer of the button. The glyph and overlay names are the convention of this runtime until the buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) fixes the sheets.
+    /// <paramref name="button"/> tells the two buttons that share art 137 apart.
     /// </summary>
-    public static IReadOnlyList<SteamwovenKitPart> ButtonLayers(SteamwovenKitSet set, int art, AreaBarButtonLook look)
+    public static IReadOnlyList<SteamwovenKitPart> ButtonLayers(SteamwovenKitSet set, int art, AreaBarButtonLook look, AreaBarButton? button = null)
     {
         if (!SteamwovenKitTable.ButtonFaces.TryGetValue(art, out var face) || !set.TryGet(face, out var plate)) return [];
-        var layers = new List<SteamwovenKitPart> { plate };
+        if (SteamwovenKitTable.GlyphOf(button, art) is not { } glyphId || !set.TryGet(glyphId, out var glyph) || glyph.Width != plate.Width || glyph.Height != plate.Height) return [];
+        var layers = new List<SteamwovenKitPart> { plate, glyph };
         var suffix = look switch { AreaBarButtonLook.Hovered => "_hover", AreaBarButtonLook.Down => "_pressed", _ => null };
         if (suffix is not null && set.TryGet(face + suffix, out var overlay) && overlay.Width == plate.Width && overlay.Height == plate.Height) layers.Add(overlay);
         return layers;

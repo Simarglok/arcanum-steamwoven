@@ -172,6 +172,10 @@ public static partial class TerrainViewerSelfTest
             await AssertInterfaceHdAsync(host);
             Stage("PortraitHd");
             AssertPortraitHd();
+            Stage("WorldMapHd");
+            AssertWorldMapHd();
+            Stage("TownMapHd");
+            await AssertTownMapHdAsync(host);
             Stage("DirectFrameArea");
             await AssertDirectFrameAreaAsync(host);
             Stage("ConversationPanel");

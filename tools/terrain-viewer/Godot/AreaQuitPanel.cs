@@ -44,7 +44,7 @@ public partial class AreaQuitPanel : CanvasLayer
         _dialog = new AreaDialogBoxView();
         _screen.AddChild(_dialog);
         _dialog.AnswerRequested += yes => AnswerRequested?.Invoke(yes);
-        _box = new PanelContainer { Name = "QuitBox", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        _box = new AreaFallbackBox { Name = "QuitBox", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
         _box.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f),
