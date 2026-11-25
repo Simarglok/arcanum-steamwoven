@@ -28,6 +28,10 @@ The page writes the step the owner has open to `local/qa/active-check.txt`; the 
 `Check: ARC-TYPE-NNN#k` (before its first heading), which the page reads to list a step's reports. The format of the id is the
 one above; see [the toolchain](toolchain.md#owner-qa-page-arc-dev-2187) and [the viewer](../rendering/terrain-viewer.md).
 
+A report is tagged only with a live check (ARC-DEV-3130): the active file is younger than 12 hours, the `checks.json` beside it is
+younger than 72 hours and lists the step, and the step was not answered more than 12 hours ago; otherwise the report carries no `Check:` line. See
+[the toolchain](toolchain.md#owner-qa-page-arc-dev-2187) (`./arcanum qa refresh` rebuilds the list).
+
 ## In-game overlay (ARC-DEV-2190)
 
 `./arcanum qa` also writes the list as `local/qa/checks.json` for the overlay of the viewer (Ctrl+Q, on only with

@@ -203,12 +203,12 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-DEV-2189: the owner check the QA page has open (best effort: any problem is "none"); an automated run reads only
-    /// the ARC_QA_ACTIVE_CHECK file.</summary>
+    /// the ARC_QA_ACTIVE_CHECK file. ARC-DEV-3130: a check of a stale list, of a list that no longer has the step, or one already answered is "none".</summary>
     private static string? BugReportActiveCheck()
     {
         try
         {
-            return BugReportCheck.ReadActive(BugReportActiveCheckFile(), DateTime.UtcNow);
+            return OwnerQaFiles.CheckForReport(BugReportActiveCheckFile(), DateTime.UtcNow);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
         {

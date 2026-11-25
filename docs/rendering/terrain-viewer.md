@@ -2127,7 +2127,8 @@ keeps going under it too.
   text that is not a step id keeps the window open and sends nothing. `report.md` gets one machine-readable line
   `Check: ARC-TYPE-NNN#k` before its first heading (`BugReportCheck.cs`, `BugReportWriter.Markdown`), absent when no check is
   active. A missing, unreadable, malformed, oversized or older-than-12-hours file is "no check" and never blocks a report; the row is
-  hidden without a check, so a player's window is unchanged.
+  hidden without a check, so a player's window is unchanged. ARC-DEV-3130: the step is also "no check" when the `checks.json` beside the
+  file is older than 72 hours, unreadable or lacks the step, or the step was answered more than 12 hours ago (`OwnerQaFiles.CheckForReport`).
 - **Smoke.** Stage `report` (last in the map battery, or `ARC_AREA_MAP_SMOKE_ONLY=report`): Ctrl+B opens the modal
   report, the moment holds a save, the log line before the key and a screenshot; Send writes the folder whose
   `report.md` names the build, rules, map, hero and combat, whose log holds the line and whose save loads; Escape
@@ -2151,7 +2152,8 @@ A PROJECT window (the original has no such window; no original art; all text Eng
   marker are read again every two seconds and at each Ctrl+Q, so `qa overlay off` hides the plate and `on` shows it without a restart.
 - **List.** The steps of `local/qa/checks.json`, the current step first (the step of `active-check.txt`, else the first open one;
   picking a row makes it current and writes the file, so Ctrl+B and the page follow, and the plate follows the page within two
-  seconds), the others by filter: Open, This section, All. A recorded status wins over the list's own.
+  seconds), the others by filter: Open, This section, All. A recorded status wins over the list's own. ARC-DEV-3130: a list older than 72 hours is refused (no steps, the message names its age and `./arcanum qa refresh`) and the file
+  Ctrl+B reads is cleared, so a step of an old list is never made current.
 - **Result.** Same / Differs / Cannot test append one event to `local/qa/results.jsonl` (the page's format, plus `build` = the build's
   commit and `src: game`) with the note and the step's last report folder; the page shows it at once and `./arcanum qa sync` or the
   running page creates the issue of a `differs` exactly once. Next open moves to the next open step.
