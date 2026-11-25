@@ -13,8 +13,9 @@ namespace Arcanum.World;
 /// would change it, so the loaded slot is always current), the game's scripts and DLGs (ARC-SCRIPT-011 content, data
 /// fixes of the session's rules), the session's global flags, the player (<see cref="AreaScriptHost.PcCode"/> on the
 /// actor's map) and the session party for the follower conditions. A printed line uses the hero's gender (the diagnostic
-/// male PC without a hero) and the hero's player name (ARC-SCRIPT-2787; the placeholder without a hero); a line naming <c>@npcname@</c> is unsupported (whose name it is
-/// on an item run is not read), so the session refuses that transfer. Everything else the viewer does not model answers "no". It only reads.
+/// male PC without a hero) and the hero's player name (ARC-SCRIPT-2787; the placeholder without a hero); ARC-SCRIPT-2811: <c>@npcname@</c> is the attachee item's shown name and <c>@pcname@</c> of an NPC triggerer
+/// its not-yet-met description, read through the shown map's use host (<see cref="AreaUseScriptHost.ObjectName"/>); a line whose object has no row or no name source is unsupported, so the session refuses that transfer. Everything else the
+/// viewer does not model answers "no". It only reads.
 /// </summary>
 public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWorldHost
 {
@@ -157,15 +158,23 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     public bool SameObject(ScrObjectRef a, ScrObjectRef b) => AreaScriptHost.SameCritter(a, b);
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
-    public SessionPrintedLine PrintedLine(int script, int line) => ReadLine(script, line, npcTriggerer: false);
+    public SessionPrintedLine PrintedLine(int script, int line) => ReadLine(script, line, npcTriggerer: false, null, null);
 
     /// <summary>
     /// ARC-AI-1655 (ledger IS2): a line for a run whose triggerer is an NPC: the original shows the text or the alternate text by the triggerer's gender, and the host does not read an NPC's gender, so only a line whose two texts
     /// agree is shown (the hero's gender then does not matter); a line whose texts differ is <see cref="SessionPrintedLineStatus.Unsupported"/> and the session refuses the run.
     /// </summary>
-    public SessionPrintedLine PrintedLineForNpc(int script, int line) => ReadLine(script, line, npcTriggerer: true);
+    public SessionPrintedLine PrintedLineForNpc(int script, int line) => ReadLine(script, line, npcTriggerer: true, null, null);
 
-    private SessionPrintedLine ReadLine(int script, int line, bool npcTriggerer)
+    /// <summary>ARC-SCRIPT-2811 (ledger NM4): the line with the objects of its context, so a name token of it can be read (see <see cref="ReadLine"/>).</summary>
+    public SessionPrintedLine PrintedLineOf(int script, int line, ScrObjectRef? triggerer, ScrObjectRef? attachee, bool npcTriggerer) => ReadLine(script, line, npcTriggerer, triggerer, attachee);
+
+    /// <summary>
+    /// The line's text for the run. A name token needs its object: <c>@pcname@</c> is the triggerer's name, the hero's player name unless an NPC triggers (then the NPC's not-yet-met description, observer none, ledger NM4) and <c>@npcname@</c> the
+    /// attachee's shown name (an item the loaded maps hold a row of, its own observer, identified when the session marked it); the shown map's use host reads those names (<see cref="AreaUseScriptHost.ObjectName"/>). A token whose object or name cannot be
+    /// read is <see cref="SessionPrintedLineStatus.Unsupported"/>, so the session refuses the run.
+    /// </summary>
+    private SessionPrintedLine ReadLine(int script, int line, bool npcTriggerer, ScrObjectRef? triggerer, ScrObjectRef? attachee)
     {
         if (_content is null) return new(SessionPrintedLineStatus.NoDialog, string.Empty, "no script content");
         var read = _content.Dialog(script, _session.Rules.Data);
@@ -183,15 +192,36 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         if (npcTriggerer && read.Document!.TryGetRecord(line, out var both) && both is not null && !both.Text.Bytes.SequenceEqual(both.AlternateText.Bytes))
             return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} differs by gender and the NPC's gender is not read");
         var alternate = !npcTriggerer && (_session.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc).Gender != DialogPcGender.Male;
-        var printed = ScrPrintedLine.Read(read.Document!, line, alternate, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, null));
+        var text = read.Document!.TryGetRecord(line, out var record) && record is not null ? System.Text.Encoding.Latin1.GetString((alternate ? record.AlternateText : record.Text).Bytes.ToArray()) : string.Empty;
+        string? pcName = null, npcName = null;
+        // ARC-SCRIPT-2811 (0x44B390 → 0x416B00, NM4): an NPC triggerer's @pcname@ is its not-yet-met description (no observer).
+        if (npcTriggerer && text.Contains("@pcname@", StringComparison.OrdinalIgnoreCase) && (triggerer is not { } who || !IsHero(who)))
+        {
+            if (triggerer is not { } npc || _shown?.Invoke()?.LineName(npc, Arcanum.Data.Messages.CritterRecognition.NotRecognized, false) is not { } unmet)
+                return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} names the triggering NPC");
+            pcName = unmet;
+        }
+        // The attachee is its own observer: an item by its shown name (identified when the session marked it), the hero by its player name.
+        if (text.Contains("@npcname@", StringComparison.OrdinalIgnoreCase))
+        {
+            if (attachee is { } hero && IsHero(hero)) npcName = AreaDialogNames.PcName(_session);
+            else if (attachee is not { } item || AttacheeName(item) is not { } named) return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} names the NPC");
+            else npcName = named;
+        }
+        var printed = ScrPrintedLine.Read(read.Document!, line, alternate, AreaDialogNames.Of(_session, AreaConversationProfile.Diagnostic.Names, pcName, npcName));
         if (printed.Status != ScrPrintedLineStatus.Shown) return new(SessionPrintedLineStatus.Unsupported, string.Empty, printed.Detail);
-        if (read.Document!.TryGetRecord(line, out var record) && record is not null &&
-            System.Text.Encoding.Latin1.GetString((alternate ? record.AlternateText : record.Text).Bytes.ToArray()).Contains("@npcname@", StringComparison.OrdinalIgnoreCase))
-            return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} names the NPC");
-        // ARC-SCRIPT-2787 (0x44B390): @pcname@ is the triggerer; an NPC triggerer's name (the unknown-critter description, taken with no observer) is not read.
-        if (npcTriggerer && read.Document!.TryGetRecord(line, out var named) && named is not null &&
-            System.Text.Encoding.Latin1.GetString((alternate ? named.AlternateText : named.Text).Bytes.ToArray()).Contains("@pcname@", StringComparison.OrdinalIgnoreCase))
-            return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} names the triggering NPC");
         return new(SessionPrintedLineStatus.Shown, printed.Text, printed.Detail);
+    }
+
+    private static bool IsHero(ScrObjectRef obj) => obj.Code == AreaScriptHost.PcCode;
+
+    /// <summary>ARC-SCRIPT-2811 (NM3, NM4): the attachee's shown name (empty when it has no text); null for an object no loaded row names (a made item) or when the shown map's use host has no name source.</summary>
+    private string? AttacheeName(ScrObjectRef attachee)
+    {
+        if (_shown?.Invoke() is not { } host) return null;
+        var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == attachee.Map);
+        return map is not null && map.TryGetRow(attachee.Code, out var row)
+            ? host.LineName(row, Arcanum.Data.Messages.CritterRecognition.Recognized, _session.QueryItemIdentified(attachee.Code))
+            : host.LineName(attachee, Arcanum.Data.Messages.CritterRecognition.Recognized, _session.QueryItemIdentified(attachee.Code));
     }
 }

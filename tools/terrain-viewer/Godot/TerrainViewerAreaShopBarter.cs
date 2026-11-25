@@ -124,7 +124,9 @@ public partial class TerrainViewerApp
         owner.AttachItemArtSizes((item, kind) => InventoryItemArtSize(owner, item, kind));
         var shop = AreaShopSession.Open(owner, map, data,
             (item, kind) => map.Inventory.TryGetRow(item, out _) ? names.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog),
-            AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why, hero.Effects, ShopScriptContent);
+            AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why, hero.Effects, ShopScriptContent,
+            // ARC-SCRIPT-2811 (NM3): the bet lines' @npcname@ is the merchant's recognized description, the window's name its not-yet-met one.
+            AreaDialogNames.NpcNameSource(() => _hoverNames?.Catalog));
         if (shop is null) { owner.Dispose(); (_shopInventoryHost, _shopInventorySession) = (null, null); return null; }
         return shop;
     }

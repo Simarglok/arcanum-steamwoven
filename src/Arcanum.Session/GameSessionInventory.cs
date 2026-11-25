@@ -423,6 +423,13 @@ public interface ISessionItemScriptHost : IScrHost
     /// </summary>
     SessionPrintedLine PrintedLineForNpc(int script, int line) => new(SessionPrintedLineStatus.Unsupported, string.Empty, "this host does not read a line for an NPC triggerer");
 
+    /// <summary>
+    /// ARC-SCRIPT-2811 (ledger NM4): the line of a print-line action with the objects of its context: <paramref name="triggerer"/> names <c>@pcname@</c> (an NPC triggerer by its not-yet-met description) and
+    /// <paramref name="attachee"/> <c>@npcname@</c> (the item the script is attached to, by its shown name). A host that reads those names answers a line naming them; the default is <see cref="PrintedLineForNpc"/> or
+    /// <see cref="PrintedLine"/> (a line naming either is then <see cref="SessionPrintedLineStatus.Unsupported"/>).
+    /// </summary>
+    SessionPrintedLine PrintedLineOf(int script, int line, ScrObjectRef? triggerer, ScrObjectRef? attachee, bool npcTriggerer) => npcTriggerer ? PrintedLineForNpc(script, line) : PrintedLine(script, line);
+
     /// <summary>ARC-SCRIPT-042: the rule of an effect number an add-effect action names (<see cref="SessionEffectDefinition.FromRule"/> of
     /// the module's effect rule), or null when the host has none; the session then refuses the move.</summary>
     SessionEffectDefinition? EffectDefinition(int number) => null;
