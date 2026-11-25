@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         };
         // Frame the actor before the first publication: SetAreaPlan Fits the whole
         // envelope at minimum zoom, and publishing there would submit ~32k items.
-        _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+        FrameAreaCamera();
         // As in WORLD: quarantine first, then enter Follow on the actor, so the
         // safety reset cannot clear the fresh camera's actor tracking.
         // ARC-UI-039: the session hero's body before the first publication, so the fixed human never shows for a frame.
@@ -90,7 +90,7 @@ public partial class TerrainViewerApp
         SyncHeroBody();
         lap.Step("selection");
         QuarantineWorld(); PublishWorldSelection();
-        _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+        _worldFitView = false; FrameAreaCamera();
         RefreshAreaStatus();
         GD.Print("ARC-RENDER-007 source-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             area.Generation, area.Snapshot.Reconciliation, DrawnTerrain = drawn.Length, DrawnBodies = area.Plan.DrawableBodies,
@@ -100,6 +100,16 @@ public partial class TerrainViewerApp
         lap.Step("menu");
         MaybeOpenMainMenu(arguments);
     }
+    /// <summary>ARC-RENDER-3129: the view of the window the stream replaces, kept until the new window is framed (the original's view does not move when sectors load).</summary>
+    private TerrainCameraController.KeptView? _streamKeptView;
+
+    /// <summary>Frames the actor, or, in a window move, puts the kept view back (same follow state, zoom and offset from the hero) so a free view is not recentred.</summary>
+    private void FrameAreaCamera()
+    {
+        if (_streamKeptView is { } kept) _camera!.RestoreView(kept, WorldAnchor, WorldViewport);
+        else _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+    }
+
     private void RefreshAreaStatus()
     {
         if (_readyArea is not { } area || _camera is null || _canvas is null) return;

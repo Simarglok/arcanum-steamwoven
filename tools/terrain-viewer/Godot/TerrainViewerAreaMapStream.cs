@@ -169,9 +169,14 @@ public partial class TerrainViewerApp
             // ARC-DEV-119 (MIG9 S5c): the session goes on across the window move, so the map's AI host does too (it is bound to the new window below).
             _aiKeepAcrossWindowMove = true;
             var swap = System.Diagnostics.Stopwatch.StartNew();
-            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); _cursorReapply = _cursorShown is not null; GD.Print($"ARC-UI-056 window swap on the main thread {swap.ElapsedMilliseconds} ms shown={_cursorShown is not null} shape={Godot.Input.GetCurrentCursorShape()}"); }
+            // ARC-RENDER-3129: the view stays where it is relative to the hero (the original's view does not move when sectors load).
+            // A view in Fit mode (the whole-window fit) is framed again as before.
+            _streamKeptView = _worldFitView ? null : _camera?.KeepView(WorldAnchor);
+            var voicesBefore = _schemeVoices.ToArray();
+            _streamSwapActive = true;
+            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); NoteStreamSwap(voicesBefore, swap.ElapsedMilliseconds); _cursorReapply = _cursorShown is not null; GD.Print($"ARC-UI-056 window swap on the main thread {swap.ElapsedMilliseconds} ms shown={_cursorShown is not null} shape={Godot.Input.GetCurrentCursorShape()}"); }
             catch (Exception exception) { refused = exception; }
-            finally { _aiKeepAcrossWindowMove = false; }
+            finally { _aiKeepAcrossWindowMove = false; _streamKeptView = null; _streamSwapActive = false; }
         });
         if (refused is not null)
         {
@@ -203,6 +208,24 @@ public partial class TerrainViewerApp
             Moves = _mapWindowMoves, Sectors = area.Snapshot.Sectors.Count(s => s.Present), Visuals = area.Snapshot.Visuals.Count, area.CpuRgbaBytes,
             Session = _areaSession?.Version.Revision }));
         RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-RENDER-3129: one window swap's record: its main-thread time, whether every scheme song voice still plays (the original's music goes on when sectors load) and whether the view kept its place.</summary>
+    private readonly List<(long SwapMs, bool SoundKept, bool ViewKept)> _streamSwaps = [];
+
+    /// <summary>True only inside the swap callback: the sound and the view of the scene it replaces are kept (a scene cleared by a failure while a stream loads is torn down whole).</summary>
+    private bool _streamSwapActive;
+
+    private void NoteStreamSwap(KeyValuePair<long, ViewerAudioHandle>[] voicesBefore, long swapMs)
+    {
+        if (!_nativeSmoke) return; // only the smoke reads the record
+
+        var soundKept = voicesBefore.All(v => _schemeVoices.TryGetValue(v.Key, out var handle) && handle.Equals(v.Value));
+        var viewKept = true;
+        if (_streamKeptView is { } before && _camera?.KeepView(WorldAnchor) is { } after)
+            viewKept = after.Follow == before.Follow && after.Held == before.Held
+                && Math.Abs(after.FromActor.X - before.FromActor.X) <= 100 && Math.Abs(after.FromActor.Y - before.FromActor.Y) <= 100;
+        _streamSwaps.Add((swapMs, soundKept, viewKept));
     }
 
     private void StreamFailed(AreaSectorCoordinate sector, string frontier, string what)
@@ -313,6 +336,7 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), begin);
             }
             _mapStreamLog.Clear();
+            var swapsAtStart = _streamSwaps.Count;
             var releasesAtStart = _cursorReleases; var reappliesAtStart = CursorReappliesForSelfTest;
             if (observeAi)
             {
@@ -393,6 +417,8 @@ public partial class TerrainViewerApp
                 var at = ((AreaGridSession)_worldActor.Session!).Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
                 Require(at == goalWorld && !MapStreamInFlight, $"GOAL_NOT_REACHED frames={frames} at={at} goal={goalWorld} route={_worldRouteDiagnostic} status={_mapStreamStatus}");
                 Require(_mapStreamLog.Count > logged, $"NOT_MOVED goal={goalWorld} status={_mapStreamStatus}");
+                // ARC-RENDER-3129: the smoke's walk drives no camera (a window swap used to frame the hero again), so the view is put on the hero before the drawn check.
+                _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 Require(_canvas!.AreaVisibleCount > 0, "NOTHING_DRAWN");
@@ -415,6 +441,13 @@ public partial class TerrainViewerApp
                 Require(_cursorShown is not null && CursorReappliesForSelfTest - reappliesAtStart >= _mapStreamLog.Count, $"CURSOR_NOT_REAPPLIED {CursorReappliesForSelfTest - reappliesAtStart}/{_mapStreamLog.Count}");
             }
             Require(_mapStreamLog[0].Walking, "FIRST_MOVE_NOT_MID_WALK");
+            // ARC-RENDER-3129: a window move restarts no song and recentres no view; the main-thread time of the swaps is in the log.
+            {
+                var swaps = _streamSwaps.Skip(swapsAtStart).ToArray(); var times = swaps.Select(w => w.SwapMs).Order().ToArray();
+                GD.Print($"ARC-RENDER-3129 window swaps={swaps.Length} median={(times.Length > 0 ? times[times.Length / 2] : 0)} ms max={(times.Length > 0 ? times[^1] : 0)} ms voices={_schemeVoices.Count} soundKept={swaps.Count(w => w.SoundKept)} viewKept={swaps.Count(w => w.ViewKept)}");
+                Require(swaps.Length >= StreamSmokeMoves && swaps.All(w => w.SoundKept), "SOUND_RESTARTED");
+                Require(swaps.All(w => w.ViewKept), "VIEW_RECENTRED");
+            }
             Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
             if (observeAi)
             {
@@ -457,7 +490,7 @@ public partial class TerrainViewerApp
             Require(session is null || ReferenceEquals(_areaSession, session), "SESSION_NOT_CARRIED");
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            Require(_canvas!.AreaVisibleCount > 0, "NOTHING_DRAWN");
+            Require(_canvas!.AreaVisibleCount > 0, $"NOTHING_DRAWN view={_camera!.KeepView(WorldAnchor)} state={_camera.State} anchor={WorldAnchor} swaps={string.Join(';', _streamSwaps.Select(w => $"{w.SwapMs}/{w.SoundKept}/{w.ViewKept}"))}");
             GD.Print("ARC-RENDER-024 native-smoke round-trip PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Home = home, Out = there, Back = back, Window = new { _mapWindowCentre!.Value.X, _mapWindowCentre.Value.Y }, Session = _areaSession?.Version.Revision,
                 Carried = session is not null }));

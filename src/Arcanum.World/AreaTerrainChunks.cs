@@ -25,9 +25,25 @@ public sealed class AreaTerrainChunks
     public IReadOnlyCollection<(int X, int Y)> Chunks => _chunks.Keys;
     public int TerrainCommandCount => _terrain.Count;
 
+    // ARC-RENDER-3129: the build (the binary-alpha scan of every distinct terrain crop, about 120 ms on the main map's window) is
+    // prepared on the load's worker and found again by the plan's command list, which a plan with a moved spawn shares.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, PreparedChunks> Prepared = new();
+    private sealed record PreparedChunks(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames, AreaTerrainChunks? Chunks);
+
+    /// <summary>Builds the chunks now (on any thread) for <see cref="TryCreate(AreaScenePlan, IReadOnlyDictionary{AreaFrameKey, DecodedAreaFrame})"/> to hand back later.</summary>
+    public static void Prepare(AreaScenePlan plan, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames)
+    {
+        ArgumentNullException.ThrowIfNull(plan); ArgumentNullException.ThrowIfNull(frames);
+        Prepared.AddOrUpdate(plan.Commands, new(frames, TryCreate(plan.Commands, frames)));
+    }
+
     public static AreaTerrainChunks? TryCreate(AreaScenePlan plan, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        // The prepared build answers for its own frames and for an overlay over them (the overlay only adds frames of other keys).
+        if (Prepared.TryGetValue(plan.Commands, out var prepared)
+            && (ReferenceEquals(prepared.Frames, frames) || frames is AreaFrameOverlay overlay && ReferenceEquals(overlay.Map, prepared.Frames)))
+            return prepared.Chunks;
         return TryCreate(plan.Commands, frames);
     }
 
