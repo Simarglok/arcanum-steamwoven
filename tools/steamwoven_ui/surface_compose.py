@@ -125,7 +125,7 @@ class ZoneSpec:
     fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
     halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (a gear, an oval): the wood weight is 1 outside the part's own light shape
     disc_boxes: tuple[tuple[int, int, int, int, int, int, int, int], ...] = ()   # ARC-UI-3101: (x0, y0, x1, y1, dx0, dy0, dx1, dy1): the wood weight is 1 in the box outside the ellipse of the disc box (a lens, a round button), 0 inside
-    plate_boxes: tuple[tuple[int, int, int, int], ...] = ()      # ARC-UI-3275: (x0, y0, x1, y1): the dark rectangular plate behind an oval (outer edge of its outline, x1 and y1 exclusive), inside a disc box: the rectangle minus that disc's ellipse is laid as dark brown-grey triangles over the new wood
+    plate_boxes: tuple[tuple[int, int, int, int, int, int], ...] = ()      # ARC-UI-3275/3290: (x0, y0, x1, y1, ea, eb): the dark rectangular plate behind an oval (outer edge of its outline, x1 and y1 exclusive), inside a disc box, and the semi-axes of the ellipse (concentric with that disc, larger than its ring) that bounds the plate's corner triangles: the rectangle minus that ellipse is laid as dark brown-grey triangles over the new wood
     dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
     wood_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes where the Codex wood shows whole: the letters baked into the wood go
     text_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes whose text pixels are replaced by their ground (black fields, discs, gradient pits, flat parchment)
@@ -200,10 +200,18 @@ def load_spec(path: Path) -> ZoneSpec:
         if not (isinstance(bands_raw, list) and all(isinstance(b, list) and len(b) == 2 and all(_is_int(v) for v in b) and 0 <= b[0] < b[1] for b in bands_raw)):
             raise ComposeError(f"spec {path}: dot_bands is null or a list of [top, bottom] rows")
         bands = tuple(tuple(b) for b in bands_raw)
-    discs_read, plates_read = discs(), boxes("plate_boxes")
-    for plate in plates_read:
-        if plate_disc(plate, discs_read) is None:
-            raise ComposeError(f"spec {path}: plate_boxes entry {list(plate)} lies in no disc_boxes box (the plate's triangles are laid round that disc's ellipse)")
+    discs_read = discs()
+    plates_read = []
+    for plate in raw.get("plate_boxes", []) if isinstance(raw.get("plate_boxes", []), list) else [None]:
+        if not (isinstance(plate, list) and len(plate) == 6 and all(_is_int(v) for v in plate) and 0 <= plate[0] < plate[2] and 0 <= plate[1] < plate[3] and plate[4] > 0 and plate[5] > 0):
+            raise ComposeError(f"spec {path}: plate_boxes entries are [x0, y0, x1, y1, ea, eb] (a rectangle with x0 < x1, y0 < y1 and the two positive semi-axes of the corner ellipse)")
+        disc = plate_disc(tuple(plate[:4]), discs_read)
+        if disc is None:
+            raise ComposeError(f"spec {path}: plate_boxes entry {plate} lies in no disc_boxes box (the plate's triangles are cut round that disc's centre)")
+        if not (plate[4] > (disc[6] - disc[4]) / 2 and plate[5] > (disc[7] - disc[5]) / 2):
+            raise ComposeError(f"spec {path}: plate_boxes entry {plate}: the corner ellipse is concentric with the disc and larger than its ring")
+        plates_read.append(tuple(plate))
+    plates_read = tuple(plates_read)
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
                     erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), disc_boxes=discs_read, plate_boxes=plates_read, dot_bands=bands,
                     wood_boxes=boxes("wood_boxes"), text_boxes=boxes("text_boxes"), paper_boxes=boxes("paper_boxes"))
@@ -826,25 +834,26 @@ def plate_disc(plate: tuple, discs: tuple) -> tuple | None:
 
 
 def lay_plates(image: Path, plates: tuple, discs: tuple, width: int, height: int) -> int:
-    """ARC-UI-3275 `plate_boxes`: an oval of the inventory stands in a dark rectangular recessed plate; outside the oval's ring the plate shows as four triangles: two straight crisp legs on the
-    rectangle's edges, the concave side a smooth arc along the ring's outer edge. The `disc_boxes` cut took them for old wood. The geometry is analytic: each entry (x0, y0, x1, y1) is the
-    plate's rectangle measured on the original (outer edge of its outline, x1 and y1 exclusive), inside the box of a `disc_boxes` entry whose disc (the rim box dx0..dy1) gives the ellipse; the
-    triangles are the rectangle minus that ellipse, the arc anti-aliased by PLATE_SAMPLES samples per pixel side, the straight edges hard. The fill is dark brown-grey, PLATE_DEPTH of the median luma
-    of the new wood (a PLATE_RING ring round the plate) in the original's hue (PLATE_TINT), with a thin lighter rim (PLATE_RIM) along the straight legs; nothing else is touched, so the wood
-    between and round the triangles stays the new wood. `image` is rewritten in place; returns the number of pixels painted. A plate outside the image or in no disc box is an error."""
+    """ARC-UI-3275 / ARC-UI-3290 `plate_boxes`: an oval of the inventory stands in a dark rectangular recessed plate; the plate shows only in the four corners of its rectangle, as triangles: two
+    straight crisp legs on the rectangle's edges, the concave side a smooth arc, which does NOT touch the gold ring: a strip of wood lies between (the original's corners stop short of the ring, and
+    at the middle of the oval's sides there is no plate). The geometry is analytic: each entry (x0, y0, x1, y1, ea, eb) is the plate's rectangle measured on the original (outer edge of its outline,
+    x1 and y1 exclusive), inside the box of a `disc_boxes` entry, and the semi-axes of the ellipse, concentric with that disc but larger than its ring, fitted to the inner edges of the original's
+    four dark corners; the triangles are the rectangle minus that ellipse, the arc anti-aliased by PLATE_SAMPLES samples per pixel side, the straight edges hard. The fill is dark brown-grey,
+    PLATE_DEPTH of the median luma of the new wood (a PLATE_RING ring round the plate) in the original's hue (PLATE_TINT), with a thin lighter rim (PLATE_RIM) along the straight legs; nothing else is
+    touched, so everything outside the triangles stays the new wood. `image` is rewritten in place; returns the number of pixels painted. A plate outside the image or in no disc box is an error."""
     if not plates:
         return 0
     picture = pngio.read(image)
     data = picture.data
     n = PLATE_SAMPLES
     painted = 0
-    for x0, y0, x1, y1 in plates:
+    for x0, y0, x1, y1, ea, eb in plates:
         if x1 > width or y1 > height:
             raise ComposeError(f"plate box {(x0, y0, x1, y1)} is outside the {width} x {height} px image")
         disc = plate_disc((x0, y0, x1, y1), discs)
         if disc is None:
             raise ComposeError(f"plate box {(x0, y0, x1, y1)} lies in no disc box")
-        cx, cy, ra, rb = (disc[4] + disc[6]) / 2, (disc[5] + disc[7]) / 2, (disc[6] - disc[4]) / 2, (disc[7] - disc[5]) / 2
+        cx, cy, ra, rb = (disc[4] + disc[6]) / 2, (disc[5] + disc[7]) / 2, float(ea), float(eb)
         ring = sorted(_luma(data, y * width + x) for y in range(max(0, y0 - PLATE_RING[1]), min(height, y1 + PLATE_RING[1])) for x in range(max(0, x0 - PLATE_RING[1]), min(width, x1 + PLATE_RING[1]))
                       if not (x0 - PLATE_RING[0] <= x < x1 + PLATE_RING[0] and y0 - PLATE_RING[0] <= y < y1 + PLATE_RING[0]))
         if not ring:
