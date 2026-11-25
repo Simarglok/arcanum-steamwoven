@@ -70,6 +70,14 @@ FILL_CLOSE = 4           # px: ... and closed by this, so strokes of a letter an
 HALO_BRIGHT = 70          # 0..255 luma of the ORIGINAL: ARC-UI-3101: an object's metal or paper is lighter than this, the dark halo (the old art's shadow and wood fringe) around it is not
 HALO_DILATE = 2           # px: ... the object's pixels are grown by this
 HALO_CLOSE = 10           # px: ... and closed by this (the dark parts inside a gear), the holes inside filled: the object is one solid shape, everything outside it in the box is the Codex wood
+PLATE_RING = (4, 14)      # px: ARC-UI-3275: the ring round a plate box (from 4 px outside the box to 14 px outside it) whose median luma is the reference of the old wood in the original and of the new wood in the result
+PLATE_CORNER = (48, 34)   # px: ARC-UI-3275: the corner windows of a plate (width, height) in which the brackets are looked for: a bracket's arms are 45 px long along the plate's top and bottom edge and 30 px along its sides
+PLATE_EDGE = 0.85         # ARC-UI-3275: a pixel of the original darker than this share of the old wood's luma belongs to a bracket (the wood's own grain is 0.9 and above, the brackets 0.55 to 0.8)
+PLATE_CLOSE = 2           # px: ARC-UI-3275: the mask is closed by this many px (a square) and its enclosed gaps are filled, so a bracket is a solid L, not the grain's lace
+PLATE_MIN = 40            # ARC-UI-3275: a dark component of fewer pixels is grain or the old shadow's speck, not a bracket
+PLATE_TONE = (0.72, 0.92)  # ARC-UI-3275: the bracket's luma over the new wood's: the original's darkness over the old wood, clamped to this range (the old shadow's black and the lit edge's near white stay out)
+PLATE_RIM = 1.0           # ARC-UI-3275: the bracket's thin lit rim (its outline pixels that border the wood, not the ellipse or the window's cut): this share of the new wood's luma (the original's lit edge is 1.07 of its wood)
+PLATE_IRON = (0.99, 1.0, 1.01)   # ARC-UI-3275: the iron's tint over its grey: the brackets are grey iron plates, the wood round them is warm brown
 SHADOW_DX = 13            # px: ARC-UI-3101: the soft shadow of a disc (a lens, an oval, a round button) falls down and to the right (light from the top left), the ellipse shifted by this much ...
 SHADOW_DY = 13
 SHADOW_SIGMA = 16.0       # px: ... blurred by this (Gaussian sigma) ...
@@ -119,6 +127,7 @@ class ZoneSpec:
     fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
     halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (a gear, an oval): the wood weight is 1 outside the part's own light shape
     disc_boxes: tuple[tuple[int, int, int, int, int, int, int, int], ...] = ()   # ARC-UI-3101: (x0, y0, x1, y1, dx0, dy0, dx1, dy1): the wood weight is 1 in the box outside the ellipse of the disc box (a lens, a round button), 0 inside
+    plate_boxes: tuple[tuple[int, int, int, int], ...] = ()      # ARC-UI-3275: the rim box of an oval in a recessed plate (the inventory ovals), inside a disc box: its four dark grey-iron L-shaped corner brackets are laid over the new wood, by the original's mask
     dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
     wood_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes where the Codex wood shows whole: the letters baked into the wood go
     text_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes whose text pixels are replaced by their ground (black fields, discs, gradient pits, flat parchment)
@@ -141,7 +150,7 @@ def load_spec(path: Path) -> ZoneSpec:
         raise ComposeError(f"cannot read the spec {path}: {error}") from error
     if not isinstance(raw, dict):
         raise ComposeError(f"spec {path}: the top level is an object")
-    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands", "halo_boxes", "disc_boxes", "wood_boxes", "text_boxes", "paper_boxes"}
+    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands", "halo_boxes", "disc_boxes", "plate_boxes", "wood_boxes", "text_boxes", "paper_boxes"}
     if unknown or "id" not in raw or "screen" not in raw:
         raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
     if not (isinstance(raw["id"], str) and SAFE_ID.fullmatch(raw["id"]) and isinstance(raw["screen"], str)):
@@ -193,8 +202,12 @@ def load_spec(path: Path) -> ZoneSpec:
         if not (isinstance(bands_raw, list) and all(isinstance(b, list) and len(b) == 2 and all(_is_int(v) for v in b) and 0 <= b[0] < b[1] for b in bands_raw)):
             raise ComposeError(f"spec {path}: dot_bands is null or a list of [top, bottom] rows")
         bands = tuple(tuple(b) for b in bands_raw)
+    discs_read, plates_read = discs(), boxes("plate_boxes")
+    for plate in plates_read:
+        if not any(d[0] <= plate[0] and d[1] <= plate[1] and plate[2] <= d[2] and plate[3] <= d[3] for d in discs_read):
+            raise ComposeError(f"spec {path}: plate_boxes entry {list(plate)} lies in no disc_boxes box (the plate's brackets are laid only where the wood weight cut the old art)")
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
-                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), disc_boxes=discs(), dot_bands=bands,
+                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), disc_boxes=discs_read, plate_boxes=plates_read, dot_bands=bands,
                     wood_boxes=boxes("wood_boxes"), text_boxes=boxes("text_boxes"), paper_boxes=boxes("paper_boxes"))
 
 
@@ -809,6 +822,82 @@ def cast_disc_shadows(image: Path, solid: Path, discs: tuple, width: int, height
     run(["magick", str(image), "-alpha", "off", str(factor), "-compose", "Multiply", "-composite", str(image)])
 
 
+def lay_plates(image: Path, original: "pngio.Image", solid: Path, plates: tuple, width: int, height: int) -> int:
+    """ARC-UI-3275 `plate_boxes`: an oval of the inventory stands in a rectangular recessed plate whose four corners (outside the oval) hold dark grey-iron L-shaped brackets (an arm along the
+    plate's top or bottom edge, an arm along its side), the wood between them is plain. The wood weight (`disc_boxes`) took the brackets for old wood and cut them. Each entry (x0, y0, x1, y1) is the
+    plate's rectangle (the oval's rim box); in each of its four PLATE_CORNER windows the bracket is the original's pixels darker than PLATE_EDGE of the old wood's luma (the median of the original in a
+    PLATE_RING ring round the plate), outside the ellipse (wood weight at least 1/2), closed by PLATE_CLOSE px, its enclosed gaps filled, and cleared of components under PLATE_MIN pixels. The mask is hard: the bracket has the original's
+    sharp edge and the original's place and size, nothing between the brackets is touched. Its pixels are laid as grey iron: the luma is the original's darkness over the old wood (clamped to PLATE_TONE) times the median luma of the new wood in the same ring, tinted by PLATE_IRON, with a thin lit rim (PLATE_RIM) on the outline that borders the wood, so the arms keep the original's inner shading (the darker core, the lit edge) at the original's depth relative
+    to the wood. `image` is rewritten in place; returns the number of pixels laid. A plate outside the image is an error."""
+    if not plates:
+        return 0
+    weight = gray_bytes(solid)
+    picture = pngio.read(image)
+    data, src = picture.data, original.data
+    laid = 0
+    for x0, y0, x1, y1 in plates:
+        if x1 > width or y1 > height:
+            raise ComposeError(f"plate box {(x0, y0, x1, y1)} is outside the {width} x {height} px image")
+        ring = [y * width + x for y in range(max(0, y0 - PLATE_RING[1]), min(height, y1 + PLATE_RING[1])) for x in range(max(0, x0 - PLATE_RING[1]), min(width, x1 + PLATE_RING[1]))
+                if not (x0 - PLATE_RING[0] <= x < x1 + PLATE_RING[0] and y0 - PLATE_RING[0] <= y < y1 + PLATE_RING[0])]
+        if not ring:
+            raise ComposeError(f"plate box {(x0, y0, x1, y1)}: no wood round it to measure")
+        old = sorted(_luma(src, p) for p in ring)
+        new = sorted(_luma(data, p) for p in ring)
+        ref, wood = max(1.0, old[len(old) // 2]), new[len(new) // 2]
+        cw, ch = min(PLATE_CORNER[0], x1 - x0), min(PLATE_CORNER[1], y1 - y0)
+        for wx, wy in ((x0, y0), (x1 - cw, y0), (x0, y1 - ch), (x1 - cw, y1 - ch)):
+            inside = lambda x, y: wx <= x < wx + cw and wy <= y < wy + ch
+            open_ = {(x, y) for y in range(wy, wy + ch) for x in range(wx, wx + cw) if weight[y * width + x] >= 128}    # the window's pixels outside the ellipse
+            dark = {(x, y) for x, y in open_ if _luma(src, y * width + x) < PLATE_EDGE * ref}
+            span = range(-PLATE_CLOSE, PLATE_CLOSE + 1)
+            grown = dark | {(x + dx, y + dy) for x, y in dark for dx in span for dy in span if (x + dx, y + dy) in open_}
+            closed = {(x, y) for x, y in grown if all((x + dx, y + dy) in grown or not inside(x + dx, y + dy) or (x + dx, y + dy) not in open_ for dx in span for dy in span)}
+            reach = [(x, y) for x, y in open_ if x in (wx, wx + cw - 1) or y in (wy, wy + ch - 1) or any((x + dx, y + dy) not in open_ for dx in (-1, 0, 1) for dy in (-1, 0, 1))]
+            reached = set(q for q in reach if q not in closed)       # a gap inside a bracket is no wood: what the window's border and the ellipse cannot reach through non-bracket pixels is filled
+            stack = list(reached)
+            while stack:
+                cx, cy = stack.pop()
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    q = (cx + dx, cy + dy)
+                    if q in open_ and q not in closed and q not in reached:
+                        reached.add(q)
+                        stack.append(q)
+            closed |= open_ - closed - reached
+            seen: set = set()
+            for start in sorted(closed):
+                if start in seen:
+                    continue
+                stack, part = [start], []
+                seen.add(start)
+                while stack:
+                    cx, cy = stack.pop()
+                    part.append((cx, cy))
+                    for dx in (-1, 0, 1):
+                        for dy in (-1, 0, 1):
+                            q = (cx + dx, cy + dy)
+                            if q in closed and q not in seen:
+                                seen.add(q)
+                                stack.append(q)
+                if len(part) < PLATE_MIN:
+                    continue
+                body = set(part)
+                for x, y in part:
+                    p = y * width + x
+                    lum = wood * min(PLATE_TONE[1], max(PLATE_TONE[0], _luma(src, p) / ref))
+                    if any((x + dx, y + dy) in open_ and (x + dx, y + dy) not in body for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                        lum = wood * PLATE_RIM
+                    for c in range(3):
+                        data[p * 4 + c] = min(255, int(lum * PLATE_IRON[c] + 0.5))
+                    laid += 1
+    pngio.write(image, picture)
+    return laid
+
+
+def _luma(data: bytearray, p: int) -> float:
+    return (data[p * 4] * 299 + data[p * 4 + 1] * 587 + data[p * 4 + 2] * 114) / 1000.0
+
+
 def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, height: int) -> None:
     """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items), `halo_boxes` (wood round a part, outside its light shape) and `disc_boxes`
     (wood round a lens or a round button, outside its exact ellipse)."""
@@ -839,7 +928,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     work.mkdir(parents=True, exist_ok=True)
     img_o = pngio.read(original)
     w, h = img_o.w, img_o.h
-    for kind in ("erase_boxes", "text_boxes", "paper_boxes", "wood_boxes", "halo_boxes", "disc_boxes"):       # a box outside the image is found before the minutes of work, not after
+    for kind in ("erase_boxes", "text_boxes", "paper_boxes", "wood_boxes", "halo_boxes", "disc_boxes", "plate_boxes"):       # a box outside the image is found before the minutes of work, not after
         for x0, y0, x1, y1 in (box[:4] for box in getattr(spec, kind)):
             if x1 > w or y1 > h:
                 raise ComposeError(f"{kind[:-1].replace('_', ' ')} {(x0, y0, x1, y1)} is outside the {w} x {h} px image")
@@ -879,6 +968,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
         pngio.write(out, merged)
     else:                         # the original's band replaces the Codex line
         run(["magick", str(out), str(original), str(bevel), "-composite", str(out)])
+    plates = lay_plates(out, img_o, solid, spec.plate_boxes, w, h)      # the plate's brackets first, so the disc's soft shadow falls over them
     cast_disc_shadows(out, solid, spec.disc_boxes, w, h)
     result = pngio.read(out)
     chip_pixels = remove_chips(result, spec.chip_boxes)
@@ -887,7 +977,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     kit = lay_kit_parts(result, spec.kit_parts, kit_base)
     pngio.write(out, result)
     after = wood_stats(pngio.read(out), mask, coverage, cells)
-    return {"out": str(out), "speck_components": specks, "dots_kept": dot_count, "bevel_lines": bevel_lines, "chip_pixels": chip_pixels, "erased_pixels": erased, "text_pixels": text, "kit_parts": kit,
+    return {"out": str(out), "speck_components": specks, "dots_kept": dot_count, "bevel_lines": bevel_lines, "chip_pixels": chip_pixels, "erased_pixels": erased, "text_pixels": text, "kit_parts": kit, "plate_pixels": plates,
             "fit": numbers, "wood_target": target, "wood_before": before, "wood_after": after}
 
 
