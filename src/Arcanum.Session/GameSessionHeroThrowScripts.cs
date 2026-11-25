@@ -14,6 +14,10 @@ public sealed partial class GameSessionOwner
     // What the scripts of a hero's throw came to: a result the throw ends with (a refusal, nothing to throw, the declined throw), or the runs whose changes were applied (Applied: they changed the session and took a revision of their own).
     private sealed record HeroThrowScripted(SessionHeroThrowResult? Done, ItemScriptRuns? Runs, bool Applied);
 
+    // ARC-SCRIPT-2900: whether the lift of a whole gold pile or ammunition stack runs its remove-item script: the host's facts show it, or the session knows it (the hero's gold pile is the counter, whose facts carry no points: its prototype's array gives them).
+    private bool StackRemovesOnLift(string item, IReadOnlyList<int> points) =>
+        points.Contains(SessionScriptPoint.RemoveItem) || (item == SessionHeroGrid.GoldEntity ? WithHeroGoldObject(HeroGoldPoints) : HeldItemPoints(item)).Contains(SessionScriptPoint.RemoveItem);
+
     /// <summary>
     /// ARC-COMBAT-1955 (0x4B3C00, ledger TT1, TT8, TW3; exe read 0x573740 → 0x5788C0 with flag 4, 0x466E00, 0x467860, 0x441980): the scripts around the hero's throw, run before anything of the throw is decided. In the original the lift removes the item from the
     /// hero's list (0x466E00 → 0x467860: the wield-off script (25) of an item the hero wears, then its remove-item script (28)), and the throw (0x4B3C00) runs the item's throw script (point 6, 0x441980) with the hero as the triggerer, the item as the
@@ -52,13 +56,19 @@ public sealed partial class GameSessionOwner
         var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
         // A made stack has no complexity of its own (its weight row is made with none).
         var complexity = worn?.Item.MagickTechComplexity ?? (!split && _inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0);
-        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [attachee] = complexity });
+        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [attachee] = complexity, [item] = complexity });
         if (split) _pendingMade = (splitEntity!, request.SplitKind!.Value);
         try
         {
             // The removal 0x467860 for a worn item, then the throw script; a run the session cannot apply ends the sequence.
             if (worn is not null && points.Contains(SessionScriptPoint.WieldOff)) runs.Run(SessionScriptPoint.WieldOff, attachee, SessionEventKinds.PlayerEntity, null);
-            if (runs.Failure == GameSessionFailure.None && !split && points.Contains(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, attachee, SessionEventKinds.PlayerEntity, null);
+            // ARC-SCRIPT-2900: the whole stack's lift destroys the source (its remove-item script runs for the source); a part of it runs none (QW5).
+            var wholeStack = split && (wholeGold || item != SessionHeroGrid.GoldEntity && _inventory.Ammo.TryGetValue(item, out var heldStack) && heldStack.Units == request.Count);
+            if (runs.Failure == GameSessionFailure.None && (!split ? points.Contains(SessionScriptPoint.RemoveItem) : wholeStack && StackRemovesOnLift(item, points))) {
+                // The whole gold pile's source answers as the gold object while its removal runs, the made stack that follows as the one the split makes.
+                if (item == SessionHeroGrid.GoldEntity && split) { var keep = _pendingMade; _pendingMade = (SessionHeroGrid.GoldEntity, SessionHeroGrid.GoldKind); try { runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null); } finally { _pendingMade = keep; } }
+                else runs.Run(SessionScriptPoint.RemoveItem, split ? item : attachee, SessionEventKinds.PlayerEntity, null);
+            }
             ScrRunResult? answer = null;
             if (runs.Failure == GameSessionFailure.None && throwScript) answer = runs.Run(SessionScriptPoint.Throw, attachee, SessionEventKinds.PlayerEntity, null);
             // ARC-COMBAT-2183 (0x4617F0 → 0x461810 → 0x466640, ledger TW3): a refusing throw script gives the item back through the item transfer, whose insertion runs the item's insert-item script (21) after the throw script, the hero as

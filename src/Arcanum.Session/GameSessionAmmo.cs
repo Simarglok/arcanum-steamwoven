@@ -17,7 +17,12 @@ public readonly record struct SessionAmmoHolder(string? Npc, string? Container =
 /// units after, and whether it was removed (its last units spent: the stack is deleted as the durability deletion deletes an item).
 /// </summary>
 public readonly record struct SessionAmmoUse(GameSessionDisposition Disposition, GameSessionFailure Failure, string? Stack, int UnitsAfter,
-    bool Removed, GameSessionVersion Version);
+    bool Removed, GameSessionVersion Version)
+{
+    /// <summary>ARC-SCRIPT-2900: the runs of the emptied stack's remove-item script (28) when the call was given a script host (a call that used the standing host sends its lines to <see cref="GameSessionOwner.ItemRunOutput"/>), with the lines they printed.</summary>
+    public IReadOnlyList<SessionItemScriptRun> Scripts { get; init; } = [];
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+}
 
 /// <summary>
 /// ARC-WORLD-066: ammunition in the session (contract docs/world/inventory-runtime.md, ledger "Ammunition"). An ammunition item is
@@ -63,8 +68,10 @@ public sealed partial class GameSessionOwner
     /// 0..3, or a holder naming both an NPC and a container), no hero (<see cref="GameSessionFailure.InvalidLifeTarget"/>) or an NPC or
     /// container no attached seed lists (<see cref="GameSessionFailure.UnknownHolder"/>), the version, the record and durability budgets
     /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision.
+    /// ARC-SCRIPT-2900: the deletion of an emptied stack runs its remove-item script (28) with the holder as the triggerer through <paramref name="scripts"/> or the standing host (<see cref="StandingItemScripts"/>); a stack with that script and no host, or a run the session cannot apply, refuses the spend
+    /// whole (<see cref="GameSessionFailure.ItemScriptUnsupported"/> and the run's failures). Contract: docs/world/inventory-runtime.md.
     /// </summary>
-    public SessionAmmoUse SpendAmmo(GameSessionVersion expected, SessionAmmoHolder holder, int ammoType, int count)
+    public SessionAmmoUse SpendAmmo(GameSessionVersion expected, SessionAmmoHolder holder, int ammoType, int count, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (count < 0 || ammoType is < 0 or >= SessionAmmoRecord.AmmoTypes || holder is { Npc: not null, Container: not null } ||
@@ -82,10 +89,18 @@ public sealed partial class GameSessionOwner
         if (removed ? !_durability.Records.ContainsKey(found.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
             : !_inventory.Ammo.ContainsKey(found.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectAmmo(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectAmmo(GameSessionFailure.RevisionExhausted);
+        // ARC-SCRIPT-2900 (IE3, AM4; 0x4658E0 → 0x43CCA0 → 0x466E00 → 0x467860): the emptied stack is destroyed out of the holder's list, which runs its remove-item script (28) with the holder as the triggerer (the destroy script, point 2, comes first and is not run: #2759).
+        // Planned before any write: a stack with the script and no host, a row of another map or a run the session cannot apply refuses the spend whole. The runs commit with the deletion, one revision.
+        var (runs, standing, removalFailure) = removed ? PlanEmptiedRemoval(found.Entity, HeldItemPoints(found.Entity), holder.IsHero ? null : holder.Npc ?? holder.Container, scripts) : (null, false, GameSessionFailure.None);
+        if (removalFailure != GameSessionFailure.None) return RejectAmmo(removalFailure);
+        if (_revision == long.MaxValue) return RejectAmmo(GameSessionFailure.RevisionExhausted);
+        runs?.Commit();
         if (removed) DestroyObject(found.Entity);
         else _inventory.Ammo[found.Entity] = found with { Units = left.Units };
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, found.Entity, left.Units, removed, Version);
+        if (standing) DeliverStanding(runs);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, found.Entity, left.Units, removed, Version)
+        { Scripts = runs?.Runs ?? [], Messages = standing ? [] : runs?.Messages ?? [] };
     }
 
     /// <summary>

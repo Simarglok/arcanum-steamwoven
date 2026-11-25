@@ -67,7 +67,7 @@ public sealed class SessionDialogGoldPort(
         // The PC first: the source asks its transfer for the whole amount owed. A PC with a stack but less gets nothing moved (GM3); one without a
         // stack (no gold at all) makes the transfer credit the NPC from nothing (GM2).
         if (!Pay(owed, own, own > 0, shortPayerPaysNothing,
-                payment => _session.GiveGoldToNpc(_session.Version, npc, (int)payment, pileKind, _insertCheck),
+                payment => _session.GiveGoldToNpc(_session.Version, npc, (int)payment, pileKind, _insertCheck, itemScripts),
                 payment => _session.GiveGoldToNpcFromNothing(_session.Version, npc, (int)payment, pileKind, _insertCheck))) return DialogCommandResult.Rejected;
         owed -= own;
         // Then the follower array as it stands after that payment (0x4411C0 is read after the PC's call).
@@ -80,7 +80,7 @@ public sealed class SessionDialogGoldPort(
             // while the amount owed still falls by its gold.
             if (follower.Entity == npc) { owed -= held; continue; }
             if (!Pay(owed, held, _session.QueryNpcHasGoldPile(follower.Entity), shortPayerPaysNothing,
-                    payment => _session.MoveGoldBetweenNpcs(_session.Version, follower.Entity, npc, (int)payment, pileKind, _insertCheck),
+                    payment => _session.MoveGoldBetweenNpcs(_session.Version, follower.Entity, npc, (int)payment, pileKind, _insertCheck, itemScripts),
                     payment => _session.GiveGoldToNpcFromNothing(_session.Version, npc, (int)payment, pileKind, _insertCheck))) return DialogCommandResult.Rejected;
             owed -= held;
         }
