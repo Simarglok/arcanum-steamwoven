@@ -17,6 +17,8 @@ Findings (each is an error, the exit code is 1 when there is one):
               count as a link).
 * ``owner``   a row of the owner re-check list (``docs/project/owner-recheck-list.md``) with a bad step id, a missing
               column or an unknown status (the parser is ``tools/local_dev/owner_checks.py``, ARC-DEV-2186).
+* ``conflict`` a line of a page that starts with a merge-conflict marker (``<<<<<<<`` or ``>>>>>>>`` plus a space or the
+              line end), outside fenced code (ARC-DEV-3220).
 * ``stale``   an entry of ``KNOWN_ORPHANS`` that no longer exists or is no longer an orphan.
 
 Links inside fenced code blocks and inline code are examples, not links.
@@ -49,6 +51,7 @@ SYNTHETIC_PATH_FILES = ("tools/local_dev/test_smoke_zones.py", "tools/docs_check
 
 
 OWNER_LIST = "docs/project/owner-recheck-list.md"
+CONFLICT_MARKER = re.compile(r"^(?:<{7}|>{7})(?: |$)")
 OWNER_PARSER = Path(__file__).resolve().parent / "local_dev" / "owner_checks.py"
 
 
@@ -167,6 +170,9 @@ def check(root: Path, files: list[str], known_orphans: tuple[str, ...] | None = 
         problems.extend(owner_list_problems(OWNER_LIST, texts[OWNER_LIST]))
 
     for page in pages:
+        for number, line in enumerate(strip_fences(texts.get(page, "")).split("\n"), 1):
+            if CONFLICT_MARKER.match(line):
+                problems.append(f"{page}:{number}: conflict: merge-conflict marker left in the page")
         body = strip_code(texts.get(page, ""))
         base = Path(page).parent
         for number, target in link_targets(body):
@@ -275,6 +281,14 @@ def self_test() -> int:
         if "docs/orphan.md: orphan" in text or "docs/gone-entry.md: stale" not in text or "docs/b.md: stale" not in text:
             print("self-test: KNOWN_ORPHANS handling is wrong:")
             print(text)
+            return 1
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write(root, {"docs/README.md": "# Index\n\n[m](m.md)\n",
+                      "docs/m.md": "# M\n\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> origin/main\n\n```\n<<<<<<< HEAD\n```\n"})
+        found = [line for line in check(root, walk_files(root), ()) if ": conflict:" in line]
+        if [line.split(": conflict:")[0] for line in found] != ["docs/m.md:3", "docs/m.md:7"]:
+            print("self-test: conflict markers wrong:", found)
             return 1
     good_list = ("## ARC-DEV-1 — x\n\n| # | Step | Expected | Status |\n| --- | --- | --- | --- |\n"
                  "| 1 | A. | B. | open |\n| 2 | C. | D. | same (note) |\n")
