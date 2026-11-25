@@ -384,7 +384,7 @@ RIM_MIN = 30
 RIM_LEAN = 40      # (a mauve of the art such as 90 59 89 leans 30 and is art)
 
 
-OWN_MAGENTA = frozenset({"plate.s_phantasm_hover", "plate.s_phantasm_pressed"})   # ARC-UI-3204: the college of Phantasm is magenta in the original, and so are its lit overlays; the generation ground of its plate was grey, so no magenta of these parts is a leak
+OWN_MAGENTA = frozenset({"plate.s_phantasm_hover", "plate.s_phantasm_pressed"})   # ARC-UI-3204: the college of Phantasm is magenta in the original and in the pack: so are its hover and pressed frames (its idle plate is purple; no generation ground is involved, the parts are the pack's frames)
 
 
 def ground_pixels(data: bytes | bytearray, width: int | None = None) -> list[int]:

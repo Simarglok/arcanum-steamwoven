@@ -221,15 +221,15 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
         plate = plates.get(f"plate.{name}")
         if canvas is None and plate is not None:
             canvas = f"a {plate['size'][0]} x {plate['size'][1]} canvas"
-        lit = tool == "school_kit.py"
+        pack = tool == "school_kit.py"
         if plate is None:  # a census without the button (a test's synthetic one): nothing to hang the parts on (the real census has all eight, `build_kit.py --check` pins it)
             continue
         rule = tool.removesuffix(".py")
-        for ident, kind, states, what in ((f"glyph.{name}", "glyph", ["idle"], f"the symbol of art {art} as the idle frame shows it over the plate"),
-                                          (f"plate.{name}_hover", "plate", ["hover"], f"overlay of art {art}'s hover frame over its idle frame (" + ("the dome and the symbol light up" if lit else "the symbol lights up and glows") + ")"),
-                                          (f"plate.{name}_pressed", "plate", ["pressed"], f"overlay of art {art}'s pressed frame over its idle frame (" + ("the dome lights up more, the symbol stays dark" if lit else "the lit symbol, and the plate darkened where the original darkens it") + ")")):
+        for ident, kind, states, what in ((f"glyph.{name}", "glyph", ["idle"], f"the symbol of art {art} as the idle frame shows it over the plate" if not pack else f"an EMPTY layer: the symbol of art {art} is in the plate (the pack's frame as it is)"),
+                                          (f"plate.{name}_hover", "plate", ["hover"], f"overlay of art {art}'s hover frame over its idle frame (" + ("the pack's hover frame in full, over the idle face" if pack else "the symbol lights up and glows") + ")"),
+                                          (f"plate.{name}_pressed", "plate", ["pressed"], f"overlay of art {art}'s pressed frame over its idle frame (" + ("the pack's pressed frame in full, over the idle face" if pack else "the lit symbol, and the plate darkened where the original darkens it") + ")")):
             parts.append(new_part(ident, kind, plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
-                                  f"{what}; {tool} draws it from the original frames (no Codex), {canvas}, so the size is open", states=states, master=True, provenance=f"rule:{rule}:{ident}"))
+                                  f"{what}; {tool} " + ("cuts it from the HD pack's frame (no Codex)" if pack else "draws it from the original frames (no Codex)") + f", {canvas}, so the size is open", states=states, master=True, provenance=f"rule:{rule}:{ident}"))
     return parts
 
 
@@ -293,9 +293,8 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
         if ident in SCHOOL_PLATES:
-            part["status"], part["provenance"] = "master", f"fit:{ident}"
-            part["note"] = (f"the coloured dome in its brass ring, no symbol: one of the {len(school_kit.tabs_of(SCHOOL_PLATES[ident].group))} domes of the Codex item {school_kit.GROUPS[SCHOOL_PLATES[ident].group]}, cut apart and fitted to this part; "
-                            "the original's highlight, the symbol and the states are made by rule (school_kit.py, ARC-UI-3204)")
+            part["status"], part["provenance"] = "master", f"rule:school_kit:{ident}"
+            part["note"] = "the pack's own idle frame of the button as it is, cut to the ring's circle by an analytic round alpha (school_kit.py, ARC-UI-3204, owner 2026-11-25); the states are the pack's frames"
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"

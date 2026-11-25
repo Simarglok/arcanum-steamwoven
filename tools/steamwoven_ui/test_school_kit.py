@@ -1,4 +1,4 @@
-"""ARC-UI-3204: tests of the coloured-dome button kit tool (college tabs, skill-school buttons) on synthetic frames (no art)."""
+"""ARC-UI-3204: tests of the college tab / skill-school button kit tool (the HD pack's frames cut to the ring's circle) on synthetic frames (no art)."""
 from __future__ import annotations
 
 import json
@@ -7,401 +7,185 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from . import button_kit as bk
-from . import kit_check
 from . import pngio
-from . import prompt_library
 from . import school_kit as sk
 
-N = 24
-CENTRE = 12.0
-DOME = (40, 90, 160)
-SYMBOL = [(x, y) for y in range(8, 17) for x in range(11, 13)] + [(x, y) for y in range(11, 13) for x in range(8, 16)]  # a black cross
+TAB = sk.TABS[0]            # art 11, 24 x 24 units, master 84 x 84
+HD = 96                     # pack pixels (4 per unit)
+INSIDE, OUTSIDE = (200, 30, 30), (30, 200, 30)
 
 
-def frame(shade=1.0, symbol=True, lit_symbol=(2, 2, 2)) -> pngio.Image:
-    """A disc of radius 11.6 in a 24 x 24 frame: a brass ring outside radius 10.4, a glossy dome inside it (lighter towards the upper left), a black cross."""
-    image = pngio.Image(N, N, bytearray(N * N * 4))
-    for y in range(N):
-        for x in range(N):
-            r = math.hypot(x + 0.5 - CENTRE, y + 0.5 - CENTRE)
-            if r > 11.6:
-                continue
-            if r > 10.4:
-                colour = (150, 120, 50)
-            else:
-                lift = 1.0 + 0.5 * (-(x + 0.5 - CENTRE) - (y + 0.5 - CENTRE)) / 20.0
-                colour = tuple(max(0, min(255, int(c * lift * shade))) for c in DOME)
-            image.data[(y * N + x) * 4:(y * N + x) * 4 + 4] = bytes((*colour, 255))
-    if symbol:
-        for x, y in SYMBOL:
-            image.data[(y * N + x) * 4:(y * N + x) * 4 + 3] = bytes(lit_symbol)
+def pack_frame(colour=INSIDE) -> pngio.Image:
+    """A 96 x 96 pack frame: the colour inside the art's circle (a little wider than the cut), the old background (green) outside it."""
+    circle = sk.circle_of(TAB)
+    image = pngio.Image(HD, HD, bytearray(HD * HD * 4))
+    for y in range(HD):
+        for x in range(HD):
+            inside = math.hypot(x + 0.5 - circle.cx * 4, y + 0.5 - circle.cy * 4) <= circle.cut * 4 + 3
+            image.data[(y * HD + x) * 4:(y * HD + x) * 4 + 4] = bytes((*(colour if inside else OUTSIDE), 255))
     return image
 
 
-class MaskTests(unittest.TestCase):
-    def test_symbol_mask_finds_the_black_cross(self):
-        idle, pressed = frame(), frame(shade=1.7)
-        mask = sk.symbol_mask(idle, pressed)
-        found = {i for i, on in enumerate(mask) if on}
-        truth = {y * N + x for x, y in SYMBOL}
-        self.assertGreaterEqual(len(found & truth) / len(truth), 0.9)
-        self.assertLessEqual(len(found - truth) / len(truth), 0.2)
-
-    def test_a_plain_dome_has_no_symbol(self):
-        self.assertFalse(any(sk.symbol_mask(frame(symbol=False), frame(shade=1.7, symbol=False))))
-
-    def test_override_adds_and_drops_cells(self):
-        idle = frame()
-        base = sk.symbol_mask(idle, None, {})
-        x, y = next((i % N, i // N) for i, on in enumerate(base) if on)
-        mask = sk.symbol_mask(idle, None, {"add": ((12, 12),), "drop": ((x, y),)})
-        self.assertTrue(mask[12 * N + 12])
-        self.assertTrue(base[y * N + x])
-        self.assertFalse(mask[y * N + x])
-
-    def test_override_cells_outside_the_frame_are_refused(self):
-        for key in ("add", "drop"):
-            for cell in ((-1, 3), (N, 3), (3, N)):
-                with self.assertRaises(sk.SchoolError):
-                    sk.symbol_mask(frame(), None, {key: (cell,)})
-
-    def test_the_template_has_no_symbol_left(self):
-        idle = frame()
-        mask = [False] * (N * N)
-        for x, y in SYMBOL:
-            mask[y * N + x] = True
-        template = sk.plate_template(idle, mask)
-        plain = frame(symbol=False)
-        worst = max(bk.distance(sk.colour_at(template, x, y), sk.colour_at(plain, x, y)) for x, y in SYMBOL)
-        self.assertLess(worst, 8.0)
-        self.assertEqual([sk.alpha_at(template, i % N, i // N) for i in range(N * N)], [sk.alpha_at(idle, i % N, i // N) for i in range(N * N)])
+def tree(folder: str, escape: bool = False) -> Path:
+    """`<folder>/local/hd-packs/interface-redraw-4x/` with the three frames of TAB (idle red, pressed blue, hover yellow) and their index; returns `<folder>/local`."""
+    local = Path(folder) / "local"
+    pack = local / sk.PACK_DIR
+    (pack / "interface").mkdir(parents=True)
+    header = "screen\tkind\tart\tframe\tpath\tlegacy_w\tlegacy_h\thd_w\thd_h\tslice\talpha\treview\tsha12\n"
+    rows = []
+    for number, colour in ((0, INSIDE), (1, (30, 30, 200)), (2, (200, 200, 30))):
+        pngio.write(pack / "interface" / f"{TAB.name}-f{number:03d}.png", pack_frame(colour))
+        rows.append(f"x\tbuttons\t{TAB.name}\t{number}\t{'../../x.png' if escape else f'interface/{TAB.name}-f{number:03d}.png'}\t24\t24\t{HD}\t{HD}\ts\t\tunreviewed\tabc123def45{number}\n")
+    (pack / "index.tsv").write_text(header + "".join(rows), encoding="utf-8")
+    return local
 
 
-class ShapeAndRingTests(unittest.TestCase):
-    def test_shape_cells_inside_the_shapes_only(self):
-        w = h = 20
-        rect = sk.shape_cells(("rect", 2.0, 3.0, 6.0, 5.0), w, h)
-        self.assertEqual(sorted(rect), sorted(y * w + x for y in range(3, 5) for x in range(2, 6)))
-        ellipse = sk.shape_cells(("ellipse", 10.0, 10.0, 3.0, 2.0), w, h)
-        self.assertIn(10 * w + 10, ellipse)
-        self.assertNotIn(10 * w + 14, ellipse)
-        poly = sk.shape_cells(("poly", [(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)]), w, h)
-        self.assertEqual(len(poly), 36)
-        line = sk.shape_cells(("line", 2.0, 10.0, 12.0, 10.0, 2.0), w, h)
-        self.assertIn(9 * w + 7, line)
-        self.assertNotIn(5 * w + 7, line)
-        gear = sk.shape_cells(("gear", 10.0, 10.0, 3.0, 5.0, 8, 0.0), w, h)
-        self.assertGreater(len(gear), math.pi * 9 * 0.9)
-        self.assertLess(len(gear), math.pi * 25)
-        with self.assertRaises(sk.SchoolError):
-            sk.shape_cells(("star", 1.0), w, h)
+class CircleTests(unittest.TestCase):
+    def test_every_button_has_a_circle_in_the_viewers_table(self):
+        for tab in sk.TABS:
+            circle = sk.circle_of(tab)
+            self.assertGreater(circle.radius, 10.0, tab.name)
+            self.assertAlmostEqual(circle.trim, 0.4)
+            self.assertAlmostEqual(circle.cx, circle.width / 2, delta=2.0, msg=tab.name)
+        self.assertEqual(len(sk.circles()), 28)
 
-    def test_override_shapes_and_roi_change_the_mask(self):
-        idle = frame(symbol=False)
-        shape = ("rect", 10.0, 10.0, 13.0, 13.0)
-        added = sk.symbol_mask(idle, None, {"shapes": (shape,)})
-        self.assertTrue(all(added[i] for i in sk.shape_cells(shape, N, N)))
-        removed = sk.symbol_mask(frame(), None, {"shapes_drop": (("rect", 0.0, 0.0, float(N), float(N)),)})
-        self.assertFalse(any(removed))
-        everything = [(0.0, 0.0), (float(N), 0.0), (float(N), float(N)), (0.0, float(N))]
-        plain = frame(symbol=False)
-        pressed = frame(shade=1.7, symbol=False)
-        for frame_ in (plain, pressed):   # a dark cell the rules do not find
-            frame_.data[(6 * N + 12) * 4:(6 * N + 12) * 4 + 3] = bytes((30, 30, 30))
-        self.assertFalse(sk.symbol_mask(plain, pressed, {})[6 * N + 12])
-        roi = sk.symbol_mask(plain, pressed, {"roi": (everything, 60.0)})
-        self.assertTrue(roi[6 * N + 12])
-        self.assertFalse(roi[0])                                   # a transparent corner is never symbol
-        self.assertFalse(sk.symbol_mask(plain, pressed, {"shapes": (("rect", 0.0, 0.0, 3.0, 3.0),)})[0])
+    def test_the_shadow_numbers_are_the_viewers(self):
+        s = sk.shadow()
+        self.assertAlmostEqual(s.offset, 13 / 3.6, places=4)
+        self.assertAlmostEqual(s.sigma, 16 / 3.6, places=4)
+        self.assertAlmostEqual(s.strength, 0.7)
 
-    def test_the_coloured_body_of_a_symbol_joins_the_mask(self):
-        idle = frame()
-        pressed = frame(shade=1.7)
-        for x, y in ((10, 9), (10, 10), (13, 9), (13, 10)):   # a body of another hue beside the black strokes
-            pressed.data[(y * N + x) * 4:(y * N + x) * 4 + 3] = bytes((230, 120, 20))
-        self.assertFalse(sk.symbol_mask(idle, pressed, {"fill": 0})[9 * N + 10])
-        self.assertTrue(sk.symbol_mask(idle, pressed)[9 * N + 10])
+    def test_coverage_is_one_inside_zero_outside_and_half_on_the_edge(self):
+        circle = sk.circle_of(TAB)
+        master = sk.master_of(TAB.name)
+        mx = master[0] / circle.width
+        centre = (circle.cx * mx, circle.cy * mx)
+        self.assertEqual(sk.coverage(circle, master, *centre), 1.0)
+        self.assertEqual(sk.coverage(circle, master, centre[0] + circle.cut * mx + 2, centre[1]), 0.0)
+        self.assertAlmostEqual(sk.coverage(circle, master, centre[0] + circle.cut * mx, centre[1]), 0.5, places=3)
 
-    def test_the_ring_is_laid_over_the_plate_edge(self):
-        plate = pngio.Image(40, 40, bytearray(b"\x20\x40\x80\xff" * 1600))
-        ring = ([(100.0, 80.0, 40.0)] * sk.RING_BINS, [1.0] * sk.RING_ANGLES)
-        out = sk.paint_ring(plate, (20.0, 20.0), 18.0, 4.0, ring)
-        self.assertEqual(sk.colour_at(out, 20, 20), (32, 64, 128))              # the dome inside the ring stays
-        self.assertEqual(sk.colour_at(out, 20, 2), (100, 80, 40))              # the ring itself
-        self.assertEqual((sk.alpha_at(out, 20, 20), sk.alpha_at(out, 0, 0)), (255, 0))   # transparent outside the outer circle
-        self.assertGreaterEqual(sk.alpha_at(out, 20, 2), 250)
-        self.assertEqual(sk.alpha_at(out, 20, 1), 0)   # r = 19: outside the circle of radius 18
+    def test_the_shadow_lies_lower_right_and_never_under_the_part(self):
+        circle = sk.circle_of(TAB)
+        under = sk.shadow_alpha(circle, circle.cx, circle.cy, 0.3)
+        lower_right = sk.shadow_alpha(circle, circle.cx + circle.cut + 1.0, circle.cy + circle.cut + 1.0, 0.3)
+        upper_left = sk.shadow_alpha(circle, circle.cx - circle.cut - 1.0, circle.cy - circle.cut - 1.0, 0.3)
+        self.assertEqual(under, 0.0)
+        self.assertGreater(lower_right, upper_left * 3)
+        self.assertLessEqual(lower_right, sk.shadow().strength)
 
-    def test_ring_profile_reads_the_hardware_ring(self):
+
+class PartTests(unittest.TestCase):
+    def test_the_old_background_never_reaches_the_edge(self):
+        circle = sk.circle_of(TAB)
+        part = sk.round_part(pack_frame(), circle, sk.master_of(TAB.name))
+        for y in range(part.h):
+            for x in range(part.w):
+                k = (y * part.w + x) * 4
+                if part.data[k + 3]:
+                    self.assertGreater(part.data[k], 150, (x, y))       # red
+                    self.assertLess(part.data[k + 1], 90, (x, y))       # no green of the old background
+
+    def test_the_part_is_round_cut_smooth_and_at_the_masters_size(self):
+        circle, master = sk.circle_of(TAB), sk.master_of(TAB.name)
+        part = sk.round_part(pack_frame(), circle, master)
+        self.assertEqual((part.w, part.h), master)
+        alpha = lambda x, y: part.data[(y * part.w + x) * 4 + 3]
+        self.assertEqual(alpha(master[0] // 2, master[1] // 2), 255)
+        self.assertEqual(alpha(0, 0), 0)
+        self.assertEqual(alpha(master[0] - 1, 0), 0)
+        partial = {part.data[i] for i in range(3, len(part.data), 4)} - {0, 255}
+        self.assertGreater(len(partial), 8)                              # an even smoothed edge, not a staircase
+
+    def test_a_frame_of_another_aspect_is_stretched_to_the_master(self):
+        circle = sk.circle_of(next(t for t in sk.TABS if t.name == "anatomical_but"))        # 32 x 31 art on a 114 x 114 master
+        master = sk.master_of("anatomical_but")
+        frame = pngio.Image(128, 124, bytearray(bytes((90, 120, 150, 255)) * (128 * 124)))
+        part = sk.round_part(frame, circle, master)
+        self.assertEqual((part.w, part.h), master)
+        mx, my = master[0] / circle.width, master[1] / circle.height
+        self.assertEqual(part.data[(int(circle.cy * my) * part.w + int(circle.cx * mx)) * 4 + 3], 255)
+
+    def test_the_three_states_are_the_three_pack_frames_and_the_glyph_is_empty(self):
         with tempfile.TemporaryDirectory() as folder:
-            local = Path(folder)
-            (local / "masters").mkdir()
-            ring = pngio.Image(60, 60, bytearray(60 * 60 * 4))
-            for y in range(60):
-                for x in range(60):
-                    r = math.hypot(x + 0.5 - 30, y + 0.5 - 30)
-                    if 20 <= r <= 30:
-                        ring.data[(y * 60 + x) * 4:(y * 60 + x) * 4 + 4] = bytes((100, 80, 40, 255))
-            pngio.write(local / "masters" / f"{sk.RING_SOURCE}.png", ring)
-            profile, gains = sk.ring_profile(local)
-            self.assertEqual(len(profile), sk.RING_BINS)
-            self.assertEqual(len(gains), sk.RING_ANGLES)
-            self.assertTrue(all(abs(c - v) < 3 for c, v in zip(profile[len(profile) // 2], (100, 80, 40))))
-            with self.assertRaises(sk.SchoolError):
-                sk.ring_profile(Path(folder) / "nowhere")
-
-
-class TabPartsTests(unittest.TestCase):
-    """`tab_parts` end to end on synthetic frames written under a temporary census folder (no art)."""
-
-    def parts_of(self, tab, overrides=None):
-        with tempfile.TemporaryDirectory() as folder:
-            frames = Path(folder)
-            (frames / tab.folder).mkdir()
-            for k, shade in enumerate((1.0, 1.7, 1.3)):
-                pngio.write(frames / tab.folder / f"f{k}.png", frame(shade=shade))
-            saved = dict(sk.OVERRIDES)
-            try:
-                sk.OVERRIDES.update(overrides or {})
-                return sk.tab_parts(frames, tab, None), sk.tab_symbol(frames, tab, sk.master_of(tab.name))
-            finally:
-                sk.OVERRIDES.clear()
-                sk.OVERRIDES.update(saved)
-
-    def test_college_tab_gives_three_parts_with_one_solid_symbol(self):
-        tab = sk.TABS[0]
-        parts, symbol = self.parts_of(tab)
-        self.assertEqual(set(parts), {f"glyph.{tab.name}", f"plate.{tab.name}_hover", f"plate.{tab.name}_pressed"})
+            parts = sk.tab_parts(tree(folder), TAB)
+        self.assertEqual(set(parts), {f"plate.{TAB.name}", f"glyph.{TAB.name}", f"plate.{TAB.name}_hover", f"plate.{TAB.name}_pressed"})
+        master = sk.master_of(TAB.name)
+        centre = ((master[1] // 2) * master[0] + master[0] // 2) * 4
+        self.assertEqual(tuple(parts[f"plate.{TAB.name}"].data[centre:centre + 3]), INSIDE)
+        self.assertEqual(tuple(parts[f"plate.{TAB.name}_pressed"].data[centre:centre + 3]), (30, 30, 200))     # frame 1
+        self.assertEqual(tuple(parts[f"plate.{TAB.name}_hover"].data[centre:centre + 3]), (200, 200, 30))       # frame 2
+        self.assertFalse(any(parts[f"glyph.{TAB.name}"].data[3::4]))
         for image in parts.values():
-            self.assertEqual((image.w, image.h), sk.master_of(tab.name))
-        self.assertTrue(any(c > 0 for c in symbol.dark.cover))
-
-    def test_the_school_group_has_no_coloured_body_unless_asked(self):
-        school = next(t for t in sk.TABS if t.group == "school")
-        college = sk.TABS[0]
-        self.assertEqual(sk.override_of(school).get("fill"), 0)
-        self.assertNotIn("fill", sk.override_of(college) if college.name not in sk.OVERRIDES else {})
-
-    def test_shapes_only_draws_just_the_shapes_inside_the_frame(self):
-        tab = sk.TABS[0]
-        shape = ("rect", 9.0, 9.0, 15.0, 15.0)
-        _, symbol = self.parts_of(tab, {tab.name: {"shapes_only": True, "shapes": (shape, ("rect", -3.0, -3.0, 1.0, 1.0))}})
-        self.assertIsNone(symbol.body)
-        k = symbol.dark.w / N
-        at = lambda x, y: symbol.dark.cover[int(y * k) * symbol.dark.w + int(x * k)]
-        self.assertEqual(at(12.0, 12.0), 1.0)
-        self.assertEqual(at(4.0, 4.0), 0.0)     # not the cross: the shapes are the whole symbol
-        self.assertEqual(at(0.0, 0.0), 0.0)     # a shape that leaves the frame's outline is clipped
+            self.assertEqual((image.w, image.h), master)
 
 
-class PartsTests(unittest.TestCase):
-    def setUp(self):
-        self.idle, self.pressed, self.hover = frame(), frame(shade=1.7), frame(shade=1.3)
-        self.mask = sk.symbol_mask(self.idle, self.pressed)
-        self.template = sk.plate_template(self.idle, self.mask)
-        self.px = (84, 84)
-        self.clip = sk.silhouette_clip(self.idle, self.px)
+class PackTests(unittest.TestCase):
+    def test_a_missing_index_or_frame_is_a_school_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(sk.SchoolError):
+                sk.pack_path(Path(folder), TAB.name, 0)
+            local = tree(folder)
+            with self.assertRaises(sk.SchoolError):
+                sk.pack_path(local, TAB.name, 7)
+            with self.assertRaises(sk.SchoolError):
+                sk.pack_path(local, "no_such_art", 0)
+            (local / sk.PACK_DIR / "interface" / f"{TAB.name}-f000.png").write_bytes(b"not a png")
+            with self.assertRaises(sk.SchoolError):
+                sk.read_pack(local, TAB.name, 0)
 
-    def plate(self):
-        """A stand-in plate master: the template, smoothly enlarged, inside the frame's outline."""
-        out = pngio.Image(*self.px, bytearray(self.px[0] * self.px[1] * 4))
-        for py in range(self.px[1]):
-            for px in range(self.px[0]):
-                x, y = min(N - 1, px * N // self.px[0]), min(N - 1, py * N // self.px[1])
-                o = (py * self.px[0] + px) * 4
-                out.data[o:o + 4] = bytes((*sk.colour_at(self.template, x, y), self.clip.data[o + 3]))
-        return out
+    def test_an_index_that_points_outside_the_pack_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            local = tree(folder, escape=True)
+            with self.assertRaises(sk.SchoolError):
+                sk.pack_path(local, TAB.name, 0)
 
-    def shape(self, lines=True, **kw):
-        return sk.glyph_shape(self.mask, N, N, self.px, lines=lines, **kw)
-
-    def test_the_symbol_is_one_solid_smooth_colour(self):
-        glyph = sk.paint_symbol(self.shape(), sk.symbol_colour(self.idle, self.mask))
-        k = self.px[0] / N
-        centre = (int(12 * k), int(12 * k))
-        o = (centre[1] * self.px[0] + centre[0]) * 4
-        self.assertEqual(glyph.data[o + 3], 255)
-        self.assertLess(bk.distance(tuple(glyph.data[o:o + 3]), (2, 2, 2)), 12.0)
-        solid = {tuple(glyph.data[i * 4:i * 4 + 3]) for i in range(self.px[0] * self.px[1]) if glyph.data[i * 4 + 3] == 255}
-        self.assertLessEqual(len(solid), 14)   # the colour with its rim and its shade, not a texture of cells
-        self.assertTrue(all(bk.distance(c, (2, 2, 2)) < 120 for c in solid))
-
-    def test_the_symbol_has_a_light_rim_upper_left_and_a_shade_lower_right(self):
-        glyph = sk.paint_symbol(self.shape(), (100, 100, 100))
-        light = lambda x, y: sum(glyph.data[(y * self.px[0] + x) * 4:(y * self.px[0] + x) * 4 + 3])
-        covered = [(i % self.px[0], i // self.px[0]) for i in range(self.px[0] * self.px[1]) if glyph.data[i * 4 + 3] == 255]
-        x0, y0 = min(covered, key=lambda c: c[0] + c[1])
-        x1, y1 = max(covered, key=lambda c: c[0] + c[1])
-        self.assertGreater(light(x0, y0), 300)   # lighter than the colour
-        self.assertLess(light(x1, y1), 300)      # darker
-
-    def test_the_glyph_leaves_the_dome_alone(self):
-        glyph = sk.paint_symbol(self.shape(), (0, 0, 0))
-        corner = (4 * self.px[0] // N, 6 * self.px[1] // N)
-        self.assertEqual(glyph.data[(corner[1] * self.px[0] + corner[0]) * 4 + 3], 0)
-
-    def test_thin_lines_get_one_width_and_a_thick_part_stays_solid(self):
-        w = h = 24
-        for width in (1, 2):   # a one-cell and a two-cell line become lines of the same width
-            mask = [False] * (w * h)
-            for y in range(4, 20):
-                for x in range(12, 12 + width):
-                    mask[y * w + x] = True
-            cover = sk.glyph_shape(mask, w, h, (84, 84), lines=True).cover
-            row = [cover[42 * 84 + x] for x in range(84)]
-            self.assertAlmostEqual(sum(row) / 3.5, sk.STROKE_W, delta=0.35)
-        block = [False] * (w * h)
-        for y in range(6, 16):
-            for x in range(6, 16):
-                block[y * w + x] = True
-        cover = sk.glyph_shape(block, w, h, (84, 84), lines=True).cover
-        self.assertAlmostEqual(sum(cover) / (3.5 * 3.5), 100.0, delta=12.0)   # about the 10 x 10 cells it was
-
-    def test_exact_shapes_are_round_and_cut_holes(self):
-        shape = sk.glyph_shape([False] * (N * N), N, N, self.px, add=(("ellipse", 12.0, 12.0, 6.0, 6.0),), drop=(("ellipse", 12.0, 12.0, 2.0, 2.0),))
-        k = self.px[0] / N
-        at = lambda cx, cy: shape.cover[int(cy * k) * self.px[0] + int(cx * k)]
-        self.assertEqual(at(12.0, 12.0), 0.0)     # the hole
-        self.assertEqual(at(16.0, 12.0), 1.0)     # the ring
-        self.assertEqual(at(19.5, 12.0), 0.0)     # outside
-
-    def test_the_lit_overlay_lights_the_dome_and_gives_the_frame_back(self):
-        plate = self.plate()
-        glyph = sk.paint_symbol(self.shape(), sk.symbol_colour(self.idle, self.mask))
-        face = sk.over(plate, glyph)
-        lit_symbol = sk.paint_symbol(self.shape(), sk.symbol_colour(self.hover, self.mask))
-        lit = sk.over(face, sk.lit_overlay(self.hover, self.idle, self.mask, self.px, plate, lit_symbol))
-        k = self.px[0] / N
-        errors = []
-        for y in range(5, 19):
-            for x in range(5, 19):
-                if self.mask[y * N + x] or any(self.mask[j] for j in sk.neighbours8(y * N + x, N, N)):
-                    continue
-                px, py = int((x + 0.5) * k), int((y + 0.5) * k)
-                o = (py * self.px[0] + px) * 4
-                errors.append(bk.distance(tuple(lit.data[o:o + 3]), sk.colour_at(self.hover, x, y)))
-        self.assertLess(sum(errors) / len(errors), 6.0)
-        self.assertLess(max(errors), 20.0)
-
-    def test_the_symbol_colour_is_the_frames_own(self):
-        self.assertLess(bk.distance(sk.symbol_colour(self.idle, self.mask), (2, 2, 2)), 4.0)
-        lit = frame(lit_symbol=(220, 140, 30))
-        self.assertLess(bk.distance(sk.symbol_colour(lit, self.mask), (220, 140, 30)), 4.0)
-
-    def test_the_overlay_never_leaves_the_plate(self):
-        overlay = sk.lit_overlay(self.pressed, self.idle, self.mask, self.px, self.plate(), sk.paint_symbol(self.shape(), (0, 0, 0)))
-        self.assertEqual(overlay.data[3], 0)  # the corner
-
-    def test_lift_of_gives_the_colour_back(self):
-        for base, lit in (((40, 90, 160), (90, 160, 230)), ((120, 10, 10), (230, 40, 40)), ((200, 200, 200), (120, 120, 140))):
-            a, c = sk.lift_of(base, lit)
-            self.assertGreaterEqual(a, sk.LIFT_MIN_ALPHA)
-            self.assertLessEqual(a, 1.0)
-            back = tuple(b + a * (cc - b) for b, cc in zip(base, c))
-            self.assertLess(bk.distance(tuple(int(round(v)) for v in back), lit), 3.0)
-            self.assertTrue(all(0.0 <= v <= 255.0 for v in c))
-
-    def test_lift_of_the_same_colour_is_nothing(self):
-        self.assertEqual(sk.lift_of((10, 20, 30), (11, 20, 30))[0], 0.0)
-
-    def test_the_gloss_lies_on_the_upper_left_only(self):
-        idle = frame(symbol=False)
-        for y in range(3, 8):
-            for x in range(4, 9):
-                idle.data[(y * N + x) * 4:(y * N + x) * 4 + 3] = bytes((250, 250, 250))
-        layer = sk.gloss_layer(idle, (84, 84))
-        self.assertGreater(layer.data[(int(6 * 3.5) * 84 + int(6 * 3.5)) * 4 + 3], 0)
-        self.assertEqual(layer.data[(int(18 * 3.5) * 84 + int(18 * 3.5)) * 4 + 3], 0)
+    def test_the_record_names_the_pack_frame_it_was_cut_from(self):
+        with tempfile.TemporaryDirectory() as folder:
+            local = tree(folder)
+            parts = sk.tab_parts(local, TAB)
+            out = Path(folder) / "out"
+            out.mkdir()
+            records = {}
+            for ident, image in parts.items():
+                path = out / f"{ident}.png"
+                pngio.write(path, image)
+                records[ident] = sk.record_of(local, TAB, ident, path, image)
+        idle = records[f"plate.{TAB.name}"]
+        self.assertEqual(idle["source"], "pack")
+        (key, source), = idle["sources"].items()
+        self.assertTrue(key.endswith(f"{TAB.name}-f000"))
+        self.assertEqual(len(source["sha256"]), 64)
+        self.assertEqual(source["index_sha12"], "abc123def450")
+        self.assertIn("f001", next(iter(records[f"plate.{TAB.name}_pressed"]["sources"])))
+        self.assertIn("f002", next(iter(records[f"plate.{TAB.name}_hover"]["sources"])))
+        self.assertTrue(records[f"glyph.{TAB.name}"]["empty"])
+        self.assertEqual(records[f"glyph.{TAB.name}"]["sources"], {})
 
 
 class DataTests(unittest.TestCase):
-    def test_every_button_has_a_sized_plate_row(self):
+    def test_names_and_arts_are_unique_and_every_button_has_a_sized_plate_row(self):
+        self.assertEqual(len({t.name for t in sk.TABS}), 28)
+        self.assertEqual(len({t.art for t in sk.TABS}), 28)
         for tab in sk.TABS:
-            w, h = sk.master_of(tab.name)
-            self.assertEqual((w % 6, h % 6), (0, 0), tab.name)
-
-    def test_names_and_arts_are_unique_and_the_overrides_name_buttons(self):
-        self.assertEqual(len({t.name for t in sk.TABS}), len(sk.TABS))
-        self.assertEqual(len({t.art for t in sk.TABS}), len(sk.TABS))
-        self.assertLessEqual(set(sk.OVERRIDES), {t.name for t in sk.TABS})
-        self.assertEqual((len(sk.tabs_of("college")), len(sk.tabs_of("school"))), (16, 12))
-        with self.assertRaises(sk.SchoolError):
-            sk.tabs_of("nothing")
-        with self.assertRaises(sk.SchoolError):
-            sk.tab_named("nothing")
-
-    def test_the_collage_fits_its_prompt_and_its_cells_do_not_overlap(self):
-        library = prompt_library.load()
-        for group, prompt in sk.GROUPS.items():
-            entry = next(p for p in library["prompts"] if p["id"] == prompt)
-            self.assertEqual(list(sk.collage_size(group)), entry["size"])
-            cells = sk.collage_cells(group)
-            self.assertEqual(len(cells), len(sk.tabs_of(group)))
-            for cell in cells:
-                x, y, w, h = cell["rect"]
-                self.assertLessEqual(x + w, sk.collage_size(group)[0])
-                self.assertLessEqual(y + h, sk.collage_size(group)[1])
-            widest = max(sk.disc_of(frame())[2] for _ in (0,)) * 2 * sk.COLLAGE_SCALE[group]
-            self.assertLess(widest, min(sk.COLLAGE_PITCH[group]))
-
-    def test_locate_finds_each_dome_of_a_collage(self):
-        group = "college"
-        cells = sk.collage_cells(group)[:4]
-        layout = {"canvas": list(sk.collage_size(group)), "cells": cells}
-        w, h = sk.collage_size(group)
-        image = pngio.Image(w, h, bytearray(bytes((*sk.GROUND, 255)) * (w * h)))
-        for cell in cells:
-            cx, cy = cell["centre"]
-            for y in range(int(cy) - 100, int(cy) + 100):
-                for x in range(int(cx) - 100, int(cx) + 100):
-                    if math.hypot(x - cx, y - cy) <= 100:
-                        image.data[(y * w + x) * 4:(y * w + x) * 4 + 3] = bytes((150, 60, 60))
-        found = sk.locate(image, layout)
-        for cell in cells:
-            fx, fy, fr = found[cell["name"]]
-            self.assertAlmostEqual(fx, cell["centre"][0], delta=3)
-            self.assertAlmostEqual(fy, cell["centre"][1], delta=3)
-            self.assertAlmostEqual(fr, 100, delta=3)
-
-    def test_locate_refuses_a_square_piece_that_is_no_circle(self):
-        cells = sk.collage_cells("college")[:1]
-        layout = {"canvas": list(sk.collage_size("college")), "cells": cells}
-        w, h = sk.collage_size("college")
-        image = pngio.Image(w, h, bytearray(bytes((*sk.GROUND, 255)) * (w * h)))
-        cx, cy = cells[0]["centre"]
-        for y in range(int(cy) - 40, int(cy) + 40):
-            for x in range(int(cx) - 110, int(cx) + 110):
-                image.data[(y * w + x) * 4:(y * w + x) * 4 + 3] = bytes((150, 60, 60))
-        with self.assertRaises(sk.SchoolError):
-            sk.locate(image, layout)
+            self.assertEqual(sk.circle_of(tab).width / sk.circle_of(tab).height > 0, True)
+            self.assertTrue(all(v > 0 for v in sk.master_of(tab.name)), tab.name)
 
     def test_the_manifest_rows_of_the_slice(self):
         manifest = json.loads(sk.MANIFEST.read_text(encoding="utf-8"))
-        parts = {p["id"]: p for p in manifest["parts"]}
+        rows = {p["id"]: p for p in manifest["parts"]}
         for tab in sk.TABS:
             for ident in (f"plate.{tab.name}", f"glyph.{tab.name}", f"plate.{tab.name}_hover", f"plate.{tab.name}_pressed"):
-                self.assertEqual(parts[ident]["status"], "master", ident)
-                self.assertTrue(parts[ident]["provenance"], ident)
-        self.assertEqual(parts["plate.s_air"]["provenance"], "fit:plate.s_air")
-        self.assertTrue(parts["glyph.s_air"]["provenance"].startswith("rule:school_kit:"))
+                self.assertIn(ident, rows)
+                self.assertEqual(rows[ident]["provenance"], f"rule:school_kit:{ident}")
+                self.assertEqual(rows[ident]["status"], "master")
 
-    def test_own_magenta_is_a_narrow_exemption(self):
-        self.assertEqual(kit_check.OWN_MAGENTA, {"plate.s_phantasm_hover", "plate.s_phantasm_pressed"})
-
-    def test_the_record_of_a_rule_part_names_its_sources(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            frames = Path(tmp)
-            tab = sk.tab_named("s_air")
-            (frames / tab.folder).mkdir()
-            for k in range(3):
-                pngio.write(frames / tab.folder / f"f{k}.png", frame())
-            path = frames / "x.png"
-            image = frame()
-            pngio.write(path, image)
-            record = sk.record_of("glyph.s_air", frames, path, image)
-        self.assertEqual(sorted(record["sources"]), [f"{tab.folder}/f{k}" for k in range(3)])
-        self.assertEqual(record["rule"], "school_kit")
+    def test_a_group_filter_and_a_wrong_name_are_refused(self):
+        self.assertEqual(len(sk.tabs_of("college")), 16)
+        self.assertEqual(len(sk.tabs_of("school")), 12)
+        with self.assertRaises(sk.SchoolError):
+            sk.tabs_of("nope")
+        with self.assertRaises(sk.SchoolError):
+            sk.tab_named("nope")
 
 
 if __name__ == "__main__":
