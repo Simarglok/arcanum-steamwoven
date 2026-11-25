@@ -88,10 +88,11 @@ public static class AreaKitRoundParts
 
     /// <summary>
     /// The canvas shader of a round part: <c>mode</c> 0 cuts the texture drawn over the node (the node is the art's rectangle, <c>unit_size</c> its size in units), <c>mode</c> 1 draws the shadow on a node of the art's rectangle grown by
-    /// <see cref="ShadowReach"/> on every side (<c>origin</c> the art's corner inside it). The numbers are those of <see cref="Coverage"/> and <see cref="ShadowAt"/>.
+    /// <see cref="ShadowReach"/> on every side (<c>origin</c> the art's corner inside it). The numbers are those of <see cref="Coverage"/> and <see cref="ShadowAt"/>. The blend is premultiplied alpha, as the character sheet's views are (<c>AreaArtTextDraw.Prepare</c>) and as the textures of their arts are made (<c>InterfaceHd.Texture(..., premultipliedAlpha: true)</c>): the cut scales the colour with the alpha, and the shadow's black is the colour 0 with its opacity.
     /// </summary>
     public const string Shader = """
         shader_type canvas_item;
+        render_mode blend_premul_alpha;
         uniform float mode = 0.0;
         uniform vec2 unit_size = vec2(1.0);
         uniform vec2 origin = vec2(0.0);
@@ -105,7 +106,7 @@ public static class AreaKitRoundParts
             float d = length(p - disc.xy) - disc.z;
             float keep = clamp(0.5 - d / pixel, 0.0, 1.0);
             if (mode < 0.5) {
-                COLOR.a *= keep;
+                COLOR *= keep;
             } else {
                 float moved = length(p - disc.xy - shadow) - disc.z;
                 float edge = 1.0 / (1.0 + exp(1.702 * moved / shadow_shape.x));

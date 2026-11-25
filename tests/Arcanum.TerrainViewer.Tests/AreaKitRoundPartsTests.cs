@@ -77,6 +77,7 @@ public sealed class AreaKitRoundPartsTests
         StringAssert.Contains(AreaKitRoundParts.Shader, "1.702");
         StringAssert.Contains(AreaKitRoundParts.Shader, "0.5 - d / pixel");
         StringAssert.Contains(AreaKitRoundParts.Shader, "(1.0 - keep)");
-        StringAssert.Contains(AreaKitRoundParts.Shader, "COLOR.a *= keep");
+        StringAssert.Contains(AreaKitRoundParts.Shader, "render_mode blend_premul_alpha");
+        StringAssert.Contains(AreaKitRoundParts.Shader, "COLOR *= keep");
     }
 }
