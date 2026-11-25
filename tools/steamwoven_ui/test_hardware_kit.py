@@ -128,6 +128,18 @@ class RingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, self.assertRaises(hk.KitError):
             hk.brass_material(Path(folder))
 
+    def test_a_grain_shorter_than_the_ring_is_refused(self) -> None:
+        short = {"grain": [[0.0] * hk.BRASS_ROWS for _ in range(900)], "tone": [99.0, 77.0, 43.0], "sha256": {}}
+        with self.assertRaises(hk.KitError):
+            hk.render_ring(44.5, short, hk.LENS_WHOLE)
+
+    def test_an_off_centre_lens_circle_is_refused(self) -> None:
+        part = hk.BY_ID["hardware.pcwincvr"]
+        frames = {p.art: lens_art() for p in hk.LENS_ARTS}
+        with mock.patch.object(hk, "read_frame", lambda _f, p, frame=0: frames[p.art]), mock.patch.object(hk, "brass_material", lambda _m: flat_material()), \
+                mock.patch.object(hk, "hole_of", lambda _i: (46.0, 44.5, 44.5)), self.assertRaises(hk.KitError):
+            hk.build_part(part, None, None, (318, 318), {})
+
     def test_the_drop_in_part_is_the_whole_ring_on_the_arts_square(self) -> None:
         part = hk.BY_ID["hardware.pcwincvr"]
         frames = {p.art: lens_art() for p in hk.LENS_ARTS}

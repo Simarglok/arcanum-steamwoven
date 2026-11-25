@@ -52,7 +52,7 @@ GRID = 6
 LABEL_FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"   # the labels of a composite are English (project rule)
 MANIFEST = HERE / "kit.json"
 
-# the lens ring's polar table
+# the lens ring
 RING_WIDTH = 5.0              # the ring's brass band, original px (the old art's band is about 4 px, its dark rim included)
 LENS_PAD = 18                 # master px added on every side of a lens art's square so the ring is whole (3 grid steps)
 BRASS_ROWS = 18               # the band's width in master px (RING_WIDTH x the lens scale), rows of the brass texture
@@ -310,6 +310,8 @@ def render_ring(radius: float, material: dict, size: tuple[int, int], fill: tupl
     A fill colour makes the circle's inside opaque (art 367)."""
     w, h = size
     s = (w - 2 * pad) / (2 * radius)            # master px per original px (the art's square is the circle's diameter)
+    if len(material["grain"]) < 2 * math.pi * (radius + RING_WIDTH / 2) * s:
+        raise KitError("the brass grain is shorter than the lens ring's circumference: it would repeat with a seam")
     cx, cy = w / 2.0, h / 2.0
     grain, tone = material["grain"], material["tone"]
     rows, count = BRASS_ROWS, len(grain)
@@ -492,6 +494,10 @@ def build_part(part: Part, frames: Path, masters: Path, size: tuple[int, int], c
         if "brass" not in cache:
             cache["brass"] = brass_material(masters)
             cache["hole"] = hole_of(read_frame(frames, LENS_ARTS[0]))
+        art_of_shape = read_frame(frames, part) if part.family == "lens" else read_frame(frames, LENS_ARTS[0])
+        cx, cy, _ = hole_of(art_of_shape) if part.family == "lens" else cache["hole"]
+        if abs(cx - art_of_shape.w / 2) > 0.6 or abs(cy - art_of_shape.h / 2) > 0.6:
+            raise KitError(f"{part.ident}: the lens circle is not centred in its art (centre {cx:.1f}, {cy:.1f} of {art_of_shape.w}x{art_of_shape.h}); the ring is drawn on the canvas centre")
         fill = None
         if part.fill:
             source = part if part.art else BY_ID["hardware.schm_pc_lens"]
@@ -559,7 +565,9 @@ def gates(part: Part, image: pngio.Image, size: tuple[int, int]) -> list[str]:
 
 def provenance_record(part: Part, frames: Path, extra: dict, size: tuple[int, int], blob: bytes) -> dict:
     sources = {}
-    arts = extra.get("pooled_arts") or ([part.art] if part.art else [LENS_ARTS[0].art])
+    arts = list(extra.get("pooled_arts") or ([part.art] if part.art else []))
+    if part.family in ("lens", "lens_whole"):          # the circle comes from the first lens art, the filled look from art 367
+        arts += [a for a in [LENS_ARTS[0].art] + ([BY_ID["hardware.schm_pc_lens"].art] if part.fill else []) if a not in arts]
     names = {p.art: p.name for p in PARTS}
     for art in arts:
         path = frames / f"{art}-{names[art]}" / "f0.png"
