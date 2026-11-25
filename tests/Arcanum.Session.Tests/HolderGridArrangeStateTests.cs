@@ -45,6 +45,22 @@ public sealed class HolderGridArrangeStateTests
     }
 
     [TestMethod]
+    public void AColumnByColumnLayoutAndAnUnknownLayoutOfTheBarterButton()
+    {
+        // ARC-UI-3198 (IW38): the barter button arranges the follower's list in the layout of its press, which alternates with the hero's.
+        var guard = new SessionSeedHolder("guard", SessionHolderKind.Npc, false, false, [], ["a", "b", "c"]);
+        using var owner = Owner(new([guard], [Item("a", 5001, 1, 3, 40), Item("b", 5002, 1, 1, 77), Item("c", 5003, 1, 1, 66)]));
+        var bad = owner.ArrangeHolderGrid(owner.Version, "guard", (InventoryArrangeLayout)99);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem), (bad.Disposition, bad.Failure));
+        var done = owner.ArrangeHolderGrid(owner.Version, "guard", InventoryArrangeLayout.Vertical);
+        Assert.AreEqual(GameSessionDisposition.Changed, done.Disposition);
+        Assert.AreEqual("a@0 b@30 c@40", Slots(owner, "guard"), "column by column: the free cells are scanned down the columns, so the others stack under the tall item");
+        var back = owner.ArrangeHolderGrid(owner.Version, "guard", InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual(GameSessionDisposition.Changed, back.Disposition);
+        Assert.AreEqual("a@0 b@1 c@2", Slots(owner, "guard"), "row by row again");
+    }
+
+    [TestMethod]
     public void ATakenItemsCellClosesUpAtTheNextOpenAndNotBefore()
     {
         using var owner = Owner(Chest(Item("tall", 5001, 1, 3, 40), Item("mid", 5002, 1, 2, 7), Item("small", 5003, 1, 1, 3)));
