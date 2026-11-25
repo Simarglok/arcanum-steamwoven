@@ -39,6 +39,9 @@ public partial class AreaCharacterSheetSpellsView : Control
     // ARC-UI-3035: the kit's sheet behind this page (the page draws its own panel art only while the kit has none).
     private readonly AreaKitSheetView _kitSheet = new();
     internal bool KitSheetShownForSelfTest => _kitSheet.Shown;
+    // ARC-UI-3101: over the kit's sheet the college rings are cut to their gold circle and cast the generated shadow (they are separate arts with the old stone in their edge pixels).
+    private readonly AreaKitRoundPartsLayer _round = new();
+    internal AreaKitRoundPartsLayer RoundPartsForSelfTest => _round;
 
     public override void _EnterTree() => AreaKitSheets.Changed += QueueRedraw;
 
@@ -55,6 +58,7 @@ public partial class AreaCharacterSheetSpellsView : Control
         Visible = false;
         AreaArtTextDraw.Prepare(this);
         AddChild(_kitSheet);
+        AddChild(_round);
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts)
@@ -129,17 +133,22 @@ public partial class AreaCharacterSheetSpellsView : Control
 
     public override void _Draw()
     {
-        if (_fonts is not { } fonts) return;
+        if (_fonts is not { } fonts) { _round.Clear(); return; }
         // ARC-UI-3035: the kit's sheet for this page, if any, stands behind and the page's own panel art is not drawn.
         _kitSheet.Set(AreaCharacterSheetSpellsLayout.BackgroundArt, Size);
         if (!_kitSheet.Shown) DrawArt(Art(AreaCharacterSheetSpellsLayout.BackgroundArt), (0, 0));
-        if (_spells is null) return;
+        if (_spells is null) { _round.Clear(); return; }
+        var rings = new List<AreaKitRoundPartsLayer.Item>();
         for (var college = 0; college < AreaCharacterSheetSpellsLayout.Colleges; college++)
         {
             var art = AreaCharacterSheetSpellsLayout.CollegeArt(college);
-            DrawArt(Art(art, Frame(art, new(AreaCharacterSheetSpellsLayout.Part.CollegeTab, college), selected: college == _spells.College)),
-                AreaCharacterSheetSpellsLayout.CollegeTab(college));
+            var tab = Art(art, Frame(art, new(AreaCharacterSheetSpellsLayout.Part.CollegeTab, college), selected: college == _spells.College));
+            var place = AreaCharacterSheetSpellsLayout.CollegeTab(college);
+            // ARC-UI-3101: over the kit's sheet the ring goes through the round-part layer.
+            if (_kitSheet.Shown && AreaKitRoundPartsLayer.Applies(art, tab)) rings.Add(new(art, tab!, new Rect2(place.X, place.Y, tab!.GetWidth(), tab.GetHeight())));
+            else DrawArt(tab, place);
         }
+        if (rings.Count > 0) _round.Show(rings); else _round.Clear();
         var rank = _spells.Rank;
         for (var row = 0; row < AreaCharacterSheetSpellsLayout.Rows; row++)
         {

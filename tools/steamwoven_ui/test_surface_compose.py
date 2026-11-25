@@ -343,6 +343,53 @@ class SurfaceComposeTests(unittest.TestCase):
                 with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
                     surface_compose.load_spec(path)
 
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_plate_lays_grey_iron_brackets_by_the_originals_dark_mask_and_nothing_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, image, solid = tmp_path / "o.png", tmp_path / "i.png", tmp_path / "s.png"
+            # the original: old wood luma 60 and a 100 x 100 plate at 50,50; in its upper left corner a dark bracket (luma 30, 20 x 20) with a 10 x 10 lighter gap (luma 60) inside, a 3 x 3 speck (luma 30)
+            # far from it, a dark patch (x 98..120, y 98..120) reaching into the lower right window and lying in the weight-0 disc
+            subprocess.run(["magick", "-size", "200x200", "xc:gray(60)", "-fill", "gray(30)", "-draw", "rectangle 52,52 71,71", "-fill", "gray(60)", "-draw", "rectangle 56,56 65,65",
+                            "-fill", "gray(30)", "-draw", "rectangle 140,52 142,54", "-fill", "gray(30)", "-draw", "rectangle 98,98 120,120", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "200x200", "xc:gray(100)", str(image)], check=True)
+            subprocess.run(["magick", "-size", "200x200", "xc:white", "-fill", "black", "-draw", "rectangle 90,90 129,129", str(solid)], check=True)
+            laid = surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 150, 150),), 200, 200)
+            data = surface_compose.gray_bytes(image)
+            self.assertEqual(surface_compose.lay_plates(image, pngio.read(orig), solid, (), 200, 200), 0)    # no plate: nothing to do
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 250, 150),), 200, 200)
+        at = lambda x, y: data[y * 200 + x]
+        self.assertGreater(laid, 380)
+        low, high = round(100 * surface_compose.PLATE_TONE[0]), round(100 * surface_compose.PLATE_TONE[1])
+        self.assertTrue(low - 3 <= at(55, 55) <= low + 3, msg=str(at(55, 55)))      # the bracket: grey iron at the clamp's darkest share of the new wood (luma 30 over 60 is 0.5, under the 0.72 clamp)
+        self.assertTrue(low - 3 <= at(60, 60) <= high + 3, msg=str(at(60, 60)))     # the 10 x 10 gap inside the bracket is wider than the closing: the fill makes it iron too
+        self.assertEqual(at(141, 53), 100)      # a speck under PLATE_MIN pixels is no bracket
+        self.assertEqual(at(110, 118), 100)     # weight 0 (the disc), in the lower right window and dark in the original: untouched
+        self.assertEqual(at(20, 20), 100)       # outside the plate: untouched
+        self.assertEqual(at(100, 60), 100)      # between the brackets: the wood, untouched
+        self.assertEqual(at(72, 72), 100)       # just outside the bracket: untouched (the mask is hard)
+
+    def test_load_spec_reads_plate_boxes_and_refuses_a_bad_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spec.json"
+            disc = [0, 0, 120, 120, 10, 10, 110, 110]
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [disc], "plate_boxes": [[10, 10, 110, 110]]}), encoding="utf-8")
+            self.assertEqual(surface_compose.load_spec(path).plate_boxes, ((10, 10, 110, 110),))
+            for bad in ([[0, 0, 100]], [[50, 0, 50, 100]], "x", [[10, 10, 130, 110]]):     # a short entry, an empty box, no list, a plate outside every disc box
+                path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [disc], "plate_boxes": bad}), encoding="utf-8")
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.load_spec(path)
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": [[10, 10, 110, 110]]}), encoding="utf-8")      # no disc box at all
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.load_spec(path)
+
+    def test_the_inventory_plates_lie_inside_their_disc_boxes(self):
+        spec = surface_compose.load_spec(Path(__file__).parent / "zone_specs" / "ctx-inventory.json")
+        self.assertEqual(len(spec.plate_boxes), 2)
+        for plate in spec.plate_boxes:
+            self.assertTrue(any(d[0] <= plate[0] and d[1] <= plate[1] and plate[2] <= d[2] and plate[3] <= d[3] for d in spec.disc_boxes), msg=str(plate))
+
     def test_the_committed_specs_load_and_their_discs_lie_in_the_master(self):
         for path in sorted((Path(__file__).parent / "zone_specs").glob("ctx-*.json")):
             spec = surface_compose.load_spec(path)

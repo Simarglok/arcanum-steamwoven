@@ -57,7 +57,9 @@
       "prompts": [
         "plate-square-hud",
         "plate-round-hud",
-        "plate-ball-hud"
+        "plate-ball-hud",
+        "plate-dome-hud",
+        "plate-dome-small-hud"
       ],
       "after": null
     },
@@ -828,6 +830,40 @@
       "screen": null,
       "batch": "B-HARDWARE-HUD",
       "notes": "slice 1 of #2481 (ARC-UI-2481): one Codex item, six parts cut from the original on a transparent ground; hardware_build.py refs / cut"
+    },
+    {
+      "id": "plate-dome-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Large dark round button dome, empty (arts 32, 33, 201, 202, 203)",
+      "file": "plate-dome-hud.txt",
+      "size": [
+        1014,
+        1014
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-3 (ARC-UI-3203): one Codex item for the dome of the large Cancel, Done and Clear buttons (38 x 37 units, master 138 x 132), idle dome only, no brass: the dome is a circle that fills a square canvas, `disc_kit.py place` puts it where the original's disc stands, and the brass crescent, the gloss arc, the glyphs and the overlays are made by rule from the original frames and the strip's brass ring (disc_kit.py); fitted to plate.cncl_big, plate.done_big, plate.cler_big"
+    },
+    {
+      "id": "plate-dome-small-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Big Green arrow button dome, empty (arts 283, 284)",
+      "file": "plate-dome-small-hud.txt",
+      "size": [
+        1014,
+        1014
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-3 (ARC-UI-3203): one Codex item for the dome of the two Big Green arrow buttons (34 x 33 units, master 120 x 120), idle dome only, no brass (as plate-dome-hud: placed, crescent, gloss, glyphs and overlays by rule, disc_kit.py); fitted to plate.big_grn_l, plate.big_grn_r"
     },
     {
       "id": "hardware-menu-top-plates",

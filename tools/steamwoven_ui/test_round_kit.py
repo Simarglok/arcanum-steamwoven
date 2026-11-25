@@ -62,7 +62,7 @@ def darken(image: pngio.Image, share: float, left_of: int) -> pngio.Image:
 
 
 def write_frames(root: Path) -> None:
-    for index, b in enumerate(rk.ROUND_BUTTONS):
+    for index, b in enumerate(rk.ALL_ROUND):
         cells = symbol(index)
         idle = paint(disc(), cells, ORANGE)
         hover = paint(paint(disc(), [(x, y) for x in range(12 + index, 23 + index) for y in range(12, 26) if (x, y) not in set(cells)], (62, 45, 19)), cells, RED)
@@ -119,7 +119,7 @@ class PartTests(unittest.TestCase):
 
     def test_every_part_of_the_slice_is_built_at_the_face_size(self):
         parts = rk.build_parts(self.frames, None)
-        want = {f"{kind}.{b.name}{suffix}" for b in rk.ROUND_BUTTONS for kind, suffix in (("glyph", ""), ("plate", "_hover"), ("plate", "_pressed"))}
+        want = {f"{kind}.{b.name}{suffix}" for b in rk.ALL_ROUND for kind, suffix in (("glyph", ""), ("plate", "_hover"), ("plate", "_pressed"))}
         want |= {"glyph.fate_but", "glyph.sleep_but", "plate.lilgrnbut_pressed"}
         self.assertEqual(set(parts), want)
         for ident, image in parts.items():
@@ -268,7 +268,7 @@ class GlossTests(unittest.TestCase):
             fitted.mkdir(parents=True)
             records = local / "provenance" / "fit"
             records.mkdir(parents=True)
-            for b in rk.ROUND_BUTTONS:
+            for b in rk.ALL_ROUND:
                 pngio.write(fitted / f"plate.{b.name}.png", rk.upscaled(disc(), M))
                 (records / f"plate.{b.name}.json").write_text(json.dumps({"record": f"fit:plate.{b.name}", "master": {"sha256": "old"}, "limits": {"halo_mean_de": 15.0}}))
             pngio.write(fitted / "plate.lilgrnbut.png", rk.upscaled(disc(rk.BALL_UNITS), rk.BALL_MASTER))

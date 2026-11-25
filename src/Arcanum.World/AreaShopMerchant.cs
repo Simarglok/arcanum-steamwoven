@@ -163,7 +163,7 @@ public sealed class AreaShopSession : IDisposable
     /// <param name="effects">ARC-UI-1806: the effect rules of the new character's hero tables, for the merchant's sheet (its Gambling skill opens the bet and opposes the
     /// hero's check, as in the dialog's barter window); null: the merchant has no sheet and the bet gate refuses.</param>
     /// <param name="scriptContent">ARC-UI-1806: the script content (the generated dialog texts and the merchant's override dialog) the merchant's bet lines are read from, borrowed
-    /// and asked at each line; null or no content: no line is said (the gate's refusals then print nothing, as the dialog's window does without texts).</param>
+    /// and asked at each line and at each item-script run of the opening regeneration (ARC-SCRIPT-3242); null or no content: no line is said (the gate's refusals then print nothing, as the dialog's window does without texts).</param>
     /// <param name="npcName">ARC-SCRIPT-2811 (ledger NM3): the merchant's name as a line's <c>@npcname@</c> prints it, its description taken as a recognized NPC (<see cref="AreaDialogNames.NpcNameSource"/>; the window's <paramref name="merchantName"/> is the
     /// not-yet-met description); null: the window's name.</param>
     public static AreaShopSession? Open(GameSessionOwner owner, AreaShopMap map, AreaBarterData data, Func<string, SessionItemKind, string> name,
@@ -183,7 +183,10 @@ public sealed class AreaShopSession : IDisposable
         if (forgot.Disposition == GameSessionDisposition.Rejected) { refused = $"the merchant did not forget the PC ({forgot.Failure})"; return null; }
         var inventory = new AreaInventoryHost([map.Inventory]);
         var restock = new AreaRestockHost(owner, inventory, data, NoScreen.Instance);
-        var world = new AreaEventWorld(() => null, () => null, restock: () => restock);
+        // ARC-SCRIPT-3242 (exe 0x463E20 → 0x4617F0 → 0x461810 / 0x466640): the regeneration of the merchant and its container runs the created items' get (4) and insert-item (21) scripts and the clear's remove-item scripts (28), with the holder as the triggerer. The shop
+        // map is the actor's map and the only map the host reads rows of, so its inventory map is the host's (the content is asked when a script runs; no shown map's use host exists before the game starts, see the limits in docs/world/inventory-runtime.md).
+        var itemScripts = scriptContent is null ? null : AreaItemScriptHost.Lazy(owner, [map.Inventory], scriptContent, effects);
+        var world = new AreaEventWorld(() => null, () => null, restock: () => restock, itemScripts: () => itemScripts);
         var merchantRegeneration = owner.RegenerateInventory(owner.Version, map.Merchant, world);
         if (merchantRegeneration.Disposition == GameSessionDisposition.Rejected) { refused = $"the merchant's inventory did not regenerate ({merchantRegeneration.Failure})"; return null; }
         var row = map.MerchantRow;

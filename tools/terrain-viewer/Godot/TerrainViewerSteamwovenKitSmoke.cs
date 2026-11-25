@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session;
+using Arcanum.World;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -564,6 +565,16 @@ public partial class TerrainViewerApp
             _sheetPanel.SelectTabForSelfTest(page.Tab);
             await frames(4);
             require(page.Visible() && page.Shown() == kitSheets, $"[{tag}] the {page.Name} page shows and draws {(kitSheets ? "its kit sheet" : "its own panel art (no kit sheet)")}");
+            // ARC-UI-3101: over the kit's sheet the page's round buttons go through the round-part layer (cut to their gold circle, with the generated shadow); on the page's own art none does.
+            var rounds = page.Name switch { "skills" => view.Pages.RoundPartsForSelfTest.ShownForSelfTest, "tech" => view.Pages.RoundPartsForSelfTest.ShownForSelfTest, "spells" => view.Spells.RoundPartsForSelfTest.ShownForSelfTest, _ => [] };
+            IReadOnlyList<int> expectedRounds = !kitSheets ? [] : page.Name switch
+            {
+                "skills" => [.. Enumerable.Range(AreaCharacterSheetPagesLayout.GroupTabArtBase, AreaCharacterSheetPagesLayout.Groups)],
+                "tech" => [.. Enumerable.Range(AreaCharacterSheetPagesLayout.DisciplineArtBase, AreaCharacterSheetPagesLayout.Disciplines)],
+                "spells" => [.. AreaCharacterSheetSpellsLayout.CollegeArtNumbers],
+                _ => [],
+            };
+            require(rounds.SequenceEqual(expectedRounds), $"[{tag}] the {page.Name} page draws its round buttons {(kitSheets ? "through the round-part layer" : "as they are")} (got {string.Join(",", rounds)})");
             using var shot = GetViewport().GetTexture().GetImage();
             var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
             var at = page.Point(3, 321);
