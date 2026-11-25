@@ -55,7 +55,9 @@
     },
     "B-BUTTONS": {
       "prompts": [
-        "plate-square-hud"
+        "plate-square-hud",
+        "plate-round-hud",
+        "plate-ball-hud"
       ],
       "after": null
     }
@@ -572,6 +574,42 @@
       "screen": null,
       "batch": "B-BUTTONS",
       "notes": "slice B-BUTTONS-1 (ARC-UI-2482): one Codex item, idle plate only; every state, glyph and lit face of these buttons is made by rule from the original frames (button_kit.py); fitted to the five plate parts of the top-strip buttons"
+    },
+    {
+      "id": "plate-round-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Round HUD button face, empty (arts 470, 471, 472, 473)",
+      "file": "plate-round-hud.txt",
+      "size": [
+        1014,
+        1014
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-2 (ARC-UI-3202): one Codex item for the four round buttons of the bottom strip, idle face only (no brass ring: the strip draws the socket); the glyphs and the hover and pressed overlays are made by rule from the original frames (round_kit.py); fitted to the four plate parts"
+    },
+    {
+      "id": "plate-ball-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Fate Points / Sleep ball plate, empty (art 137)",
+      "file": "plate-ball-hud.txt",
+      "size": [
+        1014,
+        1014
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-2 (ARC-UI-3202): one Codex item for the ball of the Fate Points and Sleep buttons, idle plate only (the original has no symbol on it); the pressed overlay is made by rule from the original frames (round_kit.py); fitted to plate.lilgrnbut"
     }
   ]
 }
