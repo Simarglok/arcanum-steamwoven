@@ -47,12 +47,17 @@ public partial class TerrainViewerApp
         // The hero gives one taken ground item to a living NPC of the window: it leaves the hero's list, and the window still must not draw it (the report: items given to a companion in the cave lay on the ground again).
         var receiver = inventory.Holders.Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && window.TryGetRow(h.Entity, out _)).OrderBy(h => h.Entity, StringComparer.Ordinal).FirstOrDefault();
         var gaveOn = 0;
-        if (receiver is not null && taken.Count > 0)
+        // An ammunition stack merges and gold is no item to hand on: the first other taken item goes.
+        var giveable = taken.FirstOrDefault(entity => inventory.Ground.Any(g => g.Item.Entity == entity && g.Item.Facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing or SessionItemType.Ammo)));
+        if (receiver is not null && giveable is not null)
         {
-            var give = session.GiveItemToNpc(session.Version, receiver.Entity, taken[0], _inventoryHost.InsertCheck);
-            if (give.Disposition == GameSessionDisposition.Changed) gaveOn = 1;
-            else GD.Print($"{TakeReturnCode} stage give refused: {give.Failure}");
+            var give = session.GiveItemToNpc(session.Version, receiver.Entity, giveable, _inventoryHost.InsertCheck);
+            Require(give.Disposition == GameSessionDisposition.Changed, $"the hero's item was given to {receiver.Entity}: {give.Failure}");
+            Require(session.QueryGivenItems().Any(g => g.Entity == giveable), "the given item is in the NPC's list");
+            Require(!session.QueryPcInventory().Any(item => item.Entity == giveable), "the given item left the hero's list");
+            gaveOn = 1;
         }
+        else GD.Print($"{TakeReturnCode} stage give skipped: receiver={receiver is not null} giveable={giveable is not null}");
         var rest = candidates.Except(taken).ToArray();
         if (taken.Count == 0) { GD.Print($"{TakeReturnCode} native-smoke take-return NONE (no ground item of the window can be taken)"); return; }
         var keys = taken.Concat(looted).Select(entity => window.Row(entity).Key).ToArray();
@@ -67,7 +72,7 @@ public partial class TerrainViewerApp
             var lying = _areaSession!.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.Select(g => g.Item.Entity).ToHashSet(StringComparer.Ordinal) ?? [];
             Require(!taken.Concat(looted).Any(lying.Contains), $"a taken item is on the session's ground {when}: {string.Join(",", taken.Concat(looted).Where(lying.Contains))}");
             var still = rest.Where(entity => now!.TryGetRow(entity, out _)).ToArray();
-            Require(still.Length == 0 || still.Any(entity => _inventoryHost.Target(_areaSession!, CurrentAreaMap, now!.Row(entity).Key) is { Kind: AreaInventoryTargetKind.GroundItem }), $"an item not taken is still a pickup target {when}");
+            Require(still.Length > 0 && still.Any(entity => _inventoryHost.Target(_areaSession!, CurrentAreaMap, now!.Row(entity).Key) is { Kind: AreaInventoryTargetKind.GroundItem }), $"an item not taken is still a pickup target {when}");
         }
         Hidden("after the pickup");
 
