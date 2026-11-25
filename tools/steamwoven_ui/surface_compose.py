@@ -113,7 +113,7 @@ class ZoneSpec:
     kit_parts: tuple[dict, ...] = ()
     island_min: int = 0                                          # ARC-UI-3164: wood-weight islands under this many pixels are dropped (the ORIGINAL's pixels stand there): metal and paper edges the class leaks into
     fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
-    halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (a gear, an oval): the wood weight is 1 outside the part's own light shape, 0 inside it
+    halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (a gear, an oval): the wood weight is 1 outside the part's own light shape
     disc_boxes: tuple[tuple[int, int, int, int, int, int, int, int], ...] = ()   # ARC-UI-3101: (x0, y0, x1, y1, dx0, dy0, dx1, dy1): the wood weight is 1 in the box outside the ellipse of the disc box (a lens, a round button), 0 inside
     dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
     wood_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes where the Codex wood shows whole: the letters baked into the wood go
@@ -820,8 +820,8 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     work.mkdir(parents=True, exist_ok=True)
     img_o = pngio.read(original)
     w, h = img_o.w, img_o.h
-    for kind in ("erase_boxes", "text_boxes", "paper_boxes", "wood_boxes"):       # a box outside the image is found before the minutes of work, not after
-        for x0, y0, x1, y1 in getattr(spec, kind):
+    for kind in ("erase_boxes", "text_boxes", "paper_boxes", "wood_boxes", "halo_boxes", "disc_boxes"):       # a box outside the image is found before the minutes of work, not after
+        for x0, y0, x1, y1 in (box[:4] for box in getattr(spec, kind)):
             if x1 > w or y1 > h:
                 raise ComposeError(f"{kind[:-1].replace('_', ' ')} {(x0, y0, x1, y1)} is outside the {w} x {h} px image")
     if pngio.read(a).w != w:

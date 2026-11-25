@@ -291,13 +291,14 @@ class SurfaceComposeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             orig, solid = tmp_path / "o.png", tmp_path / "s.png"
-            subprocess.run(["magick", "-size", "240x120", "xc:gray(30)", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "240x120", "xc:gray(30)", "-fill", "gray(150)", "-draw", "rectangle 105,45 135,75", str(orig)], check=True)
             subprocess.run(["magick", "-size", "240x120", "xc:black", str(solid)], check=True)
-            spec = surface_compose.ZoneSpec(id="z", disc_boxes=((10, 10, 230, 110, 20, 30, 220, 90),))
+            spec = surface_compose.ZoneSpec(id="z", disc_boxes=((10, 10, 230, 110, 20, 30, 220, 90),), halo_boxes=((90, 35, 150, 85),))
             surface_compose.apply_box_fills(orig, solid, spec, 240, 120)
             data = surface_compose.gray_bytes(solid)
         self.assertGreater(data[20 * 240 + 120], 200)    # above the oval (y 20, inside the box but outside the ellipse y 30..89): wood
         self.assertLess(data[60 * 240 + 120], 60)        # the oval
+        self.assertLess(data[60 * 240 + 95], 60)         # inside the oval and the halo box but beside the light square: the disc runs after the halo, so the original's
         self.assertGreater(data[60 * 240 + 15], 200)     # left of the oval's tip, inside the box: wood
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
