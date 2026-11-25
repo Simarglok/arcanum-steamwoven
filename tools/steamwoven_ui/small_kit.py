@@ -312,15 +312,15 @@ def triangle_polygon_alpha(top: float, bottom: float, cx: float, half: float, si
     return out
 
 
-def triangle_alpha(mask: list[bool], size: tuple[int, int], master: tuple[int, int], up: bool) -> list[float]:
+def triangle_alpha(mask: list[bool], size: tuple[int, int], master: tuple[int, int], up: bool, scale: int = 1) -> list[float]:
     """An isosceles triangle with the mask's box (the apex half a cell above its top row): exact straight edges, one sharp apex."""
     w, h = size
     biggest = max(components(mask, w, h), key=len)   # a stray cell beside the triangle is no part of it
     cells = [(i % w, i // w) for i in biggest]
     top, bottom = min(y for _, y in cells), max(y for _, y in cells) + 1
     left, right = min(x for x, _ in cells), max(x for x, _ in cells) + 1
-    # the apex row of the original is one cell wide: the true apex lies half a cell beyond it
-    return triangle_polygon_alpha(top - 0.5 if up else top, bottom if up else bottom + 0.5, (left + right) / 2.0, (right - left) / 2.0, size, master, up)
+    # the apex row of the original is one cell wide: the true apex lies half a cell beyond it (`scale` = mask pixels per cell)
+    return triangle_polygon_alpha(top - 0.5 * scale if up else top, bottom if up else bottom + 0.5 * scale, (left + right) / 2.0, (right - left) / 2.0, size, master, up)
 
 
 def silhouette(mask: list[bool], size: tuple[int, int], master: tuple[int, int], sigma: float = SYMBOL_SIGMA, level: float = SYMBOL_LEVEL) -> list[float]:
@@ -481,7 +481,7 @@ def ring_profile(ring: Image) -> tuple[list[tuple[float, float, float]], list[fl
 
 
 def resample_bilinear(image: Image, w: int, h: int) -> Image:
-    """The picture at another size by area-weighted box averaging (premultiplied), for a reduction; a plain bilinear when it grows."""
+    """The picture at another size by area-weighted box averaging (premultiplied), made for a reduction; box sampling when it grows (nearest-like; the dome master only shrinks here)."""
     out = Image(w, h, bytearray(w * h * 4))
     sx, sy = image.w / w, image.h / h
     for y in range(h):
@@ -600,7 +600,7 @@ def button_parts(frames: Path, b: Small, pack: Path | None = None, shape_source:
     idle = read_frame(frames, b, b.frames["idle"])
     shape = symbol_shape(frames, pack, b, shape_source)
     mask = coarse(shape.mask, shape.size[0], shape.size[1], shape.size[0] // b.units[0])   # the symbol on the original's cells: the colours, the glow and the darkening are read there
-    alpha = triangle_alpha(shape.mask, shape.size, b.master, b.outline == "tri_up") if b.outline else silhouette(shape.mask, shape.size, b.master, shape.sigma, b.level)
+    alpha = triangle_alpha(shape.mask, shape.size, b.master, b.outline == "tri_up", shape.size[0] // b.units[0]) if b.outline else silhouette(shape.mask, shape.size, b.master, shape.sigma, b.level)
     parts = {f"glyph.{b.name}": engraved(alpha, symbol_colour(idle, mask, b.hue), b.master, b.engrave)}
     for state in STATES:
         number = b.frames.get(state)
@@ -780,7 +780,7 @@ def salvaged_band(local: Path, item: Item, record: dict, work: Path) -> tuple[Pa
     """A strip the generator refused for its aspect but saved (a canvas with black bars round the band, `refused` in its record) is used through the band crop of the batch runner (TRD SWI-GEN-8: the cropped band
     is accepted when the tool step produced it); the record says so. Anything else missing is an error."""
     picture = local / "codex-work" / BATCH / str(record.get("run")) / f"{item.prompt}.png"
-    if record.get("outcome") != "refused" or item.size[0] / item.size[1] < 4.0 or not picture.is_file():
+    if record.get("outcome") not in ("refused", "wrong-aspect") or item.size[0] / item.size[1] < 4.0 or not picture.is_file():
         raise SmallError(f"the result of {item.prompt} is missing in the outbox (run the batch first: codex_batch.py run {BATCH} --crop-band)")
     out = work / f"{item.prompt}-band.png"
     subprocess.run([sys.executable, "-B", str(HERE / "codex_batch.py"), "crop", str(picture), "--size", f"{item.size[0]}x{item.size[1]}", "--out", str(out)], check=True, capture_output=True)
@@ -1034,6 +1034,72 @@ def cmd_sheet(args: argparse.Namespace) -> int:
     return 0
 
 
+def pack_layer(b: Small, pack: Path | None, number: int) -> Image | None:
+    """The old HD pack frame of a button's state at the master size (the owner's candidate for round buttons, 2026-11-25: the pack's frame as it is), with an analytic round alpha for a round button (a smooth even edge, no
+    corners of the old background, no staircase); None when the pack has no frame for the state."""
+    hd = pack_frame(pack, b, number)
+    if hd is None:
+        return None
+    w, h = b.master
+    flat = resample_bilinear(hd, w, h)
+    if b.family != "round":
+        return flat
+    for y in range(h):
+        for x in range(w):
+            rho = math.hypot((x + 0.5 - w / 2.0) / (w / 2.0), (y + 0.5 - h / 2.0) / (h / 2.0))
+            edge = max(0.0, min(1.0, (1.0 - rho) * min(w, h) / 2.0 + 0.5))   # one pixel of anti-aliasing at the ellipse
+            o = (y * w + x) * 4 + 3
+            flat.data[o] = int(round(flat.data[o] * edge))
+    return flat
+
+
+def cmd_variants(args: argparse.Namespace) -> int:
+    """A composite for the owner's pick: the original | the pack's frames as they are (variant P, analytic round alpha) | the kit's rule-F parts (variant R), idle, hover, pressed, for every button whose
+    pack frames exist (the two big plus / minus buttons 257, 258 have none)."""
+    need_magick()
+    local = args.local_root
+    frames = args.frames or local / "census" / "frames"
+    plate_dir = args.plate_dir or local / "masters"
+    buttons = selected(args.only)
+    parts = build_parts(frames, buttons, args.pack, args.shape)
+    rows = []
+    for b in buttons:
+        states = [(state, b.frames[state]) for state in ("idle", "hover", "pressed") if b.frames.get(state) is not None]
+        packed = [(state, pack_layer(b, args.pack, number)) for state, number in states]
+        if any(layer is None for _, layer in packed):
+            print(f"{b.name}: the pack has no frame for every state, skipped")
+            continue
+        plate = read_plate(plate_dir, b) or (round_plate(b, local) if b.plate == "dome" else None)
+        if plate is None:
+            raise SmallError(f"plate.{b.name} is not fitted yet")
+        idle = button_kit.composite(plate, parts[f"glyph.{b.name}"])
+        cells = [("original idle", upscaled(read_frame(frames, b, 0), b.master))]
+        cells += [(f"P pack {state}", layer) for state, layer in packed]  # type: ignore[misc]
+        cells.append(("R kit idle", idle))
+        for state, _ in states[1:]:
+            cells.append((f"R kit {state}", button_kit.composite(idle, parts[f"plate.{b.name}_{state}"])))
+        rows.append((b.name, cells))
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        lines = []
+        for k, (name, cells) in enumerate(rows):
+            files = []
+            for j, (label, image) in enumerate(cells):
+                path = work / f"{k}-{j}.png"
+                pngio.write(path, image)
+                labelled = work / f"{k}-{j}-lab.png"
+                subprocess.run(["magick", str(path), "-background", "#3c3c3c", "-flatten", "-filter", "point", "-resize", f"{args.zoom * 100}%", "-gravity", "North", "-background", "#202020", "-fill", "white",
+                                "-font", LABEL_FONT, "-pointsize", "14", "-splice", "0x22", "-annotate", "+0+3", f"{name} {label}", str(labelled)], check=True)
+                files.append(labelled)
+            row = work / f"row-{k}.png"
+            subprocess.run(["magick", *[str(f) for f in files], "-background", "#202020", "-gravity", "North", "+append", "-bordercolor", "#202020", "-border", "6", str(row)], check=True)
+            lines.append(row)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["magick", *[str(r) for r in lines], "-background", "#202020", "-gravity", "West", "-append", str(args.out)], check=True)
+    print(f"SMALL KIT variants PASS ({len(rows)} buttons) -> {args.out}")
+    return 0
+
+
 def self_test() -> int:
     mask = [False] * 25
     for i in (7, 11, 12, 13, 17):
@@ -1048,7 +1114,7 @@ def self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("plan", "refs", "plates", "build", "sheet", "cut"):
+    for name in ("plan", "refs", "plates", "build", "sheet", "cut", "variants"):
         s = sub.add_parser(name)
         s.add_argument("--local-root", type=Path, default=None)
         if name != "plan":
@@ -1060,7 +1126,7 @@ def main(argv: list[str] | None = None) -> int:
             s.add_argument("--out", type=Path)
         if name in ("build", "cut"):
             s.add_argument("--dry-run", action="store_true")
-        if name == "sheet":
+        if name in ("sheet", "variants"):
             s.add_argument("--out", type=Path, required=True)
             s.add_argument("--plate-dir", type=Path)
             s.add_argument("--zoom", type=int, default=4)
@@ -1070,7 +1136,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "self-test":
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
-        return {"plan": cmd_plan, "refs": cmd_refs, "cut": cmd_cut, "plates": cmd_plates, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
+        return {"plan": cmd_plan, "refs": cmd_refs, "cut": cmd_cut, "plates": cmd_plates, "build": cmd_build, "sheet": cmd_sheet, "variants": cmd_variants}[args.command](args)
     except (SmallError, pngio.PngError, OSError, subprocess.CalledProcessError) as error:
         print(f"SMALL KIT FAIL: {error}")
         return 2

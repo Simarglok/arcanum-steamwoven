@@ -1405,13 +1405,14 @@ The kit parts of the small stone and dark buttons (the round skill and slider bu
 
 ```sh
 python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 18 buttons, how each plate is made, and the manifest size check
-python3 -B tools/steamwoven_ui/small_kit.py refs                           # the seven references: the idle frame without its symbol, stretched (a magenta ground round a cut-out)
-python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS-SMALL     # the inbox (seven items)
+python3 -B tools/steamwoven_ui/small_kit.py refs                           # the five references: the idle frame without its symbol, stretched (a magenta ground round a cut-out)
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS-SMALL     # the inbox (five items)
 python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-SMALL --crop-band   # the owner's Codex subscription (gpt-6.1-sol); the 5 : 1 strip needs the band crop
 python3 -B tools/steamwoven_ui/small_kit.py cut [--only PROMPT,...] [--dry-run]   # results -> keyed, cut, fitted plate masters (fit.py; the halo gate's recorded overrides as in the gauge batch)
-python3 -B tools/steamwoven_ui/small_kit.py plates                          # the four round plates (the strip's dome + the brass ring by rule) and the two OFF plates (darkened by rule)
+python3 -B tools/steamwoven_ui/small_kit.py plates                          # the plates by rule: the four round ones (the strip's dome + the brass ring), the two scroll triangles, the two OFF strips (darkened)
 python3 -B tools/steamwoven_ui/small_kit.py build [--shape mask|pack] [--only NAME,...] [--dry-run]   # glyphs and overlays -> masters/ and provenance/rule/
 python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]          # the before / after composite (English labels)
+python3 -B tools/steamwoven_ui/small_kit.py variants --out FILE [--zoom N]                          # original | the HD pack's frames as they are (analytic round alpha) | the rule-F parts, for the owner's pick
 ```
 
 A symbol's shape is read from the original's mask by default (`--shape pack` reads the installed HD pack's old generative frame instead, the owner's first source for a symbol shape; for these plain plus, minus and arrow symbols the pack frames have blunt tips and bumps). Rule F constants (`SYMBOL_SIGMA`, `SYMBOL_LEVEL`, `ENGRAVE_*`, `GLOW_*`, `DARK_*`) and the ring (`RING_UNITS`, `RING_SOURCE`) are at the top of `small_kit.py`. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_small_kit` (about 1 s; also in `tools/local_dev/run_tests.py`).

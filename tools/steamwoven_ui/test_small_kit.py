@@ -228,6 +228,92 @@ class RingTest(unittest.TestCase):
             sk.ring_profile(pngio.Image(10, 10, bytearray(400)))
 
 
+class KeyAndReferenceTest(unittest.TestCase):
+    def test_key_cutout_clears_the_ground_cuts_to_the_box_and_removes_spill(self):
+        image = pngio.Image(20, 12, bytearray(20 * 12 * 4))
+        for i in range(20 * 12):
+            image.data[i * 4:i * 4 + 4] = bytes((255, 0, 255, 255))
+        for y in range(3, 9):
+            for x in range(5, 15):
+                image.data[(y * 20 + x) * 4:(y * 20 + x) * 4 + 4] = bytes((60, 60, 20, 255))
+        image.data[(3 * 20 + 5) * 4:(3 * 20 + 5) * 4 + 3] = bytes((45, 1, 47))   # a dark edge pixel with the ground's light on it
+        keyed = sk.key_cutout(image)
+        self.assertEqual((keyed.w, keyed.h), (10, 6))
+        self.assertTrue(all(keyed.pixel(x, y)[3] == 255 for x in range(10) for y in range(6)))
+        r, g, b, _ = keyed.pixel(0, 0)
+        self.assertLess(abs(r - b), 12)
+        self.assertLess(r, 8)   # the magenta lean is taken out
+        with self.assertRaises(sk.SmallError):
+            sk.key_cutout(pngio.Image(4, 4, bytearray(bytes((255, 0, 255, 255)) * 16)))
+
+    def test_symbol_free_removes_the_symbol_and_its_recess(self):
+        b = button()
+        cells = plus(10, 10)
+        image = frame(b.units, cells)
+        free = sk.symbol_free(image, b)
+        for x, y in cells:
+            self.assertEqual(free.pixel(x, y)[:3], BASE)
+        self.assertEqual(free.pixel(1, 1)[:3], BASE)
+
+    def test_triangle_polygon_at_a_pack_scale(self):
+        b = button(family="strip")
+        cells = [(x, y) for y in range(6, 13) for x in range(10 - (y - 6), 11 + (y - 6))]
+        small = sk.symbol_mask(frame(b.units, cells), b)
+        hd = [small[(y // 4) * 20 + x // 4] for y in range(80) for x in range(80)]
+        a1 = sk.triangle_alpha(small, b.units, b.master, True)
+        a4 = sk.triangle_alpha(hd, (80, 80), b.master, True, 4)
+        self.assertLess(abs(sum(a1) - sum(a4)) / sum(a1), 0.03)   # the apex lies half a CELL beyond the top row at either scale
+
+
+class RulePlateTest(unittest.TestCase):
+    def make_local(self, root: Path) -> None:
+        RingTest().make_local(root)
+
+    def triangle_frame(self) -> pngio.Image:
+        image = pngio.Image(11, 15, bytearray(11 * 15 * 4))
+        for y in range(15):
+            for x in range(11):
+                if abs(x - 5) <= y * 5 // 14:
+                    image.data[(y * 11 + x) * 4:(y * 11 + x) * 4 + 4] = bytes((140, 100, 50, 255))
+        return image
+
+    def test_tri_plate_has_outline_band_and_field_by_distance_and_clear_corners(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp)
+            self.make_local(local)
+            frames = local / "frames"
+            b = sk.button_named("scrllup")
+            (frames / b.folder).mkdir(parents=True)
+            pngio.write(frames / b.folder / "f0.png", self.triangle_frame())
+            plate = sk.tri_plate(b, frames, local)
+            w, h = b.master
+            self.assertEqual(plate.pixel(0, 0)[3], 0)                           # the corner outside the triangle is clear
+            self.assertEqual(plate.pixel(w // 2, h - 12)[:3], sk.TRI_FIELD)     # the field inside, far from every edge
+            edge = plate.pixel(w // 2, h - 2)                                   # just inside the base: the dark outline
+            self.assertEqual(edge[3], 255)
+            self.assertLess(sum(edge[:3]), sum(plate.pixel(w // 2, h - 6)[:3]))  # the band behind the outline is lighter
+            left, right = plate.pixel(w // 2 - 9, h - 7), plate.pixel(w // 2 + 9, h - 7)
+            self.assertEqual((left[3], right[3]), (255, 255))
+
+    def test_derived_plate_is_the_base_darkened(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp)
+            (local / "masters").mkdir()
+            frames = local / "frames"
+            base, off = sk.button_named("follow_scroll_up"), sk.button_named("follow_scroll_up_off")
+            plate = pngio.Image(120, 48, bytearray(bytes((120, 110, 130, 255)) * (120 * 48)))
+            pngio.write(local / "masters" / "plate.follow_scroll_up.png", plate)
+            for b, level in ((base, 120), (off, 60)):
+                (frames / b.folder).mkdir(parents=True)
+                tri = [(x, y) for y in range(3, 10) for x in range(16 - (y - 3), 18 + (y - 3))]
+                pngio.write(frames / b.folder / "f0.png", frame(b.units, tri, colour=(30, 230, 40), plate=(level, level, level + 10)))
+            dark = sk.derived_plate(off, frames, local)
+            self.assertEqual((dark.w, dark.h), (120, 48))
+            self.assertLess(dark.pixel(5, 24)[0], 120 - 20)
+            with self.assertRaises(sk.SmallError):
+                sk.derived_plate(off, frames, local / "elsewhere")
+
+
 class TableTest(unittest.TestCase):
     def test_every_button_matches_its_manifest_row(self):
         manifest = {r["id"]: r for r in json.loads(sk.MANIFEST.read_text(encoding="utf-8"))["parts"]}
