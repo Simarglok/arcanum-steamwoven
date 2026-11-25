@@ -58,6 +58,14 @@
         "plate-square-hud"
       ],
       "after": null
+    },
+    "B-HARDWARE-HUD": {
+      "prompts": [
+        "hardware-hud-bottom",
+        "hardware-hud-top-plates",
+        "hardware-hud-top-parts"
+      ],
+      "after": null
     }
   },
   "prompts": [
@@ -572,6 +580,60 @@
       "screen": null,
       "batch": "B-BUTTONS",
       "notes": "slice B-BUTTONS-1 (ARC-UI-2482): one Codex item, idle plate only; every state, glyph and lit face of these buttons is made by rule from the original frames (button_kit.py); fitted to the five plate parts of the top-strip buttons"
+    },
+    {
+      "id": "hardware-hud-bottom",
+      "group": "part",
+      "kind": "hardware",
+      "title": "HUD bottom strip details (vial housing, cylinder, wires, ring, dial, slot frame, lamp, rail unit)",
+      "file": "hardware-hud-bottom.txt",
+      "size": [
+        1596,
+        1194
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-HUD",
+      "notes": "slice 1 of #2481 (ARC-UI-2481): one Codex item, a sheet of the eight metal details of the strip cut from the original on a transparent ground; hardware_build.py refs / cut"
+    },
+    {
+      "id": "hardware-hud-top-plates",
+      "group": "part",
+      "kind": "hardware",
+      "title": "HUD top strip iron end sections, iron only (two plates with their openings)",
+      "file": "hardware-hud-top-plates.txt",
+      "size": [
+        1590,
+        822
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-HUD",
+      "notes": "slice 1 of #2481 (ARC-UI-2481): one Codex item; the original's brass details are painted out of the reference, they are parts of their own (hardware-hud-top-parts); hardware_build.py refs / cut"
+    },
+    {
+      "id": "hardware-hud-top-parts",
+      "group": "part",
+      "kind": "hardware",
+      "title": "HUD top strip small parts (clock frame, slot frame, ring, infinity box, hourglass, rivet)",
+      "file": "hardware-hud-top-parts.txt",
+      "size": [
+        1602,
+        732
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-HUD",
+      "notes": "slice 1 of #2481 (ARC-UI-2481): one Codex item, six parts cut from the original on a transparent ground; hardware_build.py refs / cut"
     }
   ]
 }
