@@ -31,6 +31,7 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
+from tools.steamwoven_ui import parchment_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
@@ -218,9 +219,26 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
+def box_parts(plates: dict[str, dict]) -> list[dict]:
+    """ARC-UI-3205, slice 5 of B-BUTTONS, part one: the symbol of every oval box (Drop, Use, Gamble) and its lit twin, BY RULE from the original's frames (`parchment_kit.py`, no Codex). Each part sits where its plate sits (anchor and windows)."""
+    parts = []
+    for box in parchment_kit.BOXES:
+        plate = plates.get(f"plate.{box.name}")
+        if plate is None:  # a census without the box (a test's synthetic one): nothing to hang the parts on (the real census has all three, `build_kit.py --check` pins it)
+            continue
+        for ident, states, what in ((f"glyph.{box.name}", ["idle"], f"the symbol of art {box.art} as the idle frame shows it over the plate"),
+                                    (f"glyph.{box.on_name}", ["hover", "pressed"], f"the lit symbol of art {box.on_art} (the lit frame's cells in the same mask)")):
+            parts.append(new_part(ident, "glyph", plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
+                                  f"{what}; parchment_kit.py draws it from the original frames (no Codex), a {parchment_kit.MASTER[0]} x {parchment_kit.MASTER[1]} canvas of the whole frame, so the size is open",
+                                  states=states, master=True, provenance=f"rule:parchment_kit:{ident}"))
+    return parts
+
+
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
 DISC_PLATES = {f"plate.{m.name}": (f, m) for f in disc_kit.FAMILIES for m in f.members}
+BOX_PLATES = {f"plate.{b.name}": b for b in parchment_kit.BOXES}
+BOX_STATES = {f"state.{n}": b for b in parchment_kit.BOXES for n in (b.on_name, b.ill_name)}
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
@@ -275,6 +293,14 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"fit:{ident}"
             part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
+        if ident in BOX_PLATES:
+            part["status"], part["provenance"] = "master", f"fit:{ident}"
+            part["note"] = "the empty oval box: one Codex item (plate-parchment-oval, its field toned to the original's by parchment_kit.py tone), fitted to this part; the symbol, the lit face and the refused face are made by rule (parchment_kit.py, ARC-UI-3205)"
+        if ident in BOX_STATES:
+            lit = ident.endswith("_on")
+            part["status"], part["provenance"] = "master", f"rule:parchment_kit:{ident}"
+            part["note"] = (f"the lit face of art {part['source_arts'][-1]}: the plate lightened by the lit frame's gain field, the corners green; its symbol is glyph.{BOX_STATES[ident].on_name}" if lit else
+                            f"the refused face of art {part['source_arts'][-1]}: the plate with the corners red; the symbol is the idle one (parchment_kit.py, ARC-UI-3205)")
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
@@ -287,6 +313,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         parts.append(part)
     parts.extend(new_parts())
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES}))
+    parts.extend(box_parts({p["id"]: p for p in parts if p["id"] in BOX_PLATES}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),

@@ -1450,6 +1450,24 @@ python3 -B tools/steamwoven_ui/disc_kit.py sheet --out FILE [--zoom N] [--family
 The frame functions (`button_kit.render_crisp`, `resample_plane`, `outside_cells`, `round_kit.gloss_layer`) take a frame of any width and height (a `(width, height)` pair for the master); the square results are byte for byte the slice-1 and slice-2 masters. The plate template of a family is voted per cell from the idle and hover frames of all its buttons (two buttons must agree, a colour that is no dome colour is not voted in the middle of the dome, a cell fewer than two buttons show plain is filled from its neighbours, a trace of a symbol's edge in the middle of the dome takes the local median; all symbols of these families lie in that middle, `SPECK_SHARE` of the radius); the dome's middle and radius of a family are constants fitted once to the outline of its frames (`FAMILIES`). The brass crescent is made by rule, not generated: its inner and outer radius per 5 degrees of angle are read from the original's brass cells (smooth, tapering to points), its surface is cut from the strip's brass ring master at its lit side (owner 2026-11-25: thin as the original, warm ring brass), and a dark gap of one cell lies between it and the dome; no overlay takes the original's brass cells. A twin art is refused unless its frames are byte for byte the same. The halo gate of the fit tool ([#3073](https://github.com/Simarglok/arcanum-steamwoven/issues/3073)) is relaxed as in slice 2 (mean 15 / p95 30; after the safety net p95 under 3); the limits are in each plate's fit record.
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_disc_kit` (about 4 s, in the batched `tools/local_dev/run_tests.py`).
 
+## Steamwoven parchment boxes, batch B-BUTTONS slice 5 (ARC-UI-3205)
+
+Part one of the fifth slice of B-BUTTONS (the rest of #3205 is split into #3309, #3310 and #3311 by plate family): the three oval boxes of the inventory, loot and barter windows (Drop 224, Use 342, Gamble 345 and their lit 225, 343, 344 and refused 348, 347, 346 frames; 80 x 43 units, 288 x 156 px). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/parchment_kit.py masks --out FILE [--zoom N]   # the three symbol masks over the idle frames, for a look
+python3 -B tools/steamwoven_ui/parchment_kit.py refs                          # the original oval without its symbol (the prompt's ORIGINAL) and the two material swatches
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS              # the inbox (the earlier slices' items are skipped by the runner while their outbox files exist)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS --only plate-parchment-oval   # gpt-6.1-sol, about a minute
+python3 -B tools/steamwoven_ui/parchment_kit.py tone                          # the generated field takes the original's mean colour -> work/B-BUTTONS/plate-parchment-oval-toned.png + derived record
+for n in drop_off use_box_off gamble_box_off; do python3 -B tools/steamwoven_ui/fit.py fit plate.$n --source local/steamwoven-ui/work/B-BUTTONS/plate-parchment-oval-toned.png --provenance local/steamwoven-ui/work/B-BUTTONS/plate-parchment-oval-toned.provenance.json --key none --masters local/steamwoven-ui/work/B-BUTTONS/fitted --replace; done
+python3 -B tools/steamwoven_ui/parchment_kit.py build [--look cells|smooth|solid] [--dry-run] [--only drop_off,...]   # glyphs, lit and refused faces -> masters/ and provenance/rule/ (copy the fitted plates to masters/ first)
+python3 -B tools/steamwoven_ui/parchment_kit.py sheet --out FILE [--zoom N]    # the before / after composite (English labels, looks side by side)
+python3 -B tools/steamwoven_ui/build_kit.py && python3 -B tools/steamwoven_ui/kit_check.py
+```
+
+The painted symbols differ from the parchment by little, so a symbol mask is read in two passes against a smooth model of the parchment (see the tool's docstring); `MASKS` holds a threshold, a closing and, for the hand, a hull per box. The lit face is the plate times a per-channel gain field (lit template over idle template, smoothed), the corners a flat colour laid inside the wedge the original's corner cells span and outside the generated ring. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_parchment_kit` (about 20 s, in the batched `tools/local_dev/run_tests.py`).
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
