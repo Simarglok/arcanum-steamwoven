@@ -1,4 +1,4 @@
-"""ARC-UI-3206: tests of the small button kit tool (pack-first rule) on a synthetic pack (no art)."""
+"""ARC-UI-3206, ARC-UI-3323: tests of the small button kit tool (pack frames, the round dome by rule, Codex sheets) on synthetic pictures (no art)."""
 from __future__ import annotations
 
 import json
@@ -46,75 +46,202 @@ def synthetic_pack(root: Path, b: sk.Small, make) -> Path:
     return pack
 
 
-ROUND = sk.Small("probe", 1, "1-probe", "round", (10, 10), (30, 30))
 RECT = sk.Small("slab", 2, "2-slab", "rect", (12, 6), (36, 18), frames={"idle": 0, "pressed": 1})
-OWN = sk.Small("arrow", 3, "3-arrow", "own", (6, 8), (20, 28))
-
-
-class AlphaTest(unittest.TestCase):
-    def test_ellipse_is_solid_inside_clear_outside_and_smooth_between(self):
-        a = sk.ellipse_alpha((0.0, 0.0, 40.0, 40.0), (40, 40), (60, 60))
-        self.assertEqual(a[30 * 60 + 30], 1.0)
-        self.assertEqual(a[0], 0.0)
-        edge = [v for v in a[30 * 60:31 * 60] if 0.0 < v < 1.0]
-        self.assertLessEqual(len(edge), 2)    # one pixel of anti-aliasing per side of the outline
-        self.assertEqual(a[30 * 60 + 5], a[30 * 60 + 54])   # symmetric
-
-    def test_ellipse_follows_a_wider_box(self):
-        a = sk.ellipse_alpha((0.0, 0.0, 40.0, 20.0), (40, 20), (80, 40))
-        self.assertEqual(a[20 * 80 + 40], 1.0)
-        self.assertEqual(a[0], 0.0)
-
-    def test_opaque_box_is_the_silhouette(self):
-        self.assertEqual(sk.opaque_box(disc_frame(40, 40)), (0.0, 0.0, 40.0, 40.0))
-        with self.assertRaises(sk.SmallError):
-            sk.opaque_box(pngio.Image(4, 4, bytearray(64)))
-
-    def test_bleed_fills_the_transparent_ring_with_the_edge_colour_and_keeps_opaque_pixels(self):
-        image = disc_frame(40, 40)
-        out = sk.bleed(image)
-        self.assertEqual(out.pixel(20, 20), image.pixel(20, 20))
-        corner = out.pixel(4, 4)
-        self.assertEqual(corner[3], 255)
-        self.assertNotEqual(corner[:3], (5, 5, 5))   # the dark of the old corner is gone near the disc
-        near = [out.pixel(x, y) for y in range(40) for x in range(40) if image.pixel(x, y)[3] == 0 and out.pixel(x, y)[3] == 255]
-        self.assertTrue(near)
+ARGS = type("Args", (), {})
 
 
 class PartTest(unittest.TestCase):
-    def test_round_part_has_an_ellipse_alpha_and_no_dark_fringe(self):
-        box = sk.opaque_box(disc_frame(40, 40))
-        part = sk.part_from_frame(ROUND, disc_frame(40, 40), box)
-        self.assertEqual((part.w, part.h), (30, 30))
-        self.assertEqual(part.pixel(15, 15)[3], 255)
-        self.assertEqual(part.pixel(0, 0)[3], 0)
-        for x in range(30):   # every pixel that shows is the plate or the rim, never the dark of the old corner
-            p = part.pixel(x, 15)
-            if p[3] > 0:
-                self.assertGreater(p[0] + p[1] + p[2], 150)
-
-    def test_every_state_has_the_idle_frames_edge(self):
-        idle = disc_frame(40, 40)
-        pressed = disc_frame(40, 40, colour=(20, 20, 10))
-        box = sk.opaque_box(idle)
-        a = [p for p in sk.part_from_frame(ROUND, idle, box).data[3::4]]
-        b = [p for p in sk.part_from_frame(ROUND, pressed, box).data[3::4]]
-        self.assertEqual(a, b)
-
-    def test_rect_part_is_the_frame_resampled_opaque(self):
-        part = sk.part_from_frame(RECT, flat_frame(48, 24, (10, 20, 30)), (0.0, 0.0, 48.0, 24.0))
+    def test_resample_is_exact_on_a_flat_frame_and_keeps_the_colour_of_a_half_covered_pixel(self):
+        part = sk.resample(flat_frame(48, 24, (10, 20, 30)), 36, 18)
         self.assertEqual((part.w, part.h), (36, 18))
         self.assertTrue(all(part.pixel(x, y) == (10, 20, 30, 255) for y in range(18) for x in range(36)))
 
-    def test_own_part_keeps_the_frames_alpha(self):
-        frame = pngio.Image(24, 32, bytearray(24 * 32 * 4))
-        for y in range(32):
-            for x in range(8, 16):
-                frame.data[(y * 24 + x) * 4:(y * 24 + x) * 4 + 4] = bytes((40, 80, 20, 255))
-        part = sk.part_from_frame(OWN, frame, sk.opaque_box(frame))
-        self.assertEqual((part.w, part.h), (20, 28))
-        self.assertEqual(part.pixel(10, 14), (40, 80, 20, 255))
-        self.assertEqual(part.pixel(1, 14)[3], 0)
+    def test_over_blends_straight_alpha(self):
+        dst = pngio.Image.blank(2, 1, (0, 0, 0, 0))
+        sk.over(dst, flat_frame(1, 1, (200, 100, 0)), 0, 0)
+        self.assertEqual(dst.pixel(0, 0), (200, 100, 0, 255))
+        half = pngio.Image(1, 1, bytearray((100, 100, 100, 128)))
+        sk.over(dst, half, 0, 0)
+        self.assertEqual(dst.pixel(0, 0)[3], 255)
+        self.assertTrue(100 < dst.pixel(0, 0)[0] < 200)
+        self.assertEqual(dst.pixel(1, 0), (0, 0, 0, 0))
+
+
+class DomeTest(unittest.TestCase):
+    def frame(self, symbol=True) -> pngio.Image:
+        """A 29 x 30 round frame: olive dome, brass ring, one red checkered 3 x 3 symbol in the middle."""
+        w, h = 29, 30
+        image = pngio.Image(w, h, bytearray(w * h * 4))
+        for y in range(h):
+            for x in range(w):
+                r = sk.dome_radius(x, y, w, h)
+                o = (y * w + x) * 4
+                if r > 14.5:
+                    image.data[o:o + 4] = bytes((0, 0, 0, 0))
+                elif r >= sk.DOME_FLAT:
+                    image.data[o:o + 4] = bytes((150, 110, 40, 255))
+                else:
+                    image.data[o:o + 4] = bytes((35, 36, 3, 255))
+        if symbol:
+            for y in range(13, 16):
+                for x in range(13, 16):
+                    image.data[(y * w + x) * 4:(y * w + x) * 4 + 4] = bytes((110, 0, 0, 255) if (x + y) % 2 else (80, 0, 50, 255))
+        return image
+
+    def test_symbol_cells_are_the_red_ones_inside_the_dome_only(self):
+        cells = sk.symbol_cells(self.frame())
+        self.assertEqual(sum(cells), 9)
+        self.assertTrue(cells[14 * 29 + 14])
+        self.assertFalse(cells[0])
+
+    def test_symbol_shape_takes_the_symbol_out_of_the_frame(self):
+        frame = self.frame()
+        mask, base = sk.symbol_shape(frame, [])
+        self.assertEqual(sum(mask), 9)
+        self.assertEqual(base.pixel(14, 14)[:3], (35, 36, 3))   # inpainted from the dome round it
+        self.assertEqual(base.pixel(14, 1), frame.pixel(14, 1))   # the rest is the frame as it is
+
+    def test_inpaint_fills_from_the_rim_inward(self):
+        frame = flat_frame(9, 9, (10, 20, 30))
+        frame.data[(4 * 9 + 4) * 4:(4 * 9 + 4) * 4 + 3] = bytes((255, 0, 0))
+        hole = [False] * 81
+        hole[4 * 9 + 4] = True
+        self.assertEqual(sk.inpaint(frame, hole).pixel(4, 4)[:3], (10, 20, 30))
+
+    def test_only_symbol_drops_the_pixels_that_are_not_red_and_with_relief_keeps_the_symbol_on_top(self):
+        glyph = pngio.Image.blank(8, 8)
+        glyph.data[(3 * 8 + 3) * 4:(3 * 8 + 3) * 4 + 4] = bytes((120, 0, 0, 255))
+        glyph.data[(3 * 8 + 4) * 4:(3 * 8 + 4) * 4 + 4] = bytes((10, 10, 10, 255))
+        clean = sk.only_symbol(glyph)
+        self.assertEqual(clean.pixel(3, 3)[3], 255)
+        self.assertEqual(clean.pixel(4, 3)[3], 0)
+        relief = sk.with_relief(clean)
+        self.assertEqual(relief.pixel(3, 3), (120, 0, 0, 255))
+        self.assertTrue(any(relief.data[i * 4 + 3] > 0 for i in range(64) if i != 3 * 8 + 3))   # a soft relief round it
+
+    def test_dome_parts_and_their_records_on_synthetic_frames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp)
+            (local / "masters").mkdir()
+            pngio.write(local / "masters" / f"{sk.DOME_PLATE}.png", flat_frame(138, 138, (30, 40, 10)))
+            pngio.write(local / "masters" / f"{sk.DOME_RING}.png", flat_frame(198, 192, (180, 140, 60)))
+            group = [b for b in sk.SMALL if b.name in ("skiladdbut", "skilminusbut")]
+            frames = local / "frames"
+            for b in group:
+                (frames / b.folder).mkdir(parents=True)
+                for k in (0, 1, 2):
+                    pngio.write(frames / b.folder / f"f{k}.png", self.frame())
+            parts = sk.dome_parts(local, frames, group)
+            for b in group:
+                for ident in (f"plate.{b.name}", f"glyph.{b.name}", f"plate.{b.name}_hover", f"plate.{b.name}_pressed"):
+                    self.assertEqual((parts[ident].w, parts[ident].h), b.master, ident)
+                self.assertTrue(any(a > 0 for a in parts[f"glyph.{b.name}"].data[3::4]))   # the symbol is there
+            args = ARGS()
+            args.pack, args.local_root = local, local
+            out = local / "g.png"
+            pngio.write(out, parts["glyph.skiladdbut"])
+            record = sk.record_of("plate.skiladdbut", group[0], None, out, args)
+            self.assertEqual(len(record["source"]["face_sha256"]), 64)
+            self.assertEqual(len(record["source"]["ring_sha256"]), 64)
+
+    def test_dome_plate_puts_the_ring_over_the_face(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp)
+            (local / "masters").mkdir()
+            pngio.write(local / "masters" / f"{sk.DOME_PLATE}.png", flat_frame(138, 138, (30, 40, 10)))
+            ring = pngio.Image.blank(198, 192)
+            for y in range(192):
+                for x in range(198):
+                    if sk.dome_radius(x, y, 198, 192) > 85:
+                        ring.data[(y * 198 + x) * 4:(y * 198 + x) * 4 + 4] = bytes((180, 140, 60, 255))
+            pngio.write(local / "masters" / f"{sk.DOME_RING}.png", ring)
+            plate = sk.dome_plate(local, (102, 108))
+            self.assertEqual((plate.w, plate.h), (102, 108))
+            self.assertEqual(plate.pixel(51, 54)[:3], (30, 40, 10))
+            self.assertEqual(plate.pixel(2, 54)[:3], (180, 140, 60))
+            self.assertEqual(plate.pixel(0, 0)[3], 0)
+
+
+class SheetTest(unittest.TestCase):
+    def test_every_codex_button_state_has_exactly_one_cell(self):
+        for b in sk.GENERATED:
+            for state in b.frames:
+                sheet, k = sk.sheet_for(b.name, state, "sp-b")
+                self.assertEqual(sheet.cells[k], (b.name, state))
+        self.assertEqual(sk.sheet_for("sp_minus", "idle", "sp-a")[0].id, "sp-a")
+        self.assertEqual(sk.sheet_for("sp_minus", "idle", "sp-b")[0].id, "sp-b")
+        with self.assertRaises(sk.SmallError):
+            sk.sheet_for("sp_minus", "hover")
+
+    def test_the_layout_of_each_sheet_is_pinned(self):
+        # the cell of a button state in the sheet as it was laid out for Codex (columns idle, pressed, hover; fs: up and down side by side, rows normal, pressed, off)
+        self.assertEqual(sk.sheet_for("oldchar_plus", "hover")[1], 5)
+        self.assertEqual(sk.sheet_for("oldchar_minus", "idle")[1], 0)
+        self.assertEqual(sk.sheet_for("scrlldwn", "pressed")[1], 4)
+        self.assertEqual((sk.sheet_for("follow_scroll_dwn", "pressed")[0].id, sk.sheet_for("follow_scroll_dwn", "pressed")[1]), ("fs", 3))
+        self.assertEqual(sk.sheet_for("follow_scroll_up_off", "idle")[1], 4)
+        self.assertEqual(sk.sheet_for("sp_plus", "pressed", "sp-a")[1], 3)
+        self.assertEqual(sk.sheet_for("sp_minus", "pressed", "sp-b")[1], 1)
+
+    def test_every_sheet_grid_holds_its_cells(self):
+        for sheet in sk.SHEETS:
+            self.assertEqual(sheet.cols * sheet.rows, len(sheet.cells), sheet.id)
+
+    def test_a_cell_is_cut_by_equal_division(self):
+        image = pngio.Image(40, 20, bytearray(40 * 20 * 4))
+        for y in range(20):
+            for x in range(40):
+                image.data[(y * 40 + x) * 4:(y * 40 + x) * 4 + 4] = bytes((x // 20 * 100, y // 10 * 100, 0, 255))
+        sheet = sk.Sheet("t", 2, 2, (("a", "idle"),) * 4)
+        self.assertEqual(sk.sheet_cell(image, sheet, 3).pixel(0, 0)[:3], (100, 100, 0))
+        self.assertEqual(sk.sheet_cell(image, sheet, 1).pixel(0, 0)[:3], (100, 0, 0))
+
+    def test_triangle_clip_cuts_the_ground_and_a_rim_and_keeps_the_inside(self):
+        cell = pngio.Image(30, 30, bytearray(b"\xff\x00\xff\xff" * 900))
+        for y in range(5, 25):
+            for x in range(8, 22):
+                cell.data[(y * 30 + x) * 4:(y * 30 + x) * 4 + 4] = bytes((40, 90, 10, 255))
+        # a pink anti-aliased edge pixel is ground too
+        cell.data[(10 * 30 + 8) * 4:(10 * 30 + 8) * 4 + 3] = bytes((200, 60, 200))
+        out = sk.triangle_clip(cell)
+        self.assertEqual(out.pixel(15, 15)[3], 255)
+        self.assertEqual(out.pixel(0, 0)[3], 0)
+        self.assertEqual(out.pixel(8, 10)[3], 0)
+        self.assertEqual(out.pixel(8 + sk.TRIANGLE_ERODE + 1, 15)[3], 255)
+
+    def test_a_broken_provenance_record_is_a_small_error_and_a_good_one_is_kept(self):
+        b = sk.button_named("sp_plus")
+        with tempfile.TemporaryDirectory() as tmp:
+            sheet = Path(tmp) / "sp-a.png"
+            pngio.write(sheet, flat_frame(8, 8, (1, 2, 3)))
+            args = ARGS()
+            args.pack, args.local_root = Path(tmp), Path(tmp)
+            (Path(tmp) / "sp-a.provenance.json").write_text("{not json", encoding="utf-8")
+            with self.assertRaises(sk.SmallError):
+                sk.record_of("plate.sp_plus", b, sheet, sheet, args)
+            (Path(tmp) / "sp-a.provenance.json").write_text('{"generator": "codex"}', encoding="utf-8")
+            record = sk.record_of("plate.sp_plus", b, sheet, sheet, args)
+            self.assertEqual(record["source"]["generation"]["generator"], "codex")
+            self.assertEqual(record["source"]["sheet"], "sp-a.png")
+
+    def test_codex_parts_cut_reduce_and_give_an_empty_glyph(self):
+        b = sk.button_named("sp_plus")
+        with tempfile.TemporaryDirectory() as tmp:
+            sheets = Path(tmp)
+            image = pngio.Image(400, 200, bytearray(400 * 200 * 4))
+            colours = {0: (10, 0, 0), 1: (20, 0, 0), 2: (30, 0, 0), 3: (40, 0, 0)}
+            for y in range(200):
+                for x in range(400):
+                    image.data[(y * 400 + x) * 4:(y * 400 + x) * 4 + 4] = bytes((*colours[(y // 100) * 2 + x // 200], 255))
+            pngio.write(sheets / "sp-a.png", image)
+            parts, sources = sk.codex_parts(sheets, [b], "sp-a")
+            self.assertEqual(parts["plate.sp_plus"].pixel(5, 5), (30, 0, 0, 255))
+            self.assertEqual(parts["plate.sp_plus_pressed"].pixel(5, 5), (40, 0, 0, 255))
+            self.assertEqual((parts["plate.sp_plus"].w, parts["plate.sp_plus"].h), b.master)
+            self.assertTrue(all(a == 0 for a in parts["glyph.sp_plus"].data[3::4]))
+            self.assertEqual(sources["plate.sp_plus"].name, "sp-a.png")
+            with self.assertRaises(sk.SmallError):
+                sk.codex_parts(sheets / "none", [b], "sp-a")
 
 
 class PackTest(unittest.TestCase):
@@ -150,18 +277,20 @@ class PackTest(unittest.TestCase):
             (pack / "index.tsv").write_text("h\nscr\tk\tslab\t0\tfirst.png\nscr2\tk\tslab\t0\tsecond.png\n", encoding="utf-8")
             self.assertEqual(sk.pack_index(pack)[("slab", 0)], "first.png")
 
-    def test_build_writes_masters_and_records_with_the_pack_files_hash(self):
+    def test_rect_parts_and_records_carry_the_pack_files_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             pack = synthetic_pack(Path(tmp), RECT, lambda state, w, h: flat_frame(w, h, (10, 20, 30)))
-            parts, sources = sk.build_parts(pack, [RECT])
+            args = ARGS()
+            args.pack, args.local_root, args.frames, args.sheets, args.sp_variant = pack, Path(tmp), None, None, "sp-b"
+            parts, sources = sk.build_parts(args, [RECT])
             out = Path(tmp) / "out"
             out.mkdir()
             pngio.write(out / "plate.slab.png", parts["plate.slab"])
-            record = sk.record_of("plate.slab", RECT, sources["plate.slab"], out / "plate.slab.png", pack)
+            record = sk.record_of("plate.slab", RECT, sources["plate.slab"], out / "plate.slab.png", args)
             self.assertEqual(record["source"]["file"], "interface/slab-f000.png")
             self.assertEqual(len(record["source"]["sha256"]), 64)
             self.assertEqual(record["source_art"], 2)
-            glyph = sk.record_of("glyph.slab", RECT, None, out / "plate.slab.png", pack)
+            glyph = sk.record_of("glyph.slab", RECT, None, out / "plate.slab.png", args)
             self.assertIsNone(glyph["source"])
 
 
@@ -175,27 +304,29 @@ class TableTest(unittest.TestCase):
             self.assertEqual(b.folder, f"{b.art}-{b.folder.split('-', 1)[1]}", b.name)
             self.assertEqual(b.folder.split("-", 1)[1].lower(), b.name, b.name)
 
-    def test_names_are_unique_and_the_generated_ones_have_no_pack_family(self):
+    def test_names_are_unique_and_the_families_are_known(self):
         names = [b.name for b in (*sk.SMALL, *sk.GENERATED)]
         self.assertEqual(len(names), len(set(names)))
-        self.assertTrue(all(b.family != "none" for b in sk.SMALL))
-        self.assertTrue(all(b.family == "none" for b in sk.GENERATED))
+        self.assertTrue(all(b.family in ("rect", "dome") for b in sk.SMALL))
+        self.assertEqual({b.name for b in sk.SMALL if b.family == "rect"}, {"spelltech_add", "spelltech_minus", "followerarrow_dwn", "followerarrow_up"})   # what the owner kept from the pack
+        self.assertTrue(all(b.family == "codex" for b in sk.GENERATED))
         self.assertTrue(all("idle" in b.frames for b in (*sk.SMALL, *sk.GENERATED)))
 
     def test_build_kit_rows_cover_every_glyph_and_overlay(self):
-        plates = {f"plate.{b.name}": {"anchor": "window", "used_by": ["G01"]} for b in sk.SMALL}
+        every = (*sk.SMALL, *sk.GENERATED)
+        plates = {f"plate.{b.name}": {"anchor": "window", "used_by": ["G01"]} for b in every}
         rows = {r["id"]: r for r in build_kit.small_parts(plates)}
-        for b in sk.SMALL:
+        for b in every:
             self.assertIn(f"glyph.{b.name}", rows)
             for state in ("hover", "pressed"):
                 self.assertEqual(f"plate.{b.name}_{state}" in rows, state in b.frames, (b.name, state))
-        self.assertTrue(all(r["status"] == "master" and r["provenance"].startswith("rule:small_kit:") for r in rows.values()))
+        self.assertTrue(all(r["status"] == "master" and r["provenance"].split(":")[1] == "small_kit" for r in rows.values()))
+        self.assertTrue(rows["plate.sp_plus_pressed"]["provenance"].startswith("codex:") and rows["glyph.skiladdbut"]["provenance"].startswith("rule:"))
 
-    def test_the_masters_stretch_a_pack_frame_by_a_few_percent_at_most(self):
-        # the masters are snapped to the 6 px grid in kit.json, so a pack frame (4 x the units) is scaled to it; the widest accepted drift is the scroll arrows' 12 %
-        for b in sk.SMALL:
-            w, h = b.units[0] * sk.PACK_SCALE, b.units[1] * sk.PACK_SCALE
-            self.assertLess(abs((b.master[0] / w) / (b.master[1] / h) - 1.0), 0.12, b.name)
+    def test_the_masters_stretch_a_frame_by_a_few_percent_at_most(self):
+        # the masters are snapped to the 6 px grid in kit.json: the original's aspect and the master's differ by at most 12 % (a pack frame is 4 x the units, a Codex cell is cut at the original's aspect)
+        for b in (*sk.SMALL, *sk.GENERATED):
+            self.assertLess(abs((b.master[0] / b.units[0]) / (b.master[1] / b.units[1]) - 1.0), 0.12, b.name)
 
     def test_resampling_at_a_fractional_ratio_keeps_a_flat_colour_and_an_edge(self):
         frame = pngio.Image(116, 120, bytearray(116 * 120 * 4))
@@ -210,6 +341,7 @@ class TableTest(unittest.TestCase):
 
     def test_owner_of_a_part_id(self):
         self.assertEqual(sk.owner_of("plate.scrllup_hover").name, "scrllup")
+        self.assertEqual(sk.owner_of("plate.sp_plus_pressed").name, "sp_plus")
         self.assertEqual(sk.owner_of("glyph.skiladdbut").name, "skiladdbut")
         self.assertEqual(sk.owner_of("plate.follow_scroll_up").name, "follow_scroll_up")
 
