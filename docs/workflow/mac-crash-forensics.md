@@ -224,16 +224,16 @@ The first eight kernel frames of the stuck child are **identical in all four rep
 1. **macOS 27.2 kernel or RunningBoard deadlock around process creation (most likely).** A fork from an agent shell (Claude Code
    or Codex) gets stuck before exec; the `runningboardd` assertion call-out waits on the same kernel event; WindowServer waits
    on `runningboardd`; the watchdog kills WindowServer and the relaunched one wedges too. Evidence: 4 of 4 identical kernel
-   stacks, different spawning programs, one incident with no game at all, no GPU fault. The trigger probably scales with the
+   stacks, different spawning programs, one incident read as having no game (11-08; superseded by the 2026-11-25 owner finding below: the game was probably open), no GPU fault. The trigger probably scales with the
    process-spawn rate (many agent threads running shells).
 2. **Memory pressure as an aggravator (possible, not proven).** 11-21 had two Virtualization VMs (7.3 GB resident), the Claude
    renderer 2 GB and the game 2.1 GB: summed resident sizes 33 GB on a 24 GB machine (overcounts shared pages). No Jetsam
    report near 14:13, so not a memory-exhaustion kill. 11-15 had 21 GB summed and no VM, so pressure is not required.
 3. **Parallel Godot smoke runs (ruled out as necessary).** On 11-21 the queue was idle (no Godot or dotnet process in the
    stackshot), so the "owner is playing" mode of #2273 would not have helped.
-4. **GPU, Metal or OpenGL driver hang (unlikely).** WindowServer's main thread waits on `runningboardd`, not on IOGPU; no
+4. **GPU, Metal or OpenGL driver hang (open; being tested by the Metal build, #3145).** WindowServer's main thread waits on `runningboardd`, not on IOGPU; no
    GPU-restart report; the game's OpenGL abort comes after the watchdog fired.
-5. **Our game leaking resources (ruled out for 11-21).** Counters bounded over 20 minutes; 11-08 happened without the game.
+5. **Our game leaking resources (ruled out for 11-21).** Counters bounded over 20 minutes; 11-08 was first read as happening without the game (see the 2026-11-25 section).
 
 ### Owner note, 2026-11-24
 
@@ -244,17 +244,18 @@ fix there is neither confirmed nor ruled out.
 
 The fifth hang (macOS 27.2.1, 26B131) repeated the signature: a forked agent child stuck in `exec` of `magick`, the
 WindowServer watchdog, the game aborting afterwards in `-[NSCGLSurface flushRect:]`. Owner finding: every one of the five hangs had
-the game open, and with the game closed the Mac stays stable for days under the same agent load, so the game is treated as a
+the game open (owner statement, 2026-11-25, a new observation beside the 11-24 note that no hang happened while the agents were off), and with the game closed the Mac stays stable for days under the same agent load, so the game is treated as a
 necessary co-factor (hypothesis 4 above is no longer "unlikely"; the 11-08 "no game" reading came only from the absence of the
-packaged game process). The game's coupling to WindowServer is the OpenGL path: the Compatibility renderer on macOS is Apple's
-deprecated OpenGL-over-Metal layer and flushes an `NSOpenGLContext` to WindowServer every frame.
+packaged game process). The game's per-frame coupling to WindowServer is the OpenGL path (the Compatibility renderer on macOS is Apple's
+deprecated OpenGL-over-Metal layer, flushing an `NSOpenGLContext`): a hypothesis under test, not a measured cause. The game's own
+`NSCGLSurface` abort comes after the watchdog fired, so it is a consequence, not the trigger.
 
 First experiment (owner decision): the macOS game on **Metal** (Godot Mobile renderer, Metal driver; Windows unchanged). The setting
 is `renderer/rendering_method.macos="mobile"` and `rendering_device/driver.macos="metal"` in the viewer's `project.godot`;
-the run log's second line must read `Metal 4.0 - Forward Mobile`, not `OpenGL`. Look check on four scenes (menu, cave night and
-day relight, map with HUD) on the owner's M4 Pro: at most 1 level of 255 a channel apart from OpenGL, apart from the digits of the
+the run log's second line must read `Metal 4.0 - Forward Mobile`, not `OpenGL` (check it for every package build: Godot may fall back to OpenGL if the Metal device fails to start, which would void the A/B). Look check on four scenes (menu, cave night and
+day relight, map with HUD) on the owner's M4 Pro (one machine): at most 1 level of 255 a channel apart from OpenGL, apart from the digits of the
 load time in the diagnostic text. One smoke check, ARC-UI-070 (menu text blend against the original's integer blend), measures 3
-levels on Metal where OpenGL stayed within 2; its tolerance is 3.
+levels on Metal where OpenGL stayed within 2 (cause not analysed); its tolerance is 3 on macOS and 2 elsewhere.
 
 **A/B protocol and result record (owner side).** Play with agents on as before, on the Metal build, for several days; record here
 the dates, whether a hang happened and the package commit. A hang with the game on Metal rules the renderer out as the co-factor
