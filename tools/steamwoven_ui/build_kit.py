@@ -31,6 +31,7 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
+from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import parchment_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
@@ -144,7 +145,16 @@ def new_parts() -> list[dict]:
     parts.extend(round_hud_parts())
     parts.extend(hud_hardware_parts())
     parts.extend(lens_ring_parts())
+    parts.append(wide_button_part())
     return parts
+
+
+def wide_button_part() -> dict:
+    """ARC-UI-3271, B-BUTTONS: the schematic window's wide round button (bar, ring, two wells; baked into art 365) as one part, PACK FIRST: the old HD pack's frame, an analytic alpha and the soft shadow, by `wide_button_kit.py`."""
+    return new_part(wide_button_kit.PART, "plate", "window", ["G15"], "BD-F", "B-BUTTONS",
+                    "the schematic window's wide round button (brass bar, ring round the dome, two wells open); pack first: the old HD pack's frame of art 365 + analytic alpha + soft shadow, "
+                    "wide_button_kit.py, 600 x 354; size open",
+                    master=True, provenance=f"rule:wide_button_kit:{wide_button_kit.PART}")
 
 
 def hud_hardware_parts() -> list[dict]:
