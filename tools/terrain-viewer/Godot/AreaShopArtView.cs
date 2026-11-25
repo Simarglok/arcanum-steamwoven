@@ -38,6 +38,8 @@ public partial class AreaShopArtView : Control
     public event Action<AreaShopArtButton>? ButtonPressed;
     /// <summary>An interface sound (3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
+    /// <summary>ARC-UI-3120: the pointer entered a button (its hint goes to the message window, ledger MW32) or left it (null).</summary>
+    public event Action<AreaShopArtButton?>? HoverChanged;
 
     public bool ArtSet => _artSet;
 
@@ -189,6 +191,7 @@ public partial class AreaShopArtView : Control
         if (what == NotificationVisibilityChanged && !IsVisibleInTree()) ReleaseKit();
         if (what != NotificationMouseExit || _hovered is null) return;
         _hovered = null;
+        HoverChanged?.Invoke(null);
         QueueRedraw();
     }
 
@@ -201,6 +204,7 @@ public partial class AreaShopArtView : Control
                 if (_focusLit) { _focusLit = false; QueueRedraw(); }
                 if (over == _hovered) break;
                 _hovered = over;
+                HoverChanged?.Invoke(over);
                 QueueRedraw();
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:

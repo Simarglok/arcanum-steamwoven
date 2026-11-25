@@ -354,11 +354,11 @@ are F0 and are read by the slice.
    the character sheet's slice (above) rather than here; the shop is the barter window's look (ARC-UI-038). Shop done by ARC-UI-069,
    ledger MW30 (`AreaShopArtView`): the strips and the two art buttons Accept and Back in the bottom strip (table 0x5C5408, flag 1,
    the screen's (675, 496) and (69, 496)), the barter window's original look docked at the screen's (0, 41) on the shop's session,
-   without the round view (the main menu is up, IW33, IW34). PROJECT: the hints are not shown; the controller's focus row lights its
+   without the round view (the main menu is up, IW33, IW34). The hints of Accept and Back are type-6 posts to the bottom message window (ARC-UI-3120, MW32); PROJECT: the controller's focus row lights its
    button until the pointer moves. Editor done by ARC-UI-147 (window 14, the same strips and buttons, table 0x5C5310; `AreaShopArtView`
    with the character sheet's original look between them, `AreaCharacterSheetArtView.MenuScreen`): the sheet's window at the menu screen's
    (0, 41), the draft's values and portrait, the three pages' `−` and `+` and the tabs by the pointer; the portrait's close rectangle does not
-   close it (modes 1 and 2 only, CM3). PROJECT: the hints are not shown; a refused press's `charedit.mes` text is drawn as the original does, in the bottom message window (the black box between Back and Accept; post 0x550750, text rectangle (290, 504, 291 × 78) in font 229, white, F1; ARC-UI-2968), until the next refusal or art change (the original also clears it when the pointer leaves the button).
+   close it (modes 1 and 2 only, CM3). The text bar answers as in the game (ARC-UI-3120, ledger MW32): a refused press's `charedit.mes` text is a stored type-4 message in the bottom message window (post 0x550750, icon 442, sound 3004), the hover texts of the sheet's regions and the hints of Accept and Back (`MainMenu.mes` 6999, 7003, 7002) are type-6 posts there, all in the strip's text rectangle in font 229 (ARC-UI-2968 first drew the refusal alone).
 6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3) in the game's common dialog box, read by
    ARC-WORLD-120 (DB1–DB4: `DialogueBox` 325 × 136 at (237, 232), `Flare12Font` text, `Lil_Accept` and `Lil_Cancel`) and built
    there as `AreaDialogBoxView` for the death load box. ARC-DEV-334: the in-play menu's quit question draws on the same view over the
