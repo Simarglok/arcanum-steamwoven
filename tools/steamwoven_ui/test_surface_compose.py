@@ -231,8 +231,8 @@ class SurfaceComposeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             orig, solid, out = tmp_path / "o.png", tmp_path / "s.png", tmp_path / "f.png"
-            # dark wood (luma 30), a dark ring (the old shadow, luma 20) round a light disc (luma 150) with a dark spot inside; the weight is black (no wood) in the whole ring and disc
-            subprocess.run(["magick", "-size", "240x240", "xc:gray(30)", "-fill", "gray(20)", "-draw", "circle 120,120 120,60", "-fill", "gray(150)", "-draw", "circle 120,120 120,90",
+            # dark wood (luma 30), a dark ring (the old shadow, luma 5, under the dark-item cut of the fill rule) round a light disc (luma 150) with a dark spot inside; the weight is black (no wood) in the whole ring and disc
+            subprocess.run(["magick", "-size", "240x240", "xc:gray(30)", "-fill", "gray(5)", "-draw", "circle 120,120 120,60", "-fill", "gray(150)", "-draw", "circle 120,120 120,90",
                             "-fill", "gray(25)", "-draw", "circle 120,120 120,112", str(orig)], check=True)
             subprocess.run(["magick", "-size", "240x240", "xc:black", "-fill", "white", "-draw", "rectangle 0,0 20,239", str(solid)], check=True)
             surface_compose.fill_between_items(orig, solid, ((30, 30, 210, 210),), out, 240, 240, surface_compose.HALO_BRIGHT, None, surface_compose.HALO_DILATE, surface_compose.HALO_CLOSE)
@@ -243,6 +243,20 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertLess(at(120, 120), 60)      # the dark spot inside the disc is part of it (closed and filled), not wood
         self.assertLess(at(120, 20), 60)       # outside the box: untouched
         self.assertGreater(at(10, 120), 200)   # the weight that was already 1 stays 1
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_apply_box_fills_runs_the_halo_boxes_of_the_spec_and_nothing_without_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, solid = tmp_path / "o.png", tmp_path / "s.png"
+            subprocess.run(["magick", "-size", "240x240", "xc:gray(30)", "-fill", "gray(5)", "-draw", "circle 120,120 120,60", "-fill", "gray(150)", "-draw", "circle 120,120 120,90", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "240x240", "xc:black", str(solid)], check=True)
+            surface_compose.apply_box_fills(orig, solid, surface_compose.ZoneSpec(id="z"), 240, 240)
+            self.assertLess(surface_compose.gray_bytes(solid)[65 * 240 + 120], 60)      # no halo box: untouched
+            surface_compose.apply_box_fills(orig, solid, surface_compose.ZoneSpec(id="z", halo_boxes=((30, 30, 210, 210),)), 240, 240)
+            data = surface_compose.gray_bytes(solid)
+        self.assertGreater(data[65 * 240 + 120], 200)   # the ring is wood now
+        self.assertLess(data[100 * 240 + 120], 60)      # the part stays
 
     def test_load_spec_reads_halo_boxes_and_refuses_a_bad_one(self):
         with tempfile.TemporaryDirectory() as tmp:

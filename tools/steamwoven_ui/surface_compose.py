@@ -540,7 +540,8 @@ def remove_islands(solid: Path, out: Path, min_area: int) -> None:
 
 def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, width: int, height: int, bright: float = FILL_BRIGHT, dark: float | None = FILL_DARK,
                        dilate: int = FILL_DILATE, close: int = FILL_CLOSE) -> None:
-    """ARC-UI-3164: in each fill box the wood weight is 1 wherever no item is: an item is an ORIGINAL pixel lighter than FILL_BRIGHT or darker than FILL_DARK in luma (letters,
+    """The defaults are the `fill_boxes` rule; ARC-UI-3101's `halo_boxes` pass `bright` HALO_BRIGHT, `dark` None (no dark items: the fringe round a part is none) and the HALO_* sizes.
+    ARC-UI-3164: in each fill box the wood weight is 1 wherever no item is: an item is an ORIGINAL pixel lighter than `bright` (FILL_BRIGHT) or darker than `dark` (FILL_DARK) in luma (letters,
     brass rims, black fields), grown by FILL_DILATE, closed by FILL_CLOSE and filled inside (a knob in a rim), all inside the box only. The tone mask excludes these boxes
     whole, which left the ORIGINAL's lighter panel wood there as a patch with a sharp edge against the Codex wood (the colour class cannot be used: the panel wood is no wood class)."""
     if not boxes:
@@ -567,6 +568,14 @@ def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, wid
     run(["magick", str(solid), str(fill), "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
 
 
+def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, height: int) -> None:
+    """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items) and `halo_boxes` (wood round a part, outside its light shape)."""
+    if spec.fill_boxes:
+        fill_between_items(original, solid, spec.fill_boxes, solid, width, height)
+    if spec.halo_boxes:
+        fill_between_items(original, solid, spec.halo_boxes, solid, width, height, HALO_BRIGHT, None, HALO_DILATE, HALO_CLOSE)
+
+
 def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BEVEL_MODE, spec: ZoneSpec = INVENTORY, kit_base: Path | None = None) -> dict:
     if bevel_mode not in ("lighten", "original"):
         raise ComposeError(f"unknown bevel mode {bevel_mode!r}")
@@ -581,10 +590,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     method_c.write_mask(original, raw, screen_id=spec.screen)
     fill_notches(solid, solid)
     remove_islands(solid, solid, spec.island_min)
-    if spec.fill_boxes:
-        fill_between_items(original, solid, spec.fill_boxes, solid, w, h)
-    if spec.halo_boxes:
-        fill_between_items(original, solid, spec.halo_boxes, solid, w, h, HALO_BRIGHT, None, HALO_DILATE, HALO_CLOSE)
+    apply_box_fills(original, solid, spec, w, h)
     keep_joins(solid, solid, w, h, spec.joins)
     clean = work / "a-clean.png"
     specks = despeckle(a, clean, work, w, h)
