@@ -567,7 +567,7 @@ Call-ex (81) now runs the dialog point (9): it goes through the object entry as 
 0x4449B0 apply (TG5): a dead attachee whose script lacks file flag 0x8 or a surrendered one without 0x10 runs nothing (the action
 goes on as a call that ran default), a mind-controlled one runs script 2188 in place of its slot's script, whose slot keeps the
 held script number. A dialog action in such a callee is allowed: the callee's dialog store is the slot the call-ex writes back (X11),
-so `ScrDialogStart` carries the callee, the line, the node and `Point = 9`; a host opens the talk and resumes that slot (TG8). A
+so `ScrDialogStart` carries the callee, the line, the node and `Point = 9`; a host opens the talk and resumes that slot (TG8, TG10). A
 dialog action at any other point carries that point. Call-ex of the use point (1) stays refused (a nested use's trap spot is not
 modelled). A callee of the dialog point that reaches call script (7) is refused, as a dialog-point event's set may not hold
 call script (the called script would run at the dialog point without the gates). The call-ex's writeback supersedes the callee's

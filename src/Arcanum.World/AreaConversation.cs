@@ -662,13 +662,14 @@ public sealed class AreaConversationHost
     /// <summary>
     /// ARC-SCRIPT-046: opens the conversation a tile script, or a script it called, asked for with its dialog action (0x447282: the DLG
     /// of the running script at the action's node, the PC with the action's attachee): <paramref name="speaker"/> is that attachee and
-    /// the run's effects are applied already (<see cref="AreaUseScriptHost.RunPlaced"/>), so no dialog script runs. Which local flags
-    /// the DLG's LF reads and writes for such a start is not read in the executable (level F0; the action stored the callee's into the
-    /// speaker's use slot, X11), so a DLG with any LF operation is refused (<see cref="AreaConversationStartStatus.EntryNotAdmitted"/>)
-    /// rather than run on the speaker's dialog slot. A "return to script" end has no dialog script of the speaker to resume (the
-    /// caller does not resume it). ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex of the speaker's dialog point, ledger
-    /// TG5) stored the flags in the speaker's dialog slot, the one the DLG's LF reads, so its DLG may use LF; its "return to script" end
-    /// resumes the speaker's dialog slot as a talk's does (<see cref="Resume"/>, the original's dialog UI runs point 9 of the NPC).
+    /// the run's effects are applied already (<see cref="AreaUseScriptHost.RunPlaced"/>), so no dialog script runs.
+    /// ARC-SCRIPT-2961 (ledger TG10): the DLG's LF and LC read and write the speaker's dialog slot (point 9) whichever script or point started the
+    /// talk (the action side 0x415BA0 and the condition side 0x4150D0 pass attachment point 9), so a start at another point uses the same state
+    /// as a talk's; the dialog action's own store went to the attachment of the run's point (X11, <see cref="AreaScriptHost.Apply"/>). A speaker
+    /// whose live dialog slot holds no script makes lf and lc do nothing and read false and 0, which the state does not model (KC3): such a
+    /// start is refused (<see cref="AreaConversationStartStatus.EntryNotAdmitted"/>) when its DLG holds an LF or LC operation. A "return to
+    /// script" end resumes the speaker's dialog slot as a talk's does (<see cref="Resume"/>; 0x567E30 → 0x568480 runs point 9 of the NPC at the reply's
+    /// line, or the held line + 1 where the line is the dialog action's own line in the script that started the talk, ledger TG10).
     /// </summary>
     public AreaConversationStart BeginScripted(AreaSpeaker speaker, ScrDialogStart dialog, CancellationToken token = default)
     {
@@ -682,8 +683,8 @@ public sealed class AreaConversationHost
         State.Bind(speaker.Index, slot?.LocalFlags ?? 0, slot?.Counters ?? 0);
         var loaded = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node, _session.Rules.Data);
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
-        if (dialog.Point != ScrPoint.Dialog && UsesLocalFlags(loaded.Document!))
-            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {dialog.Script}: the DLG of a scripted conversation reads local flags or counters (not modelled)");
+        if (dialog.Point != ScrPoint.Dialog && UsesLocalFlags(loaded.Document!) && Scripts.Slot(Scripts.Object(speaker), ScrPoint.Dialog) is not { Script: > 0 })
+            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {dialog.Script}: the DLG of a scripted conversation reads local flags or counters of a speaker with no dialog script (not modelled)");
         token.ThrowIfCancellationRequested();
         return Open(speaker, dialog, loaded.Document!);
     }
@@ -693,7 +694,7 @@ public sealed class AreaConversationHost
     private static bool UsesLocalFlags(DlgDocument document) => document.Records.Any(record => new[] { record.Condition, record.Action }
         .Any(field => System.Text.Encoding.Latin1.GetString(field.Bytes.ToArray()).Split(',')
             .Any(operation => operation.TrimStart(' ', '\t').StartsWith("lf", StringComparison.OrdinalIgnoreCase)
-                // ARC-DEV-196: the LC counters are the same attachment's as the flags; which attachment a talk started at another point reads is unread in the exe (X11), so it is refused like LF.
+                // ARC-DEV-196: the LC counters are the same attachment's as the flags (the speaker's dialog slot, point 9).
                 || operation.TrimStart(' ', '\t').StartsWith("lc", StringComparison.OrdinalIgnoreCase))));
 
     [OriginalFunction(0x412FD0, OriginalFunctionScope.Partial)]
