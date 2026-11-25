@@ -498,12 +498,13 @@ python3 -B tools/steamwoven_ui/icon_rule.py upscale --frames $FR --out DIR --mod
 - **Ghost repair.** The pack's redraw of an icon with a black background keeps faint outlines of the redraw sheet's neighbouring icons on that black. Where the original frame is black (luma below 14, an
   outline of 2 HD pixels kept back from its content and rounded by a Gaussian of 3 HD pixels) the pack's pixels take the original's black; alpha and everything else stay the pack's, and the frame is written
   with `alphaMode` `legacySmooth` (no mask, the importer's own alpha, as the installed frames have). Measured by the audit's ghost metric ([audit](../rendering/hd-pack-picture-quality-audit.md)): 11 arts
-  (`Ammo_Icon_Arrows`, `_Gold`, `_Fuel`, `_Bullets`, `_Mana`, `TechSkillIcon`, `E_EarthIcon`, `SocialIcon`, `CombatIcon`, `Cont_Junk`, `racedarkelficon`) from 0.3 to 4.2 % to 0.00 %. Side effect to look at:
-  where the original's black is part of the object (the shadow side of the `SocialIcon` hat) the pack's shading there goes black too, as in the original.
+  (`Ammo_Icon_Arrows`, `_Gold`, `_Fuel`, `_Bullets`, `_Mana`, `E_EarthIcon`, `CombatIcon`, `Cont_Junk`, `racedarkelficon`) from 0.3 to 3.0 % to 0.00 %. **Installed 2026-11-25 for these 9 only.** `SocialIcon` and `TechSkillIcon`
+  are left as the pack has them (owner decision 2026-11-25): there the original's black is partly part of the picture (the shadow side of the hat, the dark top of the table), the pack's shading in it is the redraw's own
+  addition and not a ghost, and the rule turned it into a flat black with a hard or ragged edge. A rule that only clears black connected to the frame edge would be a new task if wanted.
 - **Arts by rule.** The importer cuts every HD alpha to the texels the original leaves opaque (`HdAlphaMasks.Resolve`), so a rule cannot grow or smooth a silhouette beyond the original's. `square` copies every original
   pixel as one 4 x 4 block (colour and alpha exact: the one-pixel lines and the square dots of the indicators stay exact, `tb_td`'s dots are square again); `smooth` blends the colour between the cells
   (bilinear, weighted by the cell's alpha, so a transparent cell lends no colour) and keeps the exact alpha. Both write `alphaMode` `legacy` (the mask is the original's own alpha). The eight
-  indicators and the nine arts with no pack frame (`scroll-0` to `scroll-7`, `scroll_not`) are kit parts with status `master` (`build_kit.py`, `ICON_RULE_ARTS`); the frames of arts
+  indicators and the nine arts with no pack frame (`scroll-0` to `scroll-7`, `scroll_not`; installed as the `square` variant, owner decision 2026-11-25, like the other cursors) are kit parts with status `master` (`build_kit.py`, `ICON_RULE_ARTS`); the frames of arts
   the pack lacks need `--add-new` at `apply`. **Twin names:** the pack names an entry by one of the arts that share its content, so `plan` replaces entries under another name than the one you staged: `hoverover` (468) is the pack's
   `hoverunder` (15 frames) and `BlockedShot` (845) is `magic-tech-penalty`; the audit #3144 looked them up by name, listed them as frameless, and they are not: the pack serves both with a good redraw, so they are no part of this batch. Read the
   plan's replaced paths against what you staged.
