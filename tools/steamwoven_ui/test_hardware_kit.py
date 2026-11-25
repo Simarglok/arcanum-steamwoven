@@ -117,6 +117,27 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(wood.pixel(50, 50)[:3], (60, 46, 36))   # the tone is the original's
         self.assertEqual(wood.pixel(50, 50)[3], 255)
 
+    def test_one_transparent_pixel_anywhere_in_the_wood_is_refused_and_never_filled(self) -> None:
+        strip = pngio.Image.blank(2880, 150, (40, 30, 20, 255))
+        strip.data[(40 * 2880 + 879) * 4 + 3] = 0   # a column the old every-seventh-pixel sample missed
+        with self.assertRaises(hk.KitError):
+            hk.strip_wood(strip, 0, 126)
+        tile = pngio.Image.blank(8, 8, (40, 30, 20, 255))
+        tile.data[3] = 0
+        shaded = hk.shaded_wood(tile, pngio.Image.blank(32, 32, (60, 46, 36, 255)))
+        self.assertTrue(hk.gates(hk.BY_ID["hardware.splslt1"], shaded, (8, 8)))   # the gate sees the hole (and the size)
+
+    def test_a_fill_keeps_the_ring_colour_at_the_edge(self) -> None:
+        table = hk.ring_table([lens_art()])
+        plain = hk.render_ring(table, (318, 318))
+        filled = hk.render_ring(table, (318, 318), fill=(8, 8, 8))
+        edge = [(x, y) for y in range(318) for x in range(318) if 20 < plain.pixel(x, y)[3] < 200 and filled.pixel(x, y)[3] > plain.pixel(x, y)[3]]
+        self.assertTrue(edge)
+        for x, y in edge[:50]:
+            for c in range(3):   # the blend lies between the ring's colour and the fill's
+                lo, hi = sorted((plain.pixel(x, y)[c], 8))
+                self.assertTrue(lo - 1 <= filled.pixel(x, y)[c] <= hi + 1, (x, y, c))
+
     def test_a_wood_area_with_an_opening_is_refused(self) -> None:
         strip = pngio.Image.blank(2880, 150, (40, 30, 20, 255))
         for y in range(12, 138):

@@ -57,7 +57,7 @@ SIGMA_T, SIGMA_D = 2.0, 0.40  # the splat's width: degrees, original px
 RING_CORE, RING_END = 4.2, 5.0   # the ring is opaque up to RING_CORE px beyond the circle and fades out by RING_END (its outer dark rim melts into the window's wood)
 
 # the strip wood the maintain slots and plugs are cut from (board.inttop master px): the one plain stretch of wood left of the slot openings (the strip's other opaque stretches are filled-in erasures, smeared), 126 px square;
-# a smaller tile is cut at a corner or the middle of it, flipped, so the five tiles differ (a 126 px plug differs by its flip only)
+# a smaller tile is cut at a corner or the middle of it, flipped, so the five tiles differ (a 126 px plug fills the area, so its four flips differ and the fifth plug repeats the first)
 WOOD_AREA = (878, 12)
 WOOD_SIZE = 126
 WOOD_CUTS = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5))      # slot i: where in the area (0 = start, 1 = end of the free margin)
@@ -267,12 +267,12 @@ def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] |
                     alpha = a_in * a_out
             if fill is not None and inside < 0.5:
                 cover = clamp(0.5 - inside, 0.0, 1.0)  # the fill's own soft edge, under the ring
-                r = r * alpha + fill[0] * (1 - alpha) * cover if alpha < 1 else r
-                g = g * alpha + fill[1] * (1 - alpha) * cover if alpha < 1 else g
-                b = b * alpha + fill[2] * (1 - alpha) * cover if alpha < 1 else b
-                alpha = alpha + (1 - alpha) * cover
-                if alpha > 0:
-                    pass
+                total = alpha + (1 - alpha) * cover
+                if total > 0:  # the ring over the fill, in straight (not premultiplied) colour
+                    r = (r * alpha + fill[0] * (1 - alpha) * cover) / total
+                    g = (g * alpha + fill[1] * (1 - alpha) * cover) / total
+                    b = (b * alpha + fill[2] * (1 - alpha) * cover) / total
+                alpha = total
             if alpha <= 0:
                 continue
             i = (my * w + mx) * 4
@@ -354,7 +354,7 @@ def strip_wood(strip: pngio.Image, index: int, size: int) -> pngio.Image:
     fx, fy = WOOD_CUTS[index % len(WOOD_CUTS)]
     x0, y0 = WOOD_AREA[0] + int(round(margin * fx)), WOOD_AREA[1] + int(round(margin * fy))
     tile = strip.crop(x0, y0, size, size)
-    if any(tile.data[3::4][i] != 255 for i in range(0, size * size, 7)):
+    if any(a != 255 for a in tile.data[3::4]):
         raise KitError(f"the strip's wood at ({x0}, {y0}) is not opaque: the wood area changed with the strip")
     return flipped(tile, *WOOD_FLIPS[index % len(WOOD_FLIPS)])
 
@@ -391,7 +391,7 @@ def shaded_wood(tile: pngio.Image, original: pngio.Image) -> pngio.Image:
     out = pngio.Image.blank(tile.w, tile.h)
     for i, s in enumerate(shade):
         p = tile.data[i * 4:i * 4 + 4]
-        out.data[i * 4:i * 4 + 4] = bytes((int(clamp(p[0] * tone[0] * s, 0, 255)), int(clamp(p[1] * tone[1] * s, 0, 255)), int(clamp(p[2] * tone[2] * s, 0, 255)), 255))
+        out.data[i * 4:i * 4 + 4] = bytes((int(clamp(p[0] * tone[0] * s, 0, 255)), int(clamp(p[1] * tone[1] * s, 0, 255)), int(clamp(p[2] * tone[2] * s, 0, 255)), p[3]))
     return out
 
 
