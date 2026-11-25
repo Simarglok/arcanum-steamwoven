@@ -52,6 +52,12 @@
         "cap-rivets"
       ],
       "after": null
+    },
+    "B-BUTTONS": {
+      "prompts": [
+        "plate-square-hud"
+      ],
+      "after": null
     }
   },
   "prompts": [
@@ -548,6 +554,24 @@
       "screen": null,
       "batch": "B-BOARD",
       "notes": "sheet of two bars; keyed, scaled to 24 x 570 and 24 x 150 and given a soft shadow by board_build.py caps (cap masters 72 wide); the right cap is the mirror"
+    },
+    {
+      "id": "plate-square-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Square HUD button plate, empty (arts 169, 186, 187, 193, 194)",
+      "file": "plate-square-hud.txt",
+      "size": [
+        1020,
+        1020
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-1 (ARC-UI-2482): one Codex item, idle plate only; every state, glyph and lit face of these buttons is made by rule from the original frames (button_kit.py); fitted to the five plate parts of the top-strip buttons"
     }
   ]
 }

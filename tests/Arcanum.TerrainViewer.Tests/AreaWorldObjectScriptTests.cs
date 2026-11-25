@@ -81,6 +81,8 @@ public sealed class AreaWorldObjectScriptTests
             Write("scr/00847item.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10041), (Attachee, -1))), Do(RunDefault)));
             Write("scr/00848gold.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10042), (Attachee, -1))), Do(RunDefault)));
             // ARC-SCRIPT-2912: create item 10043 (a prototype with a get script) in the attachee.
+            // ARC-SCRIPT-2910: the same item created in the player (the hero's pack).
+            Write("scr/00858heroscripted.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10043), (Player, -1))), Do(RunDefault)));
             Write("scr/00857scripted.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10043), (Attachee, -1))), Do(RunDefault)));
             Write("scr/00849touch.scr", Program(Do(new(ScrCatalogue.Action.TouchArt, N(1234))), Do(RunDefault)));
             // ARC-SCRIPT-1279: destroy item named 7001 from the attachee, transfer item 7001 from the attachee to the player, set written start 9 and toggle item inventory display of the attachee, set written start of a second item.
@@ -286,6 +288,31 @@ public sealed class AreaWorldObjectScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, taken.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             Assert.AreEqual((GameSessionDisposition.Changed, SessionScriptPoint.Get), (taken.LastCreatedItem!.Value.Disposition, taken.LastCreatedItem.Value.Scripts.Single().Point));
             Assert.AreEqual(1, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Count);
+        });
+    }
+
+    // ARC-SCRIPT-2910 (ledger TQ19): an item a script creates for the hero (and the trap device) runs its prototype's get script with the hero as the triggerer; a skip default leaves it on the hero's tile, and with no item script host the run is refused at the plan.
+    [TestMethod]
+    public void Create_item_for_the_hero_runs_the_new_items_get_script_and_a_skip_default_leaves_it_on_the_tile()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var npc = Row(2, NpcType, ScrPoint.Heartbeat, 858);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no item script host: refused before anything applies");
+            Assert.AreEqual(0, session.QueryPcInventory().Count);
+            var refusing = new AreaAiShotTests.PickupScripts { Point = SessionScriptPoint.Get, Program = AreaAiShotTests.PickupScripts.Make(skip: true) };
+            var refused = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = refusing };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, refused.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual((GameSessionDisposition.Changed, (int?)SessionScriptPoint.Get), (refused.LastCreatedItem!.Value.Disposition, refused.LastCreatedItem.Value.DeclinedBy));
+            Assert.AreEqual(0, session.QueryPcInventory().Count, "the get script's skip default keeps the item out of the pack");
+            var allowing = new AreaAiShotTests.PickupScripts { Point = SessionScriptPoint.Get, Program = AreaAiShotTests.PickupScripts.Make(skip: false) };
+            var taken = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = allowing };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, taken.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual((GameSessionDisposition.Changed, SessionScriptPoint.Get), (taken.LastCreatedItem!.Value.Disposition, taken.LastCreatedItem.Value.Scripts.Single().Point));
+            Assert.AreEqual((SessionInsertVerdict?)SessionInsertVerdict.Accepted, taken.LastCreatedItem.Value.Verdict, "taken by the hero: " + session.QueryObject(taken.LastCreatedItem.Value.Item!)?.Place);
+            var device = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = allowing }.GiveHeroPrototypeItem(10043, _ => SessionInsertVerdict.Accepted)!.Value;
+            Assert.AreEqual(SessionScriptPoint.Get, device.Scripts.Single().Point, "the trap device runs its get script too");
         });
     }
 
