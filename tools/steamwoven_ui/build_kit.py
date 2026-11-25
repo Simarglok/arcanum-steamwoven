@@ -33,6 +33,7 @@ from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
 from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
+from tools.steamwoven_ui import parchment_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import small_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
@@ -263,6 +264,8 @@ SMALL_PLATES = {f"plate.{b.name}": b for b in small_kit.SMALL}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
 DISC_PLATES = {f"plate.{m.name}": (f, m) for f in disc_kit.FAMILIES for m in f.members}
+BOX_PLATES = {f"plate.{b.name}": b for b in parchment_kit.BOXES}
+BOX_STATES = {f"state.{n}": b for b in parchment_kit.BOXES for n in (b.on_name, b.ill_name)}
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
@@ -318,6 +321,10 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"fit:{ident}"
             part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
+        if ident in BOX_PLATES or ident in BOX_STATES:  # ARC-UI-3205: pack-first (owner rule 2026-11-25): the old HD pack's frame with an analytic alpha, no Codex
+            part["status"], part["provenance"] = "master", f"rule:parchment_kit:{ident}"
+            part["note"] = (f"the idle face of art {part['source_arts'][-1]}: the old HD pack's frame (pack-first rule) resampled to the master, the alpha the ring's ellipse united with the four corner triangles (parchment_kit.py, ARC-UI-3205); the symbol is in the frame" if ident in BOX_PLATES else
+                            f"the {'lit' if ident.endswith('_on') else 'refused'} face of art {part['source_arts'][-1]}: the old HD pack's frame of that state (green or red corners kept), the same alpha (parchment_kit.py, ARC-UI-3205)")
         if ident in SMALL_PLATES:
             part["status"], part["provenance"] = "master", f"rule:small_kit:{ident}"
             part["note"] = "the old HD pack's idle frame at the master size, with the analytic ellipse alpha on a round button (pack-first rule, small_kit.py, ARC-UI-3206); the symbol is in the frame"
