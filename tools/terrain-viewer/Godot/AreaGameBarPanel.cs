@@ -66,6 +66,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (same) return;
         // ARC-UI-2714, ARC-UI-3143: the kit's window backgrounds carry the lens at the one common place; a window drawn from the pack's art keeps its own (the art's) place.
         AreaLensPlace.Unified = window is not null;
+        AreaLensPlace.Surface = AreaKitLens.CornerOf(window); // ARC-UI-3101: a surface that carries its lens ring puts the lens at its own place and the window draws no ring art
         AreaKitFixtures.Publish(fixtures); // ARC-UI-3098: the window's fixtures (the baked pits, dials, signs) go out with its background, before the windows redraw
         s_kitWindowShown = window; KitCovers.Clear();
         if (covers is not null) foreach (var pair in covers) KitCovers[pair.Key] = pair.Value;

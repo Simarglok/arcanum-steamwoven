@@ -21,6 +21,9 @@ public partial class AreaRoundView : CanvasLayer
         uniform vec2 source_origin;
         uniform float source_side = 1.0;
         void fragment() {
+            // ARC-UI-3101 (#3276): the copy is the circle inscribed in its square (the lens's circle); the square's corners show what is under them.
+            vec2 round_q = UV - vec2(0.5);
+            if (dot(round_q, round_q) > 0.25) discard;
             // The screen span of one UV unit of the hole: the canvas-to-screen scale (and a flipped axis) without knowing the stretch.
             vec2 span = vec2(dFdx(SCREEN_UV.x) / dFdx(UV.x), dFdy(SCREEN_UV.y) / dFdy(UV.y));
             vec2 delta = (source_origin - hole_origin) + UV * (source_side - hole_side);
@@ -59,7 +62,7 @@ public partial class AreaRoundView : CanvasLayer
         ArgumentNullException.ThrowIfNull(area);
         area.RoundViewCut = holder is not null;
         var (x, y) = AreaInventoryHole.Corner(area.LookMode);
-        Update(area.GlobalPosition + new Vector2(x, y) * area.FrameScale, AreaInventoryHole.Side * area.FrameScale, holder);
+        Update(area.GlobalPosition + new Vector2(x, y) * area.FrameScale, AreaLensPlace.Side * area.FrameScale, holder);
     }
 
     /// <summary>ARC-UI-098: shows the game view around <paramref name="holder"/> in the square of <paramref name="side"/> screen pixels whose
