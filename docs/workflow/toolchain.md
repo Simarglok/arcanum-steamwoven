@@ -1367,6 +1367,20 @@ through `SteamwovenKitScreenSpec.TopLayers` and `BottomLayers` (`SteamwovenKitTa
 159 units), and a screen is drawn from the kit only when every layer is in the set, so a kit without the four parts keeps the screen's own arts whole.
 
 
+### Slice 4: the pop-up panel bases and frames (ARC-UI-3278)
+
+The 17 pop-up panel arts of [#3278](https://github.com/Simarglok/arcanum-steamwoven/issues/3278) (the 410 x 107 "Rot" family 7, 128, 200, 274, 288, 290, 291, 354, 564, 642, 842 and the framed panels 822, 298, 826, 292, 565, 328) are kit parts `hardware.*` (the manifest rows of the arts, status master, provenance `rule:popup_kit:<id>`), each the art's whole rectangle at the kit's 3.6 scale, made BY RULE by `tools/steamwoven_ui/popup_kit.py` (no Codex: small shapes are built from the original's own shapes; the issue's Codex sheet idea is not used). The
+method: every pixel of the original is classified (brass, window dark, olive socket, iron, transparent), the classes are blurred once, enlarged with a cubic filter and cut with a steep threshold, so each outline is the original's and sub-pixel smooth; the iron is made new (mean 47, blotches, grain, a few specks: the HUD top plate's iron, #3259); brass (frames, side tabs, the curls of art 822) gets a height field from the distance to its edge and is lit from the top left (a sharp highlight ridge, a warm copper bounce, no smooth gradient) with the tone and the fine grain of the approved brass (HUD socket ring and clock frame #3259, menu message window #3260); rivets are domes; round sockets are analytic brass rings at the original's centres with the original's face (glyph) enlarged inside; slots, piece wells and list rows are recessed rectangles; a window keeps the original's dark fill and a baked stand-in inside it (the blue bar of 642, the sample icon of 564) is dropped; the odometer, +/- boxes and glyph faces are the original's pixels enlarged. Gates: size = the manifest's on the 6 px grid, transparent share = the original's, at most 1.2 % translucent pixels, no magenta, the edge halo gate of `fit.py`.
+
+```sh
+python3 -B tools/steamwoven_ui/popup_kit.py plan                          # the 17 parts and their manifest rows
+python3 -B tools/steamwoven_ui/popup_kit.py rule [--only ID,...] [--dry-run]   # masters/hardware.<id>.png and provenance/rule/<id>.json (about 1 min)
+python3 -B tools/steamwoven_ui/popup_kit.py sheet --out FILE [--only ...] [--zoom 2]   # before / after composite, English labels (ImageMagick)
+```
+
+Needs the approved HUD ring, clock frame and menu window masters (`local/steamwoven-ui/masters/`) and the census frames. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_popup_kit` (also in `tools/local_dev/run_tests.py`). The runtime does not lay these masters yet (the popup windows draw their own arts until a later slice).
+
+
 ## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
 
 Production of the kit parts of the five square buttons of the top strip (Character 169, Inventory 186, Logbook 187, Map of the town 193, World map 194; lit arts 561, 559, 560, 558, 195), the first slice of batch B-BUTTONS

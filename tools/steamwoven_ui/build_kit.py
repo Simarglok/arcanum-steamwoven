@@ -30,6 +30,7 @@ from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
+from tools.steamwoven_ui import popup_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
@@ -224,6 +225,7 @@ DISC_PLATES = {f"plate.{m.name}": (f, m) for f in disc_kit.FAMILIES for m in f.m
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
+POPUP_PARTS = frozenset(popup_kit.coverage())    # ARC-UI-3278 (B-HARDWARE slice 4): the pop-up panel bases and frames
 
 
 def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindow]) -> dict:
@@ -281,6 +283,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if ident in GAUGE_PARTS:  # ARC-UI-2483 (B-GAUGES): every part of the batch is a master once gauge_kit.py has made it (a rule record or a fit record)
             part["status"], part["provenance"] = "master", gauge_kit.provenance_of(ident)
             part["note"] = gauge_kit.note_of(ident, part["frames"])
+        if ident in POPUP_PARTS:  # ARC-UI-3278: every pop-up panel base is a master once popup_kit.py has made it (a rule record)
+            part["status"], part["provenance"] = "master", popup_kit.provenance_of(ident)
+            part["note"] = popup_kit.note_of(ident)
         if lead.kind == "board":
             part["status"], part["provenance"] = "master", f"fit:{part['id']}"
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"
