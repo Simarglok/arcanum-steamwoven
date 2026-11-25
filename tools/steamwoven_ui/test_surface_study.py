@@ -97,6 +97,18 @@ class SurfaceStudyTests(unittest.TestCase):
             self.assertEqual(read(100, 600), "srgb(0,128,0)")
             self.assertEqual(read(100, 2000), "srgb(0,0,255)")
 
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_assemble_writes_an_8_bit_rgb_png_for_textured_zones(self):
+        # flat zones are written as a palette PNG whatever the canvas depth, so textured ones show the Q16 canvas of xc:black (16 bit without -depth 8)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, size in (("top", "2103x107"), ("win", "1774x887"), ("bot", "2103x417")):
+                subprocess.run(["magick", "-size", size, "plasma:fractal", str(root / f"{name}.png")], check=True)
+            out = root / "a.png"
+            surface_study.assemble({"top-strip": root / "top.png", "window": root / "win.png", "bottom-strip": root / "bot.png"}, out)
+            header = out.read_bytes()
+            self.assertEqual((header[24], header[25]), (8, 2))  # IHDR: bit depth 8, colour type 2 (RGB), the only form surface_compose reads
+
     def test_method_c_commands(self):
         tile = method_c.tile_command(Path("t.png"), 432, (2880, 2160), Path("o.png"))
         self.assertIn("432x432!", tile)

@@ -155,6 +155,26 @@ public sealed class AreaInventoryHostTests
         Assert.IsTrue(host.View(session, Catalog, 1, Entity(3)).BodyDoll.All(slot => slot.Entity is null), "the knife left the slot");
     }
 
+    // ARC-WORLD-3122: an item the hero took and gave to an NPC is in no list of the hero's, yet it stays off the ground: not drawn, not a target, also in the host a later map change builds.
+    [TestMethod]
+    public void AGroundItemTheHeroGaveToAnNpcStaysHiddenAndUnpickedAcrossAMapReturn()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaInventoryHost([Map()]);
+        host.Attach(session);
+        Assert.AreEqual(GameSessionDisposition.Changed, host.PickUp(session, Entity(0)).Disposition);
+        var given = session.GiveItemToNpc(session.Version, Entity(4), Entity(0), host.InsertCheck);
+        Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition, given.Failure.ToString());
+        Assert.IsFalse(session.QueryPcInventory().Any(item => item.Entity == Entity(0)), "the hero no longer holds it");
+        Assert.IsTrue(host.Taken(session, 1).Contains(Key(0)), "its T0 body is not drawn");
+        Assert.IsNull(host.Target(session, 1, Key(0)), "not a pickup target");
+        // The map is left and entered again: a new host is built over the same session.
+        var again = new AreaInventoryHost([Map()]);
+        Assert.AreEqual(GameSessionFailure.None, again.Attach(session));
+        Assert.IsTrue(again.Taken(session, 1).Contains(Key(0)), "still hidden after the return");
+        Assert.IsNull(again.Target(session, 1, Key(0)), "still not a pickup target after the return");
+    }
+
     [TestMethod]
     public void PickupAndLootMoveItemsToThePcAndTheWindowNamesThem()
     {
