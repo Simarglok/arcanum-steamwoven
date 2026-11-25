@@ -24,6 +24,9 @@ public partial class TerrainViewerApp
     private IGridSession? _worldRouteSession;
     private string _worldRouteDiagnostic = "no click yet";
     private string _worldRouteClick = "none";
+    // ARC-INPUT-3133: every world press that ends with no route, goal or action says why (the log line and these two fields).
+    private int _worldClickDrops;
+    private string? _worldClickDropReason;
     // ARC-WORLD-016: a route step denied by a live companion is planned again a few times for the same goal.
     private bool _worldActorDenied;
     private (CellCoord? Goal, int Count) _worldActorRetries;
@@ -894,15 +897,20 @@ public partial class TerrainViewerApp
         && _worldGate.IsOpen && _worldLifecycleSession is null;
     private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false, bool repeat = false)
     {
-        if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
+        if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null)
+        {
+            DropWorldClick("ignored (no world session, route or canvas)", repeat); return;
+        }
         if (!WorldClickInputOpen)
         {
-            _worldRouteClick = "ignored (input quarantined/modal/lifecycle)";
+            // ARC-INPUT-3133: the dialog, a window, the quarantine or a lifecycle step holds the world; the reason names which.
+            DropWorldClick("ignored (input quarantined/modal/lifecycle)", repeat,
+                $"focused={_worldFocused} gameView={GameViewModeOpen} uiFocus={WorldUiFocus} plan={_readyActorPlan is not null} gate={_worldGate.IsOpen} lifecycle={_worldLifecycleSession is not null} conversation={ConversationOpen}");
             RefreshReadyStatus(); return;
         }
         if (AreaTransferPending)
         {
-            _worldRouteClick = "ignored (map transfer pending)";
+            DropWorldClick("ignored (map transfer pending)", repeat);
             RefreshReadyStatus(); return;
         }
         // ARC-WORLD-046: a press outside the open follower order menu only closes it; after a portrait's walk order the press picks
@@ -910,7 +918,7 @@ public partial class TerrainViewerApp
         if (_followerPortraits is { MenuShown: true } portraits)
         {
             portraits.CloseMenu();
-            _worldRouteClick = "closed the follower order menu";
+            _worldRouteClick = "closed the follower order menu"; // the press acted (it closed the menu): not a drop
             RefreshReadyStatus(); return;
         }
         // ARC-COMBAT-021: the original's world press handler (0x54ED30) does nothing for a PC that is not active (0x45D790); a hero
@@ -919,14 +927,14 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-063: a held item goes back when the PC is not active (0x575770, TT2).
             PutBackGameCursorItem("the hero cannot act");
-            _worldRouteClick = "ignored (the hero is down)";
+            DropWorldClick("ignored (the hero is down)", repeat);
             RefreshReadyStatus(); return;
         }
         // ARC-COMBAT-020: in a turn-based round the world takes the hero's commands only on its own subturn (the original's world
         // handler ignores them during another's).
         if (_areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
         {
-            _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
+            DropWorldClick("ignored (another participant's turn)", repeat); _turnBasedNotice = "the press waits for the hero's turn";
             RefreshReadyStatus(); return;
         }
         // ARC-UI-063: an item on the game cursor takes the press: it is thrown, or goes back for a hero that cannot act (TT2, TT6).
@@ -941,13 +949,13 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
-        if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; RefreshReadyStatus(); return; }
+        if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; DropWorldClick("ignored (casting goal holds the hero)", repeat); RefreshReadyStatus(); return; }
         if (TryPendingOrder(screen)) return;
         // ARC-INPUT-1936 (GT107): a press on bare ground with a Shift key held does nothing at all: it replaces no walk, door approach, attack or throw. A press on an object is the object click's (it takes Shift below),
         // and the open item cursor, lockpicks, pick pocket and disarm are other interface modes that take every press.
         if (shift && _itemAiming is null && _lockpickArmed is null && !PickPocketArmed && !DisarmArmed && AreaObjectAtScreen(screen, spared: PressPickSpared(alt)) is null)
         {
-            _worldRouteClick = "ignored (Shift held on the ground)";
+            DropWorldClick("ignored (Shift held on the ground)", repeat);
             RefreshReadyStatus(); return;
         }
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
@@ -962,6 +970,7 @@ public partial class TerrainViewerApp
             else
             {
                 CancelTalkApproach("a press cancelled the pick"); CancelAreaUseApproach("a press cancelled the pick"); CancelInventoryApproach("a press cancelled the pick");
+                DropWorldClick("ignored (armed lockpicks: the press was not on a door or window)", repeat);
                 RefreshReadyStatus();
             }
             return;
@@ -993,14 +1002,14 @@ public partial class TerrainViewerApp
         // ARC-INPUT-1938 (GT108, 0x54E05E): while the held flag is 1 (a tile walk press, the button still down) a press on an object is ignored: dragging over an object does nothing.
         if (_heldWalkFlag && AreaObjectAtScreen(screen, spared: _pressSpared) is not null)
         {
-            _worldRouteClick = "ignored (held walk over an object)";
+            DropWorldClick("ignored (held walk over an object)", repeat);
             return;
         }
         // ARC-COMBAT-1944 (0x54ED30): out of combat mode, a press on an NPC about to attack the hero or a follower enters combat mode first, so the press below is an attack.
         // A round the entry started (turn-based) may open on another participant's subturn: the press waits as the guard above makes it wait.
         if (EnterCombatModeForAttacker(screen, alt, shift) && _areaSession?.QueryCombatRound() is { } entered && !entered.Actor.IsHero)
         {
-            _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
+            DropWorldClick("ignored (another participant's turn)", repeat); _turnBasedNotice = "the press waits for the hero's turn";
             RefreshReadyStatus(); return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
@@ -1016,7 +1025,11 @@ public partial class TerrainViewerApp
         // ARC-INPUT-1946: the Alt action (immediate) builds no goal, so it sets no approach gait.
         if (TryAreaInventoryClick(screen, alt, shift, out var immediate)) { if (!immediate) SetObjectApproachGait(); return; }
         var chart = _canvas!.GetGlobalTransformWithCanvas().AffineInverse() * screen;
-        if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
+        if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell)
+        {
+            // ARC-INPUT-3133: the pick answers null only for a non-finite or out-of-reach chart point.
+            DropWorldClick($"ignored (no cell picked at chart {chart.X:0.#},{chart.Y:0.#})", repeat); return;
+        }
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
         // ARC-INPUT-1936 (GT107): with a Shift key held the tile press does nothing; the host answers Ignored and the hero stays as it was.
         // ARC-INPUT-1938 (GT109): the first press does not mark the run 0x400, every repeat (a press while the held flag is 1) does; the tail sets the flag whether the starter succeeded or not.
@@ -1025,8 +1038,16 @@ public partial class TerrainViewerApp
         var accepted = walk.Outcome == HeroRequestOutcome.Done;
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : walk.Outcome == HeroRequestOutcome.Ignored ? "ignored (Shift held)" : "same goal kept")}";
-        if (!repeat) GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
+        if (!repeat) GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}" + (accepted ? "" : $" reason={(walk.Outcome == HeroRequestOutcome.Ignored ? "Shift held" : "same goal kept")}"));
         RefreshReadyStatus();
+    }
+    /// <summary>ARC-INPUT-3133: a world press that sets no route, goal or action: the reason goes to <see cref="_worldRouteClick"/> and, unless it is a held repeat, one log line.</summary>
+    private void DropWorldClick(string reason, bool repeat = false, string? detail = null)
+    {
+        _worldRouteClick = reason;
+        if (repeat) return; // a held repeat comes every 250 ms: it is neither counted nor logged
+        _worldClickDropReason = reason; _worldClickDrops++;
+        GD.Print($"ARC-INPUT-3133 world click dropped reason={reason}" + (detail is null ? "" : $" {detail}"));
     }
     private static WorldKeyModifiers KeyModifiers(InputEventKey key)
         => (key.CtrlPressed ? WorldKeyModifiers.Ctrl : 0) | (key.ShiftPressed ? WorldKeyModifiers.Shift : 0)

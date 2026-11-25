@@ -98,9 +98,11 @@ public partial class TerrainViewerApp
 
             // Lying, the hero takes no press and does not walk on the stick.
             var cell = grid.State.CommittedCell;
+            var dropsBefore = _worldClickDrops;
             WorldRouteClick(Screen(far!.Value));
             Require(_worldRouteClick == "ignored (the hero is down)" && !HeroWalking,
                 $"a ground press while down does nothing: {_worldRouteClick}");
+            Require(_worldClickDrops == dropsBefore + 1 && _worldClickDropReason == _worldRouteClick, "ARC-INPUT-3133: the dropped press is counted with its reason");
             for (var i = 0; i < 20; i++) Frame(new Vec2(1, 0));
             for (var i = 0; i < 5; i++) Frame();
             Require(grid.State.CommittedCell == cell && grid.State.Phase == MovementPhase.Settled && _heroKnockdown.Stage == AreaKnockdownStage.Down,
