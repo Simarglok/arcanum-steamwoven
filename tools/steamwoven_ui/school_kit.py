@@ -22,7 +22,7 @@ The parts of a button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitCom
 
 The symbol mask is read from the PRESSED frame (the dome is brightest there and the near-black symbol stands out most; `read: idle` in an override reads the idle frame, where the `MAX_GAIN` filter then drops cells that brighten in the pressed frame): a cell in the dome's reach whose lightness is under half of what its neighbourhood shows (the high percentile of a window), small and large
 (two window sizes), the pieces that lie wholly in the rim's shade dropped, the cells inside it that stand out in colour from the dome added (an accent such as the yellow gear core), small holes closed. `OVERRIDES` holds a per-button correction
-(a threshold or cells) where the rule needs one; every mask is looked at (`masks`).
+(a threshold, cells, simple shapes straightened or a region with its own darkness limit) where the rule needs one; every mask is looked at (`masks`). The symbol's coloured body (the fire's orange) joins the dark outline. `gloss` also draws the brass ring by rule (`paint_ring`, the width of the original, the tone of the hardware menu ring).
 Nothing here holds art: every picture is read from and written to the ignored `local/steamwoven-ui/`. Standard library only (`pngio.py`); ImageMagick for `masks`, `place` and `sheet`.
 Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
 """
@@ -53,7 +53,7 @@ except ImportError:  # run as a script
 TOOL_VERSION = 1
 MANIFEST = HERE / "kit.json"
 DOME_SHARE = 0.89           # the dome's radius as a share of the frame's (the brass ring and its dark outline lie outside it)
-REACH_SHARE = 0.70          # a symbol lies within this share of the dome's radius
+REACH_SHARE = 0.82          # a symbol lies within this share of the dome's radius
 WINDOWS = ((0.28, 0.50), (0.55, 0.42))   # (window radius as a share of the dome's radius, lightness ratio): the symbol mask's two readings (thin lines, then blobs)
 PERCENTILE = 0.85           # the dome's lightness around a cell: this percentile of the window
 MIN_DROP = 8.0              # CIE L a cell must lie below the dome's lightness to be symbol
@@ -66,9 +66,12 @@ GROW_MAX_L = 15.0           # ... and no lighter than this, ...
 GROW_GAIN = 34.0            # ... and gains no more than this from the idle to the pressed frame; one pass
 DEFAULT_MEDIAN = (0.45, 6.0)  # the median reading every button without a `median` entry gets (window share, drop in CIE L)
 MEDIAN_PERCENTILE = 0.5     # the median reading (`median` in `OVERRIDES`: [window share, drop in CIE L]): a cell this much darker than the median of the window's cells is symbol (for symbols only a little darker than a dome that itself darkens towards the rim)
-RIM_DROP = 0.62             # the dome's shade at the lower right (beyond this share of the dome's radius, past the diagonal) is no symbol: such cells are dropped (`rim_drop` in `OVERRIDES` moves the limit)
-RIM_SHARE = 0.58            # a piece of the mask whose nearest cell to the middle lies beyond this share of the dome's radius is the rim's shade, not a symbol
-SPECK = 2                   # a piece of this many cells or fewer is a speck, dropped
+RIM_DROP = 0.72             # the dome's shade at the lower right (beyond this share of the dome's radius, past the diagonal) is no symbol: such cells are dropped (`rim_drop` in `OVERRIDES` moves the limit)
+RIM_SHARE = 0.74            # a piece of the mask whose nearest cell to the middle lies beyond this share of the dome's radius is the rim's shade, not a symbol
+SPECK = 4                   # a piece of this many cells or fewer is a speck, dropped
+FILL_DE = 24.0              # the symbol's coloured body: a cell within FILL_NEAR cells of the dark outline that is this far in hue (CIE a, b) from the median of the plain dome around it (in the pressed frame) joins the mask; `fill` in `OVERRIDES` changes it, 0 = off
+FILL_NEAR = 1               # cells
+FILL_WINDOW = 4             # the window of that median, in cells
 ACCENT_DE = 34.0            # a cell this far (CIE76) from the median of the plain dome cells around it is an accent of the symbol (the gear's yellow core), joined to the mask
 ACCENT_REACH = 0.50         # an accent lies this share of the dome's radius from the middle at most (the highlight on the upper left is no accent)
 ACCENT_WINDOW = 3           # the window of the median, in cells
@@ -110,10 +113,18 @@ TABS = (
 )
 GROUPS = {"college": "plate-college-hud", "school": "plate-school-hud"}   # the prompt of each group
 OVERRIDES: dict[str, dict] = {
-    "mechanical_but": {"reach": 0.78, "rim_share": 1.0},
-    "gunsmithy_but": {"reach": 0.76, "rim_share": 1.0},
-    "therapeutics_but": {"reach": 0.76, "rim_share": 1.0},
-}   # per button: {"windows": ((share, ratio), ...), "median": (share, drop), "read": "idle", "max_l", "max_gain", "reach", "rim_share", "rim_drop", "grow", "accent", "add": ((x, y), ...), "drop": ((x, y), ...)}; read by eye from `masks`
+    "social_but": {"shapes": (("rect", 13.0, 7.0, 22.0, 17.0), ("ellipse", 17.0, 20.5, 7.4, 3.1))},      # the top hat: crown and brim
+    "technological_but": {"shapes_drop": (("ellipse", 15.8, 15.6, 1.8, 1.8),)},                          # the gear's hole is round
+    "anatomical_but": {"shapes": (("poly", [(10.0, 11.0), (22.0, 11.0), (22.0, 16.5), (18.2, 17.0), (18.2, 21.0), (22.5, 21.0), (22.5, 24.0), (10.0, 24.0)]),)},   # the mortar's bowl and foot
+    "mechanical_but": {"reach": 0.78, "rim_share": 1.0,
+                       "shapes": (("gear", 13.3, 10.9, 3.4, 4.3, 8, 0.0), ("gear", 19.5, 18.5, 4.3, 5.2, 8, 0.06)),
+                       "shapes_drop": (("ellipse", 13.0, 11.5, 1.2, 1.0), ("ellipse", 19.0, 18.0, 1.2, 1.2))},   # two gears with round holes
+    "gunsmithy_but": {"reach": 0.76, "rim_share": 1.0, "close": 1,
+                      "roi": ([(7.0, 9.0), (26.5, 6.5), (26.5, 11.5), (19.0, 14.5), (18.0, 24.0), (7.0, 24.0)], 33.0)},   # the revolver: dark only against the dome's own shade at the lower right, so the cells of its region
+    "therapeutics_but": {"reach": 0.76, "rim_share": 1.0,
+                         "shapes": (("poly", [(7.5, 9.8), (14.0, 9.0), (16.5, 9.5), (16.5, 12.8), (9.0, 12.8)]), ("poly", [(16.5, 9.0), (25.0, 9.0), (25.0, 12.8), (16.5, 12.8)]),
+                                    ("rect", 13.8, 12.5, 16.2, 23.0), ("ellipse", 15.0, 15.0, 3.0, 1.4), ("ellipse", 15.0, 18.3, 2.6, 1.2))},   # the caduceus: wings, staff, snakes
+}   # per button: {"windows": ((share, ratio), ...), "median": (share, drop), "read": "idle", "max_l", "max_gain", "reach", "rim_share", "rim_drop", "grow", "accent", "fill", "close", "add": ((x, y), ...), "drop": ((x, y), ...), "shapes" / "shapes_drop": simple shapes (`shape_cells`)}; read by eye from `masks`
 
 
 def tabs_of(group: str | None) -> list[Tab]:
@@ -267,6 +278,31 @@ def symbol_mask(frame: Image, pressed: Image | None = None, override: dict | Non
             if any(mask[j] for j in neighbours8(i, w, h)):
                 grown[i] = True
         mask = grown
+    fill_de = override.get("fill", FILL_DE)
+    if fill_de:  # the symbol's coloured body: cells next to its dark outline that stand out in colour from the plain dome around them (the fire's orange, the water's teal), read from the pressed frame
+        shown = pressed if pressed is not None else frame
+        near_mask = [False] * (w * h)
+        for i, on in enumerate(mask):
+            if on:
+                for y in range(i // w - FILL_NEAR, i // w + FILL_NEAR + 1):
+                    for x in range(i % w - FILL_NEAR, i % w + FILL_NEAR + 1):
+                        if 0 <= x < w and 0 <= y < h:
+                            near_mask[y * w + x] = True
+        dome = [(not near_mask[i]) and alpha_at(shown, i % w, i // w) > 0 and math.hypot(i % w + 0.5 - cx, i // w + 0.5 - cy) <= 0.85 * rd for i in range(w * h)]
+        extra = []
+        for i in range(w * h):
+            x, y = i % w, i // w
+            if mask[i] or not near_mask[i] or alpha_at(shown, x, y) == 0 or math.hypot(x + 0.5 - cx, y + 0.5 - cy) > reach * rd:
+                continue
+            around = [button_kit.lab(*colour_at(shown, xx, yy)) for yy in range(y - FILL_WINDOW, y + FILL_WINDOW + 1) for xx in range(x - FILL_WINDOW, x + FILL_WINDOW + 1)
+                      if 0 <= xx < w and 0 <= yy < h and dome[yy * w + xx]]
+            if len(around) < 8:
+                continue
+            median = tuple(sorted(c[k] for c in around)[len(around) // 2] for k in range(3))
+            if math.dist(button_kit.lab(*colour_at(shown, x, y))[1:], median[1:]) > fill_de:
+                extra.append(i)
+        for i in extra:
+            mask[i] = True
     limit = override.get("rim_drop", RIM_DROP) * rd
     for i, on in enumerate(mask):
         dx, dy = i % w + 0.5 - cx, i // w + 0.5 - cy
@@ -295,6 +331,20 @@ def symbol_mask(frame: Image, pressed: Image | None = None, override: dict | Non
         if len(piece) <= HOLE_MAX and not any(i % w in (0, w - 1) or i // w in (0, h - 1) for i in piece):
             for i in piece:
                 mask[i] = True
+    if "roi" in override:  # a symbol that stands out only in its own region (dark-on-dark elsewhere): the cells of the region read as dark as `max_l` in the pressed frame
+        region, max_l = override["roi"]
+        inside = set(shape_cells(("poly", region), w, h))
+        for i in inside:
+            if reading[i] <= max_l:
+                mask[i] = True
+    for _ in range(override.get("close", 0)):  # morphological closing: the gaps between the strokes of a symbol the pressed frame shows only partly
+        grown = dilate(mask, w, h)
+        eroded = [grown[i] and all(grown[j] for j in neighbours8(i, w, h)) for i in range(w * h)]
+        mask = [mask[i] or (eroded[i] and alpha_at(frame, i % w, i // w) > 0) for i in range(w * h)]
+    for key, value in ("shapes", True), ("shapes_drop", False):  # simple forms the original draws as a straight or round shape, straightened
+        for shape in override.get(key, ()):
+            for i in shape_cells(shape, w, h):
+                mask[i] = value
     for key, value in ("add", True), ("drop", False):
         for x, y in override.get(key, ()):
             if not (0 <= x < w and 0 <= y < h):
@@ -304,6 +354,40 @@ def symbol_mask(frame: Image, pressed: Image | None = None, override: dict | Non
 
 
 # --- the plate template and the collage of the references ---------------------------------------------------------------------
+
+def shape_cells(shape: tuple, w: int, h: int) -> list[int]:
+    """The cells (by their centres) inside a simple shape, in the frame's cell coordinates: ("rect", x0, y0, x1, y1), ("ellipse", cx, cy, rx, ry), ("poly", [(x, y), ...]), ("line", x0, y0, x1, y1, width),
+    ("gear", cx, cy, body radius, tooth radius, teeth, phase in turns)."""
+    kind = shape[0]
+    cells = []
+    for y in range(h):
+        for x in range(w):
+            px, py = x + 0.5, y + 0.5
+            if kind == "rect":
+                inside = shape[1] <= px <= shape[3] and shape[2] <= py <= shape[4]
+            elif kind == "ellipse":
+                inside = ((px - shape[1]) / shape[3]) ** 2 + ((py - shape[2]) / shape[4]) ** 2 <= 1.0
+            elif kind == "poly":
+                pts, inside = shape[1], False
+                for k in range(len(pts)):
+                    (x0, y0), (x1, y1) = pts[k], pts[(k + 1) % len(pts)]
+                    if (y0 > py) != (y1 > py) and px < x0 + (py - y0) * (x1 - x0) / (y1 - y0):
+                        inside = not inside
+            elif kind == "line":
+                x0, y0, x1, y1, width = shape[1:]
+                length2 = (x1 - x0) ** 2 + (y1 - y0) ** 2
+                t = max(0.0, min(1.0, ((px - x0) * (x1 - x0) + (py - y0) * (y1 - y0)) / length2)) if length2 else 0.0
+                inside = math.hypot(px - (x0 + t * (x1 - x0)), py - (y0 + t * (y1 - y0))) <= width / 2.0
+            elif kind == "gear":
+                _, cx, cy, body, tooth, teeth, phase = shape
+                angle = math.atan2(py - cy, px - cx) / (2 * math.pi) * teeth - phase * teeth
+                inside = math.hypot(px - cx, py - cy) <= (tooth if math.cos(2 * math.pi * angle) > 0.15 else body)
+            else:
+                raise SchoolError(f"unknown override shape {kind}")
+            if inside:
+                cells.append(y * w + x)
+    return cells
+
 
 def dilate(mask: list[bool], w: int, h: int) -> list[bool]:
     return [mask[i] or any(mask[j] for j in neighbours8(i, w, h)) for i in range(w * h)]
@@ -513,6 +597,74 @@ def gloss_layer(template: Image, pixels: tuple[int, int]) -> Image:
     return soft_layer(cells, (w, h), pixels, GLOSS_SIGMA)
 
 
+RING_UNITS = 2.6            # the brass ring's width in the original's cells (its outer line, the lit band and the shaded inner band), the same for both groups
+RING_SOURCE = "hardware.menu_ring"   # the master whose brass the ring takes: the ring of the menu strips' hardware (#3259), cut and fitted there; the tone of the kit's brass rings
+RING_BINS, RING_ANGLES = 12, 16
+RING_GAIN = (0.78, 1.28)    # the light's share over the angles (upper left lit, lower right shaded) stays within this
+
+
+def ring_profile(local: Path) -> tuple[list[tuple[float, float, float]], list[float]]:
+    """The cross-section of the hardware ring (the mean colour from its outer edge to its hole, `RING_BINS` bins) and the light over its angles (`RING_ANGLES` gains around 1)."""
+    path = local / "masters" / f"{RING_SOURCE}.png"
+    if not path.is_file():
+        raise SchoolError(f"no ring master {path}: the ring takes its brass from {RING_SOURCE}")
+    ring = pngio.read(path)
+    cells = [(i % ring.w, i // ring.w) for i in range(ring.w * ring.h) if ring.data[i * 4 + 3] > 128]
+    if not cells:
+        raise SchoolError(f"{path} is empty")
+    cx = (min(x for x, _ in cells) + max(x for x, _ in cells) + 1) / 2.0
+    cy = (min(y for _, y in cells) + max(y for _, y in cells) + 1) / 2.0
+    radii = [math.hypot(x + 0.5 - cx, y + 0.5 - cy) for x, y in cells]
+    r_out, r_in = max(radii), min(radii)
+    sums = [[0.0, 0.0, 0.0, 0] for _ in range(RING_BINS)]
+    light = [[0.0, 0] for _ in range(RING_ANGLES)]
+    for (x, y), r in zip(cells, radii):
+        b = min(RING_BINS - 1, int((r_out - r) / (r_out - r_in) * RING_BINS))
+        colour = colour_at(ring, x, y)
+        for k in range(3):
+            sums[b][k] += colour[k]
+        sums[b][3] += 1
+        if 0.2 < (r_out - r) / (r_out - r_in) < 0.8:   # the lit band and the shaded band, not the dark edges
+            a = min(RING_ANGLES - 1, int(((math.atan2(y + 0.5 - cy, x + 0.5 - cx) + math.pi) / (2 * math.pi)) * RING_ANGLES))
+            light[a][0] += sum(colour) / 3.0
+            light[a][1] += 1
+    profile = [tuple(c[k] / max(1, c[3]) for k in range(3)) for c in sums]
+    means = [v / max(1, n) for v, n in light]
+    overall = sum(means) / len(means)
+    gains = [max(RING_GAIN[0], min(RING_GAIN[1], m / overall)) for m in means]
+    return profile, [(gains[k - 1] + 2 * gains[k] + gains[(k + 1) % len(gains)]) / 4.0 for k in range(len(gains))]   # smoothed
+
+
+def paint_ring(plate: Image, centre: tuple[float, float], r_out: float, width: float, ring: tuple[list[tuple[float, float, float]], list[float]]) -> Image:
+    """The plate inside the circle `r_out`, with the brass ring laid over its outer `width` (smooth edges), the tone from the hardware ring's cross-section and its light over the angles."""
+    profile, gains = ring
+    cx, cy = centre
+    out = Image(plate.w, plate.h, bytearray(plate.w * plate.h * 4))
+    for y in range(plate.h):
+        for x in range(plate.w):
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
+            r = math.hypot(dx, dy)
+            a_out = max(0.0, min(1.0, r_out - r + 0.5))
+            if a_out <= 0.0:
+                continue
+            w = max(0.0, min(1.0, r - (r_out - width) + 0.5))
+            t = max(0.0, min(1.0, (r_out - r) / width)) * RING_BINS - 0.5
+            lo = max(0, min(RING_BINS - 1, int(math.floor(t))))
+            hi = min(RING_BINS - 1, lo + 1)
+            f = max(0.0, min(1.0, t - lo))
+            ang = (math.atan2(dy, dx) + math.pi) / (2 * math.pi) * RING_ANGLES - 0.5
+            g0 = int(math.floor(ang)) % RING_ANGLES
+            g1 = (g0 + 1) % RING_ANGLES
+            gain = gains[g0] + (gains[g1] - gains[g0]) * (ang - math.floor(ang))
+            ring_colour = [max(0.0, min(255.0, (profile[lo][k] * (1 - f) + profile[hi][k] * f) * gain)) for k in range(3)]
+            under = colour_at(plate, x, y) if alpha_at(plate, x, y) else ring_colour
+            i = (y * plate.w + x) * 4
+            for k in range(3):
+                out.data[i + k] = int(round(under[k] * (1 - w) + ring_colour[k] * w))
+            out.data[i + 3] = int(round(a_out * 255))
+    return out
+
+
 def tab_inputs(frames: Path, tab: Tab) -> tuple[Image, Image, Image, list[bool], Image]:
     idle, pressed, hover = (read_frame(frames, tab, k) for k in (0, 1, 2))
     for frame in (pressed, hover):
@@ -709,8 +861,13 @@ def cmd_gloss(args: argparse.Namespace) -> int:
         _, _, _, _, template = tab_inputs(frames, tab)
         layer = multiply_alpha(gloss_layer(template, (plate.w, plate.h)), plate)
         plan.append((tab, source, plate, layer))
+    ring = ring_profile(local)
     for tab, source, plate, layer in plan:
-        final = over(plate, layer)
+        idle = read_frame(frames, tab, 0)
+        cx, cy, radius = disc_of(idle)
+        kx, ky = plate.w / idle.w, plate.h / idle.h
+        scale = (kx + ky) / 2.0
+        final = paint_ring(over(plate, layer), (cx * kx, cy * ky), radius * scale, RING_UNITS * scale, ring)
         covered = sum(1 for i in range(3, len(layer.data), 4) if layer.data[i] > 0) / (plate.w * plate.h)
         print(f"plate.{tab.name:22s} highlight covers {covered * 100:4.1f} % of the canvas")
         if args.dry_run:
@@ -724,7 +881,7 @@ def cmd_gloss(args: argparse.Namespace) -> int:
             record.setdefault("fit_master", record.get("master"))
             record["master"] = {"file": str(target), "size": list(master_of(tab.name)), "sha256": button_kit.sha256_file(target)}
             record["gloss"] = {"rule": "school_kit gloss", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "fitted_master_sha256": button_kit.sha256_file(source),
-                               "window_cells": GLOSS_WINDOW, "min_lighter_l": GLOSS_DL, "sigma_cells": GLOSS_SIGMA, "min_alpha": GLOSS_MIN_ALPHA, "sources": [f"{tab.folder}/f0", f"{tab.folder}/f1"]}
+                               "window_cells": GLOSS_WINDOW, "min_lighter_l": GLOSS_DL, "sigma_cells": GLOSS_SIGMA, "min_alpha": GLOSS_MIN_ALPHA, "ring": {"units": RING_UNITS, "source": RING_SOURCE, "bins": RING_BINS, "angles": RING_ANGLES, "gain": list(RING_GAIN)}, "sources": [f"{tab.folder}/f0", f"{tab.folder}/f1"]}
             record["halo_gate"] = {"relaxed": True, "issue": "#3073", "limits": record.get("limits"), "halo_limits": HALO_LIMITS, "note": "the gate fails the plate's real rim shading by design; fitted with --halo-limits, the repository's limits are unchanged"}
             record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print("SCHOOL KIT gloss " + ("DRY-RUN " if args.dry_run else "") + "PASS")
@@ -744,7 +901,7 @@ def record_of(ident: str, frames: Path, image_path: Path, image: Image) -> dict:
     return {"part": ident, "rule": "school_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(),
             "sources": {f"{tab.folder}/f{k}": button_kit.sha256_file(frames / tab.folder / f"f{k}.png") for k in range(3)},
             "empty": not any(image.data[3::4]), "overrides": {k: (list(v) if isinstance(v, tuple) else v) for k, v in OVERRIDES.get(tab.name, {}).items()},
-            "parameters": {"dome_share": DOME_SHARE, "reach_share": REACH_SHARE, "windows": [list(w) for w in WINDOWS], "percentile": PERCENTILE, "min_drop": MIN_DROP, "max_l": MAX_L, "max_l_read": MAX_L_READ, "read": "pressed (override read: idle)", "median": list(DEFAULT_MEDIAN), "median_percentile": MEDIAN_PERCENTILE, "grow_passes": GROW_PASSES, "max_gain": MAX_GAIN, "hole_max": HOLE_MAX, "place_scale": PLACE_SCALE, "edge_pull": EDGE_PULL, "enlarge": ENLARGE, "rim_drop": RIM_DROP, "rim_share": RIM_SHARE,
+            "parameters": {"dome_share": DOME_SHARE, "reach_share": REACH_SHARE, "windows": [list(w) for w in WINDOWS], "percentile": PERCENTILE, "min_drop": MIN_DROP, "max_l": MAX_L, "max_l_read": MAX_L_READ, "read": "pressed (override read: idle)", "median": list(DEFAULT_MEDIAN), "median_percentile": MEDIAN_PERCENTILE, "grow_passes": GROW_PASSES, "max_gain": MAX_GAIN, "hole_max": HOLE_MAX, "speck": SPECK, "fill_de": FILL_DE, "fill_near": FILL_NEAR, "fill_window": FILL_WINDOW, "place_scale": PLACE_SCALE, "edge_pull": EDGE_PULL, "enlarge": ENLARGE, "rim_drop": RIM_DROP, "rim_share": RIM_SHARE,
                            "lift_min_alpha": LIFT_MIN_ALPHA, "lift_sigma": LIFT_SIGMA, "dead_de": button_kit.DEAD_DE, "solid_de": button_kit.SOLID_DE, "crisp_sigma": button_kit.CRISP_SIGMA, "edge_half": button_kit.EDGE_HALF, "master": [image.w, image.h]},
             "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [image.w, image.h], "run_by": "agent"}
 
@@ -816,6 +973,18 @@ def cmd_sheet(args: argparse.Namespace) -> int:
             face = over(plate, parts[f"glyph.{tab.name}"])
             shots = [(idle, face), (hover, over(face, parts[f"plate.{tab.name}_hover"])), (pressed, over(face, parts[f"plate.{tab.name}_pressed"]))]
             size = master_of(tab.name)
+            if args.layout == "owner":
+                cells = []
+                for tag, image, nearest in (("o-idle", upscaled(idle, size), True), ("k-idle", shots[0][1], False), ("o-pressed", upscaled(pressed, size), True), ("k-pressed", shots[2][1], False)):
+                    path = work / f"{tab.name}-{tag}.png"
+                    pngio.write(path, image)
+                    subprocess.run(["magick", str(path), "-background", "#202020", "-alpha", "remove", "-alpha", "off", "-filter", "point" if nearest else "Lanczos", "-resize", f"{size[0] * args.zoom}x{size[1] * args.zoom}!",
+                                    "-gravity", "center", "-extent", f"{cell}x{cell}", str(path)], check=True)
+                    cells.append(path)
+                row = work / f"{tab.name}-row.png"
+                subprocess.run(["magick", *cells, "+append", str(row)], check=True)
+                rows.append(row)
+                continue
             columns = []
             for index, (before, after) in enumerate(shots):
                 pair = []
@@ -835,13 +1004,14 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         grid = []
         for k in range(0, len(rows), per):
             line = work / f"line-{k}.png"
-            subprocess.run(["magick", *rows[k:k + per], "+append", "-background", "#202020", "-extent", f"{cell * 3 * per}x{cell * 2}", str(line)], check=True)
+            subprocess.run(["magick", *rows[k:k + per], "+append", "-background", "#202020", "-extent", f"{cell * (4 if args.layout == 'owner' else 3) * per}x{cell * (1 if args.layout == 'owner' else 2)}", str(line)], check=True)
             grid.append(line)
         sheet = work / "sheet.png"
         subprocess.run(["magick", *grid, "-background", "#202020", "-append", str(sheet)], check=True)
         head = work / "head.png"
-        subprocess.run(["magick", "-size", f"{cell * 3 * per}x40", "xc:#202020", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "22", "-gravity", "west", "-annotate", "+10+0",
-                        f"{args.title}: top of each pair = ORIGINAL (nearest cells), bottom = KIT (plate + glyph + overlays); columns per button: idle, hover, pressed", str(head)], check=True)
+        caption = (f"{args.title}: columns per button: ORIGINAL idle | KIT idle | ORIGINAL pressed | KIT pressed (variant A)" if args.layout == "owner"
+                   else f"{args.title}: top of each pair = ORIGINAL (nearest cells), bottom = KIT (plate + glyph + overlays); columns per button: idle, hover, pressed")
+        subprocess.run(["magick", "-size", f"{cell * (4 if args.layout == 'owner' else 3) * per}x40", "xc:#202020", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "22", "-gravity", "west", "-annotate", "+10+0", caption, str(head)], check=True)
         subprocess.run(["magick", str(head), str(sheet), "-append", str(args.out)], check=True)
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -850,7 +1020,7 @@ def cmd_sheet(args: argparse.Namespace) -> int:
 
 
 def cmd_masks(args: argparse.Namespace) -> int:
-    """The symbol masks over the idle frames (yellow), the original beside each: the review of `OVERRIDES`."""
+    """The symbol masks over the pressed frames (yellow), the original pressed frame beside each: the review of `OVERRIDES`."""
     local = args.local_root
     frames = args.frames or local / "census" / "frames"
     need_magick()
@@ -860,12 +1030,12 @@ def cmd_masks(args: argparse.Namespace) -> int:
         for tab in tabs_of(args.group):
             idle, pressed = read_frame(frames, tab, 0), read_frame(frames, tab, 1)
             mask = symbol_mask(idle, pressed, OVERRIDES.get(tab.name))
-            shown = Image(idle.w, idle.h, bytearray(idle.data))
+            shown = Image(pressed.w, pressed.h, bytearray(pressed.data))
             for i, on in enumerate(mask):
                 if on:
                     shown.data[i * 4:i * 4 + 3] = bytes((255, 255, 0))
             a, b, t = work / f"{tab.name}-a.png", work / f"{tab.name}-b.png", work / f"{tab.name}.png"
-            pngio.write(a, idle)
+            pngio.write(a, pressed)
             pngio.write(b, shown)
             subprocess.run(["magick", str(a), str(b), "-filter", "point", "-resize", f"{args.zoom * 100}%", "+append", "-background", "#202020", "-extent", f"{2 * 36 * args.zoom}x{34 * args.zoom}", str(t)], check=True)
             tiles.append(t)
@@ -937,6 +1107,7 @@ def main(argv: list[str] | None = None) -> int:
             s.add_argument("--only")
             s.add_argument("--plate-dir", type=Path)
             s.add_argument("--columns", type=int, default=2)
+            s.add_argument("--layout", choices=("states", "owner"), default="states", help="states: idle, hover, pressed with the original above the kit; owner: original idle | kit idle | original pressed | kit pressed in one row")
             s.add_argument("--title", default="ARC-UI-3204, coloured-dome buttons")
     sub.add_parser("self-test")
     args = parser.parse_args(argv)

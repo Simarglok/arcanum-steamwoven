@@ -78,6 +78,72 @@ class MaskTests(unittest.TestCase):
         self.assertEqual([sk.alpha_at(template, i % N, i // N) for i in range(N * N)], [sk.alpha_at(idle, i % N, i // N) for i in range(N * N)])
 
 
+class ShapeAndRingTests(unittest.TestCase):
+    def test_shape_cells_inside_the_shapes_only(self):
+        w = h = 20
+        rect = sk.shape_cells(("rect", 2.0, 3.0, 6.0, 5.0), w, h)
+        self.assertEqual(sorted(rect), sorted(y * w + x for y in range(3, 5) for x in range(2, 6)))
+        ellipse = sk.shape_cells(("ellipse", 10.0, 10.0, 3.0, 2.0), w, h)
+        self.assertIn(10 * w + 10, ellipse)
+        self.assertNotIn(10 * w + 14, ellipse)
+        poly = sk.shape_cells(("poly", [(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)]), w, h)
+        self.assertEqual(len(poly), 36)
+        line = sk.shape_cells(("line", 2.0, 10.0, 12.0, 10.0, 2.0), w, h)
+        self.assertIn(9 * w + 7, line)
+        self.assertNotIn(5 * w + 7, line)
+        gear = sk.shape_cells(("gear", 10.0, 10.0, 3.0, 5.0, 8, 0.0), w, h)
+        self.assertGreater(len(gear), math.pi * 9 * 0.9)
+        self.assertLess(len(gear), math.pi * 25)
+        with self.assertRaises(sk.SchoolError):
+            sk.shape_cells(("star", 1.0), w, h)
+
+    def test_override_shapes_and_roi_change_the_mask(self):
+        idle = frame(symbol=False)
+        shape = ("rect", 10.0, 10.0, 13.0, 13.0)
+        added = sk.symbol_mask(idle, None, {"shapes": (shape,)})
+        self.assertTrue(all(added[i] for i in sk.shape_cells(shape, N, N)))
+        removed = sk.symbol_mask(frame(), None, {"shapes_drop": (("rect", 0.0, 0.0, float(N), float(N)),)})
+        self.assertFalse(any(removed))
+        roi = sk.symbol_mask(frame(), frame(shade=1.7), {"roi": ([(0.0, 0.0), (float(N), 0.0), (float(N), float(N)), (0.0, float(N))], 60.0)})
+        self.assertTrue(roi[12 * N + 12])
+
+    def test_the_coloured_body_of_a_symbol_joins_the_mask(self):
+        idle = frame()
+        pressed = frame(shade=1.7)
+        for x, y in ((10, 9), (10, 10), (13, 9), (13, 10)):   # a body of another hue beside the black strokes
+            pressed.data[(y * N + x) * 4:(y * N + x) * 4 + 3] = bytes((230, 120, 20))
+        self.assertFalse(sk.symbol_mask(idle, pressed, {"fill": 0})[9 * N + 10])
+        self.assertTrue(sk.symbol_mask(idle, pressed)[9 * N + 10])
+
+    def test_the_ring_is_laid_over_the_plate_edge(self):
+        plate = pngio.Image(40, 40, bytearray(b"\x20\x40\x80\xff" * 1600))
+        ring = ([(100.0, 80.0, 40.0)] * sk.RING_BINS, [1.0] * sk.RING_ANGLES)
+        out = sk.paint_ring(plate, (20.0, 20.0), 18.0, 4.0, ring)
+        self.assertEqual(sk.colour_at(out, 20, 20), (32, 64, 128))              # the dome inside the ring stays
+        self.assertEqual(sk.colour_at(out, 20, 2), (100, 80, 40))              # the ring itself
+        self.assertEqual((sk.alpha_at(out, 20, 20), sk.alpha_at(out, 0, 0)), (255, 0))   # transparent outside the outer circle
+        self.assertGreaterEqual(sk.alpha_at(out, 20, 2), 250)
+        self.assertEqual(sk.alpha_at(out, 20, 1), 0)   # r = 19: outside the circle of radius 18
+
+    def test_ring_profile_reads_the_hardware_ring(self):
+        with tempfile.TemporaryDirectory() as folder:
+            local = Path(folder)
+            (local / "masters").mkdir()
+            ring = pngio.Image(60, 60, bytearray(60 * 60 * 4))
+            for y in range(60):
+                for x in range(60):
+                    r = math.hypot(x + 0.5 - 30, y + 0.5 - 30)
+                    if 20 <= r <= 30:
+                        ring.data[(y * 60 + x) * 4:(y * 60 + x) * 4 + 4] = bytes((100, 80, 40, 255))
+            pngio.write(local / "masters" / f"{sk.RING_SOURCE}.png", ring)
+            profile, gains = sk.ring_profile(local)
+            self.assertEqual(len(profile), sk.RING_BINS)
+            self.assertEqual(len(gains), sk.RING_ANGLES)
+            self.assertTrue(all(abs(c - v) < 3 for c, v in zip(profile[len(profile) // 2], (100, 80, 40))))
+            with self.assertRaises(sk.SchoolError):
+                sk.ring_profile(Path(folder) / "nowhere")
+
+
 class PartsTests(unittest.TestCase):
     def setUp(self):
         self.idle, self.pressed, self.hover = frame(), frame(shade=1.7), frame(shade=1.3)
