@@ -170,11 +170,13 @@ public partial class TerrainViewerApp
             _aiKeepAcrossWindowMove = true;
             var swap = System.Diagnostics.Stopwatch.StartNew();
             // ARC-RENDER-3129: the view stays where it is relative to the hero (the original's view does not move when sectors load).
-            _streamKeptView = _camera?.KeepView(WorldAnchor);
+            // A view in Fit mode (the whole-window fit) is framed again as before.
+            _streamKeptView = _worldFitView ? null : _camera?.KeepView(WorldAnchor);
             var voicesBefore = _schemeVoices.ToArray();
+            _streamSwapActive = true;
             try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); NoteStreamSwap(voicesBefore, swap.ElapsedMilliseconds); _cursorReapply = _cursorShown is not null; GD.Print($"ARC-UI-056 window swap on the main thread {swap.ElapsedMilliseconds} ms shown={_cursorShown is not null} shape={Godot.Input.GetCurrentCursorShape()}"); }
             catch (Exception exception) { refused = exception; }
-            finally { _aiKeepAcrossWindowMove = false; _streamKeptView = null; }
+            finally { _aiKeepAcrossWindowMove = false; _streamKeptView = null; _streamSwapActive = false; }
         });
         if (refused is not null)
         {
@@ -211,8 +213,13 @@ public partial class TerrainViewerApp
     /// <summary>ARC-RENDER-3129: one window swap's record: its main-thread time, whether every scheme song voice still plays (the original's music goes on when sectors load) and whether the view kept its place.</summary>
     private readonly List<(long SwapMs, bool SoundKept, bool ViewKept)> _streamSwaps = [];
 
+    /// <summary>True only inside the swap callback: the sound and the view of the scene it replaces are kept (a scene cleared by a failure while a stream loads is torn down whole).</summary>
+    private bool _streamSwapActive;
+
     private void NoteStreamSwap(KeyValuePair<long, ViewerAudioHandle>[] voicesBefore, long swapMs)
     {
+        if (!_nativeSmoke) return; // only the smoke reads the record
+
         var soundKept = voicesBefore.All(v => _schemeVoices.TryGetValue(v.Key, out var handle) && handle.Equals(v.Value));
         var viewKept = true;
         if (_streamKeptView is { } before && _camera?.KeepView(WorldAnchor) is { } after)

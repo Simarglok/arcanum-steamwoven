@@ -172,8 +172,8 @@ public partial class TerrainViewerApp
         _newGameRecipe = null; _heroBodyPrefetch = null;
         _areaTransitions = null; _areaSession = null; _useOpenPending = null; _useTargets.Clear(); _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
-        // ARC-RENDER-3129: a window move under the same session is no map change; the song and the sector it follows go on (KeepAreaSoundAcrossWindowMove).
-        if (_mapHandoff is not { Kind: MapHandoffKind.Stream, Session: not null } || _schemePlayer is null)
+        // ARC-RENDER-3129: a window move under the same session (the swap callback, `_streamSwapActive`) is no map change; the song and the sector it follows go on (KeepAreaSoundAcrossWindowMove).
+        if (!_streamSwapActive || _schemePlayer is null)
         {
             StopAllSounds(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
             StopPositionalSound();
