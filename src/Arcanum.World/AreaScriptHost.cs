@@ -552,7 +552,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male,
                 AreaDialogNames.For(_session, _profile.Names, AreaDialogNames.NpcName(NpcName, Speaker(line.Speaker)?.Row)));
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
-            floats.Add(new(line.Speaker, printed.Text, line.Pc));
+            floats.Add(new(line.Speaker, printed.Text, line.Pc, AreaScriptFloat.VoiceOf(document, line.Script, line.Line)));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
         floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
@@ -719,7 +719,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 }
 
 /// <summary>ARC-SCRIPT-050: one float line a run applied: the object it floats over and its text. ARC-UI-2055 (TB26): <see cref="Listener"/> is the object the speech display turns an idle living speaker to (the script float line's nearby PC, the headline's triggerer, a follower's leader), or null for no turn.</summary>
-public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text, ScrObjectRef? Listener = null);
+/// <param name="Voice">ARC-SCRIPT-3124: the speech identity the float callback hands the speech display (0x568430 → 0x568540 → 0x5688D0), or -1 for a line without a voice (a playing voice is then left alone).</param>
+public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text, ScrObjectRef? Listener = null, int Voice = -1)
+{
+    // ARC-SCRIPT-3124 (exe read: float line 0x44B1F0 → 0x413A30 mode 1 → 0x416840 → composer 0x4189C0).
+    /// <summary>The voice of a script float line is the speech identity of its DLG line, the same composer and field as the dialog's NPC line (the running script's number and the number in the line's condition field); −1 for a line the DLG does not hold or one without a condition field.</summary>
+    public static int VoiceOf(DlgDocument document, int script, int line) =>
+        document.TryGetRecord(line, out var record) && record is not null
+            ? Arcanum.Data.Audio.SoundCatalog.SpeechIdentity(script, Arcanum.Data.Audio.SoundCatalog.SpeechConditionField(record.Condition.Bytes)) : -1;
+}
 
 /// <summary>ARC-TECHNOLOGY-005: how a start schematic UI request resolved.</summary>
 public enum AreaSchematicScriptStatus

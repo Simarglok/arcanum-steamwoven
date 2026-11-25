@@ -205,7 +205,7 @@ public partial class TerrainViewerApp
     {
         foreach (var award in host.TakeAwards()) LevelAreaFollowers(award);
         // ARC-DEV-298 (B20): the float lines of the run (the ghost of Brego's) over their speakers, floated by the next frame.
-        foreach (var line in host.TakeFloats()) _tileScriptFloats.Enqueue((line.Speaker == host.Pc ? HeroFloater : line.Speaker.Code, line.Text, ListenerOwner(line.Listener)));
+        foreach (var line in host.TakeFloats()) _tileScriptFloats.Enqueue((line.Speaker == host.Pc ? HeroFloater : line.Speaker.Code, line.Text, ListenerOwner(line.Listener), line.Voice));
         NoteScriptCreations(host.TakeCreations());
         return ran;
     }

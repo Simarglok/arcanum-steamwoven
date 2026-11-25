@@ -105,7 +105,7 @@ public partial class TerrainViewerApp
     private int _scriptFloats;
 
     // ARC-DEV-298 (B20): the float lines of tile scripts (owner, text), queued when the run was applied.
-    private readonly Queue<(string Owner, string Text, string? Listener)> _tileScriptFloats = new();
+    private readonly Queue<(string Owner, string Text, string? Listener, int Voice)> _tileScriptFloats = new();
 
     /// <summary>The bubble clock: the real one (the original's timeGetTime), or the smoke's own.</summary>
     private long BubbleNowMs() => _floaterClockForSelfTest ? BubbleClockForSelfTest : (long)Time.GetTicksMsec();
@@ -227,15 +227,22 @@ public partial class TerrainViewerApp
         ClearBubblesOfScriptFades();
         while (_tileScriptFloats.Count > 0)
         {
-            var (tileOwner, tileText, tileListener) = _tileScriptFloats.Dequeue();
-            if (Bubble(tileOwner, tileText, listener: tileListener)) GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
+            var (tileOwner, tileText, tileListener, tileVoice) = _tileScriptFloats.Dequeue();
+            if (Bubble(tileOwner, tileText, listener: tileListener)) { PlayScriptFloatVoice(tileVoice); GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} voice={tileVoice} text={tileText}"); }
         }
         if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {
             var owner = line.Speaker == scripts.Pc ? HeroFloater : line.Speaker.Code;
-            if (Bubble(owner, line.Text, listener: ListenerOwner(line.Listener))) GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} text={line.Text}");
+            if (Bubble(owner, line.Text, listener: ListenerOwner(line.Listener))) { PlayScriptFloatVoice(line.Voice); GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} voice={line.Voice} text={line.Text}"); }
         }
+    }
+
+    // ARC-SCRIPT-3124 (exe read 0x44B1F0 → 0x568430 → 0x568540 → 0x5688D0).
+    /// <summary>A script float line starts its DLG line's voice with the bubble (the listener is the hero, whose gender picks the file); a line without a voice (−1) leaves a playing voice alone.</summary>
+    private void PlayScriptFloatVoice(int voice)
+    {
+        if (voice >= 0 && _audio is not null) ExecuteVoice(new(Arcanum.Presentation.Audio.DialogVoiceCommandKind.Play, voice));
     }
 
     private AreaFloaterLayer FloaterLayer()

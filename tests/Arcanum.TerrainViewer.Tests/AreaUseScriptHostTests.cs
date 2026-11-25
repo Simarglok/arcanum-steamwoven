@@ -137,7 +137,7 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00774townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(5000))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(47))), Do(Skip)));
             // 775 (ARC-DEV-298, bug B20): a tile script that floats its DLG line 1 over the PC, as the ghost of Brego's callee (2789) floats the ghost's.
             Write("scr/00775float.scr", Program(Do(new(ScrCatalogue.Action.FloatLine, N(1), (Triggerer, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(48))), Do(Skip)));
-            Write("dlg/00775float.dlg", Encoding.Latin1.GetBytes("{1}{Help me.}{}{}{}{}{}"));
+            Write("dlg/00775float.dlg", Encoding.Latin1.GetBytes("{1}{Help me.}{}{}{7}{}{}"));   // ARC-SCRIPT-3124: condition field 7 = the line's voice number
             // 776 (ARC-SCRIPT-1241): a use script that fades for 12 seconds into movie 3 (track 0, the screen back at once) and sets a flag, as the Vendigroth underground's 2862 plays its movies.
             Write("scr/00776fade.scr", Program(Do(new(ScrCatalogue.Action.Fade, N(12), N(0), N(3), N(0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(49))), Do(Skip)));
             // 782 (ARC-SCRIPT-1764, NP9, NP10): a tile script that queues issue 5030 behind the head, queues issue 7 at the front, queues 7 again (found, no change) and floats the head issue's headline over the PC
@@ -937,7 +937,7 @@ public sealed class AreaUseScriptHostTests
             var ran = host.RunPlaced(tile, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(host.GlobalFlag(48), "the lines after the float ran");
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.", host.Pc) }, host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.", host.Pc, (775 << 16) | 7) }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }
