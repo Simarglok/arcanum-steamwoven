@@ -16,7 +16,7 @@ The part (master px of the 2880 x 2160 composition, one canvas of 300 x 168 = th
   edge of the plate and follows the same light as the rim (from the upper left): an edge that faces the light is lit, an edge that faces away is dark, over BEVEL_WIDTH px. The rim's soft shadow (the surfaces' disc shadow: the
   ellipse shifted 13 px down and right, Gaussian sigma 16, strength 0.7) is baked into the plate, because the part is laid over the surface after its shadow.
 
-Everything stays under the ignored `local/steamwoven-ui/`; nothing here holds art. Standard library only (`pngio`). Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
+Everything stays under the ignored `local/steamwoven-ui/`; nothing here holds art. Standard library only (`pngio`). Exit 0 = done, 1 = a check failed or an input (a kit master) could not be used.
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ PART = "plate.inventory_oval"
 CANVAS = (300, 168)            # master px, on the 6 px grid (SWI-LAY-7)
 PLATE = (7, 6, 293, 162)       # the plate's rectangle in the canvas (x0, y0, x1, y1; x1 and y1 exclusive): 286 x 156, measured on the original (x 2531 to 2817, y 1191 to 1347 for the hand oval)
 CENTRE = (149.0, 83.0)         # the rim's centre in the canvas (the original's rim box centre, 2673 x 1268 for the hand oval)
-RIM = (141.0, 78.0)            # the rim's OUTER semi-axes (the rim box of the original, 282 x 156)
+RIM = (141.0, 78.0)            # the rim's OUTER semi-axes (the rim box of the original, 282 x 156; the arrow oval's box is 284 x 156, so its rim ends 1 px short each side at the ends of the long axis)
 CORNER = (160.0, 98.0)         # the semi-axes of the ellipse the plate's corner triangles are cut by (concentric, larger than the rim)
 RING_WIDTH = 10.0              # px: the brass band (the old art's gold band is 5 px; the new one covers it and the dark dots of its inner edge)
 BEVEL_WIDTH = 2.5              # px: the plate's bevel
