@@ -13,7 +13,8 @@ public partial class TerrainViewerApp
 {
     private AreaLoadResult? _wispRowsFor;
     private IReadOnlyList<(AreaObjectRecord Row, WispGlow Glow)> _wispRows = [];
-    private Func<IEnumerable<AreaRelight.Light>>? _wispSource;
+    private Func<IReadOnlyList<AreaRelight.Light>>? _wispSource;
+    private readonly List<AreaRelight.Light> _wispLights = [];
 
     /// <summary>The wisps' glow in the relit look: on (the default); <c>ARC_RELIGHT_WISPS=off</c> takes it away for a comparison (the "before" of a capture) and <see cref="SetWispGlow"/> does the same for a smoke.</summary>
     internal static bool WispGlowOn { get; private set; } = !string.Equals(OS.GetEnvironment("ARC_RELIGHT_WISPS"), "off", StringComparison.OrdinalIgnoreCase);
@@ -21,8 +22,8 @@ public partial class TerrainViewerApp
     internal static float WispStrengthFactor { get; } = float.TryParse(OS.GetEnvironment("ARC_RELIGHT_WISP_STRENGTH"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var factor) && factor >= 0 ? factor : 1f;
     internal void SetWispGlow(bool on) { WispGlowOn = on; _canvas?.RefreshRelight(); }
 
-    /// <summary>The wisps' glows for the relit look as lights in world pixels (what the canvas appends to the carried lights at each submission); none while no map is shown.</summary>
-    private IEnumerable<AreaRelight.Light> WispRelitLights()
+    /// <summary>The wisps' glows for the relit look as lights in world pixels (what the canvas appends to the carried lights at each submission); none while no map is shown. ARC-RENDER-3127: the list is reused by the next call (the canvas copies it at once).</summary>
+    private IReadOnlyList<AreaRelight.Light> WispRelitLights()
     {
         if (!WispGlowOn || _readyArea is not { } area || area.Lighting?.Local is not { } local) return [];
         if (!ReferenceEquals(_wispRowsFor, area)) { _wispRows = AreaWispGlows.Rows(area.Snapshot.Objects); _wispRowsFor = area; }
@@ -31,7 +32,7 @@ public partial class TerrainViewerApp
         var absent = _areaCompanions?.Absent;
         var host = _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null;
         var entities = host is null ? null : WispEntities(host);
-        var lights = new List<AreaRelight.Light>();
+        var lights = _wispLights; lights.Clear();
         foreach (var (row, glow) in _wispRows)
         {
             if (absent?.Contains(row.Key) == true) continue;

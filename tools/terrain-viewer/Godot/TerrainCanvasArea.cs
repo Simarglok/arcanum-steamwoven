@@ -535,15 +535,20 @@ public partial class TerrainCanvas
     {
         if (!AreaRelight.Active) return;
         // No lighting shown (toggled off, or the area released): no lights either, so a stale list does not light the next view.
-        if (_areaAmbient is not { } relitAmbient) { AreaRelight.SetCarriedLights([]); AreaRelight.SetMapLights([]); AreaRelight.Upload(); return; }
+        if (_areaAmbient is not { } relitAmbient) { AreaRelight.ClearCarriedLights(); AreaRelight.ClearMapLights(); AreaRelight.Upload(); return; }
         // ARC-RENDER-2064: the wisps' glows ride with the carried lights, in the relit look only (the Legacy lattice never sees them).
-        AreaRelight.SetCarriedLights((_areaCarriedNow?.CarriedPlacements ?? []).Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, relitAmbient.Pair))
-            .Where(light => light is not null).Select(light => light!.Value).Concat(_areaRelitExtra?.Invoke() ?? []));
+        // ARC-RENDER-3127: filled light by light, so the per-frame call builds no sequence.
+        AreaRelight.ClearCarriedLights();
+        var carried = _areaCarriedNow?.CarriedPlacements;
+        for (var index = 0; carried is not null && index < carried.Count; index++)
+            if (AreaRelight.FromPlacement(carried[index].Light, carried[index].Rect, relitAmbient.Pair) is { } carriedLight) AreaRelight.AddCarriedLight(carriedLight);
+        if (_areaRelitExtra?.Invoke() is { } extra)
+            for (var index = 0; index < extra.Count; index++) AreaRelight.AddCarriedLight(extra[index]);
         AreaRelight.Upload();
     }
-    private Func<IEnumerable<AreaRelight.Light>>? _areaRelitExtra;
+    private Func<IReadOnlyList<AreaRelight.Light>>? _areaRelitExtra;
     /// <summary>ARC-RENDER-2064: the relit lights that are not part of the Legacy lighting (the wisps' glows); read at each submission while the relit look is on.</summary>
-    internal void SetAreaRelitExtra(Func<IEnumerable<AreaRelight.Light>>? source)
+    internal void SetAreaRelitExtra(Func<IReadOnlyList<AreaRelight.Light>>? source)
     {
         if (ReferenceEquals(_areaRelitExtra, source)) return;
         _areaRelitExtra = source; _areaView = null; QueueRedraw();
