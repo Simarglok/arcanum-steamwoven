@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Locks;
@@ -68,6 +69,20 @@ public static class AreaSpellCasting
     {
         ArgumentNullException.ThrowIfNull(data);
         return Enumerable.Range(0, SpellRecord.Count).Select(n => SessionSpellRecords.Translate(data.Records[n])).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-UI-3123: the shown name of a cast's object id in the "Magic" message. The hero is "the hero"; any other id is named by its row's text
+    /// (<paramref name="rowOf"/>: the cast map's row, a visiting companion's from another map included) and not by the shown map's hover index, which
+    /// lacks a visitor after a window move; an id with no row or no text stays as the id.
+    /// </summary>
+    public static string ObjectName(string id, Func<string, AreaObjectRecord?> rowOf, Func<AreaObjectRecord, string?> textOf)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        ArgumentNullException.ThrowIfNull(rowOf);
+        ArgumentNullException.ThrowIfNull(textOf);
+        if (id == SessionSpellCaster.Hero) return "the hero";
+        return rowOf(id) is { } row && textOf(row) is { Length: > 0 } text ? text : id;
     }
 
     /// <summary>The feedback line of one logged cast event, or null for an event the viewer does not show (a freed run).</summary>
