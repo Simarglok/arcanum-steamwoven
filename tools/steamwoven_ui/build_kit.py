@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 from tools.steamwoven_ui import button_kit  # noqa: E402
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
+from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
@@ -136,6 +137,20 @@ def new_parts() -> list[dict]:
                                   states=states, master=True, provenance=f"rule:glyph_cells:{ident}"))
     parts.extend(square_hud_parts())
     parts.extend(round_hud_parts())
+    parts.extend(hud_hardware_parts())
+    return parts
+
+
+def hud_hardware_parts() -> list[dict]:
+    """ARC-UI-2481, slice 1 of B-HARDWARE: the metal of the two HUD strips (kit layers over the strip art, SWI-LAY-12), one Codex sheet per strip (hardware_build.py);
+    a part placed several times (the ten slot frames, the four socket rings, the rail unit) is one master, a right-hand detail that mirrors the left one is its mirror."""
+    parts = []
+    for ident in hardware_build.HARDWARE_ORDER:
+        info = hardware_build.PARTS[ident]
+        top = info["strip"] == "board.inttop"
+        what = "mirror of " + info["mirror_of"].split(".")[1] if info.get("mirror_of") else "drawn once"
+        parts.append(new_part(ident, "hardware", "top-strip" if top else "bottom-strip", ["H01" if top else "H02"], None, "B-HARDWARE",
+                              f"{info['note']}; a layer over the strip art ({what}); hardware_build.py, ARC-UI-2481; open size", master=True))
     return parts
 
 
@@ -235,7 +250,8 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
     parts.extend(new_parts())
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
-    for art, layers in (("184", ["cap.bottom_strip_left", "cap.bottom_strip_right"]), ("185", ["cap.top_strip_left", "cap.top_strip_right"]),
+    for art, layers in (("184", ["cap.bottom_strip_left", "cap.bottom_strip_right"] + hardware_build.layers_of("board.intbotom")),
+                        ("185", ["cap.top_strip_left", "cap.top_strip_right"] + hardware_build.layers_of("board.inttop")),
                         ("221", ["grid.inventory_cells"]), ("365", ["grid.schematic"])):
         if art in by_art:  # the real census has all four (a test pins it)
             by_art[art]["layers"] = layers

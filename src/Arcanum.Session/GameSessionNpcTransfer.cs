@@ -239,6 +239,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.InvalidItem"/>), fewer coins than the count (<see cref="GameSessionFailure.GoldShort"/>), a sum past 32
     /// bits, a full list, store or record budget, or no free made number (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. A
     /// count of 0 changes nothing.
+    /// ARC-SCRIPT-2900: the hero's gold pile (the counter's one pile) runs its insert-item script (21, the NPC as the triggerer) first and, when every coin goes, its remove-item script (28, the hero) through <paramref name="scripts"/> or the standing host; a pile with such a script and no host refuses the move whole.
     /// </summary>
     public InventoryMutationResult GiveGoldToNpc(GameSessionVersion expected, string npc, int count, SessionItemKind pileKind, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
@@ -251,24 +252,31 @@ public sealed partial class GameSessionOwner
         if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (_inventory.Gold < count) return RejectItem(GameSessionFailure.GoldShort);
+        // ARC-SCRIPT-2900 (NT1, IE3; 0x464830 → 0x43CCA0 → 0x466E00 → 0x467860): the hero's gold pile (the counter's one pile, SessionHeroGrid.GoldEntity) runs its insert-item script (21) first with the NPC as the triggerer; the whole pile given destroys it, which
+        // then runs its remove-item script (28) with the hero as the triggerer (the destroy script, point 2, comes between and is not run: #2759). One run set, committed with the move; without a host (given or standing) a pile with such a script refuses the move whole.
+        var insert = WithHeroGoldObject(() => RunPileInsert(scripts, SessionHeroGrid.GoldEntity, npc, npcTriggerer: true, _inventory.Gold == count ? SessionEventKinds.PlayerEntity : null));
+        if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         if (NpcPile(npc) is { } pile)
         {
             if ((long)pile.Quantity + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
             if (!_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
             if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+            CommitHeroGoldRuns(insert.Runs);
             _inventory.Gold -= count;
             _inventory.Piles[pile.Entity] = pile.Quantity + count;
             Revise();
-            return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
+            return insert.Result(new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version));
         }
         if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
-        var report = new CreatedScripts();
+        var report = new CreatedScripts { Defer = true };
         var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report, ground: true);
         if (created is null) return refusal!.Value;
+        CommitHeroGoldRuns(insert.Runs);
+        report.CommitPending();
         _inventory.Gold -= count;
         _inventory.Piles[created.Value.Entity] = count;
         Revise();
-        return report.Apply(new(GameSessionDisposition.Changed, GameSessionFailure.None, created.Value.Entity, SessionInsertVerdict.Accepted, Version));
+        return report.Apply(insert.Result(new(GameSessionDisposition.Changed, GameSessionFailure.None, created.Value.Entity, SessionInsertVerdict.Accepted, Version)));
     }
 
     /// <summary>
