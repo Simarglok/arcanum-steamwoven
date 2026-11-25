@@ -32,6 +32,7 @@ from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
+from tools.steamwoven_ui import school_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
@@ -202,14 +203,18 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
     parts = []
     rows = [(b.name, b.art, "round_kit.py", f"a {round_kit.ROUND_MASTER} x {round_kit.ROUND_MASTER} canvas") for b in round_kit.SKILL_BUTTONS]
     rows += [(m.name, m.art, "disc_kit.py", f"a {f.master[0]} x {f.master[1]} canvas") for f in disc_kit.FAMILIES for m in f.members]
+    rows += [(t.name, t.art, "school_kit.py", None) for t in school_kit.TABS]  # ARC-UI-3204: the college tabs and the skill-school buttons (coloured domes), the canvas is the plate's size
     for name, art, tool, canvas in rows:
         plate = plates.get(f"plate.{name}")
+        if canvas is None and plate is not None:
+            canvas = f"a {plate['size'][0]} x {plate['size'][1]} canvas"
+        lit = tool == "school_kit.py"
         if plate is None:  # a census without the button (a test's synthetic one): nothing to hang the parts on (the real census has all eight, `build_kit.py --check` pins it)
             continue
         rule = tool.removesuffix(".py")
         for ident, kind, states, what in ((f"glyph.{name}", "glyph", ["idle"], f"the symbol of art {art} as the idle frame shows it over the plate"),
-                                          (f"plate.{name}_hover", "plate", ["hover"], f"overlay of art {art}'s hover frame over its idle frame (the symbol lights up and glows)"),
-                                          (f"plate.{name}_pressed", "plate", ["pressed"], f"overlay of art {art}'s pressed frame over its idle frame (the lit symbol, and the plate darkened where the original darkens it)")):
+                                          (f"plate.{name}_hover", "plate", ["hover"], f"overlay of art {art}'s hover frame over its idle frame (" + ("the dome and the symbol light up" if lit else "the symbol lights up and glows") + ")"),
+                                          (f"plate.{name}_pressed", "plate", ["pressed"], f"overlay of art {art}'s pressed frame over its idle frame (" + ("the dome lights up more, the symbol stays dark" if lit else "the lit symbol, and the plate darkened where the original darkens it") + ")")):
             parts.append(new_part(ident, kind, plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
                                   f"{what}; {tool} draws it from the original frames (no Codex), {canvas}, so the size is open", states=states, master=True, provenance=f"rule:{rule}:{ident}"))
     return parts
@@ -218,6 +223,7 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
 DISC_PLATES = {f"plate.{m.name}": (f, m) for f in disc_kit.FAMILIES for m in f.members}
+SCHOOL_PLATES = {f"plate.{t.name}": t for t in school_kit.TABS}
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
@@ -272,6 +278,10 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"fit:{ident}"
             part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
+        if ident in SCHOOL_PLATES:
+            part["status"], part["provenance"] = "master", f"fit:{ident}"
+            part["note"] = (f"the coloured dome in its brass ring, no symbol: one of the {len(school_kit.tabs_of(SCHOOL_PLATES[ident].group))} domes of the Codex item {school_kit.GROUPS[SCHOOL_PLATES[ident].group]}, cut apart and fitted to this part; "
+                            "the original's highlight, the symbol and the states are made by rule (school_kit.py, ARC-UI-3204)")
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
@@ -283,7 +293,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"
         parts.append(part)
     parts.extend(new_parts())
-    parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES}))
+    parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES or p["id"] in SCHOOL_PLATES}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("184", ["cap.bottom_strip_left", "cap.bottom_strip_right"] + hardware_build.layers_of("board.intbotom")),

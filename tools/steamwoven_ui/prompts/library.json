@@ -59,7 +59,9 @@
         "plate-round-hud",
         "plate-ball-hud",
         "plate-dome-hud",
-        "plate-dome-small-hud"
+        "plate-dome-small-hud",
+        "plate-college-hud",
+        "plate-school-hud"
       ],
       "after": null
     },
@@ -857,6 +859,42 @@
       "screen": null,
       "batch": "B-BUTTONS",
       "notes": "slice B-BUTTONS-3 (ARC-UI-3203): one Codex item for the dome of the two Big Green arrow buttons (34 x 33 units, master 120 x 120), idle dome only, no brass (as plate-dome-hud: placed, crescent, gloss, glyphs and overlays by rule, disc_kit.py); fitted to plate.big_grn_l, plate.big_grn_r"
+    },
+    {
+      "id": "plate-college-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Coloured round dome buttons, empty, sixteen on one sheet (college tabs: arts 11, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110, 116, 122)",
+      "file": "plate-college-hud.txt",
+      "size": [
+        1020,
+        1020
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-4 (ARC-UI-3204): one Codex item, a collage of the sixteen college tabs of the spell window (24 x 24 units, master 84 x 84), each dome in its own colour with its symbol removed, on a flat grey ground; school_kit.py refs builds the collage and its layout, place cuts the result into one dome per button, the highlight, the glyphs and the overlays are made by rule (school_kit.py); fitted to the plate parts of the group"
+    },
+    {
+      "id": "plate-school-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Coloured round dome buttons, empty, twelve on one sheet (skill schools: arts 302 to 313)",
+      "file": "plate-school-hud.txt",
+      "size": [
+        1530,
+        1020
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-4 (ARC-UI-3204): one Codex item, a collage of the twelve skill-school buttons of the character sheet (31 to 34 x 31 to 32 units, masters 114 to 120 x 114), each dome in its own colour with its symbol removed, on a flat grey ground; school_kit.py refs builds the collage and its layout, place cuts the result into one dome per button, the highlight, the glyphs and the overlays are made by rule (school_kit.py); fitted to the plate parts of the group"
     }
   ]
 }

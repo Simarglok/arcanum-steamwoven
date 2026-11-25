@@ -384,6 +384,9 @@ RIM_MIN = 30
 RIM_LEAN = 40      # (a mauve of the art such as 90 59 89 leans 30 and is art)
 
 
+OWN_MAGENTA = frozenset({"plate.s_phantasm_hover", "plate.s_phantasm_pressed"})   # ARC-UI-3204: the college of Phantasm is magenta in the original, and so are its lit overlays; the generation ground of its plate was grey, so no magenta of these parts is a leak
+
+
 def ground_pixels(data: bytes | bytearray, width: int | None = None) -> list[int]:
     """The indexes (pixel numbers) of the visible pixels of straight RGBA `data` that have the colour of the generation ground: the strict magenta anywhere, and, when the `width`
     is given, the darker violet blends on the outer `RIM` lines."""
@@ -420,7 +423,7 @@ def check_masters(manifest: dict, masters: Path) -> tuple[list[str], int, int]:
             errors.append(f"{part['id']}: master {path.name} cannot be read: {error}")
             continue
         checked += 1
-        bad = ground_pixels(image.data, image.w)
+        bad = [] if part["id"] in OWN_MAGENTA else ground_pixels(image.data, image.w)
         if bad:
             first = bad[0]
             errors.append(f"{part['id']}: {len(bad)} visible pixel(s) have the colour of the generation ground (magenta), the first at {first % image.w},{first // image.w}: transparency must be the alpha channel alone")
