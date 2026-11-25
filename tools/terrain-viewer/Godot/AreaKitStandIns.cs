@@ -148,14 +148,31 @@ internal static class AreaKitStandIns
         });
     }
 
-    /// <summary>The words and numbers baked into art 22 that the sheet writes itself with its own font while the kit's background shows: text, where it starts, and the colour (the gold of the stat names, dark ink on the parchment of the dial and the ruler).</summary>
-    internal static IEnumerable<(string Text, int X, int Y, (byte R, byte G, byte B) Rgb)> SheetLabels()
+    /// <summary>ARC-UI-3299: the kit parts that carry the sheet's baked-in lettering in the old HD version's look (light silvery letters with their embossed edge and shadow; the dial's E&amp;G with its curls), cut from the player's HD frame by <c>tools/steamwoven_ui/label_parts.py</c>: part id and the place of its corner in the sheet's units.</summary>
+    internal static readonly (string Id, int X, int Y)[] SheetLabelPartPlaces = [("fixture.sheet_stat_names_l", 120, 108), ("fixture.sheet_stat_names_r", 255, 108), ("fixture.sheet_dial_letters", 25, 146)];
+
+    /// <summary>ARC-UI-3299: draws the sheet's label parts that the kit holds (the same fixtures path as the other details: <see cref="AreaKitFixtures"/>) and says which it drew; the sheet writes the text of <see cref="SheetLabels"/> itself only for the ones that are missing (a text-free surface never shows without its lettering: all three parts or the font's text, per group).</summary>
+    internal static IReadOnlySet<string> SheetLabelParts(CanvasItem canvas)
+    {
+        var drawn = new HashSet<string>();
+        foreach (var (id, x, y) in SheetLabelPartPlaces)
+            if (AreaKitFixtures.Draw(canvas, 1, id, x, y)) drawn.Add(id);
+        return drawn;
+    }
+
+    /// <summary>The words and numbers baked into art 22 that the sheet writes itself with its own font while the kit's background shows: text, where it starts, and the colour (the gold of the stat names, dark ink on the parchment of the dial and the ruler). The stat names and the dial's letters are left out for a group whose kit part is in <paramref name="drawnParts"/> (<see cref="SheetLabelParts"/>); the ruler's divisions are always text.</summary>
+    internal static IEnumerable<(string Text, int X, int Y, (byte R, byte G, byte B) Rgb)> SheetLabels(IReadOnlySet<string>? drawnParts = null)
     {
         (byte, byte, byte) gold = (255, 210, 0), ink = (60, 45, 25);
         string[] left = ["ST", "CN", "DX", "BE"], right = ["IN", "WP", "PE", "CH"];
-        for (var r = 0; r < 4; r++) { yield return (left[r], 131, 115 + 40 * r, gold); yield return (right[r], 263, 115 + 40 * r, gold); }
+        bool leftPart = drawnParts?.Contains("fixture.sheet_stat_names_l") == true, rightPart = drawnParts?.Contains("fixture.sheet_stat_names_r") == true, dialPart = drawnParts?.Contains("fixture.sheet_dial_letters") == true;
+        for (var r = 0; r < 4; r++)
+        {
+            if (!leftPart) yield return (left[r], 131, 115 + 40 * r, gold);
+            if (!rightPart) yield return (right[r], 263, 115 + 40 * r, gold);
+        }
         // The alignment dial's two ends (evil, good) and the magic-technology ruler's divisions: 75, 50, 25, 0, 25, 50, 75 at 32 units a step round the centre line (221).
-        yield return ("E", 38, 146, ink); yield return ("G", 66, 146, ink);
+        if (!dialPart) { yield return ("E", 38, 146, ink); yield return ("G", 66, 146, ink); }
         string[] steps = ["75", "50", "25", "0", "25", "50", "75"];
         for (var i = 0; i < steps.Length; i++) yield return (steps[i], 766, 120 + 32 * i, ink);
     }

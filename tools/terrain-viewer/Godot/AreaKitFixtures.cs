@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 /// </summary>
 internal static class AreaKitFixtures
 {
-    private static readonly Dictionary<string, Texture2D> Held = [];
+    private static readonly Dictionary<string, Texture2D> Held = [], HeldPremultiplied = [];
 
     /// <summary>The ids drawn from the kit now, for the self-test.</summary>
     internal static IReadOnlyCollection<string> ShownForSelfTest => [.. Held.Keys.Order()];
@@ -30,6 +30,7 @@ internal static class AreaKitFixtures
     internal static void Publish(IReadOnlyDictionary<string, Texture2D>? fixtures)
     {
         Held.Clear();
+        HeldPremultiplied.Clear();
         if (fixtures is not null) foreach (var pair in fixtures) Held[pair.Key] = pair.Value;
     }
 
@@ -37,8 +38,20 @@ internal static class AreaKitFixtures
     internal static bool Draw(CanvasItem canvas, float scale, string id, float x, float y)
     {
         if (!Held.TryGetValue(id, out var texture) || !SteamwovenKitTable.FixtureUnits.TryGetValue(id, out var units)) return false;
+        // ARC-UI-3299: a canvas item with the premultiplied-alpha material (the sheet's, for its text, <see cref="AreaArtTextDraw"/>) blends every texture as premultiplied: a straight-alpha part with soft edges (the lettering) would come out bold and bright, so it is drawn from a premultiplied copy there.
+        if (canvas.Material is CanvasItemMaterial { BlendMode: CanvasItemMaterial.BlendModeEnum.PremultAlpha }) texture = Premultiplied(id, texture);
         canvas.DrawTextureRect(texture, new Rect2(x * scale, y * scale, units.Width * scale, units.Height * scale), false);
         Drawn.Add(id);
         return true;
+    }
+
+    /// <summary>A premultiplied copy of the part's texture (made once per published set).</summary>
+    private static Texture2D Premultiplied(string id, Texture2D texture)
+    {
+        if (HeldPremultiplied.TryGetValue(id, out var held)) return held;
+        var image = texture.GetImage();
+        if (image is null) return texture;
+        image.PremultiplyAlpha();
+        return HeldPremultiplied[id] = ImageTexture.CreateFromImage(image);
     }
 }

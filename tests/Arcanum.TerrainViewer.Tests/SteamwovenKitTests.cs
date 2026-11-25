@@ -974,6 +974,14 @@ public sealed class SteamwovenKitTests
         CollectionAssert.AreEqual(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Barter).ToArray(), SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.BarterFollower).ToArray());
         Assert.AreEqual(0, SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Logbook).Count);
         Assert.IsTrue(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Character).Contains("fixture.mt_ruler") && SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Schematic).Contains("fixture.gear_hat"));
+        // ARC-UI-3299: the sheet's label parts (stat names, the dial's E&G) are fixtures of the character window, each on the 5-unit grid (3.6 px a unit, 6 px grid cells) at the corner the viewer draws it at.
+        foreach (var id in new[] { "fixture.sheet_stat_names_l", "fixture.sheet_stat_names_r", "fixture.sheet_dial_letters" })
+        {
+            Assert.IsTrue(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Character).Contains(id), id);
+            var (width, height) = SteamwovenKitTable.FixtureUnits[id];
+            Assert.IsTrue(width % 5 == 0 && height % 5 == 0, id + " is not on the 5-unit grid");
+            Assert.AreEqual(width * 36 / 10, SteamwovenKitTable.MasterOf(width), id + " width is the exact 3.6 px a unit");
+        }
     }
 
     [TestMethod]

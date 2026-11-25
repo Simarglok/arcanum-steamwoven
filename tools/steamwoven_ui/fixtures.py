@@ -56,6 +56,7 @@ class Fixture:
     height: int
     windows: tuple[str, ...]  # census windows that draw it
     note: str
+    cut: bool = False  # not drawn here: a picture cut from the player's own HD frame by `label_parts.py` (ARC-UI-3299)
 
     @property
     def master(self) -> tuple[int, int]:
@@ -84,6 +85,9 @@ FIXTURES: tuple[Fixture, ...] = (
     Fixture("fixture.health_disc", 76, 56, ("G05",), "the health disc with its red heart at 411, 127"),
     Fixture("fixture.fatigue_disc", 76, 56, ("G05",), "the fatigue disc with its blue cross at 411, 197"),
     Fixture("fixture.mt_ruler", 46, 330, ("G05",), "the magic and technology ruler at 747, 60: ticks, the magic sign, the technology gear, two number pits (the divisions 75 50 25 0 25 50 75 are written by the sheet)"),
+    Fixture("fixture.sheet_stat_names_l", 50, 160, ("G05",), "the stat names ST CN DX BE of the sheet at 131, 115 + 40 r in the old HD version's look (the part's corner is 120, 108)", cut=True),
+    Fixture("fixture.sheet_stat_names_r", 55, 160, ("G05",), "the stat names IN WP PE CH of the sheet at 263, 115 + 40 r in the old HD version's look (the part's corner is 255, 108)", cut=True),
+    Fixture("fixture.sheet_dial_letters", 65, 25, ("G05",), "the alignment dial's E&G with its two curls at 45..70, 153 (the part's corner is 25, 146)", cut=True),
     Fixture("fixture.schem_page", 506, 367, ("G15",), "the blueprint page at 201, 13 (paper)"),
     Fixture("grid.schematic", 506, 367, ("G15",), "the page's ruling over the paper: a line every 32 units from 26, 9 of the page"),
     Fixture("fixture.schem_slot", 103, 71, ("G15",), "a component slot box, two of them at 577, 179 and 577, 275"),
@@ -361,8 +365,10 @@ def _gear_sign(c: Canvas, cx_u: float, hat: bool) -> None:
 
 
 def draw(ident: str, variant: str = "brass") -> pngio.Image:
-    """The master of one fixture. Raises KeyError for an unknown id."""
+    """The master of one fixture. Raises KeyError for an unknown id, and for a cut one (`label_parts.py` makes those from the player's HD frame)."""
     fixture = BY_ID[ident]
+    if fixture.cut:
+        raise KeyError(f"{ident} is cut from the player's HD frame by label_parts.py, not drawn here")
     width, height = fixture.master
     c = Canvas(width, height, (fixture.width, fixture.height))
     if ident == "grid.inventory_cells":
@@ -429,7 +435,7 @@ def build(out: Path, variant: str, only: set[str] | None = None) -> list[str]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
     for fixture in FIXTURES:
-        if only and fixture.ident not in only:
+        if fixture.cut or (only and fixture.ident not in only):
             continue
         pngio.write(out / f"{fixture.ident}.png", draw(fixture.ident, variant))
         written.append(fixture.ident)
