@@ -279,6 +279,8 @@ public partial class AreaCharacterSheetArtView : Control
     internal bool KitBackgroundShownForSelfTest => KitBackgroundShown;
     /// <summary>ARC-UI-3041: the last draw painted the original's art 22 (false over the kit's background).</summary>
     internal bool OwnBackgroundDrawnForSelfTest { get; private set; }
+    /// <summary>ARC-UI-3165: the words and numbers the last draw wrote itself over the kit's background in place of the ones art 22 had baked in (<see cref="AreaKitStandIns.SheetLabels"/>: the eight stat names, the dial's E and G, the ruler's seven divisions); empty when the art's own background was drawn.</summary>
+    internal IReadOnlyList<string> KitLabelsDrawnForSelfTest { get; private set; } = [];
 
     public bool KitBody
     {
@@ -293,6 +295,7 @@ public partial class AreaCharacterSheetArtView : Control
         ClaimScale();
         // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
         OwnBackgroundDrawnForSelfTest = false;
+        var kitLabels = new List<string>();
         if (!KitBackgroundShown && Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
         {
             OwnBackgroundDrawnForSelfTest = true;
@@ -312,8 +315,9 @@ public partial class AreaCharacterSheetArtView : Control
             AreaKitStandIns.CharacterSheet(this);
             // The stat names are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet writes them itself, in its own font.
             var labelFace = fonts.For(AreaSheetFont.Cloister);
-            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels()) AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb);
+            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels()) { AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb); kitLabels.Add(label); }
         }
+        KitLabelsDrawnForSelfTest = kitLabels;
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
         if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
             DrawTextureRect(lens, new Rect2(AreaCharacterSheetArtLayout.Lens.X, AreaCharacterSheetArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
