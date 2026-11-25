@@ -38,6 +38,7 @@ except ImportError:  # run as a script
 TOOL_VERSION = 1
 PART = "plate.schematic_wide_button"
 PACK_FRAME = ("interface-redraw-4x", "interface/schematics/panels/schematic_base-f000.png")     # the old HD pack (4x) and the frame of art 365
+PACK_SIZE = (3200, 1600)       # the pack frame of art 365: 800 x 400 units at 4x
 SCALE = 0.9                    # master px per pack px: 3.6 px per unit / 4 px per unit
 WINDOW_TOP = 148               # master row where the window zone (and the art's top) starts
 CANVAS = (600, 354)            # master px, on the 6 px grid
@@ -198,6 +199,8 @@ def lanczos(x: float) -> float:
 
 def resample(src: pngio.Image) -> pngio.Image:
     """The canvas' window of the pack frame at the master's scale (Lanczos 3, area-correct for a 0.9 shrink): opaque RGB, the pack frame is the whole opaque art outside its holes."""
+    if (src.w, src.h) != PACK_SIZE:
+        raise KitError(f"the pack frame is {src.w} x {src.h}, not {PACK_SIZE[0]} x {PACK_SIZE[1]} (4x of art 365's 800 x 400)")
     w, h = CANVAS
     ox, oy = ORIGIN
     support = LANCZOS / SCALE
@@ -267,7 +270,7 @@ def gates(image: pngio.Image, pack: pngio.Image | None = None) -> list[str]:
     if (image.w, image.h) != (w, h) or w % 6 or h % 6:
         return [f"the master is {image.w} x {image.h}, not {w} x {h} on the 6 px grid"]
     ox, oy = ORIGIN
-    at = lambda x, y: image.pixel(int(round(x - ox)), int(round(y - oy)))
+    at = lambda x, y: image.pixel(int(math.floor(x - ox)), int(math.floor(y - oy)))
     dx, dy, r = MASTER_DOME
     if at(dx, dy)[3]:
         failures.append("the dome's hole is not open")

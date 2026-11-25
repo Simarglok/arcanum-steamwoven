@@ -114,13 +114,16 @@ class WideButtonKitTest(unittest.TestCase):
         self.assertTrue(all(0.0 <= v <= 1.0 + 1e-9 for row in field for v in row[::17]))
 
     def test_the_resampling_keeps_the_frame_in_place(self):
-        pack = pngio.Image(3200, 1600, bytearray(b"".join(bytes((x * 255 // 3199, 100, 50, 255)) for _y in range(1600) for x in range(3200))))
+        pack = pngio.Image(3200, 1600, bytearray(b"".join(bytes((x * 255 // 3199, y * 255 // 1599, 50, 255)) for y in range(1600) for x in range(3200))))
         out = wb.resample(pack)
         for col in (0, 300, 599):
             expected = (wb.ORIGIN[0] + col + 0.5) / wb.SCALE * 255 / 3199
             self.assertAlmostEqual(out.pixel(col, 100)[0], expected, delta=1.5)          # the master column maps to the pack column / 0.9
-        for row in (0, 200):
-            self.assertEqual(out.pixel(10, row)[1:3], (100, 50))
+        for row in (0, 200, 353):
+            expected = (wb.ORIGIN[1] + row + 0.5 - wb.WINDOW_TOP) / wb.SCALE * 255 / 1599
+            self.assertAlmostEqual(out.pixel(10, row)[1], expected, delta=1.5)           # the master row maps to the pack row (minus the window's top) / 0.9
+        with self.assertRaises(wb.KitError):
+            wb.resample(pngio.Image(1600, 800, bytearray(1600 * 800 * 4)))               # a frame of another size is refused
 
     def test_a_missing_frame_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
