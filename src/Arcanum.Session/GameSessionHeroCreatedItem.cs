@@ -76,7 +76,7 @@ public sealed partial class GameSessionOwner
             else
             {
                 var (mapNow, cell) = (_actor.Map, _actor.Cell);
-                if (!DropCellFits(cell)) return RejectItem(GameSessionFailure.DropTileUnfit, verdict);
+                if (!DropCellFits(cell)) return RejectItem(GameSessionFailure.DropTileUnfit, verdict) with { Scripts = runs?.Runs ?? [] };
                 CreateMadeItem(new(entity, kind, SessionCreatePlace.Ground, weight, weight.Complexity, Map: mapNow, Cell: cell, Source: SessionPlacedSource.Made));
             }
             runs?.Commit();
