@@ -275,7 +275,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     // ARC-UI-2510: the layout turned on or off, or the window was laid out again: the screen the portraits hang in moved (the bars place themselves after this panel's own resize handler may have run).
     private void ScreenMoved() { if (_root is null) return; Place(); EdgeChanged?.Invoke(); }
 
-    /// <summary>ARC-UI-1817: device pixels per Legacy pixel of this panel and its menu (what the generated frames are painted at): the scale of the panel's root, the canvas transform's
+    /// <summary>ARC-UI-1817: device pixels per Legacy pixel of this panel and its menu (what the pack's frames are resampled at): the scale of the panel's root, the canvas transform's
     /// and the viewport's stretch.</summary>
     internal float DeviceScale() =>
         _root is null || !GodotObject.IsInstanceValid(_root) ? 1f
@@ -298,7 +298,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     public void Bind(IReadOnlyDictionary<int, Texture2D> art)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
-        // ARC-UI-1817: the generated interface paints the panel's frames at the panel's own device scale.
+        // ARC-UI-1817: the pack's frames are area-resampled at the panel's own device scale (InterfaceResample).
         foreach (var texture in art.Values.OfType<HdInterfaceTexture>()) texture.ScaleSource = DeviceScale;
         // No list matches it: the next Show rebuilds the frames with the new art, an empty list included.
         _signature = "\0";

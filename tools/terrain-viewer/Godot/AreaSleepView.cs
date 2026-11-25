@@ -17,7 +17,7 @@ public partial class AreaSleepView : Control
     private AreaArtFontFace? _font;
     private IReadOnlyList<string> _labels = [];
     private readonly AreaSleepButtons _buttons = new();
-    // ARC-UI-1200: the generated interface paints the window's frames and buttons at the window's own device scale (claimed at every draw).
+    // ARC-UI-1200: the pack's frames and buttons are area-resampled at the window's own device scale (claimed at every draw).
     private AreaDeviceScale? _claim;
     private AreaDeviceScale Claim => _claim ??= new(this);
 
@@ -38,7 +38,7 @@ public partial class AreaSleepView : Control
         return GetGlobalTransform() * new Vector2(x + width / 2f, y + height / 2f);
     }
     internal int FrameForSelfTest(int row) => AreaGameBarLayout.Frame(_buttons.Look(row), ButtonFrames());
-    /// <summary>ARC-UI-1200: the window's device scale (what its generated frames are painted at) and its textures by art number, every frame (the native smoke).</summary>
+    /// <summary>ARC-UI-1200: the window's device scale (what its pack frames are resampled at) and its textures by art number, every frame (the native smoke).</summary>
     internal float DeviceScale() => Claim.Current();
     internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];

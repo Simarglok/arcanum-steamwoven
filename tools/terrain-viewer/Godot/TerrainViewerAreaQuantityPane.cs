@@ -50,7 +50,7 @@ public partial class TerrainViewerApp
         _quantityPaneView.SetState(bar.Count, QuantityIcon());
     }
 
-    // ARC-UI-1818: the opt-in generated-chrome part (see WindowArtSmokeAsync) for the pane while the question is up: the background (298) and the three buttons' idle frames (299, 33, 32; the 13 x 10 up and down buttons stay pictures) draw at the strip's own device scale.
+    // ARC-UI-1818: the opt-in window-art part (see WindowArtSmokeAsync) for the pane while the question is up: the background (298) and the three buttons' idle frames (299, 33, 32; the 13 x 10 up and down buttons stay pictures) draw at the strip's own device scale.
     private Task QuantityPaneArtSmokeAsync() => WindowArtSmokeAsync("quantity-pane", () =>
         {
             var view = _quantityPaneView;

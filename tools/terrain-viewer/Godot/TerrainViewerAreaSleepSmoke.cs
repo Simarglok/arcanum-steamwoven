@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
             Require(view.FrameForSelfTest(1) == lit && view.FrameForSelfTest(2) == 0, $"the pointer lights its button (frame {view.FrameForSelfTest(1)}, expected {lit})");
             GD.Print($"ARC-UI-1363 sleep window rect={rect} factor={factor} buttons={buttons} button-frames={view.ButtonFramesForSelfTest}");
             view.Buttons.Reset();
-            // ARC-UI-1200: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the window art and the button art (every frame) draw as the mode under test says, at the window's own device scale.
+            // ARC-UI-1200: the opt-in window-art part (ARC_AREA_WINDOW_ART): the window art and the button art (every frame) draw as the mode under test says, at the window's own device scale.
             if (WindowArtSmokeRequested)
             {
                 var found = view.TexturesForSelfTest([AreaSleepLayout.BackgroundArt, AreaSleepLayout.ButtonArt]);
