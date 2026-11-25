@@ -21,6 +21,10 @@ off in a normal build; ``./arcanum qa overlay on|off`` writes or removes the mar
 ARC-DEV-2236: the snapshot is the list of the running page (written when it starts and on Reload, with its own ``--ref``); ``qa sync``,
 ``--check`` and ``overlay off`` never replace it, ``overlay on`` writes one only when none exists, and ``qa sync`` names a differs step
 that is not in the list any more instead of skipping it silently.
+ARC-DEV-3130: a snapshot older than ``LIST_MAX_AGE_HOURS`` is a list of an earlier build: the overlay refuses it (no steps, it says so) and a
+Ctrl+B report is not tagged with a step of it or with a step that is already answered (OwnerQa.cs ``CheckForReport``). ``./arcanum qa refresh``
+rebuilds the snapshot from the ref without starting the page (and removes an active-check file that names a step the list does not have);
+``overlay on`` rebuilds a missing or stale one.
 """
 from __future__ import annotations
 
@@ -65,6 +69,7 @@ PLAYER_TEXT_LIMIT = 120
 ACTIVE_FILE = "active-check.txt"     # the one line the viewer's Ctrl+B reads (BugReportCheck.cs); keep the name in step with it
 CHECKS_FILE = "checks.json"          # the list snapshot the in-game overlay reads (OwnerQa.cs, ARC-DEV-2190)
 OVERLAY_MARKER = "owner-qa.on"       # its presence turns the overlay on in a build started from this checkout (OwnerQa.cs)
+LIST_MAX_AGE_HOURS = 72              # a snapshot older than this is refused by the game (OwnerQaFiles.MaxListAge, ARC-DEV-3130)
 AUTO_SYNC_SECONDS = 20               # the running page creates the issues of differs steps recorded by the game this often ...
 SETTLE_SECONDS = 20                  # ... once the step's latest result is this old (a note or a report may still follow the mark)
 CHECK_PREFIX = "Check: "              # the report.md line of BugReportCheck.LinePrefix
@@ -218,6 +223,30 @@ class Store:
             except OSError:
                 pass
             raise
+
+    def checks_age_hours(self) -> float | None:
+        """The age of ``checks.json`` in hours (its ``ts``, else the file time); None when there is none or it cannot be read."""
+        path = self.directory / CHECKS_FILE
+        try:
+            seconds = time.time() - path.stat().st_mtime
+        except OSError:
+            return None
+        try:
+            ts = json.loads(path.read_text(encoding="utf-8")).get("ts")
+        except (OSError, ValueError, AttributeError):
+            ts = None
+        parsed = _iso_epoch(ts)
+        if parsed is not None:
+            seconds = time.time() - parsed
+        return max(seconds, 0.0) / 3600
+
+    def active_step(self) -> str | None:
+        """The step id the active-check file holds, or None."""
+        try:
+            line = self.active_path.read_text(encoding="utf-8").split("\n", 1)[0].strip()
+        except OSError:
+            return None
+        return line or None
 
     def clear_active(self) -> None:
         with self._active_lock:
@@ -713,8 +742,9 @@ def start_server(app: QaApp, port: int = 0) -> tuple[LocalServer, str, str]:
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("action", nargs="?", choices=("serve", "sync", "overlay"), default="serve",
+    parser.add_argument("action", nargs="?", choices=("serve", "sync", "overlay", "refresh"), default="serve",
                         help="serve (default): the local check page; sync: create the issues of the differs steps that have none; "
+                        "refresh: rebuild the overlay's list snapshot (local/qa/checks.json) from the ref, start no page (ARC-DEV-3130); "
                         "overlay on|off: turn the in-game owner-checks overlay (Ctrl+Q) on or off for builds started from this checkout (ARC-DEV-2190)")
     parser.add_argument("state", nargs="?", choices=("on", "off"), help="with overlay: on or off")
     parser.add_argument("--ref", default="origin/main", help="the ref the list is read from with git show (default origin/main)")
@@ -755,8 +785,11 @@ def run(args: argparse.Namespace) -> int:
         return 2
     # ARC-DEV-2236: the snapshot mirrors the list of the running page, so only a page that serves (not --check, not sync) replaces it;
     # `overlay on` writes one only when there is none yet (the overlay needs something to list).
-    has_snapshot = (Path(data_dir) / CHECKS_FILE).exists()
-    snapshot = not args.dry_run and ((args.action == "serve" and not args.check) or (args.action == "overlay" and args.state == "on" and not has_snapshot))
+    # ARC-DEV-3130: a snapshot older than the limit counts as none; `refresh` always rebuilds it.
+    age = Store(data_dir).checks_age_hours()
+    has_snapshot = age is not None and age <= LIST_MAX_AGE_HOURS
+    snapshot = not args.dry_run and ((args.action == "serve" and not args.check) or args.action == "refresh"
+                                     or (args.action == "overlay" and args.state == "on" and not has_snapshot))
     app = QaApp(Store(data_dir), reports_dir, ROOT, args.ref, fetch=not args.no_fetch and not args.dry_run, snapshot=snapshot)
     try:
         app.reload()
@@ -766,6 +799,20 @@ def run(args: argparse.Namespace) -> int:
     print(f"qa: the list from {args.ref} ({app.commit}): {owner_checks.summary(app.parsed)}")
     if app.warning:
         print(f"qa: warning: {app.warning}", file=sys.stderr)
+    if args.action == "refresh":
+        path = app.store.directory / CHECKS_FILE
+        if args.dry_run:
+            print(f"qa: would rebuild {path} from {args.ref} ({len(app.parsed.steps)} steps; now {'missing' if age is None else f'{age:.0f} h old'})")
+            return 0
+        if app.warning and CHECKS_FILE in app.warning:
+            print(f"arcanum qa: {app.warning}", file=sys.stderr)
+            return 1
+        stray = app.store.active_step()
+        if stray is not None and stray not in {step.id for step in app.parsed.steps}:
+            app.store.clear_active()
+            print(f"qa: removed {app.store.active_path}: it named {stray}, which the list of {args.ref} does not have")
+        print(f"qa: rebuilt {path} from {args.ref} ({app.commit}, {len(app.parsed.steps)} steps)")
+        return 0
     if args.action == "overlay":
         marker = app.store.directory / OVERLAY_MARKER
         if args.state is None:

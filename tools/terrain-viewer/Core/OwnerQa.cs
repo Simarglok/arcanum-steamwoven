@@ -32,6 +32,10 @@ public static class OwnerQaFiles
     public const int MaxNote = 4000;
     private const int MaxLevels = 8;
     private const long MaxFileBytes = 16 * 1024 * 1024;
+    /// <summary>ARC-DEV-3130: a <c>checks.json</c> older than this is a list of an earlier build, not the owner's current list: the overlay
+    /// shows no steps (and says why), Ctrl+B tags no report with a step of it. The page and <c>./arcanum qa refresh</c> write a fresh one
+    /// (keep the number in step with <c>LIST_MAX_AGE_HOURS</c> of <c>tools/local_dev/qa.py</c>).</summary>
+    public static readonly TimeSpan MaxListAge = TimeSpan.FromDays(3);
     /// <summary>The statuses the overlay can record (the page's <c>open</c> is only ever the default).</summary>
     public static readonly string[] Marks = ["same", "differs", "cannot-test"];
 
@@ -70,8 +74,10 @@ public static class OwnerQaFiles
         return firstBare;
     }
 
-    /// <summary>The steps of <c>checks.json</c> and the commit of the list; an empty list and a message when it cannot be read.</summary>
-    public static (IReadOnlyList<OwnerQaStep> Steps, string Commit, string? Problem) ReadChecks(string folder)
+    /// <summary>The steps of <c>checks.json</c> and the commit of the list; an empty list and a message when it cannot be read.
+    /// ARC-DEV-3130: with <paramref name="nowUtc"/> given, a list older than <see cref="MaxListAge"/> (its <c>ts</c>, else the file time) is
+    /// refused the same way: no steps, the message says the age and the command that rebuilds it.</summary>
+    public static (IReadOnlyList<OwnerQaStep> Steps, string Commit, string? Problem) ReadChecks(string folder, DateTime? nowUtc = null)
     {
         var path = Path.Combine(folder, ChecksFile);
         try
@@ -81,6 +87,9 @@ public static class OwnerQaFiles
             if (info.Length > MaxFileBytes) return ([], "", "checks.json is too large");
             using var document = JsonDocument.Parse(File.ReadAllBytes(path));
             var root = document.RootElement;
+            var commitText = root.TryGetProperty("commit", out var listCommit) && listCommit.ValueKind == JsonValueKind.String ? listCommit.GetString() ?? "" : "";
+            if (nowUtc is { } now && ListAge(root, info, now) is { } age && age > MaxListAge)
+                return ([], commitText, $"the list is {(int)age.TotalDays} days old (from {(commitText.Length > 0 ? commitText : "an unknown commit")}): run ./arcanum qa refresh");
             var steps = new List<OwnerQaStep>();
             foreach (var item in root.GetProperty("steps").EnumerateArray())
             {
@@ -89,12 +98,55 @@ public static class OwnerQaFiles
                 if (BugReportCheck.Normalize(id) is null) continue;
                 steps.Add(new(id, Text("section"), Text("step"), Text("expected"), Text("status")));
             }
-            return (steps, root.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.String ? commit.GetString() ?? "" : "", null);
+            return (steps, commitText, null);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
             return ([], "", "checks.json cannot be read: " + error.Message);
         }
+    }
+
+    /// <summary>The age of the list: the time since its <c>ts</c> (the page writes it), else since the file was last written; never negative.</summary>
+    private static TimeSpan? ListAge(JsonElement root, FileInfo info, DateTime nowUtc)
+    {
+        var written = info.LastWriteTimeUtc;
+        if (root.TryGetProperty("ts", out var ts) && ts.ValueKind == JsonValueKind.String
+            && DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+            written = parsed;
+        var age = nowUtc - written;
+        return age < TimeSpan.Zero ? TimeSpan.Zero : age;
+    }
+
+    /// <summary>ARC-DEV-2768 rule: a step is answered when it has a status other than open (recorded, else the list's own) or a report
+    /// folder recorded for it.</summary>
+    public static bool IsAnswered(OwnerQaStep step, OwnerQaResult? result)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+        var status = result?.Status ?? (step.ListStatus is "same" or "differs" or "cannot-test" ? step.ListStatus : "open");
+        return status != "open" || result?.Report is not null;
+    }
+
+    /// <summary>ARC-DEV-3130: the owner check a new Ctrl+B report may carry: the step of <paramref name="activeFile"/>
+    /// (<see cref="BugReportCheck.ReadActive"/>: not older than 12 hours) that is still a live check of the QA folder beside it. Null when
+    /// that folder's list is older than <see cref="MaxListAge"/> or cannot be read, does not list the step any more, or the step was answered
+    /// more than 12 hours ago (a check settled on an earlier day must not tag today's reports; a mark or report of the last 12 hours still does). A folder without a list (an
+    /// automated run's bare file) has nothing to judge by, so the step stays.</summary>
+    public static string? CheckForReport(string? activeFile, DateTime nowUtc)
+    {
+        var step = BugReportCheck.ReadActive(activeFile, nowUtc);
+        if (step is null || activeFile is null) return null;
+        var folder = Path.GetDirectoryName(Path.GetFullPath(activeFile));
+        if (string.IsNullOrEmpty(folder) || !File.Exists(Path.Combine(folder, ChecksFile))) return step;
+        var (steps, _, problem) = ReadChecks(folder, nowUtc);
+        if (problem is not null) return null;
+        var listed = steps.FirstOrDefault(item => item.Id == step);
+        if (listed is null) return null;
+        var result = ReadResults(folder).GetValueOrDefault(step);
+        // An answer of the last 12 hours (the owner marked the step or sent a report for it a moment ago and now describes it with Ctrl+B)
+        // still tags; an older one settled the check on an earlier day.
+        var recent = result?.Ts is { } ts && DateTime.TryParse(ts, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var at)
+            && nowUtc - at <= BugReportCheck.MaxAge;
+        return IsAnswered(listed, result) && !recent ? null : step;
     }
 
     /// <summary>The latest recorded result of every step (the page's rule: the last valid <c>result</c> event wins; a line that cannot be
@@ -196,7 +248,7 @@ public static class OwnerQaFiles
             var status = result?.Status;
             if (status is null)
             {
-                var listed = ReadChecks(folder).Steps.FirstOrDefault(item => item.Id == step)?.ListStatus;
+                var listed = ReadChecks(folder).Steps.FirstOrDefault(item => item.Id == step)?.ListStatus;   // no age rule: a report still records
                 status = listed is "same" or "differs" or "cannot-test" ? listed : "open";
             }
             var kept = note.Trim().Length > 0 ? note.Trim() : result?.Note ?? "";
@@ -268,10 +320,13 @@ public sealed class OwnerQaSession
     /// <summary>Reads the list and the results again; the current step stays when it is still in the list.</summary>
     public void Reload()
     {
-        var (steps, commit, problem) = OwnerQaFiles.ReadChecks(Folder);
+        var (steps, commit, problem) = OwnerQaFiles.ReadChecks(Folder, DateTime.UtcNow);
         Problem = problem;
         if (problem is null || _steps.Count == 0) { _steps = steps; ListCommit = commit; }   // a transient read problem keeps the list in hand
         _results = OwnerQaFiles.ReadResults(Folder);
+        // ARC-DEV-3130: with no list to trust (stale, missing, unreadable) no step is current and the file Ctrl+B reads is cleared, so a
+        // step of an old list is not offered, written fresh at every start of the game and stamped on the next report.
+        if (_steps.Count == 0) { CurrentId = null; if (problem is not null) OwnerQaFiles.WriteActive(Folder, null); return; }
         if (CurrentId is null || _steps.All(step => step.Id != CurrentId))
         {
             var active = BugReportCheck.ReadActive(Path.Combine(Folder, BugReportCheck.FileName), DateTime.UtcNow);
@@ -294,7 +349,7 @@ public sealed class OwnerQaSession
 
     /// <summary>ARC-DEV-2768: a step is answered when it has a status other than open (marked here, on the page or in the list) or a report
     /// folder recorded for it (a Ctrl+B report tagged with the step counts). Reopening it writes open without a report.</summary>
-    public bool IsAnswered(OwnerQaStep step) => EffectiveStatus(step) != "open" || ResultOf(step.Id)?.Report is not null;
+    public bool IsAnswered(OwnerQaStep step) => OwnerQaFiles.IsAnswered(step, ResultOf(step.Id));
 
     /// <summary>The UTC day (yyyy-MM-dd) of the step's latest recorded event, or "" when it has none (an answer taken from the list).</summary>
     public string AnsweredDate(OwnerQaStep step) => ResultOf(step.Id)?.Ts is { Length: >= 10 } ts ? ts[..10] : "";
