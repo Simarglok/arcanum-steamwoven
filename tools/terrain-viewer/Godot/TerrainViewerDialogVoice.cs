@@ -72,6 +72,15 @@ public partial class TerrainViewerApp
         var first = _voiceHandle.Value;
         ExecuteVoice(new(DialogVoiceCommandKind.Play, (0x7FFF << 16) | 0xFFFF));
         Require(_audio.Volume(first) is null && _voiceHandle is null && _voiceNotice!.Contains("Missing", StringComparison.Ordinal), "a missing voice stops the old one and plays nothing: " + _voiceNotice);
+        // ARC-SCRIPT-3124: a script float line (tile script queue) starts its line's voice with the bubble; a line without a voice (-1) leaves it playing.
+        var beforeFloat = _voicesPlayed;
+        _tileScriptFloats.Enqueue((HeroFloater, "ARC-SCRIPT-3124 voice smoke", null, identity));
+        TickScriptFloats();
+        Require(_voicesPlayed == beforeFloat + 1 && _voiceHandle is not null, $"a script float line started its voice ({_voiceNotice})");
+        var floatHandle = _voiceHandle;
+        _tileScriptFloats.Enqueue((HeroFloater, "ARC-SCRIPT-3124 voice smoke, no voice", null, -1));
+        TickScriptFloats();
+        Require(_voicesPlayed == beforeFloat + 1 && _voiceHandle == floatHandle, "a float line without a voice leaves the playing voice alone");
         GD.Print($"ARC-UI-043 native-smoke voice PASS identity={identity} channel={AudioVolumeRules.ChannelVolume(_audioVolumes, AudioChannel.Voice)} missing=silent");
     }
 }

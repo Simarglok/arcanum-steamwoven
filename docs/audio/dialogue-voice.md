@@ -32,6 +32,24 @@ Checked in the 1.0.7.4 executable ([audio study](../research/audio-evidence.md) 
 The viewer runs it every frame while a conversation is open; the status line names the last voice and
 counts the voices played.
 
+## Script float lines (ARC-SCRIPT-3124)
+
+Checked in the executable (float line action 23, handler 0x44B1F0 → the dialog interface's float callback, the pointer set by 0x567330 to
+0x568430 → speech display 0x568540 → voice start 0x5688D0; the AI barks' global 0x5F8488 is a different pointer):
+
+- **Identity.** The line is loaded as the dialog's own NPC line is (0x413A30 mode 1, 0x416840); its speech id is the same composer on the same field: the
+  running script's number and the line's condition field (0x4189C0), so the id of a script float line is `AreaScriptFloat.VoiceOf`. A line the DLG does not
+  hold, or one without a condition field, is −1 and a playing voice is left alone (0x5688D0); the viewer shows a missing line as one space, which makes no bubble, so no voice either.
+- **Listener.** The voice's gender is that of the display's listener, the nearby PC the float step found (the hero here): gender stat 26 = 0 picks the
+  female file with the male file as fallback, any other value the male file only. The same listener picks the line's text (alternate for a female PC; the tile and use-script host reads the male text only, as before). The viewer takes the hero's gender from the conversation host's profile (male without one).
+- **Per speaker.** The voice start sits inside the per-speaker loop, so a line floated over several objects restarts the same file for each (the last start
+  survives: one voice). Speakers that are dead or busy are not silenced (they only do not turn); a PC speaker is voiced too. A multiplayer client without the
+  broadcast bit says nothing at all (not applicable).
+- **Viewer.** `AreaScriptFloat.Voice` carries the identity from the two hosts that read the DLG (dialog scripts, `AreaScriptHost`; tile and use scripts,
+  `AreaUseScriptHost`); `TickScriptFloats` starts it with the bubble through the dialog voice channel. The float newspaper headline (86) and the AI barks keep their
+  own paths (the follower comments' voice: ARC-AI-1640).
+- **Checks.** `AreaDialogVoiceTests`, `AreaUseScriptHostTests` (the tile script's float carries its voice); the voice smoke steps a float line with and without a voice.
+
 ## Checks
 
 Unit tests: `DialogVoiceTests` (Presentation), `AreaDialogVoiceTests` (viewer core). Opt-in real-data
@@ -45,6 +63,7 @@ and the Derian Ka temple's voiced speaker is not the one drawn).
 
 ## NOT READY
 
-- Floating lines and combat taunts (their voices come with the text-float layer), story slides,
+- Combat taunts' voice by the AI barks other than the follower comments, story slides,
   generated greetings (the generic greeting is a silent floating line, ARC-DEV-324).
+  Script float lines are voiced since ARC-SCRIPT-3124 (above).
 - Nothing was compared by ear with the running original.

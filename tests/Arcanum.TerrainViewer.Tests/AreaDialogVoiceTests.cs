@@ -33,4 +33,15 @@ public sealed class AreaDialogVoiceTests
         Assert.IsNull(SoundCatalog.SpeechConditionField(Encoding.ASCII.GetBytes("\r\n\v\f")));
         Assert.AreEqual("é", SoundCatalog.SpeechConditionField([0xE9]), "a high byte is not white space");
     }
+
+    [TestMethod]
+    public void A_script_float_line_has_the_same_voice_identity_as_the_dialog_line_of_that_number()
+    {
+        // ARC-SCRIPT-3124 (exe read 0x44B1F0 → 0x413A30 → 0x416840 → 0x4189C0): the float line's voice is the running script's number and the condition field of the line, as for an NPC line.
+        var document = DlgReader.Read(Encoding.ASCII.GetBytes("{10}{Hello}{Hello}{}{ 42x}{}{}\r\n{20}{Quiet}{Quiet}{}{}{}{}\r\n"), new DlgReaderOptions { Mode = DlgReadMode.Original });
+        Assert.AreEqual((5 << 16) | 42, AreaScriptFloat.VoiceOf(document, 0x18005, 10));
+        Assert.AreEqual(-1, AreaScriptFloat.VoiceOf(document, 0x18005, 20), "no condition field: no voice");
+        Assert.AreEqual(-1, AreaScriptFloat.VoiceOf(document, 0x18005, 99), "no such line: no voice");
+        Assert.AreEqual(-1, AreaScriptFloat.VoiceOf(document, 0, 10), "script 0: no voice");
+    }
 }
