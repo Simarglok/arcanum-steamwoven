@@ -477,9 +477,17 @@ Owner decision 2026-11-24 (option A, [#3098](https://github.com/Simarglok/arcanu
   library (text) and notes with numbers.
 - **SWI-PRV-2** The kit therefore exists only on the owner's devices (and those of a player who builds it from their own
   installation), like the HD pack; it is not shipped with the game. Reopening this needs a new owner decision.
-- **SWI-PRV-3** Composites for the owner are posted in the thread and never committed (owner rule 2026-11-11).
+- **SWI-PRV-3** Composites for the owner are posted in the thread and never committed (owner rule 2026-11-11); before posting, each is saved under SWI-PRV-5.
 - **SWI-PRV-4** Storage of the baked sets (ARC-DEV-2460): `local/steamwoven-ui/baked/<step>/` of the main checkout, written only by `bake.py`; not committed, not packaged and
   not backed up (reproducible from the masters, whose backup convention is in the [toolchain section](../workflow/toolchain.md#steamwoven-kit-bake-arc-dev-2460)). The runtime reads them in place, or from `user://steamwoven-ui/baked` on a player's own device (ARC-UI-2461, [the kit runtime](#the-kit-runtime-arc-ui-2461)).
+
+- **SWI-PRV-5** Image archive (ARC-DEV-3277, owner rule 2026-11-25): every image of a task (raw Codex outputs, collages, masters, composites, screenshots, sheets) is
+  kept in `local/steamwoven-ui/archive/<TASK>/` of the main checkout (`<kind>/` folders; the accepted version also in `<TASK>/final/`; files with no determinable task in
+  `_unsorted/<bucket>/`) and described by one row per file in `archive/registry.jsonl` (task, file, location, kind, status final/rejected/intermediate/unknown, sources,
+  sha256, size, date, basis of the task and kind). `tools/steamwoven_ui/image_archive.py` (`dir`, `add`, `mark`, `scan`, `index`, `verify`) is the only writer; `image_rescue.py`
+  copies images found only in worktrees, session scratchpads, temp folders and the Codex output folder (it copies, never moves or deletes) and registers the pipeline's in-place
+  files (outbox, codex-work, masters; `location: pipeline`). `fixtures.py build` writes to the main checkout's `masters/`, and the tools with `--out`/`--work` print a warning
+  for a folder inside a worktree or a temp folder. Not committed, not packaged (SWI-PRV-1); the HD pack resources are never touched.
 
 ## Verification
 

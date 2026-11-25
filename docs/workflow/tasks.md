@@ -513,5 +513,19 @@ committed files. Do not copy the game or the full vault into each worktree.
   image to the coordinator for a decision card. The images contain original
   art, so they are posted in the thread and kept local, never committed to git
   ([HD pack rule](hd-pack.md)); the PR text says which thread holds them.
+- **Image archive** (owner rule 2026-11-25, ARC-DEV-3277): every image a task
+  makes or uses as evidence (raw Codex outputs, collages, masters, composites,
+  screenshots, sheets) is saved to `local/steamwoven-ui/archive/<TASK>/` **of the
+  main checkout** before it is posted, never only in a worktree, a session
+  scratchpad or `/tmp` (they are lost when the worktree is removed or the OS
+  cleans up). `python3 -B tools/steamwoven_ui/image_archive.py dir <TASK>` creates
+  and prints the folder (use it as `--out`); `... add <TASK> FILE... --kind
+  composite|collage|screenshot|master|raw-codex` copies and registers files; the
+  version the owner accepted goes into `<TASK>/final/` (`... mark <TASK>
+  composite/NAME.png final`); `... scan` registers files copied there by hand.
+  Every file has a row in `archive/registry.jsonl` (task, file, kind, status
+  final/rejected/intermediate/unknown, source, hash, date). Tools that take
+  `--out`/`--work` warn when the folder is inside a worktree or a temp folder.
+  The images stay local and uncommitted ([TRD SWI-PRV-5](../ui/steamwoven-interface-trd.md#provenance-and-storage)).
 - Report Implemented, Not implemented, Remaining work, the checks run with their
   results, and material uncertainties.

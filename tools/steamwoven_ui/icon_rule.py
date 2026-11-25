@@ -334,6 +334,17 @@ def cmd_upscale(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def _warn_out(tool: str, *paths) -> None:
+    """ARC-DEV-3277: warn when an output folder is inside a worktree or a temp folder (the images are lost there)."""
+    try:
+        from tools.steamwoven_ui import image_archive
+    except ImportError:
+        import image_archive  # type: ignore
+    for path in paths:
+        image_archive.warn_if_ephemeral(path, tool)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -349,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("art", nargs="+")
         p.set_defaults(func=helper)
     args = parser.parse_args(argv)
+    _warn_out("icon_rule.py", getattr(args, "out", None))
     try:
         return args.func(args)
     except RuleError as error:

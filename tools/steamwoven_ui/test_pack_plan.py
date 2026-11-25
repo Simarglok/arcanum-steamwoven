@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from tools.steamwoven_ui import assemble, census, pack_plan, pngio
 from tools.steamwoven_ui.pngio import Image
@@ -290,7 +292,7 @@ class EndToEndTests(unittest.TestCase):
 
     def run_main(self, args: list[str]) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
+        with redirect_stdout(out), redirect_stderr(err), mock.patch.dict(os.environ, {"ARC_IMAGE_ARCHIVE_QUIET": "1"}):  # temp folders would warn (ARC-DEV-3277)
             code = pack_plan.main(args)
         return code, out.getvalue(), err.getvalue()
 

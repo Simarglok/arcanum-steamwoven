@@ -199,12 +199,27 @@ public sealed partial class GameSessionOwner
     private void DestroyItem(string entity, bool windowShowsContainer)
     {
         var pile = _inventory.Objects.PileOf(entity);
+        // ARC-SCRIPT-3266 (ledger IE3, JP4, TQ20; exe read 0x43CCA0 → 0x466E00 → 0x467860): the item's remove-item script (28) of the removal from its pile, planned before its records go (it reads the item as it lies).
+        // The pile's own loot (the window's take of a key, a merged stack or a whole stack or gold pile, _lootedPile) has run the item's 28 itself with the pile as the triggerer, so the destroy it ends with runs none again.
+        var removal = pile is null || _lootedPile == pile.Entity ? default : PlanPileRemoval(entity, pile);
         // ARC-WORLD-1284 (AM5): the destroy 0x43CCA0 takes an item an NPC holds out of its list first (0x467860), which sets NPC flag 0x40 on the NPC; read before the records go.
         if (!_destroyingHolder) MarkCheckWield(NpcHolderOfItem(entity));
         RemoveItemRecords(entity);
         // ARC-WORLD-063 (JP5, JP7): the pile the item left is checked unless a container window is open (the counter 0x5E8800).
         if (pile is not null && _lootedPile != pile.Entity && !windowShowsContainer && !LootWindowShowsContainer() && _inventory.Objects.Pile(pile.Entity) is { } left)
             DissolveJunkPile(left);
+        // The script runs last (0x467860: the dissolve check 0x463540 comes before the script's call 0x441980), with the pile as the triggerer, whether or not the dissolve destroyed it: after the other item's own removal script the dissolve ran.
+        removal.Runs?.Commit();
+        DeliverStanding(removal.Runs);
+    }
+
+    // ARC-SCRIPT-3266 (ledger IE3, JP4, TQ20; exe read 0x43CCA0 → 0x466E00 → 0x467860 → 0x441980 with point 0x1C): the remove-item script (28) of an item destroyed inside a junk pile, whatever destroys it (the Item Decay event, a merge, a script, a spell): the destroy unlinks it from the pile first, so
+    // point 28 runs with the pile as the triggerer and the item as the attachee, result ignored, after the pile's dissolve check and with the pile possibly destroyed by it. The destroy cannot refuse, so a script the session cannot run (a pile of another map, no host in the pass world or standing, a run it cannot apply) is skipped, as an
+    // event pass's removals are. The host is the pass world's, else the standing one. Limits: the run is read before the dissolve's own run (the other item's script) applies, which the original runs first; a destroyer that was given its own host runs it through the pass world's or the standing one.
+    private PileRelease PlanPileRemoval(string item, SessionJunkPile pile)
+    {
+        var plan = PlanPileRelease(item, pile.Map, pile.Entity, _passWorld?.ItemScriptHost);
+        return plan.Failure == GameSessionFailure.None ? plan : default;
     }
 
     // The pile the host's loot window is taking an item from right now (LootJunkPile): the window shows it, so no destroy inside the
