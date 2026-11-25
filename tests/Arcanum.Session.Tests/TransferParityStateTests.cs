@@ -50,6 +50,82 @@ public sealed class TransferParityStateTests
         Assert.AreEqual(before, owner.Version);
     }
 
+    // ARC-WORLD-2969 (ledger TQ30): a follower that carries the WAIT bit while it follows is skipped by the walk 0x4D3760 and stays on the closing map, in the hero's array.
+    private static GameSessionOwner PartyWithFlagged(string flagged, params string[] others)
+    {
+        var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, flagged).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, flagged).Disposition);
+        foreach (var entity in others) Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, entity).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(flagged).WaitFlag);
+        return owner;
+    }
+
+    [TestMethod]
+    public void A_following_follower_with_the_wait_bit_is_left_behind_and_stays_in_the_array()
+    {
+        using var owner = PartyWithFlagged(Sogg, Virgil);
+        var before = owner.QueryCompanion(Sogg);
+        var list = owner.QueryTransferMoveList(new());
+        CollectionAssert.AreEqual(new[] { Sogg }, list.Left.ToArray());
+        CollectionAssert.AreEqual(new[] { Virgil }, list.Travelling.ToArray());
+        Assert.AreEqual(0, list.Waiting.Count);
+        var result = owner.ApplyChanges(owner.Version, Inside, [], list);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.AreEqual(before, owner.QueryCompanion(Sogg), "nothing is written for it: leader, standing and the bit stay");
+        CollectionAssert.AreEqual(new[] { Sogg, Virgil }, owner.QueryParty().Followers.Select(f => f.Entity).ToArray(), "still in the array and counted");
+    }
+
+    [TestMethod]
+    public void An_unconscious_follower_that_already_has_the_wait_bit_is_left_behind_not_ordered_to_wait()
+    {
+        // 0x4AA7A0 returns at once when the bit is set, so the wait order changes nothing for it and the walk skips it.
+        using var owner = PartyWithFlagged(Sogg);
+        var list = owner.QueryTransferMoveList(new() { NoFatigue = _ => true });
+        Assert.AreEqual(0, list.Waiting.Count);
+        CollectionAssert.AreEqual(new[] { Sogg }, list.Left.ToArray());
+        Assert.AreEqual(0, list.Travelling.Count);
+        Assert.AreEqual(CompanionStanding.Following, owner.QueryCompanion(Sogg).Standing);
+    }
+
+    [TestMethod]
+    public void A_move_list_that_names_its_left_members_wrongly_is_refused_and_the_list_decides_not_the_bit_now()
+    {
+        using var owner = PartyWithFlagged(Sogg, Virgil);
+        var revision = owner.Version.Revision;
+        // Every direct follower must be waiting, travelling or left; a left one must be a member, once, and not also waiting or travelling.
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Virgil])).Failure, "Sogg is neither");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Virgil]) { Left = [Sogg, Sogg] }).Failure, "twice");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Sogg, Virgil]) { Left = [Sogg] }).Failure, "left and travelling");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion,
+            owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([new SessionWaitOrder(Sogg, null)], [Virgil]) { Left = [Sogg] }).Failure, "left and waiting");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Sogg, Virgil]) { Left = [Rat] }).Failure, "not a member");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Virgil]) { Left = null! }).Failure);
+        Assert.AreEqual(revision, owner.Version.Revision);
+        // The list built before the bit changed still stands: Sogg is left behind though its bit went in between (a wait timer ran out).
+        var list = owner.QueryTransferMoveList(new());
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitParty(owner.Version, Sogg, PartyStateTests.Facts(), true).Disposition);
+        Assert.IsFalse(owner.QueryCompanion(Sogg).WaitFlag);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (owner.ApplyChanges(owner.Version, Inside, [], list).Disposition, GameSessionFailure.None));
+    }
+
+    [TestMethod]
+    public void A_left_behind_member_on_the_other_map_still_takes_a_slot_of_the_follower_limit()
+    {
+        // The original counts the dangling array element toward the limit (0x45E3F0, join check 0x4AD950); Steamwoven keeps the member in the array by entity, so the count is the same.
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Sogg).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Sogg, PartyStateTests.Facts(maxFollowers: 1), false).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Sogg).WaitFlag);
+        Assert.AreEqual(1, owner.QueryParty().NonForcedFollowers);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, Inside, [], owner.QueryTransferMoveList(new())).Disposition);
+        Assert.AreEqual(Cave, owner.QueryActor().Map, "the hero is on the other map");
+        Assert.AreEqual(1, owner.QueryParty().NonForcedFollowers, "the member left on the old map is still counted");
+        var refused = owner.JoinParty(owner.Version, Virgil, PartyStateTests.Facts(maxFollowers: 1), false);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ConsentRefused, FollowConsent.LimitReached), (refused.Disposition, refused.Failure, refused.Consent));
+        Assert.AreEqual(1, owner.QueryParty().Followers.Count);
+    }
+
     [TestMethod]
     public void A_move_to_another_map_clears_FM6_links_of_the_travellers_and_keeps_the_danger_word()
     {
