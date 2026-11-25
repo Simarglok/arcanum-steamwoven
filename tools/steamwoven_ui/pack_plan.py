@@ -316,6 +316,17 @@ def art_map_lines(plan: Plan) -> list[str]:
             f"{'alpha masks' if item.masks else 'the original alpha'}; name from {item.source})" for item in plan.arts]
 
 
+
+def _warn_out(tool: str, *paths) -> None:
+    """ARC-DEV-3277: warn when an output folder is inside a worktree or a temp folder (the images are lost there)."""
+    try:
+        from tools.steamwoven_ui import image_archive
+    except ImportError:
+        import image_archive  # type: ignore
+    for path in paths:
+        image_archive.warn_if_ephemeral(path, tool)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("inputs", nargs="+", type=Path, help="assembly records (<art>.assembly.json) or folders holding them (assemble.py --out DIR)")
@@ -331,6 +342,8 @@ def main(argv: list[str] | None = None) -> int:
         records = find_records(args.inputs)
         assemblies = [load_assembly(path) for path in records]
         out_dir = (args.out or assemblies[0].folder).resolve()
+        if not args.dry_run:
+            _warn_out("pack_plan.py", out_dir)
         check_out_dir(out_dir)
         plan = build_plan(assemblies, out_dir, args.pack_id, args.masks, parse_art_names(args.art_name))
         written = [] if args.dry_run else write_plan(plan, out_dir)
