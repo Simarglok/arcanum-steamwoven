@@ -753,6 +753,8 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-2886: the same scripts of the worn item the hero's critical drop takes off it, over the hero's item script host.
         session.HeroWearerScripts = () => _inventoryHost?.ItemScripts(session);
         session.ItemRunOutput = (lines, candies) => { PostScriptLines(lines); QueueScriptEyeCandies(candies); };
+        // ARC-SCRIPT-2900: the item script host of the item events a session call runs without a host of its own (the remove-item script of the ammunition a shot or a payment empties, the coins paid out).
+        session.StandingItemScripts = () => _inventoryHost?.ItemScripts(session);
         // ARC-AI-1530: the danger setter's enter-combat and exit-combat scripts (slots 13 and 14) of an NPC of the shown map.
         session.DangerHookScript = RunDangerHook;
         // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).

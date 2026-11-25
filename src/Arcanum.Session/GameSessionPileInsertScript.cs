@@ -8,12 +8,18 @@ namespace Arcanum.Session;
 public sealed partial class GameSessionOwner
 {
     // What the insert-item script of a moved pile came to: Failure is the refusal of the move (None: go on), Runs the prepared runs to commit with the move (null: the pile has no insert-item script), Run the script's answer (ignored by the original).
-    private readonly record struct PileInsert(GameSessionFailure Failure, ItemScriptRuns? Runs, ScrRunResult? Run)
+    private readonly record struct PileInsert(GameSessionFailure Failure, ItemScriptRuns? Runs, ScrRunResult? Run, Action? Deliver = null)
     {
         internal static readonly PileInsert None = new(GameSessionFailure.None, null, null);
 
         /// <summary>The result of the committed move: the script's run, its prints and its runs, as the item moves report them.</summary>
-        internal InventoryMutationResult Result(InventoryMutationResult moved) => Runs is null ? moved : moved with { InsertScript = Run, Scripts = Runs.Runs, Messages = Runs.Messages };
+        internal InventoryMutationResult Result(InventoryMutationResult moved)
+        {
+            if (Runs is null) return moved;
+            // ARC-SCRIPT-2900: the runs of the standing host (the caller gave none) send their lines to the host's output, once the move is applied.
+            Deliver?.Invoke();
+            return moved with { InsertScript = Run, Scripts = Runs.Runs, Messages = Deliver is null ? Runs.Messages : [] };
+        }
 
         /// <summary>The refusal that keeps the runs made (also on a refusal, as the item moves do).</summary>
         internal InventoryMutationResult Refused(InventoryMutationResult refusal) => Runs is null ? refusal : refusal with { InsertScript = Run, Scripts = Runs.Runs };
@@ -38,6 +44,8 @@ public sealed partial class GameSessionOwner
         // the holder as the triggerer, after the insert-item event (the destroy script, point 2, comes between and is not run). The same run set, so the removal reads what the insert-item run did.
         var scripted = piles.Where(pile => Scripted(pile, SessionScriptPoint.InsertItem) || removedFrom is not null && Scripted(pile, SessionScriptPoint.RemoveItem)).ToArray();
         if (scripted.Length == 0) return PileInsert.None;
+        // ARC-SCRIPT-2900: a call given no host runs through the standing one (null: refused, as before).
+        scripts = ResolveItemScripts(scripts, out var standing);
         bool Shown(string pile, int point) => !Scripted(pile, point) || MadeHas(pile, point) || _inventory.Seeds.TryGetValue(_actor.Map, out var shown) && Has(shown, pile, point);
         if (scripts is null || scripted.Any(pile => !Shown(pile, SessionScriptPoint.InsertItem) || removedFrom is not null && !Shown(pile, SessionScriptPoint.RemoveItem))) return new(GameSessionFailure.ItemScriptUnsupported, null, null);
         var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
@@ -62,6 +70,6 @@ public sealed partial class GameSessionOwner
         // A host callback changed nothing the runs rest on: the revision, the attached seeds, the shown map and the flags.
         if (_revision != revision || _actor.Map != map || _inventory.SeedGeneration != seeds || _flags.Version != flagVersion) return new(GameSessionFailure.StaleVersion, runs, last);
         if (runs.Failure == GameSessionFailure.None) runs.Prepare();
-        return new(runs.Failure, runs, last);
+        return new(runs.Failure, runs, last, standing ? () => DeliverStanding(runs) : null);
     }
 }

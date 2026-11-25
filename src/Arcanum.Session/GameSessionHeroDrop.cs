@@ -96,7 +96,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-UI-029: the hero drops <paramref name="count"/> units of one of its ammunition stacks on its own tile, as the inventory
     /// window's drop does after the quantity window (ledger QW5, IW16): the unit use with no destination (0x4658E0) takes the units from
-    /// the stack (the stack goes at exactly the count, a deletion with no remove-item event, else it keeps the rest), then a new object
+    /// the stack (the stack goes at exactly the count, a deletion that runs its remove-item script (28, ARC-SCRIPT-2900), else it keeps the rest), then a new object
     /// of <paramref name="newStackKind"/> carries them (0x465A40: the original creates the type's base prototype; the host names the kind)
     /// and the drop's placement lays it on the hero's tile (0x466E50: a junk pile, then the decay timer). It joins the hero's placed items
     /// as a made item. Unlike an ordinary item's drop (<see cref="DropHeroItem"/>) the stack's drop script and no-drop flag are not
@@ -110,7 +110,7 @@ public sealed partial class GameSessionOwner
     /// tile first.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x465A40, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    public InventoryMutationResult DropHeroAmmo(GameSessionVersion expected, string stack, int count, SessionItemKind newStackKind)
+    public InventoryMutationResult DropHeroAmmo(GameSessionVersion expected, string stack, int count, SessionItemKind newStackKind, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(stack)) return RejectItem(GameSessionFailure.InvalidItem);
@@ -128,14 +128,19 @@ public sealed partial class GameSessionOwner
         var freed = emptied ? 1 : 0;
         if (_inventory.Ammo.Count - freed + 1 > _limits.MaxAmmoRecords || _inventory.Held - freed + 1 > _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // ARC-SCRIPT-2900 (exe read 0x578EA0 → 0x4658E0 → 0x43CCA0 → 0x466E00 → 0x467860): a whole stack's drop destroys the source, which runs its remove-item script (28) with the hero as the triggerer; no drop script (point 5) runs for ammunition.
+        var (runs, standing, removalFailure) = emptied ? PlanEmptiedRemoval(source.Entity, HeldItemPoints(source.Entity), null, scripts) : (null, false, GameSessionFailure.None);
+        if (removalFailure != GameSessionFailure.None) return RejectItem(removalFailure);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        runs?.Commit();
         if (emptied) DestroyObject(source.Entity);
         else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
         var item = CreateMadeItem(new(entity, newStackKind, SessionCreatePlace.HeroList, CreatedWeight(newStackKind.Prototype)));
         _inventory.Ammo[item.Entity] = new(item.Entity, source.AmmoType, count);
         // The placement is the drop's (junk pile, decay) and makes the one revision.
         PlaceHeroItem(item.Entity, cell);
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version);
+        if (standing) DeliverStanding(runs);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version) { Scripts = runs?.Runs ?? [], Messages = standing ? [] : runs?.Messages ?? [] };
     }
 
     /// <summary>
@@ -153,7 +158,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision. The caller places the actor on the hero's current tile first.
     /// </summary>
     [OriginalFunction(0x464970, OriginalFunctionScope.Partial)]
-    public InventoryMutationResult DropHeroGold(GameSessionVersion expected, int count, SessionItemKind pileKind)
+    public InventoryMutationResult DropHeroGold(GameSessionVersion expected, int count, SessionItemKind pileKind, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (count < 0 || pileKind.Type != SessionItemType.Gold) return RejectItem(GameSessionFailure.InvalidItem);
@@ -167,6 +172,11 @@ public sealed partial class GameSessionOwner
         if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var weight = CreatedWeight(pileKind.Prototype); // the host callback runs before the first change
+        // ARC-SCRIPT-2900: the whole pile's drop destroys it (0x464830 → 0x43CCA0 → 0x466E00 → 0x467860), which runs its remove-item script (28) with the hero as the triggerer; no drop script (point 5) runs for gold.
+        var (runs, standing, removalFailure) = _inventory.Gold == count ? WithHeroGoldObject(() => PlanEmptiedRemoval(SessionHeroGrid.GoldEntity, HeroGoldPoints(), null, scripts)) : (null, false, GameSessionFailure.None);
+        if (removalFailure != GameSessionFailure.None) return RejectItem(removalFailure);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        CommitHeroGoldRuns(runs);
         _inventory.Gold -= count;
         var map = _actor.Map;
         CreateMadeItem(new(entity, pileKind, SessionCreatePlace.Ground, weight, 0, null, map, cell, SessionPlacedSource.Made));
@@ -175,6 +185,7 @@ public sealed partial class GameSessionOwner
         SettleDrop(entity, map, cell);
         ScheduleDecay(entity, map);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, entity, null, Version);
+        if (standing) DeliverStanding(runs);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, entity, null, Version) { Scripts = runs?.Runs ?? [], Messages = standing ? [] : runs?.Messages ?? [] };
     }
 }
