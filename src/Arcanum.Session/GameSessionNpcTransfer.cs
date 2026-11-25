@@ -1,4 +1,5 @@
 using Arcanum.Scripting.Scr;
+using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
 
@@ -166,7 +167,7 @@ public sealed partial class GameSessionOwner
         }
         if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         var report = new CreatedScripts();
-        var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report);
+        var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report, ground: true);
         if (created is null) return refusal!.Value;
         _inventory.Piles[created.Value.Entity] = count;
         Revise();
@@ -215,7 +216,7 @@ public sealed partial class GameSessionOwner
         if (target is { } existing) targetPile = existing.Entity;
         else
         {
-            var created = NewNpcEntry(to, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report);
+            var created = NewNpcEntry(to, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report, ground: true);
             if (created is null) return refusal!.Value;
             targetPile = created.Value.Entity;
         }
@@ -232,7 +233,8 @@ public sealed partial class GameSessionOwner
     /// Moves <paramref name="count"/> of the hero's coins to the NPC (0x464830 with the NPC as destination, NT1): its gold pile grows
     /// with no insert check; an NPC without a pile gets a new one, a <c>made:n</c> item of <paramref name="pileKind"/> (the gold prototype,
     /// the host's) at the end of its list, after the host's insert check for the NPC. The original then leaves a refused new pile on the
-    /// ground and still reports success; here a refusal moves nothing (<see cref="GameSessionFailure.InsertRefused"/>). Refused before any
+    /// ground and still reports success (ARC-SCRIPT-2911: so does the session when the host attaches a tile source, <see cref="AttachHolderCells"/>: the pile lies on the NPC's tile, the coins are out of the hero and
+    /// the result is Changed with the refusing <see cref="InventoryMutationResult.Verdict"/>; without one a refusal moves nothing, <see cref="GameSessionFailure.InsertRefused"/>). Refused before any
     /// effect, beyond <see cref="TakeGoldFromNpc"/>'s input, version, holder and hero checks: a kind that is not gold
     /// (<see cref="GameSessionFailure.InvalidItem"/>), fewer coins than the count (<see cref="GameSessionFailure.GoldShort"/>), a sum past 32
     /// bits, a full list, store or record budget, or no free made number (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. A
@@ -261,7 +263,7 @@ public sealed partial class GameSessionOwner
         }
         if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         var report = new CreatedScripts();
-        var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report);
+        var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal, scripts: scripts, report: report, ground: true);
         if (created is null) return refusal!.Value;
         _inventory.Gold -= count;
         _inventory.Piles[created.Value.Entity] = count;
@@ -564,7 +566,7 @@ public sealed partial class GameSessionOwner
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = NpcStackOfType(npc, source.AmmoType);
         var report = new CreatedScripts { Defer = true };
-        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(npc, newStackKind, source.AmmoType, count, insertCheck, scripts: scripts, report: report) : null, insert, report);
+        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(npc, newStackKind, source.AmmoType, count, insertCheck, scripts: scripts, report: report, ground: true) : null, insert, report);
     }
 
     /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs and that are still in an NPC's list, by entity in ordinal order.</summary>
@@ -635,9 +637,9 @@ public sealed partial class GameSessionOwner
     }
 
     private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewNpcStack(string npc, SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck,
-        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null)
+        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null, bool ground = false)
     {
-        var created = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal, holder, scripts, report);
+        var created = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal, holder, scripts, report, ground: ground);
         if (created is null) return (null, refusal);
         _inventory.Ammo[created.Value.Entity] = new(created.Value.Entity, ammoType, units);
         return (created, null);
@@ -653,6 +655,11 @@ public sealed partial class GameSessionOwner
         internal List<SessionScriptMessage> Messages { get; } = [];
         internal ScrRunResult? Insert { get; set; }
 
+        /// <summary>ARC-SCRIPT-2911: the new pile or stack was refused (the get script skipped the default, <see cref="Declined"/>, or the insert check answered <see cref="RefusedVerdict"/>) and lies on the holder's tile; the call still succeeds.</summary>
+        internal bool OnGround { get; set; }
+        internal bool Declined { get; set; }
+        internal SessionInsertVerdict? RefusedVerdict { get; set; }
+
         /// <summary>The move also has a source pile whose own insert-item runs commit first (the original runs the source's 21 before the new item's scripts): the new item's runs wait in <see cref="Pending"/> for <see cref="CommitPending"/>.</summary>
         internal bool Defer { get; init; }
         internal ItemScriptRuns? Pending { get; set; }
@@ -664,14 +671,18 @@ public sealed partial class GameSessionOwner
         }
 
         /// <summary>The result with the created object's script runs, lines and answer added after its own.</summary>
-        internal InventoryMutationResult Apply(InventoryMutationResult result) => Runs.Count == 0 ? result
-            : result with { Scripts = [.. result.Scripts, .. Runs], Messages = [.. result.Messages, .. Messages], InsertScript = result.InsertScript ?? Insert };
+        internal InventoryMutationResult Apply(InventoryMutationResult result)
+        {
+            if (OnGround) result = result with { Verdict = RefusedVerdict, DeclinedBy = Declined ? SessionScriptPoint.Get : result.DeclinedBy };
+            return Runs.Count == 0 ? result
+                : result with { Scripts = [.. result.Scripts, .. Runs], Messages = [.. result.Messages, .. Messages], InsertScript = result.InsertScript ?? Insert };
+        }
     }
 
     // A new made item at the end of the NPC's (ARC-WORLD-090: or a container's) list after the host's insert check for it (the
     // original's new object moved in by 0x4617F0); its own bookkeeping (gold or ammunition record, revision) is the caller's.
     private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal,
-        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null, bool hero = false, SessionAmmoRecord? mergeInto = null)
+        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null, bool hero = false, SessionAmmoRecord? mergeInto = null, bool ground = false)
     {
         refusal = null;
         // ARC-SCRIPT-2857 (NT2, IE2): the new object moves in through 0x4617F0 → 0x461810. It has no parent, so 0x461810 does not forward to the parented transfer 0x461CA0: the holder's transfer script (point 32) is never
@@ -701,30 +712,56 @@ public sealed partial class GameSessionOwner
             bool Stale() => _revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _flags.Version != flagVersion;
             InventoryMutationResult Refused(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
                 RejectItem(failure, verdict) with { Scripts = runs?.Runs ?? [], Messages = failure == GameSessionFailure.InsertRefused ? runs?.Messages ?? [] : [] };
+            var declined = false;
             if (runs is not null && hasGet)
             {
                 var gate = runs.Run(SessionScriptPoint.Get, entity, npc, null);
                 ThrowIfDisposed();
                 if (Stale()) { refusal = Refused(GameSessionFailure.StaleVersion); return null; }
                 if (runs.Failure != GameSessionFailure.None) { refusal = Refused(runs.Failure); return null; }
-                // Skip default: the move does not happen (a refused restock item is destroyed by 0x463E20, as an insert refusal; the original leaves a refused pile or stack on the ground, which a refusal here does not model, as for the insert check), and
-                // the refusing run's own effects are not applied (the documented limit of a refused move).
-                if (gate?.Outcome == ScrOutcome.SkipDefault) { refusal = Refused(GameSessionFailure.InsertRefused) with { DeclinedBy = SessionScriptPoint.Get }; return null; }
+                // Skip default: the move does not happen. A refused restock item is destroyed by 0x463E20, so it is refused here with the refusing run's own effects not applied (the documented limit of a refused move). A new pile or stack
+                // (ARC-SCRIPT-2911, <paramref name="ground"/>) is not destroyed: 0x461810 returns 0 and the object stays where 0x464970 / 0x4658E0 made it, on the holder's tile, and the call reports success (see GroundTarget).
+                if (gate?.Outcome == ScrOutcome.SkipDefault)
+                {
+                    if (ground && !hero && mergeInto is null) declined = true;
+                    else { refusal = Refused(GameSessionFailure.InsertRefused) with { DeclinedBy = SessionScriptPoint.Get }; return null; }
+                }
             }
             // ARC-WORLD-085: the new object has its prototype's weight (the NPC's own weight is the host's insert check).
             var weight = CreatedWeight(kind.Prototype);
-            var verdict = mergeInto is { } stack ? insertCheck(new SessionInventoryItem(stack.Entity, facts))
-                : hero
-                ? HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, facts)), 0, new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, facts.Quantity ?? 0), room: NewItemRoom(entity, kind))
-                : insertCheck(new SessionInventoryItem(entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
-            ThrowIfDisposed();
-            if (Stale()) { refusal = Refused(GameSessionFailure.StaleVersion, verdict); return null; }
-            if (verdict != SessionInsertVerdict.Accepted) { refusal = Refused(GameSessionFailure.InsertRefused, verdict); return null; }
+            SessionInsertVerdict? refusedVerdict = null, verdict = null;
+            if (!declined)
+            {
+                verdict = mergeInto is { } stack ? insertCheck(new SessionInventoryItem(stack.Entity, facts))
+                    : hero
+                    ? HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, facts)), 0, new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, facts.Quantity ?? 0), room: NewItemRoom(entity, kind))
+                    : insertCheck(new SessionInventoryItem(entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
+                ThrowIfDisposed();
+                if (Stale()) { refusal = Refused(GameSessionFailure.StaleVersion, verdict); return null; }
+                if (verdict != SessionInsertVerdict.Accepted)
+                {
+                    if (!(ground && !hero && mergeInto is null)) { refusal = Refused(GameSessionFailure.InsertRefused, verdict); return null; }
+                    refusedVerdict = verdict;
+                }
+            }
+            // ARC-SCRIPT-2911: the refused new pile or stack lies on the holder's tile when the host knows it and the ground can hold it; else the move is refused as before (InsertRefused, nothing created).
+            CellCoord? lying = null;
+            if (declined || refusedVerdict is not null)
+            {
+                lying = GroundTarget(npc);
+                ThrowIfDisposed();
+                if (Stale()) { refusal = Refused(GameSessionFailure.StaleVersion, refusedVerdict); return null; }
+                if (lying is null)
+                {
+                    refusal = declined ? Refused(GameSessionFailure.InsertRefused) with { DeclinedBy = SessionScriptPoint.Get } : Refused(GameSessionFailure.InsertRefused, refusedVerdict);
+                    return null;
+                }
+            }
             ScrRunResult? insertRun = null;
             if (runs is not null)
             {
-                // The insert-item script runs at the end of the insertion and cannot cancel it: it is run here, before the item is made, and applied with it, or the whole move is refused.
-                if (hasInsert) insertRun = runs.Run(SessionScriptPoint.InsertItem, entity, npc, null);
+                // The insert-item script runs at the end of the insertion and cannot cancel it: it is run here, before the item is made, and applied with it, or the whole move is refused. An object left on the ground was never inserted: it has none.
+                if (hasInsert && lying is null) insertRun = runs.Run(SessionScriptPoint.InsertItem, entity, npc, null);
                 ThrowIfDisposed();
                 if (Stale()) { refusal = Refused(GameSessionFailure.StaleVersion, verdict); return null; }
                 runs.Prepare();
@@ -732,9 +769,11 @@ public sealed partial class GameSessionOwner
             }
             var merging = mergeInto is not null;
             var made = merging ? new SessionMadeItem(entity, kind)
+                : lying is { } cell ? CreateMadeItem(new(entity, kind, SessionCreatePlace.Ground, weight, 0, null, _actor.Map, cell, SessionPlacedSource.Made))
                 : hero ? CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight))
                 : CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
-            if (!hero && !merging) StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
+            if (!hero && !merging && lying is null) StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
+            if (lying is not null && report is not null) { report.OnGround = true; report.Declined = declined; report.RefusedVerdict = refusedVerdict; }
             if (runs is not null)
             {
                 if (report is { Defer: true }) report.Pending = runs;

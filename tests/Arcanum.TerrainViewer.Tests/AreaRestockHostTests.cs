@@ -150,6 +150,20 @@ public sealed class AreaRestockHostTests
     }
 
     [TestMethod]
+    public void The_holder_cell_the_session_lays_a_refused_pile_on_is_the_ai_cell_else_the_row_of_the_shown_map()
+    {
+        // ARC-SCRIPT-2911: Attach hands the session this answer (GameSessionOwner.AttachHolderCells).
+        var (session, inventory, _, _) = Host();
+        using var owned = session;
+        Assert.AreEqual(new CellCoord(100, 100), inventory.HolderCell(session, Entity(0)), "the NPC's map row");
+        Assert.AreEqual(new CellCoord(105, 100), inventory.HolderCell(session, Entity(1)), "a container's map row");
+        inventory.NpcLiveCell = npc => npc == Entity(0) ? new CellCoord(100, 130) : null;
+        Assert.AreEqual(new CellCoord(100, 130), inventory.HolderCell(session, Entity(0)), "where the AI has walked it");
+        Assert.AreEqual(new CellCoord(105, 100), inventory.HolderCell(session, Entity(1)));
+        Assert.IsNull(inventory.HolderCell(session, "oid:nobody"), "a holder with no row");
+    }
+
+    [TestMethod]
     public void Sets_items_persistence_and_the_pile_come_from_the_data()
     {
         var (session, _, host, _) = Host();

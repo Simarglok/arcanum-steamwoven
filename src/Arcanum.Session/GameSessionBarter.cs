@@ -99,7 +99,7 @@ public sealed partial class GameSessionOwner
         if (piles.Length > 0 && target is null)
         {
             // 0x464830 creates the first pile with its coins and moves it in (0x4617F0); the later piles join it.
-            var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal, scripts: scripts, report: report);
+            var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = piles[0].Facts.Quantity }, npcInsert, out var refusal, scripts: scripts, report: report, ground: true);
             if (created is null) return Refuse(refusal!.Value.Failure) with { Messages = refusal.Value.Messages };
             pile = created.Value.Entity;
             if (identify) marked.Add(pile);
@@ -255,8 +255,9 @@ public sealed partial class GameSessionOwner
         var into = container ?? npc;
         var kind = container is null ? SessionHolderKind.Npc : SessionHolderKind.Container;
         var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert, scripts) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts, slotWearer: slotWearer, slotPoints: slotPoints);
-        // ARC-SCRIPT-2827: the merchant's transfer script declined the item (DeclinedBy): it stays with the hero and nothing is paid.
-        if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is not null || total == 0) return moved;
+        // ARC-SCRIPT-2827: the merchant's transfer script declined the item (DeclinedBy): it stays with the hero and nothing is paid. ARC-SCRIPT-2911: a new stack whose get script skipped the default (DeclinedBy = Get, Changed) lies on the
+        // ground and the original's call reports success, so the units are paid for.
+        if (moved.Disposition != GameSessionDisposition.Changed || moved.DeclinedBy is { } declined && declined != SessionScriptPoint.Get || total == 0) return moved;
         var paid = TakeGoldFromNpc(Version, npc, (int)total, scripts: scripts);
         return paid.Disposition == GameSessionDisposition.Changed
             ? moved with { Version = Version, InsertScript = paid.InsertScript ?? moved.InsertScript, Scripts = [.. moved.Scripts, .. paid.Scripts], Messages = [.. moved.Messages, .. paid.Messages] }
@@ -362,6 +363,6 @@ public sealed partial class GameSessionOwner
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = ContainerStackOfType(holder, source.AmmoType);
         var report = new CreatedScripts { Defer = true };
-        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind, scripts, report) : null, insert, report);
+        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(holder, newStackKind, source.AmmoType, count, insertCheck, kind, scripts, report, ground: true) : null, insert, report);
     }
 }
