@@ -59,8 +59,7 @@
         "plate-round-hud",
         "plate-ball-hud",
         "plate-dome-hud",
-        "plate-dome-small-hud",
-        "plate-parchment-oval"
+        "plate-dome-small-hud"
       ],
       "after": null
     },
@@ -901,24 +900,6 @@
       "screen": null,
       "batch": "B-HARDWARE-MENU",
       "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item, two details cut from the original on a transparent ground; hardware_build.py refs / cut"
-    },
-    {
-      "id": "plate-parchment-oval",
-      "group": "part",
-      "kind": "plate",
-      "title": "Oval parchment button box, empty (arts 224, 342, 345 and their lit and refused states)",
-      "file": "plate-parchment-oval.txt",
-      "size": [
-        1680,
-        912
-      ],
-      "references": [
-        "original",
-        "sheet"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS",
-      "notes": "slice B-BUTTONS-5 (ARC-UI-3205): one Codex item for the oval boxes of the Drop, Use and Gamble buttons (80 x 43 units, master 288 x 156), idle face only, no symbol; the glyphs, the lit face (gain field of the lit frame) and the refused face (red corners) are made by rule from the original frames (parchment_kit.py); fitted to plate.drop_off, plate.use_box_off, plate.gamble_box_off"
     }
   ]
 }
