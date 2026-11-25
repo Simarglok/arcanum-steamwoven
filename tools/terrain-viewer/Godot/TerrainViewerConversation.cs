@@ -419,7 +419,7 @@ public partial class TerrainViewerApp
         if (EndsAtStart(speaker, start, scripted: dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog)) { RefreshReadyStatus(); return; }
         if (!ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "scripted dialog")) return;
         OpenConversation(speaker, start);
-        // ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex) resumes the speaker's dialog slot on "return to script".
+        // ARC-SCRIPT-047: tells the smoke stages a start at another point than the dialog point (every start resumes the speaker's dialog slot on "return to script", ARC-SCRIPT-2961).
         _conversationScripted = dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog;
         GD.Print($"ARC-SCRIPT-046 scripted conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
         RefreshReadyStatus();

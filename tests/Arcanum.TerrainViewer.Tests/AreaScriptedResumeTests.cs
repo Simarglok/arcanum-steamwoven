@@ -14,16 +14,17 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaScriptedResumeTests
 {
-    // Counter 1 is loaded as 2: "Fresh." is offered and sets it to 9, then ends with "return to script" (response 0).
+    // The fixture's dialog slot loads the local flags 4 (bit 2 set) and the counters 0x0201 (counter 0 is 1, counter 1 is 2). "Fresh." is offered while counter 1 is 2, sets counter 1 to 9 and local flag 3, and ends with
+    // "return to script" (response 0); "Back." is offered while flag 2 is set and answers with the special response -1 (line 1).
     private const string Dialog = "{1}{Hello.}{}{}{}{}{}"
-        + "{2}{Fresh.}{}{1}{lc 1 2}{0}{lc 1 9}"
-        + "{3}{Back.}{}{1}{}{-1}{}";
+        + "{2}{Fresh.}{}{1}{lc 1 2}{0}{lc 1 9, lf 3 1}"
+        + "{3}{Back.}{}{1}{lf 2 1}{-1}{}";
 
     private static ScrDialogStart Use(AreaReactionConversationTests.Fixture f, int line) =>
         new(f.Host.Scripts.Pc, f.Host.Scripts.Object(f.Speaker), 777, line, 1) { Point = ScrPoint.Use };
 
     [TestMethod]
-    public void A_use_started_talk_runs_lf_and_lc_on_the_speakers_dialog_slot_and_its_end_names_the_held_line_plus_one()
+    public void A_use_started_talk_reads_and_writes_lf_and_lc_of_the_speakers_dialog_slot_and_its_end_names_the_held_line_plus_one()
     {
         using var f = AreaReactionConversationTests.Fixture.Create(Dialog);
         var start = f.Host.BeginScripted(f.Speaker, Use(f, 5));
@@ -33,6 +34,7 @@ public sealed class AreaScriptedResumeTests
         Assert.AreEqual(DialogConversationSelectStatus.Ended, talk.Select(talk.Options.Single(option => option.Text == "Fresh.").Token).Status);
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(6)), talk.End, "the held line is the use script's own line 5, plus one");
         Assert.AreEqual(0x0901L, f.Session.QueryObjectChange(f.Host.State.MapOf(0), MapChangeKey.ForEntity(f.Entity, AreaScriptHost.CountersProperty)), "lc wrote the dialog slot's counter");
+        Assert.AreEqual(12L, f.Session.QueryObjectChange(f.Host.State.MapOf(0), MapChangeKey.ForEntity(f.Entity, AreaConversationState.LocalFlagsProperty)), "lf wrote bit 3 beside the loaded bit 2 of the dialog slot's flags");
     }
 
     [TestMethod]
@@ -45,7 +47,7 @@ public sealed class AreaScriptedResumeTests
         var resumed = f.Host.Resume(f.Speaker, talk.End!.ScriptLine!.Value);
         Assert.AreEqual(AreaConversationStartStatus.ScriptEnded, resumed.Status, resumed.Detail);
         Assert.AreEqual(1, f.Host.LastRun!.StopLine);
-        // A reply's own line, -1, runs line 1 too; line 0 would be the dialog action again (a new talk).
+        // (The second talk needs the first one's flag, which the first half left set.) A reply's own line, -1, runs line 1 too; line 0 would be the dialog action again (a new talk).
         var again = f.Host.BeginScripted(f.Speaker, Use(f, 3)).Conversation!;
         Assert.AreEqual(DialogConversationSelectStatus.Ended, again.Select(again.Options.Single(option => option.Text == "Back.").Token).Status);
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(1)), again.End);
@@ -59,6 +61,8 @@ public sealed class AreaScriptedResumeTests
         var resumed = f.Host.Resume(f.Speaker, new DialogScriptLine(6));
         Assert.AreNotEqual(AreaConversationStartStatus.Started, resumed.Status, resumed.Detail);
         Assert.IsNull(resumed.Conversation);
+        Assert.IsNull(f.Session.QueryObjectChange(f.Host.State.MapOf(0), MapChangeKey.ForEntity(f.Entity, AreaScriptHost.CountersProperty)), "nothing ran, nothing was stored");
+        Assert.AreEqual(0, f.Host.LastRun?.Effects.ObjectStates.Count ?? 0);
     }
 
     [TestMethod]
