@@ -152,6 +152,9 @@ RULE_PARTS = {
     "gauge.yelwvial": ("x-yelwvial", 0, "y"), "gauge.bar": ("4-bar", 0, "y"),
     "gauge.followerframe_ft": ("504-FollowerFrame_FT", 0, "x"), "gauge.followerframe_hp": ("505-FollowerFrame_HP", 0, "x"), "gauge.followerframe_po": ("616-FollowerFrame_PO", 0, "x"),
     "gauge.followerframe_poison": ("x-followerframe_poison", 0, "x"), "gauge.xp_gaugemag": ("772-XP_GaugeMag", 0, "x"), "gauge.item_dam": ("256-Item_Dam", 8, "flat"),
+    # small detailed parts the owner wanted built from the original itself (the generated ones shifted the tone by dE 11 to 35): the frame resampled smoothly, nothing redrawn
+    "gauge.scrllslidem1": ("787-ScrllSlideM1", 0, "smooth"), "gauge.timepnts": ("216-TimePnts", 0, "smooth"), "gauge.mt_apt": ("255-MT_Apt", 0, "smooth"),
+    "gauge.amo_rol": ("167-Amo_Rol", 0, "smooth"),
 }
 # parts that are the same picture as another part (the original's two chain strips differ in 5 of 7800 pixels; ON is unused by any window)
 COPIES = {"gauge.scrllsld_on": "gauge.scrllsld_off"}
@@ -200,6 +203,7 @@ def note_of(part: str, frames: int = 1) -> str:
     if part in RULE_PARTS:
         folder, frame, axis = RULE_PARTS[part]
         text = ("the original's flat colour of the last damage frame; the nine frames are a linear ramp the runtime draws from the value" if axis == "flat"
+                else "by rule from the original's frame, resampled smoothly, nothing redrawn or added; no Codex" if axis == "smooth"
                 else "by rule from the original's frame: dither replaced by the band median, resampled smoothly; no Codex, nothing added")
         text += " (gauge_kit.py rule)"
     elif how.startswith("composite:"):
@@ -489,7 +493,7 @@ def cell_image(path: Path, found: dict, cell: dict) -> pngio.Image:
         run(["magick", str(path), "-crop", f"{region[2]}x{region[3]}+{region[0]}+{region[1]}", "+repage", "-alpha", "off", "-depth", "8", f"PNG24:{crop}"])
         image = pngio.read(crop)
     if cell["mode"] == "rect":
-        return image
+        return peel_ground(image)
     colour, spread = (KEY, 0.0)
     for i in range(0, len(image.data), 4):   # a pixel that leans magenta (red and blue well above green) is ground: no part of the batch has such a colour
         r, g, b = image.data[i], image.data[i + 1], image.data[i + 2]
@@ -506,6 +510,46 @@ def cell_image(path: Path, found: dict, cell: dict) -> pngio.Image:
                     image.data[i * 4 + 3] = 0
         return pngio.Image(image.w, image.h, image.data)  # the region keeps its extent (pad included): the caller maps it back to the expected rectangle
     return trim_alpha(image)
+
+
+PEEL_MAX = 8        # most lines taken off one side of an opaque cell (generator pixels)
+PEEL_SHARE = 0.02   # a line is ground bleed when this share of its pixels lean magenta ...
+PEEL_LEAN = 40      # ... (red and blue above 30, the smaller of them this far above green: a dark blend of the ground into the art as well as the ground itself)
+PEEL_MIN = 30
+
+
+def peel_ground(image: pngio.Image) -> pngio.Image:
+    """An opaque cell without its ground bleed: the outer lines (rows, columns) in which the magenta ground shows or blends into the art are cut off, and one more line, for the blend the
+    resampling would take from it. The master of an opaque cell has no transparency to hide ground in, so no magenta may reach it (ARC-UI-2483)."""
+    def leaning(x: int, y: int) -> bool:
+        r, g, b = image.data[(y * image.w + x) * 4:(y * image.w + x) * 4 + 3]
+        return min(r, b) > PEEL_MIN and min(r, b) - g > PEEL_LEAN
+
+    def share(line: int, row: bool, left: int, top: int, right: int, bottom: int) -> float:
+        quarter_w, quarter_h = (right - left) // 4, (bottom - top) // 4      # the middle half of the line: the side's own corners are another side's bleed
+        cells = [(x, line) for x in range(left + quarter_w, right - quarter_w)] if row else [(line, y) for y in range(top + quarter_h, bottom - quarter_h)]
+        return sum(leaning(x, y) for x, y in cells) / max(1, len(cells))
+
+    left, top, right, bottom = 0, 0, image.w, image.h
+    for side in ("top", "bottom", "left", "right"):
+        taken = 0
+        while right - left > 4 and bottom - top > 4:
+            line = {"top": top, "bottom": bottom - 1, "left": left, "right": right - 1}[side]
+            if share(line, side in ("top", "bottom"), left, top, right, bottom) < PEEL_SHARE:
+                break
+            if taken == PEEL_MAX:
+                raise GaugeError(f"the ground reaches more than {PEEL_MAX} px into the {side} side of an opaque cell: the cell was not found where the layout puts it")
+            top += side == "top"
+            bottom -= side == "bottom"
+            left += side == "left"
+            right -= side == "right"
+            taken += 1
+        if taken:       # the line after the last bleed line: the resampling mixes it in
+            top += side == "top"
+            bottom -= side == "bottom"
+            left += side == "left"
+            right -= side == "right"
+    return image.crop(left, top, right - left, bottom - top) if (left, top, right, bottom) != (0, 0, image.w, image.h) else image
 
 
 def trim_alpha(image: pngio.Image) -> pngio.Image:
@@ -610,6 +654,8 @@ def cut_group(group: Group, local: Path, frames: Path, dry: bool, manifest: dict
     done: list[str] = []
     cache[group.gid] = {"geometry": geometry, "found": found, "path": path, "record": record}
     for cell in geometry["cells"]:
+        if cell["part"] in RULE_PARTS:      # a cell of a part made by rule stays in the collage's layout but is not cut (a deep ground bleed in it is no matter)
+            continue
         image = cell_image(path, found[cell["id"]], cell)
         cache[group.gid].setdefault("images", {})[cell["id"]] = image
         if cell["part"] is None or cell["mode"] == "placed":
@@ -810,6 +856,8 @@ def rule_part(part: str, frames: Path, manifest: dict) -> tuple[pngio.Image, dic
         r, g, b, a = last.pixel(0, 0)
         out = pngio.Image(want[0], want[1], bytearray(bytes((r, g, b, 255)) * (want[0] * want[1])))
         return out, {"ramp_linear": ramp_ok, "colour": [r, g, b]}
+    if axis == "smooth":
+        return fit.resample_image(image, (0, 0, image.w, image.h), want[0], want[1]), {"axis": axis, "source_size": [image.w, image.h]}
     cleaned = denoise(image, axis)
     out = fit.resample_image(cleaned, (0, 0, cleaned.w, cleaned.h), want[0], want[1])
     return out, {"bands": len(bands(image, axis)), "axis": axis}

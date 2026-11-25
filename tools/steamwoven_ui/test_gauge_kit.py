@@ -8,6 +8,7 @@ from unittest import mock
 
 from . import fit
 from . import gauge_kit as gk
+from . import kit_check
 from . import pngio
 
 
@@ -221,6 +222,34 @@ class ComposeTests(unittest.TestCase):
             with self.assertRaises(gk.GaugeError):
                 gk.compose_parts("nothing", "grp", {}, Path(t), {"grp": {}}, Path(t), False)
             self.assertEqual(gk.compose_parts("nothing", "grp", {}, Path(t), {"grp": {}}, Path(t), True), [])
+
+
+class PeelTests(unittest.TestCase):
+    def _cell(self, ring: int) -> pngio.Image:
+        image = solid(30, 20, (90, 90, 90, 255))
+        for y in range(20):
+            for x in range(30):
+                if min(x, y, 29 - x, 19 - y) < ring:
+                    image.data[(y * 30 + x) * 4:(y * 30 + x) * 4 + 3] = bytes((230, 20, 220))
+        return image
+
+    def test_the_ground_bleed_at_the_rim_of_an_opaque_cell_is_peeled_with_one_line_more(self) -> None:
+        out = gk.peel_ground(self._cell(2))
+        self.assertEqual((out.w, out.h), (30 - 6, 20 - 6))
+        self.assertEqual(kit_check.ground_pixels(out.data), [])
+        self.assertTrue(all(out.pixel(x, y)[:3] == (90, 90, 90) for x in range(out.w) for y in range(out.h)))
+
+    def test_a_clean_cell_is_untouched_and_a_deep_bleed_is_an_error(self) -> None:
+        clean = solid(30, 20, (90, 90, 90, 255))
+        self.assertIs(gk.peel_ground(clean), clean)
+        with self.assertRaises(gk.GaugeError):
+            gk.peel_ground(self._cell(gk.PEEL_MAX + 1))
+        big = solid(60, 40, (90, 90, 90, 255))
+        for y in range(40):
+            for x in range(60):
+                if min(x, y, 59 - x, 39 - y) < gk.PEEL_MAX:
+                    big.data[(y * 60 + x) * 4:(y * 60 + x) * 4 + 3] = bytes((230, 20, 220))
+        self.assertEqual((gk.peel_ground(big).w, gk.peel_ground(big).h), (60 - 2 * (gk.PEEL_MAX + 1), 40 - 2 * (gk.PEEL_MAX + 1)))      # exactly PEEL_MAX lines is peeled, not refused
 
 
 class RuleTests(unittest.TestCase):
