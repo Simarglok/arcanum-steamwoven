@@ -23,6 +23,7 @@ namespace Arcanum.Session;
 /// <param name="pileKind">The kind of a new gold pile of an NPC that has none (the gold prototype).</param>
 /// <param name="insertCheck">The host's insert check for such a new pile.</param>
 /// <param name="shortPayerPaysNothing">The Original setting of GM3.</param>
+/// <param name="itemScripts">ARC-SCRIPT-2910: the item script host the hero's new gold pile (a hero with no pile) runs its prototype's get and insert-item scripts through; null: such a prototype refuses the gift.</param>
 /// <param name="prepare">Called with an NPC's entity before its gold is read or moved, for a host that attaches the seed of the map listing it first (a companion carried here from its home map).</param>
 public sealed class SessionDialogGoldPort(
     GameSessionOwner session,
@@ -31,7 +32,8 @@ public sealed class SessionDialogGoldPort(
     SessionItemKind pileKind,
     SessionInsertCheck insertCheck,
     bool shortPayerPaysNothing,
-    Action<string>? prepare = null) : IDialogGoldPort
+    Action<string>? prepare = null,
+    ISessionItemScriptHost? itemScripts = null) : IDialogGoldPort
 {
     private readonly GameSessionOwner _session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly Func<DialogParticipantId, string?> _entityOf = entityOf ?? throw new ArgumentNullException(nameof(entityOf));
@@ -57,7 +59,7 @@ public sealed class SessionDialogGoldPort(
         ArgumentNullException.ThrowIfNull(command);
         if (command.PlayerCharacter != playerCharacter || _session.QueryHero() is null) return DialogCommandResult.Rejected;
         if (command.Amount == 0) return DialogCommandResult.Applied;
-        if (command.Amount > 0) return Applied(_session.GiveGoldToHero(_session.Version, command.Amount));
+        if (command.Amount > 0) return Applied(_session.GiveGoldToHero(_session.Version, command.Amount, itemScripts));
         if (_entityOf(command.Npc) is not { } npc) return DialogCommandResult.Rejected;
         prepare?.Invoke(npc);
         var owed = -(long)command.Amount;
