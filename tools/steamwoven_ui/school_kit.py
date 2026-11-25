@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ARC-UI-3204 (batch B-BUTTONS, slice 4): the college tabs of the spell window (16 arts, 24 x 24 units) and the skill-school buttons (12 arts, 31 to 34 x 31 to 32 units), round buttons with a COLOURED dome inside a thin brass ring,
-three frames each (idle 0, pressed 1, hover 2). Same rule as the earlier round buttons (`round_kit.py`, `disc_kit.py`, rule E of slice 1) for the plate and the frames, but the glyph follows the TRD's rule F (owner decision 2026-11-25): a generated plate, and the glyph and the state overlays BY RULE from the original's own frames.
+three frames each (idle 0, pressed 1, hover 2). Same rule as the earlier round buttons (`round_kit.py`, `disc_kit.py`, rule E of slice 1) for the plate and the frames, but the glyph follows the TRD's rule F (owner decision 2026-11-25): a generated plate, and the glyph and the state overlays BY RULE: the symbol's shape from the player's HD pack frame of the button where it reads well (`pack_symbol.py`), else the original's own mask; its colour and the states from the original's own frames.
 
     python3 -B tools/steamwoven_ui/school_kit.py masks  --out FILE [--group college|school] [--zoom N]          (the symbol masks over the idle frames, for a look; needs ImageMagick)
     python3 -B tools/steamwoven_ui/school_kit.py refs   [--group college|school] [--frames DIR] [--local-root DIR]  (the references of the two collage prompts: the original domes without their symbols)
@@ -42,10 +42,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 try:
-    from . import button_kit, pngio, prompt_library, round_kit
+    from . import button_kit, pack_symbol, pngio, prompt_library, round_kit
 except ImportError:  # run as a script
     sys.path.insert(0, str(HERE))
     import button_kit  # type: ignore
+    import pack_symbol  # type: ignore
     import pngio  # type: ignore
     import prompt_library  # type: ignore
     import round_kit  # type: ignore
@@ -561,7 +562,7 @@ GLYPH_LEVEL = 0.42          # the field's level of the outline (below 0.5: a thi
 STROKE_W = 1.15             # cells: the width every thin line of a symbol is drawn at (a line the original draws one or two cells wide, in its centreline)
 SOLID_R = 1.2               # cells: a part of the symbol thicker than twice this stays a solid area (the hat's crown, a gear's body), only the thinner parts become strokes
 ENGRAVE_PX = 1.1            # master pixels: the width of the light rim (upper left) and the shade (lower right) of the engraved symbol
-ENGRAVE_LIGHT = 0.5         # the rim: this share of the way from the symbol's colour to white
+ENGRAVE_LIGHT = 0.3         # the rim: this share of the way from the symbol's colour to white
 ENGRAVE_SHADE = 0.5         # the shade: the symbol's colour times this
 
 
@@ -713,6 +714,13 @@ def glyph_shape(mask: list[bool], w: int, h: int, pixels: tuple[int, int], add: 
                     inside[v][u] = 1
                 if inside[v][u] and any(shape_contains(shape, cx, cy) for shape in drop):
                     inside[v][u] = 0
+    return shape_of_inside(inside, pixels)
+
+
+def shape_of_inside(inside: list[bytearray], pixels: tuple[int, int]) -> GlyphShape:
+    """The coverage of every master pixel and its light rim and shade shares, from the supersampled outline (`GLYPH_SS` samples a pixel per axis)."""
+    pw, ph = pixels
+    sw, sh = pw * GLYPH_SS, ph * GLYPH_SS
     d = max(1, int(round(ENGRAVE_PX * GLYPH_SS)))
     cover, rim, shade = [], [], []
     count = float(GLYPH_SS * GLYPH_SS)
@@ -904,11 +912,55 @@ def read_plate(plate_dir: Path | None, name: str) -> Image | None:
 
 @dataclass(frozen=True)
 class TabSymbol:
-    """The symbol of a button as smooth outlines: the dark outline (`dark`) and, where the original draws a coloured body inside it (the fire's orange), the body's silhouette under it (`body`), with the cells each colour is read from."""
+    """The symbol of a button as smooth outlines: the dark outline (`dark`) and, where the original draws a coloured body inside it (the fire's orange), the body's silhouette under it (`body`), with the cells each colour is read from.
+    `source` says where the outline comes from: `pack` (cut from the player's HD pack frame and fitted to the original's place, `pack_symbol`) or `mask` (the original's own 30 x 30 mask, rule F's reconstruction); `cells` are the original's cells the symbol covers."""
     dark: GlyphShape
     body: GlyphShape | None
     dark_cells: list
     body_cells: list
+    source: str = "mask"
+    pack: "pack_symbol.PackSymbol | None" = None
+    cells: list | None = None
+
+
+PACK_COLOUR_COVER = 0.6       # the original cells the fitted pack symbol covers at least this much give the symbol its colour (the median of their pixels)
+SYMBOL_SOURCE = {"college": "pack", "school": "mask"}   # where each group's symbols come from (the owner's source priority 2026-11-25: the pack's HD frame first); `SOURCE_OVERRIDES` picks per button
+SOURCE_OVERRIDES: dict[str, str] = {name: "pack" for name in ("combat_but", "thieving_but", "chemistry_but", "electrical_but", "explosives_but", "gunsmithy_but", "therapeutics_but")}   # the schools whose pack symbol reads better than the original's own mask or the exact shapes (the owner's rule: a school changes source only where the current result is worse than the source); the others keep the mask's shapes
+PACK_CUT = {"school": {"radius": 16, "rim_reach": 0.70}}   # the pack cut's parameters per group (`pack_symbol.cut_symbol`): the school buttons' symbols are solid, a wider closing; their dome's rim shade at the lower right is no symbol
+
+
+def source_of(tab: Tab) -> str:
+    return SOURCE_OVERRIDES.get(tab.name) or SYMBOL_SOURCE[tab.group]
+
+
+def pack_local(frames: Path) -> Path:
+    """The `local/` folder of the checkout the census frames live in (`local/steamwoven-ui/census/frames`): the HD pack lies under it."""
+    return frames.resolve().parents[2]
+
+
+def pack_glyph_shape(symbol: "pack_symbol.PackSymbol", pixels: tuple[int, int]) -> GlyphShape:
+    """The pack symbol as a smooth curve at the master's size: its blurred field sampled at `GLYPH_SS` points a master pixel per axis (bilinear), cut at one half, over the fit's shift and scale."""
+    pw, ph = pixels
+    sw, sh = pw * GLYPH_SS, ph * GLYPH_SS
+    cw, ch = symbol.w / symbol.sx, symbol.h / symbol.sy
+    fit, field, w, h = symbol.fit, symbol.field, symbol.w, symbol.h
+    inside = []
+    for v in range(sh):
+        oy = (v + 0.5) / sh * ch
+        line = bytearray(sw)
+        for u in range(sw):
+            px, py = pack_symbol.to_pack(symbol.centre, symbol.sx, symbol.sy, fit.scale, fit.dx, fit.dy, (u + 0.5) / sw * cw, oy)
+            fx, fy = px - 0.5, py - 0.5
+            x0, y0 = int(math.floor(fx)), int(math.floor(fy))
+            tx, ty = fx - x0, fy - y0
+            acc = 0.0
+            for yy, wy in ((y0, 1 - ty), (y0 + 1, ty)):
+                for xx, wx in ((x0, 1 - tx), (x0 + 1, tx)):
+                    if 0 <= xx < w and 0 <= yy < h:
+                        acc += field[yy * w + xx] * wx * wy
+            line[u] = 1 if acc >= 0.5 else 0
+        inside.append(line)
+    return shape_of_inside(inside, pixels)
 
 
 def tab_symbol(frames: Path, tab: Tab, pixels: tuple[int, int]) -> TabSymbol:
@@ -918,16 +970,30 @@ def tab_symbol(frames: Path, tab: Tab, pixels: tuple[int, int]) -> TabSymbol:
     add, drop = tuple(override.get("shapes", ())), tuple(override.get("shapes_drop", ()))
     n = idle.w * idle.h
     clip = [alpha_at(idle, i % idle.w, i // idle.w) > 0 for i in range(n)]
+    if source_of(tab) == "pack":
+        try:
+            full = symbol_mask(idle, pressed, dict(plain, shapes=add, shapes_drop=drop) if override.get("shapes_only") else plain)
+            dark = symbol_mask(idle, pressed, dict(plain, fill=0)) if not override.get("shapes_only") else full
+            cx, cy, radius = disc_of(idle)
+            found = pack_symbol.pack_symbol(pack_local(frames), tab.name, (idle.w, idle.h), (cx, cy, dome_radius((cx, cy, radius))), full, PACK_CUT.get(tab.group))
+        except pack_symbol.PackError:
+            found = None   # no pack on this machine: the mask's reconstruction below
+        if found is not None:
+            cover = pack_symbol.coverage_at_cells(found.field, found.w, found.h, found.centre, found.sx, found.sy, found.fit.scale, found.fit.dx, found.fit.dy, idle.w, idle.h)
+            colour_cells = [c >= PACK_COLOUR_COVER for c in cover]   # the original's own colour of the symbol: its cells under the fitted pack symbol
+            if sum(colour_cells) < 4:
+                colour_cells = [c >= 0.3 for c in cover]
+            return TabSymbol(pack_glyph_shape(found, pixels), None, colour_cells, [False] * n, "pack", found, [a or c >= 0.25 for a, c in zip(full, cover)])
     if override.get("shapes_only"):   # the shapes are the whole symbol (a top hat, two gears)
         cells = symbol_mask(idle, pressed, override)
-        return TabSymbol(glyph_shape([False] * n, idle.w, idle.h, pixels, add, drop, lines=True, clip=clip), None, cells, [False] * n)
+        return TabSymbol(glyph_shape([False] * n, idle.w, idle.h, pixels, add, drop, lines=True, clip=clip), None, cells, [False] * n, cells=cells)
     dark = symbol_mask(idle, pressed, dict(plain, fill=0))
     full = symbol_mask(idle, pressed, plain)
     body = [f and not d for f, d in zip(full, dark)]
     shape_body = glyph_shape(full, idle.w, idle.h, pixels, add, drop, clip=clip) if sum(body) >= max(6, 0.3 * sum(dark)) else None
     if shape_body is None:
         body = [False] * n
-    return TabSymbol(glyph_shape(dark, idle.w, idle.h, pixels, add, drop, lines=True, clip=clip), shape_body, dark, body)
+    return TabSymbol(glyph_shape(dark, idle.w, idle.h, pixels, add, drop, lines=True, clip=clip), shape_body, dark, body, cells=full)
 
 
 def symbol_image(symbol: TabSymbol, frame: Image) -> Image:
@@ -945,8 +1011,8 @@ def tab_parts(frames: Path, tab: Tab, plate_dir: Path | None) -> dict[str, Image
     clip = plate if plate is not None else silhouette_clip(idle, pixels)
     symbol = tab_symbol(frames, tab, pixels)
     return {f"glyph.{tab.name}": symbol_image(symbol, idle),
-            f"plate.{tab.name}_hover": lit_overlay(hover, idle, mask, pixels, clip, symbol_image(symbol, hover)),
-            f"plate.{tab.name}_pressed": lit_overlay(pressed, idle, mask, pixels, clip, symbol_image(symbol, pressed))}
+            f"plate.{tab.name}_hover": lit_overlay(hover, idle, symbol.cells or mask, pixels, clip, symbol_image(symbol, hover)),
+            f"plate.{tab.name}_pressed": lit_overlay(pressed, idle, symbol.cells or mask, pixels, clip, symbol_image(symbol, pressed))}
 
 
 def build_parts(frames: Path, plate_dir: Path | None, tabs: list[Tab]) -> dict[str, Image]:
@@ -1150,12 +1216,30 @@ def source_folders(ident: str) -> tuple[Tab, str]:
     raise SchoolError(f"{ident} belongs to no button of this slice")
 
 
+_SYMBOLS: dict = {}
+
+
+def symbol_record(frames: Path, tab: Tab) -> dict:
+    """Where the symbol's outline comes from (`pack`: the HD pack's frame, cut and fitted; `mask`: the original's own mask, rule F's reconstruction; `codex`/`manual` when a symbol is drawn by Codex or by hand) and how it was fitted."""
+    key = (str(frames), tab.name)
+    if key not in _SYMBOLS:
+        symbol = tab_symbol(frames, tab, master_of(tab.name))
+        record: dict = {"source": symbol.source}
+        if symbol.pack is not None:
+            fit = symbol.pack.fit
+            record["pack_frame"] = {"art": tab.name, "frame": 0, "sha12": symbol.pack.sha12}
+            record["fit"] = {"scale": fit.scale, "dx": fit.dx, "dy": fit.dy, "overlap": fit.score, "contour_within_3_cells": fit.contour, "flagged": fit.flagged}
+            record["cut"] = dict(PACK_CUT.get(tab.group) or {}, top_hat_radius=pack_symbol.TOP_HAT_RADIUS, top_hat_depth=pack_symbol.TOP_HAT_DEPTH, symbol_ratio=pack_symbol.SYMBOL_RATIO, reach=pack_symbol.REACH, far_piece=pack_symbol.FAR_PIECE, blur_sigma=pack_symbol.BLUR_SIGMA)
+        _SYMBOLS[key] = record
+    return _SYMBOLS[key]
+
+
 def record_of(ident: str, frames: Path, image_path: Path, image: Image) -> dict:
     """The provenance record of a rule-made part (SWI-GEN-6): no generator, the rule and the hashes of the original frames it read."""
     tab, _ = source_folders(ident)
     return {"part": ident, "rule": "school_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(),
             "sources": {f"{tab.folder}/f{k}": button_kit.sha256_file(frames / tab.folder / f"f{k}.png") for k in range(3)},
-            "empty": not any(image.data[3::4]), "overrides": {k: (list(v) if isinstance(v, tuple) else v) for k, v in override_of(tab).items()},
+            "empty": not any(image.data[3::4]), "symbol": symbol_record(frames, tab), "overrides": {k: (list(v) if isinstance(v, tuple) else v) for k, v in override_of(tab).items()},
             "parameters": {"dome_share": DOME_SHARE, "reach_share": REACH_SHARE, "windows": [list(w) for w in WINDOWS], "percentile": PERCENTILE, "min_drop": MIN_DROP, "max_l": MAX_L, "max_l_read": MAX_L_READ, "read": "pressed (override read: idle)", "median": list(DEFAULT_MEDIAN), "median_percentile": MEDIAN_PERCENTILE, "grow_passes": GROW_PASSES, "max_gain": MAX_GAIN, "hole_max": HOLE_MAX, "speck": SPECK, "fill_de": FILL_DE, "fill_near": FILL_NEAR, "fill_window": FILL_WINDOW, "place_scale": PLACE_SCALE, "edge_pull": EDGE_PULL, "enlarge": ENLARGE, "rim_drop": RIM_DROP, "rim_share": RIM_SHARE,
                            "lift_min_alpha": LIFT_MIN_ALPHA, "lift_sigma": LIFT_SIGMA, "dead_de": button_kit.DEAD_DE, "solid_de": button_kit.SOLID_DE, "crisp_sigma": button_kit.CRISP_SIGMA, "edge_half": button_kit.EDGE_HALF, "master": [image.w, image.h]},
             "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [image.w, image.h], "run_by": "agent"}
@@ -1228,9 +1312,17 @@ def cmd_sheet(args: argparse.Namespace) -> int:
             face = over(plate, parts[f"glyph.{tab.name}"])
             shots = [(idle, face), (hover, over(face, parts[f"plate.{tab.name}_hover"])), (pressed, over(face, parts[f"plate.{tab.name}_pressed"]))]
             size = master_of(tab.name)
-            if args.layout == "owner":
+            if args.layout in ("owner", "source"):
                 cells = []
-                for tag, image, nearest in (("o-idle", upscaled(idle, size), True), ("k-idle", shots[0][1], False), ("o-pressed", upscaled(pressed, size), True), ("k-pressed", shots[2][1], False)):
+                if args.layout == "source":   # ORIGINAL idle | SOURCE (the pack's HD frame the symbol is cut from) | KIT idle | KIT pressed
+                    try:
+                        source = pack_symbol.read_pack(pack_local(frames), tab.name, 0)[0]
+                    except pack_symbol.PackError:
+                        source = Image(*size, bytearray(size[0] * size[1] * 4))
+                    columns4 = (("o-idle", upscaled(idle, size), True), ("source", source, False), ("k-idle", shots[0][1], False), ("k-pressed", shots[2][1], False))
+                else:
+                    columns4 = (("o-idle", upscaled(idle, size), True), ("k-idle", shots[0][1], False), ("o-pressed", upscaled(pressed, size), True), ("k-pressed", shots[2][1], False))
+                for tag, image, nearest in columns4:
                     path = work / f"{tab.name}-{tag}.png"
                     pngio.write(path, image)
                     subprocess.run(["magick", str(path), "-background", "#202020", "-alpha", "remove", "-alpha", "off", "-filter", "point" if nearest else "Lanczos", "-resize", f"{size[0] * args.zoom}x{size[1] * args.zoom}!",
@@ -1238,6 +1330,10 @@ def cmd_sheet(args: argparse.Namespace) -> int:
                     cells.append(path)
                 row = work / f"{tab.name}-row.png"
                 subprocess.run(["magick", *cells, "+append", str(row)], check=True)
+                if args.layout == "source":   # the button's name and where its symbol comes from, in English, on the row's first cell
+                    sym = tab_symbol(frames, tab, size)
+                    note = f"{tab.name} [{sym.source}]" + (f" drift {sym.pack.fit.contour:.2f}{' FLAG' if sym.pack.fit.flagged else ''}" if sym.pack is not None else "")
+                    subprocess.run(["magick", str(row), "-font", LABEL_FONT, "-fill", "white", "-undercolor", "#00000099", "-pointsize", "16", "-gravity", "southwest", "-annotate", "+4+2", note, str(row)], check=True)
                 rows.append(row)
                 continue
             columns = []
@@ -1259,14 +1355,15 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         grid = []
         for k in range(0, len(rows), per):
             line = work / f"line-{k}.png"
-            subprocess.run(["magick", *rows[k:k + per], "+append", "-background", "#202020", "-extent", f"{cell * (4 if args.layout == 'owner' else 3) * per}x{cell * (1 if args.layout == 'owner' else 2)}", str(line)], check=True)
+            subprocess.run(["magick", *rows[k:k + per], "+append", "-background", "#202020", "-extent", f"{cell * (4 if args.layout in ('owner', 'source') else 3) * per}x{cell * (1 if args.layout in ('owner', 'source') else 2)}", str(line)], check=True)
             grid.append(line)
         sheet = work / "sheet.png"
         subprocess.run(["magick", *grid, "-background", "#202020", "-append", str(sheet)], check=True)
         head = work / "head.png"
         caption = (f"{args.title}: columns per button: ORIGINAL idle | KIT idle | ORIGINAL pressed | KIT pressed (variant A)" if args.layout == "owner"
+                   else f"{args.title}: columns per button: ORIGINAL idle (x{args.zoom}) | SOURCE (HD pack frame) | KIT idle | KIT pressed" if args.layout == "source"
                    else f"{args.title}: top of each pair = ORIGINAL (nearest cells), bottom = KIT (plate + glyph + overlays); columns per button: idle, hover, pressed")
-        subprocess.run(["magick", "-size", f"{cell * (4 if args.layout == 'owner' else 3) * per}x40", "xc:#202020", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "22", "-gravity", "west", "-annotate", "+10+0", caption, str(head)], check=True)
+        subprocess.run(["magick", "-size", f"{cell * (4 if args.layout in ('owner', 'source') else 3) * per}x40", "xc:#202020", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "22", "-gravity", "west", "-annotate", "+10+0", caption, str(head)], check=True)
         subprocess.run(["magick", str(head), str(sheet), "-append", str(args.out)], check=True)
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -1362,7 +1459,7 @@ def main(argv: list[str] | None = None) -> int:
             s.add_argument("--only")
             s.add_argument("--plate-dir", type=Path)
             s.add_argument("--columns", type=int, default=2)
-            s.add_argument("--layout", choices=("states", "owner"), default="states", help="states: idle, hover, pressed with the original above the kit; owner: original idle | kit idle | original pressed | kit pressed in one row")
+            s.add_argument("--layout", choices=("states", "owner", "source"), default="states", help="states: idle, hover, pressed with the original above the kit; owner: original idle | kit idle | original pressed | kit pressed in one row; source: original idle | the HD pack frame the symbol is cut from | kit idle | kit pressed")
             s.add_argument("--title", default="ARC-UI-3204, coloured-dome buttons")
     sub.add_parser("self-test")
     args = parser.parse_args(argv)
