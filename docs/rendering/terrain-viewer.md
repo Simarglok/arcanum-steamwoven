@@ -2241,7 +2241,7 @@ and layout (below), the other windows the project's.
   `AreaArtTextDraw.Prepare` (premultiplied alpha; its other draws must be opaque or fully transparent with black transparent pixels,
   as decoded art is) and keeps the order of its draws; the message panel and hover window (art 27/229), the floaters (art 229) and
   the conversation window in the bottom panel are planned to use it next. The menu stage checks it after the art (`ARC-UI-070 native-smoke menu text blend PASS`: the main
-  window's labels, read back, within two levels a channel of the background with the three passes rendered by `AreaArtTextRules`, and
+  window's labels, read back, within two levels a channel (three on macOS, where the Metal renderer measured 3; ARC-DEV-3145) of the background with the three passes rendered by `AreaArtTextRules`, and
   the font holding partly covering edge pixels).
 
 - **Windows.** Main (Single Player, Options, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game

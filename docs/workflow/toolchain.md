@@ -893,7 +893,7 @@ without the flag).
 
 ### Minimized window draw (ARC-DEV-045)
 
-On macOS (Godot 4.7.2, compatibility renderer) a window that cannot draw (`DisplayServer.window_can_draw()` false, seen
+On macOS (Godot 4.7.2, compatibility renderer; measured on OpenGL, not re-measured on the Metal renderer of ARC-DEV-3145) a window that cannot draw (`DisplayServer.window_can_draw()` false, seen
 when the window is minimized) keeps its process frames but the engine skips every draw: `frame_post_draw` never fires,
 so each `FramePostDraw` await of a self-test or smoke waits for its timeout (the cause of the export's exit 124 found in
 ARC-DEV-043). Two throttles make such a run slow as well: the engine sleeps the low-processor time (6.9 ms) after every

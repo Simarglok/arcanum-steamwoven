@@ -202,7 +202,7 @@ public partial class TerrainViewerApp
             var rid = viewport.GetViewportRid();
             RenderingServer.ViewportSetMeasureRenderTime(rid, true);
             // Two ways: "frame" is the smoke's own frame (the area step and the viewer's per-frame work, as the first experiment timed it); "bare" only waits for the next frame, so the
-            // CPU side is as small as the viewer lets it be and the GPU's share shows (the renderer here, OpenGL compatibility, has no GPU timer: the GPU column stays 0).
+            // CPU side is as small as the viewer lets it be and the GPU's share shows (the OpenGL compatibility renderer has no GPU timer and its GPU column stays 0; on macOS the viewer now runs Metal, whose column is read).
             async Task<(double Mean, double P95, double Gpu, double Cpu)> Time90(bool bare)
             {
                 for (var i = 0; i < 6; i++) { if (!bare) AreaSmokeFrame(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
