@@ -338,7 +338,8 @@ public sealed partial class GameSessionOwner
             var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, source.Units == count ? container : null);
             if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
             var hero = HeroStackOfType(source.AmmoType);
-            return MoveUnits(source, count, hero, hero is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
+            var report = new CreatedScripts { Defer = true };
+            return MoveUnits(source, count, hero, hero is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck, scripts, report) : null, insert, report);
         }
         if (_inventory.Lists.IsContainer(container) && _inventory.AddedTo(container).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
             return Take(seed, new(item, _inventory.AddedFacts(added)), container, insertCheck, scripts);

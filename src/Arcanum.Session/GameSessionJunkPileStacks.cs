@@ -65,7 +65,8 @@ public sealed partial class GameSessionOwner
         _lootedPile = found.Entity;
         try
         {
-            var result = MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
+            var report = new CreatedScripts { Defer = true };
+            var result = MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck, scripts, report) : null, insert, report);
             if (result.Disposition == GameSessionDisposition.Changed && source.Units == count) CancelDecay(item);
             return result;
         }
