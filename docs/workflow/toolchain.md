@@ -1410,6 +1410,19 @@ python3 -B tools/steamwoven_ui/button_kit.py sheet --out FILE          # the bef
 `build_kit.py` writes the manifest rows (the five plates and the lit faces from the census, the glyphs, lit glyphs and overlays as new rows of batch B-BUTTONS, all `master`). A glyph or an overlay is an original frame over its base frame: the symbol's cells in their own colours with a smooth sharp outline, the glow or darkening a separate soft layer under it; laid over the plate
 it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. A glyph layer of high contrast (the lit symbols, the globe) keeps the symbol as the core and lets its soft edge fall off outward as a halo (alpha = distance over the core threshold, no plateau, no rim; constants `CORE_DE`, `CORE_SHARE`, `HALO_*` in `button_kit.py`). Rule E is the glyph rule of the whole #2482 batch, slices included. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
 
+## Steamwoven small stone and dark buttons, batch B-BUTTONS slice 6 (ARC-UI-3206)
+
+The kit parts of the small stone and dark buttons (the round skill and slider buttons, the spell and technology Add / Remove, the olive plus and minus, the scroll arrows, the follower strips; 16 arts, 54 parts), made by the PACK-FIRST rule P ([TRD](../ui/steamwoven-interface-trd.md#asset-kit)): each part is the old HD pack's frame of that state with an analytic alpha, no Codex. Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 16 pack-first buttons and the 2 generated ones: the pack frames found per state, the manifest size check
+python3 -B tools/steamwoven_ui/small_kit.py build [--only NAME,...] [--dry-run] [--pack DIR]   # plate / _hover / _pressed / empty glyph -> masters/ and provenance/rule/ (pack file and hash in each record)
+python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]      # the composite original | idle | hover | pressed (English labels)
+python3 -B tools/steamwoven_ui/small_kit.py self-test
+```
+
+The pack is `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x` (`--pack` names another); it is read, never written, and `build` fails with the list of missing states when the pack lacks a frame the table expects. A round button's alpha is the ellipse inscribed in the opaque box of its idle frame, applied to every state so all states share one edge; its old transparent pixels are first bled four pixels outward so no dark fringe shows. The two skill-point Plus / Minus buttons (257, 258) have no pack frame (`GENERATED` in the table): they wait for their own Codex step. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_small_kit` (about 1 s; also in `tools/local_dev/run_tests.py`).
+
 ## Steamwoven gauges and readouts, batch B-GAUGES (ARC-UI-2483)
 
 Production of the 56 gauge parts (vials, bars, the clock, experience pips, scroll thumbs, ammunition counters, the load watch, pointers; TRD SWI-KIT-6). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
