@@ -387,7 +387,7 @@ class SurfaceComposeTests(unittest.TestCase):
                     surface_compose.load_spec(path)
 
     def test_a_spec_with_the_retired_plate_boxes_is_refused(self):
-        """ARC-UI-3271: the inventory ovals' plate is a kit part now (`plate.inventory_oval`, laid by `kit_parts`), the analytic triangles of #3290 are gone."""
+        """ARC-UI-3205: the inventory ovals are kit parts now (`plate.use_box_off`, `plate.drop_off`, laid by `kit_parts`), the analytic triangles of #3290 are gone."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "spec.json"
             path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": [[10, 10, 110, 110, 70, 60]]}), encoding="utf-8")

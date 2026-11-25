@@ -63,7 +63,7 @@ class AlphaTests(unittest.TestCase):
         self.assertLess(len(partial), W * H // 8)
 
     def test_the_four_corners_are_alike(self) -> None:
-        self.assertEqual(sum(1 for y in range(H // 2) for x in range(W // 2) if pk.coverage(x, y) == 0.0) > 0, True)
+        self.assertGreater(sum(1 for y in range(H // 2) for x in range(W // 2) if pk.coverage(x, y) == 0.0), 0)
         left = sum(pk.coverage(x, y) for y in range(H) for x in range(20))
         right = sum(pk.coverage(W - 1 - x, y) for y in range(H) for x in range(20))
         self.assertAlmostEqual(left, right, delta=left * 0.15)         # the ring is a pixel and a half off the middle: nearly the same
@@ -119,12 +119,6 @@ class BuildTests(unittest.TestCase):
             local = make_local(root)
             self.assertEqual(pk.main(["build", "--local-root", str(local), "--only", "nobox", "--dry-run"]), 2)
             self.assertEqual(pk.main(["build", "--local-root", str(root / "nowhere" / "steamwoven-ui"), "--dry-run"]), 2)
-
-    def test_owner_of(self) -> None:
-        self.assertEqual(pk.owner_of("state.drop_ill").art, 224)
-        self.assertEqual(pk.owner_of("plate.gamble_box_off").art, 345)
-        with self.assertRaises(pk.ParchmentError):
-            pk.owner_of("glyph.nothing")
 
     def test_self_test(self) -> None:
         with redirect_stdout(io.StringIO()):

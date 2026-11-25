@@ -174,13 +174,6 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def owner_of(ident: str) -> Box:
-    for box in BOXES:
-        if ident in part_ids(box):
-            return box
-    raise ParchmentError(f"{ident} belongs to no box of this slice")
-
-
 def record_of(ident: str, local: Path, image_path: Path) -> dict:
     """The provenance record of a rule-made part (SWI-GEN-6): no generator, the rule and the hash of the pack frame it took."""
     source = pack_frame(local, pack_name(ident))
