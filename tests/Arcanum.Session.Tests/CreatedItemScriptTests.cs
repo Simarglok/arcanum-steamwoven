@@ -226,4 +226,62 @@ public sealed class CreatedItemScriptTests
         var added = plain.AddItemToNpc(plain.Version, "virgil", Bullets, Accept, (0, 10), new Host(plain));
         Assert.AreEqual((GameSessionDisposition.Changed, 0), (added.Disposition, added.Scripts.Count));
     }
+
+    // ARC-SCRIPT-2909 (ledger TQ19; exe 0x466640's merge branch, 0x462930): ammunition the session adds to an NPC that holds a stack of its prototype is a created object too: it runs its get (4) script before the insert check and its insert-item (21) script
+    // before it is destroyed and its units join the stack, with the NPC as the triggerer. Gold and ammunition moves onto an existing pile or stack (0x464830, 0x4658E0) create no object and run none of this.
+    [TestMethod]
+    public void Ammunition_added_to_an_npc_stack_runs_the_incoming_objects_get_then_insert_script_and_the_units_join_the_stack()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        Assert.AreEqual("made:1", owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10), host).Item);
+        var merged = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 5), host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, "made:1"), (merged.Disposition, merged.Failure, merged.Item), "the result names the stack");
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:2"), (SessionScriptPoint.InsertItem, "made:2") }, Points(merged), "the incoming object is the attachee");
+        Assert.IsNotNull(merged.InsertScript);
+        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6" }, merged.Messages.Select(message => message.Text).ToArray());
+        Assert.AreEqual(15, owner.QueryAmmo("made:1")?.Units);
+        Assert.IsNull(owner.QueryAmmo("made:2"), "the incoming object is not kept");
+        Assert.IsFalse(owner.IsItemDestroyed("made:2"), "and leaves no deleted-item record");
+    }
+
+    [TestMethod]
+    public void A_get_script_that_skips_the_default_refuses_an_ammunition_merge_and_the_stack_keeps_its_units()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        Assert.AreEqual("made:1", owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10), host).Item);
+        host.Programs[GetScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var revision = owner.Version.Revision;
+        var refused = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 5), host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, (int?)SessionScriptPoint.Get), (refused.Disposition, refused.Failure, refused.DeclinedBy));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:2") }, Points(refused), "the insert-item script is not run");
+        Assert.AreEqual((revision, 10), (owner.Version.Revision, owner.QueryAmmo("made:1")!.Value.Units));
+    }
+
+    [TestMethod]
+    public void An_insert_check_refusal_of_an_ammunition_merge_applies_none_of_the_scripts_effects_and_a_missing_host_refuses_a_scripted_merge()
+    {
+        using var owner = Hero();
+        var host = new Host(owner);
+        Assert.AreEqual("made:1", owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10), host).Item);
+        var flag = ReadFlag(owner, 3);
+        var refused = owner.AddItemToNpc(owner.Version, "virgil", Bullets, _ => SessionInsertVerdict.NoRoom, (0, 5), host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, SessionInsertVerdict.NoRoom), (refused.Disposition, refused.Failure, refused.Verdict));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "made:2") }, Points(refused));
+        Assert.AreEqual((flag, 10), (ReadFlag(owner, 3), owner.QueryAmmo("made:1")!.Value.Units));
+        var unsupported = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 5));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (unsupported.Disposition, unsupported.Failure));
+        Assert.AreEqual(10, owner.QueryAmmo("made:1")!.Value.Units);
+    }
+
+    [TestMethod]
+    public void An_ammunition_merge_whose_prototype_has_no_scripts_runs_none_and_still_joins_the_stack()
+    {
+        using var owner = Hero(attach: false);
+        var host = new Host(owner);
+        Assert.AreEqual("made:1", owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 10), host).Item);
+        var merged = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (0, 5), host);
+        Assert.AreEqual((GameSessionDisposition.Changed, "made:1", 0, 15), (merged.Disposition, merged.Item, merged.Scripts.Count, owner.QueryAmmo("made:1")!.Value.Units));
+    }
 }

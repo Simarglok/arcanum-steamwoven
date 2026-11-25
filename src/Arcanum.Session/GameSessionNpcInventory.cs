@@ -37,7 +37,7 @@ public sealed partial class GameSessionOwner
     /// units grow, no item is added: <see cref="InventoryMutationResult.Item"/> names the stack), as the original's insertion does;
     /// a sum that does not fit 32 bits is refused (<see cref="GameSessionFailure.BudgetExceeded"/>).
     /// ARC-SCRIPT-2912: a new item (no merge) runs its prototype's get (4) and insert-item (21) scripts through <paramref name="scripts"/> with the NPC as the triggerer (<see cref="GiveGoldToNpcFromNothing"/>'s rules): the result lists the runs and lines, a get script that skips the default refuses the move
-    /// (<see cref="GameSessionFailure.InsertRefused"/>, <see cref="InventoryMutationResult.DeclinedBy"/>), and a prototype with such a script and no host is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). The merge into a stack runs none (#2909).
+    /// (<see cref="GameSessionFailure.InsertRefused"/>, <see cref="InventoryMutationResult.DeclinedBy"/>), and a prototype with such a script and no host is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). ARC-SCRIPT-2909 (ledger TQ19, NT2): ammunition that joins the NPC's stack of its prototype is a created object too: it runs its prototype's get (4) script before the insert check and its insert-item (21) script before it is destroyed after the units are added, with the NPC as the triggerer, with the same refusals and results as a new item.
     /// </summary>
     public InventoryMutationResult AddItemToNpc(GameSessionVersion expected, string npc, SessionItemKind kind, SessionInsertCheck insertCheck,
         (int AmmoType, int Units)? ammo = null, ISessionItemScriptHost? scripts = null)
@@ -52,7 +52,7 @@ public sealed partial class GameSessionOwner
         if ((kind.Type == SessionItemType.Ammo) != ammo.HasValue || ammo is { } given && (given.AmmoType is < 0 or >= SessionAmmoRecord.AmmoTypes || given.Units < 0))
             return RejectItem(GameSessionFailure.InvalidAmmo);
         if (ammo is { } units && NpcStacks(npc).Where(pair => pair.Prototype == kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault() is { } stack)
-            return MergeIntoNpc(npc, stack, units.Units, insertCheck, kind);
+            return MergeIntoNpc(npc, stack, units.Units, insertCheck, kind, scripts);
         if (ammo is not null && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         // ARC-SCRIPT-2912 (ledger TQ19): the new item moves in through the fresh path 0x4617F0 → 0x461810 → 0x466640, as a restock item or a new pile does: its get (4) script runs before the insert check and its insert-item (21) script
         // at the end, both with the NPC as the triggerer and from the prototype's array (NewNpcEntry); a refused or stale move reports the runs it made.
@@ -65,20 +65,20 @@ public sealed partial class GameSessionOwner
     }
 
     // ARC-WORLD-066: ammunition added to an NPC that holds a stack of its prototype only grows that stack (the inserted object is
-    // destroyed in the original); the host's insert check still answers for the NPC.
-    private InventoryMutationResult MergeIntoNpc(string npc, SessionAmmoRecord stack, int units, SessionInsertCheck insertCheck, SessionItemKind kind)
+    // destroyed in the original); the host's insert check still answers for the NPC. ARC-SCRIPT-2909: the inserted object runs its get (4) and insert-item (21) scripts first (NewNpcEntry, merge mode).
+    private InventoryMutationResult MergeIntoNpc(string npc, SessionAmmoRecord stack, int units, SessionInsertCheck insertCheck, SessionItemKind kind, ISessionItemScriptHost? scripts)
     {
         if ((long)stack.Units + units > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (!_inventory.Ammo.ContainsKey(stack.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
-        var verdict = insertCheck(new SessionInventoryItem(stack.Entity, InventoryDomain.MadeFacts(kind) with { AmmoType = stack.AmmoType, Quantity = units }));
-        ThrowIfDisposed();
-        if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
-        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
-        _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + units };
+        var report = new CreatedScripts();
+        var incoming = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = stack.AmmoType, Quantity = units }, insertCheck, out var refusal, scripts: scripts, report: report, mergeInto: stack);
+        if (incoming is null) return refusal!.Value;
+        // The runs' effects are applied: the stack is read again, as the move adds its units to what it holds now.
+        var current = _inventory.Ammo.TryGetValue(stack.Entity, out var held) ? held : stack;
+        _inventory.Ammo[stack.Entity] = current with { Units = current.Units + units };
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, stack.Entity, verdict, Version);
+        return report.Apply(new(GameSessionDisposition.Changed, GameSessionFailure.None, stack.Entity, SessionInsertVerdict.Accepted, Version));
     }
 
     /// <summary>
