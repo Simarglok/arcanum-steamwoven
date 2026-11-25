@@ -539,8 +539,11 @@ def _closing(channels: list[list[int]], width: int, height: int, window: int) ->
     raw = bytearray(width * height * 3)
     for c in range(3):
         raw[c::3] = bytes(channels[c])
-    body = subprocess.run(["magick", "-size", f"{width}x{height}", "-depth", "8", "rgb:-", "-morphology", "Close", f"Square:{window}", "-depth", "8", "rgb:-"],
-                          input=bytes(raw), capture_output=True)
+    try:
+        body = subprocess.run(["magick", "-size", f"{width}x{height}", "-depth", "8", "rgb:-", "-morphology", "Close", f"Square:{window}", "-depth", "8", "rgb:-"],
+                              input=bytes(raw), capture_output=True)
+    except OSError as error:
+        raise ComposeError(f"the closing of the paper box needs ImageMagick (magick): {error}") from error
     if body.returncode != 0 or len(body.stdout) != width * height * 3:
         raise ComposeError(f"the closing of the paper box failed: {body.stderr.decode('utf-8', 'replace').strip()[:200]}")
     return [list(body.stdout[c::3]) for c in range(3)]
@@ -751,6 +754,10 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     work.mkdir(parents=True, exist_ok=True)
     img_o = pngio.read(original)
     w, h = img_o.w, img_o.h
+    for kind in ("erase_boxes", "text_boxes", "paper_boxes", "wood_boxes"):       # a box outside the image is found before the minutes of work, not after
+        for x0, y0, x1, y1 in getattr(spec, kind):
+            if x1 > w or y1 > h:
+                raise ComposeError(f"{kind[:-1].replace('_', ' ')} {(x0, y0, x1, y1)} is outside the {w} x {h} px image")
     if pngio.read(a).w != w:
         raise ComposeError("the original and the Codex result must have the same size")
     masks = tone_check.load_masks()
@@ -821,10 +828,10 @@ def provenance_record(spec: ZoneSpec, original: Path, a: Path, out: Path, info: 
             "seams": seams, "tone": {"screen": spec.screen, "pass": tone["pass"], "failed": tone["failed"], "regions": regions}, "gates": evaluate_gates(seams, tone)}
 
 
-def tone_masks_for(spec: ZoneSpec) -> dict | None:
+def tone_masks_for(spec: ZoneSpec, width: int = 2880, height: int = 2160) -> dict | None:
     """The tone masks of the check with the spec's text and paper boxes added to the screen's excluded content (ARC-UI-3165): the text the game draws is taken out of the
     surface on purpose, so the tone of the paper and of the black fields is measured where the surface keeps the original's own (a page with its text erased would read as a
-    brighter paper otherwise). Boxes are master pixels; the masks are the 800 x 600 layout, so a box is divided by the layout scale (3.6 px a unit) and rounded outward.
+    brighter paper otherwise). Boxes are master pixels of a `width` x `height` image (the contexts' 2880 x 2160); the masks are the 800 x 600 layout, so a box is divided by the layout scale (3.6 px a unit for the contexts) and rounded outward.
     None (the file's masks as they are) when the spec has no such box."""
     boxes = spec.text_boxes + spec.paper_boxes
     if not boxes:
@@ -832,9 +839,9 @@ def tone_masks_for(spec: ZoneSpec) -> dict | None:
     masks = copy.deepcopy(tone_check.load_masks())
     if spec.screen not in masks["screens"]:
         return None                                       # the check names the missing screen itself
-    scale = 2880 / tone_check.TARGET_W
+    sx, sy = width / tone_check.TARGET_W, height / tone_check.TARGET_H
     masks["screens"][spec.screen].setdefault("exclude", []).extend(
-        [math.floor(x0 / scale), math.floor(y0 / scale), math.ceil(x1 / scale), math.ceil(y1 / scale)] for x0, y0, x1, y1 in boxes)
+        [math.floor(x0 / sx), math.floor(y0 / sy), math.ceil(x1 / sx), math.ceil(y1 / sy)] for x0, y0, x1, y1 in boxes)
     return masks
 
 
@@ -843,7 +850,7 @@ def build(original: Path, a: Path, out: Path, work: Path, provenance: Path, spec
     info = compose(original, a, out, work, bevel_mode, spec, kit_base)
     image = pngio.read(out)
     seams = [{"join": f"y={j}", "ratio": surface_metrics.join_seam(image, "y", j)} for j in spec.joins]
-    tone = tone_check.compare_screen_files(spec.screen, original, out, tone_masks_for(spec))
+    tone = tone_check.compare_screen_files(spec.screen, original, out, tone_masks_for(spec, image.w, image.h))
     record = provenance_record(spec, original, a, out, info, seams, tone, bevel_mode, datetime.datetime.now(datetime.timezone.utc))
     provenance.parent.mkdir(parents=True, exist_ok=True)
     provenance.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")

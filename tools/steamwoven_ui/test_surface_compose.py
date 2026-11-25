@@ -419,6 +419,25 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertIn([0, 1, 12, 23], exclude)
         self.assertNotIn([222, 94, 434, 386], surface_compose.tone_check.load_masks()["screens"]["ctx-reading"]["exclude"])   # the file's own masks are not changed
 
+    def test_erase_text_at_the_image_corner_and_with_a_halo_that_leaves_little_ground(self):
+        image = self._flat(30, 20, 5)
+        self._paint(image, 0, 0, 10, 14, (240, 240, 240))                       # a thick glyph touching the top left corner of the image: no ring above or left of the box
+        self.assertGreater(surface_compose.erase_text(image, ((0, 0, 14, 18),)), 10 * 14)
+        self.assertLessEqual(max(image.pixel(4, 6)[:3]), 8)
+        tight = self._flat(24, 24, 6)
+        self._paint(tight, 6, 6, 18, 18, (250, 250, 250))                        # a glyph that fills most of a small box: the widest halo would leave no ground, a narrower one is taken
+        surface_compose.erase_text(tight, ((4, 4, 20, 20),))
+        self.assertLessEqual(max(tight.pixel(12, 12)[:3]), 8)
+
+    def test_compose_refuses_a_box_outside_the_image_before_any_work(self):
+        spec = surface_compose.ZoneSpec(id="a", screen="ctx-inventory", text_boxes=((10, 10, 5000, 50),))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pngio.write(root / "o.png", self._flat(40, 40, 9))
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.compose(root / "o.png", root / "o.png", root / "out.png", root / "work", spec=spec)
+            self.assertFalse((root / "out.png").exists())
+
     def test_the_committed_zone_specs_load_and_their_boxes_lie_in_the_window_zone(self):
         folder = Path(__file__).parent / "zone_specs"
         names = sorted(p.name for p in folder.glob("*.json"))
