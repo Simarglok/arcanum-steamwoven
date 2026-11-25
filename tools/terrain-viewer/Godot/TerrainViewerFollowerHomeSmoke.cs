@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
         require(BarterOpen, "the barter window opened for the visitor: " + _barterStatus);
         var view = barter!.View();
         var kept = holder!.Value.Holder.Items.Count(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold);
-        require(view.Wares.Count <= kept, $"the window shows the visitor's own list: {view.Wares.Count} wares of {kept}");
+        require(view.Wares.Count <= kept && (kept == 0 || view.Wares.Count > 0), $"the window shows the visitor's own list: {view.Wares.Count} wares of {kept}");
         GD.Print("ARC-WORLD-3118 native-smoke visitor-barter PASS " + System.Text.Json.JsonSerializer.Serialize(new { Visitor = entity, Shown = CurrentAreaMap, Home = holder.Value.Map.RuntimeMap, Wares = view.Wares.Count, Listed = kept }));
         CloseBarterByPlayer();
     }

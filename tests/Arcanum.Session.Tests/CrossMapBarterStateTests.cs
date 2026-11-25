@@ -38,7 +38,8 @@ public sealed class CrossMapBarterStateTests
         Assert.AreEqual(Cave, found.Map);
         CollectionAssert.AreEqual(new[] { "locket", "bow", "locket-2" }, found.Holder.Items.Select(item => item.Entity).ToArray());
         Assert.IsNull(owner.QueryNpcHolder("nobody"));
-        Assert.AreEqual(Cave, owner.QueryNpcHolder("pal")!.Value.Map);
+        Assert.IsFalse(found.Holder.Dead);
+        Assert.ThrowsExactly<ArgumentException>(() => owner.QueryNpcHolder(""));
     }
 
     [TestMethod]
