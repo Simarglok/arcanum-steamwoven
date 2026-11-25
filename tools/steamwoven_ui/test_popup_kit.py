@@ -34,6 +34,41 @@ class PopupKitTests(unittest.TestCase):
             self.assertEqual(row["provenance"], popup_kit.provenance_of(spec.ident))
             self.assertTrue(all(side % popup_kit.GRID == 0 for side in row["size"]), spec.ident)
 
+    def test_pack_first_where_a_frame_exists(self):
+        by = popup_kit.BY_ID
+        self.assertEqual(sorted(s.art for s in popup_kit.SPECS if not s.pack), ["128", "642", "826"])
+        self.assertEqual(popup_kit.provenance_of("hardware.mess_rot"), "pack:popup_kit:hardware.mess_rot")
+        self.assertEqual(popup_kit.provenance_of("hardware.skill_ro"), "rule:popup_kit:hardware.skill_ro")
+        self.assertIn("pack-first", popup_kit.note_of("hardware.trap_rot"))
+        self.assertIn("sample icon", popup_kit.note_of("hardware.magickweapon_rot"))
+        self.assertEqual(by["hardware.magickweapon_rot"].pack_clear, ((32, 58, 128, 95),))
+
+    def test_pack_master_takes_the_frame_and_the_originals_alpha(self):
+        original = synthetic()
+        spec = popup_kit.Spec("hardware.test", "0", "test", "rot", pack="x/test")
+        frame = pngio.Image.blank(160, 96, (70, 60, 50, 255))            # 4 times the original; a pack frame with its own wrong alpha
+        for y in range(0, 12):
+            for x in range(0, 24):
+                frame.data[(y * 160 + x) * 4:(y * 160 + x) * 4 + 4] = bytes((255, 0, 255, 255))   # the pack covers the hole with magenta: it must not show
+        image, extra = popup_kit.pack_master(spec, frame, original, (144, 84))
+        self.assertEqual(image.pixel(1, 1)[3], 0, "the alpha is the original's")
+        self.assertEqual(image.pixel(100, 60)[3], 255)
+        self.assertEqual(image.pixel(100, 60)[:3], (70, 60, 50))
+        self.assertEqual(extra["pack_scale"], 4)
+        self.assertEqual(popup_kit.gates(spec, image, (144, 84), original, rule_build=False), [])
+        with self.assertRaises(popup_kit.KitError):
+            popup_kit.pack_master(spec, pngio.Image.blank(100, 50, (1, 1, 1, 255)), original, (144, 84))
+
+    def test_pack_master_paints_out_a_stand_in(self):
+        original = pngio.Image.blank(40, 24, (60, 60, 60, 255))
+        frame = pngio.Image.blank(160, 96, (4, 4, 6, 255))
+        for y in range(60, 90):
+            for x in range(20, 60):
+                frame.data[(y * 160 + x) * 4:(y * 160 + x) * 4 + 4] = bytes((20, 20, 220, 255))      # a blue sample icon
+        spec = popup_kit.Spec("hardware.test", "0", "test", "rot", pack="x/test", pack_clear=((5, 15, 15, 22),))
+        image, _ = popup_kit.pack_master(spec, frame, original, (144, 84))
+        self.assertLess(image.pixel(30, 60)[2], 20, "the stand-in is gone")
+
     def test_the_seventeen_arts_of_the_issue(self):
         self.assertEqual(sorted(int(s.art) for s in popup_kit.SPECS),
                          sorted([7, 128, 200, 274, 288, 290, 291, 354, 564, 642, 842, 822, 298, 826, 292, 565, 328]))

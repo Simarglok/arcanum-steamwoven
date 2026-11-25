@@ -88,6 +88,8 @@ class Spec:
     fills: tuple = ()                  # (x0, y0, x1, y1, (r, g, b)): a flat fill (a window that is dark grey)
     force_w: tuple = ()                # boxes made window dark (a baked detail inside a window)
     force_i: tuple = ()                # boxes made iron
+    pack: str = ""                     # the old HD pack's frame of this art (path under the pack's `interface/`, no `-f000.png`): pack-first, see below; empty = no good frame, the rule build is the master
+    pack_clear: tuple = ()             # (x0, y0, x1, y1) original px: a stand-in baked into the pack's frame (a sample icon) is painted out with the window's colour
     note: str = ""
 
 
@@ -101,42 +103,46 @@ def face(cx: float, cy: float, rm: float) -> tuple:
     return ("ellipse", cx, cy, rm - RING_BAND / 2 + 0.3, rm - RING_BAND / 2 + 0.3)     # the original's face inside a ring (a little under the band)
 
 SPECS: tuple[Spec, ...] = (
-    Spec("hardware.mess_rot", "7", "mess_rot", "rot", rivets=RIV_L + ((354.0, 30.0), (354.0, 56.0), (354.0, 79.5)),
+    Spec("hardware.mess_rot", "7", "mess_rot", "rot", pack="dialogue/buttons/mess_rot", rivets=RIV_L + ((354.0, 30.0), (354.0, 56.0), (354.0, 79.5)),
          rings=((383.0, 32.3, 17.2), (383.0, 75.7, 17.2)), copies=(face(383.0, 32.3, 17.2), face(383.0, 75.7, 17.2)), note="the big message window with the riveted side tabs and two round sockets"),
     Spec("hardware.skill_ro", "128", "skill_ro", "plain", note="an olive noise art, no brass, no window, no sockets: classified unused, the master is the plain iron plate of its size"),
-    Spec("hardware.mpwt_rot", "200", "MpWt_Rot", "rot", rings=((101.7, 74.3, 19.3), (216.7, 75.3, 19.3), (331.7, 75.3, 19.3), (29.3, 27.8, 14.3), (28.5, 54.5, 14.3), (28.4, 81.3, 14.3)),
+    Spec("hardware.mpwt_rot", "200", "MpWt_Rot", "rot", pack="multiplayer/buttons/mpwt_rot", rings=((101.7, 74.3, 19.3), (216.7, 75.3, 19.3), (331.7, 75.3, 19.3), (29.3, 27.8, 14.3), (28.5, 54.5, 14.3), (28.4, 81.3, 14.3)),
          copies=(face(101.7, 74.3, 19.3), face(216.7, 75.3, 19.3), face(331.7, 75.3, 19.3), face(29.3, 27.8, 14.3), face(28.5, 54.5, 14.3), face(28.4, 81.3, 14.3)), rivets=((52.0, 28.0), (381.0, 28.0)), note="the L-shaped brass bar with three icon medallions, its dark window and three round buttons"),
-    Spec("hardware.skill_rot", "274", "Skill_Rot", "rot", wells=((85, 16, 129, 60), (148, 16, 192, 60), (211, 16, 255, 60), (274, 16, 318, 60)), note="four recessed square slots over a text window"),
-    Spec("hardware.combine_rot", "288", "Combine_Rot", "rot", rings=((277.6, 42.1, 17.3),), wells=((9, 7, 106, 72), (155, 7, 254, 72), (303, 7, 402, 72)),
+    Spec("hardware.skill_rot", "274", "Skill_Rot", "rot", pack="logbook/buttons/skill_rot", wells=((85, 16, 129, 60), (148, 16, 192, 60), (211, 16, 255, 60), (274, 16, 318, 60)), note="four recessed square slots over a text window"),
+    Spec("hardware.combine_rot", "288", "Combine_Rot", "rot", pack="schematics/buttons/combine_rot", rings=((277.6, 42.1, 17.3),), wells=((9, 7, 106, 72), (155, 7, 254, 72), (303, 7, 402, 72)),
          emboss=((35, 18, 76, 62), (190, 18, 220, 62), (328, 18, 376, 62), (120, 28, 142, 50)), note="three recessed piece wells, a plus sign, a round socket opening and a text window"),
-    Spec("hardware.trap_rot", "290", "Trap_Rot", "rot", note="four square openings (transparent) over a text window"),
-    Spec("hardware.broadcast_rot", "291", "Broadcast_Rot", "rot", rivets=RIV_L + ((396.0, 30.0), (396.0, 56.0), (396.0, 79.5)), note="the big window with the riveted side tabs"),
-    Spec("hardware.dialoguewindow", "354", "DialogueWindow", "rot", note="the big window in a brass frame"),
-    Spec("hardware.magickweapon_rot", "564", "MagickWeapon_Rot", "rot", force_w=((32, 58, 128, 95),), wells=((155, 48, 191, 84), (204, 48, 240, 84), (253, 48, 289, 84), (303, 48, 339, 84), (352, 48, 388, 84)), note="a window, a picture field, a text window and five recessed slots"),
+    Spec("hardware.trap_rot", "290", "Trap_Rot", "rot", pack="logbook/buttons/trap_rot", note="four square openings (transparent) over a text window"),
+    Spec("hardware.broadcast_rot", "291", "Broadcast_Rot", "rot", pack="dialogue/buttons/broadcast_rot", rivets=RIV_L + ((396.0, 30.0), (396.0, 56.0), (396.0, 79.5)), note="the big window with the riveted side tabs"),
+    Spec("hardware.dialoguewindow", "354", "DialogueWindow", "rot", pack="dialogue/panels/dialoguewindow", note="the big window in a brass frame"),
+    Spec("hardware.magickweapon_rot", "564", "MagickWeapon_Rot", "rot", pack="logbook/buttons/magickweapon_rot", pack_clear=((32, 58, 128, 95),), force_w=((32, 58, 128, 95),), wells=((155, 48, 191, 84), (204, 48, 240, 84), (253, 48, 289, 84), (303, 48, 339, 84), (352, 48, 388, 84)), note="a window, a picture field, a text window and five recessed slots"),
     Spec("hardware.privmes_window", "642", "PrivMes_Window", "rot", force_w=((90, 68, 366, 94),), rings=((391.5, 28.4, 11.9),), copies=(face(391.5, 28.4, 11.9),), note="the private message window with a small round socket"),
-    Spec("hardware.mp_kickbanrotwindow", "842", "MP_KickBanRotWindow", "rot", rings=((119.0, 63.0, 32.4), (288.0, 63.0, 32.4)), copies=(face(119.0, 63.0, 32.4), face(288.0, 63.0, 32.4)), note="two big round buttons on the plain plate"),
-    Spec("hardware.dialoguebox", "822", "DialogueBox", "frame", note="the thin brass window frame with the original's curled corners over an iron plate"),
-    Spec("hardware.multimove_base", "298", "MultiMove_Base", "frame", rings=((179.2, 67.4, 12.0), (365.7, 31.3, 19.3), (365.7, 82.2, 19.3)),
+    Spec("hardware.mp_kickbanrotwindow", "842", "MP_KickBanRotWindow", "rot", pack="multiplayer/panels/mp_kickbanrotwindow", rings=((119.0, 63.0, 32.4), (288.0, 63.0, 32.4)), copies=(face(119.0, 63.0, 32.4), face(288.0, 63.0, 32.4)), note="two big round buttons on the plain plate"),
+    Spec("hardware.dialoguebox", "822", "DialogueBox", "frame", pack="dialogue/panels/dialoguebox", note="the thin brass window frame with the original's curled corners over an iron plate"),
+    Spec("hardware.multimove_base", "298", "MultiMove_Base", "frame", pack="hud-bar/panels/multimove_base", rings=((179.2, 67.4, 12.0), (365.7, 31.3, 19.3), (365.7, 82.2, 19.3)),
          copies=(face(179.2, 67.4, 12.0), face(365.7, 31.3, 19.3), face(365.7, 82.2, 19.3), ("rect", 207, 56, 283, 75), ("rect", 283, 55, 295, 76)),
          force_i=((70, 42, 155, 90),), wells=((71, 43, 154, 89),), fills=((72, 44, 153, 88, (3, 3, 10)),), note="the dark window, the counter and two round sockets"),
     Spec("hardware.follwercomandmenu", "826", "FollwerComandMenu", "list", rows=((6, 125, 20, 36, 4, 16),), note="the follower command menu: recessed list rows"),
-    Spec("hardware.fate_base", "292", "Fate_Base", "list", rows=((6, 218, 20, 36, 6, 16),), note="the fate list: recessed rows; the square openings at the right are transparent as in the original"),
-    Spec("hardware.sleep_base", "565", "Sleep_Base", "list", rows=((6, 217, 20, 36, 4, 16),), note="the sleep list: recessed rows"),
-    Spec("hardware.menuplaque", "328", "MenuPlaque", "frame", fills=((34, 242, 201, 309, (30, 30, 32)),), note="the plain iron plaque with a thin brass-framed box"),
+    Spec("hardware.fate_base", "292", "Fate_Base", "list", pack="character-sheet/panels/fate_base", rows=((6, 218, 20, 36, 6, 16),), note="the fate list: recessed rows; the square openings at the right are transparent as in the original"),
+    Spec("hardware.sleep_base", "565", "Sleep_Base", "list", pack="world-map/panels/sleep_base", rows=((6, 217, 20, 36, 4, 16),), note="the sleep list: recessed rows"),
+    Spec("hardware.menuplaque", "328", "MenuPlaque", "frame", pack="menus/panels/menuplaque", fills=((34, 242, 201, 309, (30, 30, 32)),), note="the plain iron plaque with a thin brass-framed box"),
 )
 BY_ID = {s.ident: s for s in SPECS}
 
 
 def coverage() -> dict[str, str]:
-    return {s.ident: f"rule:{s.kind}" for s in SPECS}
+    return {s.ident: (f"pack:{s.kind}" if s.pack else f"rule:{s.kind}") for s in SPECS}
 
 
 def provenance_of(part: str) -> str:
-    return f"rule:popup_kit:{part}"
+    return f"{'pack' if BY_ID[part].pack else 'rule'}:popup_kit:{part}"
 
 
 def note_of(part: str) -> str:
-    return f"{BY_ID[part].note}; iron, brass, wells and sockets by rule from the original art's own shapes; popup_kit.py, ARC-UI-3278, no Codex"
+    spec = BY_ID[part]
+    how = ("the old HD pack's frame of the art (pack-first) at the master's size with the original's alpha enlarged analytically; the pack frame's baked sample icon painted out" if spec.pack_clear else
+           "the old HD pack's frame of the art (pack-first) at the master's size with the original's alpha enlarged analytically") if spec.pack else \
+        "no good pack frame: iron, brass, wells and sockets by rule from the original art's own shapes"
+    return f"{spec.note}; {how}; popup_kit.py, ARC-UI-3278, no Codex"
 
 
 # --- small numeric helpers -----------------------------------------------------------------------------------------------------------
@@ -702,11 +708,57 @@ def render(spec: Spec, original: pngio.Image, size: tuple[int, int], brass: dict
     return image, {"window_fill": [round(c, 1) for c in win], "brass_pixels": sum(1 for m in bm if m >= 0.5), "iron_seed": seed}
 
 
+# --- pack-first ---------------------------------------------------------------------------------------------------------------------
+
+PACK_SCALE = 4                # the old pack's frames are 4 times the original's size
+
+
+def hole_mask(original: pngio.Image, size: tuple[int, int]) -> list[float]:
+    """The original's transparent places as a smooth, sub-pixel exact mask at the master's size (the analytic alpha): blurred once, enlarged with a cubic filter, cut steeply."""
+    plane = blur121([1.0 if original.data[i * 4 + 3] == 0 else 0.0 for i in range(original.w * original.h)], original.w, original.h)
+    up = fit.resample_planes([plane], original.w, (0, 0, original.w, original.h), size[0], size[1], "cubic")[0]
+    return [clamp((v - 0.5) * EDGE_K + 0.5, 0.0, 1.0) for v in up]
+
+
+def pack_master(spec: Spec, frame: pngio.Image, original: pngio.Image, size: tuple[int, int]) -> tuple[pngio.Image, dict]:
+    """Pack-first: the old HD pack's frame of the art at the master's size (a premultiplied, linear-light resample, so what is transparent in the pack bleeds no colour), a stand-in baked into the frame
+    painted out with the window's colour, and the ALPHA analytic: the original's transparent places, enlarged smoothly (the pack's own alpha is not used)."""
+    if abs(frame.w - original.w * PACK_SCALE) > 1 or abs(frame.h - original.h * PACK_SCALE) > 1:
+        raise KitError(f"{spec.ident}: the pack frame is {frame.w}x{frame.h}, not {PACK_SCALE} times the original's {original.w}x{original.h}")
+    w, h = size
+    for x0, y0, x1, y1 in spec.pack_clear:
+        sx, sy = frame.w / original.w, frame.h / original.h
+        probe = frame.pixel(int((x0 + x1) / 2 * sx), int((y0 - 12) * sy))      # the window's dark fill just above the stand-in's box
+        if probe[3] != 255 or max(probe[:3]) > 40:
+            raise KitError(f"{spec.ident}: the pack frame has no dark window fill above the stand-in's box")
+        for y in range(int(y0 * sy), int(y1 * sy)):
+            for x in range(int(x0 * sx), int(x1 * sx)):
+                frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 4] = bytes(probe)
+    for y in range(frame.h):                                  # what the original leaves open is open in the pack frame too before the resample: whatever colour the pack keeps there bleeds nothing
+        oy = min(original.h - 1, y * original.h // frame.h)
+        for x in range(frame.w):
+            if original.data[(oy * original.w + min(original.w - 1, x * original.w // frame.w)) * 4 + 3] == 0:
+                frame.data[(y * frame.w + x) * 4 + 3] = 0
+    image = fit.resample_image(frame, (0, 0, frame.w, frame.h), w, h)
+    hole = hole_mask(original, size)
+    alpha = bytearray(w * h)
+    for i, m in enumerate(hole):
+        a = 1.0 - m
+        alpha[i] = 0 if a <= 0.02 else 255 if a >= 0.98 else int(a * 255 + 0.5)
+        if alpha[i] == 0:
+            image.data[i * 4:i * 4 + 3] = b"\x00\x00\x00"
+    image.data[3::4] = alpha
+    if any(0 < a < 255 for a in alpha):
+        fit.decontaminate(image, 250, fit.EDGE_RADIUS)
+    return image, {"pack_frame": f"{spec.pack}-f000", "pack_frame_size": [frame.w, frame.h], "pack_scale": PACK_SCALE, "alpha": "analytic (the original's transparent places, enlarged)",
+                   "stand_in_cleared": [list(b) for b in spec.pack_clear]}
+
+
 # --- the gates and the records ---------------------------------------------------------------------------------------------------------
 
-def gates(spec: Spec, image: pngio.Image, size: tuple[int, int], original: pngio.Image) -> list[str]:
+def gates(spec: Spec, image: pngio.Image, size: tuple[int, int], original: pngio.Image, rule_build: bool = True) -> list[str]:
     """Size on the manifest's and the 6 px grid; the transparent places are the original's (at most 2 % of the pixels differ from the original's holes, enlarged as blocks); at most 1.2 % translucent
-    pixels; no magenta fringe and no black border pixel (an unshaded edge); the edge halo gate of `fit.py` on the translucent band."""
+    pixels; no magenta fringe and, in a rule build, no black border pixel (an unshaded edge; a pack frame has its own dark outline); the edge halo gate of `fit.py` on the translucent band."""
     failures = []
     w, h = image.w, image.h
     if (w, h) != size:
@@ -730,7 +782,7 @@ def gates(spec: Spec, image: pngio.Image, size: tuple[int, int], original: pngio
     if magenta:
         failures.append(f"{magenta} magenta pixels (a keyed fringe)")
     border = [(x, y) for y in (0, h - 1) for x in range(w)] + [(x, y) for x in (0, w - 1) for y in range(1, h - 1)]
-    black = sum(1 for x, y in border if image.pixel(x, y)[3] == 255 and sum(image.pixel(x, y)[:3]) < 12)
+    black = sum(1 for x, y in border if image.pixel(x, y)[3] == 255 and sum(image.pixel(x, y)[:3]) < 12) if rule_build else 0
     if black:
         failures.append(f"{black} black pixels on the art's border (an edge that was not shaded)")
     if hole_share:
@@ -740,11 +792,15 @@ def gates(spec: Spec, image: pngio.Image, size: tuple[int, int], original: pngio
     return failures
 
 
-def provenance_record(spec: Spec, frames: Path, extra: dict, size: tuple[int, int], blob: bytes, brass: dict) -> dict:
+def provenance_record(spec: Spec, frames: Path, extra: dict, size: tuple[int, int], blob: bytes, brass: dict | None, pack_file: Path | None) -> dict:
     src = frames / f"{spec.art}-{spec.name}" / "f0.png"
-    return {"part": spec.ident, "rule": "popup_kit", "kind": spec.kind, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": f"{spec.art}-{spec.name}/f0",
-            "sources_sha256": {f"{spec.art}-{spec.name}/f0": sha256_file(src)}, "brass_sources": list(BRASS_SOURCES), "brass_sha256": brass["sha256"], "brass_tone": [round(t, 1) for t in brass["tone"]], "grain_sd": round(brass["grain_sd"], 2), **extra,
-            "image_size": list(size), "image_sha256": hashlib.sha256(blob).hexdigest(), "run_by": "agent"}
+    record = {"part": spec.ident, "rule": "popup_kit", "how": "pack-first" if pack_file else "rule", "kind": spec.kind, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(),
+              "source": f"{spec.art}-{spec.name}/f0", "sources_sha256": {f"{spec.art}-{spec.name}/f0": sha256_file(src)}, **extra, "image_size": list(size), "image_sha256": hashlib.sha256(blob).hexdigest(), "run_by": "agent"}
+    if pack_file:
+        record["sources_sha256"][f"pack:{spec.pack}-f000"] = sha256_file(pack_file)
+    if brass:
+        record.update({"brass_sources": list(BRASS_SOURCES), "brass_sha256": brass["sha256"], "brass_tone": [round(t, 1) for t in brass["tone"]], "grain_sd": round(brass["grain_sd"], 2)})
+    return record
 
 
 def chosen(text: str | None) -> set[str]:
@@ -767,33 +823,51 @@ def cmd_plan() -> int:
     return 1 if missing else 0
 
 
-def cmd_rule(args: argparse.Namespace) -> int:
+def default_pack() -> Path:
+    return Path.home() / "Library" / "Application Support" / "Arcanum Steamwoven Game" / "hd-packs" / "interface-redraw-4x"
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    """The masters: pack-first where the art has a good frame in the old pack, the rule build where not. `--alt-dir` also writes the rule build of every pack-first art there (the composite's alternative)."""
     local = args.local_root
     frames = args.frames or local / "census" / "frames"
     masters = local / "masters"
+    pack_root = args.pack or default_pack()
     manifest = load_manifest()
     only = chosen(args.only)
-    brass = brass_material(masters)
+    brass = None
     done = 0
     for spec in SPECS:
         if only and spec.ident not in only:
             continue
         size = master_of(spec.ident, manifest)
         original = read_frame(frames, spec)
-        image, extra = render(spec, original, size, brass)
-        failures = gates(spec, image, size, original)
-        if failures:
-            raise GateError(f"{spec.ident}: " + "; ".join(failures))
-        blob = pngio.encode(image)
-        print(f"{spec.ident}: {size[0]}x{size[1]} ({spec.kind}) {hashlib.sha256(blob).hexdigest()[:12]}")
-        if not args.dry_run:
-            target = masters / f"{spec.ident}.png"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(blob)
-            (local / "provenance" / "rule").mkdir(parents=True, exist_ok=True)
-            (local / "provenance" / "rule" / f"{spec.ident}.json").write_text(json.dumps(provenance_record(spec, frames, extra, size, blob, brass), indent=2) + "\n", encoding="utf-8")
+        pack_file = pack_root / "interface" / f"{spec.pack}-f000.png" if spec.pack else None
+        if pack_file is not None and not pack_file.is_file():
+            raise KitError(f"{pack_file} is missing (the old HD pack, --pack)")
+        variants = []                                    # (image, extra, brass used, pack file, folder)
+        if pack_file is not None:
+            image, extra = pack_master(spec, pngio.read(pack_file), original, size)
+            variants.append((image, extra, None, pack_file, masters))
+        if pack_file is None or args.alt_dir:
+            brass = brass or brass_material(masters)
+            image, extra = render(spec, original, size, brass)
+            variants.append((image, extra, brass, None, masters if pack_file is None else args.alt_dir))
+        for image, extra, used, source, folder in variants:
+            failures = gates(spec, image, size, original, rule_build=source is None)
+            if failures:
+                raise GateError(f"{spec.ident}: " + "; ".join(failures))
+            blob = pngio.encode(image)
+            print(f"{spec.ident}: {size[0]}x{size[1]} ({'pack-first' if source else 'rule'}) {hashlib.sha256(blob).hexdigest()[:12]}" + ("" if folder == masters else f" -> {folder}"))
+            if not args.dry_run:
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / f"{spec.ident}.png").write_bytes(blob)
+                if folder == masters:
+                    (local / "provenance" / "rule").mkdir(parents=True, exist_ok=True)
+                    record = provenance_record(spec, frames, extra, size, blob, used, source)
+                    (local / "provenance" / "rule" / f"{spec.ident}.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
         done += 1
-    print(f"POPUP KIT rule PASS: {done} part(s)" + (" (dry run, nothing written)" if args.dry_run else ""))
+    print(f"POPUP KIT build PASS: {done} part(s)" + (" (dry run, nothing written)" if args.dry_run else ""))
     return 0
 
 
@@ -831,18 +905,23 @@ def cmd_sheet(args: argparse.Namespace) -> int:
             original = work / f"{spec.art}-o.png"
             pngio.write(original, read_frame(frames, spec))
             width = int(round(read_frame(frames, spec).w * args.zoom))
-            label = f"{spec.art} {spec.name}"
             cell = work / f"{spec.art}-cell.png"
-            run(["magick", "(", str(original), "-background", "#7a3a8a", "-alpha", "remove", "-filter", "point", "-resize", f"{width}x", ")",
-                 "(", str(master), "-background", "#7a3a8a", "-alpha", "remove", "-filter", "Lanczos", "-resize", f"{width}x", ")",
-                 "-background", "#202020", "-splice", "0x5", "-append",
-                 "-gravity", "NorthWest", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "15", "-undercolor", "#00000099", "-annotate", "+4+2", f"{label}  ORIGINAL",
-                 str(cell)])
+            pieces = [("ORIGINAL", original, "point"), ("KIT MASTER, " + ("pack-first: pack frame + analytic alpha" if spec.pack else "rule build (no good pack frame)"), master, "Lanczos")]
+            alt = args.alt_dir / f"{spec.ident}.png" if args.alt_dir else None
+            if alt is not None and alt.is_file() and spec.pack:
+                pieces.append(("ALTERNATIVE, rule build (not in the kit)", alt, "Lanczos"))
+            labelled = []
+            for k, (caption, src, flt) in enumerate(pieces):
+                part = work / f"{spec.art}-{k}.png"
+                run(["magick", str(src), "-background", "#7a3a8a", "-alpha", "remove", "-filter", flt, "-resize", f"{width}x", "-gravity", "NorthWest", "-font", LABEL_FONT, "-fill", "white",
+                     "-pointsize", "14", "-undercolor", "#000000b0", "-annotate", "+4+3", f"{spec.art} {spec.name}  {caption}", str(part)])
+                labelled.append(str(part))
+            run(["magick", *labelled, "-background", "#202020", "-splice", "0x4", "-append", str(cell)])
             cells.append(cell)
         run(["magick", *[str(c) for c in cells], "-background", "#202020", "-splice", "0x10", "-append", str(work / "sheet.png")])
         title = work / "title.png"
         run(["magick", "-size", "1500x36", "xc:#202020", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "19", "-gravity", "west", "-annotate", "+8+0",
-             "ARC-UI-3278, B-HARDWARE slice 4: top of each pair = ORIGINAL art, bottom = KIT master (transparent places magenta)", str(title)])
+             "ARC-UI-3278, B-HARDWARE slice 4: ORIGINAL | KIT MASTER | ALTERNATIVE per art, top to bottom (transparent places magenta)", str(title)])
         run(["magick", str(title), str(work / "sheet.png"), "-background", "#202020", "-append", str(args.out)])
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -881,23 +960,26 @@ def self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("plan", "rule", "sheet", "self-test"):
+    for name in ("plan", "build", "sheet", "self-test"):
         p = sub.add_parser(name)
-        if name in ("rule", "sheet"):
+        if name in ("build", "sheet"):
             p.add_argument("--only")
             p.add_argument("--frames", type=Path)
             p.add_argument("--local-root", type=Path, default=fit.default_local_root())
-        if name == "rule":
+        if name == "build":
             p.add_argument("--dry-run", action="store_true")
+            p.add_argument("--pack", type=Path)
+            p.add_argument("--alt-dir", type=Path)
         if name == "sheet":
             p.add_argument("--out", type=Path, required=True)
+            p.add_argument("--alt-dir", type=Path)
             p.add_argument("--zoom", type=float, default=2.0)
     args = parser.parse_args(argv)
     try:
         if args.cmd == "plan":
             return cmd_plan()
-        if args.cmd == "rule":
-            return cmd_rule(args)
+        if args.cmd == "build":
+            return cmd_build(args)
         if args.cmd == "sheet":
             return cmd_sheet(args)
         return self_test()
