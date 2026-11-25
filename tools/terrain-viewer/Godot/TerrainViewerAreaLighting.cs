@@ -29,9 +29,12 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-1684: an NPC's best-items wield (its regeneration, the AI gate's re-wield) runs its items' move scripts through the shown map's item script host.
         () => _areaSession is { } session ? _inventoryHost?.ItemScripts(session) : null,
         // ARC-WORLD-2358 (TT20): the conversation a deferred call's run started waits for the next frame (the original opens it inside the run, the ping applies the run's teleport a frame later).
-        callDialog: dialog => _callDialogs.Enqueue(dialog));
+        callDialog: dialog => { if (_callDialogs.Count < MaxHeldCallDialogs) _callDialogs.Enqueue(dialog); });
 
     private readonly Queue<Arcanum.Scripting.Scr.ScrDialogStart> _callDialogs = new();
+    // ARC-SCRIPT-2966: a talk held behind a panel keeps the first of these (a note script that queues itself every 2 s would pile them up; only the first one met can open anyway, the rest drop at an open conversation).
+    private const int MaxHeldCallDialogs = 16;
+    private (int Map, object? Session)? _callDialogsHeldAt;
 
     // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
     private AreaRealStepHost? _realStepHost;
