@@ -108,7 +108,7 @@ public partial class TerrainViewerApp
                 using var shot = GetViewport().GetTexture().GetImage();
                 if (shot.SavePng(capture.Replace(".png", suffix + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-075 sheet art smoke: capture failed");
             }
-            // ARC-UI-1195: with ARC_AREA_WINDOW_ART the sheet's window and the page on show (their frames and buttons) are checked in the generated interface and captured.
+            // ARC-UI-1195: with ARC_AREA_WINDOW_ART the sheet's window and the page on show (their frames and buttons) are checked in the window-art mode under test (the pack's frames or the Legacy art) and captured.
             async Task WindowArt(string page, IEnumerable<int> numbers)
             {
                 if (!WindowArtSmokeRequested) return;

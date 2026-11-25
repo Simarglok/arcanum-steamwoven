@@ -54,7 +54,7 @@ public partial class AreaDialogBoxView : Control
         _art = art;
     }
 
-    // ARC-UI-1819: the generated interface paints the box and its buttons at the window's own device scale (the shared AreaDeviceScale claim). The box on screen claims the art's textures at
+    // ARC-UI-1819: the pack's frames of the box and its buttons are area-resampled at the window's own device scale (the shared AreaDeviceScale claim). The box on screen claims the art's textures at
     // its draw (the death panel and the menu share one art) and a frame a worker swaps in redraws it; a change of the window's scale moves no pixel by itself (the canvas item is only
     // stretched), so the box also draws again then.
     private AreaDeviceScale? _claim;

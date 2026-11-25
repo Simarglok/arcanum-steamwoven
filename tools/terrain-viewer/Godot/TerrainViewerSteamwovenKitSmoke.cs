@@ -416,6 +416,7 @@ public partial class TerrainViewerApp
         await frames(2);
         var zone = SteamwovenWindowZone.ZoneOf(plan);
         require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.WorldMap && panel.KitForSelfTest.Background.Count == 1 && view.KitBackgroundShown, $"[{tag}] the open world map takes the kit's map background (window {AreaGameBarPanel.KitBackgroundWindow}, pieces {panel.KitForSelfTest.Background.Count})");
+        require(AreaLensPlace.Unified, $"[{tag}] with the kit's map background published the lenses stand at the kit's common place (ARC-UI-2714, ARC-UI-3143)");
         var piece = panel.KitForSelfTest.Background.Single();
         require(piece.Rect.X == zone.X && piece.Rect.Right == zone.Right && piece.Rect.Y == zone.Y && piece.Rect.Bottom == zone.Bottom, $"[{tag}] the map background tiles the zone {zone}, got {piece.Rect}");
         // Where each probe stands: a bare piece of the frame (left of the zoom button, clear of the buttons and the lens) is the kit's colour; the centre of the map view and of the lens are not (the view draws its own black and picture, the lens the game's view).
@@ -453,11 +454,13 @@ public partial class TerrainViewerApp
         require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 1, $"[{tag}] only the map's piece is resident while the map is open");
         CloseWorldMapByPlayer(); await frames(4);
         require(!WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] the map closed leaves no kit background resident");
+        require(!AreaLensPlace.Unified, $"[{tag}] the map closed leaves the lenses at the windows' own places");
         if (withoutMap is null) return;
         // SWI-BDR-3: a set without the piece leaves the window's own (pack) art.
         withoutMap();
         panel.Relayout(); OpenWorldMap(); await frames(6);
         require(WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && panel.KitForSelfTest.Background.Count == 0 && !view.KitBackgroundShown, $"[{tag}] with the map piece missing the window keeps its own art");
+        require(!AreaLensPlace.Unified, $"[{tag}] with the map piece missing the lens stays at the window's own place");
         CloseWorldMapByPlayer(); await frames(3);
         restore();
         panel.Relayout(); await frames(4);
@@ -614,6 +617,7 @@ public partial class TerrainViewerApp
             await frames(6);
             require(isOpen(), $"[{tag}] the {name} window opens");
             require(AreaGameBarPanel.KitBackgroundWindow == (kit ? window : null) && (panel.KitForSelfTest.Background.Count > 0) == kit, $"[{tag}] the {name} window is {(kit ? "published as standing over its kit background" : "left to its own art (no complete kit background)")} (got {AreaGameBarPanel.KitBackgroundWindow})");
+            require(AreaLensPlace.Unified == kit, $"[{tag}] the {name} window with {(kit ? "its kit background published" : "no kit background")} has the lens at {(kit ? "the kit's common place" : "its own place")} (Unified {AreaLensPlace.Unified})");
             await frames(3);
             // The window's own draw took the kit branch (it drew its stand-ins for the elements the old art held) exactly when the kit's background shows.
             require(AreaKitStandIns.DrawnForSelfTest.Contains(window) == kit, $"[{tag}] the {name} window {(kit ? "drew its stand-in fields over the kit's background" : "drew its own art, no stand-in fields")}");
@@ -664,6 +668,7 @@ public partial class TerrainViewerApp
             close();
             await frames(4);
             require(!isOpen() && AreaGameBarPanel.KitBackgroundWindow is null, $"[{tag}] the {name} window's kit background goes with it");
+            require(!AreaLensPlace.Unified, $"[{tag}] the {name} window closed leaves the lenses at the windows' own places");
         }
     }
 
