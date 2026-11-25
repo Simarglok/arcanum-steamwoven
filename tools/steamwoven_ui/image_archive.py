@@ -180,8 +180,8 @@ def add_file(registry: Registry, task: str, src: Path, *, kind: str, status: str
     return registry.put(row)
 
 
-def mark(registry: Registry, task: str, rel: str, status: str) -> dict:
-    """Change a row's status; `final` also puts a copy in `<task>/final/` and registers it."""
+def mark(registry: Registry, task: str, rel: str, status: str, note: str | None = None) -> dict:
+    """Change a row's status (and its note when given); `final` also puts a copy in `<task>/final/` and registers it."""
     row = registry.rows.get(("archive", task, rel))
     if row is None:
         raise KeyError(f"{task}/{rel} is not in the registry")
@@ -190,6 +190,8 @@ def mark(registry: Registry, task: str, rel: str, status: str) -> dict:
     if status not in STATUSES:
         raise ValueError(f"status {status!r} not in {STATUSES}")
     row["status"] = status
+    if note is not None:
+        row["note"] = note
     if status == "final":
         src = registry.root / task / rel
         final_rel = f"{FINAL_DIR}/{Path(rel).name}"
@@ -305,7 +307,7 @@ def cmd_add(args) -> int:
 
 def cmd_mark(args) -> int:
     reg = Registry()
-    row = mark(reg, args.task, args.file, args.status)
+    row = mark(reg, args.task, args.file, args.status, args.note)
     reg.save()
     print(f"{row['task']}/{row['file']} -> {row['status']}")
     return 0
@@ -371,6 +373,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("task")
     s.add_argument("file", help="path inside the task folder, e.g. composite/A.png")
     s.add_argument("status", choices=STATUSES)
+    s.add_argument("--note", default=None, help="replace the row's note (why: 'matches kit master <id>', 'owner rejected variant B')")
     s.set_defaults(func=cmd_mark)
     s = sub.add_parser("index", help="counts per task, kind and status")
     s.add_argument("task", nargs="?")

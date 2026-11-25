@@ -526,6 +526,9 @@ committed files. Do not copy the game or the full vault into each worktree.
   Every file has a row in `archive/registry.jsonl` (task, file, kind, status
   final/rejected/intermediate/unknown, source, hash, date). Tools that take
   `--out`/`--work` warn when the folder is inside a worktree or a temp folder.
+  **At merge** the task also closes its statuses ([TRD SWI-PRV-6](../ui/steamwoven-interface-trd.md#provenance-and-storage)): accepted images `final`, rejected variants
+  `rejected`, everything else it made `intermediate` (`mark <TASK> FILE STATUS [--note TEXT]`); no `unknown` row of the task may remain, or the thread files an issue
+  naming the open rows.
   The images stay local and uncommitted ([TRD SWI-PRV-5](../ui/steamwoven-interface-trd.md#provenance-and-storage)).
 - Report Implemented, Not implemented, Remaining work, the checks run with their
   results, and material uncertainties.
