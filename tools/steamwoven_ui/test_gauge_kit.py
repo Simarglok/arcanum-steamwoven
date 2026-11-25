@@ -104,6 +104,7 @@ class PixelTests(unittest.TestCase):
             for x in range(6, 18):
                 image.data[(y * 24 + x) * 4:(y * 24 + x) * 4 + 3] = bytes((120, 60, 140))     # a violet disc of the art
         image.data[(6 * 24 + 5) * 4:(6 * 24 + 5) * 4 + 3] = bytes((192, 48, 153))          # a fringe pixel: art blended into the ground
+        image.data[(7 * 24 + 5) * 4:(7 * 24 + 5) * 4 + 3] = bytes((128, 0, 128))           # a dark art blended half and half
         with tempfile.TemporaryDirectory() as t:
             png = Path(t) / "c.png"
             pngio.write(png, image)
@@ -112,6 +113,7 @@ class PixelTests(unittest.TestCase):
             cut = gk.cell_image(png, found["a"], geometry["cells"][0])
         self.assertEqual((cut.w, cut.h), (12, 12))
         self.assertTrue(all(cut.pixel(x, y)[3] > 0 for x in range(12) for y in range(12)))
+        self.assertTrue(all(cut.pixel(x, y)[:3] != (128, 0, 128) for x in range(12) for y in range(12)))
 
     def test_aspect_within_six_percent_is_fixed_beyond_it_refused(self) -> None:
         opaque = gk.to_aspect(solid(103, 100, (9, 9, 9, 255)), (100, 100))
@@ -214,10 +216,11 @@ class ComposeTests(unittest.TestCase):
             self.assertLessEqual(abs(min(y for _, y in red) - 11), 2)
             self.assertLessEqual(abs(max(y for _, y in red) - 32), 2)
 
-    def test_a_missing_base_master_is_an_error_not_a_silent_skip(self) -> None:
+    def test_a_missing_base_master_is_an_error_but_a_dry_run_only_says_so(self) -> None:
         with tempfile.TemporaryDirectory() as t:
             with self.assertRaises(gk.GaugeError):
                 gk.compose_parts("nothing", "grp", {}, Path(t), {"grp": {}}, Path(t), False)
+            self.assertEqual(gk.compose_parts("nothing", "grp", {}, Path(t), {"grp": {}}, Path(t), True), [])
 
 
 class RuleTests(unittest.TestCase):

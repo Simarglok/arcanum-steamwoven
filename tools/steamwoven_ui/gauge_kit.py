@@ -59,7 +59,7 @@ MAX_DRIFT = 0.08              # the two axis scales of the art in the result aga
 ASPECT_FIX = 0.10             # an opaque cut cell is stretched to its master aspect when it is within 10 % of it (a layout drift), else the cut is refused
 PAD_FIX = 0.15                # a keyed cut-out is centred on a transparent canvas of the master's aspect when within 15 % of it (nothing is stretched)
 SEARCH = 0.25                 # a cell is searched for in its expected rectangle grown by this share of the gap
-MAGENTA_MIN = 140             # a pixel is magenta ground or its fringe when red and blue are both above this ...
+MAGENTA_MIN = 100             # a pixel is magenta ground or its fringe when red and blue are both above this ...
 MAGENTA_LEAN = 90             # ... and the smaller of them is this far above green (a violet of the art, such as 120 60 140, stays art)
 KEY_FUZZ = "14%"
 BAND_FUZZ = 40                # the colour distance from the key (of 441) that is still ground when the bounding box of a cell is taken
@@ -698,6 +698,9 @@ def compose_parts(base_part: str, layer_group: str, layer_cells: dict[str, str],
     (a picture: centre on centre; a moon: the whole disc's left edge and bottom, because the top of the disc is cut by the frame)."""
     base_path = local / "masters" / f"{base_part}.png"
     if not base_path.is_file():
+        if dry:
+            print(f"{layer_group}: dry run, the base master {base_part} is not on disk yet, so its layers are not composed")
+            return []
         raise GaugeError(f"the base master {base_part} is not made yet: cut its group first (the layers of {layer_group} lie over it)")
     base_master = pngio.read(base_path)
     data = cache[layer_group]
