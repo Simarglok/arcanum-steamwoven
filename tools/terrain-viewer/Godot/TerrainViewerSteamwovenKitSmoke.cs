@@ -607,6 +607,13 @@ public partial class TerrainViewerApp
                 require(!kit || perColour.All(count => total > 0 && (double)count / total > 0.02), $"[{tag}] every piece of the {name} window's kit background shows (shares {string.Join(", ", perColour.Select(count => ((double)count / Math.Max(1, total)).ToString("F3")))})");
                 GD.Print($"ARC-UI-3037 {tag} {name} kit-colour share {share:F3}");
                 require(kit ? share > 0.10 : share < 0.01, $"[{tag}] the {name} window's pixels are {(kit ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kit ? "not drawn" : "drawn")}");
+                // ARC-UI-3165 (method A condition 1): the words and numbers art 22 had baked in are the sheet's own text over the kit's background (the eight stat names, the dial's E and G, the ruler's seven divisions), none with the art's own background.
+                if (name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } labelView)
+                {
+                    var expectedLabels = AreaKitStandIns.SheetLabels().Select(label => label.Text).ToArray();
+                    require(expectedLabels.Length == 17 && string.Join(" ", expectedLabels) == "ST IN CN WP DX PE BE CH E G 75 50 25 0 25 50 75", $"[{tag}] the baked-in text of art 22 the sheet owes is 8 stat names, E, G and 7 ruler divisions (got {string.Join(" ", expectedLabels)})");
+                    require(kit ? labelView.KitLabelsDrawnForSelfTest.SequenceEqual(expectedLabels) : labelView.KitLabelsDrawnForSelfTest.Count == 0, $"[{tag}] the sheet {(kit ? "wrote its own stat names, dial letters and ruler divisions over the kit's background" : "wrote none of them over its own art")} (drew {string.Join(" ", labelView.KitLabelsDrawnForSelfTest)})");
+                }
                 // ARC-UI-3037: the sheet's three gauges stand in (a point of each, in window units): the health heart, the fatigue cross, the alignment dial's face and the ruler's parchment.
                 if (kit && name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } sheetView && !(fixtures && System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_FIXTURES") is { Length: > 0 }))
                     foreach (var (what, wx, wy, expected) in new (string, float, float, Color)[] { ("health heart", 449, 164, fixtures ? KitFixture : new(.72f, .12f, .1f)), ("fatigue cross", 449, 236, fixtures ? KitFixture : new(.1f, .1f, .8f)), ("alignment dial face", 30, 170, fixtures ? KitFixture : new(.8f, .74f, .58f)), ("magic-technology ruler", 783, 300, fixtures ? KitFixture : new(.8f, .74f, .58f)) })

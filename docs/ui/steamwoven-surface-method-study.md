@@ -137,7 +137,7 @@ Issue [#3100](https://github.com/Simarglok/arcanum-steamwoven/issues/3100), pare
 
 | Condition | In the step |
 |---|---|
-| 1. Text, counters, digits, fields drawn by the game | `erase_boxes` of the zone spec: a box is filled with the per-channel median of the 2 px ring outside it, so a baked text or counter is not part of the surface and the game draws it. The boxes are per window (the census column `baked_text`, [#3037 table](steamwoven-interface-trd.md#elements-the-old-arts-held-arc-ui-3037)); none is set for the inventory, whose original art has no baked text. |
+| 1. Text, counters, digits, fields drawn by the game | `erase_boxes` of the zone spec: a box is filled with the per-channel median of the 2 px ring outside it, so a baked text or counter is not part of the surface and the game draws it. The boxes are per window (the census column `baked_text`, [#3037 table](steamwoven-interface-trd.md#elements-the-old-arts-held-arc-ui-3037)). Since ARC-UI-3165 the spec also has `text_boxes`, `paper_boxes` and `wood_boxes` for text on a ground that is no flat colour, and the five families' specs are committed ([below](#baked-text-and-counters-per-window-family-arc-ui-3165)). |
 | 2. Zones filled in play by the original's mask | unchanged: only the original's wood class is taken from the Codex result, everything else is the original's pixels (the portrait circle, plates, grids, counter windows). The mask is the tone check's wood class of the zone's screen (`screen` of the spec, `prompts/tone_masks.json`), so each window family has its own. |
 | 3. Metal parts from the kit | `kit_parts` of the spec: a kit master laid over the result at master pixels (straight alpha, over), replacing the original's stand-in; its file hash is in the record. Until a part exists (the hardware batch [#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481); the pilot [#3058](https://github.com/Simarglok/arcanum-steamwoven/issues/3058) made the round bottom-strip buttons, which reach the game inside the pack's frames) the original's pixels stand. |
 | 4. Seams | measured at every join of the spec (`joins`, default the two strip joins), gate: at most 1.8; SWI-VER-5's 1.5 is recorded beside it (`seams_within_swi_ver_5`). |
@@ -170,6 +170,45 @@ Records: `provenance/surface/ctx-<family>.json`; the composites are local, under
 - **Logbook, reading: page edges.** The same leak: the book's page-edge strip lies outside the tone mask's book zone, and blobs of it came out as wood; `island_min` drops them. The reading window's edges and both windows' right edges were clean.
 
 The spec fields default to the old behaviour (`island_min` 0, no `fill_boxes`, `dot_bands` null), so the inventory result is unchanged.
+
+## Baked text and counters per window family (ARC-UI-3165)
+
+Issue [#3165](https://github.com/Simarglok/arcanum-steamwoven/issues/3165), owner condition 1 of method A: the surface carries no text, digit or counter the game draws itself. The census (`baked_text`, [census](steamwoven-interface-census.md)) lists the words baked into the original *arts*: art 22 (the character sheet's stat names, the dial's E and G, the ruler's divisions) and art 138 (the world map's N E S W); the arts of the inventory, logbook, schematic and save window carry none, and the character sheet has no "Health" and "Fatigue" words (the census row CHW1 was wrong: the art has a heart and a cross there). But the surfaces are composed from the **context screenshots** (`ctx-<screen>-master`), which also hold the text the game wrote on them that day: a name, stat numbers, the logbook's entries, a reading window's page, the inventory's weights and counts. Both kinds are baked into the surface and are taken out here, so the game's own text is the only text in a window. The boxes are in master pixels (2880 x 2160; a window unit is 3.6 px, and the window zone starts at y 148).
+
+| Family (spec) | Baked element | Master box(es) | Taken out by | Drawn by the game |
+|---|---|---|---|---|
+| Character (`ctx-character`) | stat names ST CN DX BE, IN WP PE CH (art 22), on the wood | 8 boxes, x 452..598 and 928..1098, rows y 552..642, 702..800, 848..934, 996..1082 (left), 556..655, 704..790, 848..934, 994..1082 (right) | `wood_boxes`: the Codex wood shows there | `AreaKitStandIns.SheetLabels` over the kit's background, `AreaCharacterSheetArtView`; the kit smoke reads the 8 names back |
+| | dial letters E and G (art 22), the old needle above the hub | 156, 686, 250, 732; 194, 662, 214, 748 | `text_boxes` (parchment) | `SheetLabels` (E, G); the needle is art 254, the sheet's |
+| | ruler divisions 75 50 25 0 25 50 75 (art 22), parchment | 7 boxes, x 2750..2802, y 589..613, 697..733, 834..858, 935..969, 1057..1082, 1165..1200, 1295..1318 | `text_boxes` | `SheetLabels` (the 7 divisions, at the places of the kit smoke's list) |
+| | "Health" and "Fatigue" words | none (symbols only) | not baked | the heart and the cross are fixtures (`fixture.health_disc`, `fixture.fatigue_disc`) |
+| | screenshot text: name box (name, level, points, XP, race, gender, age), the eight stat numbers, the health and fatigue numbers, the dial's number, the ruler's two end numbers, the derived-stats and resistance text | 756, 208, 1556, 482; 8 x 44 x 46 at x 740 and 1243; 1582, 684, 1636, 722; 1582, 938, 1640, 982; 172, 872, 244, 918; 2735, 398, 2795, 442; 2745, 1474, 2790, 1519; 165, 1165, 1080, 1522; 1130, 1165, 1600, 1522 | `text_boxes` | the sheet's own text (`AreaCharacterSheetArtView` and its panel) |
+| Inventory (`ctx-inventory`) | none in arts 221 and 223; screenshot text: the name plate's weight, encumbrance and speed, the five count numbers, the weapon and shield armour numbers | 512, 252, 1075, 418; 2622, 416 + 83k, 2712, 452 + 83k (k = 0..4); 336, 1434, 392, 1489; 930, 1434, 1002, 1489 | `text_boxes` | the inventory window's own text and counters |
+| Logbook (`ctx-logbook`) | none in arts 260 and 264; screenshot text: the page titles, the entries, the page numbers, on the parchment | 790, 300, 1570, 1446; 1676, 300, 2420, 1446; 2420, 540, 2468, 1446 | `paper_boxes` | the logbook's own text layer |
+| Reading window (`ctx-reading`) | none in the book arts; screenshot text: the title and both pages of a book | 800, 340, 1560, 1388; 1700, 340, 2420, 1388 | `paper_boxes` | the reading window's own text |
+| Schematic (`ctx-schematic`) | none in art 365; the title, the description and the slot counts stand on the blueprint page (201, 13, 506, 367 units) and on the two slot boxes, which are fixtures (`fixture.schematic_page`, its ruling and `fixture.schematic_slot`) | none | not touched: the fixtures replace the page and the boxes whole, and the ruling and the page's grid would be cut by any fill | the window's own text over the fixtures |
+| World map (art 138, [#3036](https://github.com/Simarglok/arcanum-steamwoven/issues/3036), [#3112](https://github.com/Simarglok/arcanum-steamwoven/issues/3112)) | compass letters N E S W | the rose, with its kit part | `AreaWorldMapArtLayout.CompassLetters` already written by the window; the rose and the legend are #3112 | the window (dark red font), read back by the kit smoke |
+
+How the three fills work (`surface_compose.py`, constants `TEXT_*`):
+
+- **`text_boxes`** (a black field, a disc, a pit with a gradient, a flat parchment): the ground is the median luma of the 3 px ring outside the box; a pixel is text when it differs from it by more than 35 (or three standard deviations of the ring, whichever is more), the mask is grown by 6 px (the resampled art's ringing is darker than the field and shows as a ghost otherwise), and each text pixel takes the mean of the ground pixels around it (the narrowest window of 8, 16, 32 or 64 px that holds enough of them), smoothed once, plus the ground's own fine texture from a fixed offset (nothing is painted that was not there). The fill is the surroundings, not a flat colour: a gradient continues through the box.
+- **`paper_boxes`** (dark ink on a shaded page): the page's light changes by tens of levels from the spine to the edge, so "differs from the box's median" would take half the page. The text is what a grey-scale closing of the red and the green channel (21 px, 28 levels) removes; red and green because every ink is dark there (blue ink is bright in blue). The mask is grown by 3 px and filled as above.
+- **`wood_boxes`**: the wood weight is 1 in the box (feathered like the rest), so letters baked into the wood are not kept as items and the Codex wood shows in their place, with its own grain. A flat fill of the original's wood would be a patch.
+
+A box is refused when more than 80 % of it differs from its ground (it is a picture, not text) or lies outside the image; the provenance record counts the replaced pixels (`counts.text_pixels`). What is **not** text and stays, as condition 2 and 3 say: the portrait, the items, the coins, the round view and its debug overlay, the sheet's skills page and gauges, the needle, the schematic's picture; the fixtures ([#3098](https://github.com/Simarglok/arcanum-steamwoven/issues/3098)) and the production kit parts replace the plates, pits and discs they stand on.
+
+The tone gate of a spec with text or paper boxes excludes those boxes (`tone_masks_for`, in 800 x 600 layout units): the text the game draws is taken out on purpose, and a page with its text erased would read as a brighter paper (the reading window's first build failed the paper gate by 3.5 L\* for that reason).
+
+**Run, 2026-11-25:** the five specs through `build` with the inputs of ARC-UI-3164 (the inventory's of ARC-UI-3100); all gates hold. The text pixels replaced, per surface: character 348 956, inventory 73 638, logbook 550 426, reading 1 038 140, schematic 0. Other numbers as before (the text the game draws does not touch the wood).
+
+| Screen | seam y=148 | seam y=1588 | wood L\* (original / result) | tone |
+|---|---|---|---|---|
+| character | 0.67 | 1.47 | 19.63 / 19.69 | PASS |
+| inventory | 0.95 | 1.10 | 20.13 / 20.08 | PASS |
+| logbook | 1.00 | 1.49 | 19.72 / 19.68 | PASS |
+| reading | 1.16 | 1.26 | 19.75 / 19.80 | PASS |
+| schematic | 1.03 | 1.08 | 20.01 / 20.02 | PASS |
+
+Look notes for the owner: the alignment dial keeps a slightly paler patch where the needle's upper part and the caption were taken out (the dial is a fixture and the kit part covers it); the schematic page's title, description and slot counts stay in the surface because the page and the slot boxes are fixtures (a fill would cut the page's grid), the owner may ask for an erase there as well.
 
 ## Reproduction
 
