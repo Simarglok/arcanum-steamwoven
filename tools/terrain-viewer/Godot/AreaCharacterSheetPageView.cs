@@ -105,8 +105,8 @@ public partial class AreaCharacterSheetPageView : Control
 
     private int Frames(int art) => _art.TryGetValue(art, out var frames) ? frames.Length : 1;
 
-    private int Frame(int art, Hit hit, bool selected = false) => selected ? AreaGameBarLayout.Frame(AreaBarButtonLook.Down, Math.Max(1, Frames(art)))
-        : AreaCharacterArtDraw.Frame(Frames(art), _pressed is not null, _pressed == hit, _hovered == hit);
+    private int Frame(int art, Hit hit, bool selected = false, int? frames = null) => selected ? AreaGameBarLayout.Frame(AreaBarButtonLook.Down, Math.Max(1, frames ?? Frames(art)))
+        : AreaCharacterArtDraw.Frame(frames ?? Frames(art), _pressed is not null, _pressed == hit, _hovered == hit);
 
     private int Skill(int row) => _group * AreaCharacterSheetPagesLayout.GroupRows + row;
 
@@ -174,9 +174,14 @@ public partial class AreaCharacterSheetPageView : Control
         if (_rings.Count > 0) _round.Show(_rings); else _round.Clear();
     }
 
-    /// <summary>ARC-UI-3101: a round tab (a skill group or a discipline): over the kit's sheet it goes through the round-part layer, else it is drawn as before.</summary>
-    private void DrawTab(int art, (int X, int Y) place, int frame)
+    /// <summary>
+    /// ARC-UI-3101, ARC-UI-3320: a round tab (a skill group or a discipline): over the kit's sheet it goes through the round-part layer, with the kit's face of the button in the look it has (the original's three frames' order: idle, pressed, hover)
+    /// where the kit holds one, else with the art's own frame; without the kit's sheet it is drawn as before.
+    /// </summary>
+    private void DrawTab(int art, (int X, int Y) place, Hit hit, bool selected)
     {
+        if (_kitSheet.Shown && AreaKitSheets.RoundFace(art, Frame(art, hit, selected, 3)) is { } face && AreaKitRoundPartsLayer.KitItem(art, face, place) is { } kit) { _rings.Add(kit); return; }
+        var frame = Frame(art, hit, selected);
         var texture = Art(art, frame);
         if (_kitSheet.Shown && AreaKitRoundPartsLayer.Applies(art, texture)) _rings.Add(new(art, texture!, new Rect2(place.X, place.Y, texture!.GetWidth(), texture.GetHeight())));
         else DrawArt(art, place, frame);
@@ -200,7 +205,7 @@ public partial class AreaCharacterSheetPageView : Control
         for (var group = 0; group < AreaCharacterSheetPagesLayout.Groups; group++)
         {
             var art = AreaCharacterSheetPagesLayout.GroupTabArtBase + group;
-            DrawTab(art, AreaCharacterSheetPagesLayout.GroupTab(group), Frame(art, new(AreaPageHit.GroupTab, group), selected: group == _group));
+            DrawTab(art, AreaCharacterSheetPagesLayout.GroupTab(group), new(AreaPageHit.GroupTab, group), selected: group == _group);
         }
         for (var row = 0; row < AreaCharacterSheetPagesLayout.GroupRows; row++)
         {
@@ -229,7 +234,7 @@ public partial class AreaCharacterSheetPageView : Control
         for (var discipline = 0; discipline < AreaCharacterSheetPagesLayout.Disciplines; discipline++)
         {
             var art = AreaCharacterSheetPagesLayout.DisciplineArtBase + discipline;
-            DrawTab(art, AreaCharacterSheetPagesLayout.DisciplineTab(discipline), Frame(art, new(AreaPageHit.DisciplineTab, discipline), selected: discipline == _discipline));
+            DrawTab(art, AreaCharacterSheetPagesLayout.DisciplineTab(discipline), new(AreaPageHit.DisciplineTab, discipline), selected: discipline == _discipline);
         }
         var row = _tech.Rows[_discipline];
         var degree = row.Degree;

@@ -315,5 +315,22 @@ class DataTests(unittest.TestCase):
             sk.tab_named("nope")
 
 
+
+class ViewerTableTests(unittest.TestCase):
+    def test_the_viewers_round_faces_are_this_tools_buttons_art_for_art(self):
+        """ARC-UI-3320: `SteamwovenKitTable.RoundFaces` (the composer) names the plate of each of the 28 arts as this tool's table and the manifest do."""
+        import re
+        source = (sk.HERE.parents[1] / "tools" / "terrain-viewer" / "Core" / "SteamwovenKitComposer.cs").read_text(encoding="utf-8")
+        block = source[source.index("RoundFaces { get; }"):]
+        block = block[:block.index("};")]
+        viewer = {int(art): name for art, name in re.findall(r'\[(\d+)\] = "plate\.([a-z_]+)"', block)}
+        self.assertEqual({tab.art: tab.name for tab in sk.TABS}, viewer)
+        manifest = {part["id"] for part in json.loads(sk.MANIFEST.read_text(encoding="utf-8"))["parts"]}
+        for name in viewer.values():
+            for suffix in ("", "_hover", "_pressed"):
+                self.assertIn(f"plate.{name}{suffix}", manifest)
+            self.assertIn(f"glyph.{name}", manifest)
+
+
 if __name__ == "__main__":
     unittest.main()

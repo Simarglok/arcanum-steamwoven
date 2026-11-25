@@ -282,6 +282,20 @@ public static class SteamwovenKitTable
         [AreaBarButton.FatePoints] = "glyph.fate_but", [AreaBarButton.Sleep] = "glyph.sleep_but",
     };
 
+    /// <summary>
+    /// ARC-UI-3320 (#3204, <c>tools/steamwoven_ui/school_kit.py</c>): the round buttons of the character sheet's pages by the art they show (the sixteen spell college rings, the four skill group buttons, the eight technology disciplines;
+    /// the same arts <see cref="AreaKitRoundParts"/> holds) and the plate part of each: <c>plate.&lt;name&gt;</c> the idle face, <c>plate.&lt;name&gt;_pressed</c> and <c>plate.&lt;name&gt;_hover</c> the pack's other two frames, each cut to the ring's
+    /// circle. The symbol is in the plate (the part's <c>glyph.&lt;name&gt;</c> is an empty layer, so no glyph is read here); the soft shadow is the round-part layer's, at run time.
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> RoundFaces { get; } = new Dictionary<int, string>
+    {
+        [11] = "plate.s_conveyance", [38] = "plate.s_air", [44] = "plate.s_divination", [50] = "plate.s_fire", [56] = "plate.s_forc", [62] = "plate.s_meta", [68] = "plate.s_morph", [74] = "plate.s_nature",
+        [80] = "plate.s_phantasm", [86] = "plate.s_water", [92] = "plate.s_earth", [98] = "plate.s_mental", [104] = "plate.s_evilnecro", [110] = "plate.s_goodnecro", [116] = "plate.s_summoning", [122] = "plate.s_temporal",
+        [302] = "plate.combat_but", [303] = "plate.thieving_but", [304] = "plate.social_but", [305] = "plate.technological_but",
+        [306] = "plate.anatomical_but", [307] = "plate.chemistry_but", [308] = "plate.electrical_but", [309] = "plate.explosives_but",
+        [310] = "plate.gunsmithy_but", [311] = "plate.mechanical_but", [312] = "plate.smithy_but", [313] = "plate.therapeutics_but",
+    };
+
     /// <summary>The glyph part of the bar button <paramref name="button"/> showing <paramref name="art"/>, or null when the art has none.</summary>
     public static string? GlyphOf(AreaBarButton? button, int art) =>
         ButtonGlyphs.TryGetValue(art, out var glyph) ? glyph : button is { } b && SharedArtGlyphs.TryGetValue(b, out glyph) ? glyph : null;
@@ -543,6 +557,17 @@ public static class SteamwovenKitComposer
         && part.Width == SteamwovenGrid.BakedLength(SteamwovenKitTable.CompositionMasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(SteamwovenKitTable.FullScreenMasterHeight, set.Step) ? part : null;
 
     /// <summary>
+    /// ARC-UI-3320: the kit faces of the round button the page shows with <paramref name="art"/> (<see cref="SteamwovenKitTable.RoundFaces"/>), or null when the set has no idle face for it (the page keeps the art's own frame through the round-part
+    /// layer, ARC-UI-3101). The pressed and hover faces count only at the idle face's size (a state that does not fit shows the idle face); the symbol is in the plate, so no glyph is asked for.
+    /// </summary>
+    public static SteamwovenKitRoundFace? RoundFace(SteamwovenKitSet set, int art)
+    {
+        if (!SteamwovenKitTable.RoundFaces.TryGetValue(art, out var face) || !set.TryGet(face, out var idle)) return null;
+        SteamwovenKitPart? State(string suffix) => set.TryGet(face + suffix, out var part) && part.Width == idle.Width && part.Height == idle.Height ? part : null;
+        return new SteamwovenKitRoundFace(idle, State("_pressed"), State("_hover"));
+    }
+
+    /// <summary>
     /// The layers of a bar button the bar shows with <paramref name="art"/>, bottom first: its face (the plate, or the lit face of a light button), its glyph (the symbol on a transparent background at the face's size, ARC-UI-3096)
     /// and, over them, the overlay of the look when the set has one (<c>&lt;face&gt;_hover</c> for a hovered button, <c>&lt;face&gt;_pressed</c> for a pressed one; the original has no disabled frame, SWI-KIT-5). All or nothing: empty
     /// when the set has no face, or no glyph at the face's size, because a plate alone is a button without its symbol; the button then keeps the pack's or the Legacy art. The ring round a button is the strip's hardware layer
@@ -558,6 +583,13 @@ public static class SteamwovenKitComposer
         if (suffix is not null && set.TryGet(face + suffix, out var overlay) && overlay.Width == plate.Width && overlay.Height == plate.Height) layers.Add(overlay);
         return layers;
     }
+}
+
+/// <summary>ARC-UI-3320: the parts of a round button's three states in the set: the idle face and, where the set holds them at its size, the pressed and the hover face (a missing state shows the idle face).</summary>
+public sealed record SteamwovenKitRoundFace(SteamwovenKitPart Idle, SteamwovenKitPart? Pressed, SteamwovenKitPart? Hover)
+{
+    /// <summary>The part ids, idle first, for the holder that keeps them resident.</summary>
+    public IEnumerable<SteamwovenKitPart> Parts => new[] { Idle, Pressed, Hover }.OfType<SteamwovenKitPart>();
 }
 
 /// <summary>How the barter window stands for the kit: the merchant's background art (235, or 825 with the follower's cycle buttons) and whether its frame lies in the window zone (the original look, not docked in the opening shop's screen; ARC-UI-3033).</summary>
