@@ -22,6 +22,15 @@ public partial class TerrainViewerApp
     private long _soakStartMsec;
     private bool _soakWindowOpened;
     private bool _resourceLogStarted;
+    /// <summary>ARC-DEV-3128: the frame cost of the last 30 s for the resource line, fed once per frame by <see cref="RecordFrameCost"/>.</summary>
+    private readonly ViewerFrameWindow _frameWindow = new();
+
+    /// <summary>ARC-DEV-3128: notes this frame (no allocation); a self-test keeps no window.</summary>
+    private void RecordFrameCost()
+    {
+        if (!_resourceLogStarted) return;
+        _frameWindow.Record((long)Time.GetTicksUsec(), GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+    }
 
     /// <summary>Starts the resource line (once, at the start; a self-test starts none) and, when the soak environment asks, the soak's CSV.</summary>
     private void StartSoak()
@@ -81,7 +90,7 @@ public partial class TerrainViewerApp
             Monitor(Performance.Monitor.RenderTextureMemUsed), Monitor(Performance.Monitor.RenderVideoMemUsed), Monitor(Performance.Monitor.RenderBufferMemUsed),
             Monitor(Performance.Monitor.ObjectCount), Monitor(Performance.Monitor.ObjectResourceCount), Monitor(Performance.Monitor.ObjectNodeCount),
             Monitor(Performance.Monitor.ObjectOrphanNodeCount), Monitor(Performance.Monitor.MemoryStatic), GC.GetTotalMemory(false), GcLiveBytes(),
-            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), process.WorkingSet64, process.Threads.Count, ViewerResourceLine.OpenFileDescriptors());
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), process.WorkingSet64, process.Threads.Count, ViewerResourceLine.OpenFileDescriptors(), _frameWindow.Read());
     }
 
     /// <summary>The bytes that survived the latest full collection (blocking or background), 0 before the first.</summary>
