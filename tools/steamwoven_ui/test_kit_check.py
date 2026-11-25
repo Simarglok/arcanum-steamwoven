@@ -309,7 +309,7 @@ class RealManifestTests(unittest.TestCase):
         parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
         for ident in ("cap.top_strip_left", "cap.top_strip_right", "cap.bottom_strip_left", "cap.bottom_strip_right"):
             self.assertEqual((parts[ident]["source_arts"], parts[ident]["batch"]), ([], "B-BOARD"), ident)
-        self.assertEqual(parts["board.inttop"]["layers"], ["cap.top_strip_left", "cap.top_strip_right"])
+        self.assertEqual(parts["board.inttop"]["layers"][:2], ["cap.top_strip_left", "cap.top_strip_right"])   # ARC-UI-2481: the hardware layers follow the caps
         self.assertEqual(parts["board.intbotom"]["size"], [2880, 570])
 
     def test_kit_has_no_full_width_board_outward_backdrop_or_gap_wood(self) -> None:
