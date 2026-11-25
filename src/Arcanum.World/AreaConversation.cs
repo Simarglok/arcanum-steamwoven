@@ -664,11 +664,11 @@ public sealed class AreaConversationHost
     /// of the running script at the action's node, the PC with the action's attachee): <paramref name="speaker"/> is that attachee and
     /// the run's effects are applied already (<see cref="AreaUseScriptHost.RunPlaced"/>), so no dialog script runs.
     /// ARC-SCRIPT-2961 (ledger TG10): the DLG's LF and LC read and write the speaker's dialog slot (point 9) whichever script or point started the
-    /// talk (the action side 0x415BA0 and the condition side 0x4150D0 pass attachment point 9), so a start at another point uses the same state
+    /// talk (the action side and the condition side both pass attachment point 9), so a start at another point uses the same state
     /// as a talk's; the dialog action's own store went to the attachment of the run's point (X11, <see cref="AreaScriptHost.Apply"/>). A speaker
     /// whose live dialog slot holds no script makes lf and lc do nothing and read false and 0, which the state does not model (KC3): such a
     /// start is refused (<see cref="AreaConversationStartStatus.EntryNotAdmitted"/>) when its DLG holds an LF or LC operation. A "return to
-    /// script" end resumes the speaker's dialog slot as a talk's does (<see cref="Resume"/>; 0x567E30 → 0x568480 runs point 9 of the NPC at the reply's
+    /// script" end resumes the speaker's dialog slot as a talk's does (<see cref="Resume"/>: the original runs point 9 of the NPC at the reply's
     /// line, or the held line + 1 where the line is the dialog action's own line in the script that started the talk, ledger TG10).
     /// </summary>
     public AreaConversationStart BeginScripted(AreaSpeaker speaker, ScrDialogStart dialog, CancellationToken token = default)
