@@ -270,6 +270,86 @@ class SurfaceComposeTests(unittest.TestCase):
                 surface_compose.load_spec(path)
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_disc_box_gives_the_corners_round_a_disc_to_the_wood_and_keeps_the_disc_whole(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            solid, out = tmp_path / "s.png", tmp_path / "f.png"
+            # the weight is black (no wood) except a leak of wood inside the disc (a 20 x 20 square at its centre) and a column of wood outside the box
+            subprocess.run(["magick", "-size", "240x240", "xc:black", "-fill", "white", "-draw", "rectangle 110,110 129,129", "-draw", "rectangle 230,0 239,239", str(solid)], check=True)
+            surface_compose.fill_outside_discs(solid, ((20, 20, 220, 220, 40, 40, 200, 200),), out, 240, 240)
+            data = surface_compose.gray_bytes(out)
+        at = lambda x, y: data[y * 240 + x]
+        self.assertGreater(at(25, 25), 200)     # the corner of the box, outside the ellipse: wood
+        self.assertGreater(at(215, 120), 200)   # between the disc and the box's edge: wood
+        self.assertLess(at(120, 120), 60)       # the leak inside the disc is the original's again
+        self.assertLess(at(120, 60), 60)        # the disc itself: the original's
+        self.assertLess(at(10, 10), 60)         # outside the box: untouched
+        self.assertGreater(at(235, 120), 200)   # outside the box, the weight that was 1 stays 1
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_disc_casts_a_soft_shadow_down_and_right_on_the_wood_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            image, solid = tmp_path / "i.png", tmp_path / "s.png"
+            subprocess.run(["magick", "-size", "300x300", "xc:gray(200)", str(image)], check=True)
+            # the wood weight: 1 everywhere except the disc (centre 120,120, radius 40) and a neighbour at the lower right (x 200..300, y 150..300) that keeps the original's pixels
+            subprocess.run(["magick", "-size", "300x300", "xc:white", "-fill", "black", "-draw", "circle 120,120 120,80", "-draw", "rectangle 200,150 299,299", str(solid)], check=True)
+            surface_compose.cast_disc_shadows(image, solid, ((60, 60, 180, 180, 80, 80, 160, 160),), 300, 300)
+            data = surface_compose.gray_bytes(image)
+            surface_compose.cast_disc_shadows(image, solid, (), 300, 300)     # no disc: untouched
+            self.assertEqual(surface_compose.gray_bytes(image), data)
+        at = lambda x, y: data[y * 300 + x]
+        self.assertLess(at(150, 155), 120)                     # just outside the disc's lower right: dark
+        self.assertGreater(at(85, 85), 190)                    # just outside its upper left: no shadow
+        self.assertEqual(at(120, 120), 200)                    # the disc itself
+        self.assertEqual(at(250, 200), 200)                    # the neighbour keeps its pixels
+        self.assertGreater(at(10, 290), 195)                   # far away: untouched
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_disc_box_may_be_an_oval_and_the_spec_runs_it_after_the_halo_boxes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, solid = tmp_path / "o.png", tmp_path / "s.png"
+            subprocess.run(["magick", "-size", "240x120", "xc:gray(30)", "-fill", "gray(150)", "-draw", "rectangle 105,45 135,75", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "240x120", "xc:black", str(solid)], check=True)
+            spec = surface_compose.ZoneSpec(id="z", disc_boxes=((10, 10, 230, 110, 20, 30, 220, 90),), halo_boxes=((90, 35, 150, 85),))
+            surface_compose.apply_box_fills(orig, solid, spec, 240, 120)
+            data = surface_compose.gray_bytes(solid)
+        self.assertGreater(data[20 * 240 + 120], 200)    # above the oval (y 20, inside the box but outside the ellipse y 30..89): wood
+        self.assertLess(data[60 * 240 + 120], 60)        # the oval
+        self.assertLess(data[60 * 240 + 95], 60)         # inside the oval and the halo box but beside the light square: the disc runs after the halo, so the original's
+        self.assertGreater(data[60 * 240 + 15], 200)     # left of the oval's tip, inside the box: wood
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_disc_outside_its_box_or_the_image_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            solid = tmp_path / "s.png"
+            subprocess.run(["magick", "-size", "100x100", "xc:black", str(solid)], check=True)
+            for bad in ((10, 10, 50, 50, 5, 20, 40, 40), (10, 10, 120, 50, 20, 20, 40, 40)):
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.fill_outside_discs(solid, (bad,), solid, 100, 100)
+            surface_compose.fill_outside_discs(solid, (), solid, 100, 100)    # no disc: nothing to do
+
+    def test_load_spec_reads_disc_boxes_and_refuses_a_bad_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spec.json"
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [[0, 0, 100, 100, 10, 10, 90, 90]]}), encoding="utf-8")
+            self.assertEqual(surface_compose.load_spec(path).disc_boxes, ((0, 0, 100, 100, 10, 10, 90, 90),))
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x"}), encoding="utf-8")
+            self.assertEqual(surface_compose.load_spec(path).disc_boxes, ())
+            for bad in ([[0, 0, 100, 100, 10, 10, 90]], [[0, 0, 100, 100, 10, 10, 110, 90]], [[0, 0, 100, 100, 50, 10, 50, 90]], [[0, 0, 100, 100, 10, 10, 90, 90.5]], "x"):
+                path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": bad}), encoding="utf-8")
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.load_spec(path)
+
+    def test_the_committed_specs_load_and_their_discs_lie_in_the_master(self):
+        for path in sorted((Path(__file__).parent / "zone_specs").glob("ctx-*.json")):
+            spec = surface_compose.load_spec(path)
+            for box in spec.halo_boxes + tuple(d[:4] for d in spec.disc_boxes):
+                self.assertTrue(box[2] <= 2880 and box[3] <= 2160, msg=f"{path.name} {box}")
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
     def test_remove_islands_drops_a_leak_and_a_bay_joined_by_a_thin_channel_and_keeps_the_wood(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

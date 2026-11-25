@@ -66,7 +66,7 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// before the scripts were run).</summary>
     SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) => null;
     /// <summary>ARC-SCRIPT-2887 (ledger TQ19, NT2): the host that runs the get (4) and insert-item (21) scripts of an item the regeneration creates (the item move's fresh path, with the holder as the triggerer); null when the host has none, and a created
-    /// item whose prototype carries either point is then not created (counted as skipped).</summary>
+    /// item whose prototype carries either point is then not created (counted as skipped). ARC-SCRIPT-2913: for the restock event, <see cref="GameSessionOwner.RegenerateInventory"/> and the generated-once container, <paramref name="map"/> is the actor's map: a restock event of a holder of any other map never reaches the world (the event queue keeps its event parked until that map is shown), so the shown map's script host is the host of every run.</summary>
     ISessionItemScriptHost? ItemScripts(SessionMapId map) => null;
 }
 
@@ -231,6 +231,8 @@ public sealed partial class GameSessionOwner
     internal GameEventHandlerOutcome FireRestock(GameEventFiring firing)
     {
         var entity = firing.Event.Payload.Entities[0];
+        // ARC-SCRIPT-2913 (TL33): the map is always the actor's: the queue fires an event of a scoped kind only while the PC is on its map (GameEventQueue.NextEligible; the original parks the other maps' events in their files), and the actor's map cannot change
+        // during a pass (PlaceActor refuses with InvalidEventPass). So a restock never regenerates a holder of a map that is not shown, and the created items' scripts always run on the shown map (NewNpcEntry).
         var map = new SessionMapId(entity.Map);
         GameEventHandlerOutcome Report(RestockDecision decision, IReadOnlyList<SessionRestockRegeneration> regenerations, bool postponed = false,
             GameSessionFailure scheduled = GameSessionFailure.None)

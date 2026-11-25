@@ -419,7 +419,7 @@ public partial class TerrainViewerApp
         if (EndsAtStart(speaker, start, scripted: dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog)) { RefreshReadyStatus(); return; }
         if (!ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "scripted dialog")) return;
         OpenConversation(speaker, start);
-        // ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex) resumes the speaker's dialog slot on "return to script".
+        // ARC-SCRIPT-047: tells the smoke stages a start at another point than the dialog point (every start resumes the speaker's dialog slot on "return to script", ARC-SCRIPT-2961).
         _conversationScripted = dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog;
         GD.Print($"ARC-SCRIPT-046 scripted conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
         RefreshReadyStatus();
@@ -436,8 +436,8 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    // ARC-SCRIPT-046: the open conversation was started by a script's dialog action, so a "return to script" end has no dialog script
-    // of the speaker to resume.
+    // ARC-SCRIPT-046: the open conversation was started by a script's dialog action at another point than the dialog point (ARC-SCRIPT-2961: its "return to script" end resumes the speaker's dialog slot all the same; the flag
+    // tells the smoke stages which kind of start they saw).
     private bool _conversationScripted;
 
     // ARC-WORLD-118: set by a native smoke stage that observes scripted conversations (the wreck and opening stages); the others hold them.
@@ -590,7 +590,7 @@ public partial class TerrainViewerApp
         // ARC-UI-2027 (0x5678D0 → 0x4D6160 −1): the NPC's line bubble stops being persistent.
         ExpireDialogLineBubble(speaker);
         var talkHost = _conversationHost;
-        var scripted = _conversationScripted; _conversationScripted = false;
+        _conversationScripted = false;
         // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
         if (conversation?.End is { Kind: DialogEndKind.SchematicWindow } && talkHost?.TakeSchematicCrafter() is { } crafter && _areaSession is not null)
             QueueDialogSchematics(crafter);
@@ -606,9 +606,8 @@ public partial class TerrainViewerApp
         // ARC-UI-1731: ii or ri ended the talk; the item identify or repair window opens and the talk does not resume (WN1, WN2).
         if (conversation?.End is { Kind: DialogEndKind.ItemIdentifyWindow or DialogEndKind.ItemRepairWindow } && talkHost?.TakeItemServiceRequest() is { } serviceRequest && _areaSession is not null)
             QueueDialogItemService(talkHost, serviceRequest);
-        if (resume && scripted && conversation?.End is { Kind: DialogEndKind.ReturnToScript })
-            _conversationNotice = "the script that started this conversation does not continue here (not modelled)";
-        else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
+        // ARC-SCRIPT-2961 (ledger TG10, 0x567E30 → 0x568480): the resume is the speaker's dialog point (9) whichever script or point started the talk; a use, tile or call-script start resumes it too.
+        if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
             // ARC-SCRIPT-2760: the resumed script may name a carried companion as the next speaker; admission is on demand (as BeginScriptedConversation's).

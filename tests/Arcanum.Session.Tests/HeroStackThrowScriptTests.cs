@@ -14,14 +14,14 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class HeroStackThrowScriptTests
 {
-    private const int ThrowScript = 720;
+    private const int ThrowScript = 720, RemoveScript = 721;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionItemKind Bullets = new(SessionItemType.Ammo, 7059, 3301, 33301);
     private static readonly SessionItemKind GoldPile = new(SessionItemType.Gold, 9076, 3200, 33200);
 
     private sealed class Host : ISessionItemScriptHost
     {
-        public Dictionary<int, ScrProgram> Programs { get; } = new() { [ThrowScript] = Program(C(ScrCatalogue.Action.ReturnRunDefault)) };
+        public Dictionary<int, ScrProgram> Programs { get; } = new() { [ThrowScript] = Program(C(ScrCatalogue.Action.ReturnRunDefault)), [RemoveScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnSkipDefault)) };
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => null;
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
         public bool GlobalFlag(int index) => throw new InvalidOperationException("the session reads flags itself");
@@ -38,13 +38,20 @@ public sealed class HeroStackThrowScriptTests
     }
 
     // The hero holds a stack of 30 bullets (made:2); both prototypes carry the throw script (the made item inherits it from its prototype).
-    private static GameSessionOwner Hero()
+    private static GameSessionOwner Hero(bool removal = false)
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), null);
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
         var npcStack = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (1, 30)).Item!;
         Assert.AreEqual("made:2", owner.TakeAmmoFromNpc(owner.Version, "virgil", npcStack, 30, Bullets, Accept).Item);
-        owner.AttachItemScripts(prototype => prototype is 7059 or 9076 ? [new(SessionScriptPoint.Throw, ThrowScript, 0, 0)] : null);
+        // ARC-SCRIPT-2900: with removal the source stack and the hero's gold pile (the prototype of the counter's pile) carry a remove-item script too.
+        owner.AttachItemScripts(prototype =>
+        {
+            var array = new List<SessionPrototypeScript>();
+            if (prototype is 7059 or 9076) array.Add(new(SessionScriptPoint.Throw, ThrowScript, 0, 0));
+            if (removal && prototype is 7059 || removal && prototype == SessionHeroGrid.GoldPrototype) array.Add(new(SessionScriptPoint.RemoveItem, RemoveScript, 0, 0));
+            return array.Count == 0 ? null : array;
+        });
         return owner;
     }
 
@@ -55,6 +62,74 @@ public sealed class HeroStackThrowScriptTests
 
     private static SessionHeroThrow Gold(GameSessionOwner owner, Host? host, int count) =>
         new(SessionHeroGrid.GoldEntity, new(SessionHeroGrid.GoldKind, false, [SessionScriptPoint.Throw]), At(owner, 3)) { Count = count, SplitKind = GoldPile, Scripts = host };
+
+    // ARC-SCRIPT-2900 (exe read 0x578EA0 → 0x4658E0/0x464830 → 0x43CCA0 → 0x466E00 → 0x467860): the lift of the whole stack destroys the source and so runs its remove-item script (28) with the hero as the triggerer, before the throw script of the new object; a part runs none.
+    [TestMethod]
+    public void TheWholeAmmunitionStacksLiftRunsItsRemoveItemScriptBeforeTheThrowScriptOfTheNewStackAndAPartRunsNone()
+    {
+        using var owner = Hero(removal: true);
+        var host = new Host();
+        var part = owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 12, SessionScriptPoint.Throw, SessionScriptPoint.RemoveItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (part.Disposition, part.Failure), part.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Throw, "made:3") }, part.Scripts.Select(run => (run.Point, run.Attachee)).ToArray(), "a part of the stack runs no removal");
+        Assert.AreNotEqual(true, ReadFlag(owner, 3));
+        var whole = owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 18, SessionScriptPoint.Throw, SessionScriptPoint.RemoveItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (whole.Disposition, whole.Failure), whole.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.RemoveItem, "made:2"), (SessionScriptPoint.Throw, "made:4") }, whole.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.AreEqual(true, ReadFlag(owner, 3), "the removal's flag write applied");
+    }
+
+    [TestMethod]
+    public void TheWholeGoldPilesLiftRunsItsRemoveItemScriptWithTheHeroAsTheTriggerer()
+    {
+        using var owner = Hero(removal: true);
+        var host = new Host();
+        var all = owner.QueryGold();
+        var part = owner.ThrowHeroItem(owner.Version, Gold(owner, host, 3));
+        Assert.AreEqual(GameSessionFailure.None, part.Failure, part.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.Throw }, part.Scripts.Select(run => run.Point).ToArray());
+        var whole = owner.ThrowHeroItem(owner.Version, Gold(owner, host, all - 3));
+        Assert.AreEqual(GameSessionFailure.None, whole.Failure, whole.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.RemoveItem, SessionHeroGrid.GoldEntity), (SessionScriptPoint.Throw, whole.Scripts[1].Attachee) }, whole.Scripts.Select(run => (run.Point, run.Attachee)).ToArray(), "the pile's facts carry no points: its prototype's array does");
+        Assert.AreEqual((0, true), (owner.QueryGold(), ReadFlag(owner, 3) == true));
+    }
+
+    [TestMethod]
+    public void TheWholeGoldPilesRemovalLeavesNoSlotForTheCounterAndADeclinedThrowKeepsTheCoins()
+    {
+        using var owner = Hero(removal: true);
+        var host = new Host();
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var all = owner.QueryGold();
+        var thrown = owner.ThrowHeroItem(owner.Version, Gold(owner, host, all));
+        Assert.AreEqual(GameSessionFailure.None, thrown.Failure, thrown.Failure.ToString());
+        Assert.IsFalse(owner.QueryItemScriptSlots().Any(slot => slot.Entity == SessionHeroGrid.GoldEntity), "the counter's pile keeps no slot a run wrote");
+        using var declined = Hero(removal: true);
+        var refusing = new Host();
+        refusing.Programs[RemoveScript] = host.Programs[RemoveScript];
+        refusing.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        var total = declined.QueryGold();
+        var result = declined.ThrowHeroItem(declined.Version, Gold(declined, refusing, total));
+        Assert.AreEqual((GameSessionDisposition.Changed, true, total), (result.Disposition, result.ScriptDeclined, declined.QueryGold()));
+        Assert.IsFalse(declined.QueryItemScriptSlots().Any(slot => slot.Entity == SessionHeroGrid.GoldEntity));
+        Assert.AreEqual(SessionScriptPoint.RemoveItem, result.Scripts[0].Point, "the lift's removal ran before the refused throw script");
+    }
+
+    [TestMethod]
+    public void TheHeroDroppingAWholeScriptedAmmunitionStackRunsItsRemoveItemScriptAndAPartRunsNone()
+    {
+        using var owner = Hero(removal: true);
+        var host = new Host();
+        var part = owner.DropHeroAmmo(owner.Version, "made:2", 10, Bullets, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 0), (part.Disposition, part.Scripts.Count));
+        var whole = owner.DropHeroAmmo(owner.Version, "made:2", 20, Bullets, host);
+        Assert.AreEqual(GameSessionDisposition.Changed, whole.Disposition, whole.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.RemoveItem, "made:2") }, whole.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.IsTrue(owner.IsItemDestroyed("made:2"));
+        using var other = Hero(removal: true);
+        var refused = other.DropHeroAmmo(other.Version, "made:2", 30, Bullets);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 30), (refused.Disposition, refused.Failure, other.QueryAmmo("made:2")!.Value.Units));
+    }
 
     [TestMethod]
     public void TheThrowScriptRunsForTheStackTheSplitMakesAndTheThrowGoesOn()
