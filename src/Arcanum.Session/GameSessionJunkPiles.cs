@@ -100,7 +100,7 @@ public sealed partial class GameSessionOwner
 
     private PileRelease PlanPileRelease(string item, SessionMapId map, string pile, ISessionItemScriptHost? scripts)
     {
-        var points = PassItemPoints(map, item);
+        var points = HeldItemPoints(item);
         if (!points.Contains(SessionScriptPoint.RemoveItem)) return default;
         if (map != _actor.Map) return new(null, GameSessionFailure.ItemScriptUnsupported);
         var plan = PlanEmptiedRemoval(item, points, pile, scripts);
@@ -186,6 +186,7 @@ public sealed partial class GameSessionOwner
         var applied = ApplyChanges(expected, null, [new(target.Map, MapChangeKey.ForEntity(target.Entity, ObjectConditionProperty),
             (long)SessionObjectCondition.Destroyed | SpillValue(target.Baseline.Cell))]);
         if (applied.Disposition != GameSessionDisposition.Changed) return applied;
+        // The map change above is applied first (it may still be refused), so the script's effects come after it; its reads were taken before (the plan), as the restock's and the body's runs.
         var runs = release.Failure == GameSessionFailure.None ? release.Runs : null;
         runs?.Commit();
         foreach (var item in items)
