@@ -335,7 +335,7 @@ def symbol_mask(frame: Image, pressed: Image | None = None, override: dict | Non
         region, max_l = override["roi"]
         inside = set(shape_cells(("poly", region), w, h))
         for i in inside:
-            if reading[i] <= max_l:
+            if reading[i] <= max_l and alpha_at(frame, i % w, i // w) > 0:
                 mask[i] = True
     for _ in range(override.get("close", 0)):  # morphological closing: the gaps between the strokes of a symbol the pressed frame shows only partly
         grown = dilate(mask, w, h)
@@ -344,7 +344,8 @@ def symbol_mask(frame: Image, pressed: Image | None = None, override: dict | Non
     for key, value in ("shapes", True), ("shapes_drop", False):  # simple forms the original draws as a straight or round shape, straightened
         for shape in override.get(key, ()):
             for i in shape_cells(shape, w, h):
-                mask[i] = value
+                if alpha_at(frame, i % w, i // w) > 0:
+                    mask[i] = value
     for key, value in ("add", True), ("drop", False):
         for x, y in override.get(key, ()):
             if not (0 <= x < w and 0 <= y < h):
@@ -616,6 +617,8 @@ def ring_profile(local: Path) -> tuple[list[tuple[float, float, float]], list[fl
     cy = (min(y for _, y in cells) + max(y for _, y in cells) + 1) / 2.0
     radii = [math.hypot(x + 0.5 - cx, y + 0.5 - cy) for x, y in cells]
     r_out, r_in = max(radii), min(radii)
+    if r_out - r_in < 2.0:
+        raise SchoolError(f"{path}: the ring is thinner than two cells ({r_out - r_in:.1f}), no cross-section to read")
     sums = [[0.0, 0.0, 0.0, 0] for _ in range(RING_BINS)]
     light = [[0.0, 0] for _ in range(RING_ANGLES)]
     for (x, y), r in zip(cells, radii):
@@ -628,8 +631,16 @@ def ring_profile(local: Path) -> tuple[list[tuple[float, float, float]], list[fl
             a = min(RING_ANGLES - 1, int(((math.atan2(y + 0.5 - cy, x + 0.5 - cx) + math.pi) / (2 * math.pi)) * RING_ANGLES))
             light[a][0] += sum(colour) / 3.0
             light[a][1] += 1
-    profile = [tuple(c[k] / max(1, c[3]) for k in range(3)) for c in sums]
-    means = [v / max(1, n) for v, n in light]
+    profile = [tuple(c[k] / c[3] for k in range(3)) if c[3] else None for c in sums]
+    if not any(profile):
+        raise SchoolError(f"{path}: no ring cells to read")
+    for b in range(RING_BINS):   # an empty bin takes its nearest filled neighbour
+        if profile[b] is None:
+            profile[b] = next(profile[b + d * sign] for d in range(1, RING_BINS) for sign in (-1, 1) if 0 <= b + d * sign < RING_BINS and profile[b + d * sign] is not None)
+    if not any(n for _, n in light):
+        raise SchoolError(f"{path}: no cells in the ring's lit and shaded bands")
+    filled = [v / n for v, n in light if n]
+    means = [v / n if n else sum(filled) / len(filled) for v, n in light]
     overall = sum(means) / len(means)
     gains = [max(RING_GAIN[0], min(RING_GAIN[1], m / overall)) for m in means]
     return profile, [(gains[k - 1] + 2 * gains[k] + gains[(k + 1) % len(gains)]) / 4.0 for k in range(len(gains))]   # smoothed

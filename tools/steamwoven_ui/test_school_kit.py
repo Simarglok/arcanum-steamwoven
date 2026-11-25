@@ -104,8 +104,16 @@ class ShapeAndRingTests(unittest.TestCase):
         self.assertTrue(all(added[i] for i in sk.shape_cells(shape, N, N)))
         removed = sk.symbol_mask(frame(), None, {"shapes_drop": (("rect", 0.0, 0.0, float(N), float(N)),)})
         self.assertFalse(any(removed))
-        roi = sk.symbol_mask(frame(), frame(shade=1.7), {"roi": ([(0.0, 0.0), (float(N), 0.0), (float(N), float(N)), (0.0, float(N))], 60.0)})
-        self.assertTrue(roi[12 * N + 12])
+        everything = [(0.0, 0.0), (float(N), 0.0), (float(N), float(N)), (0.0, float(N))]
+        plain = frame(symbol=False)
+        pressed = frame(shade=1.7, symbol=False)
+        for frame_ in (plain, pressed):   # a dark cell the rules do not find
+            frame_.data[(6 * N + 12) * 4:(6 * N + 12) * 4 + 3] = bytes((30, 30, 30))
+        self.assertFalse(sk.symbol_mask(plain, pressed, {})[6 * N + 12])
+        roi = sk.symbol_mask(plain, pressed, {"roi": (everything, 60.0)})
+        self.assertTrue(roi[6 * N + 12])
+        self.assertFalse(roi[0])                                   # a transparent corner is never symbol
+        self.assertFalse(sk.symbol_mask(plain, pressed, {"shapes": (("rect", 0.0, 0.0, 3.0, 3.0),)})[0])
 
     def test_the_coloured_body_of_a_symbol_joins_the_mask(self):
         idle = frame()
