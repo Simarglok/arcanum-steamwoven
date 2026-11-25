@@ -220,7 +220,7 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
     for name, art, tool, canvas in rows:
         plate = plates.get(f"plate.{name}")
         if canvas is None and plate is not None:
-            canvas = f"a {plate['size'][0]} x {plate['size'][1]} canvas"
+            canvas = f"{'an' if str(plate['size'][0]).startswith('8') else 'a'} {plate['size'][0]} x {plate['size'][1]} canvas"
         pack = tool == "school_kit.py"
         if plate is None:  # a census without the button (a test's synthetic one): nothing to hang the parts on (the real census has all eight, `build_kit.py --check` pins it)
             continue
@@ -229,7 +229,7 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
                                           (f"plate.{name}_hover", "plate", ["hover"], f"overlay of art {art}'s hover frame over its idle frame (" + ("the pack's hover frame in full, over the idle face" if pack else "the symbol lights up and glows") + ")"),
                                           (f"plate.{name}_pressed", "plate", ["pressed"], f"overlay of art {art}'s pressed frame over its idle frame (" + ("the pack's pressed frame in full, over the idle face" if pack else "the lit symbol, and the plate darkened where the original darkens it") + ")")):
             parts.append(new_part(ident, kind, plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
-                                  f"{what}; {tool} " + ("cuts it from the HD pack's frame (no Codex)" if pack else "draws it from the original frames (no Codex)") + f", {canvas}, so the size is open", states=states, master=True, provenance=f"rule:{rule}:{ident}"))
+                                  f"{what}; {tool} " + (("writes it, " if ident.startswith("glyph.") else "cuts it from the HD pack's frame, ") + "no Codex" if pack else "draws it from the original frames (no Codex)") + f", {canvas}, so the size is open", states=states, master=True, provenance=f"rule:{rule}:{ident}"))
     return parts
 
 

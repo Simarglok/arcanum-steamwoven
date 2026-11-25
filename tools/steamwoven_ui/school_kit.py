@@ -50,7 +50,7 @@ except ImportError:  # run as a script
     import prompt_library  # type: ignore
 
 Image = pngio.Image
-TOOL_VERSION = 2
+TOOL_VERSION = 2            # 1 was the first, rule-F build (the coloured dome and the symbol rebuilt; rejected 2026-11-25)
 MANIFEST = HERE / "kit.json"
 ROUND_PARTS_SOURCE = HERE.parents[1] / "tools" / "terrain-viewer" / "Core" / "AreaKitRoundParts.cs"   # the viewer's table of the round parts (the circle of each art) and the shadow's numbers
 PACK_DIR = "hd-packs/interface-redraw-4x"   # under `local/`
@@ -147,7 +147,11 @@ def circles() -> dict[int, Circle]:
         if trim is None:
             raise SchoolError("AreaKitRoundParts: no Trim constant found")
         rows = re.findall(r"\[(\d+)\] = new\((\d+), (\d+), ([0-9.]+)f, ([0-9.]+)f, ([0-9.]+)f\)", text)
-        _CIRCLES = {int(a): Circle(int(w), int(h), float(cx), float(cy), float(r), float(trim.group(1))) for a, w, h, cx, cy, r in rows}
+        found = {int(a): Circle(int(w), int(h), float(cx), float(cy), float(r), float(trim.group(1))) for a, w, h, cx, cy, r in rows}
+        missing = [t.name for t in TABS if t.art not in found]
+        if missing:
+            raise SchoolError(f"AreaKitRoundParts: no circle for {missing} (the table's format changed?)")
+        _CIRCLES = found
     return _CIRCLES
 
 
@@ -200,6 +204,14 @@ def pack_path(local: Path, name: str, number: int) -> tuple[Path, str]:
     raise SchoolError(f"the pack has no frame {number} of {name}")
 
 
+def check_aspect(tab: "Tab", frame: Image, state: str) -> None:
+    """A pack frame must have the art's aspect (a frame rebuilt at another one would be stretched out of shape)."""
+    circle = circle_of(tab)
+    ux, uy = frame.w / circle.width, frame.h / circle.height
+    if abs(ux - uy) > 0.05 * ux:
+        raise SchoolError(f"{tab.name} {state}: the pack frame {frame.w} x {frame.h} is not the art's aspect {circle.width} x {circle.height}")
+
+
 def read_pack(local: Path, name: str, number: int) -> tuple[Image, Path]:
     path, _ = pack_path(local, name, number)
     try:
@@ -223,7 +235,7 @@ def extruded(frame: Image, circle: Circle) -> Image:
             if d <= inner:
                 continue
             sx, sy = cx + nx / d * inner * rx, cy + ny / d * inner * ry
-            i = (min(frame.h - 1, int(sy)) * frame.w + min(frame.w - 1, int(sx))) * 4
+            i = (max(0, min(frame.h - 1, int(sy))) * frame.w + max(0, min(frame.w - 1, int(sx)))) * 4
             out.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3] = frame.data[i:i + 3]
     return out
 
@@ -282,6 +294,8 @@ def empty_layer(master: tuple[int, int]) -> Image:
 def tab_parts(local: Path, tab: Tab) -> dict[str, Image]:
     circle, master = circle_of(tab), master_of(tab.name)
     frames = {state: read_pack(local, tab.name, number)[0] for state, number in STATE_FRAMES.items()}
+    for state, frame in frames.items():
+        check_aspect(tab, frame, state)
     return {f"plate.{tab.name}": round_part(frames["idle"], circle, master),
             f"glyph.{tab.name}": empty_layer(master),
             f"plate.{tab.name}_hover": round_part(frames["hover"], circle, master),
@@ -306,17 +320,22 @@ def shadow_alpha(circle: Circle, units_x: float, units_y: float, pixel: float) -
     return s.strength * edge * (1.0 - keep)
 
 
-MARGIN = 12   # master px of the ground left round a part on the sheet
+MARGIN_UNITS = 8.0   # art units of the ground left round a part on the sheet (the run-time shadow reaches its offset and a few sigma; the sheet cuts it at about two)
+
+
+def margin_of(circle: Circle, master: tuple[int, int]) -> tuple[int, int]:
+    return int(math.ceil(MARGIN_UNITS * master[0] / circle.width)), int(math.ceil(MARGIN_UNITS * master[1] / circle.height))
 
 
 def staged(part: Image, circle: Circle, master: tuple[int, int]) -> Image:
     """The part over the wood-like ground with the run-time shadow (the master pixel grid, a margin all round)."""
-    w, h = master[0] + 2 * MARGIN, master[1] + 2 * MARGIN
+    mw, mh = margin_of(circle, master)
+    w, h = master[0] + 2 * mw, master[1] + 2 * mh
     out = Image(w, h, bytearray(w * h * 4))
     mx, my = master[0] / circle.width, master[1] / circle.height
     for y in range(h):
         for x in range(w):
-            px, py = x - MARGIN + 0.5, y - MARGIN + 0.5
+            px, py = x - mw + 0.5, y - mh + 0.5
             a = shadow_alpha(circle, px / mx, py / my, 1.0 / mx)
             base = [c * (1.0 - a) for c in GROUND]
             if 0 <= px < master[0] and 0 <= py < master[1]:
@@ -370,17 +389,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     bad = []
     for tab in selected(args):
         circle = circle_of(tab)
+        if min(circle.cx - circle.cut, circle.cy - circle.cut, circle.width - circle.cx - circle.cut, circle.height - circle.cy - circle.cut) < -OVERSHOOT:
+            bad.append(f"{tab.name}: the circle leaves the art by more than {OVERSHOOT} unit")
         for state, number in STATE_FRAMES.items():
             try:
-                frame, _ = read_pack(local, tab.name, number)
+                check_aspect(tab, read_pack(local, tab.name, number)[0], state)
             except SchoolError as error:
-                bad.append(f"{tab.name} {state}: {error}")
-                continue
-            ux, uy = frame.w / circle.width, frame.h / circle.height
-            if min(circle.cx - circle.cut, circle.cy - circle.cut, circle.width - circle.cx - circle.cut, circle.height - circle.cy - circle.cut) < -OVERSHOOT:
-                bad.append(f"{tab.name}: the circle leaves the art by more than {OVERSHOOT} unit")
-            if abs(ux - uy) > 0.05 * ux:
-                bad.append(f"{tab.name} {state}: the pack frame {frame.w} x {frame.h} is not the art's aspect {circle.width} x {circle.height}")
+                bad.append(str(error))
     for line in bad:
         print(line)
     print("SCHOOL KIT check " + ("FAIL" if bad else f"PASS ({len(selected(args))} buttons, three pack frames each, circles inside the art)"))
@@ -433,14 +448,15 @@ def cmd_sheet(args: argparse.Namespace) -> int:
     work = Path(tempfile.mkdtemp(prefix="school-sheet-"))
     try:
         rows = []
-        cell = None
+        cell = (max(master_of(t.name)[0] + 2 * margin_of(circle_of(t), master_of(t.name))[0] for t in tabs) * args.zoom,
+                max(master_of(t.name)[1] + 2 * margin_of(circle_of(t), master_of(t.name))[1] for t in tabs) * args.zoom)
         for tab in tabs:
             circle, master = circle_of(tab), master_of(tab.name)
             parts = tab_parts(local, tab)
             original = upscaled(pngio.read(frames / tab.folder / "f0.png"), master)
             shots = [("original", original), ("idle", parts[f"plate.{tab.name}"]), ("hover", parts[f"plate.{tab.name}_hover"]), ("pressed", parts[f"plate.{tab.name}_pressed"])]
-            size = (master[0] + 2 * MARGIN, master[1] + 2 * MARGIN)
-            cell = cell or (size[0] * args.zoom, size[1] * args.zoom)
+            margin = margin_of(circle, master)
+            size = (master[0] + 2 * margin[0], master[1] + 2 * margin[1])
             cells = []
             for tag, image in shots:
                 path = work / f"{tab.name}-{tag}.png"
@@ -499,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
         return {"build": cmd_build, "check": cmd_check, "sheet": cmd_sheet}[args.command](args)
-    except (SchoolError, button_kit.ButtonError, pngio.PngError, OSError, subprocess.CalledProcessError, KeyError) as error:
+    except (SchoolError, button_kit.ButtonError, pngio.PngError, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"SCHOOL KIT FAIL: {error}")
         return 2
 

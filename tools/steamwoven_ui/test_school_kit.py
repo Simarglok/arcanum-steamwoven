@@ -21,7 +21,7 @@ def pack_frame(colour=INSIDE) -> pngio.Image:
     image = pngio.Image(HD, HD, bytearray(HD * HD * 4))
     for y in range(HD):
         for x in range(HD):
-            inside = math.hypot(x + 0.5 - circle.cx * 4, y + 0.5 - circle.cy * 4) <= circle.cut * 4 + 3
+            inside = math.hypot(x + 0.5 - circle.cx * 4, y + 0.5 - circle.cy * 4) <= circle.cut * 4 - 1
             image.data[(y * HD + x) * 4:(y * HD + x) * 4 + 4] = bytes((*(colour if inside else OUTSIDE), 255))
     return image
 
@@ -85,6 +85,22 @@ class PartTests(unittest.TestCase):
                     self.assertGreater(part.data[k], 150, (x, y))       # red
                     self.assertLess(part.data[k + 1], 90, (x, y))       # no green of the old background
 
+    def test_extruded_carries_the_inside_colour_outwards_and_leaves_the_inside_alone(self):
+        circle = sk.circle_of(TAB)
+        frame = pack_frame()
+        out = sk.extruded(frame, circle)
+        cx, cy = circle.cx * 4, circle.cy * 4
+        rx = circle.cut * 4
+        inner = 1.0 - sk.EXTRUDE_PX / rx
+        for y in range(HD):
+            for x in range(HD):
+                d = math.hypot(x + 0.5 - cx, y + 0.5 - cy) / rx
+                k = (y * HD + x) * 4
+                if d <= inner:
+                    self.assertEqual(out.data[k:k + 3], frame.data[k:k + 3])      # untouched inside
+                else:
+                    self.assertEqual(tuple(out.data[k:k + 3]), INSIDE, (x, y))     # the old background is gone
+
     def test_the_part_is_round_cut_smooth_and_at_the_masters_size(self):
         circle, master = sk.circle_of(TAB), sk.master_of(TAB.name)
         part = sk.round_part(pack_frame(), circle, master)
@@ -133,6 +149,12 @@ class PackTests(unittest.TestCase):
             with self.assertRaises(sk.SchoolError):
                 sk.read_pack(local, TAB.name, 0)
 
+    def test_a_pack_frame_of_another_aspect_is_refused(self):
+        wide = pngio.Image(128, 96, bytearray(128 * 96 * 4))
+        with self.assertRaises(sk.SchoolError):
+            sk.check_aspect(TAB, wide, "idle")
+        sk.check_aspect(TAB, pack_frame(), "idle")
+
     def test_an_index_that_points_outside_the_pack_is_refused(self):
         with tempfile.TemporaryDirectory() as folder:
             local = tree(folder, escape=True)
@@ -167,8 +189,8 @@ class DataTests(unittest.TestCase):
         self.assertEqual(len({t.name for t in sk.TABS}), 28)
         self.assertEqual(len({t.art for t in sk.TABS}), 28)
         for tab in sk.TABS:
-            self.assertEqual(sk.circle_of(tab).width / sk.circle_of(tab).height > 0, True)
-            self.assertTrue(all(v > 0 for v in sk.master_of(tab.name)), tab.name)
+            circle, master = sk.circle_of(tab), sk.master_of(tab.name)
+            self.assertAlmostEqual(master[0] / master[1], circle.width / circle.height, delta=0.12, msg=tab.name)
 
     def test_the_manifest_rows_of_the_slice(self):
         manifest = json.loads(sk.MANIFEST.read_text(encoding="utf-8"))
