@@ -490,6 +490,13 @@ Owner decision 2026-11-24 (option A, [#3098](https://github.com/Simarglok/arcanu
   copies images found only in worktrees, session scratchpads, temp folders and the Codex output folder (it copies, never moves or deletes) and registers the pipeline's in-place
   files (outbox, codex-work, masters; `location: pipeline`). `fixtures.py build` writes to the main checkout's `masters/`, and the tools with `--out`/`--work` print a warning
   for a folder inside a worktree or a temp folder. Not committed, not packaged (SWI-PRV-1); the HD pack resources are never touched.
+- **SWI-PRV-6** Archive statuses at merge (owner rule 2026-11-25, ARC-DEV-3277 continued by ARC-DEV-3302): when a task's PR merges, the task closes its archive in the same turn. The images the
+  owner accepted go to `final/` (`image_archive.py mark <TASK> <file> final`; a file whose sha256 equals a kit master or an installed-pack entry is `final` with the note
+  `matches kit master <id>` / `matches pack entry <id>`); the variants the owner rejected are `rejected`; every other file of the task (composites, screenshots, crops,
+  sheets, raw Codex outputs a master was built from, by the master's provenance record) is `intermediate`; raw Codex outputs nothing was built from are `rejected`. `mark --note TEXT`
+  records why. `image_archive.py index <TASK>` must then show no `unknown` row of the task. When the thread cannot decide a file (no owner answer yet), it files a GitHub issue naming the
+  task and the open rows instead of leaving them silently `unknown` (found need = issue). The first bulk pass over the existing archive is the marking of 2026-11-25
+  (hash match, rules, owner decisions; the rest as contact sheets for the owner in `local/steamwoven-ui/composites/ARC-UI-3277/`).
 
 ## Verification
 
