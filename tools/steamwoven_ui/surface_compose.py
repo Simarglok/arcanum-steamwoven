@@ -59,6 +59,12 @@ JOIN_KEEP = 6             # px each side of a join that are the ORIGINAL's (abou
 JOIN_FEATHER = 2.0
 SEAM_TARGET = 1.8         # owner condition 4 (2026-11-21): the seam at a strip join is at most this (the original's own are 1.82 and 1.73); SWI-VER-5's gate of 1.5 is recorded beside it
 SEAM_GATE = 1.5
+ISLAND_ERODE = 6          # px: ARC-UI-3164: the weight is eroded by this before the islands are counted (a bay joined to the wood by a few pixels becomes an island) and grown back after
+ISLAND_CONNECTIVITY = 4   # ARC-UI-3164: connected-components rule of the wood weight's island removal
+FILL_BRIGHT = 105         # 0..255 luma of the ORIGINAL: letters, brass and paper are lighter than this, the wood of a stats panel is not (panel wood: 90 % under 75)
+FILL_DARK = 14            # ... and black fields are darker than this
+FILL_DILATE = 4           # px: ARC-UI-3164: the items (letters, plates, fields) inside a fill box are grown by this much before the wood is put between them
+FILL_CLOSE = 4           # px: ... and closed by this, so strokes of a letter and a plate's rim and field are one item, never wood in between
 ERASE_RING = 2            # px: the ring just outside an erase box whose per-channel median fills it
 SCHEMA = "steamwoven-surface/1"
 SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")   # a zone id is a file name: no path parts, no leading dot
@@ -68,7 +74,10 @@ SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")   # a zone id is a file name
 class ZoneSpec:
     """One composition of method A (ARC-UI-3100): a whole screen of the master size (2880 x 2160 for the contexts), its tone-mask screen, the strip joins, the band
     of the light bevel lines, the chip boxes (inventory only), `erase_boxes` (x0, y0, x1, y1: baked text or counters the game draws over the surface; filled by the median
-    of the ring outside the box) and `kit_parts` (dicts `id`, `file`, `x`, `y`: a kit master laid over the result at master pixels, replacing the original's stand-in)."""
+    of the ring outside the box) and `kit_parts` (dicts `id`, `file`, `x`, `y`: a kit master laid over the result at master pixels, replacing the original's stand-in).
+    ARC-UI-3164 added `island_min` (drop wood-weight islands smaller than this many pixels, so a leak of the wood class into metal or a page edge is the original's again),
+    `fill_boxes` (boxes whose wood between the items the tone mask excludes is the Codex wood as well, so the original's lighter wood is no patch) and `dot_bands`
+    (the rows where the original's rows of dots are kept: the strips; in the window the faint grain specks chain into false rows of dots)."""
     id: str
     screen: str = method_c.SCREEN
     joins: tuple[int, ...] = JOINS
@@ -76,6 +85,9 @@ class ZoneSpec:
     chip_boxes: tuple[tuple[int, int, int, int], ...] = ()
     erase_boxes: tuple[tuple[int, int, int, int], ...] = ()
     kit_parts: tuple[dict, ...] = ()
+    island_min: int = 0                                          # ARC-UI-3164: wood-weight islands under this many pixels are dropped (the ORIGINAL's pixels stand there): metal and paper edges the class leaks into
+    fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
+    dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
 
 
 INVENTORY = ZoneSpec(id="ctx-inventory", chip_boxes=CHIP_BOXES)
@@ -94,7 +106,7 @@ def load_spec(path: Path) -> ZoneSpec:
         raise ComposeError(f"cannot read the spec {path}: {error}") from error
     if not isinstance(raw, dict):
         raise ComposeError(f"spec {path}: the top level is an object")
-    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts"}
+    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands"}
     if unknown or "id" not in raw or "screen" not in raw:
         raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
     if not (isinstance(raw["id"], str) and SAFE_ID.fullmatch(raw["id"]) and isinstance(raw["screen"], str)):
@@ -126,8 +138,17 @@ def load_spec(path: Path) -> ZoneSpec:
     joins = raw.get("joins", list(JOINS))
     if not (isinstance(joins, list) and joins and all(_is_int(j) and j > 0 for j in joins)):
         raise ComposeError(f"spec {path}: joins are a non-empty list of rows (positive integers)")
+    island_min = raw.get("island_min", 0)
+    if not (_is_int(island_min) and island_min >= 0):
+        raise ComposeError(f"spec {path}: island_min is a non-negative integer")
+    bands_raw = raw.get("dot_bands")
+    bands = None
+    if bands_raw is not None:
+        if not (isinstance(bands_raw, list) and all(isinstance(b, list) and len(b) == 2 and all(_is_int(v) for v in b) and 0 <= b[0] < b[1] for b in bands_raw)):
+            raise ComposeError(f"spec {path}: dot_bands is null or a list of [top, bottom] rows")
+        bands = tuple(tuple(b) for b in bands_raw)
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
-                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts))
+                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), dot_bands=bands)
 
 
 class ComposeError(Exception):
@@ -296,11 +317,12 @@ def despeckle(a: Path, out: Path, work: Path, width: int, height: int) -> int:
     return count
 
 
-def original_dots(original: Path, wood_class_mask: Path, work: Path, width: int, height: int) -> tuple[Path, int]:
-    """A mask of the ORIGINAL's rows of dots inside its wood (the dots grown by 1 px), written as a grey PNG; also the number of dots kept."""
+def original_dots(original: Path, wood_class_mask: Path, work: Path, width: int, height: int, bands: tuple[tuple[int, int], ...] | None = None) -> tuple[Path, int]:
+    """A mask of the ORIGINAL's rows of dots inside its wood (the dots grown by 1 px), written as a grey PNG; also the number of dots kept. `bands`: only dots in
+    these rows (top, bottom) count (None = every row)."""
     specks = speck_map(original, DOT_THRESHOLD, width, height, work, "o")
     wood = gray_bytes(wood_class_mask)
-    points = {i for i, b in enumerate(specks) if b and wood[i] > 128}
+    points = {i for i, b in enumerate(specks) if b and wood[i] > 128 and (bands is None or any(top <= i // width < bottom for top, bottom in bands))}
     comps = [c for c in components(points, width) if len(c) <= DOT_MAX_PIXELS]
     centres = [(sum(q // width for q in c) / len(c), sum(q % width for q in c) / len(c)) for c in comps]
     keep = dot_rows(centres)
@@ -495,6 +517,44 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def remove_islands(solid: Path, out: Path, min_area: int) -> None:
+    """The wood weight without its white islands smaller than `min_area` pixels (ImageMagick connected components): a class leak inside a gear, a plate or a book's page
+    edge is a blob of a few thousand pixels, real wood is a region of hundreds of thousands. The weight is eroded by ISLAND_ERODE first, so a bay that opens to the wood through
+    a few pixels is an island too, and grown back by the same disk inside the original weight. Only white is removed, never a hole of the wood."""
+    if min_area <= 0:
+        return
+    binary, kept, dropped = solid.with_name("island-bin.png"), solid.with_name("island-kept.png"), solid.with_name("island-dropped.png")
+    run(["magick", str(solid), "-colorspace", "Gray", "-threshold", "50%", "-morphology", "Erode", f"Disk:{ISLAND_ERODE}", str(binary)])
+    run(["magick", str(binary), "-define", f"connected-components:area-threshold={min_area}", "-define", "connected-components:mean-color=true",
+         "-connected-components", str(ISLAND_CONNECTIVITY), "-colorspace", "Gray", str(kept)])
+    # only the dropped islands (white in the eroded weight, black after the count) are taken out, grown back and feathered: the rest of the soft weight, its edges included, is untouched
+    run(["magick", str(binary), str(kept), "-compose", "Difference", "-composite", "-morphology", "Dilate", f"Disk:{ISLAND_ERODE + 2}", "-blur", f"0x{MASK_FEATHER}", "-negate", str(dropped)])
+    run(["magick", str(solid), str(dropped), "-colorspace", "Gray", "-compose", "Multiply", "-composite", str(out)])
+
+
+def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, width: int, height: int) -> None:
+    """ARC-UI-3164: in each fill box the wood weight is 1 wherever no item is: an item is an ORIGINAL pixel lighter than FILL_BRIGHT or darker than FILL_DARK in luma (letters,
+    brass rims, black fields), grown by FILL_DILATE, closed by FILL_CLOSE and filled inside (a knob in a rim), all inside the box only. The tone mask excludes these boxes
+    whole, which left the ORIGINAL's lighter panel wood there as a patch with a sharp edge against the Codex wood (the colour class cannot be used: the panel wood is no wood class)."""
+    if not boxes:
+        return
+    draw = []
+    for x0, y0, x1, y1 in boxes:
+        draw += ["-draw", f"rectangle {x0},{y0} {x1 - 1},{y1 - 1}"]
+    inside, items, protect, fill = (solid.with_name(n) for n in ("fill-box.png", "fill-items.png", "fill-protect.png", "fill-weight.png"))
+    run(["magick", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *draw, "-colorspace", "Gray", str(inside)])
+    bright, dark = f"{FILL_BRIGHT / 255 * 100:.2f}", f"{FILL_DARK / 255 * 100:.2f}"
+    run(["magick", str(original), "-alpha", "off", "-colorspace", "Gray", "(", "+clone", "-threshold", f"{bright}%", ")", "(", "-clone", "0", "-threshold", f"{dark}%", "-negate", ")",
+         "-delete", "0", "-compose", "Lighten", "-composite", str(inside), "-compose", "Multiply", "-composite",
+         "-morphology", "Dilate", f"Disk:{FILL_DILATE}", "-morphology", "Close", f"Disk:{FILL_CLOSE}", str(items)])
+    # holes of the items (a knob inside a rim): the background reached from the corner is outside; whatever black is not reached is inside an item
+    # (a black 1 px border first, so the corner pixel the flood starts from is background even when a box and an item touch the image corner)
+    run(["magick", str(items), "-bordercolor", "black", "-border", "1", "-fill", "gray50", "-draw", "color 0,0 floodfill", "-fill", "white", "-opaque", "black", "-fill", "black", "-opaque", "gray50",
+         "-shave", "1x1", str(protect)])
+    run(["magick", str(protect), "-negate", str(inside), "-compose", "Multiply", "-composite", "-blur", f"0x{MASK_FEATHER}", str(fill)])
+    run(["magick", str(solid), str(fill), "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
+
+
 def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BEVEL_MODE, spec: ZoneSpec = INVENTORY, kit_base: Path | None = None) -> dict:
     if bevel_mode not in ("lighten", "original"):
         raise ComposeError(f"unknown bevel mode {bevel_mode!r}")
@@ -508,10 +568,13 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     method_c.write_mask(original, solid, feather=MASK_FEATHER, solid=True, screen_id=spec.screen)
     method_c.write_mask(original, raw, screen_id=spec.screen)
     fill_notches(solid, solid)
+    remove_islands(solid, solid, spec.island_min)
+    if spec.fill_boxes:
+        fill_between_items(original, solid, spec.fill_boxes, solid, w, h)
     keep_joins(solid, solid, w, h, spec.joins)
     clean = work / "a-clean.png"
     specks = despeckle(a, clean, work, w, h)
-    dots, dot_count = original_dots(original, raw, work, w, h)
+    dots, dot_count = original_dots(original, raw, work, w, h, spec.dot_bands)
     mask, coverage, cells = wood_cells(img_o, masks, spec.screen)
     target = wood_stats(img_o, mask, coverage, cells)
     before = wood_stats(pngio.read(clean), mask, coverage, cells)

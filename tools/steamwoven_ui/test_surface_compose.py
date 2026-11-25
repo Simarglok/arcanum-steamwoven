@@ -211,6 +211,98 @@ class SurfaceComposeTests(unittest.TestCase):
                 with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
                     surface_compose.load_spec(path)
 
+    def test_load_spec_reads_the_island_fill_and_dot_band_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spec.json"
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "island_min": 4000, "fill_boxes": [[1, 2, 30, 40]], "dot_bands": [[0, 148], [1588, 2160]]}), encoding="utf-8")
+            spec = surface_compose.load_spec(path)
+            self.assertEqual((spec.island_min, spec.fill_boxes, spec.dot_bands), (4000, ((1, 2, 30, 40),), ((0, 148), (1588, 2160))))
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x"}), encoding="utf-8")
+            spec = surface_compose.load_spec(path)
+            self.assertEqual((spec.island_min, spec.fill_boxes, spec.dot_bands), (0, (), None))        # defaults: the inventory behaves as before
+            for bad in ({"island_min": -1}, {"island_min": True}, {"island_min": "9"}, {"dot_bands": [[5, 5]]}, {"dot_bands": [[0]]}, {"dot_bands": 3}, {"dot_bands": [["a", "b"]]},
+                        {"fill_boxes": [[5, 5, 5, 9]]}):
+                path.write_text(json.dumps({"id": "a", "screen": "s", **bad}), encoding="utf-8")
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.load_spec(path)
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_remove_islands_drops_a_leak_and_a_bay_joined_by_a_thin_channel_and_keeps_the_wood(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            src, out = tmp_path / "w.png", tmp_path / "w2.png"
+            # white wood, a black metal block with a 40 x 30 white bay inside joined to the wood by a 3 px channel, and a white 30 x 30 leak inside a second black block
+            subprocess.run(["magick", "-size", "400x200", "xc:white", "-fill", "black", "-draw", "rectangle 20,20 120,120", "-fill", "white", "-draw", "rectangle 50,50 90,80",
+                            "-draw", "rectangle 88,60 120,62", "-fill", "black", "-draw", "rectangle 200,20 320,150", "-fill", "white", "-draw", "rectangle 240,60 270,90", str(src)], check=True)
+            surface_compose.remove_islands(src, out, 700)
+            data = surface_compose.gray_bytes(out)
+        at = lambda x, y: data[y * 400 + x]
+        self.assertLess(at(70, 65), 60)       # the bay: the original's pixels again
+        self.assertLess(at(255, 75), 60)      # the leak: dropped
+        self.assertGreater(at(350, 180), 200)  # the wood: kept
+        self.assertGreater(at(10, 10), 200)
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_remove_islands_leaves_the_feathered_edge_of_the_wood_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            src, out = tmp_path / "w.png", tmp_path / "w2.png"
+            subprocess.run(["magick", "-size", "200x100", "xc:white", "-fill", "black", "-draw", "rectangle 80,0 199,99", "-blur", "0x3", str(src)], check=True)
+            before = surface_compose.gray_bytes(src)
+            surface_compose.remove_islands(src, out, 700)
+            after = surface_compose.gray_bytes(out)
+        row = 50 * 200
+        self.assertEqual(list(before[row + 70:row + 90]), list(after[row + 70:row + 90]))   # the soft edge: no hard step at 50 %
+        surface_compose.remove_islands(src, out, 0)                                         # off: returns at once
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_fill_between_items_with_an_item_and_a_box_at_the_image_corner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, solid, out = tmp_path / "o.png", tmp_path / "s.png", tmp_path / "f.png"
+            subprocess.run(["magick", "-size", "120x80", "xc:gray(60)", "-fill", "gray(200)", "-draw", "rectangle 0,0 10,10", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "120x80", "xc:black", str(solid)], check=True)
+            surface_compose.fill_between_items(orig, solid, ((0, 0, 100, 70),), out, 120, 80)
+            data = surface_compose.gray_bytes(out)
+        self.assertLess(data[5 * 120 + 5], 60)        # the corner item stays the original's
+        self.assertGreater(data[50 * 120 + 60], 200)  # wood elsewhere in the box
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_fill_between_items_puts_wood_between_letters_and_keeps_the_items_and_the_outside(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, solid, out = tmp_path / "o.png", tmp_path / "s.png", tmp_path / "f.png"
+            # panel wood (luma 60) with a bright letter block and a black field in the fill box (20,20)-(180,100); the same wood outside the box
+            subprocess.run(["magick", "-size", "240x120", "xc:gray(60)", "-fill", "gray(200)", "-draw", "rectangle 40,40 52,60", "-fill", "black", "-draw", "rectangle 120,40 160,70", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "240x120", "xc:black", str(solid)], check=True)
+            surface_compose.fill_between_items(orig, solid, ((20, 20, 180, 100),), out, 240, 120)
+            data = surface_compose.gray_bytes(out)
+        at = lambda x, y: data[y * 240 + x]
+        self.assertGreater(at(90, 30), 200)    # wood between the items, inside the box: the Codex wood now
+        self.assertLess(at(46, 50), 60)        # the letter: the original's
+        self.assertLess(at(140, 55), 60)       # the field: the original's
+        self.assertLess(at(10, 10), 60)        # outside the box: untouched
+        self.assertLess(at(200, 50), 60)
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_original_dots_count_only_inside_the_bands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, wood, work = tmp_path / "o.png", tmp_path / "w.png", tmp_path / "work"
+            work.mkdir()
+            draw = []
+            for y in (20, 100):
+                for x in range(20, 300, 25):
+                    draw += ["-draw", f"point {x},{y}"]
+            subprocess.run(["magick", "-size", "320x120", "xc:gray(128)", "-fill", "gray(60)", *draw, str(orig)], check=True)
+            subprocess.run(["magick", "-size", "320x120", "xc:white", str(wood)], check=True)
+            _, everywhere = surface_compose.original_dots(orig, wood, work, 320, 120)
+            _, banded = surface_compose.original_dots(orig, wood, work, 320, 120, ((0, 50),))
+            _, none = surface_compose.original_dots(orig, wood, work, 320, 120, ((60, 70),))
+        self.assertGreater(everywhere, banded)
+        self.assertGreater(banded, 0)
+        self.assertEqual(none, 0)
+
     def test_the_inventory_spec_is_the_prototype_and_a_spec_defaults_to_no_chip(self):
         self.assertEqual((surface_compose.INVENTORY.screen, surface_compose.INVENTORY.joins, surface_compose.INVENTORY.bevel_band, surface_compose.INVENTORY.chip_boxes),
                          ("ctx-inventory", (148, 1588), (0, 148), ((1900, 0, 1930, 18),)))     # the prototype's literal values, as of ARC-UI-3104
