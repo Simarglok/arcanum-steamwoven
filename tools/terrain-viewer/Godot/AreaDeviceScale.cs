@@ -3,9 +3,9 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-1200: what a window's own view needs for the generated interface chrome (the pattern of the logbook, the sheet and the world map): the window's device scale
-/// (the control's scale times the canvas transform's and the viewport's stretch, which is what its frames are painted at) and a claim of that scale for the textures it draws,
-/// so each paints its generated frame at the window's scale; a texture that a worker finished painting redraws the view (it draws the textures in its own <c>_Draw</c>).
+/// ARC-UI-1200: what a window's own view needs for the pack's frames (the pattern of the logbook, the sheet and the world map): the window's device scale
+/// (the control's scale times the canvas transform's and the viewport's stretch, which is what its frames are area-resampled at, InterfaceResample) and a claim of that scale for the textures it draws,
+/// so each resamples its pack frame at the window's scale; a texture that a worker finished resampling redraws the view (it draws the textures in its own <c>_Draw</c>).
 /// A view claims at every draw (a texture may be shared with another view, and the one on screen claims it) and lets go when its art goes or it leaves the tree.
 /// </summary>
 internal sealed class AreaDeviceScale

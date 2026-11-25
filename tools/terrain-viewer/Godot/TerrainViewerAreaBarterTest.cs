@@ -888,12 +888,12 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(area.Held is null && panel.ArtView!.LootGrid.Any(item => item.Entity == ware.Entity), "released on its own grid it went back");
         }
-        // ARC-UI-1194: with ARC_AREA_WINDOW_ART the window's frames (its background, the lens, the pack) are checked in the generated interface and captured.
+        // ARC-UI-1194: with ARC_AREA_WINDOW_ART the window's frames (its background, the lens, the pack) are checked in the window-art mode under test (the pack's frames or the Legacy art) and captured.
         await WindowArtSmokeAsync("barter", area, [background, AreaInventoryHole.BarterArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt]);
         string doll;
         try { doll = await BarterDollForSmokeAsync(panel, area); }
         catch (Exception failure) { GD.Print("ARC-UI-1917 native-smoke barter-doll FAIL " + failure.Message); throw; }
-        // ARC-UI-1750: with ARC_AREA_WINDOW_ART the hero's doll cover 341 (drawn over the pack with the hero's toggle set) is checked in the generated interface too, and captured.
+        // ARC-UI-1750: with ARC_AREA_WINDOW_ART the hero's doll cover 341 (drawn over the pack with the hero's toggle set) is checked in the window-art mode under test too, and captured.
         if (WindowArtSmokeRequested)
         {
             Require(area.HeroTogglesShown, "the hero's doll toggle is shown (the cover and the buttons' art read), so the cover 341 can be checked");
@@ -905,7 +905,7 @@ public partial class TerrainViewerApp
             }
             finally { area.SetHeroDoll(false); }
         }
-        // ARC-UI-1751: the follower's window (825 on the follower background) also draws the two cycle buttons (757, 758): with ARC_AREA_WINDOW_ART they are checked in the generated interface too.
+        // ARC-UI-1751: the follower's window (825 on the follower background) also draws the two cycle buttons (757, 758): with ARC_AREA_WINDOW_ART they are checked in the window-art mode under test (the pack's frames or the Legacy art) too.
         if (WindowArtSmokeRequested)
         {
             var merchantFrame = area.BarterFrame!;
@@ -930,7 +930,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-UI-1917 native observation (stage `barter`, on the live window with the game's art): the doll and bag buttons are made at (8, 123) and (46, 123), the doll button shows the
     /// merchant's doll view (337 <c>Barter_PD</c> at (0, 157)) with its nine slots (a worn item's art or the slot's cover) and hides the grid, and the bag button shows the grid again; the
-    /// toggle starts clear. With ARC_AREA_WINDOW_ART legacy, hd or generated the doll's frame is checked in that mode and captured (ARC-UI-1750: generated chrome in the generated run);
+    /// toggle starts clear. With ARC_AREA_WINDOW_ART legacy or hd the doll's frame is checked in that mode and captured (ARC-UI-1750; the `generated` mode is retired, ARC-UI-3143);
     /// ARC_AREA_WINDOW_CAPTURE=PREFIX saves it as PREFIX-barter-doll-MODE.png. Prints counts only; a window without the buttons (the doll arts did not read) says so.
     /// </summary>
     private async Task<string> BarterDollForSmokeAsync(AreaBarterPanel panel, AreaInventoryGridArea area)

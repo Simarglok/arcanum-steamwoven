@@ -107,10 +107,10 @@ public partial class TerrainViewerApp
             _gameBarPanel.MessageLog.Render();
         }
         _gameBarPanel.Visible = true;
-        // ARC-UI-2452, ARC-UI-2576: the Steamwoven layout fills the middle band with the generated backdrop of the family of the window on top of the interface mode stack while a menu window is open
+        // ARC-UI-2452, ARC-UI-2576: the Steamwoven layout lays the menu layer (the dim of the world beside the column) and the kit background of the family of the window on top of the interface mode stack over the middle band while a menu window is open
         // (SteamwovenBackdrops; the dialog and sleep views keep the world in view, so they have none; nothing otherwise).
         var menuOpen = AreaGameBarPanel.SteamwovenOn && AnyWindowOpen;
-        // ARC-UI-2461: the covered windows also name their kit background (the family's generated backdrop stays where the kit has none).
+        // ARC-UI-2461: the covered windows also name their kit background (where the kit has none the window draws its own pack or Legacy art).
         // The kit smoke shows a window's kit background with no window over it (the window's own art would hide it): its override stands in for the open window.
         if (_smokeKitBackdrop is { } smoke) _gameBarPanel.SetMenuBackdrop(smoke.Family, smoke.Window);
         else _gameBarPanel.SetMenuBackdrop(menuOpen ? SteamwovenBackdrops.FamilyOf(_interfaceWindows.Stack.Modes) : null,

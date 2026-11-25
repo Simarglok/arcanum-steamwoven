@@ -80,7 +80,7 @@ public partial class TerrainViewerApp
         {
             OpenInventory(body.Entity);
             Require(InventoryOpen && InventoryActive, "the window on the body opens");
-            // ARC-UI-1194: with ARC_AREA_WINDOW_ART the body window's doll view (the loot doll 349 over the loot art) is checked in the generated interface and captured.
+            // ARC-UI-1194: with ARC_AREA_WINDOW_ART the body window's doll view (the loot doll 349 over the loot art) is checked in the window-art mode under test and captured.
             if (WindowArtSmokeRequested)
             {
                 Require(_inventoryPanel is { ArtMode: true } && _inventoryPanel.GridAreaForSelfTest is { TogglesShown: true }, "the body window shows the original's look with its doll toggles");

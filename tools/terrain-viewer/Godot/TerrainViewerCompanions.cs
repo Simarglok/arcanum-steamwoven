@@ -614,7 +614,7 @@ public partial class TerrainViewerApp
                 }
                 barPanel.Visible = wasVisible;
             }
-            // ARC-UI-1817: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the panel's frames are checked in the generated interface: the portrait frame (503), the hide
+            // ARC-UI-1817: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the panel's frames are checked in the window-art mode under test (the pack's frames or the Legacy art): the portrait frame (503), the hide
             // button (501) and the order menu's art (826), whose frame is painted whether or not the menu is open. The scroll arrows (506-509) stand from seven followers, so the renderer's own tests cover them.
             if (WindowArtSmokeRequested)
             {

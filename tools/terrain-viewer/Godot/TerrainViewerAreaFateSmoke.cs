@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
         Require(Math.Abs(rect.Position.X - AreaGameBarPanel.ScreenLeft(GetViewport().GetVisibleRect().Size, panel.Factor)) < 1
             && Math.Abs(rect.Position.Y - AreaFateLayout.ScreenY * panel.Factor) < 1 && rect.Size.X > 0 && rect.Size.Y > 0, "the window stands at (0, 41) of the screen: " + rect);
         Require(Enumerable.Range(0, AreaFateLayout.Kinds).All(kind => view.FrameForSelfTest(kind) == 0 && !view.DownForSelfTest(kind)), "every button starts idle");
-        // ARC-UI-1200: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the window art and the button art (every frame) draw as the mode under test says, at the window's own device scale.
+        // ARC-UI-1200: the opt-in window-art part (ARC_AREA_WINDOW_ART): the window art and the button art (every frame) draw as the mode under test says, at the window's own device scale.
         if (WindowArtSmokeRequested)
         {
             var found = view.TexturesForSelfTest([AreaFateLayout.BackgroundArt, AreaFateLayout.ButtonArt]);
