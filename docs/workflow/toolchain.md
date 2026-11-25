@@ -1323,6 +1323,25 @@ window batches is measured there, with the generated window zone) and the tone c
 ground and keyed by trimming) with a soft shadow laid outward by the tool (48 px, dark brown, cosine fade, alpha 0.55 at the bar), the right cap its mirror; `fit.py --soft-shadow` does not count the shadow's semi-transparent pixels away from the art as orphans.
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_board_build tools.steamwoven_ui.test_fit` (about 3 s; the first also runs in `tools/local_dev/run_tests.py`).
 
+
+## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
+
+Production of the kit parts of the five square buttons of the top strip (Character 169, Inventory 186, Logbook 187, Map of the town 193, World map 194; lit arts 561, 559, 560, 558, 195), the first slice of batch B-BUTTONS
+(the other slices are issues of their own). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/button_kit.py refs                      # the references of the plate prompt: the original plate without its symbol (30 x), the brass-edge swatch, the HUD context's buttons
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS       # the inbox
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS            # the owner's Codex subscription (gpt-6.1-sol): one item, about 90 s
+python3 -B tools/steamwoven_ui/button_kit.py flatten                   # the plate as an opaque square (the generator's notched corners take the frame's shadow colour) + its provenance record
+for n in char_but invn_but log_but tmap_but wmap_but; do python3 -B tools/steamwoven_ui/fit.py fit plate.$n --source local/steamwoven-ui/work/B-BUTTONS/plate-square-hud-opaque.png --provenance local/steamwoven-ui/work/B-BUTTONS/plate-square-hud-opaque.provenance.json; done
+python3 -B tools/steamwoven_ui/button_kit.py build [--look crisp|sharp|cells|smooth] [--dry-run]   # crisp (default) = the pilot's symbol rule   # glyphs, lit glyphs, hover / pressed overlays, lit faces -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/button_kit.py sheet --out FILE          # the before / after composite (English labels)
+```
+
+`build_kit.py` writes the manifest rows (the five plates and the lit faces from the census, the glyphs, lit glyphs and overlays as new rows of batch B-BUTTONS, all `master`). A glyph or an overlay is an original frame over its base frame: the symbol's cells in their own colours with a smooth sharp outline, the glow or darkening a separate soft layer under it; laid over the plate
+it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
