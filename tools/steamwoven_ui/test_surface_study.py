@@ -93,6 +93,7 @@ class SurfaceStudyTests(unittest.TestCase):
             surface_study.assemble({"top-strip": root / "top.png", "window": root / "win.png", "bottom-strip": root / "bot.png"}, out)
             read = lambda x, y: subprocess.run(["magick", str(out), "-format", f"%[pixel:p{{{x},{y}}}]", "info:"], capture_output=True, text=True).stdout
             self.assertEqual(subprocess.run(["magick", "identify", "-format", "%wx%h", str(out)], capture_output=True, text=True).stdout, "2880x2160")
+            self.assertLessEqual(out.read_bytes()[24], 8)  # IHDR bit depth: surface_compose reads 8 bit only, never the Q16 of xc:black
             self.assertEqual(read(100, 10), "srgb(255,0,0)")
             self.assertEqual(read(100, 600), "srgb(0,128,0)")
             self.assertEqual(read(100, 2000), "srgb(0,0,255)")
