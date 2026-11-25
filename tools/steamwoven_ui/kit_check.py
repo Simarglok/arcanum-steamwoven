@@ -1,11 +1,16 @@
 """ARC-DEV-2454: validator of the Steamwoven kit manifest `tools/steamwoven_ui/kit.json` (TRD SWI-KIT-1..3, SWI-VER-2).
 
-    python3 -B tools/steamwoven_ui/kit_check.py [--manifest PATH] [--census-tsv PATH] [--census-md PATH] [--no-census]
+    python3 -B tools/steamwoven_ui/kit_check.py [--manifest PATH] [--census-tsv PATH] [--census-md PATH] [--no-census] [--masters DIR | --no-masters]
 
 Checks the manifest alone (unique ids, known kinds including the strip's end cap `cap`, master sizes that are multiples of 6, layers that
 name existing parts and make no cycle, known windows, kind rules of the 4:3 composition) and, unless `--no-census`, against the census of
 docs/ui: every census art is the source of exactly one part or is listed as excluded, each part says what its census rows say (kind, batch, size, windows, frames), and every window is known and every window that draws art is used. The manifest holds
 no pixels: only the fields of the schema below, short text and numbers.
+
+Masters on disk (ARC-UI-2483): unless `--no-masters`, every part with status master or baked whose file is in the masters folder (default `local/steamwoven-ui/masters`
+of the main checkout, `--masters DIR` names another) must carry its transparency in the alpha channel alone: a pixel with alpha above 0 that has the colour of the generation
+ground (magenta: red and blue both above 100 and the smaller of them 90 above green; on the outer two lines of the master also the darker violet blends: both above 30 and 40 above green) is a leaked key colour and fails. A master missing from the folder is counted, not failed (the
+masters are local files); a folder that does not exist skips the check and says so.
 """
 from __future__ import annotations
 
@@ -372,6 +377,56 @@ def _check_census_windows(windows: list[census_mod.CensusWindow], table: dict, b
             errors.append(f"window {window.ident} ({window.name}): draws {window.arts} arts but no part is used by it")
 
 
+GROUND_MIN = 100   # the key colour of the generation ground (FF00FF) and its blends: red and blue above this ...
+GROUND_LEAN = 90   # ... and the smaller of them this far above green (a violet of the art, such as 120 60 140, is art)
+RIM = 2            # on the outer RIM lines of a master a dark blend of the ground (45 1 55: violet, red and blue both above green) is a leak as well
+RIM_MIN = 30
+RIM_LEAN = 40      # (a mauve of the art such as 90 59 89 leans 30 and is art)
+
+
+def ground_pixels(data: bytes | bytearray, width: int | None = None) -> list[int]:
+    """The indexes (pixel numbers) of the visible pixels of straight RGBA `data` that have the colour of the generation ground: the strict magenta anywhere, and, when the `width`
+    is given, the darker violet blends on the outer `RIM` lines."""
+    out = []
+    height = len(data) // 4 // width if width else 0
+    for i in range(0, len(data), 4):
+        if not data[i + 3]:
+            continue
+        low = min(data[i], data[i + 2])
+        if low > GROUND_MIN and low - data[i + 1] > GROUND_LEAN:
+            out.append(i // 4)
+        elif width and data[i + 3] >= 16 and low > RIM_MIN and low - data[i + 1] > RIM_LEAN:     # (a resampling overshoot at alpha 5 is no pixel anybody sees)
+            x, y = (i // 4) % width, (i // 4) // width
+            if min(x, y, width - 1 - x, height - 1 - y) < RIM:
+                out.append(i // 4)
+    return out
+
+
+def check_masters(manifest: dict, masters: Path) -> tuple[list[str], int, int]:
+    """(problems, checked, missing): the masters of the parts that are masters or baked, looked at for a leaked ground colour."""
+    from tools.steamwoven_ui import pngio  # noqa: PLC0415
+    errors: list[str] = []
+    checked = missing = 0
+    for part in manifest["parts"]:
+        if part.get("status") not in ("master", "baked"):
+            continue
+        path = masters / f"{part['id']}.png"
+        if not path.is_file():
+            missing += 1
+            continue
+        try:
+            image = pngio.read(path)
+        except Exception as error:  # noqa: BLE001  (a file the PNG reader cannot read is a finding too)
+            errors.append(f"{part['id']}: master {path.name} cannot be read: {error}")
+            continue
+        checked += 1
+        bad = ground_pixels(image.data, image.w)
+        if bad:
+            first = bad[0]
+            errors.append(f"{part['id']}: {len(bad)} visible pixel(s) have the colour of the generation ground (magenta), the first at {first % image.w},{first // image.w}: transparency must be the alpha channel alone")
+    return errors, checked, missing
+
+
 def load_manifest(path: Path = MANIFEST) -> object:
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
@@ -383,6 +438,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--census-tsv", type=Path, default=census_mod.CENSUS_TSV)
     parser.add_argument("--census-md", type=Path, default=census_mod.CENSUS_MD)
     parser.add_argument("--no-census", action="store_true", help="check the manifest alone")
+    parser.add_argument("--masters", type=Path, default=None, help="the masters folder to look at for leaked ground colour (default: local/steamwoven-ui/masters of the main checkout)")
+    parser.add_argument("--no-masters", action="store_true", help="skip the look at the masters on disk")
     args = parser.parse_args(argv)
     try:
         manifest = load_manifest(args.manifest)
@@ -398,12 +455,28 @@ def main(argv: list[str] | None = None) -> int:
             print(line)
         print(f"KIT CHECK FAIL: {len(errors)} problem(s)" + (" (first 60 shown)" if len(errors) > 60 else ""))
         return 1
+    note = ""
+    if not args.no_masters:
+        masters = args.masters
+        if masters is None:
+            from tools.steamwoven_ui import fit  # noqa: PLC0415
+            masters = fit.default_local_root() / "masters"
+        if masters.is_dir():
+            problems, checked, absent = check_masters(manifest, masters)
+            if problems:
+                for line in problems[:60]:
+                    print(line)
+                print(f"KIT CHECK FAIL: {len(problems)} master(s) with a leaked ground colour" + (" (first 60 shown)" if len(problems) > 60 else ""))
+                return 1
+            note = f", masters {checked} looked at for ground colour ({absent} not on disk)"
+        else:
+            note = f", masters folder {masters} not found: ground colour not checked"
     parts = manifest["parts"]
     kinds: dict[str, int] = {}
     for part in parts:
         kinds[part["kind"]] = kinds.get(part["kind"], 0) + 1
     print("KIT CHECK PASS: " + f"{len(parts)} parts (" + ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())) + f"), "
-          f"{len(manifest['windows'])} windows" + ("" if args.no_census else f", census {len(arts)} arts mapped"))
+          f"{len(manifest['windows'])} windows" + ("" if args.no_census else f", census {len(arts)} arts mapped") + note)
     return 0
 
 

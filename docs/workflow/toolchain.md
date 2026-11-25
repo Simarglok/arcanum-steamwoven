@@ -1265,6 +1265,7 @@ provenance record. Standard library only (`pngio.py`), so no launch queue; it re
 python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass --dry-run   # plan and gates; writes nothing (always first)
 python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass [--key border|#RRGGBB] [--crop X,Y,W,H] [--size WxH] [--replace]
 python3 -B tools/steamwoven_ui/fit.py fit PART_ID --source FILE --provenance FILE      # a file from outside the outbox (or --no-provenance for a hand-made source)
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --source FILE --provenance FILE --halo-limits 8,20   # a recorded override of the halo gate for a textured or hair-thin cut-out (ARC-UI-2483), finite and capped at 20,45; the safety net still recolours the band
 python3 -B tools/steamwoven_ui/fit.py self-test                                         # task check: synthetic disc, no file
 python3 -B -m unittest tools.steamwoven_ui.test_fit                                     # task check (also in the batched run_tests.py set)
 ```
@@ -1324,11 +1325,35 @@ python3 -B tools/steamwoven_ui/board_build.py caps --variant plain    # the cap 
 
 The strip heights are the grid ones, 150 and 570 px (decided by this batch, [TRD](../ui/steamwoven-interface-trd.md#open-questions)). Each strip is one Codex item at the generator's size (method A); the generator draws a 19.2:1 strip at about 20:1 inside a
 padded canvas (the play screen's top strip is therefore asked at 2880 x 144 and resized back to 150 px), so the band is cropped and stretched by a recorded few percent (only the wood is taken from it). `surface_compose.py build` puts the generated wood into the original's wood, every other pixel (metal, rails, sockets, the
-original's rows of dots) stays the original's as the stand-in of the hardware batch ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481)), and the original's transparent openings (sockets, portrait holes) stay transparent (alpha of the original frame).
+original's rows of dots) stayed the original's as the stand-in of the hardware batch ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481); the two play-screen strips lost it to the hardware parts, see below), and the original's transparent openings (sockets, portrait holes) stay transparent (alpha of the original frame).
 The strips of one pair stand beside the inventory screen's window zone in the compose step, a neighbour that is not their own, so the seam at a join is gated **not worse than the same join of the original composition** (the 1.8 / 1.5 seam of the
 window batches is measured there, with the generated window zone) and the tone check must pass; all numbers are in `provenance/surface/board-<pair>.json` (`board_gate`). A cap is the brass bar of one strip end (24 px, drawn by Codex on a flat
 ground and keyed by trimming) with a soft shadow laid outward by the tool (48 px, dark brown, cosine fade, alpha 0.55 at the bar), the right cap its mirror; `fit.py --soft-shadow` does not count the shadow's semi-transparent pixels away from the art as orphans.
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_board_build tools.steamwoven_ui.test_fit` (about 3 s; the first also runs in `tools/local_dev/run_tests.py`).
+
+
+## Steamwoven hardware of the play-screen strips, batch B-HARDWARE slice 1 (ARC-UI-2481)
+
+The metal of the two play-screen strips (`board.inttop` art 185, `board.intbotom` art 184) as 18 kit parts `hardware.hud_*` (top: two plates, the slot frame, ring, clock, infinity, hourglass and rivet; bottom: the vial and its
+mirror, the cylinder and its mirror, wires, ring, dial, gem, slot frame, rail), made by `tools/steamwoven_ui/hardware_build.py` ([TRD](../ui/steamwoven-interface-trd.md), SWI-LAY-12, SWI-KIT). The rest of B-HARDWARE (the menu strips and the other
+frames, slots and pop-up panels of the batch) is not in this slice. Steps, all local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue; the Codex runs follow the `steamwoven-codex-images` skill (`gpt-6.1-sol` only):
+
+```sh
+python3 -B tools/steamwoven_ui/hardware_build.py refs --sheet hud-bottom   # per sheet (hud-bottom, hud-top, hud-top-parts): the original's shapes cut out as the references (original, material, context)
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-HARDWARE-HUD      # the inbox: the three sheet prompts, references, batch.json
+python3 -B tools/steamwoven_ui/codex_batch.py run B-HARDWARE-HUD           # the owner's Codex subscription; a refused sheet stays in codex-work/ and is judged by hand
+python3 -B tools/steamwoven_ui/hardware_build.py cut                       # each detail cut from its sheet cell (shape mask, tone fit to the original, brass chroma mask), placements.json
+python3 -B tools/steamwoven_ui/hardware_build.py fit                       # fit.py gates (alpha, halo, orphans) -> masters/hardware.hud_*.png, provenance/fit/
+python3 -B tools/steamwoven_ui/hardware_build.py strips                    # the strip arts without the original's metal (the erase mask filled with the wood beside it) and the preview with the parts laid
+python3 -B tools/steamwoven_ui/hardware_build.py art                       # fit.py on the two strip arts -> masters/board.inttop.png, board.intbotom.png
+```
+
+Each part is generated once, on a sheet of details on a transparent ground (the original's muted dusty tone, brass trim, no added ornament, no synthetic stains), and is cut out by the original's own shape; a part that repeats is one master laid at several places, and
+the right vial and cylinder are mirrored in the build (`mirror_of`) and relit: each pixel is multiplied by the slow light (alpha-weighted luminance, box radius 10 px) of the left part over that of its mirror, limited to 0.65 to 1.5, so the light still falls from the top left while the form and the sharp detail stay the mirrored ones. Per-part flags tune a redraw to the original after the tone fit: `gain` (a luminance multiplier), `squeeze` (a nine-slice that thins a frame's border to the original's width) and `solid` with `darken_neutral` (an opaque dark body and a dark rim under a glass that the redraw made pale, as the hourglass). `placements.json` gives each place on the 6 px master grid (the part's canvas corner, up to ±3 px from the original's place); the runtime table `SteamwovenKitTable.Strips` lists the same places in the same draw order
+(`test_hardware_build.py` reads the table from the C# file and fails when its part ids, their counts, their order or the 6 px grid differ; the C# tests and the kit smoke hold the part sizes, which the manifest leaves open). The strip arts the local build writes are the wood with the original's alpha openings and no metal (the erased original pixels are filled with the wood beside them, mirrored so the grain stays horizontal); the strip seam gate stays "not worse
+than the original composition's (+0.05)", measured with `surface_metrics.py --join y=150 --join y=1590` on the composition with the new strips (built 4.630 / 3.286 against the original 4.611 / 3.267). A strip is drawn from the kit only with every layer in the set, so a kit without the 18
+parts keeps the pack's strips. Look capture: `./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_STEAMWOVEN_VARIANTS=kit --env ARC_STEAMWOVEN_SIZES=3840x2160,1920x1080 --env ARC_AREA_BAR_CAPTURE=<prefix> --env ARC_STEAMWOVEN_KIT_LOOK=<folder holding only the masters of the two strips, their four caps and the hardware parts>`
+puts the real masters in place of the flat colours (the strip, cap and hardware colour checks are skipped, the other parts keep theirs, so the folder must hold no others). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_hardware_build` (also in `tools/local_dev/run_tests.py`).
 
 
 ## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
@@ -1348,6 +1373,29 @@ python3 -B tools/steamwoven_ui/button_kit.py sheet --out FILE          # the bef
 
 `build_kit.py` writes the manifest rows (the five plates and the lit faces from the census, the glyphs, lit glyphs and overlays as new rows of batch B-BUTTONS, all `master`). A glyph or an overlay is an original frame over its base frame: the symbol's cells in their own colours with a smooth sharp outline, the glow or darkening a separate soft layer under it; laid over the plate
 it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. A glyph layer of high contrast (the lit symbols, the globe) keeps the symbol as the core and lets its soft edge fall off outward as a halo (alpha = distance over the core threshold, no plateau, no rim; constants `CORE_DE`, `CORE_SHARE`, `HALO_*` in `button_kit.py`). Rule E is the glyph rule of the whole #2482 batch, slices included. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
+
+## Steamwoven gauges and readouts, batch B-GAUGES (ARC-UI-2483)
+
+Production of the 56 gauge parts (vials, bars, the clock, experience pips, scroll thumbs, ammunition counters, the load watch, pointers; TRD SWI-KIT-6). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/gauge_kit.py plan                         # every part of the batch and how it is made (codex collage / composite / copy / rule); fails when a part is missing
+python3 -B tools/steamwoven_ui/gauge_kit.py refs [--only GROUP,...]      # the eight collages (refs/<id>-original.png) and their layouts (refs/<id>-layout.json)
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-GAUGES          # the inbox: prompts, collages
+python3 -B tools/steamwoven_ui/codex_batch.py run B-GAUGES               # the owner's Codex subscription (gpt-6.1-sol): eight items, about 1 min each
+python3 -B tools/steamwoven_ui/gauge_kit.py cut [--only GROUP,...] [--dry-run]   # the results -> cells -> fit.py masters (+ the moon and counter composites, the joined chain)
+python3 -B tools/steamwoven_ui/gauge_kit.py rule [--only PART,...]       # the 16 rule parts -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/gauge_kit.py sheet --out FILE             # the before / after composite (English labels)
+```
+
+A collage puts every part of a family on a flat magenta ground (`FF00FF`), each cell the original's frame enlarged to the cell size, as the layout truth. The generator often returns another canvas than asked (another aspect, the art centred and scaled, or a "refused" run that still saved a
+picture): `cut` maps the layout onto the result by the bounding box of what is not ground (against the collage's own), finds each cell by its content, keys the ground with the fit tool's keying (a magenta-leaning pixel is ground; an opaque cell has its outer lines that show the ground peeled off, and one more), brings the cell to its master aspect (an opaque cell is stretched within 10 %,
+a cut-out is centred on a transparent canvas within 15 %) and fits it; a result the generator refused for its aspect is read from its run folder and the record says so (`accepted`). A moon disc and a counter's picture are layers: scaled and placed by their content box on the original's (the moons by
+one scale, the left edge and the bottom of the whole disc, because the frame cuts the disc's top) and laid over the base master with `over`. A keyed cut-out that the standard halo gate refuses (a bumpy brass rim, a needle a few pixels wide, measured before the safety net) is fitted with the least of the recorded
+overrides `--halo-limits 8,20` or `16,40` (each is under the cap 20,45; the safety net recolours the band as always; the override is in the part's fit record under `limits.halo_override`). The rule parts: the rows (or columns) of one band are replaced by their per-column median and the profile is resampled by the fit tool's
+premultiplied Catmull-Rom; the four small detailed parts the owner wanted free of generated tone shift (`scrllslidem1`, `timepnts`, `mt_apt`, `amo_rol`, axis `smooth`) are the original's frame resampled and nothing else (their cells stay in the collages' layouts but are not used); `gauge.item_dam` is the last of its nine linear-ramp frames.
+The halo override has a ceiling: `fit.py --halo-limits` takes finite values up to 20,45 and refuses more (the ceiling and the used pair are in `limits.halo_override` of every fit record that used it, 6 parts of this batch); the gate's final edge check is a safety net that recolours the band and always passes, so the ceiling is the real limit (#3073 tracks the gate itself). `kit_check.py` looks at the masters on disk and fails a master that has a visible pixel of the generation ground's colour (magenta): transparency is the alpha channel alone (`--no-masters` skips it). The two chain strips are the same picture. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_gauge_kit` (about 1 s; also in `tools/local_dev/run_tests.py`).
+
 
 ## Steamwoven round HUD buttons and the ball, batch B-BUTTONS slice 2 (ARC-UI-3202)
 

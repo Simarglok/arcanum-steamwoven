@@ -1,0 +1,6 @@
+KIND: GAUGE (layered gauge parts), variant: experience pips, several parts on one ground
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the ten original lamp pieces, each enlarged, in two columns of five on a flat magenta ground: the layout truth and the image to edit).
+
+Redraw the ten small lamp pieces of the ORIGINAL, in the same places, at the same sizes and in the same order, on the same flat pure magenta ground (colour FF00FF, nothing else on it: no shadow, no gradient, no texture). Each piece is a short horizontal capsule: a dull brass end cap on the left and on the right with a dark ring next to it, and between them a glowing red glass core with a soft light along its upper part, about 3.8 to 1. The pieces are almost the same; each one keeps its own exact width and its own small differences from the ORIGINAL (their widths run from a little narrower to a little wider than the others), so they can be laid end to end. Draw them finer, with the same shapes and the same red.
+
+Keep the colours of the ORIGINAL exactly (the same red, the same dull brass), no new gloss, no extra highlight, no glow outside the piece, no ornament, no screws, no stains. Plain magenta ground between and around the pieces.

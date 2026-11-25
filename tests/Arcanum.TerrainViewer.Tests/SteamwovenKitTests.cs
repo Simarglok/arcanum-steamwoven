@@ -11,6 +11,15 @@ public sealed class SteamwovenKitTests
 {
     private static SteamwovenHudPlan Plan(int width, int height) => SteamwovenHud.Plan(width, height, SteamwovenLayoutOptions.ColumnFitted)!;
 
+    /// <summary>ARC-UI-2481: the master sizes of the hardware parts of the two HUD strips (kit.json rows <c>hardware.hud_*</c>, laid by <see cref="SteamwovenKitTable.Strips"/>).</summary>
+    private static readonly (string Id, int Width, int Height)[] HardwareSizes =
+    [
+        ("hardware.hud_plate_left", 948, 150), ("hardware.hud_plate_right", 948, 150), ("hardware.hud_top_slot", 150, 144), ("hardware.hud_top_ring", 108, 108),
+        ("hardware.hud_top_clock", 486, 132), ("hardware.hud_top_infinity", 108, 108), ("hardware.hud_top_hourglass", 78, 132), ("hardware.hud_top_rivet", 30, 30),
+        ("hardware.hud_vial", 204, 558), ("hardware.hud_vial_r", 204, 558), ("hardware.hud_cylinder", 108, 324), ("hardware.hud_cylinder_r", 108, 324), ("hardware.hud_wires", 114, 144),
+        ("hardware.hud_ring", 198, 192), ("hardware.hud_dial", 144, 144), ("hardware.hud_gem", 138, 144), ("hardware.hud_slot", 138, 144), ("hardware.hud_rail", 144, 48),
+    ];
+
     /// <summary>A set holding every part of the table at the step's sizes (strips at the manifest's provisional 150 / 570, caps 120 x 150 / 120 x 570).</summary>
     private static SteamwovenKitSet Full(SteamwovenStep step, params string[] without)
     {
@@ -24,6 +33,8 @@ public sealed class SteamwovenKitTests
             new("glyph.char_but", B(120), B(120)), new("glyph.char_but_lit", B(120), B(120)), new("plate.lilgrnbut", B(84), B(84)), new("glyph.fate_but", B(84), B(84)), new("glyph.sleep_but", B(84), B(84)),
             new("backdrop.mainmenuback", B(2880), B(2160)),
         };
+        // ARC-UI-2481: the hardware layers of the two HUD strips are required parts of the strips.
+        parts.AddRange(HardwareSizes.Select(hardware => new SteamwovenKitPart(hardware.Id, B(hardware.Width), B(hardware.Height))));
         // The inventory's right piece is shared by several windows (ARC-UI-3033): a part is added once.
         foreach (var window in SteamwovenKitTable.Windows.Values)
             foreach (var (id, width) in window.Pieces)
@@ -755,9 +766,66 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    public void The_hud_strips_lay_the_hardware_parts_on_the_6_px_grid_inside_the_strip_and_every_part_is_sized()
+    {
+        var sizes = HardwareSizes.ToDictionary(hardware => hardware.Id);
+        foreach (var (strip, height) in new[] { (AreaBarStrip.Top, 150), (AreaBarStrip.Bottom, 570) })
+        {
+            var layers = SteamwovenKitTable.Strips[strip].Layers;
+            Assert.IsTrue(layers.Count > 0, strip.ToString());
+            Assert.AreEqual(layers.Count, layers.Distinct().Count(), "a part is laid once at a place");
+            foreach (var layer in layers)
+            {
+                Assert.IsTrue(sizes.ContainsKey(layer.Part), layer.Part);
+                var (width, partHeight) = (sizes[layer.Part].Width, sizes[layer.Part].Height);
+                Assert.AreEqual(0, layer.MasterX % 6, layer.Part + " x on the 6 px grid");
+                Assert.AreEqual(0, layer.MasterY % 6, layer.Part + " y on the 6 px grid");
+                Assert.AreEqual(0, width % 6, layer.Part + " width on the 6 px grid");
+                Assert.AreEqual(0, partHeight % 6, layer.Part + " height on the 6 px grid");
+                Assert.IsTrue(layer.MasterX >= 0 && layer.MasterY >= 0 && layer.MasterY + partHeight <= height, layer.Part + " inside the strip's height");
+                // Inside the strip's 2880 px, except the top strip's right plate: its 948 px canvas (the original's plate on the 6 px grid) starts at 1938 and its last 6 px are padding the draw clips away.
+                Assert.IsTrue(layer.MasterX + width <= SteamwovenKitTable.CompositionMasterWidth + (layer.Part == "hardware.hud_plate_right" ? 6 : 0), layer.Part + " inside the strip's width");
+            }
+        }
+        // Every sized part is laid somewhere, so a part of the manifest never lies unused.
+        var laid = SteamwovenKitTable.Strips.Values.SelectMany(spec => spec.Layers).Select(layer => layer.Part).ToHashSet();
+        CollectionAssert.AreEquivalent(sizes.Keys.ToList(), laid.ToList());
+    }
+
+    [TestMethod]
+    [DataRow(3840, 2160, SteamwovenStep.One)]
+    [DataRow(1920, 1080, SteamwovenStep.Half)]
+    [DataRow(2560, 1440, SteamwovenStep.TwoThirds)]
+    public void Each_hud_strip_composes_every_hardware_layer_inside_its_clip_and_a_missing_one_leaves_the_generated_chrome(int width, int height, SteamwovenStep step)
+    {
+        var plan = Plan(width, height);
+        foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+        {
+            var spec = SteamwovenKitTable.Strips[strip];
+            var composed = SteamwovenKitComposer.Strip(plan, Full(step), strip).Value!;
+            Assert.AreEqual(spec.Layers.Count, composed.Layers.Count);
+            var rect = strip == AreaBarStrip.Top ? plan.Column.TopStrip : plan.Column.BottomStrip;
+            for (var i = 0; i < composed.Layers.Count; i++)
+            {
+                var (layer, laid) = (composed.Layers[i], spec.Layers[i]);
+                Assert.AreEqual(laid.Part, layer.PartId);
+                Assert.IsTrue(layer.Clip.Width > 0 && layer.Clip.Height > 0, layer.PartId + " shows");
+                Assert.IsTrue(layer.Clip.X >= rect.X && layer.Clip.Right <= rect.Right && layer.Clip.Y >= rect.Y && layer.Clip.Bottom <= rect.Bottom, layer.PartId);
+                // The layer starts where its master position says: the strip's corner plus the position in device pixels (rounded from the master pixels at the plan's scale).
+                var factor = (double)rect.Width / SteamwovenKitTable.CompositionMasterWidth;
+                Assert.IsTrue(Math.Abs(layer.Rect.X - (rect.X + laid.MasterX * factor)) <= 1 && Math.Abs(layer.Rect.Y - (rect.Y + laid.MasterY * factor)) <= 1, $"{layer.PartId} at ({laid.MasterX}, {laid.MasterY}) is at {layer.Rect}");
+            }
+            var gone = spec.Layers[0].Part;
+            var result = SteamwovenKitComposer.Strip(plan, Full(step, gone), strip);
+            Assert.IsFalse(result.Complete);
+            CollectionAssert.Contains(result.Missing.ToList(), gone);
+        }
+    }
+
+    [TestMethod]
     public void The_table_names_only_ids_that_are_safe_file_names_and_parts_of_the_manifest()
     {
-        var ids = SteamwovenKitTable.Strips.Values.SelectMany(strip => new[] { strip.Board, strip.CapLeft, strip.CapRight })
+        var ids = SteamwovenKitTable.Strips.Values.SelectMany(strip => new[] { strip.Board, strip.CapLeft, strip.CapRight }.Concat(strip.Layers.Select(layer => layer.Part)))
             .Concat(SteamwovenKitTable.Windows.Values.SelectMany(window => window.Pieces.Select(piece => piece.Part)))
             .Concat(SteamwovenKitTable.Plates.Values).Concat(SteamwovenKitTable.ButtonFaces.Values).Concat(SteamwovenKitTable.Sheets.Values.Select(sheet => sheet.Part)).Concat(SteamwovenKitTable.Covers.Values.Select(cover => cover.Part))
             .Concat(SteamwovenKitTable.Screens.Values.SelectMany(screen => new[] { screen.TopStrip, screen.Body, screen.BottomStrip }.OfType<string>())).ToList();

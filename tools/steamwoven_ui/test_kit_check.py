@@ -309,7 +309,7 @@ class RealManifestTests(unittest.TestCase):
         parts = {p["id"]: p for p in kit_check.load_manifest()["parts"]}
         for ident in ("cap.top_strip_left", "cap.top_strip_right", "cap.bottom_strip_left", "cap.bottom_strip_right"):
             self.assertEqual((parts[ident]["source_arts"], parts[ident]["batch"]), ([], "B-BOARD"), ident)
-        self.assertEqual(parts["board.inttop"]["layers"], ["cap.top_strip_left", "cap.top_strip_right"])
+        self.assertEqual(parts["board.inttop"]["layers"][:2], ["cap.top_strip_left", "cap.top_strip_right"])   # ARC-UI-2481: the hardware layers follow the caps
         self.assertEqual(parts["board.intbotom"]["size"], [2880, 570])
 
     def test_kit_has_no_full_width_board_outward_backdrop_or_gap_wood(self) -> None:
@@ -328,7 +328,7 @@ class RealManifestTests(unittest.TestCase):
     def test_cli_pass_and_fail(self) -> None:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            self.assertEqual(kit_check.main([]), 0)
+            self.assertEqual(kit_check.main(["--no-masters"]), 0)
         self.assertIn("KIT CHECK PASS", out.getvalue())
         with tempfile.TemporaryDirectory() as tmp:
             broken = Path(tmp) / "kit.json"
@@ -351,6 +351,53 @@ class RealManifestTests(unittest.TestCase):
                 self.assertEqual(build_kit.main(["--check", "--out", str(copy_path)]), 1)
                 self.assertEqual(build_kit.main(["--out", str(copy_path)]), 0)
                 self.assertEqual(build_kit.main(["--check", "--out", str(copy_path)]), 0)
+
+
+class MasterGroundTests(unittest.TestCase):
+    """ARC-UI-2483: a master carries its transparency in alpha alone; a visible pixel of the generation ground's colour fails."""
+
+    @staticmethod
+    def _write(folder: Path, part: str, pixels: list[tuple[int, int, int, int]], width: int) -> None:
+        from tools.steamwoven_ui import pngio
+        folder.mkdir(parents=True, exist_ok=True)
+        data = bytearray(b"".join(bytes(p) for p in pixels))
+        pngio.write(folder / f"{part}.png", pngio.Image(width, len(pixels) // width, data))
+
+    def _manifest(self) -> dict:
+        return {"parts": [{"id": "gauge.a", "status": "master"}, {"id": "gauge.b", "status": "master"}, {"id": "gauge.c", "status": "generated"}, {"id": "gauge.d", "status": "master"}]}
+
+    def test_a_visible_ground_pixel_fails_and_an_invisible_one_or_a_violet_does_not(self) -> None:
+        with tempfile.TemporaryDirectory() as t:
+            folder = Path(t)
+            self._write(folder, "gauge.a", [(40, 40, 40, 255), (255, 0, 255, 0), (90, 59, 89, 255), (40, 40, 40, 255)], 2)      # clean: a transparent key pixel and a mauve of the art
+            self._write(folder, "gauge.b", [(40, 40, 40, 255), (192, 17, 189, 255), (40, 40, 40, 255), (40, 40, 40, 255)], 2)     # a leaked ground pixel at 1,0
+            self._write(folder, "gauge.c", [(255, 0, 255, 255)] * 4, 2)                                                           # not a master: not looked at
+            errors, checked, missing = kit_check.check_masters(self._manifest(), folder)
+        self.assertEqual((checked, missing), (2, 1))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("gauge.b", errors[0])
+        self.assertIn("1,0", errors[0])
+
+    def test_a_dark_violet_blend_counts_on_the_rim_only_and_a_mauve_of_the_art_never_does(self) -> None:
+        pixels = [(90, 59, 89, 255)] * 36                      # a mauve: art
+        pixels[0] = (45, 1, 55, 255)                           # dark violet at a corner: a blend of the ground
+        pixels[14] = (45, 1, 55, 255)                          # the same colour inside (x 2, y 2 of 6x6): the art may have it
+        pixels[5] = (216, 0, 79, 5)                            # an overshoot at alpha 5: nobody sees it
+        self.assertEqual(kit_check.ground_pixels(b"".join(bytes(p) for p in pixels), 6), [0])
+        self.assertEqual(kit_check.ground_pixels(b"".join(bytes(p) for p in pixels)), [])      # without a width only the strict magenta counts
+
+    def test_main_names_the_folder_it_looked_at_and_skips_a_missing_one_aloud(self) -> None:
+        with tempfile.TemporaryDirectory() as t:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(kit_check.main(["--masters", str(Path(t) / "nowhere")]), 0)
+            self.assertIn("not found: ground colour not checked", out.getvalue())
+            self._write(Path(t), "gauge.followerframe_ft", [(255, 0, 255, 255)] * 4, 2)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = kit_check.main(["--masters", t])
+            self.assertEqual(code, 1)
+            self.assertIn("gauge.followerframe_ft", out.getvalue())
 
 
 if __name__ == "__main__":

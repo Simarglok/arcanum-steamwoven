@@ -1,0 +1,6 @@
+KIND: GAUGE (layered gauge parts), variant: pointers, several parts on one ground
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original pointers, each enlarged, on a flat magenta ground: the layout truth and the image to edit).
+
+Redraw the three pointers of the ORIGINAL, in the same places, at the same sizes and in the same order, on the same flat pure magenta ground (colour FF00FF, nothing else on it). Left: a long, thin horizontal needle of dark red lacquer lying level, with a small dull grey-brown tail and its own soft shadow under it. Middle: a small red arrow-shaped marker pointing left, flat dull red. Right: a thin vertical time marker, a slim dark line with a small orange-brown triangle at its top and another at its bottom. Draw them finer, with the same proportions, tones and the same small details.
+
+Keep the colours of the ORIGINAL exactly, no new gloss, no glow, no extra decoration, no text. Plain magenta ground around and between the pieces.

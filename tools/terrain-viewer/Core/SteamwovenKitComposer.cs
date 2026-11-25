@@ -87,18 +87,34 @@ public sealed record SteamwovenKitScreenPlan(SteamwovenKitDraw Top, SteamwovenKi
 
 /// <summary>
 /// ARC-UI-2461: what the kit is made of at run time, keyed by the original's art numbers and the interface modes (the baked manifest names parts, the viewer knows arts and windows; the census rows are the source,
-/// <c>tools/steamwoven_ui/kit.json</c> holds the same ids and art numbers). The hardware layers of the strips are placed by the hardware batch ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481)),
-/// which fills <see cref="Strips"/>; until then a strip has its art and caps only.
+/// <c>tools/steamwoven_ui/kit.json</c> holds the same ids and art numbers). The hardware layers of the two HUD strips are the hardware batch's ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481), ARC-UI-2481)
+/// and fill <see cref="Strips"/>; the other strips of the interface have their art and caps only until their own slice.
 /// </summary>
 public static class SteamwovenKitTable
 {
     public const int CompositionMasterWidth = 2880, ZoneMasterHeight = 1440, FullScreenMasterHeight = 2160;
 
-    /// <summary>The strip art and its end caps (kit.json: <c>board.inttop</c> art 185, <c>board.intbotom</c> art 184).</summary>
+    /// <summary>The strip art, its end caps and the hardware layers over it (kit.json: <c>board.inttop</c> art 185, <c>board.intbotom</c> art 184; ARC-UI-2481: the layers are the <c>hardware.hud_*</c> parts at the master positions of
+    /// <c>tools/steamwoven_ui/hardware_build.py</c>'s placements, in its draw order; a part that repeats is one baked file laid at several places).</summary>
     public static IReadOnlyDictionary<AreaBarStrip, SteamwovenKitStripSpec> Strips { get; } = new Dictionary<AreaBarStrip, SteamwovenKitStripSpec>
     {
-        [AreaBarStrip.Top] = new("board.inttop", "cap.top_strip_left", "cap.top_strip_right", []),
-        [AreaBarStrip.Bottom] = new("board.intbotom", "cap.bottom_strip_left", "cap.bottom_strip_right", []),
+        [AreaBarStrip.Top] = new("board.inttop", "cap.top_strip_left", "cap.top_strip_right",
+        [
+            new("hardware.hud_plate_left", 0, 0), new("hardware.hud_plate_right", 1938, 0), new("hardware.hud_top_slot", 0, 0), new("hardware.hud_top_slot", 132, 0),
+            new("hardware.hud_top_slot", 270, 0), new("hardware.hud_top_slot", 402, 0), new("hardware.hud_top_ring", 552, 18), new("hardware.hud_top_ring", 2160, 18),
+            new("hardware.hud_top_clock", 2322, 6), new("hardware.hud_top_infinity", 672, 12), new("hardware.hud_top_hourglass", 2076, 0), new("hardware.hud_top_rivet", 846, 0),
+            new("hardware.hud_top_rivet", 786, 108), new("hardware.hud_top_rivet", 1992, 0), new("hardware.hud_top_rivet", 2052, 114)
+        ]),
+        [AreaBarStrip.Bottom] = new("board.intbotom", "cap.bottom_strip_left", "cap.bottom_strip_right",
+        [
+            new("hardware.hud_vial", 0, 6), new("hardware.hud_vial_r", 2664, 6), new("hardware.hud_cylinder", 588, 204), new("hardware.hud_cylinder_r", 2190, 204), new("hardware.hud_wires", 1392, 0),
+            new("hardware.hud_ring", 282, 30), new("hardware.hud_ring", 2466, 30), new("hardware.hud_ring", 2310, 168), new("hardware.hud_ring", 2466, 324), new("hardware.hud_dial", 576, 0),
+            new("hardware.hud_gem", 2184, 6), new("hardware.hud_slot", 702, 0), new("hardware.hud_slot", 840, 0), new("hardware.hud_slot", 984, 0), new("hardware.hud_slot", 1128, 0),
+            new("hardware.hud_slot", 1266, 0), new("hardware.hud_slot", 1500, 0), new("hardware.hud_slot", 1638, 0), new("hardware.hud_slot", 1776, 0), new("hardware.hud_slot", 1914, 0),
+            new("hardware.hud_slot", 2052, 0), new("hardware.hud_rail", 780, 132), new("hardware.hud_rail", 918, 132), new("hardware.hud_rail", 1056, 132), new("hardware.hud_rail", 1200, 132),
+            new("hardware.hud_rail", 1338, 132), new("hardware.hud_rail", 1464, 132), new("hardware.hud_rail", 1602, 132), new("hardware.hud_rail", 1740, 132), new("hardware.hud_rail", 1884, 132),
+            new("hardware.hud_rail", 2022, 132)
+        ]),
     };
 
     /// <summary>The covered windows (census G01 and G17, G05, G11, G12, G15): inventory 1290 + 1590 (the paper doll 223 and the inventory 221), the character sheet, the logbook 594 + 2286 (264 and 260), the map frame and the schematic base.</summary>
