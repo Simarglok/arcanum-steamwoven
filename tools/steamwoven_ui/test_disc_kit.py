@@ -6,6 +6,7 @@ import json
 import math
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
@@ -22,7 +23,7 @@ RED = (200, 30, 40)
 LIT = (250, 90, 90)
 
 
-def frame(symbol=(), colour=RED, shade=1.0) -> pngio.Image:
+def frame(symbol=(), colour=RED, shade=1.0, arc=False) -> pngio.Image:
     """A disc of radius 10 in a W x H frame: a flat dome inside radius 8.5 cells, a lighter rim outside it, a brass crescent at the lower right; `symbol` cells take `colour`."""
     image = pngio.Image(W, H, bytearray(W * H * 4))
     for y in range(H):
@@ -33,6 +34,11 @@ def frame(symbol=(), colour=RED, shade=1.0) -> pngio.Image:
                 continue
             base = (150, 120, 40) if crescent else (DOME if r < 8.5 else (70 + int(6 * (10 - r)), 62, 24))
             image.data[(y * W + x) * 4:(y * W + x) * 4 + 4] = bytes((*(int(c * shade) for c in base), 255))
+    if arc:  # the glossy arc of the dome: light cells along the upper-left rim
+        for y in range(H):
+            for x in range(W):
+                if image.data[(y * W + x) * 4 + 3] and x + y < 13 and math.hypot(x + 0.5 - 10.0, y + 0.5 - 10.0) > 8.0:
+                    image.data[(y * W + x) * 4:(y * W + x) * 4 + 3] = bytes((220, 215, 180))
     for x, y in symbol:
         image.data[(y * W + x) * 4:(y * W + x) * 4 + 3] = bytes(colour)
     return image
@@ -45,10 +51,10 @@ def cells(x0: int, x1: int, y0: int = 8, y1: int = 12) -> list[tuple[int, int]]:
 SYMBOLS = {"1-a": cells(6, 11), "2-b": cells(9, 14), "4-c": cells(5, 9, 6, 14)}
 
 
-def write_frames(root: Path) -> None:
+def write_frames(root: Path, arc: bool = False) -> None:
     for folder, symbol in SYMBOLS.items():
         (root / folder).mkdir(parents=True)
-        for n, image in enumerate((frame(symbol), frame(symbol, LIT, 0.8), frame(symbol, LIT))):
+        for n, image in enumerate((frame(symbol, arc=arc), frame(symbol, LIT, 0.8, arc=arc), frame(symbol, LIT, arc=arc))):
             pngio.write(root / folder / f"f{n}.png", image)
     (root / "3-b").mkdir()
     for n in range(3):
@@ -153,13 +159,27 @@ class PartTests(unittest.TestCase):
         self.assertLess(sum(ring[:3]), 60)
 
     def test_an_existing_plate_master_clips_the_overlays(self):
-        plate = pngio.Image(*FAM.master, bytearray(FAM.master[0] * FAM.master[1] * 4))
-        parts = dk.family_parts(self.frames, FAM, None)
-        clip = dk.silhouette_clip(dk.read_frame(self.frames, FAM, "1-a", 0), FAM.master)
-        self.assertEqual(clip.data[3], 0)
-        self.assertEqual(clip.data[(FAM.master[1] // 2 * FAM.master[0] + FAM.master[0] // 2) * 4 + 3], 255)
-        self.assertEqual(len(parts), 9)
-        self.assertEqual(plate.w, FAM.master[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            plate_dir = Path(tmp)
+            plate = pngio.Image(*FAM.master, bytearray(FAM.master[0] * FAM.master[1] * 4))
+            for y in range(FAM.master[1]):
+                for x in range(FAM.master[0] // 2):  # only the left half of the plate exists
+                    plate.data[(y * plate.w + x) * 4:(y * plate.w + x) * 4 + 4] = bytes((40, 40, 20, 255))
+            for m in FAM.members:
+                pngio.write(plate_dir / f"plate.{m.name}.png", plate)
+            clipped = dk.family_parts(self.frames, FAM, plate_dir)
+        for ident, image in clipped.items():
+            if ident.startswith("glyph."):
+                continue
+            for y in range(image.h):
+                for x in range(image.w // 2, image.w):
+                    self.assertEqual(image.data[(y * image.w + x) * 4 + 3], 0, (ident, x, y))
+        self.assertGreater(clipped["plate.a_btn_hover"].data[(36 * FAM.master[0] + 30) * 4 + 3], 0)
+        wrong = pngio.Image(10, 10, bytearray(400))
+        with tempfile.TemporaryDirectory() as tmp:
+            pngio.write(Path(tmp) / "plate.a_btn.png", wrong)
+            with self.assertRaises(dk.DiscError):
+                dk.family_parts(self.frames, FAM, Path(tmp))
 
     def test_a_twin_with_different_frames_is_refused(self):
         pngio.write(self.frames / "3-b" / "f1.png", frame(SYMBOLS["2-b"], LIT, 0.5))
@@ -210,26 +230,99 @@ class GeometryTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
-    def test_build_and_record_on_synthetic_frames(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            frames = Path(tmp) / "frames"
-            write_frames(frames)
-            out = Path(tmp) / "out"
-            parts = dk.family_parts(frames, FAM, None)
-            image = parts["glyph.a_btn"]
-            path = out / "glyph.a_btn.png"
-            out.mkdir()
-            pngio.write(path, image)
-            fam_real, _ = dk.owner_of("cncl_big")
-            self.assertEqual(fam_real.key, "crescent-big")
-            self.assertEqual(json.loads(json.dumps({"x": 1}))["x"], 1)
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.local = Path(self.tmp.name)
+        write_frames(self.local / "census" / "frames", arc=True)
+        self.patch = mock.patch.object(dk, "FAMILIES", (FAM,))
+        self.patch.start()
 
-    def test_unknown_names_and_missing_local_root_fail_cleanly(self):
+    def tearDown(self):
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def run_main(self, *argv):
         buffer = io.StringIO()
-        with tempfile.TemporaryDirectory() as tmp, redirect_stdout(buffer), redirect_stderr(buffer):
-            code = dk.main(["build", "--local-root", tmp, "--only", "nope"])
+        with redirect_stdout(buffer), redirect_stderr(buffer):
+            code = dk.main([*argv, "--local-root", str(self.local)] if argv[0] != "self-test" else list(argv))
+        return code, buffer.getvalue()
+
+    def fitted(self):
+        fitted = self.local / "work" / "B-BUTTONS" / "fitted"
+        fitted.mkdir(parents=True, exist_ok=True)
+        records = self.local / "provenance" / "fit"
+        records.mkdir(parents=True, exist_ok=True)
+        for m in FAM.members:
+            plate = dk.upscaled(frame(arc=True), FAM.master)
+            pngio.write(fitted / f"plate.{m.name}.png", plate)
+            (records / f"plate.{m.name}.json").write_text(json.dumps({"record": f"fit:plate.{m.name}", "master": {"sha256": "old"}, "limits": {"halo_mean_de": 15.0}}))
+        return fitted
+
+    def test_build_writes_the_parts_and_honest_records(self):
+        self.fitted()
+        code, text = self.run_main("gloss")
+        self.assertEqual(code, 0, text)
+        code, text = self.run_main("build")
+        self.assertEqual(code, 0, text)
+        masters, rules = self.local / "masters", self.local / "provenance" / "rule"
+        self.assertEqual(len(list(masters.glob("glyph.*.png"))), 3)
+        glyph = json.loads((rules / "glyph.b_btn.json").read_text())
+        hover = json.loads((rules / "plate.b_btn_hover.json").read_text())
+        self.assertEqual(set(glyph["sources"]), {f"{folder}/f{k}" for folder in ("2-b", "3-b") for k in range(3)})  # the twin's frames are sources too
+        self.assertTrue(glyph["template_sources"])
+        self.assertFalse(hover["template_sources"])
+        self.assertIsNone(glyph["clip_source"])
+        self.assertEqual(hover["clip_source"], bk.sha256_file(masters / "plate.b_btn.png"))  # an overlay is clipped by the plate master: its hash is in the record
+        self.assertEqual(glyph["image_sha256"], bk.sha256_file(masters / "glyph.b_btn.png"))
+        for key in ("vote_de", "min_support", "dome_de", "speck_de", "symbol_share"):
+            self.assertIn(key, glyph["parameters"])
+        gloss = json.loads((self.local / "provenance" / "fit" / "plate.a_btn.json").read_text())
+        self.assertEqual(gloss["fit_master"], {"sha256": "old"})
+        self.assertTrue(gloss["halo_gate"]["relaxed"])
+
+    def test_gloss_refuses_a_plate_with_no_fit_record_and_a_wrong_size(self):
+        fitted = self.fitted()
+        (self.local / "provenance" / "fit" / "plate.c_btn.json").unlink()
+        code, text = self.run_main("gloss")
         self.assertEqual(code, 2)
-        self.assertIn("unknown buttons", buffer.getvalue())
+        self.assertIn("no fit record", text)
+        self.assertFalse((self.local / "masters").exists())
+        (self.local / "provenance" / "fit" / "plate.c_btn.json").write_text("{}")
+        pngio.write(fitted / "plate.a_btn.png", pngio.Image(6, 6, bytearray(144)))
+        code, text = self.run_main("gloss", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("plate master is", text)
+
+    def test_gloss_dry_run_writes_nothing(self):
+        self.fitted()
+        code, _ = self.run_main("gloss", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertFalse((self.local / "masters").exists())
+
+    def test_only_and_family_must_agree(self):
+        code, text = self.run_main("build", "--only", "nope")
+        self.assertEqual(code, 2)
+        self.assertIn("do not hold", text)
+        code, text = self.run_main("build", "--family", "test", "--only", "c_btn", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("3 parts", text)
+        self.assertNotIn("glyph.a_btn", text)
+        with self.assertRaises(dk.DiscError):
+            dk.chosen_families("nope", None)
+
+    def test_stretch_leaves_a_square_master_alone(self):
+        import dataclasses
+        with mock.patch.object(dk, "FAMILIES", (dataclasses.replace(FAM, master=(84, 84)),)):
+            code, text = self.run_main("stretch")
+        self.assertEqual(code, 0, text)
+        self.assertIn("nothing to stretch", text)
+
+    def test_build_with_missing_frames_fails_cleanly(self):
+        for path in (self.local / "census" / "frames" / "4-c").glob("*.png"):
+            path.unlink()
+        code, text = self.run_main("build", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("no frame", text)
 
 
 if __name__ == "__main__":
