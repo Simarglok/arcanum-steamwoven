@@ -448,7 +448,7 @@ public sealed class AreaInventoryHost
     /// pile of an NPC without one is of <paramref name="pileKind"/> and takes the diagnostic NPC insert check (every item fits, as the barter's
     /// coins do); a follower carried from another map has its home map's seed attached before its gold is read.</summary>
     public SessionDialogGoldPort GoldDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf, SessionItemKind pileKind, bool shortPayerPaysNothing) =>
-        new(session, AreaConversationState.PcParticipant, entityOf, pileKind, DiagnosticInsertCheck, shortPayerPaysNothing, entity => AttachHolderMap(session, entity));
+        new(session, AreaConversationState.PcParticipant, entityOf, pileKind, DiagnosticInsertCheck, shortPayerPaysNothing, entity => AttachHolderMap(session, entity), ItemScripts(session));
 
     /// <summary>The shown name of an item or holder of any loaded map (the hover tooltip's rule); a taken item keeps its
     /// row. Unknown entities and nameless objects get a bracketed type label, never original text. An NPC is named by the original's
