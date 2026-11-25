@@ -7,6 +7,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using Arcanum.World;
@@ -1160,6 +1161,8 @@ public partial class TerrainViewerApp
             TakeDialogBarter();
             GD.Print($"ARC-UI-1925 barter {(BarterOpen ? await BarterHeroDollMovesStepAsync(session) : "not driven (the window did not reopen)")}");
             if (BarterOpen) CloseBarterByPlayer();
+            // ARC-UI-3198 (IW38): last, because it joins the speaker to the party: the arrange button in the window of a shop's NPC and of the hero's follower.
+            GD.Print($"ARC-UI-3198 barter {await BarterArrangeFollowerStepAsync(session, talk, chosen.Entity, chosen.Index)}");
         }
         finally
         {
@@ -1167,6 +1170,75 @@ public partial class TerrainViewerApp
             if (ItemServiceOpen) EndItemService();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
+    }
+
+    /// <summary>
+    /// ARC-UI-3198 native observation (stage `barter`, on the live window with the game's art): the arrange button (art 340) of the barter window arranges the hero's grid and, when the partner's
+    /// direct leader is the hero (the original's follower flag of the window, ledger IW38), the follower's grid in the same layout; a shop's NPC (no leader) is left as it is. First the speaker as it
+    /// stands: a press changes none of its shown slots. Then the speaker joins the party and the window opens again: the first press lays the follower's items out row by row (inside the grid,
+    /// no shared cell, the tallest, widest item at cell 0, the same items), the next column by column, and at least one of the two moved its slots. Returns a line for the log; a speaker with fewer than two shown
+    /// items or a window whose art did not read says so.
+    /// </summary>
+    private async Task<string> BarterArrangeFollowerStepAsync(GameSessionOwner session, AreaConversationHost talk, string entity, int index)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-3198 barter-arrange smoke: " + why); }
+        async Task<(AreaInventoryGridArea Area, Vector2 Centre)?> OpenAsync()
+        {
+            QueueDialogBarter(talk, (entity, index));
+            TakeDialogBarter();
+            if (!BarterOpen || _barterPanel is not { ArtMode: true } panel || panel.GridAreaForSelfTest is not { BarterLook: true, ArrangeShown: true } area) { if (BarterOpen) EndBarter(); return null; }
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var art = area.Look!.Art[AreaInventoryArtLayout.ArrangeArt];
+            var centre = new Vector2(AreaInventoryArtLayout.ArrangeButton.X + art.GetWidth() / 2f, AreaInventoryArtLayout.ArrangeButton.Y + art.GetHeight() / 2f);
+            Require(area.ArrangeAt(centre), "the arrange button is hit at its art's centre");
+            return (area, centre);
+        }
+        (string Entity, int Slot, int Width, int Height)[] Shown() => _barterPanel!.ArtView!.LootGrid.Select(item => (item.Entity, item.Location, item.Width, item.Height)).ToArray();
+        async Task PressAsync(AreaInventoryGridArea area, Vector2 centre)
+        {
+            var flag = _arrangeLayout;
+            area.PressAt(centre); area.ReleaseAt(centre);
+            for (var frame = 0; frame < 6 && _arrangeLayout == flag; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_arrangeLayout != flag, "the release reaches the app (the layout flag flips once per press)");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        // 1. The speaker as it stands (a shop's NPC, or a speaker the hero already leads is not driven here): the press leaves its shown slots alone.
+        if (session.QueryCompanion(entity).LedByPc) return "not driven (the speaker already follows the hero)";
+        if (await OpenAsync() is not { } shop) return "not driven (the window's art did not read)";
+        Require(!_barter!.Merchant.Follower, "a speaker that does not follow the hero is no follower in the window");
+        var shopBefore = Shown();
+        await PressAsync(shop.Area, shop.Centre);
+        Require(Shown().SequenceEqual(shopBefore), "the button leaves a shop's NPC's grid as it is");
+        CloseBarterByPlayer();
+        // 2. The speaker joins the party: the window is the follower's.
+        var join = session.ForceJoinParty(session.Version, entity);
+        if (join.Disposition == GameSessionDisposition.Rejected) return $"not driven (the speaker did not join: {join.Failure})";
+        if (await OpenAsync() is not { } follower) return "not driven (the follower's window did not open with the art)";
+        Require(_barter!.Merchant.Follower && BarterOpen, "the joined speaker's window is the follower's");
+        var before = Shown();
+        if (before.Length < 2) { CloseBarterByPlayer(); return $"not driven (the follower shows {before.Length} item(s))"; }
+        void Check(string layout, (string Entity, int Slot, int Width, int Height)[] items)
+        {
+            Require(items.Select(item => item.Entity).Order(StringComparer.Ordinal).SequenceEqual(before.Select(item => item.Entity).Order(StringComparer.Ordinal)), $"{layout}: the same items are shown");
+            var cells = items.Sum(item => item.Width * item.Height);
+            var marked = InventoryGridRules.Occupied(items.Select(item => new InventoryGridItem(item.Slot, item.Width, item.Height)), InventoryGridRules.CritterRows).Count(cell => cell);
+            Require(marked == cells, $"{layout}: no two items share a cell and all lie inside the grid ({marked} marked of {cells})");
+            var first = items.OrderBy(item => item.Slot).First();
+            var largest = items.OrderByDescending(item => item.Height).ThenByDescending(item => item.Width).First();
+            Require(first.Slot == 0 && (first.Height, first.Width) == (largest.Height, largest.Width), $"{layout}: the tallest, widest item lies at cell 0");
+        }
+        var revision = session.Version.Revision;
+        await PressAsync(follower.Area, follower.Centre);
+        var rows = Shown(); Check("rows", rows);
+        Require(session.Version.Revision >= revision, "the press kept the session's revision");
+        await PressAsync(follower.Area, follower.Centre);
+        var columns = Shown(); Check("columns", columns);
+        Require(!rows.SequenceEqual(before) || !columns.SequenceEqual(rows), "the follower's slots moved by one of the two presses");
+        var heroCells = session.QueryHeroGrid().Items.Sum(item => item.Width * item.Height);
+        Require(InventoryGridRules.Occupied(session.QueryHeroGrid().Items.Select(item => new InventoryGridItem(item.Slot, item.Width, item.Height)), SessionHeroGrid.Rows).Count(cell => cell) == heroCells,
+            "the hero's grid is laid out without a shared cell as well");
+        CloseBarterByPlayer();
+        return $"PASS shop-unchanged follower items={before.Length} rows=[{string.Join(' ', rows.OrderBy(i => i.Slot).Select(i => $"{i.Slot}:{i.Width}x{i.Height}"))}] columns=[{string.Join(' ', columns.OrderBy(i => i.Slot).Select(i => $"{i.Slot}:{i.Width}x{i.Height}"))}]";
     }
 
     /// <summary>

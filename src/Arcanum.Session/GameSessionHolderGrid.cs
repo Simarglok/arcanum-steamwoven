@@ -18,12 +18,15 @@ public sealed partial class GameSessionOwner
     /// pile's in its record. Refused before any effect: an invalid entity or a holder the actor's map does not have (<see cref="GameSessionFailure.UnknownHolder"/>),
     /// a stale version, the revision bound. One revision when some slot changed. PROJECT: the list order is the session's list order (the seed's, then the
     /// made items added); the multiplayer branch (0x4EDE80) is not built; the open table test (no other window on the object) always passes in a single-player
-    /// session, so it is not modelled.
+    /// session, so it is not modelled. ARC-UI-3198 (IW38): the barter window's arrange button runs the same function on the hero's follower (the shown object, when the
+    /// flag 0x6810FC is set) with the layout its press uses (<paramref name="layout"/>, the open's row by row by default; an unknown layout is
+    /// <see cref="GameSessionFailure.InvalidItem"/>).
     /// </summary>
-    public SessionGridArrangement ArrangeHolderGrid(GameSessionVersion expected, string holder)
+    public SessionGridArrangement ArrangeHolderGrid(GameSessionVersion expected, string holder, InventoryArrangeLayout layout = InventoryArrangeLayout.Horizontal)
     {
         ThrowIfDisposed();
         SessionGridArrangement Rejected(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, false, 0, Version);
+        if (!Enum.IsDefined(layout)) return Rejected(GameSessionFailure.InvalidItem);
         if (!SessionValidation.Entity(holder)) return Rejected(GameSessionFailure.UnknownHolder);
         if (!IsCurrent(expected)) return Rejected(GameSessionFailure.StaleVersion);
         var map = _actor.Map;
@@ -49,7 +52,7 @@ public sealed partial class GameSessionOwner
         }
         // A list with a side below one cell cannot be laid out (the hero's grid refuses it the same way through the art source's clamp); nothing is written.
         if (list.Any(item => item.Width < 1 || item.Height < 1)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, true, 0, Version);
-        var placements = InventoryArrangeRules.Arrange(list, rows, InventoryArrangeLayout.Horizontal);
+        var placements = InventoryArrangeRules.Arrange(list, rows, layout);
         if (placements is null) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, true, 0, Version);
         var locations = list.ToDictionary(item => item.Key, item => item.Location, StringComparer.Ordinal);
         var moved = placements.Count(placement => locations[placement.Key] != placement.Slot);
