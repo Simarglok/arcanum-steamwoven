@@ -277,11 +277,11 @@ public partial class TerrainViewerApp
             Require(button.Position.IsEqualApprox(origin + new Vector2(AreaCombatLampLayout.EndTurnX, AreaCombatLampLayout.EndTurnY) * factor)
                 && button.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.EndTurnWidth, AreaCombatLampLayout.EndTurnHeight)) && _combatHud.EndTurnFrameForSelfTest == 0, $"ARC-UI-1888: the end-turn button at its place: {button}");
             await HudShot("hero-preview-art");
-            // ARC-UI-1888, ARC-UI-1821: with ARC_AREA_WINDOW_ART=legacy|hd|generated (and ARC_HD_PACK for the last two) the panel's arts are checked in that interface mode: in legacy and hd all five are
-            // plain frames; in generated the panel (294) and the end-turn button (297) are generated chrome at the bars' device scale (again in a 1600 x 1200 window), the three lamps (295, 296, 315) stay pictures.
+            // ARC-UI-1888, ARC-UI-1821: with ARC_AREA_WINDOW_ART=legacy|hd (and ARC_HD_PACK for hd; the `generated` mode is retired, ARC-UI-3143) the panel's arts are checked in that interface mode: in legacy and hd all five are
+            // plain frames; the generated mode is retired (ARC-UI-3143), so all five stay the pack's or the Legacy frames (again in a 1600 x 1200 window).
             if (realArt && WindowArtSmokeRequested)
             {
-                IReadOnlyList<int> checkedArts = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") == "generated" ? [AreaCombatLampLayout.PanelArt, AreaCombatLampLayout.EndTurnArt] : AreaCombatLampLayout.ArtNumbers;
+                IReadOnlyList<int> checkedArts = AreaCombatLampLayout.ArtNumbers;
                 await WindowArtSmokeAsync("combat-lamps", () => checkedArts.Select(number => _gameBarPanel!.ArtFrame(number)).OfType<HdInterfaceTexture>().ToArray(),
                     checkedArts, BarDeviceScale, () => _combatHud.ArtShownForSelfTest, new Vector2I(1600, 1200));
             }

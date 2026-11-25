@@ -73,20 +73,15 @@ public sealed class AreaServiceArtTests
         Assert.AreEqual((0x40, 0, 0), AreaServiceArtLayout.SelectedFill);
     }
 
-    // ARC-UI-1820: the generated interface of the two windows is the own window's recipes of `PDoll` (223), `Inventor` (221) and the round view's lens (233); these checks tie the service
-    // window's own pictures (the NPC's image and quote line) to the plate of the `PDoll` recipe they lie on.
-    private static ChromeRecipe Recipe(string file) => InterfaceChromeRecipes.All.Single(recipe => recipe.File == file);
-
+    // ARC-UI-1820, ARC-UI-3143: the service window's own pictures (the NPC's image and quote line) lie on the name plate of the `PDoll` frame's own art (the generated recipe that painted it is retired).
     [TestMethod]
-    public void ThePdollRecipePaintsTheNamePlateTheImageAndTheQuoteLineLieOn()
+    public void TheImageAndTheQuoteLineLieOnTheNamePlate()
     {
-        var plate = Recipe("pdoll.art").Parts.OfType<ChromeSunk>().Single(part => (part.X, part.Y, part.Width, part.Height) == AreaServiceArtLayout.NamePlate);
         var (px, py, pw, ph) = AreaServiceArtLayout.NamePlate;
         var (qx, qy, qw, _) = AreaServiceArtLayout.QuoteLine;
-        Assert.AreEqual(ChromeMaterial.Pit, plate.Fill);
         Assert.IsTrue(AreaServiceArtLayout.Image.X >= px + 2 && AreaServiceArtLayout.Image.Y >= py + 2, "the image's corner is inside the plate's edge");
         Assert.IsTrue(qx >= px + 2 && qy >= py + 2 && qx + qw <= px + pw - 2, "the quote line's columns and top are inside the plate");
-        // The first three lines of the quote (up to 15 pixels each, the window's 12 pixel font) lie on the plate; a longer quote runs on the frame's wood below it, as in the original (the rectangle is 65 tall, the plate 55).
+        // The first three lines of the quote (up to 15 pixels each, the window's 12 pixel font) lie on the plate; a longer quote runs on the frame's wood below it, as in the original.
         Assert.IsTrue(qy + 3 * 15 <= py + ph, "three lines fit the plate");
     }
 
@@ -99,91 +94,5 @@ public sealed class AreaServiceArtTests
         Assert.IsFalse(AreaServiceArtLayout.ImageFitsNamePlate(80, 86), "one pixel row too many at half size");
         Assert.IsFalse(AreaServiceArtLayout.ImageFitsNamePlate(410, 40), "one column too many at half size");
         Assert.IsFalse(AreaServiceArtLayout.ImageFitsNamePlate(128, 128), "a 64 × 64 image reaches below the plate");
-    }
-
-    [TestMethod]
-    public void NoKeptPictureOfThePdollRecipeCutsIntoTheNamePlateAndEveryPartLiesInsideTheFrame()
-    {
-        var recipe = Recipe("pdoll.art");
-        const int w = 358, h = 400;
-        var (px, py, pw, ph) = AreaServiceArtLayout.NamePlate;
-        foreach (var keep in recipe.Parts.OfType<ChromeKeep>())
-        {
-            Assert.IsTrue(keep.X >= 0 && keep.Y >= 0 && keep.X + keep.Width <= w && keep.Y + keep.Height <= h, $"a kept picture at ({keep.X}, {keep.Y}) lies inside the frame");
-            var overlaps = keep.X < px + pw && px < keep.X + keep.Width && keep.Y < py + ph && py < keep.Y + keep.Height;
-            Assert.IsFalse(overlaps, $"the kept picture at ({keep.X}, {keep.Y}) does not cut into the name plate");
-        }
-        // The doll grid's pit runs off the frame's bottom edge on purpose (the original's box has no bottom edge between its two curved corners, S3); no plate leaves the frame on another side.
-        foreach (var sunk in recipe.Parts.OfType<ChromeSunk>())
-        {
-            var runsOffBottom = sunk.Y + sunk.Height > h;
-            Assert.IsTrue(sunk.X >= 0 && sunk.Y >= 0 && sunk.X + sunk.Width <= w, $"the plate at ({sunk.X}, {sunk.Y}) lies inside the frame's sides");
-            Assert.IsTrue(!runsOffBottom || (sunk.X, sunk.Y, sunk.Width, sunk.Height) == (18, 100, 330, 310), $"only the doll grid's pit runs off the bottom edge, not the plate at ({sunk.X}, {sunk.Y})");
-        }
-    }
-
-    [TestMethod]
-    public void TheFramesOfBothWindowsHaveGeneratedRecipesWithEveryPartInsideTheFrameAndPaintDeterministicallyAtWholeAndFractionalScales()
-    {
-        var frames = new[] { ("pdoll.art", 358, 400), ("inventor.art", 442, 400), ("lns_papr.art", 89, 89), (InterfaceChromeRecipes.ArrangeButtonFile, 28, 27) };
-        foreach (var (file, w, h) in frames)
-        {
-            var recipe = Recipe(file);
-            foreach (var part in recipe.Parts)
-            {
-                (double, double, double, double) box = part switch
-                {
-                    ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
-                    ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
-                    ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
-                    ChromeRoundView p => (p.CenterX - p.Radius, p.CenterY - p.Radius, 2 * p.Radius, 2 * p.Radius),
-                    ChromeRivet p => (p.X - p.Radius, p.Y - p.Radius, 2 * p.Radius, 2 * p.Radius),
-                    _ => (0d, 0d, 0d, 0d),
-                };
-                var (x, y, pw0, ph0) = box;
-                // The doll grid's pit runs off the bottom edge on purpose (see the plate test below).
-                var bottomSlack = file == "pdoll.art" && part is ChromeSunk { Y: 100, Height: 310 } ? 10 : 0;
-                Assert.IsTrue(x >= 0 && y >= 0 && x + pw0 <= w + 1e-9 && y + ph0 <= h + bottomSlack + 1e-9, $"{file}: a {part.GetType().Name} at ({x}, {y}, {pw0} x {ph0}) lies inside {w} x {h}");
-            }
-            var legacy = new byte[w * h * 4];
-            for (var i = 0; i < legacy.Length; i += 4) (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = (90, 60, 30, 255);
-            foreach (var scale in new[] { 1.0, 1.345, 2.0, 2.5 })
-            {
-                var first = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
-                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
-                Assert.AreEqual(pw * ph * 4, first.Length, $"{file} at {scale}");
-                CollectionAssert.AreEqual(first, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} is deterministic at {scale}");
-            }
-        }
-    }
-
-    [TestMethod]
-    public void TheArrangeButtonKeepsItsDarkBallInAGeneratedRimAndSinksOnItsSecondFrame()
-    {
-        // A synthetic 28 x 27 round button (the art 340's size): a dark olive disc inside a gold outline, transparent corners.
-        const int w = 28, h = 27;
-        var legacy = new byte[w * h * 4];
-        for (var y = 0; y < h; y++)
-        for (var x = 0; x < w; x++)
-        {
-            double dx = (x + 0.5 - w / 2.0) / (w / 2.0), dy = (y + 0.5 - h / 2.0) / (h / 2.0), d = Math.Sqrt(dx * dx + dy * dy);
-            var i = (y * w + x) * 4;
-            if (d >= 1) continue;
-            (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = d < .78 ? ((byte)40, (byte)36, (byte)8, (byte)255) : ((byte)200, (byte)150, (byte)40, (byte)255);
-        }
-        var recipe = Recipe(InterfaceChromeRecipes.ArrangeButtonFile);
-        Assert.AreEqual(ChromeKind.Button, recipe.Kind);
-        Assert.IsTrue(recipe.KeepFace, "the ball has no glyph: its own picture stays");
-        foreach (var scale in new[] { 1.0, 1.345, 2.0, 2.5 })
-        {
-            var first = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
-            var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
-            Assert.AreEqual(pw * ph * 4, first.Length, $"at {scale}");
-            CollectionAssert.AreEqual(first, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"deterministic at {scale}");
-            Assert.AreEqual(0, first[3], $"the corner is outside the round silhouette at {scale}");
-            var centre = (R: first[((ph / 2) * pw + pw / 2) * 4], A: first[((ph / 2) * pw + pw / 2) * 4 + 3]);
-            Assert.IsTrue(centre.A == 255 && centre.R < 90, $"the dark ball stays inside the rim at {scale}: R {centre.R}");
-            CollectionAssert.AreNotEqual(first, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 1, scale), $"the second frame is sunk at {scale}");
-        }
     }
 }

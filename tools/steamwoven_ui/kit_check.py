@@ -206,7 +206,7 @@ def _check_part(part: dict, where: str, known_windows: set[str], errors: list[st
         if kind == "board" and size[0] != COMPOSITION[0]:
             errors.append(f"{where}: a strip's art is {COMPOSITION[0]} px wide (no full-width board)")
         elif kind == "board" and size[1] not in (STRIP_HEIGHTS[0], STRIP_HEIGHTS[1]):
-            errors.append(f"{where}: a strip is {STRIP_HEIGHTS[0]} (top) or {STRIP_HEIGHTS[1]} (bottom) px high until #2927 fixes the grid choice")
+            errors.append(f"{where}: a strip is {STRIP_HEIGHTS[0]} (top) or {STRIP_HEIGHTS[1]} (bottom) px high (the grid choice of #2927)")
         elif kind == "board" and size[1] != STRIP_HEIGHTS[anchor == "bottom-strip"]:
             errors.append(f"{where}: the {anchor} art is {STRIP_HEIGHTS[anchor == 'bottom-strip']} px high")
 

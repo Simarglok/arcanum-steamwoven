@@ -1,5 +1,7 @@
 # HD pack audit against the 4:3 composition (ARC-RES-2949)
 
+> **2026-11-25, generated chrome removed** ([#3143](https://github.com/Simarglok/arcanum-steamwoven/issues/3143), [#3142](https://github.com/Simarglok/arcanum-steamwoven/issues/3142)): the viewer no longer has the generated interface (the recipe renderer `InterfaceChrome`, the generated wood and caps, the ring fit, the `generated interface` setting, the `ARC_AREA_WINDOW_ART=generated` and `ARC_AREA_BAR_GENERATED_VERIFY` runs). HD On is the Steamwoven interface; where the kit lacks a part the HD pack's frame of the original art is drawn (the Legacy one where the pack lacks it). What this page says about generated frames, scales and recipes is **historical**; the area resampling of the pack's frames (`InterfaceResample`) stays.
+
 Status: **audit, 2026-11-19** (work item ARC-RES-2949, [#2949](https://github.com/Simarglok/arcanum-steamwoven/issues/2949)). Docs only; the
 installed pack was read, never written. Requirements touched (status unchanged):
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007), [FR-PRODUCT-001](../requirements/content-product.md#fr-product-001).

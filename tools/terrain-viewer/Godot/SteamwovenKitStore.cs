@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-2461 (SWI-RUN-2, SWI-RUN-3, SWI-RUN-5): the viewer's holder of the baked Steamwoven kit: it finds the folder of the baked sets (<see cref="SteamwovenKitRoot"/>), reads the set of a step once, and loads a part's PNG into a texture
-/// the first time it is drawn. A set, a part or a file that does not read gives null, never an exception, and the caller draws the generated chrome (SWI-RUN-3). Only the open window's background and the plate of the open menu stay
+/// the first time it is drawn. A set, a part or a file that does not read gives null, never an exception, and the caller draws the pack's frame of the original art instead (SWI-RUN-3, ARC-UI-3143). Only the open window's background and the plate of the open menu stay
 /// resident: <see cref="Retain"/> drops every other background and plate, and a change of step drops the old step's textures. The strips, their caps and the buttons' faces stay loaded.
 /// </summary>
 internal static class SteamwovenKitStore
@@ -105,7 +105,7 @@ internal static class SteamwovenKitStore
             var image = Image.LoadFromFile(set.PathOf(id));
             if (image is null || image.GetWidth() != part.Width || image.GetHeight() != part.Height)
             {
-                if (Reported.Add(key)) GD.Print($"ARC-UI-2461 kit: {id} is not {part.Width} x {part.Height}; the generated chrome is drawn for it");
+                if (Reported.Add(key)) GD.Print($"ARC-UI-2461 kit: {id} is not {part.Width} x {part.Height}; the pack's frame is drawn for it");
             }
             else
             {

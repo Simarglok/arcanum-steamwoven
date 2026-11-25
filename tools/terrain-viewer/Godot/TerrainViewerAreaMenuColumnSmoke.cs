@@ -29,7 +29,7 @@ public partial class TerrainViewerApp
         var art = panel.ArtForSelfTest;
         var window = GetWindow();
         var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
-        var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        var (savedHd, savedSuspended) = (_gameSettings.HdInterface, SteamwovenHud.Suspended);
         var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         async Task SaveAsync(string name)
@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
         string? syntheticKit = null;
         try
         {
-            _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+            _gameSettings = _gameSettings with { HdInterface = true };
             SteamwovenHud.Suspended = false;
             SyncInterfaceHd();
             window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
@@ -118,7 +118,7 @@ public partial class TerrainViewerApp
             // ARC-DEV-2672: the Original look at each size (the HD option off: the whole-factor plate, no plan), saved as PATH-legacy-WINDOW-WxH.png; no layout checks.
             if (capture is not null)
             {
-                _gameSettings = _gameSettings with { HdInterface = false, GeneratedInterface = false };
+                _gameSettings = _gameSettings with { HdInterface = false };
                 SyncInterfaceHd();
                 await frames(3);
                 foreach (var screen in screens.Take(2))
@@ -138,7 +138,7 @@ public partial class TerrainViewerApp
                     screen.Close();
                     await frames(3);
                 }
-                _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+                _gameSettings = _gameSettings with { HdInterface = true };
                 SyncInterfaceHd();
                 await frames(3);
                 require(AreaGameBarPanel.SteamwovenOn && art.FullScreenPlan is not null, "[legacy] the HD option is back on after the Original-look pass");
@@ -162,7 +162,7 @@ public partial class TerrainViewerApp
             }
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
             SteamwovenHud.Options = savedOptions;
-            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            _gameSettings = _gameSettings with { HdInterface = savedHd };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
         }
@@ -177,14 +177,14 @@ public partial class TerrainViewerApp
         var panel = _saveListPanel!;
         var window = GetWindow();
         var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
-        var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        var (savedHd, savedSuspended) = (_gameSettings.HdInterface, SteamwovenHud.Suspended);
         var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         var cases = 0;
         string? syntheticKit = null;
         try
         {
-            _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+            _gameSettings = _gameSettings with { HdInterface = true };
             SteamwovenHud.Suspended = false;
             SyncInterfaceHd();
             window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
@@ -226,7 +226,7 @@ public partial class TerrainViewerApp
         {
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
             SteamwovenHud.Options = savedOptions;
-            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            _gameSettings = _gameSettings with { HdInterface = savedHd };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
             if (syntheticKit is not null)
@@ -318,7 +318,7 @@ public partial class TerrainViewerApp
         var panel = _mainMenuPanel!;
         var window = GetWindow();
         var (savedMode, savedAspect, savedSize, savedFactor) = (window.ContentScaleMode, window.ContentScaleAspect, window.ContentScaleSize, window.ContentScaleFactor);
-        var (savedHd, savedGenerated, savedSuspended) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface, SteamwovenHud.Suspended);
+        var (savedHd, savedSuspended) = (_gameSettings.HdInterface, SteamwovenHud.Suspended);
         var savedOptions = SteamwovenHud.Options;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } path ? System.IO.Path.ChangeExtension(path, null) : null;
         string? syntheticKit = null;
@@ -326,7 +326,7 @@ public partial class TerrainViewerApp
         var kitCases = 0;
         try
         {
-            _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = true };
+            _gameSettings = _gameSettings with { HdInterface = true };
             SteamwovenHud.Suspended = false;
             SyncInterfaceHd();
             window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
@@ -377,7 +377,7 @@ public partial class TerrainViewerApp
             }
             window.ContentScaleMode = savedMode; window.ContentScaleAspect = savedAspect; window.ContentScaleSize = savedSize; window.ContentScaleFactor = savedFactor;
             SteamwovenHud.Options = savedOptions;
-            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            _gameSettings = _gameSettings with { HdInterface = savedHd };
             SyncInterfaceHd();
             SteamwovenHud.Suspended = savedSuspended;
             await frames(4);

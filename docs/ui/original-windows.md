@@ -358,7 +358,7 @@ are F0 and are read by the slice.
    button until the pointer moves. Editor done by ARC-UI-147 (window 14, the same strips and buttons, table 0x5C5310; `AreaShopArtView`
    with the character sheet's original look between them, `AreaCharacterSheetArtView.MenuScreen`): the sheet's window at the menu screen's
    (0, 41), the draft's values and portrait, the three pages' `−` and `+` and the tabs by the pointer; the portrait's close rectangle does not
-   close it (modes 1 and 2 only, CM3). PROJECT: the hints are not shown and a refused press's `charedit.mes` text goes to the menu's note line.
+   close it (modes 1 and 2 only, CM3). PROJECT: the hints are not shown; a refused press's `charedit.mes` text is drawn as the original does, in the bottom message window (the black box between Back and Accept; post 0x550750, text rectangle (290, 504, 291 × 78) in font 229, white, F1; ARC-UI-2968), until the next refusal or art change (the original also clears it when the pointer leaves the button).
 6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3) in the game's common dialog box, read by
    ARC-WORLD-120 (DB1–DB4: `DialogueBox` 325 × 136 at (237, 232), `Flare12Font` text, `Lil_Accept` and `Lil_Cancel`) and built
    there as `AreaDialogBoxView` for the death load box. ARC-DEV-334: the in-play menu's quit question draws on the same view over the

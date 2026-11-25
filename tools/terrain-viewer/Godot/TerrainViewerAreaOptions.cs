@@ -36,7 +36,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
         ConfigureControllers(); // ARC-GPAD-1374: the controller scheme choice of the same file
         ApplyDisplayOptions(); // ARC-UI-1737: the brightness and the violence filter apply at the start
-        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} generatedInterface={_gameSettings.GeneratedInterface} hdPack={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} hdPackPath={(_gameSettings.HdPackPath is null ? "none" : "set")} pad={_gameSettings.Pad} touch={_gameSettings.Touch} prompts={_gameSettings.Prompts} from={_gameSettingsOrigin}");
+        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} hdPack={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} hdPackPath={(_gameSettings.HdPackPath is null ? "none" : "set")} pad={_gameSettings.Pad} touch={_gameSettings.Touch} prompts={_gameSettings.Prompts} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
         ApplyDisplayOptions();
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
-        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} generatedInterface={settings.GeneratedInterface} hdPack={HdPackSourceResolver.ModeName(settings.HdPackSource)} hdPackPath={(settings.HdPackPath is null ? "none" : "set")} pad={settings.Pad} touch={settings.Touch} prompts={settings.Prompts} saved={saved}");
+        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} hdPack={HdPackSourceResolver.ModeName(settings.HdPackSource)} hdPackPath={(settings.HdPackPath is null ? "none" : "set")} pad={settings.Pad} touch={settings.Touch} prompts={settings.Prompts} saved={saved}");
     }
 }
 

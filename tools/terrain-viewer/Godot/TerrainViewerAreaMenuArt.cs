@@ -15,6 +15,8 @@ public partial class TerrainViewerApp
     private void AttachMenuArt(AreaMainMenuPanel panel)
     {
         var module = _arguments?.ModulePath;
+        // ARC-UI-2968: the note over the art menus is drawn in the original's text font (art 229), read once a module.
+        panel.SetNoteFonts(TextFonts());
         if (_menuArtContent is not null && module == _menuArtModule) return;
         _menuArtModule = module;
         var started = Time.GetTicksMsec();

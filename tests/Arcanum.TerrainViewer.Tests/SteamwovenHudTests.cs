@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-2452: the Steamwoven prototype's plan (strip scale and places from the layout model) and the generated board.</summary>
+/// <summary>ARC-UI-2452: the Steamwoven prototype's plan (strip scale and places from the layout model) (the generated board is retired, ARC-UI-3143)</summary>
 [TestClass]
 public sealed class SteamwovenHudTests
 {
@@ -68,49 +68,5 @@ public sealed class SteamwovenHudTests
     {
         Assert.IsNull(SteamwovenHud.Plan(800, 450, SteamwovenLayoutOptions.Default)); // f = 0.208
         Assert.IsNull(SteamwovenHud.Plan(1920, 1080, new SteamwovenLayoutOptions(new SteamwovenColumnMode(new Ratio(1, 2)))));
-    }
-
-    [TestMethod]
-    public void A_board_is_exactly_the_asked_size_opaque_and_deterministic()
-    {
-        var first = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.Bottom, 211, 37, 1.8, -12.5, -3, null, [], 0, 0);
-        var again = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.Bottom, 211, 37, 1.8, -12.5, -3, null, [], 0, 0);
-        Assert.AreEqual(211 * 37 * 4, first.Length);
-        CollectionAssert.AreEqual(first, again);
-        for (var i = 3; i < first.Length; i += 4) Assert.AreEqual(255, first[i]);
-    }
-
-    [TestMethod]
-    public void A_board_continues_the_grain_of_a_neighbour_at_its_unit_position()
-    {
-        // Two boards of one wood: the right one starts 100 units (180 px at 1.8) to the right of the left one; its first column is the left board's column 180.
-        var wide = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 400, 20, 1.8, 0, 0, null, [], 0, 0);
-        var narrow = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 100, 20, 1.8, 100, 0, null, [], 0, 0);
-        for (var y = 0; y < 20; y++)
-        for (var c = 0; c < 4; c++)
-            Assert.AreEqual(wide[(y * 400 + 180) * 4 + c], narrow[(y * 100) * 4 + c]);
-    }
-
-    [TestMethod]
-    public void A_rim_lies_on_the_kept_edge_of_the_board()
-    {
-        // The rim of a board that stands on its bottom (the top strip's) is in the last rows, not the first.
-        var bottom = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.Bottom, 50, 40, 1.8, 0, 0, null, [], 0, 0);
-        var plain = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 50, 40, 1.8, 0, 0, null, [], 0, 0);
-        int Diff(byte[] a, byte[] b, int row) => Enumerable.Range(0, 50 * 4).Count(i => a[row * 200 + i] != b[row * 200 + i]);
-        Assert.IsTrue(Diff(bottom, plain, 39) > 100, "the last row carries the rim");
-        Assert.AreEqual(0, Diff(bottom, plain, 0), "the first row is not rimmed (the grain is the same as a plain board's)");
-    }
-
-    [TestMethod]
-    public void A_board_takes_the_wood_colours_of_the_tone_frame()
-    {
-        // A tone frame of one flat colour with no recipe parts tunes the wood to that colour's mean; the default wood differs.
-        var legacy = new byte[16 * 16 * 4];
-        for (var i = 0; i < legacy.Length; i += 4) { legacy[i] = 200; legacy[i + 1] = 40; legacy[i + 2] = 40; legacy[i + 3] = 255; }
-        var recipe = new ChromeRecipe("tone.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [], Holes: ChromeHoles.None);
-        var tuned = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 20, 20, 1, 0, 0, recipe, legacy, 16, 16);
-        var plain = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 20, 20, 1, 0, 0, null, [], 0, 0);
-        Assert.IsFalse(tuned.AsSpan().SequenceEqual(plain));
     }
 }

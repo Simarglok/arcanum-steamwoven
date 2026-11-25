@@ -26,7 +26,7 @@ public sealed class ViewerSettingsConfigTests
 
     private static readonly AreaGameSettings Chosen = new(2, true, false)
     {
-        Floats = 0, FloatSpeed = 9, CombatTaunts = false, AutoSwitchWeapons = true, FollowerSkills = false, ViolenceFilter = true, Brightness = 5, TextDuration = 3, HdInterface = true, GeneratedInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
+        Floats = 0, FloatSpeed = 9, CombatTaunts = false, AutoSwitchWeapons = true, FollowerSkills = false, ViolenceFilter = true, Brightness = 5, TextDuration = 3, HdInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
         Pad = PadScheme.Pointer, Touch = TouchScheme.Off, Prompts = PromptStyle.SteamDeck,
     };
 
@@ -83,7 +83,7 @@ public sealed class ViewerSettingsConfigTests
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\nworld zoom=auto\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\nworld zoom=auto\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));
@@ -103,8 +103,8 @@ public sealed class ViewerSettingsConfigTests
         Assert.AreEqual((false, 0), (settings.ViolenceFilter, settings.Brightness), "ARC-UI-1737: a bad violence filter or a brightness of 10 (the factor 2.0 the original refuses) reads as the default, off and 0");
         Assert.IsFalse(settings.AutoSwitchWeapons, "an out-of-range auto switch line reads as the default, off (ARC-COMBAT-1720)");
         Assert.IsTrue(settings.FollowerSkills, "an out-of-range follower skills line reads as the default, on (ARC-COMBAT-1777)");
-        Assert.AreEqual((true, true, defaults.HdPackSource, "/x"), (settings.HdInterface, settings.GeneratedInterface, settings.HdPackSource, settings.HdPackPath));
-        Assert.IsFalse(ViewerSettingsConfig.ReadGame(Lines("generated interface=1\n")).GeneratedInterface, "the generated interface is on only with the HD interface");
+        Assert.AreEqual((true, defaults.HdPackSource, "/x"), (settings.HdInterface, settings.HdPackSource, settings.HdPackPath));
+        Assert.IsFalse(ViewerSettingsConfig.ReadGame(Lines("generated interface=1\n")).HdInterface, "ARC-UI-3142: a retired generated interface line alone does not turn HD on, and the read does not fail");
         Assert.AreEqual(HdPackSourceMode.GameFolder, ViewerSettingsConfig.ReadGame(Lines("HD PACK=Game\n")).HdPackSource);
     }
 
@@ -178,8 +178,9 @@ public sealed class ViewerSettingsConfigTests
         Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("hd=0\nhd interface=1\nvisual profile=hd\n")), "the hd line wins");
         Assert.IsTrue(ViewerSettingsConfig.ReadHd(Lines("hd=1\nhd interface=0\n")));
         Assert.IsTrue(ViewerSettingsConfig.HasHd(Lines("hd interface=0\n")), "an old file with only hd interface holds a saved value");
-        Assert.IsTrue(ViewerSettingsConfig.ReadGame(Lines("hd interface=1\ngenerated interface=1\n")) is { HdInterface: true, GeneratedInterface: true });
-        Assert.IsTrue(ViewerSettingsConfig.ReadGame(Lines("visual profile=hd\ngenerated interface=1\n")) is { HdInterface: false, GeneratedInterface: false }, "generated is honoured only while HD is On");
+        Assert.IsTrue(ViewerSettingsConfig.ReadGame(Lines("hd interface=1\ngenerated interface=1\n")) is { HdInterface: true }, "the retired generated interface line is ignored (ARC-UI-3142)");
+        Assert.IsTrue(ViewerSettingsConfig.ReadGame(Lines("visual profile=hd\ngenerated interface=1\n")) is { HdInterface: false }, "a visual profile line alone does not turn HD on");
+        Assert.IsFalse(ViewerSettingsConfig.GameChanges(Chosen).Any(change => change.Name == ViewerSettingsConfig.GeneratedInterfaceLine), "ARC-UI-3142: the retired line is not written");
         Assert.IsFalse(ViewerSettingsConfig.GameChanges(Chosen).Any(change => change.Name == ViewerSettingsConfig.HdInterface), "the old line is never written again");
         var oldPath = Path.Combine(_root, "old", ArcanumConfig.FileName);
         Directory.CreateDirectory(Path.GetDirectoryName(oldPath)!);
