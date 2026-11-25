@@ -207,8 +207,20 @@ public sealed class AreaInventoryHost
         foreach (var map in _resolver.ReadMaps)
             if (session.AttachMapInventory(new(map.RuntimeMap), map.Seed).Disposition == GameSessionDisposition.Rejected)
                 Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={map.RuntimeMap}");
+        // ARC-SCRIPT-2911: a new gold pile or ammunition stack a move into an NPC or a container leaves on the ground (a skipped get script, a refused insert) lies on the holder's tile on the shown map.
+        session.AttachHolderCells(holder => HolderCell(session, holder));
         return GameSessionFailure.None;
     }
+
+    /// <summary>ARC-SCRIPT-2911 (what <see cref="Attach"/> hands the session through <see cref="GameSessionOwner.AttachHolderCells"/>): where an NPC or a container of the shown map stands now: <see cref="NpcLiveCell"/>'s (the AI host's tile), else its row's world cell on the actor's map; null when the host has neither.</summary>
+    public CellCoord? HolderCell(GameSessionOwner session, string holder)
+    {
+        if (NpcLiveCell?.Invoke(holder) is { } live) return live;
+        return _maps.TryGetValue(session.QueryActor().Map.RuntimeMap, out var map) ? RowCell(map, holder) : null;
+    }
+
+    private static CellCoord? RowCell(AreaInventoryMap map, string holder) =>
+        map.TryGetRow(holder, out var row) && row.WorldX is { } x && row.WorldY is { } y && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new((int)x, (int)y) : null;
 
     /// <summary>
     /// ARC-DEV-354: the items whose row this host keeps when it can read it, with the map the session names as each one's origin: the items the PC
