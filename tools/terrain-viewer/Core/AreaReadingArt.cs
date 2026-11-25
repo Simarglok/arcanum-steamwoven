@@ -30,11 +30,11 @@ public static class AreaReadingArtLayout
     public const int FrameArt = WrittenTexts.FrameArt, LensArt = 231, PreviousArt = WrittenTexts.BookPreviousArt, NextArt = WrittenTexts.BookNextArt;
     public static (int X, int Y) BackgroundCorner { get; } = (132, 0);
 
-    /// <summary>ARC-UI-2720: the x, in the book background's own pixels, of the fold the generated look draws: where the two page plates meet (the pages' 227 + 200 and 476 lie 49 apart in the window, so their middle is the window's 451.5, the art's 319.5).</summary>
+    /// <summary>ARC-UI-2720: the x, in the book background's own pixels, of the fold: where the two page plates meet (the pages' 227 + 200 and 476 lie 49 apart in the window, so their middle is the window's 451.5, the art's 319.5).</summary>
     public const float BookFold = 320f;
 
     /// <summary>The close hotspot and the lens (0x5CA4A8, 0x5CA4B0): 89 × 89 at (25, 24); a left release inside it closes the window (the callback 0x56BFC0 tests it with 0x551000).</summary>
-    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((25, 24)).X, AreaLensPlace.Corner((25, 24)).Y, AreaLensPlace.Side); // ARC-UI-2714: the common place with the generated interface
+    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((25, 24)).X, AreaLensPlace.Corner((25, 24)).Y, AreaLensPlace.Side); // ARC-UI-2714: the common place of the kit background
 
     public static (int X, int Y) PreviousCorner { get; } = (213, 77);
     public static (int X, int Y) NextCorner { get; } = (675, 77);
@@ -44,7 +44,7 @@ public static class AreaReadingArtLayout
 
     /// <summary>The font arts the fixed texts use: the telegram's form (481 and 479, 0x5CA538) and body (480), the newspaper's masthead (485, 484, 482; the alternate's 815) and the note (497).</summary>
     public const int NoteFont = 497, TelegramBodyFont = 480, TelegramFormFont = 481, TelegramNameFont = 479, MastheadFont = 485, MastheadSideFont = 484, MastheadLineFont = 482;
-    /// <summary>ARC-UI-2765 (owner decision 2026-11-24): the readable face of a note's body with the generated interface, art 840 (NewTimes16, a plain serif of the player's set; the pack's HD version in HD). An optional font: the
+    /// <summary>ARC-UI-2765 (owner decision 2026-11-24): the readable face of a note's body, art 840 (NewTimes16, a plain serif of the player's set; the pack's HD version in HD). An optional font: the
     /// window loads it with the others and draws the original's Pepper20 note when it did not read.</summary>
     public const int NoteBodyFont = 840;
 
@@ -314,7 +314,7 @@ public static class AreaReadingFlow
         return lines;
     }
 
-    /// <summary>ARC-UI-2765: a note's body. The original's draw (Pepper20, a handwriting face) unless <paramref name="readable"/> (the generated interface with the face loaded): then the address (first line, ending in a comma) and
+    /// <summary>ARC-UI-2765: a note's body. The original's draw (Pepper20, a handwriting face) unless <paramref name="readable"/> (the face loaded): then the address (first line, ending in a comma) and
     /// the signature (<see cref="AreaReadingNoteRule"/>) stay in Pepper20 and the body between them is in the first of <see cref="AreaReadingArtLayout.NoteBodyFonts"/> that holds the letter; a letter that does not fit the rule, or whose address, body and signature do not fit the rectangle in a face, is tried whole in that face before the next face;
     /// a letter no readable face holds in the note's rectangle keeps the original's draw.</summary>
     public static IReadOnlyList<AreaReadingLine> Note(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf, bool readable)

@@ -1519,6 +1519,22 @@ python3 -B tools/steamwoven_ui/surface_compose.py build --original refs/ctx-inve
 ```
 
 The inventory surface lays `plate.use_box_off` (the hand oval) and `plate.drop_off` (the arrow oval) with `kit_parts` at master pixels (x 2530, y 1191 and 1385); the interim analytic corner triangles of ARC-UI-3290 (`plate_boxes`) are gone from `surface_compose.py` (a spec with `plate_boxes` is refused). The oval's soft shadow stays the surface's (`disc_boxes`, #3249). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_parchment_kit` (about 1 s, in the batched `tools/local_dev/run_tests.py`).
+## Steamwoven college tabs and skill-school buttons, batch B-BUTTONS slice 4 (ARC-UI-3204)
+
+The kit parts of the 16 college tabs of the spell window (arts 11, 38 to 122 step 6, 24 x 24 units) and the 12 skill-school buttons of the character sheet (arts 302 to 313): the player's own HD-pack frames as they are, cut to the ring's circle by an analytic round alpha (owner decision 2026-11-25; [TRD](../ui/steamwoven-interface-trd.md), the 3204 paragraph).
+Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. The pack is `local/hd-packs/interface-redraw-4x` (read only, found through its `index.tsv`).
+
+```sh
+python3 -B tools/steamwoven_ui/school_kit.py check [--only NAME,...]                                   # every button has its three pack frames; the circles lie inside the arts
+python3 -B tools/steamwoven_ui/school_kit.py build [--only NAME,...] [--out DIR] [--dry-run]           # the 112 parts -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/school_kit.py codex-inbox --stage idle|states [--only NAME,...]        # Codex batch B-BUTTONS-FIX (Nature, Water, Forc): prompts, refs (pack frame, original x32, idle sample) -> inbox/
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-FIX                                        # idle first; then `codex-inbox --stage states` and run again (hover, pressed)
+python3 -B tools/steamwoven_ui/school_kit.py codex-place [--only NAME,...]                             # the generated images registered onto the pack frames' geometry -> work/B-BUTTONS-FIX/placed (`build` uses them)
+python3 -B tools/steamwoven_ui/school_kit.py sheet --out FILE [--only NAME,...] [--zoom N] [--columns N]   # original | idle | hover | pressed over a wood ground with the run-time shadow (English labels)
+```
+
+`plate.<name>` is the pack's idle frame, `plate.<name>_hover` and `_pressed` the hover and pressed frames in full, `glyph.<name>` an empty layer (for the three Codex-redrawn buttons the frames are the generated images registered onto the pack frames' geometry, all three states or none). The circle of every art (the ring's gold circle and the cut's half unit) and the shadow's numbers are read from the viewer's `tools/terrain-viewer/Core/AreaKitRoundParts.cs`, one source for the part's edge and the run-time shadow; the alpha is analytic (one pixel wide), the colour outside the circle is carried inward before the stretch to the master's size, so no old background reaches the edge. Each part's provenance record (`provenance/rule/<id>.json`) names the pack frame's sha256 and the index's sha12; the three symbols the pack reads wrongly (art 74, 86, 56: `CODEX_SYMBOLS`) are redrawn by Codex on the pack frame (source `codex` in the record, with the generation record and the placed frame's hash).
+Tests: `python3 -B -m unittest tools.steamwoven_ui.test_school_kit` (in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

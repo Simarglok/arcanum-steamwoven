@@ -89,7 +89,7 @@ public partial class TerrainViewerApp
             else
             {
                 using var image = Image.CreateEmpty(baked, bakedHeight, false, Image.Format.Rgba8);
-                if (id.StartsWith("glyph.", StringComparison.Ordinal))
+                if (id.StartsWith("glyph.", StringComparison.Ordinal) || id.StartsWith("fixture.sheet_stat_names_", StringComparison.Ordinal) || id == "fixture.sheet_dial_letters")  // ARC-UI-3299: a label part is lettering on nothing: transparent round a small mark
                 {
                     image.Fill(new Color(0, 0, 0, 0));
                     image.FillRect(new Rect2I(baked / 4, bakedHeight / 4, baked / 2, bakedHeight / 2), colour);
@@ -416,6 +416,7 @@ public partial class TerrainViewerApp
         await frames(2);
         var zone = SteamwovenWindowZone.ZoneOf(plan);
         require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.WorldMap && panel.KitForSelfTest.Background.Count == 1 && view.KitBackgroundShown, $"[{tag}] the open world map takes the kit's map background (window {AreaGameBarPanel.KitBackgroundWindow}, pieces {panel.KitForSelfTest.Background.Count})");
+        require(AreaLensPlace.Unified, $"[{tag}] with the kit's map background published the lenses stand at the kit's common place (ARC-UI-2714, ARC-UI-3143)");
         var piece = panel.KitForSelfTest.Background.Single();
         require(piece.Rect.X == zone.X && piece.Rect.Right == zone.Right && piece.Rect.Y == zone.Y && piece.Rect.Bottom == zone.Bottom, $"[{tag}] the map background tiles the zone {zone}, got {piece.Rect}");
         // Where each probe stands: a bare piece of the frame (left of the zoom button, clear of the buttons and the lens) is the kit's colour; the centre of the map view and of the lens are not (the view draws its own black and picture, the lens the game's view).
@@ -453,11 +454,13 @@ public partial class TerrainViewerApp
         require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)) == 1, $"[{tag}] only the map's piece is resident while the map is open");
         CloseWorldMapByPlayer(); await frames(4);
         require(!WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] the map closed leaves no kit background resident");
+        require(!AreaLensPlace.Unified, $"[{tag}] the map closed leaves the lenses at the windows' own places");
         if (withoutMap is null) return;
         // SWI-BDR-3: a set without the piece leaves the window's own (pack) art.
         withoutMap();
         panel.Relayout(); OpenWorldMap(); await frames(6);
         require(WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && panel.KitForSelfTest.Background.Count == 0 && !view.KitBackgroundShown, $"[{tag}] with the map piece missing the window keeps its own art");
+        require(!AreaLensPlace.Unified, $"[{tag}] with the map piece missing the lens stays at the window's own place");
         CloseWorldMapByPlayer(); await frames(3);
         restore();
         panel.Relayout(); await frames(4);
@@ -614,6 +617,7 @@ public partial class TerrainViewerApp
             await frames(6);
             require(isOpen(), $"[{tag}] the {name} window opens");
             require(AreaGameBarPanel.KitBackgroundWindow == (kit ? window : null) && (panel.KitForSelfTest.Background.Count > 0) == kit, $"[{tag}] the {name} window is {(kit ? "published as standing over its kit background" : "left to its own art (no complete kit background)")} (got {AreaGameBarPanel.KitBackgroundWindow})");
+            require(AreaLensPlace.Unified == kit, $"[{tag}] the {name} window with {(kit ? "its kit background published" : "no kit background")} has the lens at {(kit ? "the kit's common place" : "its own place")} (Unified {AreaLensPlace.Unified})");
             await frames(3);
             // The window's own draw took the kit branch (it drew its stand-ins for the elements the old art held) exactly when the kit's background shows.
             require(AreaKitStandIns.DrawnForSelfTest.Contains(window) == kit, $"[{tag}] the {name} window {(kit ? "drew its stand-in fields over the kit's background" : "drew its own art, no stand-in fields")}");
@@ -647,8 +651,13 @@ public partial class TerrainViewerApp
                 // ARC-UI-3165 (method A condition 1): the words and numbers art 22 had baked in are the sheet's own text over the kit's background (the eight stat names, the dial's E and G, the ruler's seven divisions), none with the art's own background.
                 if (name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } labelView)
                 {
-                    var expectedLabels = AreaKitStandIns.SheetLabels().Select(label => label.Text).ToArray();
-                    require(expectedLabels.Length == 17 && string.Join(" ", expectedLabels) == "ST IN CN WP DX PE BE CH E G 75 50 25 0 25 50 75", $"[{tag}] the baked-in text of art 22 the sheet owes is 8 stat names, E, G and 7 ruler divisions (got {string.Join(" ", expectedLabels)})");
+                    var allLabels = AreaKitStandIns.SheetLabels().Select(label => label.Text).ToArray();
+                    require(allLabels.Length == 17 && string.Join(" ", allLabels) == "ST IN CN WP DX PE BE CH E G 75 50 25 0 25 50 75", $"[{tag}] the baked-in text of art 22 the sheet owes is 8 stat names, E, G and 7 ruler divisions (got {string.Join(" ", allLabels)})");
+                    // ARC-UI-3299: a group whose kit part is in the set is drawn from the part and its text is not written (all parts with the real fixtures, none with the stand-ins); the ruler's divisions are always text.
+                    var partIds = AreaKitStandIns.SheetLabelPartPlaces.Select(place => place.Id).ToArray();
+                    var expectedParts = kit && fixtures ? partIds.Order().ToArray() : [];
+                    require(labelView.KitLabelPartsDrawnForSelfTest.SequenceEqual(expectedParts), $"[{tag}] the sheet laid {(expectedParts.Length > 0 ? "the kit's label parts" : "no kit label part")} over the background (got {string.Join(", ", labelView.KitLabelPartsDrawnForSelfTest)})");
+                    var expectedLabels = AreaKitStandIns.SheetLabels(expectedParts.ToHashSet()).Select(label => label.Text).ToArray();
                     require(kit ? labelView.KitLabelsDrawnForSelfTest.SequenceEqual(expectedLabels) : labelView.KitLabelsDrawnForSelfTest.Count == 0, $"[{tag}] the sheet {(kit ? "wrote its own stat names, dial letters and ruler divisions over the kit's background" : "wrote none of them over its own art")} (drew {string.Join(" ", labelView.KitLabelsDrawnForSelfTest)})");
                 }
                 // ARC-UI-3037: the sheet's three gauges stand in (a point of each, in window units): the health heart, the fatigue cross, the alignment dial's face and the ruler's parchment.
@@ -664,6 +673,7 @@ public partial class TerrainViewerApp
             close();
             await frames(4);
             require(!isOpen() && AreaGameBarPanel.KitBackgroundWindow is null, $"[{tag}] the {name} window's kit background goes with it");
+            require(!AreaLensPlace.Unified, $"[{tag}] the {name} window closed leaves the lenses at the windows' own places");
         }
     }
 

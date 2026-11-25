@@ -453,7 +453,7 @@ public partial class AreaWorldMapArtView : Control
         Redraw();
     }
 
-    // ARC-UI-1197: the generated interface paints the window's frame at the window's own device scale (the frame scale times the canvas transform's and the viewport's stretch,
+    // ARC-UI-1197: the pack's frame is area-resampled at the window's own device scale (InterfaceResample) (the frame scale times the canvas transform's and the viewport's stretch,
     // the bars' own rule). The view claims its look's textures at its draw; a texture swapped in by a worker redraws the window.
     private readonly HashSet<HdInterfaceTexture> _watched = [];
     private Action? _onTextureChanged;

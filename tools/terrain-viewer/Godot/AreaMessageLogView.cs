@@ -59,7 +59,7 @@ public partial class AreaMessageLogView : Control
     internal string PaneNameForSelfTest => Visible && _paneShown ? _paneText : "";
     internal bool IconShownForSelfTest => _icon.Visible && _icon.Texture is not null;
     internal bool BackgroundShownForSelfTest => _background.Visible && _background.Texture is not null;
-    /// <summary>ARC-UI-1200: the message mode's background texture while it shows (the native generated-chrome smoke).</summary>
+    /// <summary>ARC-UI-1200: the message mode's background texture while it shows (the native window-art smoke).</summary>
     internal Texture2D? BackgroundForSelfTest => _background.Visible ? _background.Texture : null;
     internal bool WideForSelfTest => _wide;
     internal Vector2 OlderCentreForSelfTest => _older.GetGlobalRect().GetCenter();
