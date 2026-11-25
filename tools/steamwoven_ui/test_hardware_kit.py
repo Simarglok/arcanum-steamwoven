@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from unittest import mock
 
 from . import build_kit
 from . import hardware_kit as hk
@@ -35,10 +36,14 @@ class PlanTests(unittest.TestCase):
     def test_every_part_has_a_manifest_row_and_a_grid_size(self) -> None:
         manifest = hk.load_manifest()
         rows = {r["id"]: r for r in manifest["parts"]}
-        self.assertEqual(len(hk.PARTS), 31)
+        self.assertEqual(len(hk.PARTS), 33)
         for part in hk.PARTS:
             self.assertIn(part.ident, rows)
-            w, h = rows[part.ident]["size"]
+            size = rows[part.ident]["size"]
+            if part.family == "lens_whole":
+                self.assertIsNone(size)   # a new part: its size is open in the manifest, the tool's is LENS_WHOLE
+                continue
+            w, h = size
             self.assertEqual((w % 6, h % 6), (0, 0), part.ident)
             self.assertEqual(rows[part.ident]["batch"], "B-HARDWARE")
 
@@ -49,12 +54,12 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(rows[part.ident]["provenance"], hk.provenance_of(part.ident))
 
     def test_build_kit_covers_exactly_these_parts(self) -> None:
-        self.assertEqual(build_kit.HARDWARE_RULE_PARTS, frozenset(p.ident for p in hk.PARTS))
+        self.assertEqual(build_kit.HARDWARE_RULE_PARTS, frozenset(p.ident for p in hk.PARTS if p.art))
 
     def test_the_art_numbers_are_the_census_ones(self) -> None:
         rows = {r["id"]: r for r in hk.load_manifest()["parts"]}
         for part in hk.PARTS:
-            self.assertEqual(rows[part.ident]["source_arts"], [part.art], part.ident)
+            self.assertEqual(rows[part.ident]["source_arts"], [part.art] if part.art else [], part.ident)
 
 
 class RingTests(unittest.TestCase):
@@ -63,25 +68,41 @@ class RingTests(unittest.TestCase):
         self.assertAlmostEqual(cx, 44.5, delta=0.1)
         self.assertAlmostEqual(r, 44.5, delta=0.3)
 
-    def test_the_ring_keeps_the_lighting_and_drops_the_corners(self) -> None:
+    def test_the_ring_is_whole_keeps_the_light_and_leaves_corners_and_circle_open(self) -> None:
         table = hk.ring_table([lens_art(), lens_art(wood=(90, 70, 50))])
-        ring = hk.render_ring(table, (318, 318))
-        self.assertEqual((ring.w, ring.h), (318, 318))
+        ring = hk.render_ring(table, hk.LENS_WHOLE)
+        self.assertEqual((ring.w, ring.h), (354, 354))
         self.assertEqual(ring.pixel(2, 2)[3], 0)       # the corner is open (the old art's wood is not part of the ring)
-        self.assertEqual(ring.pixel(159, 159)[3], 0)   # the circle is open
-        top_left = max(ring.pixel(x, y) for x in range(40, 80) for y in range(40, 80) if ring.pixel(x, y)[3] > 200)
-        bottom_right = max(ring.pixel(x, y) for x in range(240, 280) for y in range(240, 280) if ring.pixel(x, y)[3] > 200)
-        self.assertGreater(top_left[0], bottom_right[0])  # the light falls from the top left
+        self.assertEqual(ring.pixel(177, 177)[3], 0)   # the circle is open
+        for x, y in ((177, 9), (177, 344), (9, 177), (344, 177)):   # the ring is whole at the four places the old art clipped it
+            self.assertGreater(max(ring.pixel(x + dx, y + dy)[3] for dx in range(-5, 6) for dy in range(-5, 6)), 200, (x, y))
+        top_left = max(sum(ring.pixel(x, y)[:3]) for x in range(40, 90) for y in range(40, 90) if ring.pixel(x, y)[3] > 200)
+        bottom_right = max(sum(ring.pixel(x, y)[:3]) for x in range(260, 310) for y in range(260, 310) if ring.pixel(x, y)[3] > 200)
+        self.assertGreater(top_left, bottom_right)  # the light falls from the top left
+
+    def test_the_drop_in_part_is_the_whole_ring_on_the_arts_square(self) -> None:
+        part = hk.BY_ID["hardware.pcwincvr"]
+        frames = {p.art: lens_art() for p in hk.LENS_ARTS}
+        with mock.patch.object(hk, "read_frame", lambda _f, p, frame=0: frames[p.art]):
+            cache: dict = {}
+            drop, _ = hk.build_part(part, None, None, (318, 318), cache)
+            whole, _ = hk.build_part(hk.BY_ID["hardware.lens_ring"], None, None, hk.LENS_WHOLE, cache)
+        self.assertEqual((drop.w, drop.h), (318, 318))
+        self.assertEqual(drop.data, whole.crop(hk.LENS_PAD, hk.LENS_PAD, 318, 318).data)
 
     def test_a_fill_makes_the_circle_opaque(self) -> None:
-        ring = hk.render_ring(hk.ring_table([lens_art()]), (318, 318), fill=(7, 7, 7))
-        self.assertEqual(ring.pixel(159, 159), (7, 7, 7, 255))
+        ring = hk.render_ring(hk.ring_table([lens_art()]), hk.LENS_WHOLE, fill=(7, 7, 7))
+        self.assertEqual(ring.pixel(177, 177), (7, 7, 7, 255))
         self.assertEqual(ring.pixel(2, 2)[3], 0)
 
     def test_the_part_passes_its_gates(self) -> None:
-        ring = hk.render_ring(hk.ring_table([lens_art()]), (318, 318))
-        self.assertEqual(hk.gates(hk.BY_ID["hardware.pcwincvr"], ring, (318, 318)), [])
-        self.assertTrue(hk.gates(hk.BY_ID["hardware.pcwincvr"], ring, (324, 324)))
+        ring = hk.render_ring(hk.ring_table([lens_art()]), hk.LENS_WHOLE)
+        self.assertEqual(hk.gates(hk.BY_ID["hardware.lens_ring"], ring, hk.LENS_WHOLE), [])
+        self.assertTrue(hk.gates(hk.BY_ID["hardware.lens_ring"], ring, (360, 360)))
+
+    def test_no_white_remains_after_the_highlights_are_compressed(self) -> None:
+        self.assertLess(hk.lum(*hk.compress([255.0, 255.0, 255.0], 139.0, 0.5)), 200)
+        self.assertEqual(hk.compress([50.0, 40.0, 30.0], 139.0, 0.5), [50.0, 40.0, 30.0])
 
 
 class SlotTests(unittest.TestCase):
@@ -129,9 +150,9 @@ class SlotTests(unittest.TestCase):
 
     def test_a_fill_keeps_the_ring_colour_at_the_edge(self) -> None:
         table = hk.ring_table([lens_art()])
-        plain = hk.render_ring(table, (318, 318))
-        filled = hk.render_ring(table, (318, 318), fill=(8, 8, 8))
-        edge = [(x, y) for y in range(318) for x in range(318) if 20 < plain.pixel(x, y)[3] < 200 and filled.pixel(x, y)[3] > plain.pixel(x, y)[3]]
+        plain = hk.render_ring(table, hk.LENS_WHOLE)
+        filled = hk.render_ring(table, hk.LENS_WHOLE, fill=(8, 8, 8))
+        edge = [(x, y) for y in range(354) for x in range(354) if 20 < plain.pixel(x, y)[3] < 200 and filled.pixel(x, y)[3] > plain.pixel(x, y)[3]]
         self.assertTrue(edge)
         for x, y in edge[:50]:
             for c in range(3):   # the blend lies between the ring's colour and the fill's

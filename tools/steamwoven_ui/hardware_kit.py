@@ -54,7 +54,9 @@ MANIFEST = HERE / "kit.json"
 TH_BINS = 720                 # angle bins (0.5 degree)
 D_MIN, D_MAX, D_STEP = -0.5, 6.0, 0.25   # depth (original px beyond the circle's edge)
 SIGMA_T, SIGMA_D = 2.0, 0.40  # the splat's width: degrees, original px
-RING_CORE, RING_END = 4.2, 5.0   # the ring is opaque up to RING_CORE px beyond the circle and fades out by RING_END (its outer dark rim melts into the window's wood)
+RING_WIDTH = 5.0              # the ring's brass band, original px (the old art's band is about 4 px, its dark rim included); every angle's band is stretched to it
+LENS_PAD = 18                 # master px added on every side of a lens art's square so the ring is whole (3 grid steps)
+HIGHLIGHT_KNEE, HIGHLIGHT_SLOPE = 139.0, 0.5   # luminance above the knee (the 90th percentile of the HUD ring's brass) is halved: no white on a brass ring
 
 # the strip wood the maintain slots and plugs are cut from (board.inttop master px): the one plain stretch of wood left of the slot openings (the strip's other opaque stretches are filled-in erasures, smeared), 126 px square;
 # a smaller tile is cut at a corner or the middle of it, flipped, so the five tiles differ (a 126 px plug fills the area, so its four flips differ and the fifth plug repeats the first)
@@ -82,6 +84,8 @@ LENS = (("pcwincvr", "198", "PCWinCvr"), ("char_pcc", "222", "Char_PCC"), ("lns_
         ("schm_pc_lens", "367", "Schm_PC_Lens"), ("optionspclens", "670", "OptionsPCLens"), ("saveloadpclens", "746", "SaveLoadPCLens"))
 PARTS: tuple[Part, ...] = (
     *(Part(f"hardware.{i}", art, name, "lens", fill=art == "367") for i, art, name in LENS),
+    Part("hardware.lens_ring", "", "", "lens_whole"),
+    Part("hardware.lens_ring_filled", "", "", "lens_whole", fill=True),
     *(Part(f"hardware.hkslt{n}", str(172 + n), f"HKSlt{n}", "inset", n) for n in range(10)),
     *(Part(f"hardware.splslt{n + 1}", str(188 + n), f"SplSlt{n + 1}", "wood", n) for n in range(5)),
     *(Part(f"hardware.sp_plugged{n + 1}", str(628 + n), f"SP_Plugged{n + 1}", "plug", n) for n in range(5)),
@@ -91,14 +95,17 @@ PARTS: tuple[Part, ...] = (
 )
 BY_ID = {p.ident: p for p in PARTS}
 LENS_ARTS = tuple(p for p in PARTS if p.family == "lens")
+LENS_BASE = 318                # a lens art's master square (89 units); the whole ring is LENS_BASE + 2 * LENS_PAD
+LENS_WHOLE = (LENS_BASE + 2 * LENS_PAD, LENS_BASE + 2 * LENS_PAD)
 INSET_ARTS = tuple(p for p in PARTS if p.family == "inset")
 FAMILY_NOTE = {
-    "lens": "the lens ring by rule from the original's own ring (a polar table of the eight lens arts, read at the master size); the art's wood corners are not part of it, the circle is open",
-    "inset": "the hotkey slot's inset by rule from the original's ten slot arts (shadow along the top and left, light line along the bottom and right; the middle is open for the strip's wood)",
+    "lens_whole": "the whole lens ring by rule from the original's ring (its light, bevel and warm highlights, band 5 px, no dark rim); the art's square plus 18 px each side, centred; circle open or dark-filled",
+    "lens": "the lens art's square with the ring of hardware.lens_ring on it (drop-in for the old art, ring cut where the old art cut it); no wood corners, circle open",
+    "inset": "the hotkey slot's inset by rule from the ten slot arts: shadow top and left, light line bottom and right, the middle open for the strip's wood",
     "wood": "the maintain slot's wood: a crop of the strip's wood shaded by the original's smooth light (the slot is an opening in the strip art)",
     "plug": "the plug of a closed maintain slot: a crop of the strip's wood shaded by the original's smooth light",
-    "outline": "a flat-colour selection frame by rule: every original pixel is a block of the master, the lines stay crisp and exact",
-    "roller": "the shaded roller by rule from the original's own frame, resampled smoothly",
+    "outline": "a flat-colour selection frame by rule: every original pixel is a block of the master, lines crisp and exact",
+    "roller": "the shaded roller by rule from the original's frame: smooth along its height, crisp across",
 }
 
 
@@ -218,55 +225,99 @@ def ring_table(images: list[pngio.Image]) -> dict:
     return {"cx": cx, "cy": cy, "radius": radius, "num": num, "den": den, "size": (images[0].w, images[0].h)}
 
 
-def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] | None = None) -> pngio.Image:
-    """The ring at the master size (the table read at every master pixel); a fill colour makes the circle's inside opaque (art 367)."""
-    w, h = size
-    ow, oh = table["size"]
-    sx, sy = w / ow, h / oh
-    s = (sx + sy) / 2
-    if abs(sx - sy) / s > 0.01:
-        raise KitError("the master's aspect is not the art's")
-    cx, cy, radius = table["cx"], table["cy"], table["radius"]
+def dense_table(table: dict) -> tuple[list[list[list[float] | None]], list[float]]:
+    """The table as one colour per (angle bin, depth bin), the angles nothing was splatted into (the circle touches the art's edge there: the four cardinal points) filled by a straight line between the nearest
+    angles that have a colour, and the outer edge of the brass at every angle: the last depth whose luminance is at least half the angle's peak, plus half a pixel (the dark rim of the old art beyond it is the old
+    art's shadow on its wood and is not part of the ring), smoothed over 16 bins either side."""
     num, den = table["num"], table["den"]
+    grid: list[list[list[float] | None]] = [[None] * ND for _ in range(TH_BINS)]
+    for db in range(ND):
+        known = [t for t in range(TH_BINS) if den[t][db] >= 0.02]
+        for t in known:
+            grid[t][db] = [num[t][db][c] / den[t][db] for c in range(3)]
+        if not known:
+            continue
+        for t in range(TH_BINS):
+            if grid[t][db] is not None:
+                continue
+            lo = next(k for k in range(1, TH_BINS) if grid[(t - k) % TH_BINS][db] is not None)
+            hi = next(k for k in range(1, TH_BINS) if grid[(t + k) % TH_BINS][db] is not None)
+            a_, b_ = grid[(t - lo) % TH_BINS][db], grid[(t + hi) % TH_BINS][db]
+            f = lo / (lo + hi)
+            grid[t][db] = [a_[c] * (1 - f) + b_[c] * f for c in range(3)]
+    edge = []
+    for t in range(TH_BINS):
+        lums = [(D_MIN + db * D_STEP, lum(*grid[t][db])) for db in range(ND) if grid[t][db] is not None and 0 <= D_MIN + db * D_STEP <= 5.5]
+        peak = max(l for _, l in lums)
+        edge.append(max(d for d, l in lums if l >= 0.5 * peak) + 0.5)
+    smooth = [sum(edge[(t + k) % TH_BINS] for k in range(-16, 17)) / 33 for t in range(TH_BINS)]
+    return grid, smooth
+
+
+def sample_ring(grid: list[list[list[float] | None]], th: float, d: float) -> list[float]:
+    """The colour at angle `th` (degrees) and depth `d` (original px beyond the circle's edge), bilinear in the dense table."""
+    ft = th / (360.0 / TH_BINS) - 0.5
+    t0 = math.floor(ft)
+    wt = ft - t0
+    fd = (d - D_MIN) / D_STEP
+    d0 = max(0, min(ND - 2, int(math.floor(fd))))
+    wd = clamp(fd - d0, 0.0, 1.0)
+    acc = [0.0, 0.0, 0.0]
+    tot = 0.0
+    for tt, w1 in ((t0 % TH_BINS, 1 - wt), ((t0 + 1) % TH_BINS, wt)):
+        for dd, w2 in ((d0, 1 - wd), (d0 + 1, wd)):
+            cell = grid[tt][dd]
+            if cell is None:
+                continue
+            tot += w1 * w2
+            for c in range(3):
+                acc[c] += w1 * w2 * cell[c]
+    return [v / tot for v in acc] if tot > 0 else [0.0, 0.0, 0.0]
+
+
+def compress(colour: list[float], knee: float, slope: float) -> list[float]:
+    """Highlights above `knee` (a luminance) are pulled down to `slope` of their excess, so no white shows (the HUD rings' brass has none)."""
+    l = lum(*colour)
+    if l <= knee:
+        return colour
+    g = (knee + (l - knee) * slope) / l
+    return [min(255.0, v * g) for v in colour]
+
+
+def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] | None = None, pad: int = LENS_PAD) -> pngio.Image:
+    """The ring at the master size: the art's own square (`size` minus the padding on every side) with `pad` master px added all round, so the ring is drawn whole (the old art clipped it where the circle touches its edge).
+    Every angle's brass band (its own width in the old art) is stretched to RING_WIDTH original px, the colours are the table's (the lighting stays the original's: the white highlight at the top left, the warm orange
+    at the bottom right, the dark bevel along the inner edge), the highlights are compressed and the dark rim outside the brass is dropped. A fill colour makes the circle's inside opaque (art 367)."""
+    base_w, base_h = size[0] - 2 * pad, size[1] - 2 * pad
+    ow, oh = table["size"]
+    sx, sy = base_w / ow, base_h / oh
+    s = (sx + sy) / 2
+    if base_w <= 0 or abs(sx - sy) / s > 0.01:
+        raise KitError("the master's aspect is not the art's")
+    if "dense" not in table:
+        table["dense"] = dense_table(table)
+    grid, edge = table["dense"]
+    knee = HIGHLIGHT_KNEE
+    w, h = size
+    cx, cy, radius = w / 2.0, h / 2.0, table["radius"]
     out = pngio.Image.blank(w, h)
     bin_deg = 360.0 / TH_BINS
     for my in range(h):
         for mx in range(w):
-            ox = (mx + 0.5) / s - cx
-            oy = (my + 0.5) / s - cy
-            d = math.hypot(ox, oy) - radius
-            inside = d * s  # master px beyond the circle's edge (negative inside)
-            if d > RING_END and fill is None:
+            dx, dy = mx + 0.5 - cx, my + 0.5 - cy
+            d = (math.hypot(dx, dy) - radius * s) / s   # original px beyond the circle's edge (negative inside)
+            inside_px = d * s
+            if d > RING_WIDTH + 0.3 and fill is None:
                 continue
             r = g = b = 0.0
             alpha = 0.0
-            if d <= RING_END and d >= D_MIN:
-                th = (math.degrees(math.atan2(oy, ox)) + 360.0) % 360.0
-                ft = th / bin_deg - 0.5
-                t0 = math.floor(ft)
-                wt = ft - t0
-                fd = (d - D_MIN) / D_STEP
-                d0 = max(0, min(ND - 2, int(math.floor(fd))))
-                wd = clamp(fd - d0, 0.0, 1.0)
-                acc = [0.0, 0.0, 0.0]
-                tot = 0.0
-                for tt, w1 in ((t0 % TH_BINS, 1 - wt), ((t0 + 1) % TH_BINS, wt)):
-                    for dd, w2 in ((d0, 1 - wd), (d0 + 1, wd)):
-                        weight = den[tt][dd]
-                        if weight <= 1e-6:
-                            continue
-                        tot += w1 * w2 * weight
-                        cell = num[tt][dd]
-                        acc[0] += w1 * w2 * cell[0]
-                        acc[1] += w1 * w2 * cell[1]
-                        acc[2] += w1 * w2 * cell[2]
-                if tot > 0.05:  # a table cell nothing was splatted into (the circle touches the art's edge there) stays open
-                    r, g, b = acc[0] / tot, acc[1] / tot, acc[2] / tot
-                    a_in = clamp(inside + 0.5, 0.0, 1.0)
-                    a_out = 1.0 if d <= RING_CORE else clamp((RING_END - d) / (RING_END - RING_CORE), 0.0, 1.0)
-                    alpha = a_in * a_out
-            if fill is not None and inside < 0.5:
-                cover = clamp(0.5 - inside, 0.0, 1.0)  # the fill's own soft edge, under the ring
+            if -0.3 <= d <= RING_WIDTH + 0.3:
+                th = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
+                u = clamp(d / RING_WIDTH, 0.0, 1.0)
+                r, g, b = compress(sample_ring(grid, th, u * edge[int(th / bin_deg) % TH_BINS]), knee, HIGHLIGHT_SLOPE)
+                alpha = min(clamp(inside_px + 0.5, 0.0, 1.0), clamp((RING_WIDTH - d) * s + 0.5, 0.0, 1.0))
+            if fill is not None and inside_px < 0.5:
+                cover = clamp(0.5 - inside_px, 0.0, 1.0)  # the fill's own soft edge, under the ring
                 total = alpha + (1 - alpha) * cover
                 if total > 0:  # the ring over the fill, in straight (not premultiplied) colour
                     r = (r * alpha + fill[0] * (1 - alpha) * cover) / total
@@ -420,19 +471,22 @@ def roller(original: pngio.Image, size: tuple[int, int]) -> pngio.Image:
 
 def build_part(part: Part, frames: Path, masters: Path, size: tuple[int, int], cache: dict) -> tuple[pngio.Image, dict]:
     """The master of one part and what the record says about it. `cache` shares the ring table and the inset among the parts of a family."""
-    if part.family == "lens":
+    if part.family in ("lens", "lens_whole"):
         if "ring" not in cache:
             cache["ring"] = ring_table([read_frame(frames, p) for p in LENS_ARTS])
         fill = None
         if part.fill:
-            original = read_frame(frames, part)
+            source = part if part.art else BY_ID["hardware.schm_pc_lens"]
+            original = read_frame(frames, source)
             r, g, b, a = original.pixel(original.w // 2, original.h // 2)
             if a != 255:
                 raise KitError(f"{part.ident}: the original's fill is not opaque")
             fill = (r, g, b)
         table = cache["ring"]
-        return render_ring(table, size, fill), {"ring_centre": [round(table["cx"], 2), round(table["cy"], 2)], "circle_radius": round(table["radius"], 2), "pooled_arts": [p.art for p in LENS_ARTS],
-                                                 "fill": list(fill) if fill else None}
+        whole = render_ring(table, LENS_WHOLE, fill)
+        image = whole if part.family == "lens_whole" else whole.crop(LENS_PAD, LENS_PAD, LENS_BASE, LENS_BASE)
+        return image, {"ring_centre": [round(table["cx"], 2), round(table["cy"], 2)], "circle_radius": round(table["radius"], 2), "pooled_arts": [p.art for p in LENS_ARTS],
+                       "fill": list(fill) if fill else None, "pad": LENS_PAD, "ring_width": RING_WIDTH, "highlight_knee": HIGHLIGHT_KNEE, "highlight_slope": HIGHLIGHT_SLOPE}
     if part.family == "inset":
         if "inset" not in cache:
             cache["inset"] = inset_layer([read_frame(frames, p) for p in INSET_ARTS])
@@ -469,7 +523,7 @@ def gates(part: Part, image: pngio.Image, size: tuple[int, int]) -> list[str]:
     drawn = sum(1 for a in alpha if a)
     if drawn < 0.001 * len(alpha):
         failures.append("the part is empty")
-    if part.family in ("lens", "outline", "roller", "wood", "plug"):
+    if part.family in ("lens", "lens_whole", "outline", "roller", "wood", "plug"):
         w, h = image.w, image.h
         hollow = 0
         for y in range(1, h - 1):
@@ -477,7 +531,7 @@ def gates(part: Part, image: pngio.Image, size: tuple[int, int]) -> list[str]:
                 a = alpha[y * w + x]
                 if 0 < a < 250 and all(alpha[(y + dy) * w + x + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
                     hollow += 1
-        limit = 0.30 if part.family == "lens" else 0.0   # a lens's soft edges (the inner anti-alias, the outer fade) are translucent by design, a flat detail's are not inside it
+        limit = 0.30 if part.family.startswith("lens") else 0.0   # a lens's soft edges (the inner anti-alias, the outer fade) are translucent by design, a flat detail's are not inside it
         if drawn and hollow > limit * drawn:
             failures.append(f"{hollow} translucent pixels inside a solid detail (the detail must be opaque)")
         if part.family in ("wood", "plug") and any(a != 255 for a in alpha):
@@ -492,7 +546,7 @@ def provenance_record(part: Part, frames: Path, extra: dict, size: tuple[int, in
     for art in arts:
         path = frames / f"{art}-{names[art]}" / "f0.png"
         sources[f"{art}-{names[art]}/f0"] = sha256_file(path)
-    return {"part": part.ident, "rule": "hardware_kit", "family": part.family, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": f"{part.art}-{part.name}/f0",
+    return {"part": part.ident, "rule": "hardware_kit", "family": part.family, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": f"{part.art}-{part.name}/f0" if part.art else "pooled lens arts",
             "sources_sha256": sources, **extra, "image_size": list(size), "image_sha256": hashlib.sha256(blob).hexdigest(), "run_by": "agent"}
 
 
@@ -501,7 +555,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     rows = {r["id"]: r for r in manifest["parts"]}
     for part in PARTS:
         row = rows.get(part.ident)
-        print(f"{part.ident:34} art {part.art:>3} {part.family:8} {'x'.join(map(str, row['size'])) if row else 'NO ROW'}")
+        print(f"{part.ident:34} art {part.art:>3} {part.family:10} {'x'.join(map(str, row['size'])) if row and row['size'] else 'open' if row else 'NO ROW'}")
     missing = [p.ident for p in PARTS if p.ident not in rows]
     print(f"HARDWARE KIT plan: {len(PARTS)} parts" + (f", rows missing: {missing}" if missing else ""))
     return 1 if missing else 0
@@ -518,7 +572,7 @@ def cmd_rule(args: argparse.Namespace) -> int:
     for part in PARTS:
         if only and part.ident not in only:
             continue
-        size = master_of(part.ident, manifest)
+        size = LENS_WHOLE if part.family == "lens_whole" else master_of(part.ident, manifest)
         image, extra = build_part(part, frames, masters, size, cache)
         failures = gates(part, image, size)
         if failures:
