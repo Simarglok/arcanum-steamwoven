@@ -5,6 +5,7 @@ import json
 import tempfile
 import types
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from tools.steamwoven_ui import popup_kit, pngio
@@ -102,11 +103,14 @@ class PopupKitTests(unittest.TestCase):
             pngio.write(folder / "f0.png", original)
             pack = local / "pack"
             args = types.SimpleNamespace(local_root=local, frames=None, pack=pack, alt_dir=None, only=spec.ident, dry_run=True)
-            with self.assertRaises(popup_kit.KitError):          # no pack frame on disk
-                popup_kit.cmd_build(args)
-            same = types.SimpleNamespace(local_root=local, frames=None, pack=pack, alt_dir=local / "masters", only=spec.ident, dry_run=True)
-            with self.assertRaises(popup_kit.KitError):          # the alternative must not overwrite the masters
-                popup_kit.cmd_build(same)
+            with mock.patch.object(popup_kit, "brass_material", return_value=BRASS):
+                with self.assertRaises(popup_kit.KitError) as ctx:          # no pack frame on disk
+                    popup_kit.cmd_build(args)
+                self.assertIn("pack", str(ctx.exception))
+                same = types.SimpleNamespace(local_root=local, frames=None, pack=pack, alt_dir=local / "masters", only=spec.ident, dry_run=True)
+                with self.assertRaises(popup_kit.KitError) as ctx:          # the alternative must not overwrite the masters
+                    popup_kit.cmd_build(same)
+                self.assertIn("alt-dir", str(ctx.exception))
             self.assertFalse((local / "masters").exists())
 
     def test_pack_master_gives_the_originals_tone_and_stone_back(self):
@@ -162,6 +166,10 @@ class PopupKitTests(unittest.TestCase):
                 popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(popup_kit.Piece("a/none", (0, 0, 1, 1), (0, 0, 1, 1)),)), root, original)
             with self.assertRaises(popup_kit.KitError):
                 popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(popup_kit.Piece("a/p", (0, 0, 0, 5), (0, 0, 5, 5)),)), root, original)
+            with self.assertRaises(popup_kit.KitError):          # a source rectangle outside the pack frame (40 x 24 px) and a target outside the art
+                popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(popup_kit.Piece("a/p", (0, 0, 50, 5), (0, 0, 5, 5)),)), root, original)
+            with self.assertRaises(popup_kit.KitError):
+                popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(popup_kit.Piece("a/p", (0, 0, 5, 5), (0, 0, 45, 5)),)), root, original)
 
     def test_the_brass_is_lifted_only_when_it_is_duller_than_the_approved_tone(self):
         approved = [145.0, 113.0, 65.0]
@@ -172,6 +180,16 @@ class PopupKitTests(unittest.TestCase):
         fine = pngio.Image.blank(60, 60, (146, 112, 64, 255))
         self.assertEqual(popup_kit.lift_brass(fine, approved), [1.0, 1.0, 1.0])
         self.assertEqual(fine.pixel(5, 5)[:3], (146, 112, 64))
+        mixed = pngio.Image.blank(60, 60, (128, 90, 46, 255))        # a core of brass and an edge: a dim brass pixel and a half-transparent one
+        mixed.data[0:4] = bytes((80, 60, 40, 255))
+        mixed.data[4:8] = bytes((128, 90, 46, 128))
+        popup_kit.lift_brass(mixed, approved)
+        n = 60 * 60 - 2
+        mean = [sum(mixed.data[i * 4 + c] for i in range(2, 3600)) / n for c in range(3)]
+        for got, want in zip(mean[:2], approved[:2]):
+            self.assertAlmostEqual(got, want, delta=0.04 * want)       # the core's mean reaches the approved tone
+        self.assertAlmostEqual(mean[2], 46 * 1.3, delta=2.0)           # blue needs 1.41: the gain stops at 1.3
+        self.assertGreater(mixed.pixel(1, 0)[0], 128, "an edge pixel with alpha is lifted too")
         iron = pngio.Image.blank(60, 60, (60, 60, 62, 255))
         self.assertEqual(popup_kit.lift_brass(iron, approved), [1.0, 1.0, 1.0], "no brass: nothing to lift")
 

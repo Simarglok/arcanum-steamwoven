@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""ARC-UI-3278 (batch B-HARDWARE, slice 4): the pop-up panel bases and their frames as kit parts, PACK-FIRST (owner rule 2026-11-25) and otherwise BY RULE from the original's own arts (no Codex): the 410 x 107 "Rot" family
-(arts 7 128 200 274 288 290 291 354 564 642 842) and the framed panels (822 DialogueBox, 298 MultiMove_Base, 826 FollwerComandMenu, 292 Fate_Base, 565 Sleep_Base, 328 MenuPlaque): 17 arts, one master each (the art's whole
-rectangle at the kit's 3.6 scale). An art with a good frame in the old HD pack is that frame resampled plus an analytic alpha (`pack_master`); an art with none, or whose frame does not fit the original's window, is built by rule (`render`).
+"""ARC-UI-3278 (batch B-HARDWARE, slice 4): the pop-up panel bases and their frames as kit parts, PACK-FIRST (owner rule 2026-11-25, no Codex): the 410 x 107 "Rot" family
+(arts 7 200 274 288 290 291 354 564 642 842) and the framed panels (822 DialogueBox, 298 MultiMove_Base, 826 FollwerComandMenu, 292 Fate_Base, 565 Sleep_Base, 328 MenuPlaque): 16 arts, one master each (the art's whole
+rectangle at the kit's 3.6 scale; art 128 is unused and no part, #3307). An art with a frame of its own in the old HD pack is that frame resampled plus an analytic alpha (`pack_master`, 12 arts); an art whose frame the pack
+does not hold in a fitting form is COMPOSED from other pack frames (`compose_frame`, 4 arts: 291, 354, 642, 826). The rule build (`render`) is no kit part any more, it only makes the composite's alternative.
 
     python3 -B tools/steamwoven_ui/popup_kit.py plan
-    python3 -B tools/steamwoven_ui/popup_kit.py build [--only ID,...] [--dry-run] [--pack DIR] [--alt-dir DIR] [--frames DIR] [--local-root DIR]   (the masters, their records; --alt-dir: the rule build of the pack-first arts, for the composite)
+    python3 -B tools/steamwoven_ui/popup_kit.py build [--only ID,...] [--dry-run] [--pack DIR] [--alt-dir DIR] [--frames DIR] [--local-root DIR]   (the masters, their records; --alt-dir: the rule build of the arts, for the composite)
     python3 -B tools/steamwoven_ui/popup_kit.py sheet --out FILE [--only ID,...] [--zoom N] [--alt-dir DIR] [--frames DIR] [--local-root DIR]    (composite original | kit master | alternative, English labels, needs ImageMagick)
     python3 -B tools/steamwoven_ui/popup_kit.py self-test
 
@@ -90,7 +91,7 @@ class Spec:
     fills: tuple = ()                  # (x0, y0, x1, y1, (r, g, b)): a flat fill (a window that is dark grey)
     force_w: tuple = ()                # boxes made window dark (a baked detail inside a window)
     force_i: tuple = ()                # boxes made iron
-    pack: str = ""                     # the old HD pack's frame of this art (path under the pack's `interface/`, no `-f000.png`): pack-first, see below; empty = no good frame, the rule build is the master
+    pack: str = ""                     # the old HD pack's frame of this art (path under the pack's `interface/`, no `-f000.png`): pack-first, see below; empty = composed from other pack frames (`compose`)
     stone_wells: bool = False          # the pack frame's black square slots take the original's stone back (the original's slots are shallow squares with stone in them; `wells` are the boxes)
     compose: tuple = ()                # Pieces (see `Piece`): no pack frame of the art itself, the pack frame is composed from the pack's other frames (9-slice, mirror, splice); `pack` stays empty
     pack_copies: tuple = ()            # shapes (as `copies`): the original's pixels enlarged inside them, laid over a composed pack frame (a face inside a pack ring)
@@ -803,7 +804,7 @@ def check_pack_fit(spec: Spec, frame: pngio.Image, original: pngio.Image) -> Non
     theirs = [classify(*frame.pixel(x * PACK_SCALE + PACK_SCALE // 2, y * PACK_SCALE + PACK_SCALE // 2)) == BRASS for y in range(oh) for x in range(ow)]
     a, b = biggest_brass_box(mine, ow, oh), biggest_brass_box(theirs, ow, oh)
     if any(abs(p - q) > FIT_TOLERANCE for p, q in zip(a, b)):
-        raise KitError(f"{spec.ident}: the pack frame's brass frame {b} is not where the original's {a} is (more than {FIT_TOLERANCE} px): not a drop-in, use the rule build")
+        raise KitError(f"{spec.ident}: the pack frame's brass frame {b} is not where the original's {a} is (more than {FIT_TOLERANCE} px): not a drop-in, change the pack frame or the Pieces of the composed frame")
 
 
 def sample_rgb(img: pngio.Image, fx: float, fy: float) -> tuple[float, float, float]:
@@ -836,14 +837,22 @@ def compose_frame(spec: Spec, pack_root: Path, original: pngio.Image) -> pngio.I
         tx0, ty0, tx1, ty1 = piece.dst
         if tx1 <= tx0 or ty1 <= ty0 or sx1 <= sx0 or sy1 <= sy0:
             raise KitError(f"{spec.ident}: a piece with an empty rectangle {piece}")
+        if sx0 < 0 or sy0 < 0 or sx1 > img.w / S + 1e-6 or sy1 > img.h / S + 1e-6:
+            raise KitError(f"{spec.ident}: the source rectangle {piece.src} of {piece.pack} lies outside the pack frame ({img.w / S:g} x {img.h / S:g} px)")
+        if tx0 < 0 or ty0 < 0 or tx1 > original.w + 1e-6 or ty1 > original.h + 1e-6:
+            raise KitError(f"{spec.ident}: the target rectangle {piece.dst} lies outside the art ({original.w} x {original.h} px)")
         cx, cy = (tx0 + tx1) / 2, (ty0 + ty1) / 2
         fl, ft, fr, fb = piece.fade
         for py in range(max(0, int(math.floor(ty0 * S))), min(h, int(math.ceil(ty1 * S)))):
             ty = (py + 0.5) / S
             v = (ty - ty0) / (ty1 - ty0)
+            if not 0.0 <= v <= 1.0:
+                continue
             for px in range(max(0, int(math.floor(tx0 * S))), min(w, int(math.ceil(tx1 * S)))):
                 tx = (px + 0.5) / S
                 u = (tx - tx0) / (tx1 - tx0)
+                if not 0.0 <= u <= 1.0:
+                    continue
                 u = 1.0 - u if piece.flip_x else u
                 weight = 1.0
                 if fl and tx - tx0 < fl:
@@ -887,12 +896,13 @@ def tone_of_dark(image: pngio.Image, mask: list[float], colour: tuple, dark: flo
 
 
 def lift_brass(image: pngio.Image, tone: list[float]) -> list[float]:
-    """The pack frame's brass is duller than the approved brass of the kit (#3259, #3260): when its mean is more than 6 % under the approved tone in luminance, the brass pixels (the same test as the tone's) are multiplied
-    per channel by the ratio (at most 1.3), so the mean reaches the approved tone. Returns the gains applied (1, 1, 1 when none)."""
+    """The pack frame's brass is duller than the approved brass of the kit (#3259, #3260): the mean colour of the brass pixels (r - b >= 50, r >= 60: the core of the brass, where the gain applies in full) is compared with the
+    approved tone; when its luminance is more than 6 % under, every brass pixel (alpha above 0; the gain fades out below the core's thresholds) is multiplied per channel by the ratio (at most 1.3), so the core\'s mean reaches
+    the approved tone (a channel that would need more than 1.3 stops there). Returns the gains applied (1, 1, 1 when none)."""
     total, n = [0.0, 0.0, 0.0], 0
     d = image.data
     for i in range(0, len(d), 4):
-        if d[i + 3] == 255 and d[i] - d[i + 2] >= 30 and d[i] >= 60:
+        if d[i + 3] == 255 and d[i] - d[i + 2] >= 50 and d[i] >= 60:
             n += 1
             total[0] += d[i]
             total[1] += d[i + 1]
@@ -904,7 +914,7 @@ def lift_brass(image: pngio.Image, tone: list[float]) -> list[float]:
         return [1.0, 1.0, 1.0]
     gain = [clamp(tone[k] / mean[k], 1.0, 1.3) for k in range(3)]
     for i in range(0, len(d), 4):
-        if d[i + 3] != 255:
+        if d[i + 3] == 0:
             continue
         weight = clamp((d[i] - d[i + 2] - 20) / 30.0, 0.0, 1.0) * (1.0 if d[i] >= 60 else clamp((d[i] - 30) / 30.0, 0.0, 1.0))
         if weight > 0:
@@ -1035,7 +1045,7 @@ def provenance_record(spec: Spec, frames: Path, extra: dict, size: tuple[int, in
     record = {"part": spec.ident, "rule": "popup_kit", "how": ("pack-first composed" if spec.compose else "pack-first") if pack_files else "rule", "kind": spec.kind, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(),
               "source": f"{spec.art}-{spec.name}/f0", "sources_sha256": {f"{spec.art}-{spec.name}/f0": sha256_file(src)}, **extra, "image_size": list(size), "image_sha256": hashlib.sha256(blob).hexdigest(), "run_by": "agent"}
     for pack_file in pack_files:
-        record["sources_sha256"][f"pack:{pack_file.parent.parent.name}/{pack_file.parent.name}/{pack_file.name}"] = sha256_file(pack_file)
+        record["sources_sha256"]["pack:" + "/".join(pack_file.parts[pack_file.parts.index("interface") + 1:])[:-len(".png")]] = sha256_file(pack_file)
     if brass:
         record.update({"brass_sources": list(BRASS_SOURCES), "brass_sha256": brass["sha256"], "brass_tone": [round(t, 1) for t in brass["tone"]], "grain_sd": round(brass["grain_sd"], 2)})
     return record
