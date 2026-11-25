@@ -537,4 +537,39 @@ public sealed class RestockStateTests
         Assert.AreEqual((0, 0, 4), (chest.Coins, chest.Refused, chest.Skipped), "the pile and the sword carry scripts nothing can run: both skipped, as the key and the unknown line");
         Assert.AreEqual(0, List(owner, "chest").Length);
     }
+
+    // ARC-SCRIPT-2909 (0x463E20 → 0x4617F0 → 0x466640's merge branch): a restock line's ammunition that joins the holder's stack is a created object too: its prototype's get (4) and insert-item (21) scripts run before it is destroyed and its units join the stack.
+    private static IReadOnlyList<SessionPrototypeScript>? ScriptedAmmoPrototype(int prototype) => prototype == 7059
+        ? new SessionPrototypeScript[] { new(SessionScriptPoint.Get, CreatedItemScriptTests.GetScript, 0, 0), new(SessionScriptPoint.InsertItem, CreatedItemScriptTests.InsertScript, 0, 0) }
+        : null;
+
+    [TestMethod]
+    public void A_restock_ammunition_line_that_joins_a_stack_runs_the_incoming_objects_get_and_insert_scripts()
+    {
+        using var owner = Owner();
+        owner.AttachItemScripts(ScriptedAmmoPrototype);
+        var world = new World { Scripts = new CreatedItemScriptTests.Host(owner) };
+        Schedule(owner, "smith");
+        var done = Fire(owner, world).Restocks.Single().Regenerations.Single();
+        Assert.AreEqual((25, 0, 0), (done.Coins, done.Refused, done.Skipped));
+        CollectionAssert.AreEqual(new[] { "made:2", "made:3", "made:3" }, done.Created.ToArray(), "the second bullets join the first stack");
+        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6", "npc reads 5", "npc reads 6" }, done.Messages.Select(message => message.Text).ToArray(), "the new stack and the merged object each read both lines");
+        Assert.AreEqual(20, owner.QueryAmmo("made:3")!.Value.Units);
+        Assert.IsNull(owner.QueryAmmo("made:4"), "the incoming object is gone");
+    }
+
+    [TestMethod]
+    public void A_restock_ammunition_merge_refused_by_the_insert_check_after_the_get_script_leaves_the_stack_alone()
+    {
+        using var owner = Owner();
+        owner.AttachItemScripts(ScriptedAmmoPrototype);
+        var host = new CreatedItemScriptTests.Host(owner);
+        var calls = 0;
+        // The checks in order: the coins pile, the sword, the first bullets (a new stack), the second bullets (the merge).
+        var world = new World { Scripts = host, Insert = _ => ++calls == 4 ? SessionInsertVerdict.NoRoom : SessionInsertVerdict.Accepted };
+        Schedule(owner, "smith");
+        var done = Fire(owner, world).Restocks.Single().Regenerations.Single();
+        Assert.AreEqual((1, 10), (done.Refused, owner.QueryAmmo("made:3")!.Value.Units), "the merged line is refused by the host's check, as a new item would be");
+        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6" }, done.Messages.Select(message => message.Text).ToArray(), "a refused line reports no lines (a restock keeps the made ones only)");
+    }
 }
