@@ -41,6 +41,8 @@ SHEET_WIDTH = 1180        # master px
 STRIPS = {                # strip part id -> (work folder pair, original upscaled file, strip height)
     "board.inttop": ("hud", "original-top.png", 150),
     "board.intbotom": ("hud", "original-bottom.png", 570),
+    "board.charcreatetopbar": ("charcreate", "original-top.png", 150),         # ARC-UI-3260: the two-strip menu screens' strips (arts 336 and 335)
+    "board.charcreatebottombar": ("charcreate", "original-bottom.png", 570),
 }
 
 # Shape primitives (strip master px): ("rect", x0, y0, x1, y1) | ("ellipse", cx, cy, rx, ry) | ("poly", x, y, x, y, ...); a leading "-" makes a hole (cut out of what came before).
@@ -143,26 +145,56 @@ PARTS.update({
         "instances": [("board.inttop", None, None, False)],
     },
     "hardware.hud_top_rivet": {
-        "sheet": "hud-top-parts", "strip": "board.inttop", "note": "a round brass rivet of the top strip's iron sections (four of them)",
+        "sheet": "hud-top-parts", "strip": "board.inttop", "note": "a round brass rivet of the top strips' iron sections (four on each of the HUD's and the menu screens' top strips)",
         "shapes": [("ellipse", 863, 15, 12, 12)],
         "instances": [("board.inttop", 863, 15, False), ("board.inttop", 798, 122, False), ("board.inttop", 2005, 15, False), ("board.inttop", 2067, 127, False)],
     },
 })
+# ARC-UI-3260, slice 2 of B-HARDWARE: the metal of the two-strip menu screens' strips (art 336 top, 335 bottom). The top strip's iron end sections have the HUD top strip's silhouette and rivets (the
+# four rivets are the HUD's own part laid again at the same places), but no openings; the right section is the left one mirrored (its light recomputed to the top left). The bottom strip's metal is the two
+# round socket settings (one part, two places; the buttons the screens draw stand inside them) and the frame of the message window (its inside stays the strip's dark field).
+_MENU_PLATE_PAINT = [("ellipse", 863, 15, 14, 14), ("ellipse", 798, 122, 14, 14)]
+PARTS.update({
+    "hardware.menu_plate_left": {
+        "sheet": "menu-top", "strip": "board.charcreatetopbar", "note": "the left iron end section of the menu screens' top strip, iron only, with its concave end and no openings",
+        "shapes": [("nonwood", 0, 0, 980, 150)], "fit": "height", "paint": _MENU_PLATE_PAINT,
+        "instances": [("board.charcreatetopbar", None, None, False)],
+    },
+    "hardware.menu_plate_right": {
+        "sheet": None, "shapes": [], "strip": "board.charcreatetopbar", "mirror_of": "hardware.menu_plate_left", "note": "the right iron end section: the left one mirrored",
+        "footprint": [("nonwood", 1900, 0, 2880, 150)],   # what the original's right section covers: erased from the strip art
+        "instances": [("board.charcreatetopbar", None, None, True)],
+    },
+    "hardware.menu_ring": {
+        "sheet": "menu-bottom", "strip": "board.charcreatebottombar", "note": "the brass setting of a round button socket of the menu screens' bottom strip (the screen's button stands inside it)",
+        "keep_hole": True, "shapes": [("ellipse", 353, 301, 126, 125), ("-ellipse", 353, 301, 102, 101)],
+        "instances": [("board.charcreatebottombar", 352.5, 301, False), ("board.charcreatebottombar", 2534, 301, False)],
+    },
+    "hardware.menu_window": {
+        "sheet": "menu-bottom", "strip": "board.charcreatebottombar", "note": "the thin iron and brass frame of the message window in the middle of the menu screens' bottom strip (its inside is the strip's dark field)",
+        "keep_hole": True, "erase_grow": 3, "shapes": [("rect", 704, 184, 2176, 564), ("-rect", 736, 212, 2142, 538)],
+        "instances": [("board.charcreatebottombar", None, None, False)],
+    },
+})
+for _x, _y in ((863, 15), (798, 122), (2005, 15), (2067, 127)):   # the HUD's rivet is the menu strip's rivet too (the same four places)
+    PARTS["hardware.hud_top_rivet"]["instances"].append(("board.charcreatetopbar", _x, _y, False))
 SHEETS = {
     "hud-top": {"prompt": "hardware-hud-top-plates", "context_crop": "1448x74+0+0", "width": 1060, "scale": 1.5, "order": ["hardware.hud_plate_left", "hardware.hud_plate_right"]},
     "hud-top-parts": {"prompt": "hardware-hud-top-parts", "context_crop": "1448x74+0+0", "width": 1000, "scale": 1.6,
                       "order": ["hardware.hud_top_clock", "hardware.hud_top_slot", "hardware.hud_top_ring", "hardware.hud_top_infinity", "hardware.hud_top_hourglass", "hardware.hud_top_rivet"]},
     "hud-bottom": {"prompt": "hardware-hud-bottom", "context_crop": "1448x290+0+796", "order": ["hardware.hud_vial", "hardware.hud_cylinder", "hardware.hud_wires", "hardware.hud_ring", "hardware.hud_dial", "hardware.hud_slot",
                                                                 "hardware.hud_gem", "hardware.hud_rail"]},
+    "menu-top": {"prompt": "hardware-menu-top-plates", "batch": "B-HARDWARE-MENU", "context_crop": "1448x74+0+0", "width": 1110, "min_height": 640, "scale": 1.5, "order": ["hardware.menu_plate_left"]},
+    "menu-bottom": {"prompt": "hardware-menu-bottom", "batch": "B-HARDWARE-MENU", "context_crop": "1448x290+0+796", "width": 1600, "scale": 1.1, "order": ["hardware.menu_window", "hardware.menu_ring"]},
 }
 
 
 def layers_of(strip: str) -> list[str]:
     """The part ids laid over a strip's art, in draw order (the manifest's `layers` of the strip, after its end caps)."""
-    return [ident for ident in HARDWARE_ORDER if PARTS[ident]["strip"] == strip]
+    return [ident for ident in HARDWARE_ORDER if any(instance[0] == strip for instance in PARTS[ident]["instances"])]
 
 
-HARDWARE_ORDER = ["hardware.hud_plate_left", "hardware.hud_plate_right", "hardware.hud_top_slot", "hardware.hud_top_ring", "hardware.hud_top_clock", "hardware.hud_top_infinity",
+HARDWARE_ORDER = ["hardware.menu_plate_left", "hardware.menu_plate_right", "hardware.menu_window", "hardware.menu_ring", "hardware.hud_plate_left", "hardware.hud_plate_right", "hardware.hud_top_slot", "hardware.hud_top_ring", "hardware.hud_top_clock", "hardware.hud_top_infinity",
                   "hardware.hud_top_hourglass", "hardware.hud_top_rivet", "hardware.hud_vial", "hardware.hud_vial_r", "hardware.hud_cylinder", "hardware.hud_cylinder_r", "hardware.hud_wires",
                   "hardware.hud_ring", "hardware.hud_dial", "hardware.hud_gem", "hardware.hud_slot", "hardware.hud_rail"]
 
@@ -282,7 +314,7 @@ def cmd_refs(args) -> int:
         layout["cells"][part_id] = {"x": x, "y": y, "w": w, "h": h, "strip_box": list(box)}
         x += w + CELL_GAP
         row_h = max(row_h, h)
-    height = y + row_h + CELL_GAP
+    height = max(y + row_h + CELL_GAP, sheet.get("min_height", 0))   # a sheet of one long thin detail is made taller: the generator keeps a long thin aspect poorly
     layout["size"] = [sheet_width, height]
     canvas = work / f"sheet-{args.sheet}-1x.png"
     command = ["magick", "-size", f"{sheet_width}x{height}", "xc:none"]
@@ -528,7 +560,8 @@ def cmd_cut(args) -> int:
             run(["magick", str(base[0]), "-flop", str(content)])
             relight_mirror(base[0], content)
             contents[part_id] = (content, base[1], base[2])
-            placements[part_id] = {"content": [base[1], base[2]], "origin": None}
+            base_origin = placements[part["mirror_of"]]["origin"]   # a mirror laid over the strip's middle (no centre given) stands where the strip mirrors its base
+            placements[part_id] = {"content": [base[1], base[2]], "origin": [MASTER_W - base_origin[0] - base[1], base_origin[1]] if base_origin else None}
     canvases = {}
     for part_id, (content, ew, eh) in contents.items():
         part = PARTS[part_id]
@@ -553,7 +586,8 @@ def cmd_cut(args) -> int:
 
 
 # Leftovers of the original's metal that no part stands for. Bottom: the lone square before the rail's first unit. Top: two scraps (1900, 0 and 2026, 96) found in the strip preview after the first erase.
-ERASE_BOXES = {"board.intbotom": [(752, 146, 778, 178)], "board.inttop": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)]}   # leftovers of the original's metal that no part stands for: the lone square before the rail's first unit
+ERASE_BOXES = {"board.intbotom": [(752, 146, 778, 178)], "board.inttop": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)],
+               "board.charcreatetopbar": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)]}   # ARC-UI-3260: the menu top strip has the HUD one's end sections, so the same scraps   # leftovers of the original's metal that no part stands for: the lone square before the rail's first unit
 ERASE_GROW = 8            # px: the original's metal is erased this far beyond a part's alpha (its fringe of old shadow and wood), the wood beside it fills the gap
 
 
@@ -606,6 +640,20 @@ def mirror_fill(image: "pngio.Image", erase: "pngio.Image", wood: "pngio.Image")
     return filled
 
 
+def footprint_mask(part_id: str, part: dict, root: Path, work: Path) -> tuple[Path, tuple[int, int, int, int]]:
+    """ARC-UI-3260: the mask (white = inside) and box of what the ORIGINAL's detail covers where the part itself carries no shapes (a mirrored plate): its `footprint`."""
+    folder, original, _ = STRIPS[part["strip"]]
+    out = work / f"footprint-{part_id}.png"
+    box = cell_image({"strip": part["strip"], "shapes": part["footprint"]}, root / "work" / "B-BOARD" / folder / original, out, root)
+    return out.with_suffix(".mask.png"), box
+
+
+def hole_of(alpha: Path, out: Path) -> None:
+    """The inside of a ring or a frame (what its alpha encloses and does not cover) as a white-on-black mask the size of the part."""
+    run(["magick", str(alpha), "-alpha", "extract", "-threshold", "50%", "-bordercolor", "black", "-border", "1", "-fill", "red", "-draw", "color 0,0 floodfill", "-shave", "1x1",
+         "-channel", "R", "-separate", "+channel", "-negate", "-depth", "8", str(out)])
+
+
 def cmd_strips(args) -> int:
     """The strip art without the original's metal (its erased places filled with the wood beside them) and a preview of the strip with its layers laid at their places."""
     root = args.local_root
@@ -617,21 +665,31 @@ def cmd_strips(args) -> int:
         base = root / "work" / "B-BOARD" / folder / f"master-{pid(strip)}.png"
         if not base.is_file():
             raise HardwareError(f"no {base} (run board_build.py strips first)")
-        here = {part: info for part, info in placements.items() if info["strip"] == strip}
+        here = {part: {**info, "layers": [layer for layer in info["layers"] if layer[0] == strip]} for part, info in placements.items()}
+        here = {part: info for part, info in here.items() if info["layers"]}
         if not here:
             continue
         erase = out_dir / f"{pid(strip)}-erase.png"
         command = ["magick", "-size", f"{MASTER_W}x{height}", "xc:black"]
         for part, info in here.items():
+            grow = PARTS[part].get("erase_grow", ERASE_GROW)
             for _, x, y in info["layers"]:
-                command += ["(", str(work / "parts" / f"{part}.png"), "-alpha", "extract", "-bordercolor", "black", "-border", str(ERASE_GROW), "-morphology", "Dilate", f"Disk:{ERASE_GROW}",
-                            ")", "-geometry", f"+{x - ERASE_GROW}+{y - ERASE_GROW}", "-compose", "Lighten", "-composite"]
+                command += ["(", str(work / "parts" / f"{part}.png"), "-alpha", "extract", "-bordercolor", "black", "-border", str(grow), "-morphology", "Dilate", f"Disk:{grow}"]
+                if PARTS[part].get("keep_hole"):   # a ring or a frame: its inside (the button's socket, the window's field) is not the original's metal and stays the strip's
+                    hole = work / "strips" / f"{part}-hole.png"
+                    hole_of(work / "parts" / f"{part}.png", hole)
+                    command += ["(", str(hole), "-bordercolor", "black", "-border", str(grow), ")", "-compose", "MinusSrc", "-composite"]   # ImageMagick's MinusSrc is destination minus source
+                command += [")", "-geometry", f"+{x - grow}+{y - grow}", "-compose", "Lighten", "-composite"]
         layouts = {name: json.loads((work / f"sheet-{name}.layout.json").read_text(encoding="utf-8")) for name in SHEETS if (work / f"sheet-{name}.layout.json").is_file()}
         for part, info in here.items():   # the footprint of the original's plate (what the strip's wood mask leaves), so no scrap of the old iron or its shadow stands where the new plate is smaller
             if any(sh[0] == "nonwood" for sh in PARTS[part]["shapes"]):
                 lay = layouts[PARTS[part]["sheet"]]["cells"][part]["strip_box"]
                 command += ["(", str(work / f"cell-{part}.mask.png"), "-bordercolor", "black", "-border", "4", "-morphology", "Dilate", "Disk:4", ")", "-geometry", f"+{lay[0] - 4}+{lay[1] - 4}",
                             "-compose", "Lighten", "-composite"]
+        for part, info in here.items():   # a mirrored plate has no sheet cell: the footprint of the original's section is its own shapes
+            if PARTS[part].get("footprint"):
+                mask, box = footprint_mask(part, PARTS[part], root, work)
+                command += ["(", str(mask), "-bordercolor", "black", "-border", "4", "-morphology", "Dilate", "Disk:4", ")", "-geometry", f"+{box[0] - 4}+{box[1] - 4}", "-compose", "Lighten", "-composite"]
         for x0, y0, x1, y1 in ERASE_BOXES.get(strip, []):
             command += ["-fill", "white", "-draw", f"rectangle {x0},{y0} {x1 - 1},{y1 - 1}"]
         run(command + [str(erase)])
@@ -644,8 +702,8 @@ def cmd_strips(args) -> int:
         pngio.write(art, image)
         preview = out_dir / f"{pid(strip)}-preview.png"
         command = ["magick", str(art)]
-        for part, info in here.items():
-            for _, x, y in info["layers"]:
+        for part in (p for p in layers_of(strip) if p in here):   # the draw order of the runtime table, so a rivet stands over its plate
+            for _, x, y in here[part]["layers"]:
                 command += [str(work / "parts" / f"{part}.png"), "-geometry", f"+{x}+{y}", "-compose", "over", "-composite"]
         run(command + [str(preview)])
         print(f"STRIP {strip}: {filled} erased pixels filled with wood; {art.name}, {preview.name}")
@@ -659,12 +717,13 @@ def sha256_file(path: Path) -> str:
 def sheet_file(root: Path, sheet: dict) -> tuple[Path, dict]:
     """The generated sheet and its record. Codex sometimes remarks that the aspect it drew "differs slightly" and the runner then records `refused` without copying the image to the outbox
     (#3187, the same as for the strips and the caps of B-BOARD): the canvas is in the work folder of the run the record names; its aspect is checked against the reference's by `cut`."""
-    result = root / "outbox" / "B-HARDWARE-HUD" / f"{sheet['prompt']}.png"
+    batch = sheet.get("batch", "B-HARDWARE-HUD")
+    result = root / "outbox" / batch / f"{sheet['prompt']}.png"
     record = json.loads(result.with_suffix(".provenance.json").read_text(encoding="utf-8"))
     if result.is_file():
         return result, record
     run_name = record.get("run")
-    canvas = root / "codex-work" / "B-HARDWARE-HUD" / str(run_name) / f"{sheet['prompt']}.png"
+    canvas = root / "codex-work" / batch / str(run_name) / f"{sheet['prompt']}.png"
     if not run_name or not canvas.is_file():
         raise HardwareError(f"no result for {sheet['prompt']}: neither {result} nor the run's canvas {canvas} (run the batch first)")
     return canvas, record
@@ -727,7 +786,7 @@ def cmd_art(args) -> int:
         gen["board_image_sha256"] = gen.get("image_sha256")
         gen["image_sha256"] = sha256_file(art)
         gen["derived_hardware"] = {"tool": "hardware_build.py strips: the strip art of B-BOARD with the places of its original metal filled with the wood beside them (the metal is the hardware layers)",
-                                   "strip_art_sha256": gen["board_image_sha256"], "hardware_parts": sorted(p for p, v in PARTS.items() if v["strip"] == strip)}
+                                   "strip_art_sha256": gen["board_image_sha256"], "hardware_parts": sorted(layers_of(strip))}
         record = art.with_suffix(".provenance.json")
         record.write_text(json.dumps(gen, indent=2) + "\n", encoding="utf-8")
         command = [sys.executable, "-B", str(HERE / "fit.py"), "fit", strip, "--source", str(art), "--size", f"{MASTER_W}x{height}", "--key", "none", "--replace", "--provenance", str(record)]

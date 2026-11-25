@@ -56,9 +56,17 @@ class HardwareBuildTests(unittest.TestCase):
         for part_id, part in hb.PARTS.items():
             self.assertIn(part["strip"], hb.STRIPS, part_id)
             self.assertTrue(part["instances"], part_id)
+            for strip, *_ in part["instances"]:
+                self.assertIn(strip, hb.STRIPS, part_id)
         self.assertEqual(hb.layers_of("board.inttop")[0], "hardware.hud_plate_left")
-        self.assertEqual(set(hb.layers_of("board.inttop")) | set(hb.layers_of("board.intbotom")), set(hb.PARTS))
+        self.assertEqual(set().union(*(hb.layers_of(strip) for strip in hb.STRIPS)), set(hb.PARTS))
+        # ARC-UI-3260: the two HUD strips and the two menu strips are made of their own parts, except the rivet the top strips share
+        shared = set(hb.layers_of("board.inttop")) & set(hb.layers_of("board.charcreatetopbar"))
+        self.assertEqual(shared, {"hardware.hud_top_rivet"})
         self.assertFalse(set(hb.layers_of("board.inttop")) & set(hb.layers_of("board.intbotom")))
+        self.assertFalse(set(hb.layers_of("board.charcreatetopbar")) & set(hb.layers_of("board.charcreatebottombar")))
+        self.assertEqual(hb.layers_of("board.charcreatetopbar"), ["hardware.menu_plate_left", "hardware.menu_plate_right", "hardware.hud_top_rivet"])   # the rivets stand over the plates
+        self.assertEqual(hb.layers_of("board.charcreatebottombar"), ["hardware.menu_window", "hardware.menu_ring"])
 
     def test_the_manifest_holds_the_hardware_parts_and_the_strips_list_them_as_layers(self):
         kit = json.loads((ROOT / "tools" / "steamwoven_ui" / "kit.json").read_text(encoding="utf-8"))
@@ -68,16 +76,18 @@ class HardwareBuildTests(unittest.TestCase):
             self.assertEqual(parts[part_id]["status"], "master", part_id)
         for strip in hb.STRIPS:
             layers = parts[strip].get("layers", [])
+            self.assertEqual([layer for layer in layers if layer.startswith("hardware.")], hb.layers_of(strip), strip)
             for part_id in hb.layers_of(strip):
                 self.assertIn(part_id, layers, strip)
 
     def test_the_runtime_table_lays_each_part_as_often_as_the_batch_stands_it_and_in_the_same_order(self):
         text = COMPOSER.read_text(encoding="utf-8")
-        for marker, strip in (("[AreaBarStrip.Top]", "board.inttop"), ("[AreaBarStrip.Bottom]", "board.intbotom")):
+        for marker, strip in (("[AreaBarStrip.Top]", "board.inttop"), ("[AreaBarStrip.Bottom]", "board.intbotom"), ("MenuTopLayers { get; } =", "board.charcreatetopbar"), ("MenuBottomLayers { get; } =", "board.charcreatebottombar")):
             start = text.index(marker)
-            block = text[start:text.index("]),", start)]
-            laid = re.findall(r'new\("(hardware\.hud_[a-z_]+)", (\d+), (\d+)\)', block)
-            self.assertEqual([part for part, _, _ in laid], [part for part in hb.layers_of(strip) for _ in hb.PARTS[part]["instances"]], strip)
+            block = text[start:text.index("];" if "Layers {" in marker else "]),", start)]
+            laid = re.findall(r'new\("(hardware\.[a-z_]+)", (\d+), (\d+)\)', block)
+            expected = [part for part in hb.layers_of(strip) for instance in hb.PARTS[part]["instances"] if instance[0] == strip]
+            self.assertEqual([part for part, _, _ in laid], expected, strip)
             for _, x, y in laid:
                 self.assertEqual((int(x) % hb.GRID, int(y) % hb.GRID), (0, 0), strip)
 

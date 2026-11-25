@@ -81,6 +81,13 @@
         "hardware-hud-top-parts"
       ],
       "after": null
+    },
+    "B-HARDWARE-MENU": {
+      "prompts": [
+        "hardware-menu-top-plates",
+        "hardware-menu-bottom"
+      ],
+      "after": null
     }
   },
   "prompts": [
@@ -821,6 +828,42 @@
       "screen": null,
       "batch": "B-HARDWARE-HUD",
       "notes": "slice 1 of #2481 (ARC-UI-2481): one Codex item, six parts cut from the original on a transparent ground; hardware_build.py refs / cut"
+    },
+    {
+      "id": "hardware-menu-top-plates",
+      "group": "part",
+      "kind": "hardware",
+      "title": "Menu top strip iron end section, iron only (left plate, no openings)",
+      "file": "hardware-menu-top-plates.txt",
+      "size": [
+        1668,
+        960
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-MENU",
+      "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item; the right section is its mirror; the rivets are the HUD's hardware.hud_top_rivet; hardware_build.py refs / cut"
+    },
+    {
+      "id": "hardware-menu-bottom",
+      "group": "part",
+      "kind": "hardware",
+      "title": "Menu bottom strip metal details (message window frame, round socket ring)",
+      "file": "hardware-menu-bottom.txt",
+      "size": [
+        1764,
+        912
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-MENU",
+      "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item, two details cut from the original on a transparent ground; hardware_build.py refs / cut"
     }
   ]
 }

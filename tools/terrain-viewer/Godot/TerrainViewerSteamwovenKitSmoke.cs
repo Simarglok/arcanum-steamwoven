@@ -37,6 +37,8 @@ public partial class TerrainViewerApp
         ("hardware.hud_vial_r", 204, 558, KitHardware), ("hardware.hud_cylinder", 108, 324, KitHardware), ("hardware.hud_cylinder_r", 108, 324, KitHardware),
         ("hardware.hud_wires", 114, 144, KitHardware), ("hardware.hud_ring", 198, 192, KitHardware), ("hardware.hud_dial", 144, 144, KitHardware), ("hardware.hud_gem", 138, 144, KitHardware),
         ("hardware.hud_slot", 138, 144, KitHardware), ("hardware.hud_rail", 144, 48, KitHardware),
+        // ARC-UI-3260: the hardware layers of the two-strip menu screens' strips (the top strip's rivets are the HUD's own part).
+        ("hardware.menu_plate_left", 966, 150, KitHardware), ("hardware.menu_plate_right", 966, 150, KitHardware), ("hardware.menu_window", 1476, 384, KitHardware), ("hardware.menu_ring", 258, 258, KitHardware),
         ("backdrop.pdoll", 1290, 1440, KitDoll), ("backdrop.inventor", 1590, 1440, KitInventory),
         // ARC-UI-3033: the barter window's merchant side (plain and with the follower's cycle buttons) and its two overlays, the merchant's doll view and the hero's doll cover.
         ("backdrop.barter", 1290, 1440, KitBarter), ("backdrop.barter_follower", 1290, 1440, KitBarterFollower), ("backdrop.barter_pd", 1290, 876, KitDoll),
@@ -116,7 +118,7 @@ public partial class TerrainViewerApp
         var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, SteamwovenKitScreen.SaveLoad).Value;
         require(composed is not null, $"[{tag}] the synthetic set composes the save screen");
         var drawn = art.KitScreenForSelfTest;
-        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the save window draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.AllDraws), $"[{tag}] the save window draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
         require(art.OwnBackdropDrawnForSelfTest.Count == 0, $"[{tag}] over the kit the screen draws none of its own arts 336, 335 and 745 (drew {string.Join(",", art.OwnBackdropDrawnForSelfTest)})");
         require(AreaKitStandIns.DrawnScreensForSelfTest.Contains(SteamwovenKitScreen.SaveLoad), $"[{tag}] the preview's stand-in field is drawn over the kit");
         if (composed is null || drawn is null) return;
@@ -133,14 +135,15 @@ public partial class TerrainViewerApp
             require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             // The seams: two device rows either side of the body's top and bottom edges, clear of the buttons, the lens and the list.
             var x = (int)Math.Round(plan.ToDevice(250, 0).X);
-            var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
+            var xTop = (int)Math.Round(plan.ToDevice(400, 0).X);   // ARC-UI-3260: the top strip's iron sections stand over its two ends, so the row above the seam is read in the middle, between them
+            var (aboveTop, belowTop) = (Pixel(xTop, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
             require(Near(aboveTop, KitSaveTop) && Near(belowTop, KitSaveBody), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
             require(Near(aboveBottom, KitSaveBody) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
             var preview = AtUnit(AreaSaveListArtLayout.Preview.X + 4, AreaSaveListArtLayout.Preview.Y + 4);
             require(!Near(preview, KitSaveBody), $"[{tag}] the preview's field is not the kit's body (got {preview})");
             // The message box of the bottom strip's middle is a black stand-in (the details and the questions are written on it), clear of the kit's bottom strip colour.
-            var message = AtUnit(AreaSaveListArtLayout.MessageBox.X + AreaSaveListArtLayout.MessageBox.Width - 10, AreaSaveListArtLayout.MessageBox.Y + AreaSaveListArtLayout.MessageBox.Height - 10);
+            var message = AtUnit(AreaKitStandIns.MessageField.X + AreaKitStandIns.MessageField.Width - 10, AreaKitStandIns.MessageField.Y + AreaKitStandIns.MessageField.Height - 10);
             require(message.R8 + message.G8 + message.B8 < 12, $"[{tag}] the bottom strip's message box is a black field (got {message})");
         }
         if (!firstSize) return;
@@ -208,7 +211,7 @@ public partial class TerrainViewerApp
         var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, art.Screen).Value;
         require(composed is not null, $"[{tag}] the synthetic set composes the {art.Name} screen");
         var drawn = art.Kit();
-        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the {art.Name} screen draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.AllDraws), $"[{tag}] the {art.Name} screen draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
         require(art.OwnDrawn().Count == 0, $"[{tag}] over the kit the screen draws none of its own arts (drew {string.Join(",", art.OwnDrawn())})");
         if (composed is null || drawn is null) return;
         require(art.Nearest(1) == composed.Body.Exact, $"[{tag}] the body is sampled {(composed.Body.Exact ? "nearest" : "linear")} as its draw is {(composed.Body.Exact ? "exact" : "scaled")}");
@@ -226,7 +229,8 @@ public partial class TerrainViewerApp
             require(Near(body, art.BodyColor) && Near(bodyRight, art.BodyColor), $"[{tag}] the body's margins are the kit's {art.Name} body (got {body} and {bodyRight})");
             require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             var x = (int)Math.Round(plan.ToDevice(20, 0).X);
-            var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
+            var xTop = (int)Math.Round(plan.ToDevice(400, 0).X);   // ARC-UI-3260: the top strip's iron sections stand over its two ends, so the row above the seam is read in the middle, between them
+            var (aboveTop, belowTop) = (Pixel(xTop, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
             require(Near(aboveTop, KitSaveTop) && Near(belowTop, art.BodyColor), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
             require(Near(aboveBottom, art.BodyColor) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
@@ -304,7 +308,7 @@ public partial class TerrainViewerApp
         var composed = set is null ? null : SteamwovenKitComposer.Screen(plan, set, art.Screen).Value;
         require(composed is not null, $"[{tag}] the synthetic set composes the {art.Name} screen");
         var drawn = art.Kit();
-        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.Draws), $"[{tag}] the {art.Name} screen draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
+        require(drawn is not null && composed is not null && drawn.SequenceEqual(composed.AllDraws), $"[{tag}] the {art.Name} screen draws the composer's plan (got {(drawn is null ? "none" : string.Join(" ", drawn.Select(draw => draw.PartId + draw.Rect)))})");
         require(art.OwnDrawn().Count == 0, $"[{tag}] over the kit the screen draws none of its own strip arts (drew {string.Join(",", art.OwnDrawn())})");
         require(!art.FrameOwnArt(), $"[{tag}] the window over the {art.Name} body draws none of its own backdrop art");
         if (composed is null || drawn is null) return;
@@ -327,7 +331,8 @@ public partial class TerrainViewerApp
             }
             // The seams of the strips with the body: two device rows either side of its top and bottom edges, at the body's left margin.
             var x = (int)Math.Round(plan.ToDevice(art.BodyPoints[0].X, 0).X);
-            var (aboveTop, belowTop) = (Pixel(x, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
+            var xTop = (int)Math.Round(plan.ToDevice(400, 0).X);   // ARC-UI-3260: the top strip's iron sections stand over its two ends, so the row above the seam is read in the middle, between them
+            var (aboveTop, belowTop) = (Pixel(xTop, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
             require(Near(aboveTop, KitSaveTop) && Near(belowTop, colours[0]), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
             require(Near(aboveBottom, colours[0]) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");

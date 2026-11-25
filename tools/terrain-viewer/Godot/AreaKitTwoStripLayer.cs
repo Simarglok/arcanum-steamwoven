@@ -16,7 +16,7 @@ internal sealed class AreaKitTwoStripLayer(SteamwovenKitScreen screen, string ow
     private AreaKitBackdrop? _backdrop;
     private readonly Dictionary<Texture2D, (CanvasTexture Texture, bool Exact)> _sampled = [];
 
-    /// <summary>The kit's three draws of the screen as of the last <see cref="Compose"/> (top strip, body, bottom strip); null while the screen draws its own art.</summary>
+    /// <summary>The kit's draws of the screen as of the last <see cref="Compose"/> (top strip, body, bottom strip, then the hardware layers over the strips, ARC-UI-3260); null while the screen draws its own art.</summary>
     internal IReadOnlyList<SteamwovenKitDraw>? DrawsForSelfTest => _parts?.Select(item => item.Draw).ToList();
 
     /// <summary>True when the part drawn for <paramref name="index"/> (0 top, 1 body, 2 bottom) is sampled nearest (its draw is exact).</summary>
@@ -49,7 +49,7 @@ internal sealed class AreaKitTwoStripLayer(SteamwovenKitScreen screen, string ow
         if (!zoned || AreaGameBarPanel.ColumnMenuPlan(viewport) is not { } plan || SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { Release(); return false; }
         if (SteamwovenKitComposer.Screen(plan, set, screen, null, bodyWindow).Value is not { } composed) { Release(); return false; }
         var loaded = new List<(Texture2D, SteamwovenKitDraw)>(3);
-        foreach (var draw in composed.Draws)
+        foreach (var draw in composed.AllDraws)
         {
             if (SteamwovenKitStore.Texture(set, draw.PartId) is not { } texture) { Release(set); return false; }
             loaded.Add((texture, draw));

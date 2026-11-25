@@ -1335,8 +1335,8 @@ Tests: `python3 -B -m unittest tools.steamwoven_ui.test_board_build tools.steamw
 ## Steamwoven hardware of the play-screen strips, batch B-HARDWARE slice 1 (ARC-UI-2481)
 
 The metal of the two play-screen strips (`board.inttop` art 185, `board.intbotom` art 184) as 18 kit parts `hardware.hud_*` (top: two plates, the slot frame, ring, clock, infinity, hourglass and rivet; bottom: the vial and its
-mirror, the cylinder and its mirror, wires, ring, dial, gem, slot frame, rail), made by `tools/steamwoven_ui/hardware_build.py` ([TRD](../ui/steamwoven-interface-trd.md), SWI-LAY-12, SWI-KIT). The rest of B-HARDWARE (the menu strips and the other
-frames, slots and pop-up panels of the batch) is not in this slice. Steps, all local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue; the Codex runs follow the `steamwoven-codex-images` skill (`gpt-6.1-sol` only):
+mirror, the cylinder and its mirror, wires, ring, dial, gem, slot frame, rail), made by `tools/steamwoven_ui/hardware_build.py` ([TRD](../ui/steamwoven-interface-trd.md), SWI-LAY-12, SWI-KIT). The menu strips are slice 2 (below); the rest of B-HARDWARE (the other
+frames, slots and pop-up panels of the batch) is not in these slices. Steps, all local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue; the Codex runs follow the `steamwoven-codex-images` skill (`gpt-6.1-sol` only):
 
 ```sh
 python3 -B tools/steamwoven_ui/hardware_build.py refs --sheet hud-bottom   # per sheet (hud-bottom, hud-top, hud-top-parts): the original's shapes cut out as the references (original, material, context)
@@ -1354,6 +1354,17 @@ the right vial and cylinder are mirrored in the build (`mirror_of`) and relit: e
 than the original composition's (+0.05)", measured with `surface_metrics.py --join y=150 --join y=1590` on the composition with the new strips (built 4.630 / 3.286 against the original 4.611 / 3.267). A strip is drawn from the kit only with every layer in the set, so a kit without the 18
 parts keeps the pack's strips. Look capture: `./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_STEAMWOVEN_VARIANTS=kit --env ARC_STEAMWOVEN_SIZES=3840x2160,1920x1080 --env ARC_AREA_BAR_CAPTURE=<prefix> --env ARC_STEAMWOVEN_KIT_LOOK=<folder holding only the masters of the two strips, their four caps and the hardware parts>`
 puts the real masters in place of the flat colours (the strip, cap and hardware colour checks are skipped, the other parts keep theirs, so the folder must hold no others). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_hardware_build` (also in `tools/local_dev/run_tests.py`).
+
+### Slice 2: the metal of the menu screens' two strips (ARC-UI-3260)
+
+The strips of the two-strip menu screens (`board.charcreatetopbar` art 336, `board.charcreatebottombar` art 335: the save and load windows, the pre-made browser, the new character screen, the creation editor and the opening shop) get the
+same treatment by the same tool: four new parts and one shared. Top strip: `hardware.menu_plate_left` (the iron end section, no openings; the HUD top plate's silhouette) and `hardware.menu_plate_right` (its mirror, relit to the top left,
+`mirror_of`; its place mirrors the left one's about the strip's middle, `footprint` is the original's right section that the strip art loses), and the HUD's `hardware.hud_top_rivet` laid at the same four places (`layers_of` follows the parts' `instances`, so one part
+can stand on two strips). Bottom strip: `hardware.menu_window` (the thin iron and brass frame of the message window, `keep_hole`) and `hardware.menu_ring` (the brass setting of a round button socket, one master at two places, `keep_hole`).
+`keep_hole` keeps a ring's or a frame's inside out of the erase (the socket and the window's dark field are the strip's own, not the original's metal) and the part's inside is transparent, so what the screen draws there (the button, the message
+box) shows through. Sheets `menu-top` and `menu-bottom` (batch `B-HARDWARE-MENU`: `prompt_library.py inbox B-HARDWARE-MENU`, `codex_batch.py run B-HARDWARE-MENU`), the other steps as above (`cut`, `fit`, `strips`, `art`). The runtime lays them
+through `SteamwovenKitScreenSpec.TopLayers` and `BottomLayers` (`SteamwovenKitTable.MenuTopLayers`, `MenuBottomLayers`): a layer's master position and size scale by the strip's own ratio on each axis (the screen's strips are drawn stretched into their 41 and
+159 units), and a screen is drawn from the kit only when every layer is in the set, so a kit without the four parts keeps the screen's own arts whole.
 
 
 ## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
