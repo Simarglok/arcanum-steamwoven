@@ -481,6 +481,15 @@ public partial class TerrainViewerApp
                 TerrainViewerSelfTest.Require(_replyPressDown, "a left press while the dialog is open is remembered");
                 InputWorld(Left(false));
                 TerrainViewerSelfTest.Require(!_replyPressDown && _replyRelease is null && ConversationOpen, "a release with the dialog still open owes nothing");
+                // ARC-INPUT-3133: a press the dialog leaves to the world (outside its panel) is dropped with a named reason, never silently.
+                var dropsBefore = _worldClickDrops;
+                _UnhandledInput(Left(true));
+                TerrainViewerSelfTest.Require(_worldClickDrops == dropsBefore + 1 && _worldClickDropReason == "ignored (input quarantined/modal/lifecycle)" && _worldRouteClick == _worldClickDropReason && ConversationOpen,
+                    $"a world press while the dialog is open is dropped with its reason ({_worldClickDrops - dropsBefore} drops, '{_worldClickDropReason}')");
+                // A held repeat is neither logged nor counted.
+                var afterPress = _worldClickDrops;
+                WorldRouteClick(at, repeat: true);
+                TerrainViewerSelfTest.Require(_worldClickDrops == afterPress, "a held repeat of a dropped press is not counted again");
             }
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");

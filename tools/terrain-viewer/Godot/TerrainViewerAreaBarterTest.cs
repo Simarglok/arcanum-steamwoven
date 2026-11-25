@@ -800,15 +800,13 @@ public partial class TerrainViewerApp
                 Require(area.ServiceFrame!.Selected == item.Entity && area.ServiceFrame.Quote.Length > 0, "a press remembered the item and quoted it: " + area.ServiceFrame.Quote);
                 quote = area.ServiceFrame.Quote;
             }
-            // ARC-UI-1820: in the generated run the NPC's image (a kept picture) lies inside the generated name plate it is drawn on (the original draws a larger one regardless, so the other runs only print it).
+            // ARC-UI-1820: the NPC's image (a kept picture) is printed with whether it fits the name plate (the original draws a larger one regardless; the generated plate it once had to fit is retired, ARC-UI-3143).
             if (image is { } art && look!.Art.GetValueOrDefault(art) is { } portrait)
             {
                 var fits = AreaServiceArtLayout.ImageFitsNamePlate(portrait.GetWidth(), portrait.GetHeight());
-                if (System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") == "generated") Require(fits, $"the NPC's image {art} ({portrait.GetWidth()} x {portrait.GetHeight()}) at half size lies inside the name plate");
-                else GD.Print($"ARC-UI-1820 NPC image {art} {portrait.GetWidth()}x{portrait.GetHeight()} fits the name plate: {fits}");
+                GD.Print($"ARC-UI-1820 NPC image {art} {portrait.GetWidth()}x{portrait.GetHeight()} fits the name plate: {fits}");
             }
-            // ARC_AREA_WINDOW_ART=legacy|hd|generated: the window's three frames (the own window's `PDoll` and `Inventor` and the round view's lens) draw generated chrome at the window's own device scale
-            // in the generated run and none in the others (ARC_AREA_WINDOW_CAPTURE=PREFIX saves PREFIX-item-service-NAME-MODE.png).
+            // ARC_AREA_WINDOW_ART=legacy|hd (the generated mode is retired, ARC-UI-3143): the window's three frames (the own window's `PDoll` and `Inventor` and the round view's lens) draw plain frames (ARC_AREA_WINDOW_CAPTURE=PREFIX saves PREFIX-item-service-NAME-MODE.png).
             await WindowArtSmokeAsync("item-service-" + name, area, [AreaServiceArtLayout.BackgroundArt, AreaInventoryArtLayout.PackArt, AreaInventoryHole.Art(AreaInventoryMode.Own), AreaInventoryArtLayout.ArrangeArt]);
             // The interface switch may rebuild the panel's view: read it again.
             area = _servicePanel!.GridAreaForSelfTest;

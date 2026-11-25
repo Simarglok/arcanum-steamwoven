@@ -253,46 +253,47 @@ public partial class TerrainViewerApp
         (_gameSettingsStore, _visualStore, _gameSettings) = (null, null, AreaGameSettings.Defaults);
         try
         {
-            string[] HdLines() => [.. Lines()[8..11]];
+            string[] HdLines() => [.. Lines()[8..10]];
             await Start(true);
-            Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto", "Generated interface: Off"]) && _launcherPanel.HdEnabledForSelfTest && !_launcherPanel.HdGeneratedEnabledForSelfTest,
-                "the HD lines default to Off, Auto, Off (an old visual profile line alone does not turn HD on; generated is off while HD is Off): " + string.Join(" | ", HdLines()));
-            Require(Lines().Length == 13 && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+            Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto"]) && _launcherPanel.HdEnabledForSelfTest && Lines()[11] == "World zoom: hidden",
+                "the HD lines default to Off, Auto and the world zoom row is hidden while HD is Off (an old visual profile line alone does not turn HD on): " + string.Join(" | ", HdLines()) + " | " + Lines()[11]);
+            Require(Lines().Length == 12 && !Lines().Any(line => line.StartsWith("Generated interface", StringComparison.Ordinal)) && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
                 "the launcher has one HD row, no HD graphics, HD interface or HD lighting line: " + Lines().Length);
             _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
-            Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game", "Generated interface: Off"]) && _launcherPanel.HdGeneratedEnabledForSelfTest, "the choices show: " + string.Join(" | ", HdLines()));
+            Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game"]) && Lines()[11] == "World zoom: Auto", "the choices show and the world zoom row appears with HD On: " + string.Join(" | ", HdLines()) + " | " + Lines()[11]);
             Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd
-                    && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: false, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the one settings file");
+                    && new GameSettingsStore(false).Load() is { HdInterface: true, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the one settings file");
             Require(System.IO.File.ReadAllText(gameSettingsPath).Contains("hd=1", StringComparison.Ordinal) && System.IO.File.ReadAllText(gameSettingsPath).Contains("visual profile=hd", StringComparison.Ordinal),
                 "the hd line is written and the old lines stay in place");
-            _launcherPanel.HdGeneratedForSelfTest(true);
-            Require(Lines()[10] == "Generated interface: On" && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: true }, "the generated interface is a separate experimental row");
-            // ARC-UI-3059: the world zoom row (Auto by default, read with the generated interface): 1x is always offered and is saved at once; a step that does not exist is refused; Auto clears it.
-            Require(Lines()[12] == "World zoom: Auto" && _launcherPanel.HdWorldZoomEnabledForSelfTest.Contains("Auto") && _launcherPanel.HdWorldZoomEnabledForSelfTest.Contains("1x"), "the zoom row shows Auto and offers 1x: " + Lines()[12]);
+            // ARC-UI-3142: the generated-interface choice is retired; a file that still holds its line reads without error and the line is ignored (HD On is the Steamwoven interface).
+            System.IO.File.AppendAllText(gameSettingsPath, "generated interface=1\n");
+            Require(new GameSettingsStore(false).Load() is { HdInterface: true, HdPackSource: HdPackSourceMode.GameFolder }, "an old generated interface line is read and ignored");
+            // ARC-UI-3059: the world zoom row (Auto by default, read with HD On): 1x is always offered and is saved at once; a step that does not exist is refused; Auto clears it.
+            Require(Lines()[11] == "World zoom: Auto" && _launcherPanel.HdWorldZoomEnabledForSelfTest.Contains("Auto") && _launcherPanel.HdWorldZoomEnabledForSelfTest.Contains("1x"), "the zoom row shows Auto and offers 1x: " + Lines()[11]);
             _launcherPanel.HdWorldZoomForSelfTest(1);
-            Require(Lines()[12] == "World zoom: 1x" && new GameSettingsStore(false).Load() is { WorldZoomStep: 1 }
-                    && System.IO.File.ReadAllText(gameSettingsPath).Contains("world zoom=1", StringComparison.Ordinal), "1x is saved at once: " + Lines()[12]);
+            Require(Lines()[11] == "World zoom: 1x" && new GameSettingsStore(false).Load() is { WorldZoomStep: 1 }
+                    && System.IO.File.ReadAllText(gameSettingsPath).Contains("world zoom=1", StringComparison.Ordinal), "1x is saved at once: " + Lines()[11]);
             _launcherPanel.HdWorldZoomForSelfTest(9);
             Require(new GameSettingsStore(false).Load() is { WorldZoomStep: 1 }, "a step that does not exist is refused");
             _launcherPanel.HdWorldZoomForSelfTest(0);
-            Require(Lines()[12] == "World zoom: Auto" && System.IO.File.ReadAllText(gameSettingsPath).Contains("world zoom=auto", StringComparison.Ordinal), "Auto is saved at once: " + Lines()[12]);
+            Require(Lines()[11] == "World zoom: Auto" && System.IO.File.ReadAllText(gameSettingsPath).Contains("world zoom=auto", StringComparison.Ordinal), "Auto is saved at once: " + Lines()[11]);
             // The next launcher shows what was saved, and the start's own reading finds the same values.
             _gameSettings = AreaGameSettings.Defaults;
             await Start(true);
-            Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game", "Generated interface: On"]), "the next launcher shows the saved choices: " + string.Join(" | ", HdLines()));
+            Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game"]), "the next launcher shows the saved choices: " + string.Join(" | ", HdLines()));
             ConfigureGameSettings();
-            Require(_gameSettings is { HdInterface: true, GeneratedInterface: true, HdPackSource: HdPackSourceMode.GameFolder } && new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd, "the start reads the launcher's choices");
+            Require(_gameSettings is { HdInterface: true, HdPackSource: HdPackSourceMode.GameFolder } && new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd, "the start reads the launcher's choices");
             // Custom asks for a folder: with no dialog (an automated run) the note names the setting; the chosen folder is saved with the source.
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.Custom);
-            Require(Lines()[11].Contains("no folder dialog here", StringComparison.Ordinal), "Custom without a dialog names the setting: " + Lines()[11]);
+            Require(Lines()[10].Contains("no folder dialog here", StringComparison.Ordinal), "Custom without a dialog names the setting: " + Lines()[10]);
             LauncherHdPackFolderForSelfTest(hdFolder);
             Require(new GameSettingsStore(false).Load() is { HdPackSource: HdPackSourceMode.Custom, HdPackPath: { } custom } && custom == hdFolder && Lines()[9] == "HD pack: Custom", "the chosen folder is saved with Custom");
             LauncherHdPackFolderForSelfTest(System.IO.Path.Combine(hdFolder, "missing"));
-            Require(Lines()[11].EndsWith("| that folder cannot be used", StringComparison.Ordinal) && new GameSettingsStore(false).Load().HdPackPath == hdFolder, "a missing folder is refused and the saved one stays");
+            Require(Lines()[10].EndsWith("| that folder cannot be used", StringComparison.Ordinal) && new GameSettingsStore(false).Load().HdPackPath == hdFolder, "a missing folder is refused and the saved one stays");
             _launcherPanel.HdForSelfTest(false);
-            Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Legacy && Lines()[8] == "HD: Off" && Lines()[10] == "Generated interface: Off" && !_launcherPanel.HdGeneratedEnabledForSelfTest
-                    && new GameSettingsStore(false).Load() is { HdInterface: false, GeneratedInterface: false }, "HD Off is saved and turns the generated interface off");
+            Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Legacy && Lines()[8] == "HD: Off" && Lines()[11] == "World zoom: hidden"
+                    && new GameSettingsStore(false).Load() is { HdInterface: false }, "HD Off is saved and hides the world zoom row");
             // The relit look is a part of HD: wanted exactly with the HD profile; the old lines stay untouched in the file (ignored, not rewritten into anything).
             Require(!RelitLookWanted(VisualProfile.Legacy) && RelitLookWanted(VisualProfile.Hd) && System.IO.File.ReadAllText(gameSettingsPath).Contains("relit look=1", StringComparison.Ordinal), "the relit look follows HD only; an old relit look line is ignored");
             // Reset settings leaves the HD lines alone.
@@ -339,9 +340,9 @@ public partial class TerrainViewerApp
             var lines = panel.LinesForSelfTest.ToArray();
             Require(panel.PlayEnabledForSelfTest && lines[3] == "Rules: Steamwoven [Original]" && lines[4] == "Show at every start: off", "choices: " + string.Join(" | ", lines));
             // ARC-UI-143, ARC-UI-2174: the HD lines are on the screen (their saved values are not touched in an automated run).
-            var hdLines = panel.LinesForSelfTest.Skip(8).Take(3).ToArray();
-            Require(hdLines.Length == 3 && hdLines[0].StartsWith("HD: ", StringComparison.Ordinal) && hdLines[1].StartsWith("HD pack: ", StringComparison.Ordinal)
-                    && hdLines[2].StartsWith("Generated interface: ", StringComparison.Ordinal)
+            var hdLines = panel.LinesForSelfTest.Skip(8).Take(2).ToArray();
+            Require(hdLines.Length == 2 && hdLines[0].StartsWith("HD: ", StringComparison.Ordinal) && hdLines[1].StartsWith("HD pack: ", StringComparison.Ordinal)
+                    && !panel.LinesForSelfTest.Any(line => line.StartsWith("Generated interface", StringComparison.Ordinal))
                     && !panel.LinesForSelfTest.Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
                 "the HD lines (one HD row, ARC-UI-2174; the row count is the layout check's, ARC-DEV-3054): " + string.Join(" | ", hdLines));
             // The screenshot of the launcher itself, when the run asks for one (the end of the smoke has its own).

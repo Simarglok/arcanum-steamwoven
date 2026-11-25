@@ -11,10 +11,14 @@ public partial class TerrainViewerApp
     private AreaTextFontContent? _textFontContent;
     private string? _textFontModule;
     private AreaTextFonts? _textFonts;
+    // ARC-UI-2968: a self-test with no game folder gives the users of the fonts a synthetic face for the length of one check.
+    private AreaTextFonts? _textFontsForSelfTest;
+    internal AreaTextFonts? TextFontsForSelfTest { set => _textFontsForSelfTest = value; }
 
     /// <summary>The text fonts of the shown module, null without a game folder or when their art did not read.</summary>
     internal AreaTextFonts? TextFonts()
     {
+        if (_textFontsForSelfTest is { } synthetic) return synthetic;
         var module = _arguments?.ModulePath;
         if (SelfTestBootstrap || module is null) return null;
         if (_textFontContent is null || module != _textFontModule)

@@ -183,6 +183,15 @@ public partial class TerrainViewerApp
         await Click(art.PointForSelfTest(mx + 5, my + 5));
         require(_mainMenu.Creation.Presses.Count == presses && _mainMenu.Notice is { Length: > 0 } notice && panel.ArtNoteForSelfTest.Contains(notice, StringComparison.Ordinal),
             $"a − at the start is refused with the original's text in the note line: '{_mainMenu.Notice}' / '{panel.ArtNoteForSelfTest}'");
+        // ARC-UI-2968: the note line is art text in the original's font (art 229), not a Godot Label.
+        require(panel.ArtNoteViewForSelfTest.Items.Count == 1 && panel.ArtNoteViewForSelfTest.IsVisibleInTree() && panel.ArtNoteForSelfTest == _mainMenu.Notice,
+            $"the note line is drawn as art text: {panel.ArtNoteViewForSelfTest.Items.Count} / {panel.ArtNoteViewForSelfTest.IsVisibleInTree()}");
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } noteCapture)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using var noteImage = GetViewport().GetTexture().GetImage();
+            require(noteImage.SavePng(System.IO.Path.ChangeExtension(noteCapture, null) + "-note.png") == Error.Ok, "the note capture saved to " + noteCapture);
+        }
         // A release in the close rectangle does not close the editor (the close rectangle is the interface modes 1 and 2's).
         var close = AreaCharacterSheetArtView.CloseRectangle;
         await Click(art.PointForSelfTest(close.X + 20, close.Y + 20));

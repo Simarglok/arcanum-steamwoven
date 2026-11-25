@@ -812,7 +812,7 @@ public partial class TerrainViewerApp
             QuantityPaneReleased(QuantityPaneAction.Down, true);
             Require(panel.QuantityForSelfTest == new QuantityBar(0, stack.Units), "the pane's down button takes it back");
             GD.Print("ARC-UI-1884 native-smoke quantity-pane PASS");
-            // ARC-UI-1818: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART=legacy|hd|generated) for the pane's background and five buttons.
+            // ARC-UI-1818: the opt-in window-art part (ARC_AREA_WINDOW_ART=legacy|hd) for the pane's background and five buttons.
             if (WindowArtSmokeRequested) await QuantityPaneArtSmokeAsync();
         }
         else

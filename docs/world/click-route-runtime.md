@@ -276,6 +276,12 @@ runtime receives therefore share one Data verdict.
   a new click: it ends at its cell centre, then the follower clears its own intent.
 - **HUD.** `LMB click-to-move route <status> target=<cell> <reason> plan=<reason>
   segments=<n> (last click <cell> goal set | same goal kept | ignored ...)`; the log prints `ARC-WORLD-007 route click` and `route stop` lines.
+- **Dropped presses** (ARC-INPUT-3133). A world left press that ends with no route, goal or action prints one
+  `ARC-INPUT-3133 world click dropped reason=<why>` line (a held repeat prints none); a press that reaches the tile pick but sets no
+  goal ends its `route click` line with `reason=same goal kept` or `reason=Shift held`. The usual reason for a press the player
+  thinks vanished is a window or dialog holding the world (`ignored (input quarantined/modal/lifecycle)`, with the guard values
+  after it). The tile pick itself (`AreaCellPicking.Pick`) answers null only for a non-finite or out-of-reach point, so a miss
+  there is not a cause of a vanished click (report 2026-11-22 18:37:40: the press came 0.5 s after a dialog opened).
 
 ## Evidence
 

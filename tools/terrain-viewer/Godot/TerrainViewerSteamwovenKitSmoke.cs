@@ -432,10 +432,10 @@ public partial class TerrainViewerApp
         CloseWorldMapByPlayer(); await frames(4);
         require(!WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && !SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith("backdrop.", StringComparison.Ordinal)), $"[{tag}] the map closed leaves no kit background resident");
         if (withoutMap is null) return;
-        // SWI-BDR-3: a set without the piece leaves the generated backdrop and the window's own art.
+        // SWI-BDR-3: a set without the piece leaves the window's own (pack) art.
         withoutMap();
         panel.Relayout(); OpenWorldMap(); await frames(6);
-        require(WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && panel.KitForSelfTest.Background.Count == 0 && !view.KitBackgroundShown, $"[{tag}] with the map piece missing the window keeps the generated backdrop and its own art");
+        require(WorldMapOpen && AreaGameBarPanel.KitBackgroundWindow is null && panel.KitForSelfTest.Background.Count == 0 && !view.KitBackgroundShown, $"[{tag}] with the map piece missing the window keeps its own art");
         CloseWorldMapByPlayer(); await frames(3);
         restore();
         panel.Relayout(); await frames(4);
@@ -559,8 +559,8 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-UI-3037 (census G01, G05, G10 to G12, G15, G17): each covered window, opened for real, draws no background art of its own over a complete kit background and draws it otherwise. The kit's parts are flat colours, so the share
-    /// of the zone's pixels (sampled) that are the window's kit colours says which one shows: most of the zone with the kit, none without (<paramref name="kit"/> false: the set lacks each window's backdrop, the generated backdrop and the
-    /// window's own art stand). The window's controls, text and holes are drawn either way. The identify and repair windows are the inventory's draw path (<c>WindowOf</c> is unit-tested).
+    /// of the zone's pixels (sampled) that are the window's kit colours says which one shows: most of the zone with the kit, none without (<paramref name="kit"/> false: the set lacks each window's backdrop, the
+    /// window's own art stands). The window's controls, text and holes are drawn either way. The identify and repair windows are the inventory's draw path (<c>WindowOf</c> is unit-tested).
     /// </summary>
     private async Task CheckKitWindowBackgroundsAsync(AreaGameBarPanel panel, SteamwovenHudPlan plan, string tag, Func<int, Task> frames, Action<bool, string> require, bool kit, bool fixtures = true)
     {
@@ -632,7 +632,7 @@ public partial class TerrainViewerApp
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var fixturelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fixtureless-").FullName;
         var noGlyphRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-noglyph-").FullName;
-        var (savedHd, savedGenerated) = (_gameSettings.HdInterface, _gameSettings.GeneratedInterface);
+        var savedHd = _gameSettings.HdInterface;
         var done = new HashSet<(string, SteamwovenStep)>();
         void Ensure(string where, string folder, SteamwovenStep step, params string[] without)
         {
@@ -654,7 +654,7 @@ public partial class TerrainViewerApp
                 for (var wait = 0; wait < 120 && (Vector2I)window.GetVisibleRect().Size != size; wait++) await frames(1);
                 require((Vector2I)window.GetVisibleRect().Size == size, $"[kit {size.X}x{size.Y}] the viewport is {size}, got {window.GetVisibleRect().Size}");
                 panel.Relayout();
-                for (var wait = 0; wait < 1800 && (InterfaceHd.GeneratedPending > 0 || panel.BoardsPendingForSelfTest || !AllStripArtGenerated(panel)); wait++) await frames(1);
+                await WaitFramesResampledAsync(frames);
                 await frames(3);
                 var tag = $"kit-{size.X}x{size.Y}";
                 var plan = panel.PlanForSelfTest;
@@ -714,7 +714,6 @@ public partial class TerrainViewerApp
                 using (var image = GetViewport().GetTexture().GetImage())
                 {
                     Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
-                    // The generated brass edge of the open menu's middle band (the kit has no cap for it) lies over the outermost few pixels: the probes stand inside it.
                     var y0 = zone.Y + zone.Height / 2;
                     require(Near(Pixel(zone.X + 16, y0), KitDoll), $"[{tag}] the zone's left is the paper-doll piece (got {Pixel(zone.X + 16, y0)})");
                     require(Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the zone's right is the inventory piece (got {Pixel(zone.Right - 16, y0)})");
@@ -757,7 +756,7 @@ public partial class TerrainViewerApp
                 if (SteamwovenBarter() is { } barterModel)
                 {
                     OpenBarterWindow(barterModel); await frames(6);
-                    for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+                    await WaitFramesResampledAsync(frames);
                     var frame = _barterPanel?.GridAreaForSelfTest;
                     require(BarterOpen && _barterPanel is { KitState.InZone: true } && frame is { KitBackdrop: not null, BarterLook: true } && frame.KitDrawForSelfTest is { Background: false, Pack: false }, $"[{tag}] the open barter window takes the kit background and its frame draws no background art (frame {frame?.KitDrawForSelfTest}, kit {frame?.KitBackdrop is not null})");
                     require(panel.KitForSelfTest.Background.Count == 2 && panel.KitForSelfTest.Background[0].PartId is "backdrop.barter" or "backdrop.barter_follower", $"[{tag}] the barter window's kit background is the merchant piece and the inventory piece");
@@ -827,7 +826,7 @@ public partial class TerrainViewerApp
                 if (first)
                 {
                     first = false;
-                    // SWI-RUN-3: a strip with a part missing is the generated chrome's, the other strip is the kit's.
+                    // SWI-RUN-3: a strip with a part missing is the pack's art, whole; the other strip is the kit's.
                     Ensure("fallback", fallbackRoot, step, "cap.top_strip_left");
                     SteamwovenKitStore.UseRoot(fallbackRoot);
                     panel.Relayout();
@@ -838,11 +837,11 @@ public partial class TerrainViewerApp
                     SteamwovenKitStore.UseRoot(null);
                     panel.Relayout();
                     await frames(4);
-                    require(panel.KitForSelfTest is { Top: null, Bottom: null }, $"[{tag}] with no kit folder both strips are the generated chrome");
+                    require(panel.KitForSelfTest is { Top: null, Bottom: null }, $"[{tag}] with no kit folder both strips are the pack's art");
                     SteamwovenKitStore.UseRoot(root);
                     panel.Relayout();
                     await frames(4);
-                    // ARC-UI-3096 (AC1): a face whose glyph is missing is not drawn from the kit (the generated art stays), the strips still are.
+                    // ARC-UI-3096 (AC1): a face whose glyph is missing is not drawn from the kit (the pack's art stays), the strips still are.
                     Ensure("noglyph", noGlyphRoot, step, "glyph.char_but");
                     SteamwovenKitStore.UseRoot(noGlyphRoot);
                     panel.Relayout();
@@ -856,7 +855,7 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-2461 steamwoven {tag} step={step} exact={plan.Layout.ExactStep} runtime={plan.Layout.RuntimeScale.ToDouble():F4} top={column.TopStrip} bottom={column.BottomStrip} zone={zone}");
             }
             // AC2 (SWI-RUN-4): with the HD option off the kit is not read and nothing of it shows.
-            _gameSettings = _gameSettings with { HdInterface = false, GeneratedInterface = false };
+            _gameSettings = _gameSettings with { HdInterface = false };
             SyncInterfaceHd();
             panel.Relayout();
             await frames(4);
@@ -868,7 +867,7 @@ public partial class TerrainViewerApp
         {
             _smokeKitBackdrop = null;
             SteamwovenKitStore.ClearOverride();
-            _gameSettings = _gameSettings with { HdInterface = savedHd, GeneratedInterface = savedGenerated };
+            _gameSettings = _gameSettings with { HdInterface = savedHd };
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);

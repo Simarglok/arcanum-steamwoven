@@ -1,5 +1,7 @@
 # Generated interface chrome and density-aware layout (ARC-RES-122)
 
+> **2026-11-25, generated chrome removed** ([#3143](https://github.com/Simarglok/arcanum-steamwoven/issues/3143), [#3142](https://github.com/Simarglok/arcanum-steamwoven/issues/3142)): the viewer no longer has the generated interface (the recipe renderer `InterfaceChrome`, the generated wood and caps, the ring fit, the `generated interface` setting, the `ARC_AREA_WINDOW_ART=generated` and `ARC_AREA_BAR_GENERATED_VERIFY` runs). HD On is the Steamwoven interface; where the kit lacks a part the HD pack's frame of the original art is drawn (the Legacy one where the pack lacks it). What this page says about generated frames, scales and recipes is **historical**; the area resampling of the pack's frames (`InterfaceResample`) stays.
+
 > **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): the Steamwoven look uses a scale proportional to the screen with four baked steps, not the density scale of concept 1, and the generated chrome is not the final look. The generated chrome stays as the placeholder, the proportions prototype ([#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452)) and the fallback for parts the kit lacks.
 
 Status: **concept approved by the owner on 2026-11-11 (all recommended options; Linux narrowed to SteamOS, docs and code

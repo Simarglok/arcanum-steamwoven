@@ -126,6 +126,9 @@ public static partial class TerrainViewerSelfTest
                 host.GetTree().Quit(0);
                 return;
             }
+            // ARC-UI-3143: HD On is the Steamwoven layout now (no separate generated-interface switch), so the synthetic scenes below that switch HD on
+            // and measure the whole-factor geometry run with the layout suspended, as the older window smokes do (ARC-UI-2452).
+            SteamwovenHud.Suspended = true;
             AssertIndependentGeometryConstants();
             Stage("AreaRaster");
             await AssertAreaRasterAsync(host);

@@ -8,7 +8,7 @@ Rules (TRD SWI-KIT-1..3, SWI-BDR-8, SWI-LAY-7):
   `source_arts` lists every number (SWI-KIT-3). The 25 files without a message number are named `file:NAME`.
 - Master size = the original unit size x 3.6 (the 2880 x 2160 composition is 800 x 600 units), snapped to the 6 px grid with halves up, so
   800 x 400 is 2880 x 1440, 358 x 400 is 1290 x 1440 (SWI-BDR-5) and the strips 41 and 159 units are 150 and 570 px: the strips' heights are the
-  open question of the TRD (`size_basis` "provisional", fixed by #2927).
+  grid choice 150 / 570, fixed by #2927 (ARC-UI-2927; the units 147.6 / 572.4 are off the grid, so only the grid heights bake to the four steps exactly).
 - Parts no original art feeds are rows of their own with an open size (`size_basis` "open", fixed by their batch issue): the four end caps, the
   materials of the material sheet, the grid layers painted into arts 221 and 365 today, and the corner and rivet decor.
 - No pixels, no full-width board, no outward backdrop and no gap wood (SWI-BDR-8): none of them is a part.
@@ -30,6 +30,12 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
+
+# ARC-UI-2485 (B-ICONS, owner decision 2026-11-24): the pictures the pack cannot serve are made BY RULE from the original's own frames (`icon_rule.py upscale`, no Codex),
+# so these parts are masters: the eight map indicators (jump, turn-based, waypoint, scroll lines in the iso and top-down looks) and the nine arts the pack has no frame for
+# (the eight scroll cursors and `scroll_not`). `hoverover` (468) and `BlockedShot` (845) are NOT here: the pack serves them through the identical arts `hoverunder` and
+# `magic-tech-penalty` (the audit #3144 looked them up by name and listed them as frameless), and its redraws are better than a rule's. Art numbers of the census.
+ICON_RULE_ARTS = frozenset({"350", "351", "475", "476", "614", "615", "672", "673", "678", "679", "680", "681", "682", "683", "684", "685", "686"})
 PLATE_STATES = ["idle", "hover", "pressed", "disabled"]  # SWI-KIT-5: one button size's states are generated together
 FAMILY_OF_BATCH = {"B-BOARD": "BOARD", **{f"BD-{c}": f"BD-{c}" for c in "ABCDEFGH"}}
 
@@ -84,6 +90,8 @@ def new_part(ident: str, kind: str, anchor: str, used_by: list[str], family: str
             "note": note}
 
 
+CAP_WIDTH, BAR_WIDTH = 72, 24  # ARC-UI-2927: an end cap's master width and its brass bar (the rest is the soft shadow)
+STRIP_HEIGHT = {"top": 150, "bottom": 570}
 FIXTURE_BATCH = {"G05": "BD-B", "G15": "BD-F"}  # the window family of a fixture's first window; every other fixture is the inventory family's (BD-A)
 
 
@@ -101,7 +109,7 @@ def new_parts() -> list[dict]:
     parts = [
         new_part(f"cap.{strip}_strip_{side}", "cap", f"{strip}-strip-{side}-end", [window], "BOARD", "B-BOARD",
                  f"end cap of the {strip} HUD strip's {side} end: a brass edge and a soft shadow on the world (SWI-LAY-12); no original art; "
-                 "size fixed by #2927")
+                 f"size {CAP_WIDTH} x {STRIP_HEIGHT[strip]} fixed by #2927 (a {BAR_WIDTH} px brass bar at the inner edge, the shadow outward)", master=True)
         for strip, window in (("top", "H01"), ("bottom", "H02")) for side in ("left", "right")]
     for material in ("wood", "dark_wood", "brass", "iron", "paper", "parchment"):
         parts.append(new_part(f"material.{material}", "material", "none", [], None, None,
@@ -156,9 +164,13 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         notes = [ART_NOTES[a.ident] for a in group if a.ident in ART_NOTES]
         if notes:
             part["note"] = notes[0]
+        if ICON_RULE_ARTS.issuperset(part["source_arts"]) and part["source_arts"]:
+            part["provenance"], part["status"] = f"rule:icon_rule:{ident}", "master"
+            part["note"] = ("by rule from the original's own frames (icon_rule.py upscale, no Codex), square or smooth colour, exact alpha; "
+                            "HD frames at x4 of each original frame (ARC-UI-2485)")
         if lead.kind == "board":
-            part["size_basis"] = "provisional"
-            part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4): open question of the TRD, fixed by #2927"
+            part["status"], part["provenance"] = "master", f"fit:{part['id']}"
+            part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"
         parts.append(part)
     parts.extend(new_parts())
     by_art = {s: p for p in parts for s in p["source_arts"]}

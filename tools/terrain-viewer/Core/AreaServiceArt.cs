@@ -29,8 +29,8 @@ public static class AreaServiceArtLayout
     /// <summary>The quote line's rectangle (x, y, width, height; table 0x5CAFB0).</summary>
     public static readonly (int X, int Y, int Width, int Height) QuoteLine = (180, 29, 155, 65);
 
-    /// <summary>ARC-UI-1820: the sunk name plate of the `PDoll` frame the NPC's image and quote line lie on, in frame pixels (x, y, width, height): the generated interface's recipe of that frame
-    /// (<c>InterfaceChromeRecipes</c>, "pdoll.art") paints exactly this plate. The image (half size) lies inside it; the quote line's first lines do, and a line that wraps past its
+    /// <summary>ARC-UI-1820: the sunk name plate of the `PDoll` frame the NPC's image and quote line lie on, in frame pixels (x, y, width, height): the plate of that frame's own art
+    /// (the retired generated chrome of ARC-UI-1820 painted exactly this plate). The image (half size) lies inside it; the quote line's first lines do, and a line that wraps past its
     /// bottom (the rectangle is 10 pixels taller than the plate) falls on the frame's wood as in the original.</summary>
     public static readonly (int X, int Y, int Width, int Height) NamePlate = (124, 25, 223, 55);
 

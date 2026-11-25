@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
             layer.AddBubble("capture:0", "A text bubble over a character, drawn in the original's pixels", BubbleColor.White, (long)Time.GetTicksMsec());
             layer.Field.Add("capture:0", "Floating line", FloaterColor.White);
             await frames(3);
-            for (var wait = 0; wait < 600 && InterfaceHd.GeneratedPending > 0; wait++) await frames(1);
+            await WaitFramesResampledAsync(frames);
             await CaptureHudAsync("steamwoven-parts-" + tag, frames);
         }
         finally { foreach (var node in new Node[] { layer, portraits, overlay }) { RemoveChild(node); node.QueueFree(); } }
