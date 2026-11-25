@@ -85,6 +85,19 @@ public partial class TerrainViewerApp
         _soundSector = CurrentSoundSector();
     }
 
+    /// <summary>
+    /// ARC-RENDER-3129: the main map's window moved under the same session. The original streams sectors in place, and nothing of that
+    /// requests a scheme or stops one (exe read, audio study SN39: the scheme request has no streaming caller; only a map open, the local PC's
+    /// sector change, a script, combat and a movie lock do), so the song, its voices and the sector keep playing. Only the cues placed
+    /// in the old window's cells (positional one-shots, scenery loops) end: their points are cells of the old chart.
+    /// </summary>
+    private void KeepAreaSoundAcrossWindowMove()
+    {
+        foreach (var voice in _positionalVoices.ToArray()) _audio?.Stop(voice.Handle);
+        foreach (var voice in _sceneryVoices.Values.ToArray()) _audio?.Stop(voice);
+        StopPositionalSound();
+    }
+
     private void StopSceneSound()
     {
         StopAllSounds();
