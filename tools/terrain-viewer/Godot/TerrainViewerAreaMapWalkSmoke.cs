@@ -102,6 +102,9 @@ public partial class TerrainViewerApp
             }
             Steer();
             Require(WorldRoute((AreaGridSession)_worldActor.Session!)?.Status == RouteFollowStatus.Following, "ROUTE_NOT_SET");
+            // ARC-DEV-3212: the walk is driven by a route, not by the stick, so the view follows the hero only while the camera tracks the actor: it
+            // is put on the hero (Follow, tracking) once here, and each window swap must keep it there (ARC-RENDER-3129).
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             while (frames < WalkFrameLimit)
             {
                 // The frame's main-thread cost: the walk, its route plans (a corridor over the window included) and the steering.
@@ -130,7 +133,7 @@ public partial class TerrainViewerApp
                     Require(Math.Abs(to.X - (cell.X >> 6)) <= 1 && Math.Abs(to.Y - (cell.Y >> 6)) <= 1, $"ACTOR_OUTSIDE_CORE {to} {cell}");
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                    Require(_canvas!.AreaVisibleCount > 0, $"NOTHING_DRAWN move={_mapStreamLog.Count}");
+                    Require(_canvas!.AreaVisibleCount > 0, $"NOTHING_DRAWN move={_mapStreamLog.Count} view={_camera!.KeepView(WorldAnchor)} state={_camera.State} anchor={WorldAnchor}");
                     drawnMoves++; minVisible = Math.Min(minVisible, _canvas.AreaVisibleCount); maxLoad = Math.Max(maxLoad, loadMs);
                 }
                 if (!MapStreamInFlight && now.State.Phase == MovementPhase.Settled && cell == goal && ReferenceEquals(now, _worldActor.Session)) break;

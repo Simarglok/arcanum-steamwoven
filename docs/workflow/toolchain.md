@@ -1296,7 +1296,7 @@ Method A ([SWI-GEN-5](../ui/steamwoven-interface-trd.md), [study](../ui/steamwov
 (`zones-inbox --batch B --zones window --screen-name NAME`) and puts the zone results together (`assemble --zone top-strip=F --zone window=F --zone bottom-strip=F --out A.png`), and
 `tools/steamwoven_ui/surface_compose.py build --original O.png --a A.png --out OUT.png --work DIR [--spec SPEC.json] [--provenance FILE]` composes the wood of the Codex result over the
 original (the original's pixels are the stand-in for the non-wood parts), lays the kit parts of the spec over it, erases the boxes the game draws text into, measures the joins and the tone, and writes the record
-`local/steamwoven-ui/provenance/surface/<zone id>.json` ([fields and gates](../ui/steamwoven-surface-method-study.md#production-pipeline-step-arc-ui-3100)); exit 0 = both gates hold, 1 = a gate failed (the picture and the record are still written), 2 = an error. The zone spec (JSON) also takes `island_min`, `fill_boxes` and `dot_bands` (ARC-UI-3164: drop small wood-weight islands, put the Codex wood between the items of a tone-mask box, keep the original's rows of dots only in given rows; [study](../ui/steamwoven-surface-method-study.md)) and `text_boxes`, `paper_boxes` and `wood_boxes` (ARC-UI-3165, owner condition 1: the text, digits and counters of a window the game draws itself are taken out of the surface, by their ground, by the page's own local light, or by the Codex wood). The specs of the five window families are committed in `tools/steamwoven_ui/zone_specs/ctx-<family>.json` (`--spec`).
+`local/steamwoven-ui/provenance/surface/<zone id>.json` ([fields and gates](../ui/steamwoven-surface-method-study.md#production-pipeline-step-arc-ui-3100)); exit 0 = both gates hold, 1 = a gate failed (the picture and the record are still written), 2 = an error. The zone spec (JSON) also takes `island_min`, `fill_boxes`, `dot_bands` and `halo_boxes` (ARC-UI-3164: drop small wood-weight islands, put the Codex wood between the items of a tone-mask box, keep the original's rows of dots only in given rows, and ARC-UI-3101: the Codex wood everywhere in a box outside the part's own light shape, so the old shadow round a part is no halo; [study](../ui/steamwoven-surface-method-study.md)) and `text_boxes`, `paper_boxes` and `wood_boxes` (ARC-UI-3165, owner condition 1: the text, digits and counters of a window the game draws itself are taken out of the surface, by their ground, by the page's own local light, or by the Codex wood). The specs of the five window families are committed in `tools/steamwoven_ui/zone_specs/ctx-<family>.json` (`--spec`).
 Standard-library Python plus ImageMagick (`magick`), no Godot and no `dotnet`, so no launch queue; the tests (`python3 -B -m unittest tools.steamwoven_ui.test_surface_compose tools.steamwoven_ui.test_surface_study`, about 3 s) run in the batched `tools/local_dev/run_tests.py`;
 a real inventory screen takes about 3 minutes. All images stay under `local/steamwoven-ui/`.
 
@@ -1322,6 +1322,25 @@ The strips of one pair stand beside the inventory screen's window zone in the co
 window batches is measured there, with the generated window zone) and the tone check must pass; all numbers are in `provenance/surface/board-<pair>.json` (`board_gate`). A cap is the brass bar of one strip end (24 px, drawn by Codex on a flat
 ground and keyed by trimming) with a soft shadow laid outward by the tool (48 px, dark brown, cosine fade, alpha 0.55 at the bar), the right cap its mirror; `fit.py --soft-shadow` does not count the shadow's semi-transparent pixels away from the art as orphans.
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_board_build tools.steamwoven_ui.test_fit` (about 3 s; the first also runs in `tools/local_dev/run_tests.py`).
+
+
+## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
+
+Production of the kit parts of the five square buttons of the top strip (Character 169, Inventory 186, Logbook 187, Map of the town 193, World map 194; lit arts 561, 559, 560, 558, 195), the first slice of batch B-BUTTONS
+(the other slices are issues of their own). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/button_kit.py refs                      # the references of the plate prompt: the original plate without its symbol (30 x), the brass-edge swatch, the HUD context's buttons
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS       # the inbox
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS            # the owner's Codex subscription (gpt-6.1-sol): one item, about 90 s
+python3 -B tools/steamwoven_ui/button_kit.py flatten                   # the plate as an opaque square (the generator's notched corners take the frame's shadow colour) + its provenance record
+for n in char_but invn_but log_but tmap_but wmap_but; do python3 -B tools/steamwoven_ui/fit.py fit plate.$n --source local/steamwoven-ui/work/B-BUTTONS/plate-square-hud-opaque.png --provenance local/steamwoven-ui/work/B-BUTTONS/plate-square-hud-opaque.provenance.json; done
+python3 -B tools/steamwoven_ui/button_kit.py build [--look crisp|sharp|cells|smooth] [--dry-run]   # crisp (default) = the pilot's symbol rule   # glyphs, lit glyphs, hover / pressed overlays, lit faces -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/button_kit.py sheet --out FILE          # the before / after composite (English labels)
+```
+
+`build_kit.py` writes the manifest rows (the five plates and the lit faces from the census, the glyphs, lit glyphs and overlays as new rows of batch B-BUTTONS, all `master`). A glyph or an overlay is an original frame over its base frame: the symbol's cells in their own colours with a smooth sharp outline, the glow or darkening a separate soft layer under it; laid over the plate
+it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. A glyph layer of high contrast (the lit symbols, the globe) keeps the symbol as the core and lets its soft edge fall off outward as a halo (alpha = distance over the core threshold, no plateau, no rim; constants `CORE_DE`, `CORE_SHARE`, `HALO_*` in `button_kit.py`). Rule E is the glyph rule of the whole #2482 batch, slices included. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

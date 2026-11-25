@@ -8,6 +8,12 @@ namespace Arcanum.Simulation.Party;
 public sealed record TransferMoveList(IReadOnlyList<string> Waiting, IReadOnlyList<string> Travelling)
 {
     public static TransferMoveList Empty { get; } = new([], []);
+
+    /// <summary>
+    /// ARC-WORLD-2969 (ledger TQ30): the direct followers that carry the WAIT bit (0x8) while they follow, skipped by the walk 0x4D3760 (it tests the bit before it calls itself on a member, so a skipped member is not listed,
+    /// nor its followers, nor its inventory) and left on the closing map in the PC's array; the wait order 0x4AA7A0 returns at once for a member that already has the bit, so an unconscious one is left behind too, not ordered to wait.
+    /// </summary>
+    public IReadOnlyList<string> Left { get; init; } = [];
 }
 
 /// <summary>
@@ -30,28 +36,36 @@ public static class TransferMoveListRules
     /// <param name="noFatigue">0x45D800 for a direct follower: not undead and no fatigue left.</param>
     /// <param name="followersOf">The follower array of an NPC (a follower's own followers, none waiting among them); null answers none.</param>
     /// <param name="noWaitOrders">The request's flag 0x100.</param>
+    /// <param name="waitBit">Whether an NPC carries the WAIT bit (bit 8 of field 0x118) while it follows; null answers none.</param>
     public static TransferMoveList Build(IReadOnlyList<string> followers, Func<string, bool> noFatigue,
-        Func<string, IReadOnlyList<string>>? followersOf, bool noWaitOrders)
+        Func<string, IReadOnlyList<string>>? followersOf, bool noWaitOrders, Func<string, bool>? waitBit = null)
     {
         ArgumentNullException.ThrowIfNull(followers);
         ArgumentNullException.ThrowIfNull(noFatigue);
         var waiting = new List<string>();
         var travelling = new List<string>();
+        var left = new List<string>();
+        var skipped = waitBit ?? (_ => false);
         // A follower ordered to wait is never walked, even below another leader.
         var seen = new HashSet<string>(StringComparer.Ordinal);
         if (!noWaitOrders)
             foreach (var follower in followers)
-                if (noFatigue(follower) && seen.Add(follower)) waiting.Add(follower);
-        foreach (var follower in followers) Walk(follower, followersOf, seen, travelling, 0);
-        return new(waiting.AsReadOnly(), travelling.AsReadOnly());
+                if (!skipped(follower) && noFatigue(follower) && seen.Add(follower)) waiting.Add(follower);
+        foreach (var follower in followers)
+        {
+            if (skipped(follower)) { if (seen.Add(follower)) left.Add(follower); continue; }
+            Walk(follower, followersOf, skipped, seen, travelling, 0);
+        }
+        return new(waiting.AsReadOnly(), travelling.AsReadOnly()) { Left = left.AsReadOnly() };
     }
 
     // A node is listed after the followers walked below it; the visited set keeps a cycle or a repeated follower out.
-    private static void Walk(string npc, Func<string, IReadOnlyList<string>>? followersOf, HashSet<string> seen, List<string> list, int depth)
+    private static void Walk(string npc, Func<string, IReadOnlyList<string>>? followersOf, Func<string, bool> skipped, HashSet<string> seen, List<string> list, int depth)
     {
         if (depth > MaxDepth || !seen.Add(npc)) return;
         if (followersOf?.Invoke(npc) is { } below)
-            foreach (var follower in below) Walk(follower, followersOf, seen, list, depth + 1);
+            foreach (var follower in below)
+                if (!skipped(follower)) Walk(follower, followersOf, skipped, seen, list, depth + 1);
         list.Add(npc);
     }
 }
