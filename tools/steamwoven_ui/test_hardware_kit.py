@@ -1,0 +1,262 @@
+"""ARC-UI-3261: tests of the hardware kit tool on synthetic frames (no art)."""
+from __future__ import annotations
+
+import math
+import unittest
+from unittest import mock
+
+from . import build_kit
+from . import hardware_kit as hk
+from . import pngio
+
+
+def lens_art(size: int = 89, wood: tuple[int, int, int] = (60, 45, 30)) -> pngio.Image:
+    """A synthetic lens: a transparent circle, a lit ring (brighter to the top left) round it, wood in the corners."""
+    image = pngio.Image.blank(size, size)
+    c = size / 2
+    for y in range(size):
+        for x in range(size):
+            dx, dy = x + 0.5 - c, y + 0.5 - c
+            d = math.hypot(dx, dy) - c
+            if d < 0:
+                continue
+            if d < 3:
+                light = 120 + int(100 * (-(dx + dy) / (2 * c)))
+                image.data[(y * size + x) * 4:(y * size + x) * 4 + 4] = bytes((clip(light), clip(light - 30), 40, 255))
+            else:
+                image.data[(y * size + x) * 4:(y * size + x) * 4 + 4] = bytes((*wood, 255))
+    return image
+
+
+def clip(v: int) -> int:
+    return max(0, min(255, v))
+
+
+class PlanTests(unittest.TestCase):
+    def test_every_part_has_a_manifest_row_and_a_grid_size(self) -> None:
+        manifest = hk.load_manifest()
+        rows = {r["id"]: r for r in manifest["parts"]}
+        self.assertEqual(len(hk.PARTS), 33)
+        for part in hk.PARTS:
+            self.assertIn(part.ident, rows)
+            size = rows[part.ident]["size"]
+            if part.family == "lens_whole":
+                self.assertIsNone(size)   # a new part: its size is open in the manifest, the tool's is LENS_WHOLE
+                continue
+            w, h = size
+            self.assertEqual((w % 6, h % 6), (0, 0), part.ident)
+            self.assertEqual(rows[part.ident]["batch"], "B-HARDWARE")
+
+    def test_the_manifest_marks_every_part_a_master_with_its_rule_record(self) -> None:
+        rows = {r["id"]: r for r in hk.load_manifest()["parts"]}
+        for part in hk.PARTS:
+            self.assertEqual(rows[part.ident]["status"], "master")
+            self.assertEqual(rows[part.ident]["provenance"], hk.provenance_of(part.ident))
+
+    def test_build_kit_covers_exactly_these_parts(self) -> None:
+        self.assertEqual(build_kit.HARDWARE_RULE_PARTS, frozenset(p.ident for p in hk.PARTS if p.art))
+
+    def test_the_art_numbers_are_the_census_ones(self) -> None:
+        rows = {r["id"]: r for r in hk.load_manifest()["parts"]}
+        for part in hk.PARTS:
+            self.assertEqual(rows[part.ident]["source_arts"], [part.art] if part.art else [], part.ident)
+
+
+def flat_material() -> dict:
+    return {"grain": [[0.0] * hk.BRASS_ROWS for _ in range(1300)], "tone": [99.0, 77.0, 43.0], "sha256": {}}
+
+
+def brass_ring_master(size: int = 258, inner: int = 90, outer: int = 135) -> pngio.Image:
+    """A synthetic brass ring master: a transparent hole and outside, flat brass between the radii."""
+    image = pngio.Image.blank(size, size)
+    c = size / 2
+    for y in range(size):
+        for x in range(size):
+            r = math.hypot(x + 0.5 - c, y + 0.5 - c)
+            if inner <= r <= outer:
+                image.data[(y * size + x) * 4:(y * size + x) * 4 + 4] = bytes((100, 78, 44, 255))
+    return image
+
+
+class RingTests(unittest.TestCase):
+    def test_the_hole_is_found_from_the_alpha(self) -> None:
+        cx, cy, r = hk.hole_of(lens_art())
+        self.assertAlmostEqual(cx, 44.5, delta=0.1)
+        self.assertAlmostEqual(r, 44.5, delta=0.3)
+
+    def test_the_ring_is_whole_lit_from_the_top_left_and_leaves_corners_and_circle_open(self) -> None:
+        ring = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE)
+        self.assertEqual((ring.w, ring.h), (354, 354))
+        self.assertEqual(ring.pixel(2, 2)[3], 0)       # the corner is open (the old art's wood is not part of the ring)
+        self.assertEqual(ring.pixel(177, 177)[3], 0)   # the circle is open
+        for x, y in ((177, 9), (177, 344), (9, 177), (344, 177)):   # the ring is whole at the four places the old art clipped it
+            self.assertGreater(max(ring.pixel(x + dx, y + dy)[3] for dx in range(-5, 6) for dy in range(-5, 6)), 200, (x, y))
+        top_left = max(sum(ring.pixel(x, y)[:3]) for x in range(40, 90) for y in range(40, 90) if ring.pixel(x, y)[3] > 200)
+        bottom_right = max(sum(ring.pixel(x, y)[:3]) for x in range(260, 310) for y in range(260, 310) if ring.pixel(x, y)[3] > 200)
+        self.assertGreater(top_left, bottom_right)  # the sharp highlight is at the top left
+
+    def test_the_band_is_the_asked_width_with_no_dark_outline(self) -> None:
+        ring = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE)
+        row = [ring.pixel(x, 177) for x in range(354)]
+        solid = [i for i, p in enumerate(row) if p[3] > 250]
+        right = [i for i in solid if i > 177]
+        self.assertAlmostEqual(max(right) - min(right) + 1, hk.RING_WIDTH * 318 / 89, delta=3)
+        self.assertGreater(sum(row[max(right)][:3]), 90)   # the outermost solid pixel is brass, not a black rim
+
+    def test_the_light_closes_the_circle(self) -> None:
+        for rho in (0.1, 0.4, 0.9):
+            a, b = hk.light_of(0.001, rho), hk.light_of(359.999, rho)
+            self.assertAlmostEqual(a[0], b[0], delta=0.01)
+            self.assertAlmostEqual(a[1], b[1], delta=0.01)
+
+    def test_the_copper_is_at_the_bottom_right_and_the_chamfer_is_dark(self) -> None:
+        self.assertGreater(hk.light_of(48, 0.7)[1], 0.8)
+        self.assertLess(hk.light_of(200, 0.7)[1], 0.05)
+        self.assertLess(hk.light_of(100, 0.02)[0], 0.4 * hk.light_of(100, 0.5)[0])
+
+    def test_the_brass_is_unrolled_and_only_its_grain_is_kept(self) -> None:
+        strip = hk.unwrap(brass_ring_master(), 100)
+        self.assertEqual(len(strip[0]), hk.BRASS_ROWS)
+        self.assertGreater(len(strip), 600)
+        self.assertLess(max(abs(v) for column in hk.grain_of(strip[:300]) for v in column), 1.0)   # a flat brass has no grain
+        with self.assertRaises(hk.KitError):
+            hk.unwrap(brass_ring_master(), 140)   # the rows are past the brass
+
+    def test_a_missing_brass_master_is_refused(self) -> None:
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(hk.KitError):
+            hk.brass_material(Path(folder))
+
+    def test_the_edges_have_subpixel_coverage(self) -> None:
+        ring = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE)
+        s = (hk.LENS_WHOLE[0] - 2 * hk.LENS_PAD) / (2 * 44.5)
+        area = math.pi * (((44.5 + hk.RING_WIDTH) * s) ** 2 - (44.5 * s) ** 2)
+        covered = sum(ring.data[i + 3] for i in range(0, len(ring.data), 4)) / 255.0
+        self.assertAlmostEqual(covered / area, 1.0, delta=0.003)   # the alpha is the exact area of the band
+        self.assertGreater(len({ring.data[i + 3] for i in range(0, len(ring.data), 4)}), 20)   # soft edge values, not only 0 and 255
+
+    def test_the_filled_row_builds_from_the_dark_art(self) -> None:
+        part = hk.BY_ID["hardware.schm_pc_lens"]
+        frames = {p.art: lens_art() for p in hk.LENS_ARTS}
+        dark = pngio.Image.blank(89, 89)
+        for i in range(0, len(dark.data), 4):
+            dark.data[i:i + 4] = bytes((8, 8, 8, 255))
+        frames[part.art] = dark                      # an opaque art has no open circle: the shape comes from the first art
+        with mock.patch.object(hk, "read_frame", lambda _f, p, frame=0: frames[p.art]), mock.patch.object(hk, "brass_material", lambda _m: flat_material()):
+            image, extra = hk.build_part(part, None, None, (318, 318), {})
+        self.assertEqual(extra["fill"], [8, 8, 8])
+        self.assertEqual(image.pixel(159, 159)[3], 255)
+
+    def test_a_grain_shorter_than_the_ring_is_refused(self) -> None:
+        short = {"grain": [[0.0] * hk.BRASS_ROWS for _ in range(900)], "tone": [99.0, 77.0, 43.0], "sha256": {}}
+        with self.assertRaises(hk.KitError):
+            hk.render_ring(44.5, short, hk.LENS_WHOLE)
+
+    def test_an_off_centre_lens_circle_is_refused(self) -> None:
+        part = hk.BY_ID["hardware.pcwincvr"]
+        frames = {p.art: lens_art() for p in hk.LENS_ARTS}
+        with mock.patch.object(hk, "read_frame", lambda _f, p, frame=0: frames[p.art]), mock.patch.object(hk, "brass_material", lambda _m: flat_material()), \
+                mock.patch.object(hk, "hole_of", lambda _i: (46.0, 44.5, 44.5)), self.assertRaises(hk.KitError):
+            hk.build_part(part, None, None, (318, 318), {})
+
+    def test_the_drop_in_part_is_the_whole_ring_on_the_arts_square(self) -> None:
+        part = hk.BY_ID["hardware.pcwincvr"]
+        frames = {p.art: lens_art() for p in hk.LENS_ARTS}
+        with mock.patch.object(hk, "read_frame", lambda _f, p, frame=0: frames[p.art]), mock.patch.object(hk, "brass_material", lambda _m: flat_material()):
+            cache: dict = {}
+            drop, _ = hk.build_part(part, None, None, (318, 318), cache)
+            whole, _ = hk.build_part(hk.BY_ID["hardware.lens_ring"], None, None, hk.LENS_WHOLE, cache)
+        self.assertEqual((drop.w, drop.h), (318, 318))
+        self.assertEqual(drop.data, whole.crop(hk.LENS_PAD, hk.LENS_PAD, 318, 318).data)
+
+    def test_a_fill_makes_the_circle_opaque_and_keeps_the_ring_colour_at_the_edge(self) -> None:
+        plain = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE)
+        filled = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE, fill=(8, 8, 8))
+        self.assertEqual(filled.pixel(177, 177), (8, 8, 8, 255))
+        self.assertEqual(filled.pixel(2, 2)[3], 0)
+        edge = [(x, y) for y in range(354) for x in range(354) if 20 < plain.pixel(x, y)[3] < 200 and filled.pixel(x, y)[3] > plain.pixel(x, y)[3]]
+        self.assertTrue(edge)
+        for x, y in edge[:50]:
+            for c in range(3):   # the blend lies between the ring's colour and the fill's
+                lo, hi = sorted((plain.pixel(x, y)[c], 8))
+                self.assertTrue(lo - 1 <= filled.pixel(x, y)[c] <= hi + 1, (x, y, c))
+
+    def test_the_part_passes_its_gates(self) -> None:
+        ring = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE)
+        self.assertEqual(hk.gates(hk.BY_ID["hardware.lens_ring"], ring, hk.LENS_WHOLE), [])
+        self.assertTrue(hk.gates(hk.BY_ID["hardware.lens_ring"], ring, (360, 360)))
+
+
+class SlotTests(unittest.TestCase):
+    def art(self, tone: int) -> pngio.Image:
+        image = pngio.Image.blank(32, 32, (tone, tone - 8, tone - 14, 255))
+        for y in range(1, 9):
+            for x in range(1, 32):
+                image.data[(y * 32 + x) * 4:(y * 32 + x) * 4 + 3] = bytes((tone // 2, tone // 2 - 4, tone // 2 - 7))
+        for y in range(1, 32):
+            for x in range(1, 8):
+                image.data[(y * 32 + x) * 4:(y * 32 + x) * 4 + 3] = bytes((tone // 2, tone // 2 - 4, tone // 2 - 7))
+        for y in range(32):
+            image.data[(y * 32 + 31) * 4:(y * 32 + 31) * 4 + 4] = bytes((200, 185, 140, 255))
+        return image
+
+    def test_the_inset_holds_the_shadow_and_the_line_and_leaves_the_middle_open(self) -> None:
+        layer = hk.inset_layer([self.art(48), self.art(40), self.art(56)])
+        self.assertEqual(layer.pixel(20, 20)[3], 0)
+        shadow = layer.pixel(3, 20)
+        self.assertEqual(shadow[:3], (0, 0, 0))
+        self.assertGreater(shadow[3], 80)               # about half the wood's light is taken
+        line = layer.pixel(31, 20)
+        self.assertEqual(line[3], 255)
+        self.assertLess(abs(line[0] - 200), 12)   # the line keeps its own colour (scaled by the wood's normalisation)
+
+    def test_the_wood_of_one_tone_is_cut_flipped_and_shaded(self) -> None:
+        strip = pngio.Image.blank(2880, 150, (40, 30, 20, 255))
+        for i in range(5):
+            tile = hk.strip_wood(strip, i, 114)
+            self.assertEqual((tile.w, tile.h), (114, 114))
+        original = pngio.Image.blank(32, 32, (60, 46, 36, 255))
+        wood = hk.shaded_wood(hk.strip_wood(strip, 0, 114), original)
+        self.assertEqual(wood.pixel(50, 50)[:3], (60, 46, 36))   # the tone is the original's
+        self.assertEqual(wood.pixel(50, 50)[3], 255)
+
+    def test_one_transparent_pixel_anywhere_in_the_wood_is_refused_and_never_filled(self) -> None:
+        strip = pngio.Image.blank(2880, 150, (40, 30, 20, 255))
+        strip.data[(40 * 2880 + 879) * 4 + 3] = 0   # a column the old every-seventh-pixel sample missed
+        with self.assertRaises(hk.KitError):
+            hk.strip_wood(strip, 0, 126)
+        tile = pngio.Image.blank(8, 8, (40, 30, 20, 255))
+        tile.data[3] = 0
+        shaded = hk.shaded_wood(tile, pngio.Image.blank(32, 32, (60, 46, 36, 255)))
+        self.assertTrue(hk.gates(hk.BY_ID["hardware.splslt1"], shaded, (8, 8)))   # the gate sees the hole (and the size)
+
+    def test_a_wood_area_with_an_opening_is_refused(self) -> None:
+        strip = pngio.Image.blank(2880, 150, (40, 30, 20, 255))
+        for y in range(12, 138):
+            for x in range(878, 1004):
+                strip.data[(y * 2880 + x) * 4 + 3] = 0
+        with self.assertRaises(hk.KitError):
+            hk.strip_wood(strip, 0, 126)
+
+
+class FrameTests(unittest.TestCase):
+    def test_blocks_keep_the_flat_colours_and_the_alpha_exact(self) -> None:
+        frame = pngio.Image.blank(4, 4, (255, 0, 0, 255))
+        for y in range(1, 3):
+            for x in range(1, 3):
+                frame.data[(y * 4 + x) * 4:(y * 4 + x) * 4 + 4] = bytes((0, 0, 0, 0))
+        out = hk.blocks(frame, (24, 24))
+        self.assertEqual({out.pixel(x, y) for y in range(24) for x in range(24)}, {(255, 0, 0, 255), (0, 0, 0, 0)})
+        self.assertEqual(out.pixel(12, 12)[3], 0)
+
+    def test_the_roller_is_smooth_along_and_crisp_across(self) -> None:
+        frame = pngio.Image.blank(20, 20, (170, 171, 171, 255))
+        for y in range(20):
+            frame.data[(y * 20 + 7) * 4:(y * 20 + 7) * 4 + 3] = bytes((100, 101, 101))
+        out = hk.roller(frame, (72, 72))
+        self.assertEqual({out.pixel(x, 30)[0] for x in range(72)}, {170, 100})
+
+
+if __name__ == "__main__":
+    unittest.main()
