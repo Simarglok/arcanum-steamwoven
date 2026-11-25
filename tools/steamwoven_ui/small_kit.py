@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""ARC-UI-3206 (batch B-BUTTONS, slice 6): the small stone and dark buttons (scroll arrows, plus / minus, follower arrows) as kit parts, by the PACK-FIRST rule (owner 2026-11-25, TRD next to rules E and F).
+"""ARC-UI-3206 and ARC-UI-3323 (batch B-BUTTONS, slice 6): the small buttons (scroll arrows, plus / minus, round skill and slider buttons, follow scrolls and arrows) as kit parts, in three families (owner 2026-11-25).
 
-Where a part has a good HD frame in the old generative pack (the installed `interface-redraw-4x`, 4 px per original cell), the kit part IS that frame (one per state) with an ANALYTIC alpha (a smooth even edge, no corners of
-the old background, no staircase). Generation (Codex, rules E and F) is only for what has no pack frame: the two Plus / Minus buttons of the skill points (257, 258), a separate step.
+* `rect` (the owner kept these from the old HD pack, the installed `interface-redraw-4x`, 4 px per original cell): the stone Add / Remove (647, 648) and the follower arrows (501, 502): the kit part IS the pack's frame of each state at the master size, opaque.
+* `dome` (624, 625, 667, 668): by rule, no pack and no Codex: the accepted round face of the bottom strip's buttons (#3202) reduced under the brass ring of the sockets (#2481), the symbol (red checkered cells) by rule E from the original's own frames,
+  the hover and pressed overlays as in `round_kit.py`; all four buttons share the plate, so every such button looks the same.
+* `codex` (804, 805, 317, 318, 506 to 509, 257, 258): generated. One sheet of cells per family (the original frames enlarged and the neighbouring pack frames as the style sample are the input; the sheet is generated large), each cell cut by equal
+  division and reduced to the master size; the olive plus and minus, the follow scrolls and the skill-point buttons are opaque, the scroll arrows (a triangle on a flat magenta ground) are cut from the ground.
 
     python3 -B tools/steamwoven_ui/small_kit.py plan   [--pack DIR]
-    python3 -B tools/steamwoven_ui/small_kit.py build  [--only NAME,...] [--out DIR] [--dry-run] [--pack DIR] [--local-root DIR]
-    python3 -B tools/steamwoven_ui/small_kit.py sheet  --out FILE [--only NAME,...] [--zoom N] [--pack DIR] [--local-root DIR]   (the composite original | pack-made parts, English labels, needs ImageMagick)
+    python3 -B tools/steamwoven_ui/small_kit.py build  [--only NAME,...] [--out DIR] [--dry-run] [--pack DIR] [--local-root DIR] [--sheets DIR] [--sp-variant sp-a|sp-b]
+    python3 -B tools/steamwoven_ui/small_kit.py sheet  --out FILE [--only NAME,...] [--zoom N] ...   (the composite original idle, pressed | new idle, hover, pressed, English labels, needs ImageMagick)
     python3 -B tools/steamwoven_ui/small_kit.py self-test
 
 Per button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitComposer.ButtonLayers`: face, over it the glyph, over both the overlay `<face>_hover` or `<face>_pressed`):
 
-* `plate.<name>`: the pack's idle frame at the plate's master size. The symbol, its checkerboard and the shading are IN the frame (owner: the cells in the pack's symbols are fine).
-* `plate.<name>_hover`, `plate.<name>_pressed`: the pack's frame of that state at the same size (a full frame with the same alpha: laid over the idle plate it replaces it).
-* `glyph.<name>`: an EMPTY layer at the plate's size (the symbol is in the frames; the runtime composes a face only with a glyph of its size, as for the Fate / Sleep ball).
+* `plate.<name>`: the idle face at the plate's master size.
+* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect` or `codex` part is a full frame (laid over the idle plate it replaces it), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
+* `glyph.<name>`: the symbol of a `dome` button (rule E); an EMPTY layer at the plate's size for the others (the symbol is in the face; the runtime composes a face only with a glyph of its size).
 
-The alpha: a round button (the olive dome with its brass ring) gets the ellipse of its own silhouette (the opaque box of the idle frame); a rectangle (a stone, olive or strip button) is opaque as it is; a scroll arrow
-keeps the alpha of its own frame (a shaped arrow, softened by the resampling). The colours of the old transparent pixels are first bled outward from the opaque ones, so the new edge shows no dark fringe; the edge is one pixel of
-anti-aliasing at the master size. The shared soft shadow of round parts (#3249) is a separate shared layer, not baked into these parts.
-
-Nothing here holds art: every picture is read from the installed pack and written to the ignored `local/steamwoven-ui/`. Standard library only (`pngio.py`, `button_kit.py`); ImageMagick only for `sheet`.
+The shared soft shadow of round parts (#3249) is a separate runtime layer, not baked into these parts. The Codex sheets are copied to `local/steamwoven-ui/small-sheets/<sheet>.png` with the runner's provenance record next to them.
+Nothing here holds art: every picture is read from the installed pack, the census frames or the sheets and written to the ignored `local/steamwoven-ui/`. Standard library only (`pngio.py`, `button_kit.py`); ImageMagick only for `sheet`.
 Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
 """
 from __future__ import annotations
@@ -49,8 +49,6 @@ TOOL_VERSION = 2
 MANIFEST = HERE / "kit.json"
 PACK_ROOT = Path.home() / "Library" / "Application Support" / "Arcanum Steamwoven Game" / "hd-packs" / "interface-redraw-4x"   # the installed pack (read, never written)
 PACK_SCALE = 4               # an HD pack frame is this many times the original
-BLEED_PASSES = 4             # the colours of the old transparent pixels are bled this many pixels outward
-OPAQUE = 128                 # an alpha at least this belongs to the silhouette of the old frame
 LABEL_FONT = button_kit.LABEL_FONT
 
 
@@ -63,14 +61,14 @@ class Small:
     name: str                       # the plate's name in the manifest (`plate.<name>`) and the art's name in the pack's index
     art: int
     folder: str                     # the census frame folder (`<art>-<name>`)
-    family: str                     # `round` (the ellipse alpha of the frame's silhouette), `rect` (an opaque frame, as it is), `own` (a shaped frame, its own alpha), `none` (no pack frame: generated)
+    family: str                     # `rect` (the pack's frame, opaque, as it is), `dome` (built by rule from the accepted round plate of #3202, a brass ring and the symbol by rule E), `codex` (generated, owner 2026-11-25)
     units: tuple[int, int]          # the original frame, in cells
     master: tuple[int, int]         # the kit master of the plate, in px (kit.json)
     frames: dict = field(default_factory=lambda: {"idle": 0, "pressed": 1, "hover": 2})   # state -> frame number (a state without a frame has no overlay)
 
 
-def _round(name: str, art: int, folder: str) -> Small:
-    return Small(name, art, folder, "round", (29, 30), (102, 108))
+def _dome(name: str, art: int, folder: str) -> Small:
+    return Small(name, art, folder, "dome", (29, 30), (102, 108))
 
 
 def _stone(name: str, art: int, folder: str) -> Small:
@@ -78,27 +76,27 @@ def _stone(name: str, art: int, folder: str) -> Small:
 
 
 SMALL = (
-    _round("skiladdbut", 624, "624-SkilAddBut"),
-    _round("skilminusbut", 625, "625-SkilMinusBut"),
-    _round("sldrbutt_l_arrow", 667, "667-SldrButt_L_Arrow"),
-    _round("sldrbutt_r_arrow", 668, "668-SldrButt_R_Arrow"),
+    _dome("skiladdbut", 624, "624-SkilAddBut"),
+    _dome("skilminusbut", 625, "625-SkilMinusBut"),
+    _dome("sldrbutt_l_arrow", 667, "667-SldrButt_L_Arrow"),
+    _dome("sldrbutt_r_arrow", 668, "668-SldrButt_R_Arrow"),
     _stone("spelltech_add", 647, "647-SpellTech_Add"),
     _stone("spelltech_minus", 648, "648-SpellTech_Minus"),
-    Small("oldchar_minus", 804, "804-OldChar_Minus", "rect", (13, 10), (48, 36)),
-    Small("oldchar_plus", 805, "805-OldChar_Plus", "rect", (13, 10), (48, 36)),
-    Small("scrllup", 317, "317-ScrllUP", "own", (11, 15), (42, 54)),
-    Small("scrlldwn", 318, "318-ScrllDWN", "own", (11, 14), (42, 48)),
     Small("followerarrow_dwn", 501, "501-FollowerArrow_DWN", "rect", (67, 13), (240, 48), frames={"idle": 0}),
     Small("followerarrow_up", 502, "502-FollowerArrow_UP", "rect", (67, 13), (240, 48), frames={"idle": 0}),
-    Small("follow_scroll_up", 506, "506-Follow_Scroll_up", "rect", (33, 13), (120, 48), frames={"idle": 0, "pressed": 1}),
-    Small("follow_scroll_up_off", 507, "507-Follow_Scroll_up_OFF", "rect", (33, 13), (120, 48), frames={"idle": 0}),
-    Small("follow_scroll_dwn", 508, "508-Follow_Scroll_dwn", "rect", (34, 13), (120, 48), frames={"idle": 0, "pressed": 1}),
-    Small("follow_scroll_dwn_off", 509, "509-Follow_Scroll_dwn_OFF", "rect", (34, 13), (120, 48), frames={"idle": 0}),
 )
-# the two Plus / Minus buttons of the skill points (22 x 13 units, two frames) have no frame in the pack: generated (Codex, the neighbouring pack frames as the style sample), a separate step
+# the buttons the owner rejected from the pack (2026-11-25, #3323) are made by Codex (family `codex`): the olive plus and minus, the scroll arrows, the follow scrolls and the skill-point plus and minus
 GENERATED = (
-    Small("sp_minus", 257, "257-SP_Minus", "none", (22, 13), (78, 48), frames={"idle": 0, "pressed": 1}),
-    Small("sp_plus", 258, "258-SP_Plus", "none", (22, 13), (78, 48), frames={"idle": 0, "pressed": 1}),
+    Small("oldchar_minus", 804, "804-OldChar_Minus", "codex", (13, 10), (48, 36)),
+    Small("oldchar_plus", 805, "805-OldChar_Plus", "codex", (13, 10), (48, 36)),
+    Small("scrllup", 317, "317-ScrllUP", "codex", (11, 15), (42, 54)),
+    Small("scrlldwn", 318, "318-ScrllDWN", "codex", (11, 14), (42, 48)),
+    Small("follow_scroll_up", 506, "506-Follow_Scroll_up", "codex", (33, 13), (120, 48), frames={"idle": 0, "pressed": 1}),
+    Small("follow_scroll_up_off", 507, "507-Follow_Scroll_up_OFF", "codex", (33, 13), (120, 48), frames={"idle": 0}),
+    Small("follow_scroll_dwn", 508, "508-Follow_Scroll_dwn", "codex", (34, 13), (120, 48), frames={"idle": 0, "pressed": 1}),
+    Small("follow_scroll_dwn_off", 509, "509-Follow_Scroll_dwn_OFF", "codex", (34, 13), (120, 48), frames={"idle": 0}),
+    Small("sp_minus", 257, "257-SP_Minus", "codex", (22, 13), (78, 48), frames={"idle": 0, "pressed": 1}),
+    Small("sp_plus", 258, "258-SP_Plus", "codex", (22, 13), (78, 48), frames={"idle": 0, "pressed": 1}),
 )
 
 
@@ -106,11 +104,11 @@ def button_named(name: str) -> Small:
     for b in (*SMALL, *GENERATED):
         if b.name == name:
             return b
-    raise SmallError(f"no small button {name!r}; the pack-first buttons are {[b.name for b in SMALL]}")
+    raise SmallError(f"no small button {name!r}; the buttons are {[b.name for b in (*SMALL, *GENERATED)]}")
 
 
 def selected(only: str | None) -> list[Small]:
-    return [button_named(n) for n in only.split(",")] if only else list(SMALL)
+    return [button_named(n) for n in only.split(",")] if only else [*SMALL, *GENERATED]
 
 
 # --- the pack's frames -------------------------------------------------------------------------------------------------------
@@ -150,60 +148,7 @@ def read_frame(frames: Path, b: Small, number: int) -> Image:
     return image
 
 
-# --- the analytic alpha ------------------------------------------------------------------------------------------------------
-
-def opaque_box(image: Image) -> tuple[float, float, float, float]:
-    """x0, y0, x1, y1 (edges, in pixels) of the pixels with an alpha of `OPAQUE` or more."""
-    xs, ys = [], []
-    for i in range(image.w * image.h):
-        if image.data[i * 4 + 3] >= OPAQUE:
-            xs.append(i % image.w)
-            ys.append(i // image.w)
-    if not xs:
-        raise SmallError("a frame with no opaque pixel has no silhouette")
-    return float(min(xs)), float(min(ys)), float(max(xs) + 1), float(max(ys) + 1)
-
-
-def bleed(image: Image, passes: int = BLEED_PASSES) -> Image:
-    """The colours of the transparent pixels taken outward from the opaque ones (and made opaque), so an analytic edge a little outside the old one shows no dark fringe."""
-    w, h = image.w, image.h
-    out = Image(w, h, bytearray(image.data))
-    known = [image.data[i * 4 + 3] >= 250 for i in range(w * h)]
-    for _ in range(passes):
-        fresh: list[tuple[int, bytes]] = []
-        for i in range(w * h):
-            if known[i]:
-                continue
-            x, y = i % w, i // w
-            near = [j for j in ((i - 1) if x else -1, (i + 1) if x < w - 1 else -1, (i - w) if y else -1, (i + w) if y < h - 1 else -1) if j >= 0 and known[j]]
-            if near:
-                fresh.append((i, bytes(round(sum(out.data[j * 4 + k] for j in near) / len(near)) for k in range(3))))
-        for i, colour in fresh:
-            out.data[i * 4:i * 4 + 3] = colour
-            out.data[i * 4 + 3] = 255
-            known[i] = True
-    return out
-
-
-def edge(distance: float) -> float:
-    """One pixel of anti-aliasing: 1 inside, 0 outside, a linear step across the pixel at the outline (`distance` > 0 inside)."""
-    return max(0.0, min(1.0, distance + 0.5))
-
-
-def ellipse_alpha(box: tuple[float, float, float, float], size: tuple[int, int], master: tuple[int, int]) -> list[float]:
-    """The ellipse inscribed in `box` (frame pixels of an image of `size`) as an alpha plane at the master size (a smooth even edge)."""
-    w, h = master
-    sx, sy = w / size[0], h / size[1]
-    cx, cy = (box[0] + box[2]) / 2.0 * sx, (box[1] + box[3]) / 2.0 * sy
-    a, b = (box[2] - box[0]) / 2.0 * sx, (box[3] - box[1]) / 2.0 * sy
-    r = min(a, b)
-    out = [0.0] * (w * h)
-    for y in range(h):
-        for x in range(w):
-            rho = math.hypot((x + 0.5 - cx) / a, (y + 0.5 - cy) / b)
-            out[y * w + x] = edge((1.0 - rho) * r)   # the distance to the outline in master pixels (exact on a circle, a close one on a mild ellipse)
-    return out
-
+# --- resampling ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 def resample(image: Image, w: int, h: int) -> Image:
     """The picture at another size by area-weighted box averaging (premultiplied), made for a reduction."""
@@ -233,43 +178,283 @@ def resample(image: Image, w: int, h: int) -> Image:
     return out
 
 
-def part_from_frame(b: Small, frame: Image, box: tuple[float, float, float, float]) -> Image:
-    """A kit part from a pack frame: at the master size as it is (a rectangle is opaque, a scroll arrow keeps its own shaped alpha, which the area averaging softens); a round one with the old transparent pixels bled out and the analytic ellipse alpha of the idle frame's silhouette `box` (so every state has the very same edge)."""
-    if b.family != "round":
-        return resample(frame, *b.master)
-    flat = resample(bleed(frame), *b.master)
-    alpha = ellipse_alpha(box, (frame.w, frame.h), b.master)
-    for i, a in enumerate(alpha):
-        flat.data[i * 4 + 3] = int(round(a * 255))
-    return flat
-
-
 def button_parts(pack: Path, rows: dict[tuple[str, int], str], b: Small) -> tuple[dict[str, Image], dict[str, Path]]:
-    """`plate.<name>` (the idle frame), `plate.<name>_hover` / `_pressed` for the states the art has, the empty `glyph.<name>`; and the pack file each plate came from."""
+    """`plate.<name>` (the idle frame), `plate.<name>_hover` / `_pressed` for the states the art has, the empty `glyph.<name>`; and the pack file each plate came from. A kept pack frame is opaque and at the master size as it is."""
     found = {state: pack_frame(pack, rows, b, number) for state, number in b.frames.items()}
     missing = [state for state, f in found.items() if f is None]
     if missing:
         raise SmallError(f"{b.name}: the pack has no frame for {missing} (the pack-first parts need every state)")
-    box = opaque_box(found["idle"][0])  # type: ignore[index]
     parts: dict[str, Image] = {}
     sources: dict[str, Path] = {}
     for state in b.frames:
         frame, path = found[state]  # type: ignore[misc]
         ident = f"plate.{b.name}" if state == "idle" else f"plate.{b.name}_{state}"
-        parts[ident] = part_from_frame(b, frame, box)
+        parts[ident] = resample(frame, *b.master)
         sources[ident] = path
     parts[f"glyph.{b.name}"] = Image.blank(*b.master)
     return parts, sources
 
 
-def build_parts(pack: Path, buttons: list[Small]) -> tuple[dict[str, Image], dict[str, Path]]:
-    rows = pack_index(pack)
+# --- the dome family (owner 2026-11-25): the accepted round plate of #3202 + the brass ring + the symbol by rule E --------------------------------------------------
+
+DOME_FLAT = 10.5      # cells from the middle: the symbol is looked for inside it (outside it is the ring)
+DOME_OWN = 11.5       # cells: what a symbol or a glow may take
+DOME_PLATE = "plate.combat_button"     # the accepted round face of the bottom strip (#3202, glossy arc baked in), 138 x 138 px
+DOME_RING = "hardware.hud_ring"        # the brass setting of the round sockets (#2481), 198 x 192 px
+DOME_SIZE = 84                         # px: the face's diameter inside the ring (the ring's lip covers its edge)
+
+
+def dome_radius(x: int, y: int, w: int, h: int) -> float:
+    return math.hypot(x - (w - 1) / 2.0, y - (h - 1) / 2.0)
+
+
+def over(dst: Image, src: Image, ox: int, oy: int) -> None:
+    """`src` laid over `dst` at (ox, oy), straight alpha."""
+    for y in range(src.h):
+        for x in range(src.w):
+            dx, dy = x + ox, y + oy
+            if not (0 <= dx < dst.w and 0 <= dy < dst.h):
+                continue
+            so, do = (y * src.w + x) * 4, (dy * dst.w + dx) * 4
+            sa = src.data[so + 3] / 255.0
+            if sa <= 0:
+                continue
+            da = dst.data[do + 3] / 255.0
+            oa = sa + da * (1 - sa)
+            for k in range(3):
+                dst.data[do + k] = int(round((src.data[so + k] * sa + dst.data[do + k] * da * (1 - sa)) / oa))
+            dst.data[do + 3] = int(round(oa * 255))
+
+
+def dome_plate(local: Path, master: tuple[int, int]) -> Image:
+    """The plate of a dome button: the accepted round face of the bottom strip, reduced and centred, the brass ring of the sockets over it."""
+    face = pngio.read(local / "masters" / f"{DOME_PLATE}.png")
+    ring = pngio.read(local / "masters" / f"{DOME_RING}.png")
+    mw, mh = master
+    out = Image.blank(mw, mh)
+    over(out, resample(face, DOME_SIZE, DOME_SIZE), (mw - DOME_SIZE) // 2, (mh - DOME_SIZE) // 2)
+    rh = round(ring.h * mw / ring.w)
+    over(out, resample(ring, mw, rh), 0, (mh - rh) // 2)
+    return out
+
+
+RED_DE = 25           # a cell whose red exceeds its green by this much is the (checkered red) symbol; the olive dome is the other way round
+
+
+def symbol_cells(frame: Image) -> list[bool]:
+    """The cells of the red checkered symbol inside the dome (the frame's own colours: red above green)."""
+    w, h = frame.w, frame.h
+    return [frame.data[i * 4 + 3] > 0 and dome_radius(i % w, i // w, w, h) < DOME_FLAT and frame.data[i * 4] - frame.data[i * 4 + 1] >= RED_DE for i in range(w * h)]
+
+
+def inpaint(frame: Image, hole: list[bool]) -> Image:
+    """The frame with the `hole` cells filled from their surroundings (the dome's own shading, with the symbol taken out), pass by pass from the rim of the hole inward."""
+    w, h = frame.w, frame.h
+    out = Image(w, h, bytearray(frame.data))
+    known = [not x for x in hole]
+    for _ in range(w + h):
+        fresh = []
+        for i in range(w * h):
+            if known[i]:
+                continue
+            x, y = i % w, i // w
+            near = [yy * w + xx for yy in range(max(0, y - 1), min(h, y + 2)) for xx in range(max(0, x - 1), min(w, x + 2)) if known[yy * w + xx]]
+            if near:
+                fresh.append((i, bytes(round(sum(out.data[j * 4 + k] for j in near) / len(near)) for k in range(3))))
+        if not fresh:
+            break
+        for i, c in fresh:
+            out.data[i * 4:i * 4 + 3] = c
+            known[i] = True
+    return out
+
+
+def symbol_shape(frame: Image, others: list[Image]) -> tuple[list[bool], Image]:
+    """(the symbol's mask: the red cells of this frame and of the other states; the frame with the symbol taken out, the dome's own shading and the relief round the symbol kept, so only the symbol differs from it)."""
+    red = [any(v) for v in zip(*(symbol_cells(f) for f in [frame, *others]))]
+    return red, inpaint(frame, red)
+
+
+RELIEF_SHIFT = 1.0    # px: the soft relief of the symbol's slot, a shadow up and to the left, a light edge down and to the right (the original's slot, drawn smooth instead of in black and grey cells)
+RELIEF_BLUR = 2       # box-blur radius (twice) in px
+
+
+def blurred(plane: list[float], w: int, h: int, radius: int, shift: tuple[float, float]) -> list[float]:
+    """The alpha plane moved by `shift` (rounded, px) and box-blurred twice."""
+    sx, sy = round(shift[0]), round(shift[1])
+    cur = [0.0] * (w * h)
+    for y in range(h):
+        for x in range(w):
+            xx, yy = x - sx, y - sy
+            if 0 <= xx < w and 0 <= yy < h:
+                cur[y * w + x] = plane[yy * w + xx]
+    for _ in range(2):
+        for horizontal in (True, False):
+            nxt = [0.0] * (w * h)
+            for y in range(h):
+                for x in range(w):
+                    acc, cnt = 0.0, 0
+                    for d in range(-radius, radius + 1):
+                        xx, yy = (x + d, y) if horizontal else (x, y + d)
+                        if 0 <= xx < w and 0 <= yy < h:
+                            acc += cur[yy * w + xx]
+                        cnt += 1
+                    nxt[y * w + x] = acc / cnt
+            cur = nxt
+    return cur
+
+
+def only_symbol(glyph: Image) -> Image:
+    """The glyph without the pixels that are not the symbol's red (the Gaussian outline of rule E reaches into the dark and light relief cells beside the symbol and takes their colour at the edge)."""
+    out = Image(glyph.w, glyph.h, bytearray(glyph.data))
+    for i in range(glyph.w * glyph.h):
+        if glyph.data[i * 4] - glyph.data[i * 4 + 1] < RED_DE // 2:
+            out.data[i * 4 + 3] = 0
+    return out
+
+
+def with_relief(glyph: Image) -> Image:
+    """The symbol with the soft relief of its recess under it (shadow at the upper left, a faint light edge at the lower right), so the slot is smooth and not a staircase of dark and light cells."""
+    w, h = glyph.w, glyph.h
+    plane = [glyph.data[i * 4 + 3] / 255.0 for i in range(w * h)]
+    out = Image.blank(w, h)
+    for colour, shift, strength in (((150, 145, 90), (RELIEF_SHIFT, RELIEF_SHIFT), 0.10), ((0, 0, 0), (-RELIEF_SHIFT, -RELIEF_SHIFT), 0.55)):
+        soft = blurred(plane, w, h, RELIEF_BLUR, shift)
+        layer = Image.blank(w, h)
+        for i, a in enumerate(soft):
+            layer.data[i * 4:i * 4 + 4] = bytes((*colour, int(round(min(1.0, a) * strength * 255))))
+        over(out, layer, 0, 0)
+    over(out, glyph, 0, 0)
+    return out
+
+
+def dome_parts(local: Path, frames: Path, group: list[Small]) -> dict[str, Image]:
+    """`plate.<name>` (shared), `glyph.<name>`, `plate.<name>_hover`, `plate.<name>_pressed` of every dome button, the last three by rule E from the original's own frames (as `round_kit.round_parts`): the symbol is the
+    red checkered cells and their dark outline (a mask read from the three states), over the dome with the symbol taken out, so the dome's own shading is not mistaken for symbol."""
+    plate = dome_plate(local, group[0].master)
+    parts: dict[str, Image] = {}
+    for b in group:
+        idle, pressed, hover = (read_frame(frames, b, k) for k in (0, 1, 2))
+        mask, base = symbol_shape(idle, [hover, pressed])
+        own = lambda everything: (lambda x, y: idle.data[(y * idle.w + x) * 4 + 3] > 0 and (everything or dome_radius(x, y, idle.w, idle.h) <= DOME_OWN))  # noqa: E731
+        parts[f"plate.{b.name}"] = plate
+        parts[f"glyph.{b.name}"] = with_relief(only_symbol(button_kit.render_crisp(idle, base, False, pixels=b.master, owned_cell=own(False), silhouette_mask=mask)))
+        parts[f"plate.{b.name}_hover"] = button_kit.render_crisp(hover, idle, True, pixels=b.master, owned_cell=own(False), clip=plate)
+        parts[f"plate.{b.name}_pressed"] = button_kit.render_crisp(pressed, idle, True, pixels=b.master, owned_cell=own(True), shade=hover, clip=plate, solid_cell=own(False))
+    return parts
+
+
+# --- the Codex family (owner 2026-11-25): a sheet of cells generated large, cut, reduced to the part's size ---------------------------------------------------------
+
+@dataclass(frozen=True)
+class Sheet:
+    id: str                              # the sheet file `<sheets dir>/<id>.png`
+    cols: int
+    rows: int
+    cells: tuple                         # (column, row) -> (button name, state), row by row
+    shape: str = "rect"                  # `rect` (opaque) or `triangle` (a triangle button on a flat magenta ground: cut from the ground)
+
+
+SHEETS = (
+    Sheet("ol", 3, 2, (("oldchar_minus", "idle"), ("oldchar_minus", "pressed"), ("oldchar_minus", "hover"), ("oldchar_plus", "idle"), ("oldchar_plus", "pressed"), ("oldchar_plus", "hover"))),
+    Sheet("sc", 3, 2, (("scrllup", "idle"), ("scrllup", "pressed"), ("scrllup", "hover"), ("scrlldwn", "idle"), ("scrlldwn", "pressed"), ("scrlldwn", "hover")), shape="triangle"),
+    Sheet("fs", 2, 3, (("follow_scroll_up", "idle"), ("follow_scroll_dwn", "idle"), ("follow_scroll_up", "pressed"), ("follow_scroll_dwn", "pressed"), ("follow_scroll_up_off", "idle"), ("follow_scroll_dwn_off", "idle"))),
+    Sheet("sp-a", 2, 2, (("sp_minus", "idle"), ("sp_minus", "pressed"), ("sp_plus", "idle"), ("sp_plus", "pressed"))),
+    Sheet("sp-b", 2, 2, (("sp_minus", "idle"), ("sp_minus", "pressed"), ("sp_plus", "idle"), ("sp_plus", "pressed"))),
+)
+SP_VARIANT = "sp-b"                      # the skill-point sheet in use (A grey checkered symbol, B red checkered like the round skill buttons)
+TRIANGLE_ERODE = 3                       # px of the cell: the triangle is clipped this far inside the ground (the ground's pink never reaches the part)
+
+
+def sheet_for(button: str, state: str, sp_variant: str = SP_VARIANT) -> tuple[Sheet, int]:
+    for sheet in SHEETS:
+        if sheet.id.startswith("sp-") and sheet.id != sp_variant:
+            continue
+        for k, cell in enumerate(sheet.cells):
+            if cell == (button, state):
+                return sheet, k
+    raise SmallError(f"no sheet cell for {button} {state}")
+
+
+def is_ground(cell: Image, i: int) -> bool:
+    """The flat magenta ground (and its anti-aliased pink): red and blue both well above green."""
+    r, g, bl = cell.data[i * 4], cell.data[i * 4 + 1], cell.data[i * 4 + 2]
+    return r - g > 60 and bl - g > 60
+
+
+def triangle_clip(cell: Image) -> Image:
+    """The triangle button of a cell cut out of its magenta ground: the ground and the `TRIANGLE_ERODE` px round it become transparent (so the anti-aliased pink of the edge never reaches the part); the colours then come only from the inside."""
+    w, h = cell.w, cell.h
+    ground = [is_ground(cell, i) for i in range(w * h)]
+    e = int(TRIANGLE_ERODE)
+    horiz = [False] * (w * h)
+    for y in range(h):
+        row = ground[y * w:(y + 1) * w]
+        prefix = [0]
+        for g in row:
+            prefix.append(prefix[-1] + (1 if g else 0))
+        for x in range(w):
+            horiz[y * w + x] = prefix[min(w, x + e + 1)] - prefix[max(0, x - e)] > 0
+    out = Image(w, h, bytearray(cell.data))
+    for x in range(w):
+        prefix = [0]
+        for y in range(h):
+            prefix.append(prefix[-1] + (1 if horiz[y * w + x] else 0))
+        for y in range(h):
+            if prefix[min(h, y + e + 1)] - prefix[max(0, y - e)] > 0:
+                out.data[(y * w + x) * 4 + 3] = 0
+    return out
+
+
+def sheet_cell(sheet_image: Image, sheet: Sheet, k: int) -> Image:
+    cw, ch = sheet_image.w // sheet.cols, sheet_image.h // sheet.rows
+    return sheet_image.crop((k % sheet.cols) * cw, (k // sheet.cols) * ch, cw, ch)
+
+
+def codex_parts(sheets: Path, buttons: list[Small], sp_variant: str = SP_VARIANT) -> tuple[dict[str, Image], dict[str, Path]]:
+    """`plate.<name>[_hover|_pressed]` of every Codex button cut from its sheet and reduced to the plate's master size, and the empty `glyph.<name>`; the sheet file of each part."""
     parts: dict[str, Image] = {}
     sources: dict[str, Path] = {}
+    cache: dict[str, Image] = {}
     for b in buttons:
-        p, s = button_parts(pack, rows, b)
+        for state in b.frames:
+            sheet, k = sheet_for(b.name, state, sp_variant)
+            path = sheets / f"{sheet.id}.png"
+            if not path.is_file():
+                raise SmallError(f"no sheet {path}: the Codex output of {sheet.id} is copied there (the sheets dir)")
+            if sheet.id not in cache:
+                cache[sheet.id] = pngio.read(path)
+            image = cache[sheet.id]
+            cell = sheet_cell(image, sheet, k)
+            if sheet.shape == "triangle":
+                cell = triangle_clip(cell)
+            ident = f"plate.{b.name}" if state == "idle" else f"plate.{b.name}_{state}"
+            parts[ident] = resample(cell, *b.master)
+            sources[ident] = path
+        parts[f"glyph.{b.name}"] = Image.blank(*b.master)
+    return parts, sources
+
+
+def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[str, Image], dict[str, Path | None]]:
+    """All parts of the buttons by family: `rect` from the pack's frames, `dome` by rule from the round plate of #3202, `codex` from the generated sheets. The source file of each part (None for a part made by rule)."""
+    parts: dict[str, Image] = {}
+    sources: dict[str, Path | None] = {}
+    rect = [b for b in buttons if b.family == "rect"]
+    if rect:
+        rows = pack_index(args.pack)
+        for b in rect:
+            p, src = button_parts(args.pack, rows, b)
+            parts.update(p)
+            sources.update(src)
+    dome = [b for b in buttons if b.family == "dome"]
+    if dome:
+        parts.update(dome_parts(args.local_root, args.frames or args.local_root / "census" / "frames", dome))
+        sources.update({ident: None for ident in parts if ident.split(".", 1)[1].removesuffix("_hover").removesuffix("_pressed") in {b.name for b in dome}})
+    codex = [b for b in buttons if b.family == "codex"]
+    if codex:
+        p, src = codex_parts(args.sheets or args.local_root / "small-sheets", codex, args.sp_variant)
         parts.update(p)
-        sources.update(s)
+        sources.update(src)
     return parts, sources
 
 
@@ -277,25 +462,46 @@ def owner_of(ident: str) -> Small:
     """The button a part id (`plate.<name>`, `plate.<name>_hover`, `plate.<name>_pressed`, `glyph.<name>`) belongs to."""
     name = ident.split(".", 1)[1]
     for suffix in ("_hover", "_pressed"):
-        if name.endswith(suffix) and any(b.name == name[:-len(suffix)] for b in SMALL):
+        if name.endswith(suffix) and any(b.name == name[:-len(suffix)] for b in (*SMALL, *GENERATED)):
             name = name[:-len(suffix)]
     return button_named(name)
 
 
 # --- commands -----------------------------------------------------------------------------------------------------------------
 
-def record_of(ident: str, b: Small, source: Path | None, image_path: Path, pack: Path) -> dict:
-    return {
+RULES = {
+    "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
+    "dome": "by rule (owner 2026-11-25): the accepted round face of #3202 + the brass ring of the sockets (#2481) + the symbol by rule E from the original's own frames, states as in #3202",
+    "codex": "generated (owner 2026-11-25): a sheet of cells from Codex, original and neighbouring pack frames as input, cut and reduced to the master size",
+}
+
+
+def record_of(ident: str, b: Small, source: Path | None, image_path: Path, args: argparse.Namespace) -> dict:
+    empty = ident.startswith("glyph.") and b.family != "dome"
+    record = {
         "id": ident,
         "tool": "small_kit.py",
         "tool_version": TOOL_VERSION,
-        "rule": ("pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size (a round one with the analytic ellipse alpha of its silhouette, any other with its own alpha)"
-                 if source is not None else "an empty glyph layer at the plate's size: the symbol is in the pack frames"),
+        "rule": "an empty glyph layer at the plate's size: the symbol is in the plate" if empty else RULES[b.family],
         "source_art": b.art,
-        "source": {"pack": pack.name, "file": str(source.relative_to(pack)), "sha256": button_kit.sha256_file(source)} if source is not None else None,
+        "source": None,
         "sha256": button_kit.sha256_file(image_path),
         "date": datetime.date.today().isoformat(),
     }
+    if source is not None and b.family == "rect":
+        record["source"] = {"pack": args.pack.name, "file": str(source.relative_to(args.pack)), "sha256": button_kit.sha256_file(source)}
+    elif source is not None:
+        provenance = source.with_suffix(".provenance.json")
+        record["source"] = {"sheet": source.name, "sha256": button_kit.sha256_file(source)}
+        if provenance.is_file():
+            try:
+                record["source"]["generation"] = json.loads(provenance.read_text(encoding="utf-8"))
+            except ValueError as error:
+                raise SmallError(f"{provenance}: not a JSON provenance record ({error})") from error
+    elif b.family == "dome" and not empty:
+        masters = args.local_root / "masters"
+        record["source"] = {"face": DOME_PLATE, "face_sha256": button_kit.sha256_file(masters / f"{DOME_PLATE}.png"), "ring": DOME_RING, "ring_sha256": button_kit.sha256_file(masters / f"{DOME_RING}.png"), "frames": b.folder}
+    return record
 
 
 def need_magick() -> None:
@@ -305,17 +511,15 @@ def need_magick() -> None:
 
 def cmd_plan(args: argparse.Namespace) -> int:
     manifest = {r["id"]: r for r in json.loads(MANIFEST.read_text(encoding="utf-8"))["parts"]}
-    rows = pack_index(args.pack)
+    rows = pack_index(args.pack) if args.pack.joinpath("index.tsv").is_file() or any(b.family == "rect" for b in SMALL) else {}
     bad = 0
     for b in (*SMALL, *GENERATED):
         row = manifest.get(f"plate.{b.name}")
         have = [state for state, number in b.frames.items() if (b.name, number) in rows]
-        full = len(have) == len(b.frames)
-        ok = row is not None and row["size"] == list(b.master) and (full if b.family != "none" else not have)
+        ok = row is not None and row["size"] == list(b.master) and (len(have) == len(b.frames) if b.family == "rect" else True)
         bad += 0 if ok else 1
-        how = "pack frames" + (" + analytic alpha" if b.family == "round" else "") if b.family != "none" else "no pack frame: generated"
-        print(f"plate.{b.name:24s} art {b.art}  {b.family:6s} {b.units[0]:>2} x {b.units[1]:<2} -> {b.master[0]} x {b.master[1]}  states {','.join(have) or '-':20s} {how:30s} {'ok' if ok else 'CHECK'}")
-    print(f"SMALL KIT plan {'PASS' if not bad else 'FAIL'} ({len(SMALL)} pack-first buttons, {len(GENERATED)} generated)")
+        print(f"plate.{b.name:24s} art {b.art}  {b.family:6s} {b.units[0]:>2} x {b.units[1]:<2} -> {b.master[0]} x {b.master[1]}  states {','.join(b.frames):22s} {'ok' if ok else 'CHECK'}")
+    print(f"SMALL KIT plan {'PASS' if not bad else 'FAIL'} ({len(SMALL)} rule or pack buttons, {len(GENERATED)} generated)")
     return 0 if not bad else 1
 
 
@@ -324,7 +528,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = args.out or local / "masters"
     records = local / "provenance" / "rule" if args.out is None else out / "records"
     buttons = selected(args.only)
-    parts, sources = build_parts(args.pack, buttons)
+    parts, sources = build_parts(args, buttons)
     for ident, image in parts.items():
         covered = sum(1 for i in range(3, len(image.data), 4) if image.data[i] > 0) / (image.w * image.h)
         print(f"{ident:36s} {image.w} x {image.h}  covered {covered * 100:5.1f} %")
@@ -336,7 +540,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     for ident, image in parts.items():
         path = out / f"{ident}.png"
         pngio.write(path, image)
-        (records / f"{ident}.json").write_text(json.dumps(record_of(ident, owner_of(ident), sources.get(ident), path, args.pack), indent=2) + "\n", encoding="utf-8")
+        (records / f"{ident}.json").write_text(json.dumps(record_of(ident, owner_of(ident), sources.get(ident), path, args), indent=2) + "\n", encoding="utf-8")
     print(f"SMALL KIT build PASS ({len(parts)} parts written to {out})")
     return 0
 
@@ -353,30 +557,45 @@ def upscaled(frame: Image, size: tuple[int, int]) -> Image:
     return out
 
 
+def face(parts: dict[str, Image], b: Small, state: str) -> Image:
+    """The button as the runtime shows it: the plate, the glyph over it, over both the overlay of the state (a full frame of a pack or sheet part replaces the idle plate)."""
+    out = Image.blank(*b.master)
+    over(out, parts[f"plate.{b.name}"], 0, 0)
+    over(out, parts[f"glyph.{b.name}"], 0, 0)
+    if state != "idle":
+        over(out, parts[f"plate.{b.name}_{state}"], 0, 0)
+    return out
+
+
 def cmd_sheet(args: argparse.Namespace) -> int:
-    """The composite for the owner: per button the original idle frame (nearest cells) | the kit's idle | hover | pressed plate (the pack-made parts)."""
+    """The composite for the owner: per button the original (idle and pressed, at the master size) | the kit's idle | hover | pressed face."""
     need_magick()
     frames = args.frames or args.local_root / "census" / "frames"
     buttons = selected(args.only)
-    parts, _ = build_parts(args.pack, buttons)
+    parts, _ = build_parts(args, buttons)
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         rows_out = []
         for k, b in enumerate(buttons):
-            cells = [("original idle", upscaled(read_frame(frames, b, 0), b.master)), ("idle", parts[f"plate.{b.name}"])]
-            for state in ("hover", "pressed"):
-                if f"plate.{b.name}_{state}" in parts:
-                    cells.append((state, parts[f"plate.{b.name}_{state}"]))
+            cells = [("orig idle", upscaled(read_frame(frames, b, 0), b.master))]
+            if "pressed" in b.frames:
+                cells.append(("orig pressed", upscaled(read_frame(frames, b, b.frames["pressed"]), b.master)))
+            for state in b.frames:
+                if state == "idle" or f"plate.{b.name}_{state}" in parts:
+                    cells.append((f"new {state}", face(parts, b, state)))
             files = []
             for j, (label, image) in enumerate(cells):
                 path = work / f"{k}-{j}.png"
                 pngio.write(path, image)
                 lab = work / f"{k}-{j}-lab.png"
                 subprocess.run(["magick", str(path), "-background", "#3c3c3c", "-flatten", "-filter", "point", "-resize", f"{args.zoom * 100}%", "-gravity", "North", "-background", "#202020", "-fill", "white",
-                                "-font", LABEL_FONT, "-pointsize", "14", "-splice", "0x22", "-annotate", "+0+3", f"{b.name} {label}", str(lab)], check=True)
+                                "-font", LABEL_FONT, "-pointsize", "13", "-splice", "0x22", "-annotate", "+0+3", label, str(lab)], check=True)
                 files.append(lab)
+            head = work / f"head-{k}.png"
+            subprocess.run(["magick", "-size", "150x40", "-background", "#202020", "-fill", "white", "-font", LABEL_FONT, "-pointsize", "13", f"label:{b.name}", str(head)], check=True)
+            files.insert(0, head)
             row = work / f"row-{k}.png"
-            subprocess.run(["magick", *[str(f) for f in files], "-background", "#202020", "-gravity", "North", "+append", "-bordercolor", "#202020", "-border", "6", str(row)], check=True)
+            subprocess.run(["magick", *[str(f) for f in files], "-background", "#202020", "-gravity", "West", "+append", "-bordercolor", "#202020", "-border", "6", str(row)], check=True)
             rows_out.append(row)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["magick", *[str(r) for r in rows_out], "-background", "#202020", "-gravity", "West", "-append", str(args.out)], check=True)
@@ -385,8 +604,13 @@ def cmd_sheet(args: argparse.Namespace) -> int:
 
 
 def self_test() -> int:
-    alpha = ellipse_alpha((0.0, 0.0, 20.0, 20.0), (20, 20), (40, 40))
-    assert alpha[20 * 40 + 20] == 1.0 and alpha[0] == 0.0, "an ellipse is solid in the middle and clear in the corner"
+    cell = Image(20, 20, bytearray(b"\xff\x00\xff\xff" * 400))
+    for y in range(4, 16):
+        for x in range(4, 16):
+            cell.data[(y * 20 + x) * 4:(y * 20 + x) * 4 + 4] = bytes((40, 90, 10, 255))
+    clipped = triangle_clip(cell)
+    assert clipped.pixel(10, 10)[3] == 255 and clipped.pixel(1, 1)[3] == 0 and clipped.pixel(4, 8)[3] == 0, "the ground and its rim are clear, the inside is solid"
+    assert sheet_for("sp_plus", "pressed", "sp-a")[0].id == "sp-a"
     print("SMALL KIT self-test PASS")
     return 0
 
@@ -398,13 +622,15 @@ def main(argv: list[str] | None = None) -> int:
         s = sub.add_parser(name)
         s.add_argument("--local-root", type=Path, default=None)
         s.add_argument("--pack", type=Path, default=PACK_ROOT, help="the installed HD pack the parts are read from")
+        s.add_argument("--sheets", type=Path, default=None, help="the folder of the Codex sheets (default `local/steamwoven-ui/small-sheets`)")
+        s.add_argument("--sp-variant", default=SP_VARIANT, choices=("sp-a", "sp-b"), help="the skill-point sheet in use")
+        s.add_argument("--frames", type=Path)
         if name != "plan":
             s.add_argument("--only")
         if name == "build":
             s.add_argument("--out", type=Path)
             s.add_argument("--dry-run", action="store_true")
         if name == "sheet":
-            s.add_argument("--frames", type=Path)
             s.add_argument("--out", type=Path, required=True)
             s.add_argument("--zoom", type=int, default=3)
     sub.add_parser("self-test")
