@@ -146,15 +146,18 @@ def new_parts() -> list[dict]:
 
 
 def hud_hardware_parts() -> list[dict]:
-    """ARC-UI-2481, slice 1 of B-HARDWARE: the metal of the two HUD strips (kit layers over the strip art, SWI-LAY-12), one Codex sheet per strip (hardware_build.py);
+    """ARC-UI-2481, slice 1 of B-HARDWARE: the metal of the two HUD strips, and ARC-UI-3260, slice 2: the metal of the menu screens' two strips (kit layers over the strip art, SWI-LAY-12), Codex sheets (hardware_build.py);
     a part placed several times (the ten slot frames, the four socket rings, the rail unit) is one master, a right-hand detail that mirrors the left one is its mirror."""
     parts = []
+    menu_windows = ["M05", "M06", "M07", "M08", "M09", "M10"]   # ARC-UI-3260, slice 2: the metal of the menu screens' strips (census M05 to M10)
     for ident in hardware_build.HARDWARE_ORDER:
         info = hardware_build.PARTS[ident]
-        top = info["strip"] == "board.inttop"
+        strips = {instance[0] for instance in info["instances"]}
+        used_by = (["H01"] if "board.inttop" in strips else []) + (["H02"] if "board.intbotom" in strips else []) + (menu_windows if strips & {"board.charcreatetopbar", "board.charcreatebottombar"} else [])
+        top = info["strip"] in ("board.inttop", "board.charcreatetopbar")
         what = "mirror of " + info["mirror_of"].split(".")[1] if info.get("mirror_of") else "drawn once"
-        parts.append(new_part(ident, "hardware", "top-strip" if top else "bottom-strip", ["H01" if top else "H02"], None, "B-HARDWARE",
-                              f"{info['note']}; a layer over the strip art ({what}); hardware_build.py, ARC-UI-2481; open size", master=True))
+        parts.append(new_part(ident, "hardware", "top-strip" if top else "bottom-strip", used_by, None, "B-HARDWARE",
+                              f"{info['note']}; a layer over the strip art ({what}); hardware_build.py, {'ARC-UI-3260' if info['strip'].startswith('board.charcreate') else 'ARC-UI-2481'}; open size", master=True))
     return parts
 
 
@@ -300,7 +303,8 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
-    for art, layers in (("184", ["cap.bottom_strip_left", "cap.bottom_strip_right"] + hardware_build.layers_of("board.intbotom")),
+    for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
+                        ("184", ["cap.bottom_strip_left", "cap.bottom_strip_right"] + hardware_build.layers_of("board.intbotom")),
                         ("185", ["cap.top_strip_left", "cap.top_strip_right"] + hardware_build.layers_of("board.inttop")),
                         ("221", ["grid.inventory_cells"]), ("365", ["grid.schematic"])):
         if art in by_art:  # the real census has all four (a test pins it)
