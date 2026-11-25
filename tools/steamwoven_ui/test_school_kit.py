@@ -184,6 +184,81 @@ class PackTests(unittest.TestCase):
         self.assertEqual(records[f"glyph.{TAB.name}"]["sources"], {})
 
 
+class CodexFixTests(unittest.TestCase):
+    """The three symbols the pack reads wrongly are redrawn by Codex on the pack frame; the redrawn frame is registered back onto the pack frame's geometry."""
+
+    def test_the_prompts_are_ascii_say_the_symbol_and_the_idle_sample_only_for_the_states(self):
+        for name in sk.CODEX_SYMBOLS:
+            idle, hover = sk.codex_prompt(name, "idle"), sk.codex_prompt(name, "hover")
+            self.assertTrue(idle.isascii() and hover.isascii())
+            self.assertIn(sk.CODEX_SYMBOLS[name], idle)
+            self.assertNotIn("Image 3", idle)
+            self.assertIn("Image 3", hover)
+            self.assertIn("same symbol", idle.lower())
+
+    def test_the_disc_of_a_staged_frame_is_the_circle_and_a_registered_copy_matches_the_frame(self):
+        circle = sk.circle_of(TAB)
+        frame = pack_frame()
+        sent = sk.staged_input(frame, circle)
+        cx, cy, r = sk.disc_of_image(sent)
+        self.assertAlmostEqual(cx, circle.cx * sk.CODEX_SCALE, delta=1.5)
+        self.assertAlmostEqual(r, circle.cut * sk.CODEX_SCALE, delta=1.5)
+        # a "generated" image: the same picture, one and a half times larger and shifted: registered back it is the frame again
+        big = 1.5
+        w = int(sent.w * big)
+        out = pngio.Image(w + 40, w + 40, bytearray(bytes((*sk.CODEX_GROUND, 255)) * ((w + 40) ** 2)))
+        for y in range(w):
+            for x in range(w):
+                sx, sy = min(sent.w - 1, int(x / big)), min(sent.h - 1, int(y / big))
+                out.data[((y + 40) * out.w + x + 20) * 4:((y + 40) * out.w + x + 20) * 4 + 4] = sent.data[(sy * sent.w + sx) * 4:(sy * sent.w + sx) * 4 + 4]
+        placed = sk.placed_frame(out, sent, (frame.w, frame.h))
+        k = (HD // 2 * HD + HD // 2) * 4
+        self.assertEqual(tuple(placed.data[k:k + 3]), INSIDE)
+        self.assertEqual((placed.w, placed.h), (HD, HD))
+
+    def test_the_states_of_a_button_are_aligned_onto_the_idle_symbol(self):
+        circle = sk.circle_of(TAB)
+
+        def with_cross(dx: int, dy: int) -> pngio.Image:
+            image = pack_frame()
+            for y in range(36, 60):
+                for x in range(42, 54):
+                    image.data[((y + dy) * HD + x + dx) * 4:((y + dy) * HD + x + dx) * 4 + 3] = bytes((3, 3, 3))
+            return image
+        self.assertEqual(sk.aligned_shift(with_cross(0, 0), with_cross(0, 0), circle), (0, 0))
+        self.assertEqual(sk.aligned_shift(with_cross(0, 0), with_cross(2, 1), circle), (2, 1))      # the state's symbol stands 2 right and 1 down: `placed_frame` samples it 2 right and 1 down of each pixel
+
+    def test_a_redrawn_frame_replaces_the_pack_frame_and_the_record_says_codex(self):
+        name = "s_nature"
+        tab = sk.tab_named(name)
+        with tempfile.TemporaryDirectory() as folder:
+            local = Path(folder) / "local"
+            local_root = local / "steamwoven-ui"
+            pack = local / sk.PACK_DIR
+            (pack / "interface").mkdir(parents=True)
+            header = "screen\tkind\tart\tframe\tpath\tlegacy_w\tlegacy_h\thd_w\thd_h\tslice\talpha\treview\tsha12\n"
+            rows = []
+            for number in range(3):
+                pngio.write(pack / "interface" / f"{name}-f{number:03d}.png", pack_frame())
+                rows.append(f"x\tbuttons\t{name}\t{number}\tinterface/{name}-f{number:03d}.png\t24\t24\t{HD}\t{HD}\ts\t\tunreviewed\tabc123def45{number}\n")
+            (pack / "index.tsv").write_text(header + "".join(rows), encoding="utf-8")
+            placed = sk.codex_dirs(local_root)[2]
+            placed.mkdir(parents=True)
+            pngio.write(placed / f"{name}-f0.png", pack_frame((0, 200, 0)))      # a green redrawn idle frame
+            self.assertIsNotNone(sk.fixed_frame(local_root, name, 0))
+            self.assertIsNone(sk.fixed_frame(local_root, name, 1))
+            self.assertIsNone(sk.fixed_frame(local_root, "s_air", 0))             # not one of the three
+            parts = sk.tab_parts(local, tab, local_root)
+            master = sk.master_of(name)
+            k = ((master[1] // 2) * master[0] + master[0] // 2) * 4
+            self.assertEqual(tuple(parts[f"plate.{name}"].data[k:k + 3]), (0, 200, 0))          # idle: redrawn
+            self.assertEqual(tuple(parts[f"plate.{name}_hover"].data[k:k + 3]), INSIDE)          # hover: the pack's
+            out = Path(folder) / "o.png"
+            pngio.write(out, parts[f"plate.{name}"])
+            self.assertEqual(sk.record_of(local, tab, f"plate.{name}", out, parts[f"plate.{name}"], local_root)["source"], "codex")
+            self.assertEqual(sk.record_of(local, tab, f"plate.{name}_hover", out, parts[f"plate.{name}"], local_root)["source"], "pack")
+
+
 class DataTests(unittest.TestCase):
     def test_names_and_arts_are_unique_and_every_button_has_a_sized_plate_row(self):
         self.assertEqual(len({t.name for t in sk.TABS}), 28)

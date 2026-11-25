@@ -8,6 +8,8 @@ disc moved 13 px down and right, sigma 16 px, strength 0.7 of a 3.6 px unit), ca
 
     python3 -B tools/steamwoven_ui/school_kit.py build [--only NAME,...] [--out DIR] [--dry-run]               (the parts -> masters/ and provenance/rule/)
     python3 -B tools/steamwoven_ui/school_kit.py check [--only NAME,...]                                       (every button has its three pack frames; the circles lie inside the frames)
+    python3 -B tools/steamwoven_ui/school_kit.py codex-inbox --stage idle|states [--only NAME,...]            (the Codex batch B-BUTTONS-FIX for the three symbols the pack reads wrongly: the inbox, prompts and references)
+    python3 -B tools/steamwoven_ui/school_kit.py codex-place [--only NAME,...]                               (the generated frames registered onto the pack frames' geometry -> work/B-BUTTONS-FIX/placed)
     python3 -B tools/steamwoven_ui/school_kit.py sheet --out FILE [--only NAME,...] [--zoom N] [--columns N]   (original | idle | hover | pressed over a wood ground with the run-time shadow, English labels)
     python3 -B tools/steamwoven_ui/school_kit.py self-test
 
@@ -59,6 +61,10 @@ OVERSHOOT = 0.5             # units: how far the cut's circle may lie beyond the
 EXTRUDE_PX = 2.0            # source px: the colour inside this far from the circle's edge is carried outwards (the smoothed edge never mixes in the frame's old background)
 LABEL_FONT = button_kit.LABEL_FONT
 GROUND = (96, 68, 44)       # the wood-like ground of the sheet
+CODEX_BATCH = "B-BUTTONS-FIX"
+CODEX_GROUND = (128, 128, 128)   # the flat ground of the Codex input and output
+CODEX_SCALE = 32            # input px per art unit (the pack frame is 4 px per unit, so 8 times; the original, 24 x 24 units, 32 times with hard pixels)
+CODEX_FG_DE = 36.0          # RGB distance from the ground at which a pixel of the generated image belongs to the button
 
 
 class SchoolError(Exception):
@@ -291,9 +297,17 @@ def empty_layer(master: tuple[int, int]) -> Image:
     return Image(master[0], master[1], bytearray(master[0] * master[1] * 4))
 
 
-def tab_parts(local: Path, tab: Tab) -> dict[str, Image]:
+def state_frame(local: Path, tab: Tab, state: str, local_root: Path | None = None) -> tuple[Image, str]:
+    """The frame of a state and where it comes from: the Codex-redrawn one (`codex-place`) if the button has it, else the pack's."""
+    fixed = fixed_frame(local_root, tab.name, STATE_FRAMES[state])
+    if fixed is not None:
+        return pngio.read(fixed), "codex"
+    return read_pack(local, tab.name, STATE_FRAMES[state])[0], "pack"
+
+
+def tab_parts(local: Path, tab: Tab, local_root: Path | None = None) -> dict[str, Image]:
     circle, master = circle_of(tab), master_of(tab.name)
-    frames = {state: read_pack(local, tab.name, number)[0] for state, number in STATE_FRAMES.items()}
+    frames = {state: state_frame(local, tab, state, local_root)[0] for state in STATE_FRAMES}
     for state, frame in frames.items():
         check_aspect(tab, frame, state)
     return {f"plate.{tab.name}": round_part(frames["idle"], circle, master),
@@ -302,10 +316,10 @@ def tab_parts(local: Path, tab: Tab) -> dict[str, Image]:
             f"plate.{tab.name}_pressed": round_part(frames["pressed"], circle, master)}
 
 
-def build_parts(local: Path, tabs: list[Tab]) -> dict[str, Image]:
+def build_parts(local: Path, tabs: list[Tab], local_root: Path | None = None) -> dict[str, Image]:
     parts: dict[str, Image] = {}
     for tab in tabs:
-        parts.update(tab_parts(local, tab))
+        parts.update(tab_parts(local, tab, local_root))
     return parts
 
 
@@ -370,18 +384,267 @@ def selected(args: argparse.Namespace) -> list[Tab]:
     return tabs
 
 
-def record_of(local: Path, tab: Tab, ident: str, image_path: Path, image: Image) -> dict:
+def record_of(local: Path, tab: Tab, ident: str, image_path: Path, image: Image, local_root: Path | None = None) -> dict:
     """The provenance record of a part (SWI-GEN-6): no generator, the rule, and the hash of the pack frame it was cut from."""
     state = "idle" if ident == f"plate.{tab.name}" else ("hover" if ident.endswith("_hover") else "pressed")
     sources = {}
+    source = "none (empty layer)"
     if ident != f"glyph.{tab.name}":
         path, index_sha = pack_path(local, tab.name, STATE_FRAMES[state])
         sources = {f"{PACK_DIR}/{tab.name}-f{STATE_FRAMES[state]:03d}": {"sha256": button_kit.sha256_file(path), "index_sha12": index_sha}}
+        source = "pack"
+        fixed = fixed_frame(local_root, tab.name, STATE_FRAMES[state])
+        if fixed is not None:   # a Codex-redrawn frame: the pack frame was its input, its generation record names the prompt and the references
+            source = "codex"
+            generation = codex_dirs(local_root)[1] / f"fix-{tab.name}-{state}.provenance.json"
+            sources["codex_frame"] = {"sha256": button_kit.sha256_file(fixed), "generation_record": str(generation.relative_to(local_root)) if generation.is_file() else None,
+                                      "generation_sha256": button_kit.sha256_file(generation) if generation.is_file() else None, "input": "pack frame + original x32 (+ idle sample for hover and pressed)"}
     circle = circle_of(tab)
-    return {"part": ident, "rule": "school_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": "pack" if sources else "none (empty layer)",
+    return {"part": ident, "rule": "school_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": source,
             "sources": sources, "empty": not any(image.data[3::4]),
             "parameters": {"circle_units": {"cx": circle.cx, "cy": circle.cy, "radius": circle.radius, "trim": circle.trim, "art_size": [circle.width, circle.height]}, "extrude_px": EXTRUDE_PX, "master": [image.w, image.h]},
             "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [image.w, image.h], "run_by": "agent"}
+
+
+# --- Codex-redrawn frames for the symbols the pack reads wrongly (owner decision 2026-11-25) ------------------------------------------
+
+CODEX_SYMBOLS = {   # per button: what the symbol is (the prompt's own words, ASCII)
+    "s_nature": "a dark, nearly black, crisp silhouette of a tree: one straight vertical trunk, a few short branches, and a crown made of a few solid leaf-cluster shapes along the top and the sides of the branches. Every shape is solid and clean with smooth edges: no ragged blotches, no speckles, no pale spots inside the crown.",
+    "s_water": "two continuous, parallel, wavy zig-zag lines, the sign of water (like the sign of Aquarius): two unbroken dark lines of the same even width, one above the other, both running the whole width of the symbol, every wave alike, with no breaks, no gaps and no blobs.",
+    "s_forc": "the dark symbol of image 1 and image 2 (a short bar with a stem at the upper left, a diagonal stroke, and a curved hook-shaped tail at the bottom). The hook tail at the bottom must be ONE whole, sharp, clean curved hook of an even width, never broken, blurred, cut off or missing.",
+}
+CODEX_STATE_WORDS = {"idle": "IDLE (the dome as in image 1)", "hover": "HOVER (the dome is lit brighter, exactly as in image 1)", "pressed": "PRESSED (the dome is lit brightest, exactly as in image 1)"}
+
+
+def codex_prompt(name: str, state: str) -> str:
+    first = ("Image 1 is a round game-interface button (a coloured glossy dome in a thin brass ring) of a steampunk role-playing game, on a flat mid-grey ground. Image 2 is the ORIGINAL low-resolution version of the same button, enlarged with hard pixels: "
+             "it is the truth for what the symbol is, where it stands and how big it is." + ("" if state == "idle" else " Image 3 is the finished IDLE version of this button: draw the symbol EXACTLY as it is in image 3."))
+    return (first + "\n\nEdit image 1. Keep EVERYTHING of image 1 exactly as it is: the dome colour, the surface texture, the light and the highlights, the brass ring, the dark outline, the position and the size of the button and the flat mid-grey ground. "
+            "Change only the symbol on the dome and redraw it cleanly.\n\nSYMBOL: " + CODEX_SYMBOLS[name] + "\n\nSame symbol, same position, same size and same proportions as the symbol in image 2; clean even lines, no reinterpretation, no extra details, no text, no numbers, no new glow, no new shine, no shadow outside the button. "
+            f"State: {CODEX_STATE_WORDS[state]}.\n\nOutput one PNG with the same aspect and the same framing as image 1: the button in the middle of the flat mid-grey ground, nothing else.\n")
+
+
+def staged_input(frame: Image, circle: Circle) -> Image:
+    """A pack frame at `CODEX_SCALE` px per art unit on the flat ground: bilinear, cut to the circle by the analytic alpha (nothing of the frame's old background)."""
+    w, h = circle.width * CODEX_SCALE, circle.height * CODEX_SCALE
+    src = extruded(frame, circle)
+    out = Image(w, h, bytearray(w * h * 4))
+    ux, uy = src.w / w, src.h / h
+    for y in range(h):
+        fy = max(0.0, min(src.h - 1.0, (y + 0.5) * uy - 0.5))
+        y0 = int(fy)
+        y1 = min(src.h - 1, y0 + 1)
+        ty = fy - y0
+        for x in range(w):
+            fx = max(0.0, min(src.w - 1.0, (x + 0.5) * ux - 0.5))
+            x0 = int(fx)
+            x1 = min(src.w - 1, x0 + 1)
+            tx = fx - x0
+            a = coverage(circle, (w, h), x + 0.5, y + 0.5)
+            o = (y * w + x) * 4
+            for c in range(3):
+                v = (src.data[(y0 * src.w + x0) * 4 + c] * (1 - tx) + src.data[(y0 * src.w + x1) * 4 + c] * tx) * (1 - ty) + (src.data[(y1 * src.w + x0) * 4 + c] * (1 - tx) + src.data[(y1 * src.w + x1) * 4 + c] * tx) * ty
+                out.data[o + c] = int(round(CODEX_GROUND[c] * (1 - a) + v * a))
+            out.data[o + 3] = 255
+    return out
+
+
+def staged_original(original: Image, circle: Circle) -> Image:
+    """The original frame at `CODEX_SCALE` px per art unit with hard pixels (nearest), on the flat ground, cut to the circle."""
+    w, h = circle.width * CODEX_SCALE, circle.height * CODEX_SCALE
+    out = Image(w, h, bytearray(w * h * 4))
+    for y in range(h):
+        sy = min(original.h - 1, int((y + 0.5) * original.h / h))
+        for x in range(w):
+            sx = min(original.w - 1, int((x + 0.5) * original.w / w))
+            a = coverage(circle, (w, h), x + 0.5, y + 0.5)
+            o = (y * w + x) * 4
+            for c in range(3):
+                out.data[o + c] = int(round(CODEX_GROUND[c] * (1 - a) + original.data[(sy * original.w + sx) * 4 + c] * a))
+            out.data[o + 3] = 255
+    return out
+
+
+def disc_of_image(image: Image) -> tuple[float, float, float]:
+    """The button's disc on a flat ground: the centre and radius of the bounding box of the largest piece that differs from the ground."""
+    w, h = image.w, image.h
+    on = [math.dist(image.data[i * 4:i * 4 + 3], CODEX_GROUND) > CODEX_FG_DE for i in range(w * h)]
+    seen = [False] * (w * h)
+    best: list[int] = []
+    for start in range(w * h):
+        if not on[start] or seen[start]:
+            continue
+        stack, piece = [start], []
+        seen[start] = True
+        while stack:
+            i = stack.pop()
+            piece.append(i)
+            x, y = i % w, i // w
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if 0 <= x + dx < w and 0 <= y + dy < h and on[(y + dy) * w + x + dx] and not seen[(y + dy) * w + x + dx]:
+                    seen[(y + dy) * w + x + dx] = True
+                    stack.append((y + dy) * w + x + dx)
+        if len(piece) > len(best):
+            best = piece
+    if not best:
+        raise SchoolError("no button found on the flat ground")
+    xs, ys = [i % w for i in best], [i // w for i in best]
+    return (min(xs) + max(xs) + 1) / 2, (min(ys) + max(ys) + 1) / 2, (max(xs) - min(xs) + max(ys) - min(ys) + 2) / 4
+
+
+def placed_frame(generated: Image, sent: Image, size: tuple[int, int], shift: tuple[int, int] = (0, 0)) -> Image:
+    """The generated image registered onto the pack frame's geometry (`size` px): the button's disc in it is mapped onto the disc of what was SENT (a shift and one uniform scale), box-averaged down to the frame's pixels."""
+    cx_in, cy_in, r_in = disc_of_image(sent)
+    cx_out, cy_out, r_out = disc_of_image(generated)
+    k = r_out / r_in
+    w, h = size
+    step = sent.w / w                       # sent px per frame pixel
+    foot = max(1, int(round(step * k)))     # generated px per frame pixel
+    out = Image(w, h, bytearray(w * h * 4))
+    for y in range(h):
+        for x in range(w):
+            ox = cx_out + ((x + 0.5 + shift[0]) * step - cx_in) * k
+            oy = cy_out + ((y + 0.5 + shift[1]) * step - cy_in) * k
+            acc = [0.0, 0.0, 0.0]
+            count = 0
+            for j in range(foot):
+                py = int(oy - foot / 2 + j + 0.5)
+                for i in range(foot):
+                    px = int(ox - foot / 2 + i + 0.5)
+                    if 0 <= px < generated.w and 0 <= py < generated.h:
+                        k4 = (py * generated.w + px) * 4
+                        acc[0] += generated.data[k4]
+                        acc[1] += generated.data[k4 + 1]
+                        acc[2] += generated.data[k4 + 2]
+                        count += 1
+            o = (y * w + x) * 4
+            for c in range(3):
+                out.data[o + c] = int(round(acc[c] / count)) if count else CODEX_GROUND[c]
+            out.data[o + 3] = 255
+    return out
+
+
+ALIGN_REACH = 4             # frame px: how far a state's symbol may be shifted onto the idle one
+ALIGN_DARK = 0.45           # a symbol pixel is darker than this share of the dome's median lightness (the symbol stays dark in every state)
+
+
+def dark_symbol(frame: Image, circle: Circle) -> list[bool]:
+    """The frame's near-black symbol pixels inside the dome (for the alignment of the states only)."""
+    ux, uy = frame.w / circle.width, frame.h / circle.height
+    cx, cy, r = circle.cx * ux, circle.cy * uy, circle.radius * ux * 0.78
+    lum = {}
+    for y in range(frame.h):
+        for x in range(frame.w):
+            if math.hypot(x + 0.5 - cx, y + 0.5 - cy) <= r:
+                k = (y * frame.w + x) * 4
+                lum[y * frame.w + x] = 0.299 * frame.data[k] + 0.587 * frame.data[k + 1] + 0.114 * frame.data[k + 2]
+    median = sorted(lum.values())[len(lum) // 2]
+    return [i in lum and lum[i] < ALIGN_DARK * median for i in range(frame.w * frame.h)]
+
+
+def aligned_shift(idle: Image, state: Image, circle: Circle) -> tuple[int, int]:
+    """The whole-pixel shift of `state` (within `ALIGN_REACH`) that puts its symbol best over the idle one's (overlap of the dark symbol pixels): the states of a redrawn button must show ONE symbol."""
+    a, b = dark_symbol(idle, circle), dark_symbol(state, circle)
+    w, h = idle.w, idle.h
+    best = (-1.0, 0, 0)
+    for dy in range(-ALIGN_REACH, ALIGN_REACH + 1):
+        for dx in range(-ALIGN_REACH, ALIGN_REACH + 1):
+            inter = union = 0
+            for i in range(w * h):
+                x, y = i % w + dx, i // w + dy
+                on_b = 0 <= x < w and 0 <= y < h and b[y * w + x]
+                inter += a[i] and on_b
+                union += a[i] or on_b
+            score = inter / union if union else 0.0
+            if score > best[0] + 1e-9 or (abs(score - best[0]) <= 1e-9 and abs(dx) + abs(dy) < abs(best[1]) + abs(best[2])):
+                best = (score, dx, dy)
+    return best[1], best[2]
+
+
+def codex_dirs(local_root: Path) -> tuple[Path, Path, Path]:
+    return local_root / "inbox" / CODEX_BATCH, local_root / "outbox" / CODEX_BATCH, local_root / "work" / CODEX_BATCH / "placed"
+
+
+def fixed_frame(local_root: Path | None, name: str, number: int) -> Path | None:
+    """The Codex-redrawn frame of a button's state, once `codex-place` made it (None: the pack's own frame stands)."""
+    if local_root is None or name not in CODEX_SYMBOLS:
+        return None
+    path = codex_dirs(local_root)[2] / f"{name}-f{number}.png"
+    return path if path.is_file() else None
+
+
+def cmd_codex_inbox(args: argparse.Namespace) -> int:
+    local_root = args.local_root
+    local = pack_local(local_root)
+    frames = args.frames or local_root / "census" / "frames"
+    inbox, outbox, placed = codex_dirs(local_root)
+    states = ("idle",) if args.stage == "idle" else ("hover", "pressed")
+    names = [t for t in TABS if t.name in CODEX_SYMBOLS and (not args.only or t.name in args.only.split(","))]
+    if not names:
+        raise SchoolError("no button selected")
+    (inbox / "prompts").mkdir(parents=True, exist_ok=True)
+    items = []
+    for tab in names:
+        circle = circle_of(tab)
+        for state in states:
+            number = STATE_FRAMES[state]
+            item = f"fix-{tab.name}-{state}"
+            refs_dir = inbox / "refs" / item
+            refs_dir.mkdir(parents=True, exist_ok=True)
+            pack_frame = read_pack(local, tab.name, number)[0]
+            refs = [("image", "pack-frame.png", staged_input(pack_frame, circle)), ("original", "original-x32.png", staged_original(pngio.read(frames / tab.folder / f"f{number}.png"), circle))]
+            if state != "idle":
+                done = placed / f"{tab.name}-f0.png"
+                if not done.is_file():
+                    raise SchoolError(f"{done} is missing: run the idle stage and `codex-place` first")
+                refs.append(("idle", "idle-sample.png", staged_input(pngio.read(done), circle)))
+            ref_rows = []
+            for slot, filename, image in refs:
+                path = refs_dir / filename
+                pngio.write(path, image)
+                ref_rows.append({"slot": slot, "file": f"refs/{item}/{filename}", "sha256": button_kit.sha256_file(path)})
+            text = codex_prompt(tab.name, state)
+            prompt = inbox / "prompts" / f"{item}.txt"
+            prompt.write_text(text, encoding="utf-8")
+            items.append({"id": item, "title": f"{tab.name} ({state}): the symbol redrawn on the pack frame", "prompt_file": f"prompts/{item}.txt", "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
+                          "size": [circle.width * CODEX_SCALE, circle.height * CODEX_SCALE], "references": ref_rows, "outbox_file": f"outbox/{CODEX_BATCH}/{item}.png"})
+    batch = inbox / "batch.json"
+    old = json.loads(batch.read_text(encoding="utf-8")) if batch.is_file() else {"batch": CODEX_BATCH, "after": None, "items": []}
+    keep = [i for i in old["items"] if i["id"] not in {n["id"] for n in items}]
+    batch.write_text(json.dumps({"batch": CODEX_BATCH, "after": None, "items": keep + items}, indent=2) + "\n", encoding="utf-8")
+    outbox.mkdir(parents=True, exist_ok=True)
+    print(f"SCHOOL KIT codex-inbox PASS: {len(items)} item(s) in {inbox}")
+    return 0
+
+
+def cmd_codex_place(args: argparse.Namespace) -> int:
+    local_root = args.local_root
+    local = pack_local(local_root)
+    frames = args.frames or local_root / "census" / "frames"
+    _, outbox, placed = codex_dirs(local_root)
+    placed.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for tab in [t for t in TABS if t.name in CODEX_SYMBOLS and (not args.only or t.name in args.only.split(","))]:
+        circle = circle_of(tab)
+        for state, number in STATE_FRAMES.items():
+            generated = outbox / f"fix-{tab.name}-{state}.png"
+            if not generated.is_file():
+                continue
+            pack_frame = read_pack(local, tab.name, number)[0]
+            sent = staged_input(pack_frame, circle)
+            generated_image = pngio.read(generated)
+            frame = placed_frame(generated_image, sent, (pack_frame.w, pack_frame.h))
+            moved = (0, 0)
+            if state != "idle" and (placed / f"{tab.name}-f0.png").is_file():   # the states of one button show ONE symbol: shift this state's onto the idle one's
+                moved = aligned_shift(pngio.read(placed / f"{tab.name}-f0.png"), frame, circle)
+                if moved != (0, 0):
+                    frame = placed_frame(generated_image, sent, (pack_frame.w, pack_frame.h), moved)
+            pngio.write(placed / f"{tab.name}-f{number}.png", frame)
+            count += 1
+            print(f"{tab.name} {state}: placed {pack_frame.w} x {pack_frame.h}" + (f", symbol shifted by {moved} px onto the idle one's" if moved != (0, 0) else ""))
+    print(f"SCHOOL KIT codex-place PASS ({count} frame(s) in {placed})")
+    return 0 if count else 1
+
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -408,7 +671,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = args.out or local_root / "masters"
     records = local_root / "provenance" / "rule" if args.out is None else out / "records"
     tabs = selected(args)
-    parts = build_parts(local, tabs)
+    parts = build_parts(local, tabs, local_root)
     for ident, image in parts.items():
         covered = sum(1 for i in range(3, len(image.data), 4) if image.data[i] > 0) / (image.w * image.h)
         print(f"{ident:34s} {image.w} x {image.h}  covered {covered * 100:5.1f} %")
@@ -421,7 +684,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     for ident, image in parts.items():
         path = out / f"{ident}.png"
         pngio.write(path, image)
-        (records / f"{ident}.json").write_text(json.dumps(record_of(local, by_ident[ident], ident, path, image), indent=2) + "\n", encoding="utf-8")
+        (records / f"{ident}.json").write_text(json.dumps(record_of(local, by_ident[ident], ident, path, image, local_root), indent=2) + "\n", encoding="utf-8")
     print(f"SCHOOL KIT build PASS ({len(parts)} parts written to {out})")
     return 0
 
@@ -452,7 +715,7 @@ def cmd_sheet(args: argparse.Namespace) -> int:
                 max(master_of(t.name)[1] + 2 * margin_of(circle_of(t), master_of(t.name))[1] for t in tabs) * args.zoom)
         for tab in tabs:
             circle, master = circle_of(tab), master_of(tab.name)
-            parts = tab_parts(local, tab)
+            parts = tab_parts(local, tab, local_root)
             original = upscaled(pngio.read(frames / tab.folder / "f0.png"), master)
             shots = [("original", original), ("idle", parts[f"plate.{tab.name}"]), ("hover", parts[f"plate.{tab.name}_hover"]), ("pressed", parts[f"plate.{tab.name}_pressed"])]
             margin = margin_of(circle, master)
@@ -495,10 +758,14 @@ def self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("build", "check", "sheet"):
+    for name in ("build", "check", "sheet", "codex-inbox", "codex-place"):
         s = sub.add_parser(name)
         s.add_argument("--only")
         s.add_argument("--local-root", type=Path, default=None)
+        if name == "codex-inbox":
+            s.add_argument("--stage", choices=("idle", "states"), required=True)
+        if name in ("codex-inbox", "codex-place"):
+            s.add_argument("--frames", type=Path)
         if name == "build":
             s.add_argument("--out", type=Path)
             s.add_argument("--dry-run", action="store_true")
@@ -514,7 +781,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "self-test":
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
-        return {"build": cmd_build, "check": cmd_check, "sheet": cmd_sheet}[args.command](args)
+        return {"build": cmd_build, "check": cmd_check, "sheet": cmd_sheet, "codex-inbox": cmd_codex_inbox, "codex-place": cmd_codex_place}[args.command](args)
     except (SchoolError, button_kit.ButtonError, pngio.PngError, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"SCHOOL KIT FAIL: {error}")
         return 2

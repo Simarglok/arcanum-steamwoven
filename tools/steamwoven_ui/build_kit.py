@@ -294,7 +294,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
         if ident in SCHOOL_PLATES:
             part["status"], part["provenance"] = "master", f"rule:school_kit:{ident}"
-            part["note"] = "the pack's own idle frame of the button as it is, cut to the ring's circle by an analytic round alpha (school_kit.py, ARC-UI-3204, owner 2026-11-25); the states are the pack's frames"
+            part["note"] = ("the pack's own idle frame of the button as it is, cut to the ring's circle by an analytic round alpha (school_kit.py, ARC-UI-3204, owner 2026-11-25); the states are the pack's frames"
+                            if ident.removeprefix("plate.") not in school_kit.CODEX_SYMBOLS else
+                            "the pack's frame with its symbol redrawn by Codex (the pack read it wrongly), cut to the ring's circle by an analytic round alpha (school_kit.py, ARC-UI-3204); the states are redrawn the same way")
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"

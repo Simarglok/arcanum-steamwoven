@@ -1472,10 +1472,13 @@ Local (`local/steamwoven-ui/`, never in git), standard-library Python plus Image
 ```sh
 python3 -B tools/steamwoven_ui/school_kit.py check [--only NAME,...]                                   # every button has its three pack frames; the circles lie inside the arts
 python3 -B tools/steamwoven_ui/school_kit.py build [--only NAME,...] [--out DIR] [--dry-run]           # the 112 parts -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/school_kit.py codex-inbox --stage idle|states [--only NAME,...]        # Codex batch B-BUTTONS-FIX (Nature, Water, Forc): prompts, refs (pack frame, original x32, idle sample) -> inbox/
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-FIX                                        # idle first; then `codex-inbox --stage states` and run again (hover, pressed)
+python3 -B tools/steamwoven_ui/school_kit.py codex-place [--only NAME,...]                             # the generated images registered onto the pack frames' geometry -> work/B-BUTTONS-FIX/placed (`build` uses them)
 python3 -B tools/steamwoven_ui/school_kit.py sheet --out FILE [--only NAME,...] [--zoom N] [--columns N]   # original | idle | hover | pressed over a wood ground with the run-time shadow (English labels)
 ```
 
-`plate.<name>` is the pack's idle frame, `plate.<name>_hover` and `_pressed` the hover and pressed frames in full, `glyph.<name>` an empty layer. The circle of every art (the ring's gold circle and the cut's half unit) and the shadow's numbers are read from the viewer's `tools/terrain-viewer/Core/AreaKitRoundParts.cs`, one source for the part's edge and the run-time shadow; the alpha is analytic (one pixel wide), the colour outside the circle is carried inward before the stretch to the master's size, so no old background reaches the edge. Each part's provenance record (`provenance/rule/<id>.json`) names the pack frame's sha256 and the index's sha12.
+`plate.<name>` is the pack's idle frame, `plate.<name>_hover` and `_pressed` the hover and pressed frames in full, `glyph.<name>` an empty layer. The circle of every art (the ring's gold circle and the cut's half unit) and the shadow's numbers are read from the viewer's `tools/terrain-viewer/Core/AreaKitRoundParts.cs`, one source for the part's edge and the run-time shadow; the alpha is analytic (one pixel wide), the colour outside the circle is carried inward before the stretch to the master's size, so no old background reaches the edge. Each part's provenance record (`provenance/rule/<id>.json`) names the pack frame's sha256 and the index's sha12; the three symbols the pack reads wrongly (art 74, 86, 56: `CODEX_SYMBOLS`) are redrawn by Codex on the pack frame (source `codex` in the record, with the generation record and the placed frame's hash).
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_school_kit` (in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
