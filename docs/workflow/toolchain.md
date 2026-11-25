@@ -1356,6 +1356,20 @@ parts keeps the pack's strips. Look capture: `./arcanum smoke pr --stages bar --
 puts the real masters in place of the flat colours (the strip, cap and hardware colour checks are skipped, the other parts keep theirs, so the folder must hold no others). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_hardware_build` (also in `tools/local_dev/run_tests.py`).
 
 
+## Steamwoven hardware: rings, slots and small frames, batch B-HARDWARE slice 3 (ARC-UI-3261)
+
+31 small hardware parts made BY RULE from the original's own frames by `tools/steamwoven_ui/hardware_kit.py` (no Codex; [TRD](../ui/steamwoven-interface-trd.md), SWI-KIT): the eight lens rings (arts 198, 222, 231, 232, 233, 367, 670, 746), the ten hotkey slot insets (172 to 181), the five maintain slot woods (188 to 192) and plugs (628 to 632), the portrait highlight (646), the portrait select (332) and the roller template (314). Local only (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the composite, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/hardware_kit.py plan                                  # the parts and their manifest sizes
+python3 -B tools/steamwoven_ui/hardware_kit.py rule [--only PART,...] [--dry-run]     # masters/hardware.*.png and provenance/rule/*.json (the gates run first)
+python3 -B tools/steamwoven_ui/hardware_kit.py sheet --out FILE [--zoom N]            # before / after composite, English labels
+python3 -B tools/steamwoven_ui/hardware_kit.py self-test
+```
+
+The rules: a lens ring is the original's own ring read from a polar table (every opaque pixel within 6 px of the transparent circle, by angle and distance from the circle's edge, the eight arts pooled so their woods cancel), so its lighting is the original's, smooth at the master size; the corners and the circle are transparent (art 367 keeps its opaque dark fill). A hotkey slot is one inset (the mean of the ten arts, each normalised by its own wood: the shadow as black with the original's depth as alpha, the edge lines opaque, the middle open). The wood of a maintain slot and its plug is a crop of the strip master's plain wood (`board.inttop`, the stretch left of the slot openings; the tool refuses it if it is no longer opaque) in the original art's tone and under its smooth light. The two selection frames are blocks (every original pixel a block of the master), the roller is smooth along its height and blocks across. Gates before a master is written: the manifest size on the 6 px grid, not empty, no translucent pixel inside a solid detail, a wood tile opaque. Records: `provenance/rule/<part>.json` (`rule:hardware_kit:<part>` in the manifest). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_hardware_kit` (also in `tools/local_dev/run_tests.py`).
+
+
 ## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
 
 Production of the kit parts of the five square buttons of the top strip (Character 169, Inventory 186, Logbook 187, Map of the town 193, World map 194; lit arts 561, 559, 560, 558, 195), the first slice of batch B-BUTTONS
