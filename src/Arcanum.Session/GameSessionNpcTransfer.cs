@@ -671,14 +671,17 @@ public sealed partial class GameSessionOwner
     // A new made item at the end of the NPC's (ARC-WORLD-090: or a container's) list after the host's insert check for it (the
     // original's new object moved in by 0x4617F0); its own bookkeeping (gold or ammunition record, revision) is the caller's.
     private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal,
-        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null, bool hero = false)
+        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null, bool hero = false, SessionAmmoRecord? mergeInto = null)
     {
         refusal = null;
         // ARC-SCRIPT-2857 (NT2, IE2): the new object moves in through 0x4617F0 → 0x461810. It has no parent, so 0x461810 does not forward to the parented transfer 0x461CA0: the holder's transfer script (point 32) is never
         // run for it, whatever the holder's scripts. ARC-SCRIPT-2887: the fresh path runs the new item's own get script (point 4) with the holder as the triggerer before the insert check, and at the end of the insert 0x466640 its insert-item script (21), also
         // with the holder as the triggerer; both from the prototype's array (the new item owns no slot yet), the get script's skip default refuses the move.
         // ARC-SCRIPT-2910: <paramref name="hero"/> makes the hero the recipient (npc then names the hero as the triggerer): its list budget, its insert check (the hero's verdict, the room for the stack) and its list place.
-        if (hero ? _inventory.Held >= _limits.MaxPcItems : _inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+        // ARC-SCRIPT-2909: <paramref name="mergeInto"/> is a created ammunition object that joins the holder's stack of its type (0x466640's merge branch, 0x462930): it runs the same two scripts, then is destroyed after its units are raised; no list place is
+        // taken, so the list budgets do not apply, and the host's insert check answers for the stack. The caller adds the units; the returned item is the incoming one, never created. (A gold or ammunition move onto an existing pile or stack, 0x464830 and 0x4658E0, and
+        // a restock's coins onto a persistent pile create no object at all: they run none of this.)
+        if (mergeInto is null && (hero ? _inventory.Held >= _limits.MaxPcItems : _inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems))
         {
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);
             return null;
@@ -710,7 +713,8 @@ public sealed partial class GameSessionOwner
             }
             // ARC-WORLD-085: the new object has its prototype's weight (the NPC's own weight is the host's insert check).
             var weight = CreatedWeight(kind.Prototype);
-            var verdict = hero
+            var verdict = mergeInto is { } stack ? insertCheck(new SessionInventoryItem(stack.Entity, facts))
+                : hero
                 ? HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, facts)), 0, new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, facts.Quantity ?? 0), room: NewItemRoom(entity, kind))
                 : insertCheck(new SessionInventoryItem(entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
             ThrowIfDisposed();
@@ -726,9 +730,11 @@ public sealed partial class GameSessionOwner
                 runs.Prepare();
                 if (runs.Failure != GameSessionFailure.None) { refusal = Refused(runs.Failure, verdict); return null; }
             }
-            var made = hero ? CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight))
+            var merging = mergeInto is not null;
+            var made = merging ? new SessionMadeItem(entity, kind)
+                : hero ? CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight))
                 : CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
-            if (!hero) StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
+            if (!hero && !merging) StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
             if (runs is not null)
             {
                 if (report is { Defer: true }) report.Pending = runs;
@@ -739,6 +745,8 @@ public sealed partial class GameSessionOwner
                     report.Messages.AddRange(runs.Messages);
                     report.Insert = insertRun;
                 }
+                // The incoming object is destroyed after the merge, with the slots and flags its runs wrote (its number stays used).
+                if (merging) Discard(entity);
             }
             return made;
         }

@@ -12,7 +12,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// A hero that holds no gold pile is given a new gold object (the fresh insert path of the original makes it and moves it in), so its prototype's get (4) script runs first with the hero as the triggerer, before the insert check; an answer that skips the default
-    /// refuses the insert (the pile stays on the hero's tile, as for a grid with no place). A hero that holds a pile grows it and runs nothing (the merged case is #2909). Null when the call makes no new pile or the prototype has neither point;
+    /// refuses the insert (the pile stays on the hero's tile, as for a grid with no place). A hero that holds a pile grows it and runs nothing (ARC-SCRIPT-2909, ledger TQ19: the original raises an existing pile's quantity directly and creates no object). Null when the call makes no new pile or the prototype has neither point;
     /// a refusal when the prototype has one and there is no <paramref name="scripts"/> host (<see cref="GameSessionFailure.ItemScriptUnsupported"/>) or a run the session cannot apply.
     /// </summary>
     private (InventoryMutationResult? Refusal, FreshHeroGold? Pile) BeginFreshHeroGold(ISessionItemScriptHost? scripts)
