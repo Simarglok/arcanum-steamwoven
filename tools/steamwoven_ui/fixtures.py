@@ -22,13 +22,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from . import pngio
+    from . import image_archive, pngio, prompt_library
 except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import image_archive  # type: ignore
     import pngio  # type: ignore
+    import prompt_library  # type: ignore
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUT = ROOT / "local" / "steamwoven-ui" / "masters"
+
+
+def default_out() -> Path:
+    """`local/steamwoven-ui/masters` of the MAIN checkout (ARC-DEV-3277: a worktree has no `local/`; masters written there
+    are never seen by `bake.py` and `kit_check.py` and are lost with the worktree)."""
+    return prompt_library.default_local_root() / "masters"
+
+
 GRID = 6
 VARIANTS = ("flat", "brass")
 
@@ -454,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list")
     build_parser = sub.add_parser("build")
-    build_parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    build_parser.add_argument("--out", type=Path, default=None, help="default: local/steamwoven-ui/masters of the main checkout")
     build_parser.add_argument("--variant", choices=VARIANTS, default="brass")
     build_parser.add_argument("--only", default="")
     sub.add_parser("self-test")
@@ -465,12 +473,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "self-test":
         return self_test()
+    out = args.out if args.out is not None else default_out()
+    image_archive.warn_if_ephemeral(out, "fixtures.py build")
     only = {item for item in args.only.split(",") if item} or None
     if only and not only <= set(BY_ID):
         print("unknown ids:", ", ".join(sorted(only - set(BY_ID))))
         return 2
-    for ident in build(args.out, args.variant, only):
-        print("wrote", args.out / f"{ident}.png")
+    for ident in build(out, args.variant, only):
+        print("wrote", out / f"{ident}.png")
     return 0
 
 

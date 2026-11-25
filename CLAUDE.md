@@ -90,7 +90,9 @@ and its link holds the detail.
 - **Graphics changes** (owner rule 2026-11-11): post in the thread one
   composite image with labelled versions (before, after, any alternatives);
   forward it to the coordinator when the owner must decide; never commit the
-  images ([graphics rule](docs/workflow/tasks.md#review-publication-and-merge)).
+  images ([graphics rule](docs/workflow/tasks.md#review-publication-and-merge)); save every image of the task to `local/steamwoven-ui/archive/<TASK>/` of
+  the main checkout before posting it, the accepted one also in `final/`
+  (`tools/steamwoven_ui/image_archive.py`, [image archive](docs/workflow/tasks.md#review-publication-and-merge)).
 - **Stop and ask** with options when something you need is missing, a fix would
   change the task's contract, or the same failure repeats twice. Do not guess,
   mock or loop.
