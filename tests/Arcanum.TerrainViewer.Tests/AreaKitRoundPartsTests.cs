@@ -79,5 +79,6 @@ public sealed class AreaKitRoundPartsTests
         StringAssert.Contains(AreaKitRoundParts.Shader, "(1.0 - keep)");
         StringAssert.Contains(AreaKitRoundParts.Shader, "render_mode blend_premul_alpha");
         StringAssert.Contains(AreaKitRoundParts.Shader, "COLOR *= keep");
+        StringAssert.Contains(AreaKitRoundParts.Shader, "COLOR.rgb *= COLOR.a");   // ARC-UI-3320: a kit face is straight alpha
     }
 }

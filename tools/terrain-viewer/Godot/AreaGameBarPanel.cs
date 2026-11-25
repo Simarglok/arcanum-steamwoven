@@ -767,6 +767,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
         Dictionary<int, Texture2D>? covers = null, sheets = null;
+        Dictionary<int, Texture2D[]>? rounds = null;
         Dictionary<string, Texture2D>? fixtures = null;
         var held = new List<string>();
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
@@ -787,6 +788,15 @@ public partial class AreaGameBarPanel : CanvasLayer
                 if (window == SteamwovenKitWindow.Character)
                     foreach (var art in SteamwovenKitTable.Sheets.Keys)
                         if (SteamwovenKitComposer.Sheet(set, art) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (sheets ??= [])[art] = texture; held.Add(part.Id); }
+                // ARC-UI-3320: the round buttons of the pages (college rings, skill groups, disciplines): the idle, pressed and hover face of each button the set holds (#3204; plates stay loaded like the bar buttons' faces, the store drops only
+                // backdrops, sheets, fixtures and grids); a button whose idle face is missing or does not load keeps the art's own frame.
+                if (window == SteamwovenKitWindow.Character)
+                    foreach (var art in SteamwovenKitTable.RoundFaces.Keys)
+                        if (SteamwovenKitComposer.RoundFace(set, art) is { } face && SteamwovenKitStore.Texture(set, face.Idle.Id) is { } idle)
+                        {
+                            Texture2D State(SteamwovenKitPart? part) => part is { } known && SteamwovenKitStore.Texture(set, known.Id) is { } texture ? texture : idle;
+                            (rounds ??= [])[art] = [idle, State(face.Pressed), State(face.Hover)];
+                        }
                 // ARC-UI-3098: the window's fixtures (pits, fields, signs, dials, the ruler, gears, cell wells) that the set holds at the table's size; one missing or not loading is left out and the window draws its stand-in for it.
                 foreach (var id in SteamwovenKitTable.FixturesOf(window))
                     if (SteamwovenKitComposer.Fixture(set, id) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (fixtures ??= [])[id] = texture; held.Add(part.Id); }
@@ -794,7 +804,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
         SteamwovenKitStore.Retain("window", set, held);
         PublishKitBackground(loaded is not null ? _kitWindow : null, covers, loaded is not null ? fixtures : null);
-        AreaKitSheets.Publish(loaded is not null ? sheets : null);
+        AreaKitSheets.Publish(loaded is not null ? sheets : null, loaded is not null ? rounds : null);
         return loaded;
     }
 
