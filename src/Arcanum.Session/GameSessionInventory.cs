@@ -315,6 +315,9 @@ public sealed record SessionGroundItem(SessionInventoryItem Item, CellCoord Cell
 
 public sealed record SessionHolderInventory(string Entity, SessionHolderKind Kind, bool Dead, IReadOnlyList<SessionInventoryItem> Items);
 
+/// <summary>ARC-WORLD-3118: an NPC holder's list and the attached map whose seed lists it (a companion carried to another map: its home map).</summary>
+public readonly record struct SessionNpcHolder(SessionMapId Map, SessionHolderInventory Holder);
+
 /// <summary>Detached current inventory of one attached map: its seed without the items the PC has taken or the session deleted,
 /// each NPC holder's list followed by the made items the session added to that NPC (ARC-WORLD-055).</summary>
 public sealed class SessionMapInventory

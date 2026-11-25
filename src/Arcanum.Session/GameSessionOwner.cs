@@ -1325,6 +1325,16 @@ public sealed partial class GameSessionOwner : IDisposable
         return false;
     }
 
+    /// <summary>ARC-WORLD-3118: the NPC holder as the session's lists show it now (<see cref="SessionHolderInventory"/>, as <see cref="QueryMapInventory"/> lists it) and the attached map whose
+    /// seed lists it: the actor's map first, else another attached one (a companion carried here lists on its home map). Null when no attached seed lists it as an NPC. Throws for an invalid entity id.</summary>
+    public SessionNpcHolder? QueryNpcHolder(string npc)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        if (!NpcHolderSeed(npc, out var map, out var seed, out var row)) return null;
+        return new(map, new(row.Entity, row.Kind, row.Dead || KilledNpc(row.Entity), Array.AsReadOnly(_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).ToArray())));
+    }
+
     // The refusal of NpcHolderSeed: no seed on the actor's map and no other that lists the holder is an unavailable inventory.
     private GameSessionFailure UnseededHolder() => _inventory.Seeds.ContainsKey(_actor.Map) ? GameSessionFailure.UnknownHolder : GameSessionFailure.InventoryUnavailable;
 
