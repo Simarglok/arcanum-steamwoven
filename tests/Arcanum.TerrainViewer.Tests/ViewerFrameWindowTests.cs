@@ -97,13 +97,31 @@ public sealed class ViewerFrameWindowTests
     }
 
     [TestMethod]
-    public void AClockThatGoesBackIsIgnored()
+    public void AClockThatGoesBackStartsTheWindowAfresh()
     {
         var window = new ViewerFrameWindow();
         window.Record(1_000_000, 0, 0, 0);
         window.Record(1_010_000, 0, 0, 0);
         window.Record(900_000, 0, 0, 0);
-        Assert.AreEqual(1, window.Count);
+        Assert.AreEqual(0, window.Count);
+        window.Record(916_000, 0, 0, 0);
+        window.Record(932_000, 0, 0, 0);
+        var stats = window.Read()!.Value;
+        Assert.AreEqual(2, stats.Frames);
+        Assert.AreEqual(16.0, stats.AverageMs, 1e-3);
+    }
+
+    [TestMethod]
+    public void AStallLongerThanTheWindowIsStillRead()
+    {
+        var window = new ViewerFrameWindow(windowSeconds: 30);
+        long t = 0;
+        window.Record(t, 0, 0, 0);
+        for (var i = 0; i < 100; i++) { t += 16 * Ms; window.Record(t, 0, 0, 0); }
+        t += 45_000_000; window.Record(t, 1, 0, 0); // a 45 s stall (a cold map load)
+        var stats = window.Read()!.Value;
+        Assert.AreEqual(45_000.0, stats.MaxMs, 1e-3);
+        Assert.AreEqual(2, stats.Frames, "only the frame before the stall and the stall frame are left");
     }
 
     [TestMethod]

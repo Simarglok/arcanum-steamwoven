@@ -56,9 +56,11 @@ public sealed class ViewerFrameWindow
     {
         var previous = _previousMicros;
         _previousMicros = nowMicros;
-        if (previous < 0 || nowMicros < previous) return;
+        if (previous < 0) return;
+        if (nowMicros < previous) { _count = 0; return; } // a clock that went back: start the window afresh (the next frame is measured from this stamp)
         var capacity = _atMicros.Length;
-        while (_count > 0 && nowMicros - _atMicros[_head] > _windowMicros) { _head = (_head + 1) % capacity; _count--; }
+        // The newest kept frame stays even when it is older than the window, so a stall longer than the window is still read (as the span between two frames).
+        while (_count > 1 && nowMicros - _atMicros[_head] > _windowMicros) { _head = (_head + 1) % capacity; _count--; }
         if (_count == capacity) { _head = (_head + 1) % capacity; _count--; }
         var slot = (_head + _count) % capacity;
         _atMicros[slot] = nowMicros; _frameMs[slot] = (nowMicros - previous) / 1000f;
