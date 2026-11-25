@@ -41,7 +41,7 @@ public static class AreaCharacterSheetArtLayout
     public const int LensArt = 198;
 
     /// <summary>The lens's square: left, top and side in window units (the close rectangle).</summary>
-    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89); // ARC-UI-2714: the common place with the generated interface
+    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, AreaLensPlace.Side); // ARC-UI-2714: the common place with the generated interface
 
     /// <summary>The right-hand panel's place and size (the four panel windows at the screen's (503, 104), 0x55BAF5; art 29..31, 567: 235 × 325).</summary>
     public static (int X, int Y, int Width, int Height) Panel { get; } = (503, 63, 235, 325);

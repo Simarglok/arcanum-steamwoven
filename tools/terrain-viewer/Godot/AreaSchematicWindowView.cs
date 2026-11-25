@@ -259,7 +259,7 @@ public partial class AreaSchematicWindowView : Control
         // The assemble button's art and its face by state (0x56DDC0: the face is the page draw's, the button the build's).
         DrawArt(AreaSchematicWindowLayout.AssembleArt, AreaSchematicWindowLayout.Assemble, Frame(AreaSchematicWindowLayout.AssembleArt, new(Kind.Assemble, 0)));
         DrawArt(AreaSchematicWindowLayout.FaceArt(view.Button), AreaSchematicWindowLayout.AssembleFaceAt);
-        if (Art(AreaSchematicWindowLayout.RoundViewArt) is { } lens)
+        if (!AreaLensPlace.SurfaceRing && Art(AreaSchematicWindowLayout.RoundViewArt) is { } lens) // ARC-UI-3101: the kit surface carries the ring
         {
             var (x, y, _, _) = AreaSchematicWindowLayout.RoundView;
             DrawTextureRect(lens, new Rect2(x, y, lens.GetWidth(), lens.GetHeight()), false);

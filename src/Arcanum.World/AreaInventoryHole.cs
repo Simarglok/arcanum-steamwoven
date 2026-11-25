@@ -55,7 +55,8 @@ public static class AreaInventoryHole
     public static bool Contains(AreaInventoryMode mode, float x, float y)
     {
         var (left, top) = Corner(mode);
-        return x >= left && x < left + Side && y >= top && y < top + Side;
+        var side = AreaLensPlace.Side; // ARC-UI-3101: 92 over a kit surface with a ring
+        return x >= left && x < left + side && y >= top && y < top + side;
     }
 
     /// <summary>A left release inside the rectangle (IW34): with nothing held the window closes; with an item held the own window (mode 0
