@@ -608,12 +608,12 @@ public sealed class RestockStateTests
         Assert.AreEqual((Cave, "cave-smith", false), (shown.Map, shown.Holder, shown.Postponed));
         var done = shown.Regenerations.Single();
         Assert.AreEqual((25, 0, 0), (done.Coins, done.Refused, done.Skipped), "no created item is lost");
-        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6", "npc reads 5", "npc reads 6" }, done.Messages.Select(message => message.Text).ToArray(), "the scripts of the created ammunition ran on the shown map");
+        CollectionAssert.AreEqual(new[] { "npc reads 5", "npc reads 6", "npc reads 5", "npc reads 6" }, done.Messages.Select(message => message.Text).ToArray(), "the scripts of the created ammunition ran once the map was shown");
     }
 
     // The actor's map cannot change during a pass (the session refuses it), so no firing of one map is ever answered on another.
     [TestMethod]
-    public void The_actor_cannot_leave_the_map_between_two_firings_of_one_pass()
+    public void A_map_change_during_a_pass_is_refused_so_every_firing_stays_on_the_actors_map()
     {
         using var owner = Owner();
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Cave, CaveSeed()).Failure);
@@ -626,5 +626,6 @@ public sealed class RestockStateTests
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidEventPass), (moved!.Value.Disposition, moved.Value.Failure));
         Assert.AreEqual(Exterior, owner.QueryActor().Map);
         Assert.AreEqual(2, pass.Restocks.Count);
+        Assert.IsTrue(pass.Restocks.All(firing => firing.Map == Exterior), "every firing of the pass is for the actor's map");
     }
 }

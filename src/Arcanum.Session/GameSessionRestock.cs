@@ -66,7 +66,7 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// before the scripts were run).</summary>
     SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) => null;
     /// <summary>ARC-SCRIPT-2887 (ledger TQ19, NT2): the host that runs the get (4) and insert-item (21) scripts of an item the regeneration creates (the item move's fresh path, with the holder as the triggerer); null when the host has none, and a created
-    /// item whose prototype carries either point is then not created (counted as skipped). ARC-SCRIPT-2913: <paramref name="map"/> is always the actor's map: a restock of a holder of any other map never reaches the world (the event queue keeps its event parked until that map is shown), so the shown map's script host is the host of every run.</summary>
+    /// item whose prototype carries either point is then not created (counted as skipped). ARC-SCRIPT-2913: for the restock event, <see cref="GameSessionOwner.RegenerateInventory"/> and the generated-once container, <paramref name="map"/> is the actor's map: a restock event of a holder of any other map never reaches the world (the event queue keeps its event parked until that map is shown), so the shown map's script host is the host of every run.</summary>
     ISessionItemScriptHost? ItemScripts(SessionMapId map) => null;
 }
 
