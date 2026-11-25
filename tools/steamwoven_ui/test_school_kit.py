@@ -196,25 +196,52 @@ class CodexFixTests(unittest.TestCase):
             self.assertIn("Image 3", hover)
             self.assertIn("same symbol", idle.lower())
 
-    def test_the_disc_of_a_staged_frame_is_the_circle_and_a_registered_copy_matches_the_frame(self):
+    @staticmethod
+    def generated_of(sent: pngio.Image, big: float, pad: int = 20) -> pngio.Image:
+        """A 'generated' image: the sent picture `big` times larger on the flat ground with `pad` px more ground round it."""
+        w = int(sent.w * big)
+        out = pngio.Image(w + 2 * pad, w + 2 * pad, bytearray(bytes((*sk.CODEX_GROUND, 255)) * ((w + 2 * pad) ** 2)))
+        for y in range(w):
+            for x in range(w):
+                sx, sy = min(sent.w - 1, int(x / big)), min(sent.h - 1, int(y / big))
+                o = ((y + pad) * out.w + x + pad) * 4
+                out.data[o:o + 4] = sent.data[(sy * sent.w + sx) * 4:(sy * sent.w + sx) * 4 + 4]
+        return out
+
+    def test_a_registered_copy_matches_the_frame_and_a_shift_moves_it(self):
         circle = sk.circle_of(TAB)
         frame = pack_frame()
         sent = sk.staged_input(frame, circle)
         cx, cy, r = sk.disc_of_image(sent)
-        self.assertAlmostEqual(cx, circle.cx * sk.CODEX_SCALE, delta=1.5)
-        self.assertAlmostEqual(r, circle.cut * sk.CODEX_SCALE, delta=1.5)
-        # a "generated" image: the same picture, one and a half times larger and shifted: registered back it is the frame again
-        big = 1.5
-        w = int(sent.w * big)
-        out = pngio.Image(w + 40, w + 40, bytearray(bytes((*sk.CODEX_GROUND, 255)) * ((w + 40) ** 2)))
-        for y in range(w):
-            for x in range(w):
-                sx, sy = min(sent.w - 1, int(x / big)), min(sent.h - 1, int(y / big))
-                out.data[((y + 40) * out.w + x + 20) * 4:((y + 40) * out.w + x + 20) * 4 + 4] = sent.data[(sy * sent.w + sx) * 4:(sy * sent.w + sx) * 4 + 4]
-        placed = sk.placed_frame(out, sent, (frame.w, frame.h))
-        k = (HD // 2 * HD + HD // 2) * 4
-        self.assertEqual(tuple(placed.data[k:k + 3]), INSIDE)
+        self.assertAlmostEqual(r, circle.cut * sk.CODEX_SCALE, delta=3.0)
+        placed = sk.placed_frame(self.generated_of(sent, 1.0), circle, (frame.w, frame.h))
         self.assertEqual((placed.w, placed.h), (HD, HD))
+        at = lambda image, x, y: tuple(image.data[(y * HD + x) * 4:(y * HD + x) * 4 + 3])
+        self.assertEqual(at(placed, HD // 2, HD // 2), INSIDE)
+        self.assertEqual(at(placed, 30, 40), INSIDE)                                    # an off-centre pixel of the dome
+        # a frame with one green pixel: a shift of (+1, 0) shows the pixel one place to the left
+        marked = pack_frame()
+        marked.data[(48 * HD + 50) * 4:(48 * HD + 50) * 4 + 3] = bytes((0, 0, 255))
+        generated = self.generated_of(sk.staged_input(marked, circle), 1.0)
+        plain = sk.placed_frame(generated, circle, (HD, HD))
+        moved = sk.placed_frame(generated, circle, (HD, HD), (1, 0))
+        self.assertGreater(plain.data[(48 * HD + 50) * 4 + 2], moved.data[(48 * HD + 50) * 4 + 2])
+        self.assertGreater(moved.data[(48 * HD + 49) * 4 + 2], plain.data[(48 * HD + 49) * 4 + 2])
+
+    def test_a_generated_image_that_kept_no_framing_or_no_disc_is_refused(self):
+        circle = sk.circle_of(TAB)
+        sent = sk.staged_input(pack_frame(), circle)
+        with self.assertRaises(sk.SchoolError):
+            sk.placed_frame(self.generated_of(sent, 1.0, pad=150), circle, (HD, HD))   # the button came back much smaller on a wider canvas
+        flat = pngio.Image(200, 200, bytearray(bytes((*sk.CODEX_GROUND, 255)) * 40000))
+        with self.assertRaises(sk.SchoolError):
+            sk.disc_of_image(flat)                                                      # no button at all
+        wide = pngio.Image(200, 200, bytearray(bytes((*sk.CODEX_GROUND, 255)) * 40000))
+        for y in range(80, 120):
+            for x in range(20, 180):
+                wide.data[(y * 200 + x) * 4:(y * 200 + x) * 4 + 3] = bytes((200, 30, 30))
+        with self.assertRaises(sk.SchoolError):
+            sk.disc_of_image(wide)                                                      # a wide bar is no disc
 
     def test_the_states_of_a_button_are_aligned_onto_the_idle_symbol(self):
         circle = sk.circle_of(TAB)
@@ -245,18 +272,21 @@ class CodexFixTests(unittest.TestCase):
             placed = sk.codex_dirs(local_root)[2]
             placed.mkdir(parents=True)
             pngio.write(placed / f"{name}-f0.png", pack_frame((0, 200, 0)))      # a green redrawn idle frame
+            self.assertIsNone(sk.fixed_frame(local_root, name, 0))                # only the idle is redrawn: the button is never half redrawn
+            pngio.write(placed / f"{name}-f1.png", pack_frame((0, 0, 200)))
+            pngio.write(placed / f"{name}-f2.png", pack_frame((200, 0, 200)))
             self.assertIsNotNone(sk.fixed_frame(local_root, name, 0))
-            self.assertIsNone(sk.fixed_frame(local_root, name, 1))
             self.assertIsNone(sk.fixed_frame(local_root, "s_air", 0))             # not one of the three
             parts = sk.tab_parts(local, tab, local_root)
             master = sk.master_of(name)
             k = ((master[1] // 2) * master[0] + master[0] // 2) * 4
             self.assertEqual(tuple(parts[f"plate.{name}"].data[k:k + 3]), (0, 200, 0))          # idle: redrawn
-            self.assertEqual(tuple(parts[f"plate.{name}_hover"].data[k:k + 3]), INSIDE)          # hover: the pack's
+            self.assertEqual(tuple(parts[f"plate.{name}_pressed"].data[k:k + 3]), (0, 0, 200))   # pressed: redrawn (frame 1)
+            self.assertEqual(tuple(parts[f"plate.{name}_hover"].data[k:k + 3]), (200, 0, 200))   # hover: redrawn (frame 2)
             out = Path(folder) / "o.png"
             pngio.write(out, parts[f"plate.{name}"])
             self.assertEqual(sk.record_of(local, tab, f"plate.{name}", out, parts[f"plate.{name}"], local_root)["source"], "codex")
-            self.assertEqual(sk.record_of(local, tab, f"plate.{name}_hover", out, parts[f"plate.{name}"], local_root)["source"], "pack")
+            self.assertEqual(sk.record_of(local, tab, f"plate.{name}_hover", out, parts[f"plate.{name}"], local_root)["source"], "codex")
 
 
 class DataTests(unittest.TestCase):
