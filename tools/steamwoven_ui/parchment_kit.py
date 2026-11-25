@@ -672,6 +672,15 @@ def labelled(src: Path, dst: Path, label: str, zoom: int) -> None:
                     "-gravity", "North", "-splice", "0x28", "-annotate", "+0+4", label, str(dst)], check=True)
 
 
+def pack_frame(local: Path, name: str) -> Path | None:
+    """The old generated HD pack's frame of a box art (`local/hd-packs/interface-redraw-4x/interface/inventory/{buttons,panels}/<name>-f000.png`, 320 x 172), or None: the 'pack' column of the composite (the owner's pack-first rule, #3206)."""
+    base = local.parent / "hd-packs" / "interface-redraw-4x" / "interface" / "inventory"
+    for folder in ("buttons", "panels"):
+        if (base / folder / f"{name}-f000.png").is_file():
+            return base / folder / f"{name}-f000.png"
+    return None
+
+
 def cmd_sheet(args: argparse.Namespace) -> int:
     """The before / after composite: per box the original idle | kit cells | kit smooth | original lit | kit lit | original refused | kit refused (English labels)."""
     need_magick()
@@ -687,24 +696,37 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         built = {look: build_parts(frames, look, plate_dir) for look in LOOKS}
         for box in BOXES:
             plate = pngio.read(plate_dir / f"plate.{box.name}.png")
-            cols = [("original idle", upscale(read_frame(frames, box.folder))),
-                    ("kit cells", button_kit.composite(plate, built["cells"][f"glyph.{box.name}"])),
-                    ("kit smooth", button_kit.composite(plate, built["smooth"][f"glyph.{box.name}"])),
-                    ("original lit", upscale(read_frame(frames, box.on_folder))),
-                    ("kit lit (cells)", button_kit.composite(built["cells"][f"state.{box.on_name}"], built["cells"][f"glyph.{box.on_name}"])),
-                    ("kit lit (smooth)", button_kit.composite(built["smooth"][f"state.{box.on_name}"], built["smooth"][f"glyph.{box.on_name}"])),
-                    ("original refused", upscale(read_frame(frames, box.ill_folder))),
-                    ("kit refused (cells)", button_kit.composite(built["cells"][f"state.{box.ill_name}"], built["cells"][f"glyph.{box.name}"]))]
+
+            def packed(name: str, tag: str):
+                path = pack_frame(local, name)
+                if path is None:
+                    return []
+                small = work / f"{box.name}-{tag}-pack.png"
+                subprocess.run(["magick", str(path), "-filter", "Lanczos", "-resize", f"{MASTER[0]}x{MASTER[1]}!", str(small)], check=True)
+                return [("old HD pack", pngio.read(small))]
+
+            idle = [("original", upscale(read_frame(frames, box.folder)))] + packed(box.name, "idle") + [
+                ("kit cells", button_kit.composite(plate, built["cells"][f"glyph.{box.name}"])), ("kit smooth", button_kit.composite(plate, built["smooth"][f"glyph.{box.name}"]))]
             if box.name == "drop_off":  # the flat arrow also in the owner's round-button rule (solid fill, engraving)
-                cols.insert(3, ("kit solid", button_kit.composite(plate, built["solid"][f"glyph.{box.name}"])))
-            tiles = []
-            for n, (label, image) in enumerate(cols):
-                raw, tile = work / f"{box.name}-{n}.png", work / f"{box.name}-{n}-l.png"
-                pngio.write(raw, image)
-                labelled(raw, tile, label, args.zoom)
-                tiles.append(str(tile))
+                idle.append(("kit solid", button_kit.composite(plate, built["solid"][f"glyph.{box.name}"])))
+            lit = [("original lit", upscale(read_frame(frames, box.on_folder)))] + packed(box.on_name, "lit") + [
+                ("kit lit cells", button_kit.composite(built["cells"][f"state.{box.on_name}"], built["cells"][f"glyph.{box.on_name}"])),
+                ("kit lit smooth", button_kit.composite(built["smooth"][f"state.{box.on_name}"], built["smooth"][f"glyph.{box.on_name}"]))]
+            refused = [("original refused", upscale(read_frame(frames, box.ill_folder)))] + packed(box.ill_name, "ill") + [
+                ("kit refused", button_kit.composite(built["cells"][f"state.{box.ill_name}"], built["cells"][f"glyph.{box.name}"]))]
+            lines = []
+            for number, cols in enumerate((idle, lit, refused)):
+                tiles = []
+                for n, (label, image) in enumerate(cols):
+                    raw, tile = work / f"{box.name}-{number}-{n}.png", work / f"{box.name}-{number}-{n}-l.png"
+                    pngio.write(raw, image)
+                    labelled(raw, tile, label, args.zoom)
+                    tiles.append(str(tile))
+                line = work / f"{box.name}-line{number}.png"
+                subprocess.run(["magick", "montage", *tiles, "-tile", "5x1", "-geometry", "+4+4", "-background", "#202020", str(line)], check=True)
+                lines.append(str(line))
             row = work / f"{box.name}-row.png"
-            subprocess.run(["magick", "montage", *tiles, "-tile", "5x", "-geometry", "+4+4", "-background", "#202020", str(row)], check=True)
+            subprocess.run(["magick", *lines, "-background", "#202020", "-append", str(row)], check=True)
             rows.append(str(row))
         args.out.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["magick", "montage", *rows, "-tile", "1x", "-geometry", "+0+10", "-background", "#202020", str(args.out)], check=True)
