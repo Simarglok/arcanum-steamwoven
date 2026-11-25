@@ -38,9 +38,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    from tools.steamwoven_ui import band_crop, prompt_library
+    from tools.steamwoven_ui import band_crop, image_archive, prompt_library
 except ImportError:  # run as a script from its own folder
     import band_crop  # type: ignore[no-redef]
+    import image_archive  # type: ignore[no-redef]
     import prompt_library  # type: ignore[no-redef]
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -505,6 +506,7 @@ def crop_command(image: Path, out_file: Path, size: str, aspect: str | None, fuz
     """`crop`: one padded canvas (for example one left in a work folder) to its band at the zone size, with a provenance sidecar `OUT.crop.json`."""
     want_size = parse_pair(size, "xX,")
     want = parse_pair(aspect, ":xX") if aspect else want_size
+    image_archive.warn_if_ephemeral(out_file, "codex_batch.py crop")
     try:
         canvas = png_size(image)
         report = band_crop.crop_file(image, out_file, canvas, want, want_size, fuzz)
