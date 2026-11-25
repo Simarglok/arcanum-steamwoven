@@ -299,9 +299,14 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
         if ident in SMALL_PLATES:
             b = SMALL_PLATES[ident]
-            how = {"dome": "the bottom strip's olive dome (plate-round-hud) with the brass ring of the hardware rings laid over it at the original's width, by rule (small_kit.py plates)",
-                   "derived": f"the plate of {b.base} darkened by rule where the original's OFF frame is darker (small_kit.py plates)",
-                   "codex": f"the empty plate: one Codex item ({next(i.prompt for i in small_kit.ITEMS if b.name in i.parts)}), fitted to this part"}[b.plate]
+            if b.plate == "dome":
+                how = "the strip's olive dome (plate-round-hud) with the hardware rings' brass ring at the original's width, by rule (small_kit.py plates)"
+            elif b.plate == "rule":
+                how = "an exact triangle, dark outline, brass band in the hardware rings' brass, by rule (small_kit.py plates)"
+            elif b.plate == "derived":
+                how = f"the plate of {b.base} darkened by rule where the original's OFF frame is darker (small_kit.py plates)"
+            else:
+                how = f"the empty plate: one Codex item ({next(i.prompt for i in small_kit.ITEMS if b.name in i.parts)}), fitted to this part"
             part["status"], part["provenance"] = "master", (f"rule:small_kit:{ident}" if b.plate != "codex" else f"fit:{ident}")
             part["note"] = f"{how}; the symbol and its states are made by rule (small_kit.py, ARC-UI-3206)"
         if ident in SQUARE_HUD_STATES:

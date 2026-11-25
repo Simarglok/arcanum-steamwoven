@@ -95,8 +95,11 @@ class Small:
     frames: dict = field(default_factory=lambda: {"idle": 0, "pressed": 1, "hover": 2})   # state -> frame number (a state without a frame has no overlay)
     outline: str = ""               # `tri_up` / `tri_down`: the symbol is an exact isosceles triangle fitted to the mask; empty: the mask's own smooth outline
     shape: str = "mask"             # where the symbol's shape is read: `mask` (the original's mask: plain plus, minus and arrow shapes read well from it) or `pack` (the old HD frame of the pack, the owner's first source)
-    plate: str = "codex"            # `dome` (the bottom strip's dome + the brass ring by rule), `derived` (the plate of `base` darkened by rule) or `codex` (fitted by fit.py into the masters)
+    plate: str = "codex"            # `dome` (the bottom strip's dome + the brass ring by rule), `rule` (the scroll arrows' triangle by rule), `derived` (the plate of `base` darkened by rule) or `codex` (fitted by fit.py into the masters)
     base: str = ""                  # for `derived`: the button whose plate this one is
+    sigma: float = SYMBOL_SIGMA     # cells: the Gaussian of the mask (smaller: sharper corners, for the one-cell strokes)
+    level: float = SYMBOL_LEVEL     # the outline's level on the blurred mask: lower = a bolder line (the one-cell strokes of the small olive buttons)
+    engrave: bool = True            # False: the symbol is too thin for a rim and a shade (a one-cell line of the small olive buttons), it is plain solid
     note: str = ""
 
 
@@ -115,12 +118,12 @@ SMALL = (
     _round("sldrbutt_r_arrow", 668, "668-SldrButt_R_Arrow"),
     _stone("spelltech_add", 647, "647-SpellTech_Add"),
     _stone("spelltech_minus", 648, "648-SpellTech_Minus"),
-    Small("sp_minus", 257, "257-SP_Minus", "pill", (22, 13), (78, 48), "light", (4, 3, 17, 9), frames={"idle": 0, "pressed": 1}),
-    Small("sp_plus", 258, "258-SP_Plus", "pill", (22, 13), (78, 48), "light", (4, 3, 17, 9), frames={"idle": 0, "pressed": 1}),
-    Small("oldchar_minus", 804, "804-OldChar_Minus", "pill", (13, 10), (48, 36), "light", (2, 2, 10, 7)),
-    Small("oldchar_plus", 805, "805-OldChar_Plus", "pill", (13, 10), (48, 36), "light", (2, 2, 10, 7)),
-    Small("scrllup", 317, "317-ScrllUP", "tri", (11, 15), (42, 54), "green", (2, 2, 8, 12), outline="tri_up"),
-    Small("scrlldwn", 318, "318-ScrllDWN", "tri", (11, 14), (42, 48), "green", (2, 2, 8, 11), outline="tri_down"),
+    Small("sp_minus", 257, "257-SP_Minus", "pill", (22, 13), (78, 48), "light", (4, 3, 17, 9), frames={"idle": 0, "pressed": 1}, sigma=0.2, level=0.28, engrave=False),
+    Small("sp_plus", 258, "258-SP_Plus", "pill", (22, 13), (78, 48), "light", (4, 3, 17, 9), frames={"idle": 0, "pressed": 1}, sigma=0.2, level=0.28, engrave=False),
+    Small("oldchar_minus", 804, "804-OldChar_Minus", "pill", (13, 10), (48, 36), "light", (2, 2, 10, 7), sigma=0.2, level=0.28, engrave=False),
+    Small("oldchar_plus", 805, "805-OldChar_Plus", "pill", (13, 10), (48, 36), "light", (2, 2, 10, 7), sigma=0.2, level=0.28, engrave=False),
+    Small("scrllup", 317, "317-ScrllUP", "tri", (11, 15), (42, 54), "green", (2, 2, 8, 12), outline="tri_up", plate="rule"),
+    Small("scrlldwn", 318, "318-ScrllDWN", "tri", (11, 14), (42, 48), "green", (2, 2, 8, 11), outline="tri_down", plate="rule"),
     Small("followerarrow_dwn", 501, "501-FollowerArrow_DWN", "strip", (67, 13), (240, 48), "red", (20, 2, 46, 10), frames={"idle": 0}, outline="tri_down"),
     Small("followerarrow_up", 502, "502-FollowerArrow_UP", "strip", (67, 13), (240, 48), "green", (20, 2, 46, 10), frames={"idle": 0}, outline="tri_up"),
     Small("follow_scroll_up", 506, "506-Follow_Scroll_up", "strip", (33, 13), (120, 48), "green", (5, 2, 28, 11), frames={"idle": 0, "pressed": 1}, outline="tri_up"),
@@ -146,8 +149,6 @@ ITEMS = (
     Item("plate-stone-square-hud", "spelltech_add", ("spelltech_add", "spelltech_minus"), "full", (1020, 1020)),
     Item("plate-olive-pill-hud", "sp_plus", ("sp_minus", "sp_plus"), "margin", (1014, 600)),
     Item("plate-olive-pill-small-hud", "oldchar_plus", ("oldchar_minus", "oldchar_plus"), "margin", (1014, 780)),
-    Item("plate-scroll-up-hud", "scrllup", ("scrllup",), "margin", (744, 1014)),
-    Item("plate-scroll-down-hud", "scrlldwn", ("scrlldwn",), "margin", (798, 1014)),
     Item("plate-stone-strip-hud", "followerarrow_dwn", ("followerarrow_dwn", "followerarrow_up"), "full", (2880, 558)),
     Item("plate-stone-strip-short-hud", "follow_scroll_up", ("follow_scroll_up", "follow_scroll_dwn"), "full", (1260, 504)),
 )
@@ -287,16 +288,9 @@ def smooth(edge0: float, edge1: float, x: float) -> float:
     return button_kit.smoothstep(edge0, edge1, x)
 
 
-def triangle_alpha(mask: list[bool], size: tuple[int, int], master: tuple[int, int], up: bool) -> list[float]:
-    """An isosceles triangle with the mask's box (the apex half a cell above its top row): exact straight edges, one sharp apex, anti-aliased 4 x 4 per master pixel."""
+def triangle_polygon_alpha(top: float, bottom: float, cx: float, half: float, size: tuple[int, int], master: tuple[int, int], up: bool) -> list[float]:
+    """An isosceles triangle (apex at `top` when `up`, else at `bottom`; the base `half` * 2 wide at the other end) in cell coordinates of a `size` frame, anti-aliased 4 x 4 per master pixel."""
     w, h = size
-    biggest = max(components(mask, w, h), key=len)   # a stray cell beside the triangle is no part of it
-    cells = [(i % w, i // w) for i in biggest]
-    top, bottom = min(y for _, y in cells), max(y for _, y in cells) + 1
-    cx = (min(x for x, _ in cells) + max(x for x, _ in cells) + 1) / 2.0
-    left, right = min(x for x, _ in cells), max(x for x, _ in cells) + 1
-    top -= 0.5                                 # the apex row of the original is one cell wide: the true apex lies half a cell above it
-    half = (right - left) / 2.0
     mw, mh = master
     out = [0.0] * (mw * mh)
     sx, sy = w / mw, h / mh
@@ -318,10 +312,21 @@ def triangle_alpha(mask: list[bool], size: tuple[int, int], master: tuple[int, i
     return out
 
 
-def silhouette(mask: list[bool], size: tuple[int, int], master: tuple[int, int], sigma: float = SYMBOL_SIGMA) -> list[float]:
+def triangle_alpha(mask: list[bool], size: tuple[int, int], master: tuple[int, int], up: bool) -> list[float]:
+    """An isosceles triangle with the mask's box (the apex half a cell above its top row): exact straight edges, one sharp apex."""
+    w, h = size
+    biggest = max(components(mask, w, h), key=len)   # a stray cell beside the triangle is no part of it
+    cells = [(i % w, i // w) for i in biggest]
+    top, bottom = min(y for _, y in cells), max(y for _, y in cells) + 1
+    left, right = min(x for x, _ in cells), max(x for x, _ in cells) + 1
+    # the apex row of the original is one cell wide: the true apex lies half a cell beyond it
+    return triangle_polygon_alpha(top - 0.5 if up else top, bottom if up else bottom + 0.5, (left + right) / 2.0, (right - left) / 2.0, size, master, up)
+
+
+def silhouette(mask: list[bool], size: tuple[int, int], master: tuple[int, int], sigma: float = SYMBOL_SIGMA, level: float = SYMBOL_LEVEL) -> list[float]:
     """The symbol's alpha plane at the master size: a small Gaussian of the closed mask and a one-pixel soft step (no stair, a line stays straight, a corner stays a corner)."""
     field_ = button_kit.resample_plane([1.0 if m else 0.0 for m in mask], size, master, sigma)
-    return [smooth(SYMBOL_LEVEL - EDGE_HALF, SYMBOL_LEVEL + EDGE_HALF, v) for v in field_]
+    return [smooth(level - EDGE_HALF, level + EDGE_HALF, v) for v in field_]
 
 
 def shifted(plane: list[float], w: int, h: int, dx: int, dy: int) -> list[float]:
@@ -348,15 +353,18 @@ def paint_plane(alpha: list[float], rgb: tuple[int, int, int], size: tuple[int, 
     return out
 
 
-def engraved(alpha: list[float], colour: tuple[int, int, int], size: tuple[int, int]) -> Image:
+def engraved(alpha: list[float], colour: tuple[int, int, int], size: tuple[int, int], rim: bool = True) -> Image:
     """The solid symbol with its light rim (upper left) and shade (lower right) laid UNDER it, as one layer."""
     w, h = size
     light = tuple(int(round(c + (255 - c) * ENGRAVE_LIGHT)) for c in colour)
     shade = tuple(int(round(c * ENGRAVE_SHADE)) for c in colour)
-    rim = paint_plane([0.85 * a for a in shifted(alpha, w, h, ENGRAVE_PX, ENGRAVE_PX)], light, size)       # the symbol moved to the upper left
+    rim_on = rim
+    rim_layer = paint_plane([0.85 * a for a in shifted(alpha, w, h, ENGRAVE_PX, ENGRAVE_PX)], light, size)       # the symbol moved to the upper left
     dark = paint_plane([0.85 * a for a in shifted(alpha, w, h, -ENGRAVE_PX, -ENGRAVE_PX)], shade, size)    # moved to the lower right
     body = paint_plane(alpha, colour, size)
-    return button_kit.composite(button_kit.composite(dark, rim), body)
+    if not rim_on:
+        return body
+    return button_kit.composite(button_kit.composite(dark, rim_layer), body)
 
 
 def glow_alpha(mask: list[bool], units: tuple[int, int], master: tuple[int, int], strength: float) -> list[float]:
@@ -371,7 +379,8 @@ def glow_strength(idle: Image, state: Image, mask: list[bool], b: Small) -> floa
     near = mask
     for _ in range(3):
         near = dilate(near, w, h)
-    gains = [lightness(*state.pixel(i % w, i // w)[:3]) - lightness(*idle.pixel(i % w, i // w)[:3]) for i in range(w * h) if near[i] and not mask[i] and idle.pixel(i % w, i // w)[3]]
+    own = dilate(symbol_mask(state, b), w, h)   # the state's own, bolder symbol is no glow
+    gains = [lightness(*state.pixel(i % w, i // w)[:3]) - lightness(*idle.pixel(i % w, i // w)[:3]) for i in range(w * h) if near[i] and not mask[i] and not own[i] and idle.pixel(i % w, i // w)[3]]
     if not gains:
         return 0.0
     top = sorted(gains)[len(gains) * 3 // 4:]   # the brightest quarter of the ring: a glow that is only on one side (the lit side) still counts
@@ -583,7 +592,7 @@ def symbol_shape(frames: Path, pack: Path | None, b: Small, shape: str | None = 
     mask = symbol_mask(idle, b)
     if not any(mask):
         raise SmallError(f"{b.name}: no symbol found in the idle frame (hue {b.hue})")
-    return Shape(mask, (idle.w, idle.h), "mask", SYMBOL_SIGMA)
+    return Shape(mask, (idle.w, idle.h), "mask", b.sigma)
 
 
 def button_parts(frames: Path, b: Small, pack: Path | None = None, shape_source: str | None = None) -> dict[str, Image]:
@@ -591,14 +600,16 @@ def button_parts(frames: Path, b: Small, pack: Path | None = None, shape_source:
     idle = read_frame(frames, b, b.frames["idle"])
     shape = symbol_shape(frames, pack, b, shape_source)
     mask = coarse(shape.mask, shape.size[0], shape.size[1], shape.size[0] // b.units[0])   # the symbol on the original's cells: the colours, the glow and the darkening are read there
-    alpha = triangle_alpha(shape.mask, shape.size, b.master, b.outline == "tri_up") if b.outline else silhouette(shape.mask, shape.size, b.master, shape.sigma)
-    parts = {f"glyph.{b.name}": engraved(alpha, symbol_colour(idle, mask, b.hue), b.master)}
+    alpha = triangle_alpha(shape.mask, shape.size, b.master, b.outline == "tri_up") if b.outline else silhouette(shape.mask, shape.size, b.master, shape.sigma, b.level)
+    parts = {f"glyph.{b.name}": engraved(alpha, symbol_colour(idle, mask, b.hue), b.master, b.engrave)}
     for state in STATES:
         number = b.frames.get(state)
         if number is None:
             continue
         frame = read_frame(frames, b, number)
-        lit = engraved(alpha, symbol_colour(frame, mask, b.hue), b.master)
+        own = symbol_mask(frame, b) if b.hue == "light" else mask   # a grey symbol moves a cell when pressed: its own cells give the lit colour
+        lit_colour = symbol_colour(frame, own if any(own) else mask, b.hue)
+        lit = engraved(alpha, lit_colour, b.master, b.engrave)
         layers = []
         clip = frame_clip(idle, b.master)
         dark = dark_layer(idle, frame, mask, b, b.master)
@@ -606,7 +617,7 @@ def button_parts(frames: Path, b: Small, pack: Path | None = None, shape_source:
             layers.append(clipped(dark, clip))
         strength = glow_strength(idle, frame, mask, b)
         if strength >= GLOW_MIN:
-            layers.append(clipped(paint_plane(glow_alpha(mask, b.units, b.master, strength), symbol_colour(frame, mask, b.hue), b.master), clip))
+            layers.append(clipped(paint_plane(glow_alpha(mask, b.units, b.master, strength), lit_colour, b.master), clip))
         layers.append(lit)
         out = layers[0]
         for layer in layers[1:]:
@@ -721,7 +732,11 @@ def key_cutout(image: Image) -> Image:
     xs, ys = [], []
     for i in range(image.w * image.h):
         o = i * 4
-        a = 1.0 - is_ground(*image.data[o:o + 3])
+        r, g, b = image.data[o:o + 3]
+        a = 1.0 - is_ground(r, g, b)
+        spill = min(r - g, b - g) / 255.0   # a magenta lean (the ground's light on the plate's edge): the ground's share is taken out of the colour
+        if spill > 0.04 and abs(r - b) < 40:
+            out.data[o:o + 3] = bytes(max(0, min(255, int(round(v - spill * GROUND[k])))) for k, v in enumerate((r, g, b)))
         out.data[o + 3] = int(round(a * 255))
         if a > 0.5:
             xs.append(i % image.w)
@@ -742,7 +757,10 @@ HALO_TIERS = ("8,20", "16,40")   # the recorded overrides of fit.py's halo gate 
 
 
 def fit_plate(part: str, source: Path, provenance: Path, local: Path, dry: bool) -> dict:
-    from . import fit as fit_tool  # noqa: PLC0415 (imported here: fit.py is not needed by the other commands)
+    try:
+        from . import fit as fit_tool  # noqa: PLC0415 (imported here: fit.py is not needed by the other commands)
+    except ImportError:  # run as a script
+        import fit as fit_tool  # type: ignore  # noqa: PLC0415
     last = None
     for halo in (None, *HALO_TIERS):
         ns = argparse.Namespace(part=part, batch=None, prompt=None, source=str(source), provenance=str(provenance), no_provenance=False, size=None, crop=None, key="none",
@@ -756,6 +774,21 @@ def fit_plate(part: str, source: Path, provenance: Path, local: Path, dry: bool)
                 raise
             print(f"{part}: halo gate refused at {halo or 'the standard limits'} ({error.failures[0]})")
     raise last  # type: ignore[misc]
+
+
+def salvaged_band(local: Path, item: Item, record: dict, work: Path) -> tuple[Path, dict]:
+    """A strip the generator refused for its aspect but saved (a canvas with black bars round the band, `refused` in its record) is used through the band crop of the batch runner (TRD SWI-GEN-8: the cropped band
+    is accepted when the tool step produced it); the record says so. Anything else missing is an error."""
+    picture = local / "codex-work" / BATCH / str(record.get("run")) / f"{item.prompt}.png"
+    if record.get("outcome") != "refused" or item.size[0] / item.size[1] < 4.0 or not picture.is_file():
+        raise SmallError(f"the result of {item.prompt} is missing in the outbox (run the batch first: codex_batch.py run {BATCH} --crop-band)")
+    out = work / f"{item.prompt}-band.png"
+    subprocess.run([sys.executable, "-B", str(HERE / "codex_batch.py"), "crop", str(picture), "--size", f"{item.size[0]}x{item.size[1]}", "--out", str(out)], check=True, capture_output=True)
+    accepted = dict(record)
+    accepted["accepted"] = {"by": "small_kit.py cut", "why": "the generator refused the aspect but saved a canvas with the band between black bars; the band was cut by codex_batch.py crop (aspect error within the tool's limits)",
+                            "image": str(picture.relative_to(local)), "image_sha256": sha256_file(picture), "band": out.name}
+    accepted["image"], accepted["image_sha256"] = out.name, sha256_file(out)
+    return out, accepted
 
 
 def cmd_cut(args: argparse.Namespace) -> int:
@@ -772,14 +805,22 @@ def cmd_cut(args: argparse.Namespace) -> int:
         source = local / "outbox" / BATCH / f"{item.prompt}.png"
         record = generator_record(local, item.prompt)
         if not source.is_file():
-            raise SmallError(f"{source} is missing: run the batch first")
+            source, record = salvaged_band(local, item, record, work)
         for name in item.parts:
             part = f"plate.{name}"
             size = manifest[part]["size"]
             cut_png = work / f"{item.prompt}-{name}.png"
             if item.ground == "full":
-                shutil.copyfile(source, cut_png)
-                step = "none (the picture is the plate)"
+                src = pngio.read(source)
+                ratio = (src.w / src.h) / (size[0] / size[1])
+                if abs(ratio - 1.0) <= 0.005:
+                    shutil.copyfile(source, cut_png)
+                    step = "none (the picture is the plate)"
+                elif abs(ratio - 1.0) <= ASPECT_TOLERANCE:
+                    subprocess.run(["magick", str(source), "-filter", "lanczos", "-resize", f"{src.w}x{round(src.w * size[1] / size[0])}!", str(cut_png)], check=True)
+                    step = f"small_kit.py cut (stretched {abs(ratio - 1.0) * 100:.1f} % to the master's grid-snapped aspect {size[0]} x {size[1]})"
+                else:
+                    raise SmallError(f"{part}: the picture is {src.w} x {src.h}, {abs(ratio - 1.0) * 100:.0f} % off the master's aspect {size[0]} x {size[1]} (limit {ASPECT_TOLERANCE * 100:.0f} %)")
             else:
                 keyed = key_cutout(pngio.read(source))
                 ratio = (keyed.w / keyed.h) / (size[0] / size[1])
@@ -807,13 +848,59 @@ def cmd_plan(args: argparse.Namespace) -> int:
     bad = 0
     for b in SMALL:
         row = manifest.get(f"plate.{b.name}")
-        how = {"dome": "dome + ring by rule", "derived": f"{b.base} darkened by rule"}.get(b.plate, "codex plate")
+        how = {"dome": "dome + ring by rule", "rule": "triangle + brass by rule", "derived": f"{b.base} darkened by rule"}.get(b.plate, "codex plate")
         size = list(b.master)
         ok = row is not None and row["size"] == size
         bad += 0 if ok else 1
         print(f"plate.{b.name:24s} art {b.art}  {b.family:6s} {b.units[0]:>2} x {b.units[1]:<2} -> {b.master[0]} x {b.master[1]}  {how:20s} {'ok' if ok else 'MANIFEST SIZE DIFFERS'}")
     print(f"SMALL KIT plan {'PASS' if not bad else 'FAIL'} ({len(SMALL)} buttons)")
     return 0 if not bad else 1
+
+
+TRI_BAND = (0.9, 2.3)       # cells from the plate's edge: the dark outline ends at the first, the brass band at the second (the original's band is about 1.4 cells)
+TRI_OUTLINE = (34, 24, 12)  # the dark outline round the brass edge
+TRI_FIELD = (20, 22, 10)    # the empty dark field inside the band (the green fill is the symbol, a separate layer)
+TRI_LIGHT = 0.22            # the brass is this much lighter on the left and darker on the right (the light comes from the upper left)
+
+
+def tri_plate(b: Small, frames: Path, local: Path) -> Image:
+    """The scroll arrows' plate BY RULE (the generator copied the original's staircase outline, so a Codex item is no use here): an exact isosceles triangle on the frame's box, a dark outline, a brass band
+    of the original's width in the brass of the hardware rings (`RING_SOURCE`, its lit band) and the empty dark field inside."""
+    ring = read_master(local, RING_SOURCE)
+    if ring is None:
+        raise SmallError(f"{RING_SOURCE} is needed for the brass of the scroll arrows")
+    profile, _ = ring_profile(ring)
+    brass = tuple(sum(profile[k][c] for k in range(3, 8)) / 5.0 for c in range(3))
+    frame = read_frame(frames, b, b.frames["idle"])
+    cells = [(i % frame.w, i // frame.w) for i in range(frame.w * frame.h) if frame.data[i * 4 + 3]]
+    left, right = min(x for x, _ in cells), max(x for x, _ in cells) + 1
+    top, bottom = min(y for _, y in cells), max(y for _, y in cells) + 1
+    up = b.outline == "tri_up"
+    cx, half = (left + right) / 2.0, (right - left) / 2.0
+    w, h = b.master
+    alpha = triangle_polygon_alpha(top, bottom, cx, half, (frame.w, frame.h), b.master, up)
+    sx, sy = frame.w / w, frame.h / h
+    apex = (cx, top if up else bottom)
+    corners = ((left, bottom), (right, bottom)) if up else ((left, top), (right, top))
+    edges = [(apex, corners[0]), (apex, corners[1]), (corners[0], corners[1])]
+    out = Image(w, h, bytearray(w * h * 4))
+    for py in range(h):
+        for px in range(w):
+            a = alpha[py * w + px]
+            if a <= 0.0:
+                continue
+            x, y = (px + 0.5) * sx, (py + 0.5) * sy
+            d = min(abs((q[0] - p[0]) * (p[1] - y) - (p[0] - x) * (q[1] - p[1])) / math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in edges)
+            gain = 1.0 + TRI_LIGHT * (0.5 - (x - left) / (right - left)) * 2.0
+            band = tuple(min(255.0, c * gain) for c in brass)
+            into_band = smooth(TRI_BAND[0] - 0.2, TRI_BAND[0] + 0.2, d)
+            into_field = smooth(TRI_BAND[1] - 0.2, TRI_BAND[1] + 0.2, d)
+            colour = [TRI_OUTLINE[k] * (1 - into_band) + band[k] * into_band for k in range(3)]
+            colour = [colour[k] * (1 - into_field) + TRI_FIELD[k] * into_field for k in range(3)]
+            o = (py * w + px) * 4
+            out.data[o:o + 3] = bytes(max(0, min(255, int(round(c)))) for c in colour)
+            out.data[o + 3] = int(round(a * 255))
+    return out
 
 
 def derived_plate(b: Small, frames: Path, local: Path) -> Image:
@@ -837,6 +924,16 @@ def cmd_plates(args: argparse.Namespace) -> int:
     frames = args.frames or args.local_root / "census" / "frames"
     n = 0
     for b in selected(args.only):
+        if b.plate == "rule":
+            image = tri_plate(b, frames, args.local_root)
+            path = out / f"plate.{b.name}.png"
+            pngio.write(path, image)
+            record = record_of(f"plate.{b.name}", b, frames, path)
+            record["rule"] = f"an exact isosceles triangle on the frame's box with a dark outline and a brass band of the original's width in the brass of the hardware rings ({RING_SOURCE}), by rule"
+            (records / f"plate.{b.name}.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            print(f"plate.{b.name:24s} {image.w} x {image.h}")
+            n += 1
+            continue
         if b.plate == "derived":
             image = derived_plate(b, frames, args.local_root)
             path = out / f"plate.{b.name}.png"

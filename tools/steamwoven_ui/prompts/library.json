@@ -96,8 +96,6 @@
         "plate-stone-square-hud",
         "plate-olive-pill-hud",
         "plate-olive-pill-small-hud",
-        "plate-scroll-up-hud",
-        "plate-scroll-down-hud",
         "plate-stone-strip-hud",
         "plate-stone-strip-short-hud"
       ],
@@ -963,40 +961,6 @@
       "screen": null,
       "batch": "B-BUTTONS-SMALL",
       "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item on a magenta ground (13 x 10 units, master 48 x 36), cut by small_kit.py cut and fitted to plate.oldchar_minus and plate.oldchar_plus"
-    },
-    {
-      "id": "plate-scroll-up-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Scroll-bar up button plate (brass edged triangle), empty (art 317)",
-      "file": "plate-scroll-up-hud.txt",
-      "size": [
-        744,
-        1014
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item on a magenta ground (11 x 15 units, master 42 x 54), cut by small_kit.py cut and fitted to plate.scrllup"
-    },
-    {
-      "id": "plate-scroll-down-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Scroll-bar down button plate (brass edged triangle), empty (art 318)",
-      "file": "plate-scroll-down-hud.txt",
-      "size": [
-        798,
-        1014
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item on a magenta ground (11 x 14 units, master 42 x 48), cut by small_kit.py cut and fitted to plate.scrlldwn"
     },
     {
       "id": "plate-stone-strip-hud",
