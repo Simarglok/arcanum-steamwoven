@@ -43,7 +43,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-070: the main window's labels as drawn match the original's text blend (MW31): the background art with each
     /// label's three passes rendered by <see cref="AreaArtTextRules.Render"/> is compared, pixel by pixel of the 800 × 600 screen round
-    /// the labels, with an in-app readback (within two levels a channel), and the edges must hold partly covered pixels.</summary>
+    /// the labels, with an in-app readback (within three levels a channel: ARC-DEV-3145, the macOS Metal renderer blends the
+    /// premultiplied text one level wider than OpenGL did, which stayed within two), and the edges must hold partly covered pixels.</summary>
     private void MenuTextBlendForSmoke(Action<bool, string> require, AreaMenuArtView art)
     {
         var face = art.FontForSelfTest ?? throw new InvalidOperationException("ARC-UI-070 smoke: no menu font");
@@ -81,7 +82,7 @@ public partial class TerrainViewerApp
         foreach (var frame in face.Frames)
             for (var p = 0; p < frame.Rgba.Length; p += 4)
                 if (frame.Rgba[p + 3] != 0 && frame.Rgba[p] is > 0 and < 255) edges++;
-        require(compared > 0 && worst <= 2, $"ARC-UI-070: the labels match the original's blend: pixels={compared} worst={worst}");
+        require(compared > 0 && worst <= 3, $"ARC-UI-070: the labels match the original's blend: pixels={compared} worst={worst}");
         require(edges > 0, "ARC-UI-070: the font has partly covering edge pixels: " + edges);
         GD.Print($"ARC-UI-070 native-smoke menu text blend PASS pixels={compared} worst={worst} edgePixels={edges}");
     }

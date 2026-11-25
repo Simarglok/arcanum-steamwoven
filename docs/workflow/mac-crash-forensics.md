@@ -240,6 +240,32 @@ The first eight kernel frames of the stuck child are **identical in all four rep
 No hang has happened while the agents (Claude Code, Codex) were off. macOS 27.2.1 has not yet been tested with agents on, so a
 fix there is neither confirmed nor ruled out.
 
+### Fifth incident and the renderer change, 2026-11-25 (ARC-DEV-3145, #3145)
+
+The fifth hang (macOS 27.2.1, 26B131) repeated the signature: a forked agent child stuck in `exec` of `magick`, the
+WindowServer watchdog, the game aborting afterwards in `-[NSCGLSurface flushRect:]`. Owner finding: every one of the five hangs had
+the game open, and with the game closed the Mac stays stable for days under the same agent load, so the game is treated as a
+necessary co-factor (hypothesis 4 above is no longer "unlikely"; the 11-08 "no game" reading came only from the absence of the
+packaged game process). The game's coupling to WindowServer is the OpenGL path: the Compatibility renderer on macOS is Apple's
+deprecated OpenGL-over-Metal layer and flushes an `NSOpenGLContext` to WindowServer every frame.
+
+First experiment (owner decision): the macOS game on **Metal** (Godot Mobile renderer, Metal driver; Windows unchanged). The setting
+is `renderer/rendering_method.macos="mobile"` and `rendering_device/driver.macos="metal"` in the viewer's `project.godot`;
+the run log's second line must read `Metal 4.0 - Forward Mobile`, not `OpenGL`. Look check on four scenes (menu, cave night and
+day relight, map with HUD) on the owner's M4 Pro: at most 1 level of 255 a channel apart from OpenGL, apart from the digits of the
+load time in the diagnostic text. One smoke check, ARC-UI-070 (menu text blend against the original's integer blend), measures 3
+levels on Metal where OpenGL stayed within 2; its tolerance is 3.
+
+**A/B protocol and result record (owner side).** Play with agents on as before, on the Metal build, for several days; record here
+the dates, whether a hang happened and the package commit. A hang with the game on Metal rules the renderer out as the co-factor
+(then the synthetic fork-load A/B of #3145 and the Feedback Assistant report with the five stackshots remain); no hang over a span
+in which the OpenGL build hung several times confirms it. Result: not yet known.
+
+**Evidence-loss note.** macOS purges `/Library/Logs/DiagnosticReports/.WindowServer-*.ips` (all four earlier reports were gone by
+11-24, probably at an update). After the reboot copy them at once: `cp /Library/Logs/DiagnosticReports/.WindowServer-*.ips ~/Desktop/`
+(and the `panic-full-*.panic` from `/Library/Logs/DiagnosticReports`), then read them with
+`python3 -B tools/local_dev/windowserver_report.py`.
+
 ### Next steps (owner side unless noted)
 
 - At the next hang do **not** press the power button at once; wait about 3 minutes. The userspace watchdog then panics and
