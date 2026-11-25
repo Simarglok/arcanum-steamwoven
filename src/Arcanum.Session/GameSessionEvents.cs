@@ -13,7 +13,7 @@ public interface ISessionEventWorld
 {
     LifeFacts? CritterFacts(SessionMapId map, string entity);
 
-    /// <summary>ARC-SCRIPT-2879: the shown map's item script host, which the remove-item scripts (point 28) of the pass's removals (a restock's clear, a body's inventory walk) run through; null: none run (counted as skipped).</summary>
+    /// <summary>ARC-SCRIPT-2879: the shown map's item script host, which the remove-item scripts (point 28) of the pass's removals (a restock's clear, a body's inventory walk, the item a dissolving junk pile releases, ARC-SCRIPT-2899) run through; null: none run (counted as skipped).</summary>
     ISessionItemScriptHost? ItemScriptHost => null;
 }
 

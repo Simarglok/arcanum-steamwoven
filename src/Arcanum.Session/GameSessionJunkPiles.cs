@@ -80,11 +80,39 @@ public sealed partial class GameSessionOwner
     /// with one item is removed and that item is dropped again on the pile's cell (<see cref="SettleDrop"/>, then its decay starts
     /// over, two days on); a pile with more stays. No revision of its own: the caller's change carries it.
     /// </summary>
-    internal void DissolveJunkPile(SessionJunkPile pile)
+    internal void DissolveJunkPile(SessionJunkPile pile, ISessionItemScriptHost? scripts = null)
     {
         var step = JunkPileRules.Dissolve(pile.Items.Count);
         if (step == JunkPileDissolve.Keep) return;
         if (_inventory.Objects.Pile(pile.Entity) is null) throw new InvalidOperationException("JUNK_PILE_GONE");
+        // ARC-SCRIPT-2899: a caller that cannot refuse (a destroy, an event pass, a pickup) goes on without the script the session cannot run, as an event pass's removals do.
+        var runs = step == JunkPileDissolve.Release ? PlanPileRelease(pile.Items[0].Entity, pile.Map, pile.Entity, scripts ?? _passWorld?.ItemScriptHost).Runs : null;
+        ApplyDissolve(pile, step, runs);
+        DeliverStanding(runs);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2899 (ledger IE3, JP4, TQ20; exe read 0x463540 → 0x466E00 → 0x467860, 0x43CCA0, 0x466E50): the remove-item script (28) of the one item a dissolving junk pile releases. The dissolve removes that item from the pile first (0x466E00), so its
+    /// point 28 runs with the pile as the triggerer and the item as the attachee, result ignored, before the pile is destroyed and the item dropped on the pile's cell. <see cref="Runs"/> is null for an item with no point 28; a scripted item with no host (given, the pass
+    /// world's or the standing one), a pile off the shown map or a run the session cannot apply is a <see cref="Failure"/>: a caller that can refuse refuses the whole close, one that cannot goes on without the script.
+    /// </summary>
+    private readonly record struct PileRelease(ItemScriptRuns? Runs, GameSessionFailure Failure);
+
+    private PileRelease PlanPileRelease(string item, SessionMapId map, string pile, ISessionItemScriptHost? scripts)
+    {
+        var points = PassItemPoints(map, item);
+        if (!points.Contains(SessionScriptPoint.RemoveItem)) return default;
+        if (map != _actor.Map) return new(null, GameSessionFailure.ItemScriptUnsupported);
+        var plan = PlanEmptiedRemoval(item, points, pile, scripts);
+        return new(plan.Runs, plan.Failure);
+    }
+
+    // The dissolve's changes (0x463540): the released item's removal script effects, the pile destroyed, the item dropped again with a decay two days on. The runs' lines go on by DeliverStanding once the caller's change is applied.
+    private void ApplyDissolve(SessionJunkPile pile, JunkPileDissolve step, ItemScriptRuns? runs)
+    {
+        runs?.Commit();
+        // A run that dissolved the pile itself (its commit destroyed an item of it) leaves nothing more to do.
+        if (_inventory.Objects.Pile(pile.Entity) is null) return;
         DestroyObject(pile.Entity);
         if (step == JunkPileDissolve.Release)
         {
@@ -110,8 +138,12 @@ public sealed partial class GameSessionOwner
         if (_inventory.Objects.Pile(pile) is not { } found || found.Map != _actor.Map) return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
         if (JunkPileRules.Dissolve(found.Items.Count) == JunkPileDissolve.Keep) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
-        DissolveJunkPile(found);
+        // ARC-SCRIPT-2899: the released item's remove-item script (28) runs through the standing item script host; one that cannot run refuses the close whole (the pile stays).
+        var release = JunkPileRules.Dissolve(found.Items.Count) == JunkPileDissolve.Release ? PlanPileRelease(found.Items[0].Entity, found.Map, found.Entity, null) : default;
+        if (release.Failure != GameSessionFailure.None) return new(GameSessionDisposition.Rejected, release.Failure, Version);
+        ApplyDissolve(found, JunkPileRules.Dissolve(found.Items.Count), release.Runs);
         Revise();
+        DeliverStanding(release.Runs);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
@@ -135,11 +167,11 @@ public sealed partial class GameSessionOwner
         if (target.Map != _actor.Map || !_inventory.Seeds.TryGetValue(target.Map, out var seed) ||
             !seed.Holders.TryGetValue(target.Entity, out var holder) || holder.Kind != SessionHolderKind.Container)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
-        return DissolveMapJunkPile(expected, target, seed, holder);
+        return DissolveMapJunkPile(expected, target, seed, holder, null, refuse: true);
     }
 
     // The check 0x463540 on a standing junk pile of the map's data (JP4, JP9): shared by the loot window's close and, since ARC-AI-1486, the removal of an item an NPC picked out of it (0x467860 at 0x467C26, JP5).
-    private GameSessionMutationResult DissolveMapJunkPile(GameSessionVersion expected, SessionObjectTarget target, InventoryDomain.Seed seed, SessionSeedHolder holder)
+    private GameSessionMutationResult DissolveMapJunkPile(GameSessionVersion expected, SessionObjectTarget target, InventoryDomain.Seed seed, SessionSeedHolder holder, ISessionItemScriptHost? scripts, bool refuse)
     {
         if (ObjectState(target).Condition != SessionObjectCondition.Whole) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         var items = _inventory.Current(seed, holder, entity => DroppedCell(target.Map, seed, entity), added: false).Select(item => item.Entity).ToArray();
@@ -147,14 +179,21 @@ public sealed partial class GameSessionOwner
         if (_inventory.Current(seed, holder, entity => DroppedCell(target.Map, seed, entity)).Count() != items.Length ||
             JunkPileRules.Dissolve(items.Length) == JunkPileDissolve.Keep)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        // ARC-SCRIPT-2899 (0x463540 → 0x466E00): the one item the pile releases runs its remove-item script (28) with the pile as the triggerer before the pile is destroyed. The loot window's close (refuse) refuses the whole close when the script cannot run
+        // (the pile stays); an NPC's pickup, which cannot be taken back, goes on without it.
+        var release = items.Length == 1 ? PlanPileRelease(items[0], target.Map, target.Entity, scripts ?? _passWorld?.ItemScriptHost) : default;
+        if (release.Failure != GameSessionFailure.None && refuse) return new(GameSessionDisposition.Rejected, release.Failure, Version);
         var applied = ApplyChanges(expected, null, [new(target.Map, MapChangeKey.ForEntity(target.Entity, ObjectConditionProperty),
             (long)SessionObjectCondition.Destroyed | SpillValue(target.Baseline.Cell))]);
         if (applied.Disposition != GameSessionDisposition.Changed) return applied;
+        var runs = release.Failure == GameSessionFailure.None ? release.Runs : null;
+        runs?.Commit();
         foreach (var item in items)
         {
             SettleDrop(item, target.Map, target.Baseline.Cell);
             ScheduleDecay(item, target.Map);
         }
+        DeliverStanding(runs);
         return applied;
     }
 
