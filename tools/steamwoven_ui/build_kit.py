@@ -32,6 +32,7 @@ from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
+from tools.steamwoven_ui import small_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "kit.json"
@@ -218,6 +219,27 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
+def small_parts(plates: dict[str, dict]) -> list[dict]:
+    """ARC-UI-3206, slice 6 of B-BUTTONS: the glyph and the hover and pressed overlay of every small stone and dark button (the round skill and slider buttons, the spell and technology
+    Add / Remove, the olive plus and minus, the scroll arrows, the follower strips), BY RULE from the original's frames (`small_kit.py`, rule F: no Codex)."""
+    parts = []
+    for b in small_kit.SMALL:
+        plate = plates.get(f"plate.{b.name}")
+        if plate is None:  # a census without the button (a test's synthetic one)
+            continue
+        canvas = f"a {b.master[0]} x {b.master[1]} canvas"
+        states = [("glyph", "", "glyph", ["idle"], f"the symbol of art {b.art}: smooth, solid, in the original's colour, with an engraving (rule F)")]
+        for state in small_kit.STATES:
+            if b.frames.get(state) is not None:
+                states.append(("plate", f"_{state}", "plate", [state], f"overlay of art {b.art}'s {state} frame over its idle frame (the symbol lights up, the glow and the darkening of the original)"))
+        for prefix, suffix, kind, st, what in states:
+            ident = f"{prefix}.{b.name}{suffix}"
+            parts.append(new_part(ident, kind, plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
+                                  f"{what}; small_kit.py draws it from the original frames (no Codex), {canvas}, so the size is open", states=st, master=True, provenance=f"rule:small_kit:{ident}"))
+    return parts
+
+
+SMALL_PLATES = {f"plate.{b.name}": b for b in small_kit.SMALL}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
 DISC_PLATES = {f"plate.{m.name}": (f, m) for f in disc_kit.FAMILIES for m in f.members}
@@ -275,6 +297,13 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"fit:{ident}"
             part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
+        if ident in SMALL_PLATES:
+            b = SMALL_PLATES[ident]
+            how = {"dome": "the bottom strip's olive dome (plate-round-hud) with the brass ring of the hardware rings laid over it at the original's width, by rule (small_kit.py plates)",
+                   "derived": f"the plate of {b.base} darkened by rule where the original's OFF frame is darker (small_kit.py plates)",
+                   "codex": f"the empty plate: one Codex item ({next(i.prompt for i in small_kit.ITEMS if b.name in i.parts)}), fitted to this part"}[b.plate]
+            part["status"], part["provenance"] = "master", (f"rule:small_kit:{ident}" if b.plate != "codex" else f"fit:{ident}")
+            part["note"] = f"{how}; the symbol and its states are made by rule (small_kit.py, ARC-UI-3206)"
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
@@ -287,6 +316,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         parts.append(part)
     parts.extend(new_parts())
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES}))
+    parts.extend(small_parts({p["id"]: p for p in parts if p["id"] in SMALL_PLATES}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
