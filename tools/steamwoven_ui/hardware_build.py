@@ -72,6 +72,7 @@ PARTS: dict[str, dict] = {
     },
     "hardware.hud_slot": {
         "sheet": "hud-bottom", "strip": "board.intbotom", "note": "the brass frame of one hotkey slot (ten of them)",
+        "squeeze": (18, 14), "gain": 0.8,   # the redraw's frame is 18 px thick and 26 % brighter than the original's 14 px (owner look check): its border is squeezed to 14 px, its tone brought down
         "shapes": [("rect", 704, 4, 838, 140), ("-rect", 716, 16, 826, 128)],
         "instances": [('board.intbotom', 771, 72, False), ('board.intbotom', 912, 72, False), ('board.intbotom', 1053, 72, False), ('board.intbotom', 1194, 72, False), ('board.intbotom', 1335, 72, False), ('board.intbotom', 1567, 72, False), ('board.intbotom', 1706, 72, False), ('board.intbotom', 1845, 72, False), ('board.intbotom', 1985, 72, False), ('board.intbotom', 2124, 72, False)],
     },
@@ -117,7 +118,7 @@ PARTS.update({
     },
     "hardware.hud_top_slot": {
         "sheet": "hud-top-parts", "strip": "board.inttop", "note": "the thin brass frame of one slot opening of the top strip (four of them)",
-        "brass_only": True, "shapes": [("rect", 5, 0, 146, 139), ("-rect", 14, 7, 137, 132)],
+        "brass_only": True, "squeeze": (12, 10), "gain": 0.93, "shapes": [("rect", 5, 0, 146, 139), ("-rect", 14, 7, 137, 132)],
         "instances": [("board.inttop", x, 69.5, False) for x in TOP_SLOT_CENTRES],
     },
     "hardware.hud_top_ring": {
@@ -136,7 +137,8 @@ PARTS.update({
         "instances": [("board.inttop", None, None, False)],
     },
     "hardware.hud_top_hourglass": {
-        "sheet": "hud-top-parts", "strip": "board.inttop", "note": "the hourglass of the top strip: brass caps, clouded glass, a little brown sand",
+        "sheet": "hud-top-parts", "strip": "board.inttop", "note": "the hourglass of the top strip: brass caps, clouded glass, a little brown sand", "solid": "rgb(34,36,40)", "darken_neutral": 0.6,   # the glass is opaque like the original's (a dark body under the generated glass)
+        
         "shapes": [("rect", 2082, 6, 2153, 132)],
         "instances": [("board.inttop", None, None, False)],
     },
@@ -369,6 +371,91 @@ def png_size(path: Path) -> tuple[int, int]:
     return int(w), int(h)
 
 
+def squeeze_frame(image: Path, border_from: int, border_to: int) -> None:
+    """Nine-slice: the frame's border of `border_from` px is resized to `border_to` px (corners, edges), the inside stays empty, the size stays: a thinner frame on the same opening."""
+    w, h = png_size(image)
+    f, t = border_from, border_to
+    pieces = [(f, f, 0, 0, t, t, 0, 0), (f, f, w - f, 0, t, t, w - t, 0), (f, f, 0, h - f, t, t, 0, h - t), (f, f, w - f, h - f, t, t, w - t, h - t),
+              (w - 2 * f, f, f, 0, w - 2 * t, t, t, 0), (w - 2 * f, f, f, h - f, w - 2 * t, t, t, h - t),
+              (f, h - 2 * f, 0, f, t, h - 2 * t, 0, t), (f, h - 2 * f, w - f, f, t, h - 2 * t, w - t, t)]
+    command = ["magick", "-size", f"{w}x{h}", "xc:none"]
+    for cw, ch, sx, sy, tw, th, dx, dy in pieces:
+        command += ["(", str(image), "-crop", f"{cw}x{ch}+{sx}+{sy}", "+repage", "-filter", "Lanczos", "-resize", f"{tw}x{th}!", ")", "-geometry", f"+{dx}+{dy}", "-compose", "over", "-composite"]
+    run(command + ["-depth", "8", str(image)])
+
+
+def darken_neutral(image: Path, factor: float) -> None:
+    """Grey pixels (a glass the redraw made pale) are multiplied by `factor`; brass and sand (saturated pixels) keep their tone, the change fades in between."""
+    mask = image.with_suffix(".neutral.png")
+    run(["magick", str(image), "-alpha", "off", "-colorspace", "HSB", "-channel", "G", "-separate", "+channel", "-negate", "-level", "45%,85%", "-depth", "8", str(mask)])
+    alpha = image.with_suffix(".alpha.png")
+    run(["magick", str(image), "-alpha", "extract", "-depth", "8", str(alpha)])
+    run(["magick", str(image), "-alpha", "off", "(", "+clone", "-channel", "RGB", "-evaluate", "Multiply", str(factor), "+channel", ")", "(", str(mask), ")", "-compose", "Over", "-composite", str(alpha),
+         "-compose", "CopyOpacity", "-composite", "-depth", "8", str(image)])
+
+
+def solid_body(image: Path, colour: str) -> None:
+    """The part's silhouette (alpha over 8 %, closed) is made opaque: the generated pixels lie over a body of `colour`, so a clouded glass is as solid as the original's."""
+    w, h = png_size(image)
+    mask = image.with_suffix(".solid.png")
+    run(["magick", str(image), "-alpha", "extract", "-threshold", "8%", "-morphology", "Close", "Disk:2", "-depth", "8", str(mask)])
+    run(["magick", "-size", f"{w}x{h}", f"xc:{colour}", str(image), "-compose", "over", "-composite", "-alpha", "off", str(mask), "-compose", "CopyOpacity", "-composite", "-depth", "8", str(image)])
+    # a dark rim of the silhouette's last pixel: the glass reads as a body of its own against the plate (the original's glass has a dark edge), not as a paler patch of it
+    edge = image.with_suffix(".edge.png")
+    run(["magick", str(mask), "(", "+clone", "-morphology", "Erode", "Disk:1.5", ")", "-compose", "Minus", "-composite", "-depth", "8", str(edge)])
+    run(["magick", str(image), "(", "-size", f"{w}x{h}", "xc:rgb(12,12,14)", str(edge), "-alpha", "off", "-compose", "CopyOpacity", "-composite", ")", "-compose", "over", "-composite",
+         str(mask), "-alpha", "off", "-compose", "CopyOpacity", "-composite", "-depth", "8", str(image)])
+
+
+def blurred_light(image: "pngio.Image", radius: int) -> list[float]:
+    """The slow light of a part: the luminance averaged over a box of `radius` px, weighted by alpha (three passes, near a Gaussian), per pixel; 0 where nothing is near."""
+    w, h = image.w, image.h
+    lum = [(0.3 * image.data[i * 4] + 0.59 * image.data[i * 4 + 1] + 0.11 * image.data[i * 4 + 2]) * image.data[i * 4 + 3] / 255 for i in range(w * h)]
+    wgt = [image.data[i * 4 + 3] / 255 for i in range(w * h)]
+
+    def box(values: list[float]) -> list[float]:
+        for axis in (0, 1):
+            out = [0.0] * (w * h)
+            for line in range(h if axis == 0 else w):
+                n = w if axis == 0 else h
+                get = (lambda k: values[line * w + k]) if axis == 0 else (lambda k: values[k * w + line])
+                acc, window = 0.0, [0.0] * (n + 1)
+                for k in range(n):
+                    acc += get(k)
+                    window[k + 1] = acc
+                for k in range(n):
+                    a, b = max(0, k - radius), min(n, k + radius + 1)
+                    value = window[b] - window[a]
+                    if axis == 0:
+                        out[line * w + k] = value
+                    else:
+                        out[k * w + line] = value
+            values = out
+        return values
+
+    for _ in range(3):
+        lum, wgt = box(lum), box(wgt)
+        scale = max(wgt) or 1.0
+        lum = [value / scale for value in lum]
+        wgt = [value / scale for value in wgt]
+    return [lum[i] / wgt[i] if wgt[i] > 1e-6 else 0.0 for i in range(w * h)]
+
+
+def relight_mirror(base: Path, mirrored: Path, radius: int = 10, limits: tuple[float, float] = (0.65, 1.5)) -> None:
+    """The right-hand copy of a part is the left one mirrored, so its light would fall from the wrong side (the strip is lit from the top left). The form is the mirrored one, the slow light is
+    the original's: each pixel is multiplied by (slow light of the left part) / (slow light of its mirror), limited to `limits`; the sharp detail (screws, mesh, edges) stays the mirrored one."""
+    left, flopped = pngio.read(base), pngio.read(mirrored)
+    want, have = blurred_light(left, radius), blurred_light(flopped, radius)
+    out = bytearray(flopped.data)
+    for i in range(flopped.w * flopped.h):
+        if flopped.data[i * 4 + 3] == 0 or have[i] <= 1.0:
+            continue
+        gain = min(limits[1], max(limits[0], want[i] / have[i]))
+        for c in range(3):
+            out[i * 4 + c] = min(255, round(flopped.data[i * 4 + c] * gain))
+    pngio.write(mirrored, pngio.Image(flopped.w, flopped.h, out))
+
+
 def cmd_cut(args) -> int:
     """Cuts the details out of the generated sheets, fits each to the size of the original's and writes the part canvases (a multiple of 6 px) and the placements."""
     root = args.local_root
@@ -421,6 +508,14 @@ def cmd_cut(args) -> int:
                      "(", "-clone", "0", "-alpha", "extract", ")", "-delete", "0", "-compose", "Multiply", "-composite", str(fitted.with_suffix(".mask.png"))])
                 run(["magick", str(fitted), "-alpha", "off", str(fitted.with_suffix(".mask.png")), "-compose", "CopyOpacity", "-composite", str(fitted)])
             run(["magick", str(fitted), "-channel", "A", "-level", "12%,88%", "+channel", str(fitted)])   # the generator's faint haze at the edge: alpha under 12 % is none, over 88 % is full
+            if PARTS[part_id].get("gain"):   # the redraw's tone is brought down to the original's (mean luminance, highlights)
+                run(["magick", str(fitted), "-channel", "RGB", "-evaluate", "Multiply", str(PARTS[part_id]["gain"]), "+channel", str(fitted)])
+            if PARTS[part_id].get("squeeze"):
+                squeeze_frame(fitted, *PARTS[part_id]["squeeze"])
+            if PARTS[part_id].get("darken_neutral"):
+                darken_neutral(fitted, PARTS[part_id]["darken_neutral"])
+            if PARTS[part_id].get("solid"):
+                solid_body(fitted, PARTS[part_id]["solid"])
             tones[part_id] = report["shift"]
             contents[part_id] = (fitted, ew, eh)
             placements[part_id] = {"content": [ew, eh], "origin": [cell["strip_box"][0] + ex, cell["strip_box"][1] + ey]}
@@ -431,6 +526,7 @@ def cmd_cut(args) -> int:
                 continue
             content = parts_dir / f"{part_id}-content.png"
             run(["magick", str(base[0]), "-flop", str(content)])
+            relight_mirror(base[0], content)
             contents[part_id] = (content, base[1], base[2])
             placements[part_id] = {"content": [base[1], base[2]], "origin": None}
     canvases = {}
