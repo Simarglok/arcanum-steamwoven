@@ -681,6 +681,17 @@ def assemble(layout: Layout, out_dir: Path | None = None, manifest: dict[str, di
     return result
 
 
+
+def _warn_out(tool: str, *paths) -> None:
+    """ARC-DEV-3277: warn when an output folder is inside a worktree or a temp folder (the images are lost there)."""
+    try:
+        from tools.steamwoven_ui import image_archive
+    except ImportError:
+        import image_archive  # type: ignore
+    for path in paths:
+        image_archive.warn_if_ephemeral(path, tool)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("layout", type=Path, help="the layout JSON (kind " + KIND + ")")
@@ -691,6 +702,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.out is None and not args.dry_run:
         parser.error("give --out DIR, or --dry-run")
+    if not args.dry_run:
+        _warn_out("assemble.py", args.out)
     try:
         layout = load_layout(args.layout)
         report = assemble(layout, None if args.dry_run else args.out, load_manifest(args.manifest) if args.manifest else None)
