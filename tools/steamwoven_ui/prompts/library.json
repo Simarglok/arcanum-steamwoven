@@ -57,7 +57,9 @@
       "prompts": [
         "plate-square-hud",
         "plate-round-hud",
-        "plate-ball-hud"
+        "plate-ball-hud",
+        "plate-crescent-hud",
+        "plate-crescent-small-hud"
       ],
       "after": null
     },
@@ -821,6 +823,42 @@
       "screen": null,
       "batch": "B-HARDWARE-HUD",
       "notes": "slice 1 of #2481 (ARC-UI-2481): one Codex item, six parts cut from the original on a transparent ground; hardware_build.py refs / cut"
+    },
+    {
+      "id": "plate-crescent-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Large dark round button with a brass crescent, empty (arts 32, 33, 201, 202, 203)",
+      "file": "plate-crescent-hud.txt",
+      "size": [
+        1014,
+        1014
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-3 (ARC-UI-3203): one Codex item for the large Cancel, Done and Clear buttons (38 x 37 units, master 138 x 132), idle plate only (dome, bevel and the brass crescent at the lower right; the original is shown stretched to a square, because the generator refuses an exact 23:22 canvas; `disc_kit.py stretch` squeezes the result back to the master aspect before the fit); the glyphs and the hover and pressed overlays are made by rule from the original frames (disc_kit.py); fitted to plate.cncl_big, plate.done_big, plate.cler_big"
+    },
+    {
+      "id": "plate-crescent-small-hud",
+      "group": "part",
+      "kind": "plate",
+      "title": "Big Green arrow dark round button with a brass crescent, empty (arts 283, 284)",
+      "file": "plate-crescent-small-hud.txt",
+      "size": [
+        990,
+        990
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-BUTTONS",
+      "notes": "slice B-BUTTONS-3 (ARC-UI-3203): one Codex item for the two Big Green arrow buttons (34 x 33 units, master 120 x 120), idle plate only (the original is shown at the master aspect); the glyphs and the overlays are made by rule from the original frames (disc_kit.py); fitted to plate.big_grn_l, plate.big_grn_r"
     }
   ]
 }
