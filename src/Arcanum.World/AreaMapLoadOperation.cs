@@ -75,6 +75,9 @@ internal static class AreaMapLoadOperation
             return chart with { Spawn = chart.ToChart(Spawn(steps, mapPlan.StartTile, snapshot, arguments.AreaMapArrival, arguments.AreaMapSector)) };
         }, mapPlan.Limits);
         var snapshot = area.Snapshot; var plan = area.Plan;
+        // ARC-RENDER-3129: the canvas's terrain chunks are built here, not on the main thread's window swap.
+        lap.Step("chunks");
+        AreaTerrainChunks.Prepare(plan, area.Frames);
         var moduleIdentity = snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Module);
         var resourceIdentity = snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Resource2);
         var actorIdentity = snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Resource1);

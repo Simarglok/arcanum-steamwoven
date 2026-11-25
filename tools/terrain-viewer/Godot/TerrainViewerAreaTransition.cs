@@ -128,7 +128,8 @@ public partial class TerrainViewerApp
         lap.Step("sound");
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
         // fallback) brings keeps the sound state it holds, as a same-map quick load does.
-        if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad or MapHandoffKind.Stream } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();
+        if (_mapHandoff is { Kind: MapHandoffKind.Stream } && ReferenceEquals(carried, _areaSession) && _schemePlayer is not null) KeepAreaSoundAcrossWindowMove();
+        else if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad or MapHandoffKind.Stream } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();
         else EnterAreaMapSound(area.Snapshot.CatalogueMap);
         lap.Step("transfers");
         if (mapMode)
@@ -171,8 +172,13 @@ public partial class TerrainViewerApp
         _newGameRecipe = null; _heroBodyPrefetch = null;
         _areaTransitions = null; _areaSession = null; _useOpenPending = null; _useTargets.Clear(); _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
-        StopAllSounds(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
-        StopPositionalSound(); _tileArt = null; // the scene's terrain must not outlive it (reload retention check)
+        // ARC-RENDER-3129: a window move under the same session is no map change; the song and the sector it follows go on (KeepAreaSoundAcrossWindowMove).
+        if (_mapHandoff is not { Kind: MapHandoffKind.Stream, Session: not null } || _schemePlayer is null)
+        {
+            StopAllSounds(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
+            StopPositionalSound();
+        }
+        _tileArt = null; // the scene's terrain must not outlive it (reload retention check)
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: the hero's use goal 38 (ARC-DEV-174, <see cref="StartUseClick"/>).

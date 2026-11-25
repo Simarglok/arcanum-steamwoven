@@ -835,7 +835,12 @@ away from the goal and the window followed, ARC-WORLD-042), the walk heads for t
 [corridor](../world/click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042) toward the goal over the new
 window (its cell nearest the goal) and the goal is handed on to each later move until a window holds it; a new click
 replaces it. A click beyond the route follower's 32-cell reach is walked along a corridor over the window. Music and ambient sound go on
-  (no map change). The margin keeps a walk along a border, or a path that bends back over it, from reloading the
+  (no map change): the swap keeps the scheme player, its song voices and the followed sector, so no song restarts (ARC-RENDER-3129; only the
+  positional cues placed in the old window's cells end). The view stays where it is relative to the hero: the camera's follow state, hold,
+  zoom and offset are put back on the new window's plan, so a panned view is not recentred (the original streams sectors in place and no
+  streaming code moves its view or asks for a scheme, [SN39](../research/audio-evidence.md#music-and-ambient-schemes-combat-music-save-and-map)).
+  The terrain chunks of the canvas are built on the load's worker (`AreaTerrainChunks.Prepare`), which took about 120 ms of the swap's main-thread
+  time; the smoke stage `stream` prints `ARC-RENDER-3129 window swaps=N median=… max=…` and fails when a swap restarts a song or moves the view. The margin keeps a walk along a border, or a path that bends back over it, from reloading the
   window at every step; the actor always has at least 48 loaded cells ahead. The original keeps no fixed window: its
   sector cache holds the 16 most recently used sectors and a teleport pre-caches the 3×3 around its target
   ([main-map streaming](../research/main-map-streaming.md), SS1–SS4); the 3×3 core is that pre-cache kept around the

@@ -103,6 +103,22 @@ public sealed class TerrainCameraController
         WantedCenter = actor;
         _followState = step.State; _center = step.Center; ApplyWorld();
     }
+    /// <summary>ARC-RENDER-3129: a world view kept across a window move: the follow state, the hold, the zoom and where the view stood relative to the actor.</summary>
+    public readonly record struct KeptView(CameraFollowState Follow, bool Held, double Zoom, Vec2 FromActor);
+
+    /// <summary>The view as it stands (null before a world plan is shown). The original's view does not move when sectors load, so a window move keeps it where it is, relative to the actor.</summary>
+    public KeptView? KeepView(Vec2 actor) => _world && _bounds is not null ? new(_followState, Held, _state.Zoom, _center - actor) : null;
+
+    /// <summary>Puts a kept view back on the new window's plan: the same follow state, hold and zoom, and the centre at the same offset from the actor (clamped to the new bounds).</summary>
+    public void RestoreView(KeptView kept, Vec2 actor, Vector2 viewport)
+    {
+        if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
+        _state = _state with { Zoom = Floored(kept.Zoom, viewport), FitMode = false };
+        var wanted = actor + kept.FromActor;
+        _followState = kept.Follow; Held = kept.Held;
+        _center = Bounds(viewport).ClampCenter(wanted); WantedCenter = wanted;
+        ApplyWorld();
+    }
     public void SafetyResetWorld() => _followState = _follow.SafetyReset(_followState);
     public void UpdateWorld(Vec2 actor, Vec2 actorIntent, Vec2 pan, bool actorActive, bool manualActive, Vector2 viewport)
     {
