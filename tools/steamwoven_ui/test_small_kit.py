@@ -191,6 +191,23 @@ class TableTest(unittest.TestCase):
                 self.assertEqual(f"plate.{b.name}_{state}" in rows, state in b.frames, (b.name, state))
         self.assertTrue(all(r["status"] == "master" and r["provenance"].startswith("rule:small_kit:") for r in rows.values()))
 
+    def test_the_masters_stretch_a_pack_frame_by_a_few_percent_at_most(self):
+        # the masters are snapped to the 6 px grid in kit.json, so a pack frame (4 x the units) is scaled to it; the widest accepted drift is the scroll arrows' 12 %
+        for b in sk.SMALL:
+            w, h = b.units[0] * sk.PACK_SCALE, b.units[1] * sk.PACK_SCALE
+            self.assertLess(abs((b.master[0] / w) / (b.master[1] / h) - 1.0), 0.12, b.name)
+
+    def test_resampling_at_a_fractional_ratio_keeps_a_flat_colour_and_an_edge(self):
+        frame = pngio.Image(116, 120, bytearray(116 * 120 * 4))
+        for y in range(120):
+            for x in range(57):
+                frame.data[(y * 116 + x) * 4:(y * 116 + x) * 4 + 4] = bytes((100, 50, 20, 255))
+        out = sk.resample(frame, 102, 108)
+        self.assertEqual(out.pixel(10, 50), (100, 50, 20, 255))
+        self.assertEqual(out.pixel(90, 50)[3], 0)
+        mid = out.pixel(50, 50)
+        self.assertTrue(0 < mid[3] < 255 and mid[:3] == (100, 50, 20))   # a half-covered pixel keeps the colour, not a darkened one
+
     def test_owner_of_a_part_id(self):
         self.assertEqual(sk.owner_of("plate.scrllup_hover").name, "scrllup")
         self.assertEqual(sk.owner_of("glyph.skiladdbut").name, "skiladdbut")
