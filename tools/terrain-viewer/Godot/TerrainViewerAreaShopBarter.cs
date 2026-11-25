@@ -18,7 +18,7 @@ public partial class TerrainViewerApp
     private AreaInventoryHost? _shopInventoryHost;
     private GameSessionOwner? _shopInventorySession;
 
-    // ARC-UI-1806: the script content the shop merchant's bet lines are read from (the generated dialog texts and its override dialog), opened at the first line and
+    // ARC-UI-1806: the script content the shop merchant's bet lines are read from (the generated dialog texts and its override dialog), opened at the first line (or at the first item-script run of the opening regeneration, ARC-SCRIPT-3242) and
     // owned by the shop (the game's conversation content is another, which the shop never releases); released when the shop's window ends.
     private AreaScriptContentLoad? _shopContent;
 

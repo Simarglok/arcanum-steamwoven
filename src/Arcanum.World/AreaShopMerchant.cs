@@ -163,7 +163,7 @@ public sealed class AreaShopSession : IDisposable
     /// <param name="effects">ARC-UI-1806: the effect rules of the new character's hero tables, for the merchant's sheet (its Gambling skill opens the bet and opposes the
     /// hero's check, as in the dialog's barter window); null: the merchant has no sheet and the bet gate refuses.</param>
     /// <param name="scriptContent">ARC-UI-1806: the script content (the generated dialog texts and the merchant's override dialog) the merchant's bet lines are read from, borrowed
-    /// and asked at each line; null or no content: no line is said (the gate's refusals then print nothing, as the dialog's window does without texts).</param>
+    /// and asked at each line and at each item-script run of the opening regeneration (ARC-SCRIPT-3242); null or no content: no line is said (the gate's refusals then print nothing, as the dialog's window does without texts).</param>
     /// <param name="npcName">ARC-SCRIPT-2811 (ledger NM3): the merchant's name as a line's <c>@npcname@</c> prints it, its description taken as a recognized NPC (<see cref="AreaDialogNames.NpcNameSource"/>; the window's <paramref name="merchantName"/> is the
     /// not-yet-met description); null: the window's name.</param>
     public static AreaShopSession? Open(GameSessionOwner owner, AreaShopMap map, AreaBarterData data, Func<string, SessionItemKind, string> name,
