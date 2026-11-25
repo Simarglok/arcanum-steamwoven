@@ -2625,9 +2625,16 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   (window 14 has no background of its own and the same buttons as window 15, MW1, MW30, CM2; `AreaShopArtView`). The sheet's window stands at the
   menu screen's (0, 41) at the bars' whole factor (`AreaCharacterSheetArtView.MenuScreen`, as the shop's barter window). Differences from
   the in-game sheet, all original: a release in the portrait's close rectangle does not close the editor (the rectangle is the interface
-  modes 1 and 2's, CM3); the pages' presses are the same ones the diagnostic panel records on the draft (`AreaCreationEditor`). PROJECT: the
-  original's text bar belongs to the game, so the hover hints are not shown and a refused press writes the original's `charedit.mes` text
-  (ARC-UI-078) into the menu's note line at the top of the screen; the controller's focus row lights Accept or Back as in the shop. Without the
+  modes 1 and 2's, CM3); the pages' presses are the same ones the diagnostic panel records on the draft (`AreaCreationEditor`). **Text bar
+  (ARC-UI-3120, [ledger MW32, CHW8](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)):** the original's bottom message window is live
+  in the menu, so the editor's hover texts and refusals are posts to it as the in-game sheet's are (`AreaMessageLogView` over the strip, the text rectangle
+  (211, 503, 383, 82) with the icon at (217, 510), over the kit's strip or the original's alike): the pointer over a region of the sheet writes its
+  `charedit.mes` text (type 6, the title and the text; a stat's too, with no cost: the bar draws only the message), the pointer entering Accept or
+  Back writes the button's hint (`MainMenu.mes` 6999 as the title, a new line, 7003 or 7002), and a refused press writes the original's
+  `charedit.mes` text (ARC-UI-078) as a stored type-4 message with its sound; the 3 s rule of the log holds (a hover right after a refusal is lost), leaving a
+  region or a button shows the scroll position's entry again (the original blanks the window; PROJECT, ML7), and the menu's own log goes with the window.
+  PROJECT: the controller's focus row lights Accept or Back as in the shop. NOT READY: the spell hint's college icon, cost and description on the spells
+  page (they need the game bar's texts, which the menu has not read; the page writes the spell's name; #3231) and the barter window's item hover in the opening shop (#3230). Without the
   game's art (the synthetic self-tests, a game folder whose sheet or strips art does not read) the diagnostic panel above is shown as before.
   Native smoke (`menu` stage): `ARC-UI-147 native-smoke character editor art PASS` (the draft's sheet and portrait, the window's place, a refused
   `−` written as the note, the close rectangle that does not close, the spells tab, willpower's `+` by the pointer);
@@ -2742,7 +2749,7 @@ shown object (its substitute container) from the shop map's inventory host with 
 session's items lay out by their art, as the game's), the merchant's image, name and quote line; a drag buys or sells, as in play.
 With the main menu up the original turns on no round view (IW33) and tests no release in its square (IW34): the viewer draws neither
 the round view nor its art there, and a release in the square acts as anywhere else. The menu keeps the keys (Return, Escape) and the
-controller's focus row lights Accept or Back until the pointer moves (PROJECT); the hints (7003, 7002) are not shown. While the shop
+controller's focus row lights Accept or Back until the pointer moves (PROJECT); the pointer entering them writes their hints (7003, 7002) to the bottom message window as the editor's (ARC-UI-3120). While the shop
 map loads, when the shop is the kit alone, without the game's art (the self-tests) or with the barter window's diagnostic view chosen
 in play, the shop keeps its diagnostic window and the docked barter window above it.
 

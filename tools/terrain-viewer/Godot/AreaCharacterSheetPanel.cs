@@ -443,16 +443,9 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (_host.Visible) _pages.CurrentTab = tab == AreaSheetTab.Skills ? 1 : 2;
     }
 
-    /// <summary>The text bar's text for a message id: charedit.mes of that number; a stat's adds the cost of its next point (PROJECT: the
-    /// exe sends type 12 with the stat and the cost, the layout of that message is not read, ledger CHW8).</summary>
-    private string? HoverText(int id)
-    {
-        var text = _artView!.Texts.Hint(id);
-        if (text is null) return null;
-        var row = id switch { 106 => 0, 107 => 1, >= 109 and <= 116 => id - 107, _ => -1 };
-        if (row >= 0 && _statsView?.Rows[row] is { } stat) text += stat.NextCost == 0 ? "\n(at its maximum)" : $"\nNext point costs {stat.NextCost}";
-        return text;
-    }
+    /// <summary>The text bar's text for a message id: <c>charedit.mes</c> of that number, title, a new line and text (type 6). A stat's (109..116, type 12) is the same text:
+    /// the bar draws only the message, the stat and the cost the exe stores with it are never drawn (ARC-UI-3120, ledger CHW8).</summary>
+    private string? HoverText(int id) => _artView!.Texts.Hint(id);
 
     private void RenderArt(AreaCharacterSheetView view, AreaSkillsPageView? skills, AreaTechPageView? tech)
     {
@@ -462,8 +455,6 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _artView.Pages.Render(skills, tech);
         _artView.Spells.Render(_spellsView);
         _artView.Schemes.Render(_schemesView);
-        // A stat's text carries the cost of its next point: it is written again after a press changed the cost.
-        if (_artView.RegionForSelfTest is { } region) HoverTextRequested?.Invoke(HoverText(region));
     }
 
     /// <summary>ARC-UI-034: the creation mode's controller focus: 0 Accept, 1 Cancel (highlighted as the menu's rows are).</summary>

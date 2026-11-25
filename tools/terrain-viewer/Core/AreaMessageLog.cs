@@ -287,6 +287,11 @@ public static class AreaMessageLayout
         [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Concat(HotkeyBarRules.TypeIconNumbers)
             .Concat(AreaHoverWindow.ImageNumbers).Concat(AreaCombatPanelLayout.ArtNumbers).Concat([AreaStatLines.WeaponArt, AreaStatLines.ArmourArt]).Distinct()];
 
+    /// <summary>ARC-UI-3120: the arts the message window of the editor and the opening shop draws (the background and the entries' icons, the colleges' icons for a
+    /// spell hint); the items' and objects' arts are the game's window's only.</summary>
+    public static IReadOnlyList<int> MenuArtNumbers { get; } =
+        [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Where(kind => kind < AreaMessageKind.Item).Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Distinct()];
+
     /// <summary>The entry's drawing; <paramref name="wide"/> the second layout of a text entry whose text did not fit.</summary>
     public static AreaMessageDraw Draw(AreaMessageEntry entry, bool wide = false)
     {
