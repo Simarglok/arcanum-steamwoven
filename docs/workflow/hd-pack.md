@@ -497,7 +497,7 @@ python3 -B tools/steamwoven_ui/icon_rule.py upscale --frames $FR --out DIR --mod
 
 - **Ghost repair.** The pack's redraw of an icon with a black background keeps faint outlines of the redraw sheet's neighbouring icons on that black. Where the original frame is black (luma below 14, an
   outline of 2 HD pixels kept back from its content and rounded by a Gaussian of 3 HD pixels) the pack's pixels take the original's black; alpha and everything else stay the pack's, and the frame is written
-  with `alphaMode` `legacySmooth` (no mask, the importer's own alpha, as the installed frames have). Measured by the audit's ghost metric ([audit](../rendering/hd-pack-picture-quality-audit.md)): 11 arts
+  with `alphaMode` `legacySmooth` (no mask, the importer's own alpha, as the installed frames have). Measured by the audit's ghost metric ([audit](../rendering/hd-pack-picture-quality-audit.md)): 11 arts read above the limit, 9 were repaired
   (`Ammo_Icon_Arrows`, `_Gold`, `_Fuel`, `_Bullets`, `_Mana`, `E_EarthIcon`, `CombatIcon`, `Cont_Junk`, `racedarkelficon`) from 0.3 to 3.0 % to 0.00 %. **Installed 2026-11-25 for these 9 only.** `SocialIcon` and `TechSkillIcon`
   are left as the pack has them (owner decision 2026-11-25): there the original's black is partly part of the picture (the shadow side of the hat, the dark top of the table), the pack's shading in it is the redraw's own
   addition and not a ghost, and the rule turned it into a flat black with a hard or ragged edge. A rule that only clears black connected to the frame edge would be a new task if wanted.
