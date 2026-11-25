@@ -345,6 +345,9 @@ def cmd_verify(args) -> int:
             print(f"MISSING {row['task']}/{row['file']}")
             bad += 1
         elif sha256_file(path) != row["sha256"]:
+            if row.get("location") == "pipeline":  # the pipeline rewrites its own files (a re-fit, a re-bake): the row is a snapshot
+                print(f"NOTE rewritten in place since registered: {row['file']}")
+                continue
             print(f"CHANGED {row['task']}/{row['file']}")
             bad += 1
     print(f"verify {'FAIL' if bad else 'PASS'}: {len(reg.rows)} rows, {bad} problems")
