@@ -28,25 +28,31 @@ public sealed class TransformThenDialogCensusRealDataTests
         var transformScripts = programs.Where(p => Clauses(p.Value).Any(c => c.Clause.Type == Transform)).Select(p => p.Key).ToArray();
         report.Add($"scripts read {programs.Count}, with a transform {transformScripts.Length}: {string.Join(",", transformScripts)}");
 
-        // Scripts that hold a dialog action reachable (from any line) in a callee called by script `from` after reaching `reached`.
-        var candidates = new List<string>();
-        foreach (var number in transformScripts)
+        // A goto to a variable (a computed goto, which the admission refuses) may land on any line: the reach takes every line. A call script to a variable would hide its callee: the installed data has none.
+        var computed = programs.SelectMany(p => Clauses(p.Value).Where(c => c.Clause.Type is ScrCatalogue.Action.Goto or ScrCatalogue.Action.CallScript && c.Clause.Kind(0) != (byte)ScrValueKind.Number).Select(c => $"{p.Key}:{c.Line}:type{c.Clause.Type}")).ToArray();
+        report.Add($"goto (computed, any line) or call script (computed, hides its callee) lines with a variable target: {computed.Length}, call script ones {computed.Count(c => c.EndsWith($":type{ScrCatalogue.Action.CallScript}", StringComparison.Ordinal))}");
+
+        // The dialog actions a run can reach after the clause at `line` of script `number`: its own, one in a script it calls (call script 7, from any line of the callee) and a call script ex (the callee is the attachment of an object).
+        List<string> DialogsAfter(string what, int number, int line, ScrClause clause)
         {
             var program = programs[number];
-            foreach (var (line, side, clause) in Clauses(program).Where(c => c.Clause.Type == Transform))
-            {
-                var reached = Reach(program, Successors(program, line, clause));
-                foreach (var after in reached)
-                    foreach (var other in Taken(program.Lines[after]))
-                    {
-                        if (other.Type == ScrCatalogue.Action.Dialog) candidates.Add($"dialog after transform: script {number} transform line {line}{side} -> dialog line {after}");
-                        if (other.Type == ScrCatalogue.Action.CallScript && other.Value(0) is var callee && programs.ContainsKey(callee) && CalleeDialog(callee, programs, new HashSet<int>()))
-                            candidates.Add($"callee with a dialog after transform: script {number} transform line {line}{side} -> call script {callee} at line {after}");
-                        if (other.Type == ScrCatalogue.Action.CallScriptEx) candidates.Add($"call script ex after transform (callee by attachment): script {number} transform line {line}{side} -> line {after}");
-                    }
-            }
+            var found = new List<string>();
+            foreach (var after in Reach(program, Successors(program, line, clause)))
+                foreach (var other in Taken(program.Lines[after]))
+                {
+                    if (other.Type == ScrCatalogue.Action.Dialog) found.Add($"{what}: script {number} line {line} -> dialog line {after}");
+                    if (other.Type == ScrCatalogue.Action.CallScript && programs.ContainsKey(other.Value(0)) && CalleeDialog(other.Value(0), programs, new HashSet<int>()))
+                        found.Add($"{what}: script {number} line {line} -> call script {other.Value(0)} at line {after}, which holds a dialog");
+                    if (other.Type == ScrCatalogue.Action.CallScriptEx) found.Add($"{what}: script {number} line {line} -> call script ex at line {after} (callee by attachment)");
+                }
+            return found;
         }
-        // A transform in a callee (at any depth of call script), then a dialog in the caller after the call returns.
+
+        var candidates = new List<string>();
+        foreach (var number in transformScripts)
+            foreach (var (line, side, clause) in Clauses(programs[number]).Where(c => c.Clause.Type == Transform))
+                candidates.AddRange(DialogsAfter($"after the transform at {line}{side}", number, line, clause));
+        // A transform in a callee (at any depth of call script), then a dialog after the call returns in the caller.
         var transforming = transformScripts.ToHashSet();   // grows below
         for (var grew = true; grew;)
         {
@@ -57,11 +63,9 @@ public sealed class TransformThenDialogCensusRealDataTests
         report.Add($"scripts that can transform, through call script: {transforming.Count}");
         foreach (var (caller, program) in programs)
             foreach (var (line, _, clause) in Clauses(program).Where(c => c.Clause.Type == ScrCatalogue.Action.CallScript))
-                if (clause.Value(0) is var callee && transforming.Contains(callee) && callee != caller)
-                    foreach (var after in Reach(program, Successors(program, line, clause)))
-                        if (Taken(program.Lines[after]).Any(c => c.Type == ScrCatalogue.Action.Dialog))
-                            candidates.Add($"transform in callee {callee} then dialog in caller: script {caller} call line {line} -> dialog line {after}");
-        // A call script ex (81) runs the callee by the attachment of an object, so the callee is not known from the lines: the scripts that hold one and can reach a dialog action after it.
+                if (transforming.Contains(clause.Value(0)) && clause.Value(0) != caller)
+                    candidates.AddRange(DialogsAfter($"after the call of transforming script {clause.Value(0)}", caller, line, clause));
+        // A call script ex (81) runs the callee by the attachment of an object, as a run of its own: a transform there changes that run's attachee, not the caller's. Listed for the record.
         var exThenDialog = new List<int>();
         foreach (var (number, program) in programs)
             foreach (var (line, _, clause) in Clauses(program).Where(c => c.Clause.Type == ScrCatalogue.Action.CallScriptEx))
@@ -75,6 +79,9 @@ public sealed class TransformThenDialogCensusRealDataTests
         // either way: the dialog host's refusal of that shape (AreaScriptHost.Apply) is never met by the installed game. A change of these numbers means a script appeared that does: model the conversation with the made critter (issue #2507).
         CollectionAssert.AreEqual(new[] { 1022, 1023, 1105, 1198, 1343, 1344, 1528, 2339, 2794, 2795, 2796, 2867, 2908, 2909, 3087, 29017, 29018, 30008, 30009, 30300, 30301 }, transformScripts, string.Join("\n", report));
         Assert.AreEqual(21, transforming.Count, string.Join("\n", report));
+        Assert.AreEqual(2399, programs.Count, "the scripts read");
+        Assert.AreEqual(40, computed.Length, "the computed gotos (any line is reachable after one): " + string.Join(",", computed));
+        Assert.AreEqual(0, computed.Count(c => c.EndsWith($":type{ScrCatalogue.Action.CallScript}", StringComparison.Ordinal)), "no call script names its callee by a variable");
         Assert.AreEqual(0, candidates.Distinct().Count(), string.Join("\n", report));
     }
 
@@ -89,18 +96,29 @@ public sealed class TransformThenDialogCensusRealDataTests
 
     private static IEnumerable<ScrClause> Taken(ScrLine line) => line.Condition.Type == ScrCatalogue.Condition.True ? [line.OnTrue] : [line.OnTrue, line.OnFalse];
 
-    // The lines the run can go on with after the clause at `line`.
+    // The lines the run can go on with after the clause at `line` (the interpreter's flow; a loop for, a loop end and a loop break are over-approximated as the admission does: any loop for's lines).
     private static IEnumerable<int> Successors(Arcanum.Data.Scripts.ScrProgram program, int line, ScrClause clause)
     {
-        switch (clause.Type)
+        var count = program.Count;
+        IEnumerable<int> loopFors = program.Lines.Where(l => Taken(l).Any(c => c.Type == ScrCatalogue.Action.LoopFor)).Select(l => l.Number);
+        IEnumerable<int> next = clause.Type switch
         {
-            case ScrCatalogue.Action.ReturnSkipDefault or ScrCatalogue.Action.ReturnRunDefault or ScrCatalogue.Action.Dialog: yield break;
-            case ScrCatalogue.Action.Goto: if (clause.Value(0) >= 0 && clause.Value(0) < program.Count) yield return clause.Value(0); yield break;
-        }
-        if (line + 1 < program.Count) yield return line + 1;
-        if (clause.Type == ScrCatalogue.Action.LoopEnd)
-            foreach (var other in program.Lines)
-                if (Taken(other).Any(c => c.Type == ScrCatalogue.Action.LoopFor)) yield return Math.Min(other.Number + 1, program.Count - 1);
+            ScrCatalogue.Action.ReturnSkipDefault or ScrCatalogue.Action.ReturnRunDefault or ScrCatalogue.Action.Dialog => [],
+            ScrCatalogue.Action.Goto => clause.Kind(0) == (byte)ScrValueKind.Number ? [clause.Value(0)] : Enumerable.Range(0, count),
+            ScrCatalogue.Action.LoopFor => [line + 1, AfterLoopEnd(program, line)],
+            ScrCatalogue.Action.LoopEnd => loopFors.Select(l => l + 1).Prepend(line + 1),
+            ScrCatalogue.Action.LoopBreak => loopFors.Select(l => AfterLoopEnd(program, l)).Prepend(line + 1),
+            _ => [line + 1],
+        };
+        return next.Where(n => n >= 0 && n < count);
+    }
+
+    // The line after the first always-true loop end after the loop for (0x44BC60's scan); past the end when there is none.
+    private static int AfterLoopEnd(Arcanum.Data.Scripts.ScrProgram program, int loopFor)
+    {
+        for (var at = loopFor + 1; at < program.Count; at++)
+            if (program.Lines[at].Condition.Type == ScrCatalogue.Condition.True && program.Lines[at].OnTrue.Type == ScrCatalogue.Action.LoopEnd) return at + 1;
+        return program.Count + 1;
     }
 
     private static HashSet<int> Reach(Arcanum.Data.Scripts.ScrProgram program, IEnumerable<int> start)
