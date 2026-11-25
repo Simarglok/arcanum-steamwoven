@@ -73,6 +73,14 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             ia.mark(self.reg, "ARC-UI-2", "nope.png", "final")
 
+    def test_mark_note_replaces_the_note_and_final_copy_carries_it(self) -> None:
+        row = ia.add_file(self.reg, "ARC-UI-2", self.image("m.png"), kind="master", note="old")
+        ia.mark(self.reg, "ARC-UI-2", row["file"], "final", "matches kit master x")
+        self.assertEqual("matches kit master x", self.reg.rows[("archive", "ARC-UI-2", row["file"])]["note"])
+        self.assertEqual("matches kit master x", self.reg.rows[("archive", "ARC-UI-2", "final/m.png")]["note"])
+        ia.mark(self.reg, "ARC-UI-2", row["file"], "intermediate")  # no note given: the note stays
+        self.assertEqual("matches kit master x", self.reg.rows[("archive", "ARC-UI-2", row["file"])]["note"])
+
     def test_mark_keeps_two_accepted_files_of_one_name_and_refuses_a_final_copy(self) -> None:
         a = ia.add_file(self.reg, "ARC-UI-2", self.image("A.png", 1), kind="composite")
         b = ia.add_file(self.reg, "ARC-UI-2", self.image("sub/A.png", 2) if False else self.image("A.png", 2), kind="collage")
