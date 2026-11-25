@@ -15,6 +15,9 @@ public sealed class AreaMainMenuTexts
     public const string MainMenuPath = "mes/MainMenu.mes";
     /// <summary>ARC-UI-012: the question of the quit box (SF3).</summary>
     public const int QuitQuestion = 5100;
+    /// <summary>ARC-UI-3120 (ledger MW32): the title line of every menu button's hover text (ledger MW32); the hint of a button is its table's hint number (7002, 7003, ...).</summary>
+    public const int ButtonHintTitle = 6999;
+    private const int FirstHint = 7000, HintCount = 100;
     private const int MaxLabel = 64;
     private const int MaxQuestion = 256;
     private static readonly IReadOnlyDictionary<int, string> ProjectText = WithSaveMessages(new Dictionary<int, string>
@@ -78,11 +81,18 @@ public sealed class AreaMainMenuTexts
             if (table.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } text }
                 && text.Length <= (number == QuitQuestion ? MaxQuestion : MaxLabel))
                 kept[number] = text;
+        // ARC-UI-3120: the buttons' hover texts have no project text: the original's or none.
+        foreach (var number in Enumerable.Range(FirstHint, HintCount).Append(ButtonHintTitle))
+            if (table.Find(number) is { } hint && MesText.Decode(hint, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } hintText } && hintText.Length <= MaxQuestion)
+                kept[number] = hintText;
         return new(number => kept.GetValueOrDefault(number), true, $"{MainMenuPath}: {kept.Count} of {ProjectText.Count} texts");
     }
 
     /// <summary>The text of a message: the game's when it has it, else the project's.</summary>
     public string Text(int message) => _original(message) is { Length: > 0 } text ? text : ProjectText.GetValueOrDefault(message, $"[{message}]");
+
+    /// <summary>ARC-UI-3120: the game's text of a message with no project text (a button's hover title and hint), or null when the game has none (or no game folder).</summary>
+    public string? Original(int message) => _original(message) is { Length: > 0 } text ? text : null;
 
     /// <summary>The hotkey of a button: the first character of its hotkey message, upper-cased (MM3); null when the message is empty.</summary>
     public char? Hotkey(AreaMenuButton button)

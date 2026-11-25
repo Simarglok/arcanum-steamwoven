@@ -203,10 +203,17 @@ public partial class TerrainViewerApp
         var gate = _barterPanel.ArtView!.LootGrid.FirstOrDefault() is { } first ? _barter!.CheckGamble(first.Entity).Gate.Refusal.ToString() : "no ware";
         var (_, bx, by) = AreaShopArtLayout.Button(AreaShopArtButton.Back);
         var over = art.ScreenPointForSelfTest(bx + 15, by + 15);
+        // ARC-UI-3120: the editor's refusal is still the newest stored entry (the ring goes on across the two windows), so a hover is shown only 3 s after it (ML2).
+        _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
         GetViewport().PushInput(new InputEventMouseMotion { Position = over, GlobalPosition = over });
         await Frames(1);
         require(art.HoveredForSelfTest == AreaShopArtButton.Back && art.FrameForSelfTest(AreaShopArtButton.Accept) == 0,
             $"the pointer over Back lights it (and darkens the focus): back={art.FrameForSelfTest(AreaShopArtButton.Back)} accept={art.FrameForSelfTest(AreaShopArtButton.Accept)}");
+        // ARC-UI-3120: entering Back writes its hint (MainMenu.mes 6999, a new line, 7002) to the bottom message window; the shop's window is the editor's.
+        var (shopTitle, shopBody) = (_mainMenu!.Texts.Original(AreaMainMenuTexts.ButtonHintTitle), _mainMenu.Texts.Original(AreaShopArtLayout.BackHint));
+        require(panel.MessageWindowShownForSelfTest && (shopTitle is null || shopBody is null || panel.MessageLog.Shown is { Kind: AreaMessageKind.Hover } shopHint && shopHint.Title == shopTitle + "\n" + shopBody
+            && panel.MessageViewForSelfTest.IconForSelfTest == AreaMessageLayout.Icon(AreaMessageKind.Hover)),
+            $"the pointer on Back writes its hint to the bottom message window: '{panel.MessageLog.Shown?.Title}' (expected '{shopTitle}' + '{shopBody}')");
         if (back)
             foreach (var pressed in new[] { true, false })
             {

@@ -50,6 +50,10 @@ public partial class TerrainViewerApp
             if (CharacterEditorArtReady) AttachSheetArt(_editorPanel);
             SyncShopKit(); // ARC-UI-3041: the editor's sheet follows the screen's kit body from its first draw on
             _editorPanel.SoundRequested += id => PlayBarSound(id, "editor button");
+            // ARC-UI-3120: the sheet's hover texts and refusals are posts to the menu's bottom message window, as the in-game sheet's are posts to the game's (CHW8, ML2).
+            _editorPanel.HoverTextRequested += text => MenuHover(text is null ? null : AreaMessageEntry.Text(AreaMessageKind.Hover, text));
+            _editorPanel.HoverEntryRequested += MenuHover;
+            _editorPanel.MessageRequested += text => MenuPost(AreaMessageEntry.Text(AreaMessageKind.Message, text), "editor message");
             _editorPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
             _editorPanel.CloseRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
             _editorPanel.StatSpendRequested += row => PressEditor(e => EditorPress(e.PressStat(row, spend: true), AreaSheetPage.Stat, true, row >= 2 ? AreaStatsPage.StatOrder[row - 2] : null), $"stat spend row={row}");
@@ -76,9 +80,38 @@ public partial class TerrainViewerApp
         var schemes = _sheetArtContent is { ArtReady: true } content ? editor.Schemes(content.Texts) : null;
         if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft), schemes);
         else _editorPanel.Render(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft), schemes);
-        if (menu.Notice is { } notice) _editorPanel.ShowSkillMessage(notice);
+        // ARC-UI-3120: in the original's look the note stays at the menu's top; the message window is only for the sheet's own refusals.
+        if (menu.Notice is { } notice) _editorPanel.ShowSkillMessage(notice, _editorPanel.ArtMode ? string.Empty : null);
         // The controller's rows (Accept, Cancel) as the menu's other windows highlight theirs.
         _editorPanel.ShowCreationFocus(menu.Focus);
+    }
+
+    /// <summary>ARC-UI-3120 (ledger CHW8, ML2, MW32): posts an entry to the message window of the menu's bottom strip (the editor's and the opening shop's):
+    /// a refusal is a stored type-4 message with its sound, a hover text is shown only more than 3 s after the last stored entry. Nothing without the window.</summary>
+    private void MenuPost(AreaMessageEntry entry, string what)
+    {
+        if (_mainMenuPanel is not { MessageWindowShownForSelfTest: true } panel) return;
+        var post = panel.MessageLog.Post(entry, MessageLogNow);
+        if (post.Sound is { } sound) PlayInterfaceSound(sound, what);
+        panel.RenderMessageWindow();
+    }
+
+    /// <summary>ARC-UI-3120: a hover text or entry written to the menu's message window; null: the pointer left it (Steamwoven shows the scroll position's entry again, ML7).</summary>
+    private void MenuHover(AreaMessageEntry? entry)
+    {
+        if (entry is not null) { MenuPost(entry, "menu hover"); return; }
+        if (_mainMenuPanel is not { MessageWindowShownForSelfTest: true } panel) return;
+        panel.MessageLog.ClearHover();
+        panel.RenderMessageWindow();
+    }
+
+    /// <summary>ARC-UI-3120 (ledger MW32): the pointer entering the Accept or Back art button of the editor and the opening shop posts its hint: <c>MainMenu.mes</c> 6999 as the title,
+    /// a new line and the hint (7003 Accept, 7002 Back), type 6; leaving it blanks the window. With no title text (6999 missing) nothing is posted.</summary>
+    private void MenuButtonHover(AreaShopArtButton? button)
+    {
+        if (button is not { } hovered || _mainMenu is not { } menu) { MenuHover(null); return; }
+        if (menu.Texts.Original(AreaMainMenuTexts.ButtonHintTitle) is not { } title || menu.Texts.Original(AreaShopArtLayout.Hint(hovered)) is not { } hint) return;
+        MenuPost(AreaMessageEntry.Text(AreaMessageKind.Hover, title + "\n" + hint), "menu button hint");
     }
 
     private void CloseCharacterEditor()
@@ -111,16 +144,16 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>One + or − press of the editor: the draft changes (and the press is recorded) or the refusal is the message. In the art look the
-    /// refusal's text goes to the menu's note line at the top (the original's text bar is the game's, ARC-UI-147).</summary>
+    /// refusal's text is the original's type-4 message in the bottom message window (ARC-UI-3120, ledger CHW8, ML4), as the in-game sheet's.</summary>
     private void PressEditor(Func<AreaCreationEditor, (string Project, string? Art)> press, string what)
     {
         if (_mainMenu is not { Window: AreaMenuWindow.CharacterEditor, QuitPending: false, Editor: { Disposed: false } editor }) return;
         var (message, art) = press(editor);
-        _mainMenu.Notice = art is { Length: > 0 } ? art : null;
+        _mainMenu.Notice = null;
         GD.Print($"ARC-UI-034 editor {what}: {message} presses={editor.Creation.Presses.Count} unspent={editor.Draft.QueryHeroExperience()?.UnspentPoints}");
-        // The art look re-renders the menu so its note line takes the refusal's text; the project's words stay on the panel (the self-tests').
+        // The art look re-renders the menu (its note line goes); the refusal is posted after the redraw, so the redraw's hover text does not take its place; the project's words stay on the panel (the self-tests').
         if (_editorPanel!.ArtMode) RenderMainMenu(); else RenderCharacterEditor();
-        _editorPanel!.ShowSkillMessage(message);
+        _editorPanel!.ShowSkillMessage(message, art);
     }
 
     /// <summary>ARC-UI-147: the menu smoke's editor part, on the game's data: the editor shows the character sheet's original look (art 22 and the
@@ -181,17 +214,52 @@ public partial class TerrainViewerApp
         // A − at the start values is refused with the original's text in the note line; the draft and the presses stay.
         var (mx, my) = AreaCharacterSheetArtLayout.Minus(3);
         await Click(art.PointForSelfTest(mx + 5, my + 5));
-        require(_mainMenu.Creation.Presses.Count == presses && _mainMenu.Notice is { Length: > 0 } notice && panel.ArtNoteForSelfTest.Contains(notice, StringComparison.Ordinal),
-            $"a − at the start is refused with the original's text in the note line: '{_mainMenu.Notice}' / '{panel.ArtNoteForSelfTest}'");
-        // ARC-UI-2968: the note line is art text in the original's font (art 229), not a Godot Label.
-        require(panel.ArtNoteViewForSelfTest.Items.Count == 1 && panel.ArtNoteViewForSelfTest.IsVisibleInTree() && panel.ArtNoteForSelfTest == _mainMenu.Notice,
-            $"the note line is drawn as art text: {panel.ArtNoteViewForSelfTest.Items.Count} / {panel.ArtNoteViewForSelfTest.IsVisibleInTree()}");
+        // ARC-UI-3120: the refusal is the original's type-4 message in the bottom message window (icon 442, ML4, ML5), not the note line at the top.
+        var (messageLog, messageView) = (panel.MessageLog, panel.MessageViewForSelfTest);
+        require(_mainMenu.Creation.Presses.Count == presses && _mainMenu.Notice is null && panel.ArtNoteForSelfTest.Length == 0 && panel.MessageWindowShownForSelfTest
+            && messageLog.Shown is { Kind: AreaMessageKind.Message, Title: { Length: > 0 } refusal } && messageView.ShownKindForSelfTest == AreaMessageKind.Message
+            && messageView.IconForSelfTest == AreaMessageLayout.Icon(AreaMessageKind.Message) && messageView.ShownTextForSelfTest.Length > 0 && refusal.StartsWith(messageView.ShownTextForSelfTest[..Math.Min(8, messageView.ShownTextForSelfTest.Length)], StringComparison.Ordinal),
+            $"a − at the start is refused with the original's text in the bottom message window: '{messageLog.Shown?.Title}' shown='{messageView.ShownTextForSelfTest}' icon={messageView.IconForSelfTest} note='{panel.ArtNoteForSelfTest}'");
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } noteCapture)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             using var noteImage = GetViewport().GetTexture().GetImage();
             require(noteImage.SavePng(System.IO.Path.ChangeExtension(noteCapture, null) + "-note.png") == Error.Ok, "the note capture saved to " + noteCapture);
         }
+        // ARC-UI-3120: a hover is dropped for 3 s after the refusal (0x552770); then the pointer on the alignment gauge (region 102) writes its charedit.mes text (type 6, icon 444), on Accept the
+        // button's hint (MainMenu.mes 6999, a new line, 7003), and leaving the buttons or the gauge shows the scroll position's entry again (ML7); the type-12 stat text carries no cost.
+        var hoverAt = art.PointForSelfTest(40, 160);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = hoverAt, GlobalPosition = hoverAt });
+        await Frames(2);
+        require(messageLog.Shown is { Kind: AreaMessageKind.Message }, $"a hover within 3 s of a refusal is dropped: {messageLog.Shown?.Kind}");
+        _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
+        var hoverMove = art.PointForSelfTest(41, 161);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = hoverMove, GlobalPosition = hoverMove });
+        await Frames(2);
+        var alignmentText = art.Texts.Hint(102);
+        require(alignmentText is { Length: > 0 } && messageLog.Shown is { Kind: AreaMessageKind.Hover } hovered && hovered.Title == alignmentText && messageView.IconForSelfTest == AreaMessageLayout.Icon(AreaMessageKind.Hover)
+            && messageView.ShownTextForSelfTest.Length > 0, $"the alignment gauge's hover is written to the bottom message window: '{messageLog.Shown?.Title}' / '{messageView.ShownTextForSelfTest}'");
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } hoverCapture)
+        {
+            using var hoverImage = GetViewport().GetTexture().GetImage();
+            require(hoverImage.SavePng(System.IO.Path.ChangeExtension(hoverCapture, null) + "-hover.png") == Error.Ok, "the hover capture saved");
+        }
+        var (_, acceptX, acceptY) = AreaShopArtLayout.Button(AreaShopArtButton.Accept);
+        var acceptAt = panel.ShopArtForSelfTest.ScreenPointForSelfTest(acceptX + 15, acceptY + 15);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = acceptAt, GlobalPosition = acceptAt });
+        await Frames(2);
+        var (hintTitle, hintBody) = (_mainMenu.Texts.Original(AreaMainMenuTexts.ButtonHintTitle), _mainMenu.Texts.Original(AreaShopArtLayout.AcceptHint));
+        require(hintTitle is not null && hintBody is not null ? messageLog.Shown is { Kind: AreaMessageKind.Hover } hint && hint.Title == hintTitle + "\n" + hintBody : messageLog.Shown is { Kind: AreaMessageKind.Message },
+            $"the pointer on Accept writes its hint: '{messageLog.Shown?.Title}' (expected '{hintTitle}' + '{hintBody}')"); 
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } hintCapture)
+        {
+            using var hintImage = GetViewport().GetTexture().GetImage();
+            require(hintImage.SavePng(System.IO.Path.ChangeExtension(hintCapture, null) + "-hint.png") == Error.Ok, "the hint capture saved");
+        }
+        var leaveAt = art.PointForSelfTest(400, 5);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = leaveAt, GlobalPosition = leaveAt });
+        await Frames(2);
+        require(messageLog.Shown is { Kind: AreaMessageKind.Message }, $"leaving the button shows the stored entry again: {messageLog.Shown?.Kind}");
         // A release in the close rectangle does not close the editor (the close rectangle is the interface modes 1 and 2's).
         var close = AreaCharacterSheetArtView.CloseRectangle;
         await Click(art.PointForSelfTest(close.X + 20, close.Y + 20));
