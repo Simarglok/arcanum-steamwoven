@@ -153,6 +153,10 @@ class LayerTests(unittest.TestCase):
         self.assertGreater(sum(light[:3]), sum(middle[:3]))
         self.assertLess(sum(shade[:3]), sum(middle[:3]))
 
+    def test_an_empty_mask_cannot_be_filled_solid(self) -> None:
+        with self.assertRaises(pk.ParchmentError):
+            pk.render_solid(self.frame, pk.blank())
+
     def test_an_unknown_look_is_refused(self) -> None:
         with self.assertRaises(pk.ParchmentError):
             pk.glyph_layer(self.frame, self.template, self.mask, "blurry")
@@ -198,6 +202,42 @@ class StateTests(unittest.TestCase):
         toned = pk.apply_tone(plate, gain)
         self.assertEqual(tuple(toned.data[(50 * 200 + 100) * 4:(50 * 200 + 100) * 4 + 3]), (150, 140, 120))
         self.assertEqual(tuple(toned.data[0:3]), (200, 160, 100))   # the corner is untouched
+
+
+class ToneCommandTests(unittest.TestCase):
+    def test_tone_writes_the_toned_plate_and_a_derived_record_and_refuses_bad_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            frames = write_frames(root)
+            source = root / "outbox" / "B-BUTTONS" / f"{pk.PROMPT}.png"
+            source.parent.mkdir(parents=True)
+            pngio.write(source, pngio.Image(200, 100, bytearray(bytes((200, 160, 100, 255)) * (200 * 100))))
+            record = {"id": pk.PROMPT, "image": "x", "image_sha256": pk.sha256_file(source), "pixel_size": [200, 100]}
+            generator = source.with_name(source.stem + ".provenance.json")
+            generator.write_text(json.dumps(record), encoding="utf-8")
+            out = root / "work" / "toned.png"
+            argv = ["tone", "--frames", str(frames), "--local-root", str(root), "--source", str(source), "--out", str(out)]
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(pk.main(argv), 0)
+            derived = json.loads(out.with_name("toned.provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(derived["derived_from"]["image_sha256"], record["image_sha256"])
+            self.assertEqual(derived["image_sha256"], pk.sha256_file(out))
+            self.assertLess(pngio.read(out).data[(50 * 200 + 100) * 4], 200)   # the field was darkened towards the frames' parchment
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(pk.main(argv[:-1] + [str(source)]), 2)          # --out must not be the source
+                generator.write_text("[1, 2]", encoding="utf-8")
+                self.assertEqual(pk.main(argv), 2)                                  # not a generator record
+                generator.write_text("{broken", encoding="utf-8")
+                self.assertEqual(pk.main(argv), 2)                                  # not JSON
+            junk = root / "frames" / pk.BOXES[0].folder / "f0.png"
+            junk.write_bytes(b"junk")
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(pk.main(["build", "--frames", str(frames), "--local-root", str(root), "--dry-run"]), 2)   # a corrupt frame
+
+    def test_a_black_plate_field_is_refused(self) -> None:
+        plate = pngio.Image(200, 100, bytearray(bytes((0, 0, 0, 255)) * (200 * 100)))
+        with self.assertRaises(pk.ParchmentError):
+            pk.tone_gain(plate, pngio.Image(80, 43, bytearray(bytes((150, 140, 120, 255)) * (80 * 43))))
 
 
 class BuildTests(unittest.TestCase):

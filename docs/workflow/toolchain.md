@@ -1466,7 +1466,7 @@ python3 -B tools/steamwoven_ui/parchment_kit.py sheet --out FILE [--zoom N]    #
 python3 -B tools/steamwoven_ui/build_kit.py && python3 -B tools/steamwoven_ui/kit_check.py
 ```
 
-The painted symbols differ from the parchment by little, so a symbol mask is read in two passes against a smooth model of the parchment (see the tool's docstring); `MASKS` holds a threshold, a closing and, for the hand, a hull per box. The lit face is the plate times a per-channel gain field (lit template over idle template, smoothed), the corners a flat colour laid inside the wedge the original's corner cells span and outside the generated ring. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_parchment_kit` (about 20 s, in the batched `tools/local_dev/run_tests.py`).
+The painted symbols differ from the parchment by little, so a symbol mask is read in two passes against a smooth model of the parchment (see the tool's docstring); `MASKS` holds a threshold, a closing and, for the hand, a hull per box. The lit face is the plate times a per-channel gain field (lit template over idle template, smoothed), the corners a flat colour laid inside the wedge the original's corner cells span and outside the generated ring. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_parchment_kit` (about 30 s, in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

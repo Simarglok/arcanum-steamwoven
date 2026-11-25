@@ -5,7 +5,7 @@ lit (ON 225, 343, 344) and refused (ILL 348, 347, 346) states: a brass-ringed ov
     python3 -B tools/steamwoven_ui/parchment_kit.py masks  --out FILE [--zoom N] [--frames DIR] [--local-root DIR]      (the symbol masks over the idle frames, for a look; needs ImageMagick)
     python3 -B tools/steamwoven_ui/parchment_kit.py refs   [--frames DIR] [--local-root DIR]                           (the reference of the plate prompt: the original oval without its symbol; needs ImageMagick)
     python3 -B tools/steamwoven_ui/parchment_kit.py tone   [--source PNG] [--out PNG] [--frames DIR] [--local-root DIR]   (the generated plate's field takes the original's mean colour -> work/B-BUTTONS/, with the derived record)
-    python3 -B tools/steamwoven_ui/parchment_kit.py build  [--look cells|smooth] [--out DIR] [--only NAME,...] [--dry-run] [--frames DIR] [--local-root DIR] [--plate-dir DIR]
+    python3 -B tools/steamwoven_ui/parchment_kit.py build  [--look cells|smooth|solid] [--out DIR] [--only NAME,...] [--dry-run] [--frames DIR] [--local-root DIR] [--plate-dir DIR]
     python3 -B tools/steamwoven_ui/parchment_kit.py sheet  --out FILE [--zoom N] [--plate-dir DIR] [--frames DIR] [--local-root DIR]     (before / after composite with English labels, the two looks side by side; needs ImageMagick)
     python3 -B tools/steamwoven_ui/parchment_kit.py self-test
 
@@ -55,8 +55,8 @@ PAPER = (43.0, 22.0, 32.0, 17.0)  # the parchment field as an ellipse (centre x,
 MODEL_SIGMA = 4.0                # the Gaussian of the parchment model, in cells
 POOL_SIGMA = 3.0                 # the Gaussian of the model pooled over the boxes
 MODEL_PASSES = 4
-SPECK = 6                        # a piece of the first pass of this many cells or fewer is a speck, dropped
-PIECE = 8                        # the same in the second pass
+SPECK = 6                        # a piece of the first pass of fewer than this many cells is a speck, dropped
+PIECE = 8                        # the same in the second pass (fewer than this many cells)
 CORNER_ELLIPSE = (39.5, 21.0, 40.5, 22.0)  # the original ring's ellipse, in cells: the corners (the state's flat colour) lie outside it
 CORNER_DE = 38.0                 # a cell this close to the state's flat corner colour is a corner cell
 WEDGE_GROW = 2                   # cells the corner wedge is grown by (the frame's own noise leaves holes in a flat colour)
@@ -72,7 +72,7 @@ TONE_FIELD = 0.55                # the field's mean is measured within this shar
 TONE_FULL = 0.80                 # the gain is full up to this share, and fades out to TONE_END
 TONE_END = 0.97
 PROMPT = "plate-parchment-oval"
-REFS_SIZE = (1680, 912)          # the original oval is shown to Codex at 21 x (the master's 24 : 13)
+REFS_SIZE = (1680, 912)          # the original oval is shown to Codex at 21 x wide, the height snapped to the 6 px grid (the master's 24 : 13 within 0.3 %)
 LOOKS = ("cells", "smooth", "solid")
 ENGRAVE = 2                      # `--look solid`: the engraving's offset, in master px
 LABEL_FONT = button_kit.LABEL_FONT
@@ -318,6 +318,8 @@ def render_solid(frame: Image, mask: Mask, pixels: tuple[int, int] = MASTER) -> 
     sil = button_kit.resample_plane([1.0 if v else 0.0 for v in flat(mask)], (w, h), (pw, ph), EDGE_SIGMA)
     core = erode(mask, 1)
     cells = [cell(frame, x, y) for y, row in enumerate(core) for x, v in enumerate(row) if v] or [cell(frame, x, y) for y, row in enumerate(mask) for x, v in enumerate(row) if v]
+    if not cells:
+        raise ParchmentError("the symbol mask is empty: nothing to fill")
     base = tuple(sorted(c[k] for c in cells)[len(cells) // 2] for k in range(3))
     out = Image(pw, ph, bytearray(pw * ph * 4))
     def at(x: int, y: int) -> float:
@@ -560,6 +562,8 @@ def tone_gain(plate: Image, original_template: Image) -> tuple[float, float, flo
     inner = lambda u, v: inside_share(u, v) < TONE_FIELD
     want = field_mean(original_template, inner)
     have = field_mean(plate, inner)
+    if min(have) <= 0.0:
+        raise ParchmentError(f"the plate's field is black or empty (mean {have})")
     return tuple(w / h for w, h in zip(want, have))
 
 
@@ -586,7 +590,11 @@ def cmd_tone(args: argparse.Namespace) -> int:
     generator = source.with_name(source.stem + ".provenance.json")
     if not generator.is_file():
         raise ParchmentError(f"no generator record {generator} (SWI-GEN-6)")
+    if out.resolve() == source.resolve():
+        raise ParchmentError("--out must not be the source")
     record = json.loads(generator.read_text(encoding="utf-8"))
+    if not isinstance(record, dict):
+        raise ParchmentError(f"{generator.name} is not a generator record")
     if record.get("image_sha256") != sha256_file(source):
         raise ParchmentError(f"{source.name} differs from the image its record {generator.name} describes")
     idles = [read_frame(frames, b.folder) for b in BOXES]
@@ -597,6 +605,8 @@ def cmd_tone(args: argparse.Namespace) -> int:
     want = tuple(sum(w[k] for w in wants) / len(wants) for k in range(3))
     plate = pngio.read(source)
     have = field_mean(plate, lambda u, v: inside_share(u, v) < TONE_FIELD)
+    if min(have) <= 0.0:
+        raise ParchmentError(f"{source.name}: the field inside the ring is black or empty (mean {have})")
     gain = tuple(w / h for w, h in zip(want, have))
     toned = apply_tone(plate, gain)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -619,6 +629,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = args.out or local / "masters"
     records = local / "provenance" / "rule" if args.out is None else out / "records"
     only = set(args.only.split(",")) if args.only else None
+    if args.look == "solid" and args.out is None and not args.dry_run:
+        raise ParchmentError("--look solid is a comparison look (the flat arrow only): give --out DIR so the kit masters stay as they are")
     if only and not only <= {b.name for b in BOXES}:
         raise ParchmentError(f"--only names unknown boxes {sorted(only - {b.name for b in BOXES})}; the boxes are {[b.name for b in BOXES]}")
     parts = build_parts(frames, args.look, plate_dir, only)
@@ -749,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
         return {"masks": cmd_masks, "refs": cmd_refs, "tone": cmd_tone, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
-    except (ParchmentError, button_kit.ButtonError, OSError, subprocess.CalledProcessError) as error:
+    except (ParchmentError, button_kit.ButtonError, pngio.PngError, ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f"PARCHMENT KIT FAIL: {error}", file=sys.stderr)
         return 2
 
