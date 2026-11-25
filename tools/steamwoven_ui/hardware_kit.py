@@ -9,11 +9,11 @@ their plugs, and three small selection frames (arts 198 222 231 232 233 367 670 
 
 The rules (TRD SWI-KIT, the owner's rules: the original's muted palette and lighting, no added ornament; the old art's wood in a corner is NOT part of a hardware part, SWI-LAY-12 / #3101):
 
-* **Lens ring** (`lens_whole`, `lens`): the eight lens arts are one ring in eight wood corners. The ring is the original's own: every opaque pixel within 6 px of the transparent circle is put, by its angle and its distance from the circle's edge, into a polar
-  table (0.5 degree by 0.25 px, a smooth splat, the eight arts pooled so the eight woods cancel; the four places where the circle touches the art's edge are filled across). The master is that table read at every master pixel on a canvas
-  18 px larger on every side, so the ring is whole: each angle's brass band (up to its own outer edge, the old art's dark rim beyond it dropped) is stretched to 5 original px, highlights above the HUD rings' brass are compressed (no white), and the lighting
-  (white top left, warm orange bottom right, a dark bevel along the inner edge) stays the original's. Parts: `hardware.lens_ring` (354 x 354, the circle open), `hardware.lens_ring_filled` (with the dark fill of art 367) and the eight lens arts' rows,
-  the same ring cut to the art's own 318 x 318 square (a drop-in for the old art; the ring is cut where the old art cut it).
+* **Lens ring** (`lens_whole`, `lens`): the SHAPE is analytic (owner 2026-11-25: even, exact): a band of 5 original px outside the lens art's transparent circle, anti-aliased, on a canvas 18 px larger on every side so the ring is whole (the old art clipped it
+  where the circle touches its edge). Its MATERIAL is polished, cast brass (owner 2026-11-25: narrow sharp highlights, alternating light and dark reflections round the circle, fine metal grain, warm copper reflections): the body tone and the grain are the kit's
+  approved brass, the rings of the HUD (#3259) and the menu sockets (#3260) unrolled along their circumference (the two details end to end, longer than the lens ring, so nothing repeats; their slow light is removed, only the grain is kept); the light is
+  analytic: a sharp highlight ridge at the top left, a broad sheen, whole-harmonic reflection bands with sharp edges, a copper reflection at the bottom right, a narrow dark chamfer with a thin bright edge along the inner side, a roll-off (no dark outline) at the
+  outer side. Parts: `hardware.lens_ring` (354 x 354, the circle open), `hardware.lens_ring_filled` (with the dark fill of art 367) and the eight lens arts' rows, the same ring cut to the art's own 318 x 318 square (a drop-in for the old art; cut where the old art cut it).
 * **Slot inset** (`inset`): the ten hotkey slot arts are one inset (a dark shadow along the top and left, a light line along the bottom and right) over ten crops of the strip's wood. The inset is the mean of the ten, each normalised by its own wood, so the
   wood cancels; the part holds only what is not wood: the shadow as black with the original's depth as alpha, the edge lines in their own colour, and a transparent middle (the strip's wood shows through). The ten parts are one picture.
 * **Slot wood** and **plug** (`wood`, `plug`): the five maintain slots of the top strip are openings in the strip art, so their back and their plug are wood: a crop of the strip's own wood, flipped to differ, shaded by the original's smooth light
@@ -53,13 +53,12 @@ LABEL_FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"   # the labels of a 
 MANIFEST = HERE / "kit.json"
 
 # the lens ring's polar table
-TH_BINS = 720                 # angle bins (0.5 degree)
-D_MIN, D_MAX, D_STEP = -0.5, 6.0, 0.25   # depth (original px beyond the circle's edge)
-SIGMA_T, SIGMA_D = 2.0, 0.40  # the splat's width: degrees, original px
-DEFAULT_EDGE = 3.5            # the outer edge of the brass when no angle shows one (original px)
-RING_WIDTH = 5.0              # the ring's brass band, original px (the old art's band is about 4 px, its dark rim included); every angle's band is stretched to it
+RING_WIDTH = 5.0              # the ring's brass band, original px (the old art's band is about 4 px, its dark rim included)
 LENS_PAD = 18                 # master px added on every side of a lens art's square so the ring is whole (3 grid steps)
-HIGHLIGHT_KNEE, HIGHLIGHT_SLOPE = 139.0, 0.5   # luminance above the knee (the 90th percentile of the HUD ring's brass) is halved: no white on a brass ring
+BRASS_ROWS = 18               # the band's width in master px (RING_WIDTH x the lens scale), rows of the brass texture
+# the approved brass of the kit the ring's grain is taken from: the HUD socket ring (#3259) and the menu socket ring (#3260), each a circle of brass; (part, first row of a band of BRASS_ROWS rows, counted from the centre)
+BRASS_SOURCES = (("hardware.menu_ring", 104), ("hardware.hud_ring", 73))
+GRAIN = 1.2                   # how strongly the grain (the brass's detail without its slow light) modulates the ring
 
 # the strip wood the maintain slots and plugs are cut from (board.inttop master px): the one plain stretch of wood left of the slot openings (the strip's other opaque stretches are filled-in erasures, smeared), 126 px square;
 # a smaller tile is cut at a corner or the middle of it, flipped, so the five tiles differ (a 126 px plug fills the area, so its four flips differ and the fifth plug repeats the first)
@@ -102,8 +101,8 @@ LENS_BASE = 318                # a lens art's master square (89 units); the whol
 LENS_WHOLE = (LENS_BASE + 2 * LENS_PAD, LENS_BASE + 2 * LENS_PAD)
 INSET_ARTS = tuple(p for p in PARTS if p.family == "inset")
 FAMILY_NOTE = {
-    "lens_whole": "the whole lens ring by rule from the original's ring (its light, bevel and warm highlights, band 5 px, no dark rim); the art's square plus 18 px each side, centred; circle open or dark-filled",
-    "lens": "the lens art's square with the ring of hardware.lens_ring on it (drop-in for the old art, ring cut where the old art cut it); no wood corners, circle open",
+    "lens_whole": "the whole lens ring: analytic shape (5 px band), polished brass with the kit's approved brass grain and tone; the art's square plus 18 px each side, centred; circle open or dark-filled",
+    "lens": "the lens art's square with the ring of hardware.lens_ring on it (drop-in for the old art, cut where the old art cut it); no wood corners, circle open",
     "inset": "the hotkey slot's inset by rule from the ten slot arts: shadow top and left, light line bottom and right, the middle open for the strip's wood",
     "wood": "the maintain slot's wood: a crop of the strip's wood shaded by the original's smooth light (the slot is an opening in the strip art)",
     "plug": "the plug of a closed maintain slot: a crop of the strip's wood shaded by the original's smooth light",
@@ -188,138 +187,135 @@ def hole_of(image: pngio.Image) -> tuple[float, float, float]:
     return cx, cy, math.sqrt(len(pts) / math.pi)
 
 
-ND = int((D_MAX - D_MIN) / D_STEP) + 1
+def bilinear(image: pngio.Image, x: float, y: float) -> list[float]:
+    x -= 0.5
+    y -= 0.5
+    x0, y0 = int(math.floor(x)), int(math.floor(y))
+    fx, fy = x - x0, y - y0
+    out = [0.0, 0.0, 0.0]
+    for dx, dy, w in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
+        p = image.pixel(min(image.w - 1, max(0, x0 + dx)), min(image.h - 1, max(0, y0 + dy)))
+        for c in range(3):
+            out[c] += w * p[c]
+    return out
 
 
-def ring_table(images: list[pngio.Image]) -> dict:
-    """The polar table of the ring: sums of colour and weight per (angle bin, depth bin), every opaque pixel within D_MAX of the circle's edge splatted with a Gaussian."""
-    cx, cy, radius = hole_of(images[0])
-    num = [[[0.0, 0.0, 0.0] for _ in range(ND)] for _ in range(TH_BINS)]
-    den = [[0.0] * ND for _ in range(TH_BINS)]
-    bin_deg = 360.0 / TH_BINS
-    spread_t = int(3 * SIGMA_T / bin_deg) + 1
-    for image in images:
-        if (image.w, image.h) != (images[0].w, images[0].h):
-            raise KitError("the lens arts differ in size")
-        for y in range(image.h):
-            for x in range(image.w):
-                r, g, b, a = image.pixel(x, y)
-                if a < 255:
-                    continue
-                dx, dy = x + 0.5 - cx, y + 0.5 - cy
-                d = math.hypot(dx, dy) - radius
-                if d < 0 or d > D_MAX:
-                    continue
-                th = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
-                centre_bin = th / bin_deg
-                d_lo = max(0, int((d - 3 * SIGMA_D - D_MIN) / D_STEP))
-                d_hi = min(ND - 1, int((d + 3 * SIGMA_D - D_MIN) / D_STEP) + 1)
-                wds = [(db, math.exp(-0.5 * ((D_MIN + db * D_STEP - d) / SIGMA_D) ** 2)) for db in range(d_lo, d_hi + 1)]
-                for tb in range(int(centre_bin) - spread_t, int(centre_bin) + spread_t + 1):
-                    wt = math.exp(-0.5 * (((tb + 0.5) * bin_deg - th) / SIGMA_T) ** 2)
-                    t = tb % TH_BINS
-                    for db, wd in wds:
-                        w = wt * wd
-                        den[t][db] += w
-                        cell = num[t][db]
-                        cell[0] += w * r
-                        cell[1] += w * g
-                        cell[2] += w * b
-    return {"cx": cx, "cy": cy, "radius": radius, "num": num, "den": den, "size": (images[0].w, images[0].h)}
+def ring_centre(image: pngio.Image) -> tuple[float, float]:
+    """The centre of a ring master: the centroid of its transparent pixels near the middle (the hole)."""
+    pts = [(x, y) for y in range(image.h) for x in range(image.w) if image.pixel(x, y)[3] < 10 and math.hypot(x - image.w / 2, y - image.h / 2) < image.w * 0.3]
+    if not pts:
+        raise KitError("a brass ring master has no hole")
+    return sum(p[0] for p in pts) / len(pts) + 0.5, sum(p[1] for p in pts) / len(pts) + 0.5
 
 
-def dense_table(table: dict) -> tuple[list[list[list[float] | None]], list[float]]:
-    """The table as one colour per (angle bin, depth bin), the angles nothing was splatted into (the circle touches the art's edge there: the four cardinal points) filled by a straight line between the nearest
-    angles that have a colour, and the outer edge of the brass at every angle: the first depth after the angle's brightest point at which the luminance falls below half of it (the dark rim of the old art beyond it is the old
-    art's shadow on its wood and is not part of the ring; an angle with no such fall takes its neighbours' edge), smoothed over 16 bins either side."""
-    num, den = table["num"], table["den"]
-    grid: list[list[list[float] | None]] = [[None] * ND for _ in range(TH_BINS)]
-    for db in range(ND):
-        known = [t for t in range(TH_BINS) if den[t][db] >= 0.02]
-        for t in known:
-            grid[t][db] = [num[t][db][c] / den[t][db] for c in range(3)]
-        if not known:
-            continue
-        for t in range(TH_BINS):
-            if grid[t][db] is not None:
-                continue
-            lo = next(k for k in range(1, TH_BINS) if grid[(t - k) % TH_BINS][db] is not None)
-            hi = next(k for k in range(1, TH_BINS) if grid[(t + k) % TH_BINS][db] is not None)
-            a_, b_ = grid[(t - lo) % TH_BINS][db], grid[(t + hi) % TH_BINS][db]
-            f = lo / (lo + hi)
-            grid[t][db] = [a_[c] * (1 - f) + b_[c] * f for c in range(3)]
-    raw: list[float | None] = []
-    for t in range(TH_BINS):
-        lums = [(D_MIN + db * D_STEP, lum(*grid[t][db])) for db in range(ND) if grid[t][db] is not None and 0 <= D_MIN + db * D_STEP <= 5.5]
-        peak_d, peak = max(lums, key=lambda p: p[1])
-        drop = next((d for d, l in lums if d >= peak_d and l < 0.5 * peak), None)   # the first depth after the peak that falls below half of it
-        raw.append(None if drop is None or peak < 20 else clamp(drop - 0.25, 2.5, 5.5))   # on the dark side the wood past the brass is as bright as the brass: no edge there
-    known = [t for t in range(TH_BINS) if raw[t] is not None]
-    if not known:   # no angle falls off after its brightest point (a ring no brighter than its wood): the old art's own band width
-        return grid, [DEFAULT_EDGE] * TH_BINS
-    edge = []
-    for t in range(TH_BINS):   # an angle with no edge takes a straight line between its nearest neighbours that have one
-        if raw[t] is not None:
-            edge.append(raw[t])
-            continue
-        lo = next(k for k in range(1, TH_BINS) if raw[(t - k) % TH_BINS] is not None)
-        hi = next(k for k in range(1, TH_BINS) if raw[(t + k) % TH_BINS] is not None)
-        f = lo / (lo + hi)
-        edge.append(raw[(t - lo) % TH_BINS] * (1 - f) + raw[(t + hi) % TH_BINS] * f)  # type: ignore[operator]
-    smooth = [sum(edge[(t + k) % TH_BINS] for k in range(-16, 17)) / 33 for t in range(TH_BINS)]
-    return grid, smooth
+def unwrap(image: pngio.Image, first_row: int) -> list[list[list[float]]]:
+    """The brass of a ring master unrolled along its circumference: for every pixel step round the circle at the band's middle, BRASS_ROWS colours from `first_row` px of radius outwards (bilinear)."""
+    cx, cy = ring_centre(image)
+    n = int(round(2 * math.pi * (first_row + BRASS_ROWS / 2)))
+    strip = []
+    for i in range(n):
+        th = 2 * math.pi * i / n
+        cos, sin = math.cos(th), math.sin(th)
+        column = []
+        for j in range(BRASS_ROWS):
+            r = first_row + j + 0.5
+            x, y = cx + r * cos, cy + r * sin
+            if image.pixel(min(image.w - 1, max(0, int(x))), min(image.h - 1, max(0, int(y))))[3] < 250:   # the unrolled band must be brass all through: no hole, no soft rim
+                raise KitError("the brass band of a ring master is not opaque brass all through: the band rows no longer fit the master")
+            column.append(bilinear(image, x, y))
+        strip.append(column)
+    return strip
 
 
-def sample_ring(grid: list[list[list[float] | None]], th: float, d: float) -> list[float]:
-    """The colour at angle `th` (degrees) and depth `d` (original px beyond the circle's edge), bilinear in the dense table."""
-    ft = th / (360.0 / TH_BINS) - 0.5
-    t0 = math.floor(ft)
-    wt = ft - t0
-    fd = (d - D_MIN) / D_STEP
-    d0 = max(0, min(ND - 2, int(math.floor(fd))))
-    wd = clamp(fd - d0, 0.0, 1.0)
-    acc = [0.0, 0.0, 0.0]
-    tot = 0.0
-    for tt, w1 in ((t0 % TH_BINS, 1 - wt), ((t0 + 1) % TH_BINS, wt)):
-        for dd, w2 in ((d0, 1 - wd), (d0 + 1, wd)):
-            cell = grid[tt][dd]
-            if cell is None:
-                continue
-            tot += w1 * w2
-            for c in range(3):
-                acc[c] += w1 * w2 * cell[c]
-    return [v / tot for v in acc] if tot > 0 else [0.0, 0.0, 0.0]
+def grain_of(strip: list[list[list[float]]]) -> list[list[float]]:
+    """The strip's detail: its luminance minus its slow light (a Gaussian, 3 px round the circle and 1.5 px across), so the grain is kept and the master's own shading is not."""
+    n, rows = len(strip), len(strip[0])
+    plane = [[lum(*c) for c in column] for column in strip]
+    sigma = 3
+    kernel = [(di, dj, math.exp(-(di * di) / (2 * sigma * sigma)) * math.exp(-(dj * dj) / (2 * 1.5 ** 2))) for di in range(-2 * sigma, 2 * sigma + 1) for dj in range(-2, 3)]
+    out = []
+    for i in range(n):
+        row = []
+        for j in range(rows):
+            acc = total = 0.0
+            for di, dj, w in kernel:
+                if 0 <= j + dj < rows:
+                    acc += w * plane[(i + di) % n][j + dj]
+                    total += w
+            row.append(plane[i][j] - acc / total)
+        out.append(row)
+    return out
 
 
-def compress(colour: list[float], knee: float, slope: float) -> list[float]:
-    """Highlights above `knee` (a luminance) are pulled down to `slope` of their excess, so no white shows (the HUD rings' brass has none)."""
-    l = lum(*colour)
-    if l <= knee:
-        return colour
-    g = (knee + (l - knee) * slope) / l
-    return [min(255.0, v * g) for v in colour]
+def brass_material(masters: Path) -> dict:
+    """The ring's grain (the two rings' details end to end, longer than the lens ring's circumference, so nothing repeats) and its body tone (the mean colour of the two bands)."""
+    grain, tones, hashes = [], [], {}
+    for part, first_row in BRASS_SOURCES:
+        path = masters / f"{part}.png"
+        if not path.is_file():
+            raise KitError(f"{path} is missing: the approved brass of the kit (#3259 HUD rings, #3260 socket rings) the lens ring's grain is taken from")
+        strip = unwrap(pngio.read(path), first_row)
+        grain += grain_of(strip)
+        count = len(strip) * BRASS_ROWS
+        tones.append([sum(c[k] for column in strip for c in column) / count for k in range(3)])
+        hashes[part] = sha256_file(path)
+    tone = [sum(t[k] for t in tones) / len(tones) for k in range(3)]
+    return {"grain": grain, "tone": tone, "sha256": hashes}
 
 
-def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] | None = None, pad: int = LENS_PAD) -> pngio.Image:
-    """The ring at the master size: the art's own square (`size` minus the padding on every side) with `pad` master px added all round, so the ring is drawn whole (the old art clipped it where the circle touches its edge).
-    Every angle's brass band (its own width in the old art) is stretched to RING_WIDTH original px, the colours are the table's (the lighting stays the original's: the white highlight at the top left, the warm orange
-    at the bottom right, the dark bevel along the inner edge), the highlights are compressed and the dark rim outside the brass is dropped. A fill colour makes the circle's inside opaque (art 367)."""
-    base_w, base_h = size[0] - 2 * pad, size[1] - 2 * pad
-    ow, oh = table["size"]
-    sx, sy = base_w / ow, base_h / oh
-    s = (sx + sy) / 2
-    if base_w <= 0 or abs(sx - sy) / s > 0.01:
-        raise KitError("the master's aspect is not the art's")
-    if "dense" not in table:
-        table["dense"] = dense_table(table)
-    grid, edge = table["dense"]
-    if abs(table["cx"] - ow / 2) > 0.6 or abs(table["cy"] - oh / 2) > 0.6:
-        raise KitError("the lens circle is not centred in its art: the whole ring is drawn on the art's centre")
-    knee = HIGHLIGHT_KNEE
+def angle_gap(a: float, b: float) -> float:
+    return (a - b + 180.0) % 360.0 - 180.0
+
+
+def smoothstep(lo: float, hi: float, x: float) -> float:
+    t = clamp((x - lo) / (hi - lo), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def light_of(th: float, rho: float) -> tuple[float, float]:
+    """The light on polished, cast brass at angle `th` (degrees, image coordinates: the top left is 225) and `rho` (0 inner edge, 1 outer edge of the band): the body's multiplier and the copper mix. Alternating light and dark
+    reflections round the circumference (sharp edges, whole harmonics so the circle closes), a broad sheen and a narrow sharp highlight ridge at the top left, a warm copper reflection at the bottom right, a narrow dark chamfer with its thin
+    bright edge along the inner side, and a roll-off at the outer edge (no dark outline)."""
+    seg = math.sin(math.radians(th * 3 + 30)) + 0.6 * math.sin(math.radians(th * 5 + 110)) + 0.4 * math.sin(math.radians(th * 8 + 10))
+    light = 0.95 + 0.34 * math.tanh(3.5 * seg)
+    light += 0.55 * math.exp(-(angle_gap(th, 225) / 55) ** 2) * (0.5 + 0.5 * math.sin(math.pi * clamp(rho * 1.2, 0.0, 1.0)))
+    light += 2.4 * math.exp(-(angle_gap(th, 222) / 16) ** 2) * math.exp(-((rho - 0.42) / 0.09) ** 2)
+    light += 0.7 * math.exp(-(angle_gap(th, 300) / 6) ** 2) * math.exp(-((rho - 0.40) / 0.09) ** 2)
+    light -= 0.30 * math.exp(-(angle_gap(th, 315) / 45) ** 2) + 0.25 * math.exp(-(angle_gap(th, 135) / 40) ** 2)
+    light *= 0.15 + 0.85 * smoothstep(0.0, 0.14, rho)
+    light += 0.45 * math.exp(-((rho - 0.17) / 0.035) ** 2) * (0.4 + 0.6 * math.exp(-(angle_gap(th, 225) / 80) ** 2))
+    light *= 1 - 0.45 * smoothstep(0.80, 1.0, rho)
+    copper = math.exp(-(angle_gap(th, 48) / 38) ** 2) * smoothstep(0.25, 0.8, rho)
+    return max(0.05, light), copper
+
+
+BRASS_DARK, BRASS_HIGH, COPPER = (24, 14, 6), (240, 194, 106), (214, 118, 44)   # the ramp's ends: shadow, warm highlight (no white), copper reflection
+
+
+def brass_colour(light: float, copper: float, tone: list[float]) -> list[float]:
+    if light < 1:
+        c = [BRASS_DARK[k] + (tone[k] - BRASS_DARK[k]) * light for k in range(3)]
+    else:
+        t = clamp((light - 1) / 1.2, 0.0, 1.0)
+        c = [tone[k] + (BRASS_HIGH[k] - tone[k]) * t for k in range(3)]
+    if copper > 0:
+        w = clamp(copper * 0.85, 0.0, 1.0) * clamp(0.5 + 0.5 * light, 0.0, 1.0)
+        c = [c[k] * (1 - w) + COPPER[k] * w * clamp(0.7 + 0.5 * light, 0.0, 1.15) for k in range(3)]
+    return c
+
+
+def render_ring(radius: float, material: dict, size: tuple[int, int], fill: tuple[int, int, int] | None = None, pad: int = LENS_PAD) -> pngio.Image:
+    """The ring at the master size: the lens art's square (`size` minus `pad` on every side) with `pad` master px added all round, so the ring is drawn whole (the old art clipped it where the circle touches its edge). The shape is
+    analytic: a band of RING_WIDTH original px outside the circle of `radius` original px, anti-aliased, centred on the canvas; its colour is polished brass (`light_of`, the body tone and the grain of the kit's approved brass).
+    A fill colour makes the circle's inside opaque (art 367)."""
     w, h = size
-    cx, cy, radius = w / 2.0, h / 2.0, table["radius"]
+    s = (w - 2 * pad) / (2 * radius)            # master px per original px (the art's square is the circle's diameter)
+    cx, cy = w / 2.0, h / 2.0
+    grain, tone = material["grain"], material["tone"]
+    rows, count = BRASS_ROWS, len(grain)
+    middle = (radius + RING_WIDTH / 2) * s
+    tone_light = lum(*tone)
     out = pngio.Image.blank(w, h)
-    bin_deg = 360.0 / TH_BINS
     for my in range(h):
         for mx in range(w):
             dx, dy = mx + 0.5 - cx, my + 0.5 - cy
@@ -331,8 +327,11 @@ def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] |
             alpha = 0.0
             if -0.3 <= d <= RING_WIDTH + 0.3:
                 th = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
-                u = clamp(d / RING_WIDTH, 0.0, 1.0)
-                r, g, b = compress(sample_ring(grid, th, u * edge[int(th / bin_deg) % TH_BINS]), knee, HIGHLIGHT_SLOPE)
+                rho = clamp(d / RING_WIDTH, 0.0, 1.0)
+                light, copper = light_of(th, rho)
+                colour = brass_colour(light, copper, tone)
+                k = 1 + GRAIN * grain[int(math.radians(th) * middle) % count][min(rows - 1, int(rho * rows))] / tone_light
+                r, g, b = (clamp(v * k, 0.0, 255.0) for v in colour)
                 alpha = min(clamp(inside_px + 0.5, 0.0, 1.0), clamp((RING_WIDTH - d) * s + 0.5, 0.0, 1.0))
             if fill is not None and inside_px < 0.5:
                 cover = clamp(0.5 - inside_px, 0.0, 1.0)  # the fill's own soft edge, under the ring
@@ -345,7 +344,7 @@ def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] |
             if alpha <= 0:
                 continue
             i = (my * w + mx) * 4
-            out.data[i:i + 4] = bytes((int(round(clamp(r, 0, 255))), int(round(clamp(g, 0, 255))), int(round(clamp(b, 0, 255))), int(round(alpha * 255))))
+            out.data[i:i + 4] = bytes((int(round(r)), int(round(g)), int(round(b)), int(round(alpha * 255))))
     return out
 
 
@@ -490,8 +489,9 @@ def roller(original: pngio.Image, size: tuple[int, int]) -> pngio.Image:
 def build_part(part: Part, frames: Path, masters: Path, size: tuple[int, int], cache: dict) -> tuple[pngio.Image, dict]:
     """The master of one part and what the record says about it. `cache` shares the ring table and the inset among the parts of a family."""
     if part.family in ("lens", "lens_whole"):
-        if "ring" not in cache:
-            cache["ring"] = ring_table([read_frame(frames, p) for p in LENS_ARTS])
+        if "brass" not in cache:
+            cache["brass"] = brass_material(masters)
+            cache["hole"] = hole_of(read_frame(frames, LENS_ARTS[0]))
         fill = None
         if part.fill:
             source = part if part.art else BY_ID["hardware.schm_pc_lens"]
@@ -500,11 +500,11 @@ def build_part(part: Part, frames: Path, masters: Path, size: tuple[int, int], c
             if a != 255:
                 raise KitError(f"{part.ident}: the original's fill is not opaque")
             fill = (r, g, b)
-        table = cache["ring"]
-        whole = render_ring(table, LENS_WHOLE, fill)
+        radius = cache["hole"][2]
+        whole = render_ring(radius, cache["brass"], LENS_WHOLE, fill)
         image = whole if part.family == "lens_whole" else whole.crop(LENS_PAD, LENS_PAD, LENS_BASE, LENS_BASE)
-        return image, {"ring_centre": [round(table["cx"], 2), round(table["cy"], 2)], "circle_radius": round(table["radius"], 2), "pooled_arts": [p.art for p in LENS_ARTS],
-                       "fill": list(fill) if fill else None, "pad": LENS_PAD, "ring_width": RING_WIDTH, "highlight_knee": HIGHLIGHT_KNEE, "highlight_slope": HIGHLIGHT_SLOPE}
+        return image, {"circle_radius": round(radius, 2), "fill": list(fill) if fill else None, "pad": LENS_PAD, "ring_width": RING_WIDTH, "brass_rows": BRASS_ROWS, "grain": GRAIN,
+                       "brass_sources": [list(x) for x in BRASS_SOURCES], "brass_sha256": cache["brass"]["sha256"], "shape_from": f"{LENS_ARTS[0].art}-{LENS_ARTS[0].name}/f0 (the circle)"}
     if part.family == "inset":
         if "inset" not in cache:
             cache["inset"] = inset_layer([read_frame(frames, p) for p in INSET_ARTS])
@@ -559,12 +559,12 @@ def gates(part: Part, image: pngio.Image, size: tuple[int, int]) -> list[str]:
 
 def provenance_record(part: Part, frames: Path, extra: dict, size: tuple[int, int], blob: bytes) -> dict:
     sources = {}
-    arts = extra.get("pooled_arts") or [part.art]
+    arts = extra.get("pooled_arts") or ([part.art] if part.art else [LENS_ARTS[0].art])
     names = {p.art: p.name for p in PARTS}
     for art in arts:
         path = frames / f"{art}-{names[art]}" / "f0.png"
         sources[f"{art}-{names[art]}/f0"] = sha256_file(path)
-    return {"part": part.ident, "rule": "hardware_kit", "family": part.family, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": f"{part.art}-{part.name}/f0" if part.art else "pooled lens arts",
+    return {"part": part.ident, "rule": "hardware_kit", "family": part.family, "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": f"{part.art}-{part.name}/f0" if part.art else f"{LENS_ARTS[0].art}-{LENS_ARTS[0].name}/f0 (the circle) and the kit's brass rings",
             "sources_sha256": sources, **extra, "image_size": list(size), "image_sha256": hashlib.sha256(blob).hexdigest(), "run_by": "agent"}
 
 
