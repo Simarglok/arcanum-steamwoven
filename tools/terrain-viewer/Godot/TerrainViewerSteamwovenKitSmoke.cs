@@ -66,7 +66,16 @@ public partial class TerrainViewerApp
             if (without.Contains(id)) continue;
             var (baked, bakedHeight) = (SteamwovenGrid.BakedLength(width, step), SteamwovenGrid.BakedLength(height, step));
             var real = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_FIXTURES") is { Length: > 0 } fixtureRoot && SteamwovenKitTable.FixtureUnits.ContainsKey(id) ? System.IO.Path.Combine(fixtureRoot, SteamwovenKitSet.FolderName(step), id + ".png") : null;
+            // ARC-UI-3165: ARC_STEAMWOVEN_KIT_LOOK=DIR puts a composed window surface (DIR/<part id>.png, the master of the part, e.g. backdrop.char_maint.png) in place of the part's flat colour, resized to the step's baked size, for a look capture of the real window text over it.
+            var look = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 } lookRoot ? System.IO.Path.Combine(lookRoot, id + ".png") : null;
             if (real is not null && System.IO.File.Exists(real)) System.IO.File.Copy(real, System.IO.Path.Combine(directory, id + ".png"), true);
+            else if (look is not null && System.IO.File.Exists(look))
+            {
+                using var surface = Image.LoadFromFile(look);
+                surface.Convert(Image.Format.Rgba8);
+                surface.Resize(baked, bakedHeight, Image.Interpolation.Lanczos);
+                if (surface.SavePng(System.IO.Path.Combine(directory, id + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-3165 look surface not saved: " + id);
+            }
             else
             {
                 using var image = Image.CreateEmpty(baked, bakedHeight, false, Image.Format.Rgba8);
@@ -604,9 +613,10 @@ public partial class TerrainViewerApp
                     }
                 var share = total == 0 ? 0 : (double)hits / total;
                 // Every piece of the window's background shows (a window that still drew only one of its two old arts would hide the other piece).
-                require(!kit || perColour.All(count => total > 0 && (double)count / total > 0.02), $"[{tag}] every piece of the {name} window's kit background shows (shares {string.Join(", ", perColour.Select(count => ((double)count / Math.Max(1, total)).ToString("F3")))})");
+                var lookCapture = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };      // ARC-UI-3165: a look capture puts a real surface in place of the flat colours, so the colour shares are not asked
+                require(!kit || lookCapture || perColour.All(count => total > 0 && (double)count / total > 0.02), $"[{tag}] every piece of the {name} window's kit background shows (shares {string.Join(", ", perColour.Select(count => ((double)count / Math.Max(1, total)).ToString("F3")))})");
                 GD.Print($"ARC-UI-3037 {tag} {name} kit-colour share {share:F3}");
-                require(kit ? share > 0.10 : share < 0.01, $"[{tag}] the {name} window's pixels are {(kit ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kit ? "not drawn" : "drawn")}");
+                require(lookCapture || (kit ? share > 0.10 : share < 0.01), $"[{tag}] the {name} window's pixels are {(kit ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kit ? "not drawn" : "drawn")}");
                 // ARC-UI-3165 (method A condition 1): the words and numbers art 22 had baked in are the sheet's own text over the kit's background (the eight stat names, the dial's E and G, the ruler's seven divisions), none with the art's own background.
                 if (name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } labelView)
                 {
