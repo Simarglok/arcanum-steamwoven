@@ -113,7 +113,8 @@ class ZoneSpec:
     kit_parts: tuple[dict, ...] = ()
     island_min: int = 0                                          # ARC-UI-3164: wood-weight islands under this many pixels are dropped (the ORIGINAL's pixels stand there): metal and paper edges the class leaks into
     fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
-    halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (the gears): the wood weight is 1 outside the part's own light shape
+    halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (a gear, an oval): the wood weight is 1 outside the part's own light shape, 0 inside it
+    disc_boxes: tuple[tuple[int, int, int, int, int, int, int, int], ...] = ()   # ARC-UI-3101: (x0, y0, x1, y1, dx0, dy0, dx1, dy1): the wood weight is 1 in the box outside the ellipse of the disc box (a lens, a round button), 0 inside
     dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
     wood_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes where the Codex wood shows whole: the letters baked into the wood go
     text_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes whose text pixels are replaced by their ground (black fields, discs, gradient pits, flat parchment)
@@ -136,7 +137,7 @@ def load_spec(path: Path) -> ZoneSpec:
         raise ComposeError(f"cannot read the spec {path}: {error}") from error
     if not isinstance(raw, dict):
         raise ComposeError(f"spec {path}: the top level is an object")
-    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands", "halo_boxes", "wood_boxes", "text_boxes", "paper_boxes"}
+    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands", "halo_boxes", "disc_boxes", "wood_boxes", "text_boxes", "paper_boxes"}
     if unknown or "id" not in raw or "screen" not in raw:
         raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
     if not (isinstance(raw["id"], str) and SAFE_ID.fullmatch(raw["id"]) and isinstance(raw["screen"], str)):
@@ -151,6 +152,17 @@ def load_spec(path: Path) -> ZoneSpec:
             if not (isinstance(box, list) and len(box) == 4 and all(_is_int(v) for v in box) and box[0] < box[2] and box[1] < box[3] and min(box) >= 0):
                 raise ComposeError(f"spec {path}: {name} entries are [x0, y0, x1, y1] with x0 < x1, y0 < y1")
             out.append(tuple(box))
+        return tuple(out)
+
+    def discs() -> tuple:
+        value = raw.get("disc_boxes", [])
+        if not isinstance(value, list):
+            raise ComposeError(f"spec {path}: disc_boxes is a list")
+        out = []
+        for d in value:
+            if not (isinstance(d, list) and len(d) == 8 and all(_is_int(v) for v in d) and 0 <= d[0] <= d[4] < d[6] <= d[2] and 0 <= d[1] <= d[5] < d[7] <= d[3]):
+                raise ComposeError(f"spec {path}: disc_boxes entries are [x0, y0, x1, y1, dx0, dy0, dx1, dy1]: the disc box lies inside the box")
+            out.append(tuple(d))
         return tuple(out)
 
     parts_raw = raw.get("kit_parts", [])
@@ -178,7 +190,7 @@ def load_spec(path: Path) -> ZoneSpec:
             raise ComposeError(f"spec {path}: dot_bands is null or a list of [top, bottom] rows")
         bands = tuple(tuple(b) for b in bands_raw)
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
-                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), dot_bands=bands,
+                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), disc_boxes=discs(), dot_bands=bands,
                     wood_boxes=boxes("wood_boxes"), text_boxes=boxes("text_boxes"), paper_boxes=boxes("paper_boxes"))
 
 
@@ -743,16 +755,49 @@ def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, wid
     # (a black 1 px border first, so the corner pixel the flood starts from is background even when a box and an item touch the image corner)
     run(["magick", str(items), "-bordercolor", "black", "-border", "1", "-fill", "gray50", "-draw", "color 0,0 floodfill", "-fill", "white", "-opaque", "black", "-fill", "black", "-opaque", "gray50",
          "-shave", "1x1", str(protect)])
+    wood_outside_part(solid, protect, inside, fill, out, False)
+
+
+def wood_outside_part(solid: Path, protect: Path, inside: Path, fill: Path, out: Path, keep_part: bool) -> None:
+    """The wood weight after a part's shape (`protect`: white = the part) inside the boxes (`inside`): 1 in the box outside the shape (feathered), and with `keep_part` 0 inside the shape
+    as well (only for a shape that is exact, a disc: a leak of the wood class into an oval's parchment or a lens's rim is the original's again; a light shape of pixels may hold old wood);
+    everywhere else the weight is as it was."""
     run(["magick", str(protect), "-negate", str(inside), "-compose", "Multiply", "-composite", "-blur", f"0x{MASK_FEATHER}", str(fill)])
-    run(["magick", str(solid), str(fill), "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
+    base = solid
+    if keep_part:
+        keep, kept = solid.with_name("fill-keep.png"), solid.with_name("fill-kept.png")
+        run(["magick", str(protect), str(inside), "-compose", "Multiply", "-composite", "-blur", f"0x{MASK_FEATHER}", "-negate", str(keep)])
+        run(["magick", str(solid), str(keep), "-colorspace", "Gray", "-compose", "Multiply", "-composite", str(kept)])
+        base = kept
+    run(["magick", str(base), str(fill), "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
+
+
+def fill_outside_discs(solid: Path, discs: tuple, out: Path, width: int, height: int) -> None:
+    """ARC-UI-3101 `disc_boxes`: each entry (x0, y0, x1, y1, dx0, dy0, dx1, dy1) is a box whose wood weight is 1 outside the ellipse inscribed in the disc box (dx0, dy0, dx1, dy1; a lens,
+    a round button: the rim's own bounding box, measured on the original) and 0 inside it, feathered. The shape is exact, so a ring with dark stretches (the lens's lower right) is no gap
+    the interior leaks out of. A disc outside its box or outside the image is an error."""
+    if not discs:
+        return
+    region, shape = [], []
+    for x0, y0, x1, y1, dx0, dy0, dx1, dy1 in discs:
+        if not (0 <= x0 <= dx0 < dx1 <= x1 <= width and 0 <= y0 <= dy0 < dy1 <= y1 <= height):
+            raise ComposeError(f"disc box {(x0, y0, x1, y1, dx0, dy0, dx1, dy1)}: the disc must lie inside its box, and the box inside the {width} x {height} px image")
+        region += ["-draw", f"rectangle {x0},{y0} {x1 - 1},{y1 - 1}"]
+        shape += ["-draw", f"ellipse {(dx0 + dx1) / 2 - 0.5},{(dy0 + dy1) / 2 - 0.5} {(dx1 - dx0) / 2},{(dy1 - dy0) / 2} 0,360"]
+    inside, protect, fill = (solid.with_name(n) for n in ("disc-box.png", "disc-shape.png", "disc-weight.png"))
+    run(["magick", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *region, "-alpha", "off", "-colorspace", "Gray", str(inside)])
+    run(["magick", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *shape, "-alpha", "off", "-colorspace", "Gray", str(protect)])
+    wood_outside_part(solid, protect, inside, fill, out, True)
 
 
 def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, height: int) -> None:
-    """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items) and `halo_boxes` (wood round a part, outside its light shape)."""
+    """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items), `halo_boxes` (wood round a part, outside its light shape) and `disc_boxes`
+    (wood round a lens or a round button, outside its exact ellipse)."""
     if spec.fill_boxes:
         fill_between_items(original, solid, spec.fill_boxes, solid, width, height)
     if spec.halo_boxes:
         fill_between_items(original, solid, spec.halo_boxes, solid, width, height, HALO_BRIGHT, None, HALO_DILATE, HALO_CLOSE)
+    fill_outside_discs(solid, spec.disc_boxes, solid, width, height)
 
 
 def force_wood(solid: Path, boxes: tuple, out: Path, width: int, height: int) -> None:
