@@ -34,7 +34,10 @@ except ImportError:  # run as a script
 def default_out() -> Path:
     """`local/steamwoven-ui/masters` of the MAIN checkout (ARC-DEV-3277: a worktree has no `local/`; masters written there
     are never seen by `bake.py` and `kit_check.py` and are lost with the worktree)."""
-    return prompt_library.default_local_root() / "masters"
+    try:
+        return prompt_library.default_local_root() / "masters"
+    except Exception:  # not inside a git checkout: the old default next to the tools
+        return Path(__file__).resolve().parents[2] / "local" / "steamwoven-ui" / "masters"
 
 
 GRID = 6

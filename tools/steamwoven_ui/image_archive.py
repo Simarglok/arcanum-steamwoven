@@ -37,7 +37,7 @@ except ImportError:  # run as a script
 KINDS = ("raw-codex", "collage", "master", "composite", "screenshot", "reference", "unknown")
 STATUSES = ("final", "rejected", "intermediate", "unknown")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
-TASK_RE = re.compile(r"^(ARC-[A-Z]+-\d+(?:-[A-Za-z0-9]+)?|_unsorted/[A-Za-z0-9._-]+)$")
+TASK_RE = re.compile(r"(ARC-[A-Z]+-\d+(?:-[A-Za-z0-9]+)?|_unsorted/(?!\.+$)[A-Za-z0-9._-]+)")
 FINAL_DIR = "final"
 REGISTRY_NAME = "registry.jsonl"
 
@@ -48,7 +48,7 @@ def archive_root(local_root: Path | None = None) -> Path:
 
 
 def check_task(task: str) -> str:
-    if not TASK_RE.match(task):
+    if not isinstance(task, str) or not TASK_RE.fullmatch(task):
         raise ValueError(f"task {task!r} is not ARC-<TYPE>-<number> or _unsorted/<bucket>")
     return task
 
@@ -79,11 +79,14 @@ def image_size(path: Path) -> list[int] | None:
 def clone_copy(src: Path, dst: Path) -> None:
     """Copy `src` to `dst` (copy-on-write clone on APFS, a plain copy elsewhere); never moves or alters `src`."""
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if sys.platform == "darwin":
-        done = subprocess.run(["cp", "-c", "-p", str(src), str(dst)], capture_output=True)
-        if done.returncode == 0:
-            return
-    shutil.copy2(src, dst)
+    part = dst.with_name(dst.name + f".part{os.getpid()}")  # an interrupted copy leaves no half file under the real name
+    try:
+        done = subprocess.run(["cp", "-c", "-p", str(src), str(part)], capture_output=True) if sys.platform == "darwin" else None
+        if done is None or done.returncode != 0:
+            shutil.copy2(src, part)
+        os.replace(part, dst)
+    finally:
+        part.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------- the registry
@@ -116,11 +119,23 @@ class Registry:
         return row
 
     def save(self) -> None:
+        """Write the registry under a lock; rows another session wrote since this one loaded are kept (this one wins on a shared key)."""
         self.root.mkdir(parents=True, exist_ok=True)
-        body = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for _, r in sorted(self.rows.items()))
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(body, encoding="utf-8")
-        os.replace(tmp, self.path)
+        with (self.root / "registry.lock").open("a") as lock:
+            try:
+                import fcntl
+                fcntl.flock(lock, fcntl.LOCK_EX)
+            except ImportError:  # no flock (Windows): single writer assumed
+                pass
+            if self.path.is_file():
+                for line in self.path.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        row = json.loads(line)
+                        self.rows.setdefault(self.key(row), row)
+            body = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for _, r in sorted(self.rows.items()))
+            tmp = self.path.with_name(f"{REGISTRY_NAME}.{os.getpid()}.tmp")
+            tmp.write_text(body, encoding="utf-8")
+            os.replace(tmp, self.path)
 
 
 def _row(task, rel, kind, status, sources, digest, size_bytes, size, mtime, note, basis, location="archive"):
@@ -140,10 +155,18 @@ def add_file(registry: Registry, task: str, src: Path, *, kind: str, status: str
              subdir: str = "", basis: dict | None = None, name: str | None = None) -> dict:
     """Copy `src` into `archive/<task>/<kind>/[subdir/]name` and register it. The same content added twice to one
     task adds the extra source to the existing row; a different file with a taken name gets the hash in its name."""
+    check_task(task)
     digest = sha256_file(src)
     existing = registry.by_hash(task, digest)
     if existing is not None:
         existing["sources"] = sorted(set(existing["sources"]) | {str(src)})
+        stored = registry.root / task / existing["file"]
+        if not stored.is_file():
+            clone_copy(src, stored)
+        if status != "unknown" and existing["status"] != status:
+            existing["status"] = status
+        if kind != "unknown" and existing["kind"] == "unknown":
+            existing["kind"] = kind
         return existing
     folder = Path(kind) / subdir if subdir else Path(kind)
     rel = folder / (name or src.name)
@@ -162,12 +185,17 @@ def mark(registry: Registry, task: str, rel: str, status: str) -> dict:
     row = registry.rows.get(("archive", task, rel))
     if row is None:
         raise KeyError(f"{task}/{rel} is not in the registry")
+    if rel.startswith(FINAL_DIR + "/"):
+        raise ValueError(f"{rel} is already a copy in {FINAL_DIR}/; mark the original row")
     if status not in STATUSES:
         raise ValueError(f"status {status!r} not in {STATUSES}")
     row["status"] = status
     if status == "final":
         src = registry.root / task / rel
         final_rel = f"{FINAL_DIR}/{Path(rel).name}"
+        taken = registry.root / task / final_rel
+        if taken.exists() and sha256_file(taken) != row["sha256"]:  # another accepted file of the same name
+            final_rel = f"{FINAL_DIR}/{Path(rel).stem}-{row['sha256'][:8]}{Path(rel).suffix}"
         clone_copy(src, registry.root / task / final_rel)
         copy = dict(row, file=final_rel, sources=[str(src)], registered=date.today().isoformat())
         registry.put(copy)
@@ -197,7 +225,7 @@ def scan(registry: Registry, task: str | None = None) -> int:
     new = 0
     for tdir in sorted(p for p in registry.root.glob("*") if p.is_dir()) + sorted(registry.root.glob("_unsorted/*")):
         rel_task = tdir.relative_to(registry.root).as_posix()
-        if rel_task == "_unsorted" or (task and rel_task != task) or not TASK_RE.match(rel_task):
+        if rel_task == "_unsorted" or (task and rel_task != task) or not TASK_RE.fullmatch(rel_task):
             continue
         for path in sorted(tdir.rglob("*")):
             if not path.is_file() or path.suffix.lower() not in IMAGE_EXTS:
@@ -356,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (ValueError, KeyError) as error:
+    except (ValueError, KeyError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 

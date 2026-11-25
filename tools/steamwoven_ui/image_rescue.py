@@ -41,6 +41,15 @@ BATCH_TASK = {
 }
 
 
+def scratch_base() -> Path:
+    """The session scratch root of Claude Code on this machine (`<tmp>/claude-<uid>`)."""
+    return Path("/tmp").resolve() / f"claude-{os.getuid()}"
+
+
+def slug(text: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "-", text).strip(".-") or "x"
+
+
 def is_image(path: Path) -> bool:
     return path.suffix.lower() in ia.IMAGE_EXTS
 
@@ -86,7 +95,7 @@ class TaskMap:
                 self.codes.update(c.upper() for c in CODE_RE.findall(branch))
         comp = self.main / "local/steamwoven-ui/composites"
         if comp.is_dir():
-            self.codes.update(d.name for d in comp.iterdir() if ia.TASK_RE.match(d.name))
+            self.codes.update(d.name for d in comp.iterdir() if ia.TASK_RE.fullmatch(d.name))
 
     def normalise(self, text: str) -> str | None:
         m = CODE_RE.search(text)
@@ -134,9 +143,9 @@ class TaskMap:
 def classify(src: Path, tm: TaskMap, default_bucket: str, hint_task: str | None = None) -> tuple[str, str]:
     """(task, task_basis) for a loose file: a code in its path first, else the bucket."""
     code = hint_task or tm.from_name("/".join(src.parts[-3:]))
-    if code and ia.TASK_RE.match(code):
+    if code and ia.TASK_RE.fullmatch(code):
         return code, "path"
-    return f"_unsorted/{default_bucket}", "none"
+    return f"_unsorted/{slug(default_bucket)}", "none"
 
 
 def codex_sessions(main: Path) -> dict[str, str]:
@@ -162,7 +171,7 @@ def gather(source: str, main: Path, home: Path, tm: TaskMap) -> list[tuple[Path,
         for root in roots:
             for p in walk_images(root):
                 parts = p.relative_to(root).parts
-                task = parts[0] if ia.TASK_RE.match(parts[0]) else None
+                task = parts[0] if ia.TASK_RE.fullmatch(parts[0]) else None
                 if task is None:
                     task, basis = classify(p, tm, "composites-root")
                 else:
@@ -172,9 +181,10 @@ def gather(source: str, main: Path, home: Path, tm: TaskMap) -> list[tuple[Path,
                 wt = root.parts[root.parts.index("worktrees") + 1] if "worktrees" in root.parts else "main"
                 rows.append((p, task, basis, kind, "unknown", f"composite from {wt}"))
     elif source == "scratch":
-        base = Path("/private/tmp/claude-501")
+        base = scratch_base()
         sessions = []
-        for proj in sorted(base.glob("-Users-*worktrees-*")) + sorted(base.glob("-Users-simarglok-Git-arcanum-steamwoven*")):
+        prefix = main.as_posix().replace("/", "-")  # a session folder is the checkout's path with / as -
+        for proj in (sorted(base.glob(prefix + "*")) if base.is_dir() else []):
             for sdir in proj.glob("*/scratchpad"):
                 sessions.append((proj.name, sdir.parent.name, sdir))
         seen = set()
@@ -184,25 +194,25 @@ def gather(source: str, main: Path, home: Path, tm: TaskMap) -> list[tuple[Path,
             code, basis = tm.from_session(proj, sid)
             wt = proj.split("worktrees-", 1)[-1] if "worktrees-" in proj else proj[-30:]
             for p in walk_images(sdir):
-                task, tb = (code, basis) if code else (f"_unsorted/scratch-{wt}", "none")
+                task, tb = (code, basis) if code else (f"_unsorted/scratch-{slug(wt)}", "none")
                 hint = tm.from_name(p.name)
                 if hint and not code:
                     task, tb = hint, "path"
                 rows.append((p, task, tb, ia.guess_kind(str(p)), "unknown", f"scratchpad {wt}/{sid[:8]}"))
     elif source == "loose":
-        base = Path("/private/tmp/claude-501")
-        for entry in sorted(base.iterdir()):
-            if entry.name.startswith("-Users-") or entry.name in SKIP_PARTS or entry.name.startswith("venv"):
+        base = scratch_base()
+        for entry in (sorted(base.iterdir()) if base.is_dir() else []):
+            if entry.name.startswith("-") or entry.name in SKIP_PARTS or entry.name.startswith("venv"):
                 continue
             files = [entry] if entry.is_file() and is_image(entry) else list(walk_images(entry)) if entry.is_dir() else []
             for p in files:
                 task, tb = classify(p, tm, "loose-scratch", tm.from_name(entry.name))
                 rows.append((p, task, tb, ia.guess_kind(str(p)), "unknown", "loose file in the scratch root"))
     elif source == "tmp":
-        base = Path("/private/tmp")
+        base = Path("/tmp").resolve()
         for dp, dn, fn in os.walk(base):
             depth = len(Path(dp).relative_to(base).parts)
-            dn[:] = [d for d in dn if d not in SKIP_PARTS and d != "claude-501" and not d.startswith("MSBuild") and depth < 2]
+            dn[:] = [d for d in dn if d not in SKIP_PARTS and not d.startswith("claude-") and not d.startswith("MSBuild") and depth < 2]
             for f in fn:
                 p = Path(dp) / f
                 if is_image(p) and not p.is_symlink() and p.stat().st_mtime >= _since():
@@ -218,10 +228,10 @@ def gather(source: str, main: Path, home: Path, tm: TaskMap) -> list[tuple[Path,
             batch = batch_of.get(f"{p.parent.name}/{p.name}")
             task = BATCH_TASK.get(batch or "")
             if task:
-                rows.append((p, task, "codex-events", "raw-codex", "rejected", f"unused Codex output of batch {batch} (retry or discarded)"))
+                rows.append((p, task, "codex-events", "raw-codex", "intermediate", f"Codex output of batch {batch} that no outbox file or fit record uses (a retry)"))
             else:
                 day = _day(p)
-                rows.append((p, f"_unsorted/codex-{day}", "none", "raw-codex", "unknown", f"Codex output {p.parent.name}, batch {batch or 'unknown'}"))
+                rows.append((p, f"_unsorted/codex-{slug(day)}", "none", "raw-codex", "unknown", f"Codex output {p.parent.name}, batch {batch or 'unknown'}"))
     elif source == "pipeline":
         return rows  # registered in place by `register_pipeline`
     return rows
@@ -263,10 +273,8 @@ def register_pipeline(reg: ia.Registry, main: Path) -> int:
         nonlocal new
         task = BATCH_TASK.get(batch)
         basis = "batch-table" if task else "none"
-        task = task or f"_unsorted/batch-{batch}"
+        task = task or f"_unsorted/batch-{slug(batch)}"
         rel = p.relative_to(ui).as_posix()
-        if ("pipeline", task, rel) in reg.rows:
-            return
         st = p.stat()
         reg.put(ia._row(task, rel, kind, status, [str(p)], ia.sha256_file(p), st.st_size, ia.image_size(p), st.st_mtime, note,
                         {"task_basis": basis}, location="pipeline"))
@@ -281,7 +289,7 @@ def register_pipeline(reg: ia.Registry, main: Path) -> int:
         base = re.sub(r"-(attempt\d+|prewood|v\d+)$", "", batch)
         rejected = base != batch
         sha = ia.sha256_file(p)
-        status = "rejected" if rejected else "final" if sha in finals else "intermediate"
+        status = "final" if sha in finals else "rejected" if rejected else "intermediate"
         put(p, base, "raw-codex", status, f"Codex outbox {batch}")
     for p in sorted(walk_images(ui / "codex-work")):
         batch = p.relative_to(ui / "codex-work").parts[0]
@@ -294,7 +302,7 @@ def register_pipeline(reg: ia.Registry, main: Path) -> int:
             continue
         files = list(walk_images(d))
         key = ("pipeline", f"_unsorted/pipeline-{name}", name + "/")
-        if key in reg.rows or not files:
+        if not files:
             continue
         reg.put({"task": key[1], "file": key[2], "location": "pipeline", "kind": "directory", "status": "unknown", "sources": [str(d)],
                  "sha256": "", "bytes": sum(f.stat().st_size for f in files), "size": None, "date": "", "registered": ia.date.today().isoformat(),

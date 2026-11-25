@@ -33,7 +33,7 @@ class ArchiveTests(unittest.TestCase):
     def test_task_names(self) -> None:
         for good in ("ARC-UI-3040", "ARC-UI-3101-b", "_unsorted/codex-2026-11"):
             self.assertEqual(good, ia.check_task(good))
-        for bad in ("3040", "arc-ui-3040", "ARC-UI-3040/../x", "../ARC-UI-1", "_unsorted"):
+        for bad in ("3040", "arc-ui-3040", "ARC-UI-3040/../x", "../ARC-UI-1", "_unsorted", "ARC-UI-1\n", "_unsorted/..", "_unsorted/."):
             with self.assertRaises(ValueError):
                 ia.check_task(bad)
 
@@ -72,6 +72,34 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn(("archive", "ARC-UI-2", "final/m.png"), self.reg.rows)
         with self.assertRaises(KeyError):
             ia.mark(self.reg, "ARC-UI-2", "nope.png", "final")
+
+    def test_mark_keeps_two_accepted_files_of_one_name_and_refuses_a_final_copy(self) -> None:
+        a = ia.add_file(self.reg, "ARC-UI-2", self.image("A.png", 1), kind="composite")
+        b = ia.add_file(self.reg, "ARC-UI-2", self.image("sub/A.png", 2) if False else self.image("A.png", 2), kind="collage")
+        ia.mark(self.reg, "ARC-UI-2", a["file"], "final")
+        ia.mark(self.reg, "ARC-UI-2", b["file"], "final")
+        finals = [p for p in (self.root / "ARC-UI-2" / "final").iterdir()]
+        self.assertEqual(2, len(finals))
+        with self.assertRaises(ValueError):
+            ia.mark(self.reg, "ARC-UI-2", "final/A.png", "final")
+
+    def test_add_validates_the_task_and_restores_a_missing_copy(self) -> None:
+        with self.assertRaises(ValueError):
+            ia.add_file(self.reg, "../../x", self.image("a.png"), kind="composite")
+        src = self.image("a.png")
+        row = ia.add_file(self.reg, "ARC-UI-3", src, kind="composite")
+        (self.root / "ARC-UI-3" / row["file"]).unlink()
+        ia.add_file(self.reg, "ARC-UI-3", src, kind="composite", status="rejected")
+        self.assertTrue((self.root / "ARC-UI-3" / row["file"]).is_file())
+        self.assertEqual("rejected", row["status"])
+
+    def test_save_keeps_rows_another_writer_added(self) -> None:
+        other = ia.Registry(self.root)
+        ia.add_file(other, "ARC-UI-4", self.image("x.png", 5), kind="composite")
+        other.save()
+        ia.add_file(self.reg, "ARC-UI-5", self.image("y.png", 6), kind="composite")
+        self.reg.save()
+        self.assertEqual(2, len(ia.Registry(self.root).rows))
 
     def test_scan_registers_hand_copied_files(self) -> None:
         (self.root / "ARC-UI-9" / "final").mkdir(parents=True)
