@@ -421,6 +421,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("talk-teleport") == true) await RunAreaTalkTeleportSmokeAsync();
                         // ARC-DEV-305 (B01, B36): only when named (with --debug-mode and --hero), what the hero took and made survives the window move and a quick load (SM02).
                         if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
+                        // ARC-WORLD-3122: only when named (with --hero, a main-map window with an exit), the items the hero took stay hidden and unpickable after a map exit and the exit back.
+                        if (_readyMapName is not null && only?.Contains("take-return") == true) await RunAreaTakeReturnSmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
                         if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         stageClock.Finish();
