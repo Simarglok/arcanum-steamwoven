@@ -74,21 +74,27 @@ public sealed partial class GameSessionOwner
         if (emptied ? !_durability.Records.ContainsKey(pile.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
             : !_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        // ARC-WORLD-1132: a hero with no gold pile and no free grid place for one gets no coins, the new pile stays on the ground.
+        // ARC-SCRIPT-2910: the hero's first pile is a new gold object moved in through the fresh path, so its prototype's get script runs before the insert check (after the source's insert-item above, as the original's order).
+        var (freshRefusal, fresh) = BeginFreshHeroGold(scripts);
+        if (freshRefusal is { } refusedFresh) return insert.Refused(refusedFresh);
+        // ARC-WORLD-1132: a hero with no gold pile and no free grid place for one gets no coins, the new pile stays on the ground (so it does when the get script skipped the default).
         GoldGround? ground = null;
-        if (HeroGoldNeedsGround())
+        if (HeroGoldNeedsGround() || fresh is { Declined: true })
         {
             var failure = PlanGoldGround(pile.Facts?.Kind ?? SessionHeroGrid.GoldKind, out var planned, !emptied && !_inventory.Piles.ContainsKey(pile.Entity) ? 1 : 0);
-            if (failure != GameSessionFailure.None) return RejectItem(failure);
+            if (failure != GameSessionFailure.None) return insert.Refused(RejectItem(failure));
             ground = planned;
         }
+        ScrRunResult? insertRun = null;
+        if (fresh is not null && FinishFreshHeroGold(fresh, ground is null, out insertRun) is { } unfinished) return insert.Refused(unfinished);
         if (ground is { } onGround) LeaveGoldOnGround(onGround, count);
         else _inventory.Gold += count;
         insert.Runs?.Commit();
+        if (fresh is not null) CommitFreshHeroGold(fresh);
         if (emptied) DestroyObject(pile.Entity);
         else _inventory.Piles[pile.Entity] = pile.Quantity - count;
         Revise();
-        return insert.Result(new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version));
+        return WithFreshHeroGold(insert.Result(new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version)), fresh, insertRun);
     }
 
     /// <summary>
@@ -99,8 +105,9 @@ public sealed partial class GameSessionOwner
     /// call still succeeding (gold weighs nothing, so only the room is checked). Refused before any effect: a negative count (<see cref="GameSessionFailure.InvalidItem"/>), the version, no hero to hold
     /// gold (<see cref="GameSessionFailure.GoldUnavailable"/>), a sum past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the
     /// revision. A count of 0 changes nothing. One revision.
+    /// ARC-SCRIPT-2910: the new pile's get (4) and insert-item (21) scripts run through <paramref name="scripts"/> with the hero as the triggerer (<see cref="BeginFreshHeroGold"/>): a get script that skips the default leaves the pile on the hero's tile, and a prototype with such a script and no host refuses the call (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
     /// </summary>
-    public InventoryMutationResult GiveGoldToHero(GameSessionVersion expected, int count)
+    public InventoryMutationResult GiveGoldToHero(GameSessionVersion expected, int count, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         if (count < 0) return RejectItem(GameSessionFailure.InvalidItem);
@@ -109,18 +116,25 @@ public sealed partial class GameSessionOwner
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if ((long)_inventory.Gold + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        // ARC-WORLD-1132: no pile and no free grid place for one: the new pile lies on the hero's tile (a plain created object) and the call succeeds.
-        if (HeroGoldNeedsGround())
+        // ARC-SCRIPT-2910: a hero without a pile gets a new gold object moved in through the fresh path: its prototype's get script runs first.
+        var (freshRefusal, fresh) = BeginFreshHeroGold(scripts);
+        if (freshRefusal is { } refusedFresh) return refusedFresh;
+        // ARC-WORLD-1132: no pile and no free grid place for one: the new pile lies on the hero's tile (a plain created object) and the call succeeds (so it does when the get script skipped the default).
+        GoldGround? ground = null;
+        if (HeroGoldNeedsGround() || fresh is { Declined: true })
         {
-            var failure = PlanGoldGround(SessionHeroGrid.GoldKind, out var ground);
+            var failure = PlanGoldGround(SessionHeroGrid.GoldKind, out var planned);
             if (failure != GameSessionFailure.None) return RejectItem(failure);
-            var left = LeaveGoldOnGround(ground, count);
-            Revise();
-            return new(GameSessionDisposition.Changed, GameSessionFailure.None, left, null, Version);
+            ground = planned;
         }
-        _inventory.Gold += count;
+        ScrRunResult? insertRun = null;
+        if (fresh is not null && FinishFreshHeroGold(fresh, ground is null, out insertRun) is { } unfinished) return unfinished;
+        string? left = null;
+        if (ground is { } onGround) left = LeaveGoldOnGround(onGround, count);
+        else _inventory.Gold += count;
+        if (fresh is not null) CommitFreshHeroGold(fresh);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, Version);
+        return WithFreshHeroGold(new(GameSessionDisposition.Changed, GameSessionFailure.None, left, null, Version), fresh, insertRun);
     }
 
     /// <summary>
@@ -520,7 +534,9 @@ public sealed partial class GameSessionOwner
         var insert = RunPileInsert(scripts, source.Entity, SessionEventKinds.PlayerEntity, npcTriggerer: false, source.Units == count ? npc : null);
         if (insert.Failure != GameSessionFailure.None) return insert.Refused(RejectItem(insert.Failure));
         var into = HeroStackOfType(source.AmmoType);
-        return MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null, insert);
+        // ARC-SCRIPT-2910: a new stack runs its own get and insert-item scripts after the source's insert-item (the original runs the source's 21 first), with the hero as the triggerer.
+        var report = new CreatedScripts { Defer = true };
+        return MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck, scripts, report) : null, insert, report);
     }
 
     /// <summary>
@@ -607,22 +623,15 @@ public sealed partial class GameSessionOwner
     }
 
     // A new ammunition stack for the hero: a made item at the end of its made items (the Technophobia refusal does not apply: no
-    // complexity), its units recorded.
-    private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewHeroStack(SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
+    // complexity), its units recorded. ARC-SCRIPT-2910 (ledger TQ19): the new stack moves in through the same fresh path as an NPC's (0x4617F0 → 0x461810 → 0x466640), so its prototype's get (4) script runs before the insert check and its
+    // insert-item (21) script at the end, both with the hero as the triggerer (NewNpcEntry, hero mode); the lines and runs go to <paramref name="report"/>.
+    private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewHeroStack(SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck,
+        ISessionItemScriptHost? scripts = null, CreatedScripts? report = null)
     {
-        if (_inventory.Held >= _limits.MaxPcItems) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
-        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
-        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
-        // ARC-WORLD-085: the new object has its base prototype's weight; the insert check weighs its units.
-        var weight = CreatedWeight(kind.Prototype);
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0,
-            new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, units), room: NewItemRoom(entity, kind));
-        ThrowIfDisposed();
-        if (_revision != revision || _inventory.SeedGeneration != seeds) return (null, RejectItem(GameSessionFailure.StaleVersion, verdict));
-        if (verdict != SessionInsertVerdict.Accepted) return (null, RejectItem(GameSessionFailure.InsertRefused, verdict));
-        var item = CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight));
-        _inventory.Ammo[item.Entity] = new(item.Entity, ammoType, units);
-        return (item, null);
+        var created = NewNpcEntry(SessionEventKinds.PlayerEntity, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal, scripts: scripts, report: report, hero: true);
+        if (created is null) return (null, refusal);
+        _inventory.Ammo[created.Value.Entity] = new(created.Value.Entity, ammoType, units);
+        return (created, null);
     }
 
     private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewNpcStack(string npc, SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck,
@@ -662,13 +671,14 @@ public sealed partial class GameSessionOwner
     // A new made item at the end of the NPC's (ARC-WORLD-090: or a container's) list after the host's insert check for it (the
     // original's new object moved in by 0x4617F0); its own bookkeeping (gold or ammunition record, revision) is the caller's.
     private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal,
-        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null)
+        SessionHolderKind holder = SessionHolderKind.Npc, ISessionItemScriptHost? scripts = null, CreatedScripts? report = null, bool hero = false)
     {
         refusal = null;
         // ARC-SCRIPT-2857 (NT2, IE2): the new object moves in through 0x4617F0 → 0x461810. It has no parent, so 0x461810 does not forward to the parented transfer 0x461CA0: the holder's transfer script (point 32) is never
         // run for it, whatever the holder's scripts. ARC-SCRIPT-2887: the fresh path runs the new item's own get script (point 4) with the holder as the triggerer before the insert check, and at the end of the insert 0x466640 its insert-item script (21), also
         // with the holder as the triggerer; both from the prototype's array (the new item owns no slot yet), the get script's skip default refuses the move.
-        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+        // ARC-SCRIPT-2910: <paramref name="hero"/> makes the hero the recipient (npc then names the hero as the triggerer): its list budget, its insert check (the hero's verdict, the room for the stack) and its list place.
+        if (hero ? _inventory.Held >= _limits.MaxPcItems : _inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
         {
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);
             return null;
@@ -684,7 +694,7 @@ public sealed partial class GameSessionOwner
             var hasGet = InheritedSlot(entity, SessionScriptPoint.Get) is not null;
             var hasInsert = InheritedSlot(entity, SessionScriptPoint.InsertItem) is not null;
             if ((hasGet || hasInsert) && scripts is null) { refusal = RejectItem(GameSessionFailure.ItemScriptUnsupported); return null; }
-            if (hasGet || hasInsert) runs = new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [entity] = 0 }) { NpcTriggerer = holder == SessionHolderKind.Npc };
+            if (hasGet || hasInsert) runs = new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [entity] = 0 }) { NpcTriggerer = !hero && holder == SessionHolderKind.Npc };
             bool Stale() => _revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _flags.Version != flagVersion;
             InventoryMutationResult Refused(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
                 RejectItem(failure, verdict) with { Scripts = runs?.Runs ?? [], Messages = failure == GameSessionFailure.InsertRefused ? runs?.Messages ?? [] : [] };
@@ -700,7 +710,9 @@ public sealed partial class GameSessionOwner
             }
             // ARC-WORLD-085: the new object has its prototype's weight (the NPC's own weight is the host's insert check).
             var weight = CreatedWeight(kind.Prototype);
-            var verdict = insertCheck(new SessionInventoryItem(entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
+            var verdict = hero
+                ? HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, facts)), 0, new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, facts.Quantity ?? 0), room: NewItemRoom(entity, kind))
+                : insertCheck(new SessionInventoryItem(entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
             ThrowIfDisposed();
             if (Stale()) { refusal = Refused(GameSessionFailure.StaleVersion, verdict); return null; }
             if (verdict != SessionInsertVerdict.Accepted) { refusal = Refused(GameSessionFailure.InsertRefused, verdict); return null; }
@@ -714,8 +726,9 @@ public sealed partial class GameSessionOwner
                 runs.Prepare();
                 if (runs.Failure != GameSessionFailure.None) { refusal = Refused(runs.Failure, verdict); return null; }
             }
-            var made = CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
-            StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
+            var made = hero ? CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight))
+                : CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
+            if (!hero) StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
             if (runs is not null)
             {
                 if (report is { Defer: true }) report.Pending = runs;

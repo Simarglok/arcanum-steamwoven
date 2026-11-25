@@ -65,6 +65,9 @@ FILL_BRIGHT = 105         # 0..255 luma of the ORIGINAL: letters, brass and pape
 FILL_DARK = 14            # ... and black fields are darker than this
 FILL_DILATE = 4           # px: ARC-UI-3164: the items (letters, plates, fields) inside a fill box are grown by this much before the wood is put between them
 FILL_CLOSE = 4           # px: ... and closed by this, so strokes of a letter and a plate's rim and field are one item, never wood in between
+HALO_BRIGHT = 70          # 0..255 luma of the ORIGINAL: ARC-UI-3101: an object's metal or paper is lighter than this, the dark halo (the old art's shadow and wood fringe) around it is not
+HALO_DILATE = 2           # px: ... the object's pixels are grown by this
+HALO_CLOSE = 10           # px: ... and closed by this (the dark parts inside a gear), the holes inside filled: the object is one solid shape, everything outside it in the box is the Codex wood
 ERASE_RING = 2            # px: the ring just outside an erase box whose per-channel median fills it
 SCHEMA = "steamwoven-surface/1"
 SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")   # a zone id is a file name: no path parts, no leading dot
@@ -77,7 +80,9 @@ class ZoneSpec:
     of the ring outside the box) and `kit_parts` (dicts `id`, `file`, `x`, `y`: a kit master laid over the result at master pixels, replacing the original's stand-in).
     ARC-UI-3164 added `island_min` (drop wood-weight islands smaller than this many pixels, so a leak of the wood class into metal or a page edge is the original's again),
     `fill_boxes` (boxes whose wood between the items the tone mask excludes is the Codex wood as well, so the original's lighter wood is no patch) and `dot_bands`
-    (the rows where the original's rows of dots are kept: the strips; in the window the faint grain specks chain into false rows of dots)."""
+    (the rows where the original's rows of dots are kept: the strips; in the window the faint grain specks chain into false rows of dots).
+    ARC-UI-3101 added `halo_boxes` (boxes round parts whose old shadow and wood fringe stand around them as a dark halo: inside a box the Codex wood is everywhere outside the
+    part's own light shape)."""
     id: str
     screen: str = method_c.SCREEN
     joins: tuple[int, ...] = JOINS
@@ -87,6 +92,7 @@ class ZoneSpec:
     kit_parts: tuple[dict, ...] = ()
     island_min: int = 0                                          # ARC-UI-3164: wood-weight islands under this many pixels are dropped (the ORIGINAL's pixels stand there): metal and paper edges the class leaks into
     fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
+    halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (the gears): the wood weight is 1 outside the part's own light shape
     dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
 
 
@@ -106,7 +112,7 @@ def load_spec(path: Path) -> ZoneSpec:
         raise ComposeError(f"cannot read the spec {path}: {error}") from error
     if not isinstance(raw, dict):
         raise ComposeError(f"spec {path}: the top level is an object")
-    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands"}
+    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "halo_boxes", "dot_bands"}
     if unknown or "id" not in raw or "screen" not in raw:
         raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
     if not (isinstance(raw["id"], str) and SAFE_ID.fullmatch(raw["id"]) and isinstance(raw["screen"], str)):
@@ -148,7 +154,7 @@ def load_spec(path: Path) -> ZoneSpec:
             raise ComposeError(f"spec {path}: dot_bands is null or a list of [top, bottom] rows")
         bands = tuple(tuple(b) for b in bands_raw)
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
-                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), dot_bands=bands)
+                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), dot_bands=bands)
 
 
 class ComposeError(Exception):
@@ -532,8 +538,10 @@ def remove_islands(solid: Path, out: Path, min_area: int) -> None:
     run(["magick", str(solid), str(dropped), "-colorspace", "Gray", "-compose", "Multiply", "-composite", str(out)])
 
 
-def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, width: int, height: int) -> None:
-    """ARC-UI-3164: in each fill box the wood weight is 1 wherever no item is: an item is an ORIGINAL pixel lighter than FILL_BRIGHT or darker than FILL_DARK in luma (letters,
+def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, width: int, height: int, bright: float = FILL_BRIGHT, dark: float | None = FILL_DARK,
+                       dilate: int = FILL_DILATE, close: int = FILL_CLOSE) -> None:
+    """The defaults are the `fill_boxes` rule; ARC-UI-3101's `halo_boxes` pass `bright` HALO_BRIGHT, `dark` None (no dark items: the fringe round a part is none) and the HALO_* sizes.
+    ARC-UI-3164: in each fill box the wood weight is 1 wherever no item is: an item is an ORIGINAL pixel lighter than `bright` (FILL_BRIGHT) or darker than `dark` (FILL_DARK) in luma (letters,
     brass rims, black fields), grown by FILL_DILATE, closed by FILL_CLOSE and filled inside (a knob in a rim), all inside the box only. The tone mask excludes these boxes
     whole, which left the ORIGINAL's lighter panel wood there as a patch with a sharp edge against the Codex wood (the colour class cannot be used: the panel wood is no wood class)."""
     if not boxes:
@@ -543,16 +551,29 @@ def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, wid
         draw += ["-draw", f"rectangle {x0},{y0} {x1 - 1},{y1 - 1}"]
     inside, items, protect, fill = (solid.with_name(n) for n in ("fill-box.png", "fill-items.png", "fill-protect.png", "fill-weight.png"))
     run(["magick", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *draw, "-colorspace", "Gray", str(inside)])
-    bright, dark = f"{FILL_BRIGHT / 255 * 100:.2f}", f"{FILL_DARK / 255 * 100:.2f}"
-    run(["magick", str(original), "-alpha", "off", "-colorspace", "Gray", "(", "+clone", "-threshold", f"{bright}%", ")", "(", "-clone", "0", "-threshold", f"{dark}%", "-negate", ")",
-         "-delete", "0", "-compose", "Lighten", "-composite", str(inside), "-compose", "Multiply", "-composite",
-         "-morphology", "Dilate", f"Disk:{FILL_DILATE}", "-morphology", "Close", f"Disk:{FILL_CLOSE}", str(items)])
+    bright_pct = f"{bright / 255 * 100:.2f}"
+    if dark is None:   # only light items (a halo box: the dark fringe is no item)
+        run(["magick", str(original), "-alpha", "off", "-colorspace", "Gray", "-threshold", f"{bright_pct}%", str(inside), "-compose", "Multiply", "-composite",
+             "-morphology", "Dilate", f"Disk:{dilate}", "-morphology", "Close", f"Disk:{close}", str(items)])
+    else:
+        dark_pct = f"{dark / 255 * 100:.2f}"
+        run(["magick", str(original), "-alpha", "off", "-colorspace", "Gray", "(", "+clone", "-threshold", f"{bright_pct}%", ")", "(", "-clone", "0", "-threshold", f"{dark_pct}%", "-negate", ")",
+             "-delete", "0", "-compose", "Lighten", "-composite", str(inside), "-compose", "Multiply", "-composite",
+             "-morphology", "Dilate", f"Disk:{dilate}", "-morphology", "Close", f"Disk:{close}", str(items)])
     # holes of the items (a knob inside a rim): the background reached from the corner is outside; whatever black is not reached is inside an item
     # (a black 1 px border first, so the corner pixel the flood starts from is background even when a box and an item touch the image corner)
     run(["magick", str(items), "-bordercolor", "black", "-border", "1", "-fill", "gray50", "-draw", "color 0,0 floodfill", "-fill", "white", "-opaque", "black", "-fill", "black", "-opaque", "gray50",
          "-shave", "1x1", str(protect)])
     run(["magick", str(protect), "-negate", str(inside), "-compose", "Multiply", "-composite", "-blur", f"0x{MASK_FEATHER}", str(fill)])
     run(["magick", str(solid), str(fill), "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
+
+
+def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, height: int) -> None:
+    """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items) and `halo_boxes` (wood round a part, outside its light shape)."""
+    if spec.fill_boxes:
+        fill_between_items(original, solid, spec.fill_boxes, solid, width, height)
+    if spec.halo_boxes:
+        fill_between_items(original, solid, spec.halo_boxes, solid, width, height, HALO_BRIGHT, None, HALO_DILATE, HALO_CLOSE)
 
 
 def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BEVEL_MODE, spec: ZoneSpec = INVENTORY, kit_base: Path | None = None) -> dict:
@@ -569,8 +590,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     method_c.write_mask(original, raw, screen_id=spec.screen)
     fill_notches(solid, solid)
     remove_islands(solid, solid, spec.island_min)
-    if spec.fill_boxes:
-        fill_between_items(original, solid, spec.fill_boxes, solid, w, h)
+    apply_box_fills(original, solid, spec, w, h)
     keep_joins(solid, solid, w, h, spec.joins)
     clean = work / "a-clean.png"
     specks = despeckle(a, clean, work, w, h)
