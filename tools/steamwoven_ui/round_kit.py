@@ -82,6 +82,12 @@ ROUND_BUTTONS = (
     Round(472, "472-Skills_Button", "skills_button"),
     Round(473, "473-Spells_Button", "spells_button"),
 )
+SKILL_BUTTONS = (  # ARC-UI-3203: the character sheet's three skill-group buttons stand on the very same plate (the same circle, the same dome and rim: the symbol is the only difference), so they share the plate item and the template of the four above
+    Round(34, "34-char_Common_Skills", "char_common_skills"),
+    Round(35, "35-char_Tech_Skills", "char_tech_skills"),
+    Round(36, "36-char_Spells_Skills", "char_spells_skills"),
+)
+ALL_ROUND = ROUND_BUTTONS + SKILL_BUTTONS
 BALL = Round(137, "137-lilgrnbut", "lilgrnbut")
 BALL_GLYPHS = ("fate_but", "sleep_but")  # the two buttons that stand on art 137 (SteamwovenKitTable.SharedArtGlyphs)
 
@@ -199,7 +205,7 @@ def round_parts(frames: Path, plate_dir: Path | None, only: set[str] | None = No
     n, m = ROUND_UNITS, ROUND_MASTER
     template = round_template([read_frame(frames, b.folder, 0, n) for b in ROUND_BUTTONS])
     parts: dict[str, Image] = {}
-    for b in ROUND_BUTTONS:
+    for b in ALL_ROUND:
         if only and b.name not in only:
             continue
         idle, pressed, hover = (read_frame(frames, b.folder, k, n) for k in (0, 1, 2))
@@ -232,28 +238,31 @@ GLOSS_BIN = 6.0          # degrees: the arc is read along the circle in bins of 
 GLOSS_SIGMA = (0.40, 0.62)  # cells: the radial Gaussian width of the arc is read from the cells, within these limits (the 1-cell staircase of the original is wider than the line it stands for)
 
 
-def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int, reach_right: int | None = None) -> Image:
+def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int | tuple[int, int], reach_right: int | None = None, centre: tuple[float, float] | None = None) -> Image:
     """The gloss of the original's dome (the dome is glossy: a bright light arc along the upper-left edge, one or two cells wide) as a layer over the plate, in its SHAPE and BRIGHTNESS: the original draws it as a one-cell
     staircase, which is how a diagonal line looks on a 39 x 39 grid, so the arc is read as a curve. The cells of `frame` (the plate template, or the ball's idle frame) that are LIGHTER than the dome by `GLOSS_MIN_LIGHTER` on the upper-left side
     (`reach_right`: not further right than that many cells from the middle: the ball's brass crescent is no gloss) give, per bin of angle, the radius of the line, its width, the colour of its bright cells and the lightness of
-    its brightest cell; the layer is that line drawn at the master size: alpha = how much of the colour the original's peak needs over the dome, falling off as a Gaussian of the distance from the line (no stair, no plateau, no rim)."""
-    units = frame.w
-    centre = units / 2.0
+    its brightest cell; the layer is that line drawn at the master size: alpha = how much of the colour the original's peak needs over the dome, falling off as a Gaussian of the distance from the line (no stair, no plateau, no rim).
+    ARC-UI-3203: the frame may be any width and height (`pixels` the master's side or (width, height)) and the dome's middle `centre` (x, y in cells, a cell's middle at +0.5) is given when it is not the frame's (a dome with a brass crescent beside it)."""
+    units, rows = frame.w, frame.h
+    pw, ph = pixels if isinstance(pixels, tuple) else (pixels, pixels)
+    cx, cy = centre if centre is not None else (units / 2.0, rows / 2.0)
+    icx, icy = int(math.floor(cx)), int(math.floor(cy))
     dome_l = button_kit.lab(*dome)[0]
     bins = int(360 / GLOSS_BIN)
     cells: list[list[tuple[float, float, float, tuple[int, int, int]]]] = [[] for _ in range(bins)]  # per bin: (weight, radius, lightness, colour)
-    for y in range(units):
+    for y in range(rows):
         for x in range(units):
             o = (y * units + x) * 4
-            if not frame.data[o + 3] or (x - (units - 1) // 2) + (y - (units - 1) // 2) > 0:
+            if not frame.data[o + 3] or (x - icx) + (y - icy) > 0:
                 continue
-            if reach_right is not None and x - (units - 1) // 2 > reach_right:
+            if reach_right is not None and x - icx > reach_right:
                 continue
             colour = tuple(frame.data[o:o + 3])
             light = button_kit.lab(*colour)[0]
             if light < dome_l + GLOSS_MIN_LIGHTER:
                 continue
-            dx, dy = x + 0.5 - centre, y + 0.5 - centre
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
             angle = math.degrees(math.atan2(dy, dx)) % 360.0
             cells[int(angle / GLOSS_BIN) % bins].append((light - dome_l, math.hypot(dx, dy), light, colour))
     profile: list[tuple[float, float, float, tuple[float, float, float]] | None] = []  # per bin: radius, sigma, peak lightness, colour
@@ -270,7 +279,7 @@ def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int, reach_rig
         weight = sum(w for w, _ in bright)
         profile.append((r0, sigma, peak, tuple(sum(w * c[k] for w, c in bright) / weight for k in range(3))))
     if not radius_all:
-        return Image(pixels, pixels, bytearray(pixels * pixels * 4))
+        return Image(pw, ph, bytearray(pw * ph * 4))
     smooth: list[tuple[float, float, float, tuple[float, float, float]] | None] = []  # the radius and width [1 2 1] along the angle; the brightness is the UPPER ENVELOPE of the bin and its two neighbours (a diagonal line on a grid is bright in one cell of a step and dull in the next: the line itself is as bright as its brightest cells)
     for k, here in enumerate(profile):
         if here is None:
@@ -282,11 +291,11 @@ def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int, reach_rig
         sigma = sum(w * g[1] for w, g in group) / total
         best = max((g for _, g in group), key=lambda g: g[2])
         smooth.append((r0, sigma, best[2], best[3]))
-    out = Image(pixels, pixels, bytearray(pixels * pixels * 4))
-    scale = units / pixels
-    for py in range(pixels):
-        for px in range(pixels):
-            dx, dy = (px + 0.5) * scale - centre, (py + 0.5) * scale - centre
+    out = Image(pw, ph, bytearray(pw * ph * 4))
+    scale_x, scale_y = units / pw, rows / ph
+    for py in range(ph):
+        for px in range(pw):
+            dx, dy = (px + 0.5) * scale_x - cx, (py + 0.5) * scale_y - cy
             r = math.hypot(dx, dy)
             position = (math.degrees(math.atan2(dy, dx)) % 360.0) / GLOSS_BIN - 0.5  # bin centres at whole numbers
             k0 = int(math.floor(position))
@@ -307,7 +316,7 @@ def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int, reach_rig
             alpha = need * weight * math.exp(-0.5 * ((r - r0) / sigma) ** 2)
             if alpha <= 0.004:
                 continue
-            o = (py * pixels + px) * 4
+            o = (py * pw + px) * 4
             out.data[o:o + 4] = bytes((*(max(0, min(255, int(round(v)))) for v in colour), int(round(min(1.0, alpha) * 255))))
     return out
 
@@ -329,14 +338,14 @@ def gloss_layers(frames: Path) -> dict[str, Image]:
 
 
 def button_names() -> list[str]:
-    return [b.name for b in ROUND_BUTTONS] + [BALL.name]
+    return [b.name for b in ALL_ROUND] + [BALL.name]
 
 
 def source_folders(ident: str) -> tuple[list[str], int]:
     """The original frames a part reads (the folders) and the number of frames each has."""
     if ident.startswith(("glyph.fate_but", "glyph.sleep_but")) or ident.startswith(f"plate.{BALL.name}"):
         return [BALL.folder], 2
-    for b in ROUND_BUTTONS:
+    for b in ALL_ROUND:
         if ident in (f"glyph.{b.name}", f"plate.{b.name}_hover", f"plate.{b.name}_pressed"):
             return [b.folder], 3
     raise RoundError(f"{ident} belongs to no button of this slice")
@@ -405,7 +414,7 @@ def cmd_gloss(args: argparse.Namespace) -> int:
         if not any(layer.data[3::4]):
             raise RoundError(f"the {family} frames hold no lighter arc on their upper-left edge: nothing to lay")
     plan = []
-    for name, family, pixels in [(b.name, "round", ROUND_MASTER) for b in ROUND_BUTTONS] + [(BALL.name, "ball", BALL_MASTER)]:  # every source is checked before anything is written
+    for name, family, pixels in [(b.name, "round", ROUND_MASTER) for b in ALL_ROUND] + [(BALL.name, "ball", BALL_MASTER)]:  # every source is checked before anything is written
         source = fitted / f"plate.{name}.png"
         if not source.is_file():
             raise RoundError(f"no fitted master {source} (run fit.py fit plate.{name} --masters {fitted} first)")
@@ -475,10 +484,12 @@ def upscaled(frame: Image, pixels: int) -> Image:
     return out
 
 
-def faces(local: Path, frames: Path, plate_dir: Path, parts: dict[str, Image]) -> list[tuple[str, list[tuple[str, Image, Image | None]]]]:
+def faces(local: Path, frames: Path, plate_dir: Path, parts: dict[str, Image], only: set[str] | None = None) -> list[tuple[str, list[tuple[str, Image, Image | None]]]]:
     """Per button: (name, [(state label, the original's frame at master size, the kit's face for the state or None)])."""
     rows = []
-    for b in ROUND_BUTTONS:
+    for b in ALL_ROUND:
+        if only and b.name not in only:
+            continue
         plate = read_plate(plate_dir, b.name, ROUND_MASTER)
         if plate is None:
             raise RoundError(f"no plate master plate.{b.name}.png in {plate_dir} (fit it first)")
@@ -487,6 +498,8 @@ def faces(local: Path, frames: Path, plate_dir: Path, parts: dict[str, Image]) -
                  ("hover", read_frame(frames, b.folder, 2, ROUND_UNITS), button_kit.composite(idle, parts[f"plate.{b.name}_hover"])),
                  ("pressed", read_frame(frames, b.folder, 1, ROUND_UNITS), button_kit.composite(idle, parts[f"plate.{b.name}_pressed"]))]
         rows.append((b.name, [(label, upscaled(before, ROUND_MASTER), after) for label, before, after in shots]))
+    if only and BALL.name not in only:
+        return rows
     ball = read_plate(plate_dir, BALL.name, BALL_MASTER)
     if ball is None:
         raise RoundError(f"no plate master plate.{BALL.name}.png in {plate_dir} (fit it first)")
@@ -504,12 +517,13 @@ def cmd_sheet(args: argparse.Namespace) -> int:
     need_magick()
     if args.zoom < 1:
         raise RoundError("--zoom must be at least 1")
-    parts = build_parts(frames, plate_dir)
+    only = set(args.only.split(",")) if args.only else None
+    parts = build_parts(frames, plate_dir, only)
     work = Path(tempfile.mkdtemp(prefix="round-sheet-"))
     try:
         rows = []
         cell = ROUND_MASTER * args.zoom
-        for name, shots in faces(local, frames, plate_dir, parts):
+        for name, shots in faces(local, frames, plate_dir, parts, only):
             columns = []
             for index, (label, before, after) in enumerate(shots):
                 pair = []
@@ -529,7 +543,7 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         subprocess.run(["magick", *rows, "-append", str(sheet)], check=True)
         head = work / "head.png"
         subprocess.run(["magick", "-size", f"{cell * 3}x40", "xc:#202020", "-font", LABEL_FONT, "-fill", "white", "-pointsize", "22", "-gravity", "west", "-annotate", "+10+0",
-                        "ARC-UI-3202 slice 2: top of each pair = ORIGINAL (nearest cells), bottom = KIT (plate + glyph + overlays); columns: idle, hover, pressed (ball: idle, pressed)", str(head)], check=True)
+                        "ARC-UI-3202 / 3203, round buttons: top of each pair = ORIGINAL (nearest cells), bottom = KIT (plate + glyph + overlays); columns: idle, hover, pressed (ball: idle, pressed)", str(head)], check=True)
         subprocess.run(["magick", str(head), str(sheet), "-append", str(args.out)], check=True)
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -564,6 +578,7 @@ def main(argv: list[str] | None = None) -> int:
         if name == "sheet":
             s.add_argument("--out", type=Path, required=True)
             s.add_argument("--zoom", type=int, default=2)
+            s.add_argument("--only")
     sub.add_parser("self-test")
     args = parser.parse_args(argv)
     try:
