@@ -1417,6 +1417,28 @@ The fit tool's halo gate ([#3073](https://github.com/Simarglok/arcanum-steamwove
 The glyph's outline is the pilot's glyph mask of the lit frames; the gloss arc of the dome is read from the template as a smooth curve of the original's shape and peak brightness. The plate template of a glyph is the flat dome colour inside radius 16 cells and the voted ring outside it; a pressed overlay is a soft black shade layer (alpha = the brightness the original loses outside the symbol's footprint) plus the lit symbol, clipped to the plate's alpha; art 137 has no symbol, so `glyph.fate_but` and `glyph.sleep_but` are empty layers.
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_round_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
 
+## Steamwoven dark-dome buttons, batch B-BUTTONS slice 3 (ARC-UI-3203)
+
+Part one of the third slice of B-BUTTONS (the rest of #3203 is split into issues by plate family): the character sheet's three skill-group buttons (arts 34, 35, 36), which stand on the round plate of [slice 2](#steamwoven-round-hud-buttons-and-the-ball-batch-b-buttons-slice-2-arc-ui-3202), and the crescent family, dark domes with a brass crescent at the lower right in frames that are not square (Cancel / Done 32 and 33 with their twins 202 and 203, Clear 201: 38 x 37 units, 138 x 132 px; Big Green Left / Right 283 and 284: 34 x 33 units, 120 x 120 px).
+Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+for n in char_common_skills char_tech_skills char_spells_skills; do python3 -B tools/steamwoven_ui/fit.py fit plate.$n --masters local/steamwoven-ui/work/B-BUTTONS/fitted --source local/steamwoven-ui/outbox/B-BUTTONS/plate-round-hud.png --provenance local/steamwoven-ui/outbox/B-BUTTONS/plate-round-hud.provenance.json; done   # the slice-2 item again, through the relaxed-limit wrapper
+python3 -B tools/steamwoven_ui/disc_kit.py refs                                # references of the two dome prompts: the original's dome alone (its brass cleared), shown stretched to a square
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS               # the inbox (five items; the three of earlier slices are skipped by the runner while their outbox files exist)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS                    # plate-dome-hud, plate-dome-small-hud (gpt-6.1-sol)
+python3 -B tools/steamwoven_ui/disc_kit.py place                               # the generated dome -> the master's canvas where the original's disc stands, with the derived provenance record
+fit.py fit plate.cncl_big|done_big|cler_big  --source work/B-BUTTONS/plate-dome-hud-placed.png --provenance ...-placed.provenance.json     # as slice 2, through the relaxed-limit wrapper
+fit.py fit plate.big_grn_l|big_grn_r         --source work/B-BUTTONS/plate-dome-small-hud-placed.png --provenance ...-placed.provenance.json
+python3 -B tools/steamwoven_ui/round_kit.py gloss && python3 -B tools/steamwoven_ui/round_kit.py build --only char_common_skills,char_tech_skills,char_spells_skills
+python3 -B tools/steamwoven_ui/disc_kit.py gloss [--dry-run] [--ring FILE]      # the original's gloss arc and the brass crescent (the strip's ring, masters/hardware.hud_ring.png) over the five fitted domes -> masters/, noted in each fit record
+python3 -B tools/steamwoven_ui/disc_kit.py build [--dry-run] [--family crescent-big|crescent-small] [--only cncl_big,...]   # glyphs and overlays -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/disc_kit.py sheet --out FILE [--zoom N] [--family KEY] [--only NAME,...]                 # the before / after composite (English labels)
+```
+
+The frame functions (`button_kit.render_crisp`, `resample_plane`, `outside_cells`, `round_kit.gloss_layer`) take a frame of any width and height (a `(width, height)` pair for the master); the square results are byte for byte the slice-1 and slice-2 masters. The plate template of a family is voted per cell from the idle and hover frames of all its buttons (two buttons must agree, a colour that is no dome colour is not voted in the middle of the dome, a cell fewer than two buttons show plain is filled from its neighbours, a trace of a symbol's edge in the middle of the dome takes the local median; all symbols of these families lie in that middle, `SPECK_SHARE` of the radius); the dome's middle and radius of a family are constants fitted once to the outline of its frames (`FAMILIES`). The brass crescent is made by rule, not generated: its inner and outer radius per 5 degrees of angle are read from the original's brass cells (smooth, tapering to points), its surface is cut from the strip's brass ring master at its lit side (owner 2026-11-25: thin as the original, warm ring brass), and a dark gap of one cell lies between it and the dome; no overlay takes the original's brass cells. A twin art is refused unless its frames are byte for byte the same. The halo gate of the fit tool ([#3073](https://github.com/Simarglok/arcanum-steamwoven/issues/3073)) is relaxed as in slice 2 (mean 15 / p95 30; after the safety net p95 under 3); the limits are in each plate's fit record.
+Tests: `python3 -B -m unittest tools.steamwoven_ui.test_disc_kit` (about 4 s, in the batched `tools/local_dev/run_tests.py`).
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
