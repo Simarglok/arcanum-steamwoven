@@ -167,9 +167,9 @@ public sealed partial class GameSessionOwner
         // ARC-AI-1486 (JP5, 0x467860 at 0x467C26): the removal checks a container it took an item from while no container's loot window is open (the switch 0x5E8800 above 0, which the goal's end 0x42AA70 tested before it
         // got here): a pile left with one item or none dissolves at once (the last item is dropped again with a decay two days on). A pile the session made goes in this revision; one of the map's data is a map change that
         // takes a revision of its own.
-        if (pile is not null && _inventory.Objects.Pile(pile.Entity) is { } left) DissolveJunkPile(left);
+        if (pile is not null && _inventory.Objects.Pile(pile.Entity) is { } left) DissolveJunkPile(left, scripts);
         Revise();
-        if (mapPile is not null && mapPileHolder is not null && _inventory.Seeds.TryGetValue(mapPile.Map, out var standing)) DissolveMapJunkPile(Version, mapPile, standing, mapPileHolder);
+        if (mapPile is not null && mapPileHolder is not null && _inventory.Seeds.TryGetValue(mapPile.Map, out var standing)) DissolveMapJunkPile(Version, mapPile, standing, mapPileHolder, scripts, refuse: false);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version) { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
 }
