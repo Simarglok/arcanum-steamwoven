@@ -31,6 +31,7 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
+from tools.steamwoven_ui import popup_kit  # noqa: E402
 from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import parchment_kit  # noqa: E402
@@ -286,6 +287,7 @@ BOX_STATES = {f"state.{n}": b for b in parchment_kit.BOXES for n in (b.on_name, 
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
+POPUP_PARTS = frozenset(popup_kit.coverage())    # ARC-UI-3278 (B-HARDWARE slice 4): the pop-up panel bases and frames
 HARDWARE_RULE_PARTS = frozenset(p.ident for p in hardware_kit.PARTS if p.art)  # the parts made from census arts (the whole lens rings are new parts)
 
 
@@ -357,6 +359,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if ident in GAUGE_PARTS:  # ARC-UI-2483 (B-GAUGES): every part of the batch is a master once gauge_kit.py has made it (a rule record or a fit record)
             part["status"], part["provenance"] = "master", gauge_kit.provenance_of(ident)
             part["note"] = gauge_kit.note_of(ident, part["frames"])
+        if ident in POPUP_PARTS:  # ARC-UI-3278: every pop-up panel base is a master once popup_kit.py has made it (a rule record)
+            part["status"], part["provenance"] = "master", popup_kit.provenance_of(ident)
+            part["note"] = popup_kit.note_of(ident)
         if ident in HARDWARE_RULE_PARTS:  # ARC-UI-3261 (B-HARDWARE slice 3): lens rings, slot insets, slot wood, plugs and small frames, by rule from the original's frames
             part["status"], part["provenance"] = "master", hardware_kit.provenance_of(ident)
             part["note"] = hardware_kit.note_of(ident)

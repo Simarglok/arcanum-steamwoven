@@ -1367,6 +1367,25 @@ through `SteamwovenKitScreenSpec.TopLayers` and `BottomLayers` (`SteamwovenKitTa
 159 units), and a screen is drawn from the kit only when every layer is in the set, so a kit without the four parts keeps the screen's own arts whole.
 
 
+### Slice 4: the pop-up panel bases and frames (ARC-UI-3278)
+
+The 16 pop-up panel arts of [#3278](https://github.com/Simarglok/arcanum-steamwoven/issues/3278) (the 410 x 107 "Rot" family 7, 200, 274, 288, 290, 291, 354, 564, 642, 842 and the framed panels 822, 298, 826, 292, 565, 328) are kit parts `hardware.*` (the manifest rows of the arts, status master), each the art's whole rectangle at the kit's 3.6 scale, made by `tools/steamwoven_ui/popup_kit.py` (no Codex) by the owner's rule "pack-first" ([TRD](../ui/steamwoven-interface-trd.md)). Art 128 (`skill_ro`, an olive noise art, no code or window draws it) is no part (#3307).
+
+* **A pack frame of the art itself** (12 arts): the frame of the art in the player's old HD pack (`interface-redraw-4x/interface/<folder>/<name>-f000.png`, 4 times the original; `--pack` overrides the default install path) resampled to the master (premultiplied, linear light; what the original leaves open is open in the frame before the resample, so no colour bleeds), the ALPHA analytic (the original's transparent places blurred once, enlarged with a cubic filter, cut with a steep threshold; the pack's own alpha is not used), the edge band decontaminated (`fit.py`). A pack frame is refused when its biggest brass frame is not where the original's is (`FIT_TOLERANCE` 3 original px: the screens draw text and slots in the original's rectangles).
+* **A frame composed from the pack's other frames** (4 arts, `Spec.compose`, a list of `Piece`s: a rectangle of a pack frame enlarged to a rectangle of the new art, optionally turned (`transpose`), mirrored (`flip_x`), faded at an edge or cut as a disc): 291 (mess_rot's left part, bars and the left part mirrored to the right), 354 and 642 (mess_rot's top and bottom bars, the side bars from them turned, the margins from the menu plaque's stone; 642 also a mess_rot socket ring with the original's face copied in (`pack_copies`) and the original's baked blue input field kept (`fills`)), 826 (sleep_base's left part and right end spliced, the seam faded). The composed frame goes through the same steps and the same fit gate as a pack frame.
+* **What follows for both:** the pack's flat black fields take the original's tone back (the windows by the original's dark class, `fills` boxes: art 328's grey box, 298's window), its black slots the original's stone (`stone_wells`: 274 and 564), and the pack's brass is lifted to the approved brass of the kit (HUD ring and clock frame #3259, menu window #3260; per channel at most 1.3, only when the mean is more than 6 % under the approved tone in luminance; the gain is in the provenance record). Art 564's baked sign in the picture field is kept (the original has it too). No shadow is baked in (it is cast where the part is laid, #3249).
+* **Rule build** (`render`, no part of the kit any more): every pixel of the original is classified, the iron is new, the brass is shaded by a height field; `--alt-dir DIR` writes it there for the composite's alternative column.
+
+Gates: size = the manifest's on the 6 px grid, at most 2 % of the pixels where the transparent places differ from the original's, at most 1.2 % translucent pixels, no magenta, the edge halo gate of `fit.py`; a rule build also has no black border pixel.
+
+```sh
+python3 -B tools/steamwoven_ui/popup_kit.py plan                                 # the 16 parts and their manifest rows
+python3 -B tools/steamwoven_ui/popup_kit.py build [--only ID,...] [--dry-run] [--pack DIR] [--alt-dir DIR]   # masters/hardware.<id>.png and provenance/rule/<id>.json (about 35 s)
+python3 -B tools/steamwoven_ui/popup_kit.py sheet --out FILE [--only ...] [--zoom 2] [--alt-dir DIR] [--alt-label TEXT]   # composite original | kit master | alternative, English labels (ImageMagick)
+```
+
+The build needs the approved HUD ring, clock frame and menu window masters (`local/steamwoven-ui/masters/`, the brass tone) and the census frames. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_popup_kit` (also in `tools/local_dev/run_tests.py`). The runtime does not lay these masters yet (the popup windows draw their own arts until a later slice).
+
 ## Steamwoven hardware: rings, slots and small frames, batch B-HARDWARE slice 3 (ARC-UI-3261)
 
 33 small hardware parts made BY RULE from the original's own frames by `tools/steamwoven_ui/hardware_kit.py` (no Codex; [TRD](../ui/steamwoven-interface-trd.md), SWI-KIT): the eight lens rings (arts 198, 222, 231, 232, 233, 367, 670, 746), the ten hotkey slot insets (172 to 181), the five maintain slot woods (188 to 192) and plugs (628 to 632), the portrait highlight (646), the portrait select (332) and the roller template (314). Local only (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the composite, no Godot and no `dotnet`, so no launch queue:
