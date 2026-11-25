@@ -202,8 +202,8 @@ def load_spec(path: Path) -> ZoneSpec:
         bands = tuple(tuple(b) for b in bands_raw)
     discs_read, plates_read = discs(), boxes("plate_boxes")
     for plate in plates_read:
-        if not any(d[0] <= plate[0] and d[1] <= plate[1] and plate[2] <= d[2] and plate[3] <= d[3] for d in discs_read):
-            raise ComposeError(f"spec {path}: plate_boxes entry {list(plate)} lies in no disc_boxes box (the plate's brackets are laid only where the wood weight cut the old art)")
+        if plate_disc(plate, discs_read) is None:
+            raise ComposeError(f"spec {path}: plate_boxes entry {list(plate)} lies in no disc_boxes box (the plate's triangles are laid round that disc's ellipse)")
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
                     erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), disc_boxes=discs_read, plate_boxes=plates_read, dot_bands=bands,
                     wood_boxes=boxes("wood_boxes"), text_boxes=boxes("text_boxes"), paper_boxes=boxes("paper_boxes"))
@@ -820,6 +820,11 @@ def cast_disc_shadows(image: Path, solid: Path, discs: tuple, width: int, height
     run(["magick", str(image), "-alpha", "off", str(factor), "-compose", "Multiply", "-composite", str(image)])
 
 
+def plate_disc(plate: tuple, discs: tuple) -> tuple | None:
+    """The first `disc_boxes` entry whose box holds the plate rectangle (x0, y0, x1, y1), the disc whose ellipse the plate's triangles are cut by; None if there is none."""
+    return next((d for d in discs if d[0] <= plate[0] and d[1] <= plate[1] and plate[2] <= d[2] and plate[3] <= d[3]), None)
+
+
 def lay_plates(image: Path, plates: tuple, discs: tuple, width: int, height: int) -> int:
     """ARC-UI-3275 `plate_boxes`: an oval of the inventory stands in a dark rectangular recessed plate; outside the oval's ring the plate shows as four triangles: two straight crisp legs on the
     rectangle's edges, the concave side a smooth arc along the ring's outer edge. The `disc_boxes` cut took them for old wood. The geometry is analytic: each entry (x0, y0, x1, y1) is the
@@ -836,7 +841,7 @@ def lay_plates(image: Path, plates: tuple, discs: tuple, width: int, height: int
     for x0, y0, x1, y1 in plates:
         if x1 > width or y1 > height:
             raise ComposeError(f"plate box {(x0, y0, x1, y1)} is outside the {width} x {height} px image")
-        disc = next((d for d in discs if d[0] <= x0 and d[1] <= y0 and x1 <= d[2] and y1 <= d[3]), None)
+        disc = plate_disc((x0, y0, x1, y1), discs)
         if disc is None:
             raise ComposeError(f"plate box {(x0, y0, x1, y1)} lies in no disc box")
         cx, cy, ra, rb = (disc[4] + disc[6]) / 2, (disc[5] + disc[7]) / 2, (disc[6] - disc[4]) / 2, (disc[7] - disc[5]) / 2
@@ -849,6 +854,8 @@ def lay_plates(image: Path, plates: tuple, discs: tuple, width: int, height: int
         rim = [wood * PLATE_RIM * t for t in PLATE_TINT]
         for y in range(y0, y1):
             for x in range(x0, x1):
+                if ((x + 0.5 - cx) / ra) ** 2 + ((y + 0.5 - cy) / rb) ** 2 < 0.9:       # the pixel's centre is well inside the ellipse: no sample is outside
+                    continue
                 outside = 0
                 for j in range(n):
                     for i in range(n):

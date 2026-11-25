@@ -364,6 +364,9 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertLess(at(42, 60), 100)                  # and darker than the wood
         self.assertEqual(at(100, 90), 100)                # inside the ellipse: untouched
         self.assertEqual(at(100, 42), 100)                # just inside the ellipse's top: untouched (the arc is the ellipse, no teeth)
+        self.assertTrue(any(fill + 4 < at(70, y) < 97 for y in range(44, 50)), msg=str([at(70, y) for y in range(44, 50)]))      # the arc is anti-aliased: a partly covered pixel between the fill and the wood
+        self.assertLess(at(70, 44), fill + 6)                # above the arc at x 70 the triangle is whole fill
+        self.assertEqual(at(70, 50), 100)                    # below it, inside the ellipse: the wood
         self.assertEqual(at(30, 30), 100)                 # outside the rectangle: untouched
         self.assertEqual(at(39, 60), 100)                 # the leg is hard: one pixel outside it is the wood
         self.assertTrue(fill - 6 <= at(40, 60) <= fill + 6, msg=str(at(40, 60)))     # the leg's outermost pixel is plate (the fill), not wood
