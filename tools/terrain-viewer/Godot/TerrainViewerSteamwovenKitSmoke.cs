@@ -24,7 +24,7 @@ public partial class TerrainViewerApp
         KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f), KitNewCharBody = new(0.25f, 0.6f, 0.6f),
         KitFixture = new(0.95f, 0.95f, 0.2f);
 
-    /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's 150 and 570 px; the caps are 120 px wide.</summary>
+    /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
     [
         ("board.inttop", 2880, 150, KitTop), ("board.intbotom", 2880, 570, KitBottom),
@@ -44,7 +44,7 @@ public partial class TerrainViewerApp
         ("sheet.char_spells", 846, 1170, KitSpellsSheet), ("sheet.scheme_rot", 846, 1170, KitSchemesSheet),
         // ARC-UI-3037: the logbook's two pieces and the schematic window's backdrop.
         ("backdrop.logbooks_side", 594, 1440, KitLogSide), ("backdrop.book_main", 2286, 1440, KitLogBook), ("backdrop.schematic_base", 2880, 1440, KitSchematic),
-        // ARC-UI-3038: the save and load screen's two strips (150 and 570 px) and its body.
+        // ARC-UI-3038: the save and load screen's two strips (the provisional 150 and 570 px) and its body.
         ("board.charcreatetopbar", 2880, 150, KitSaveTop), ("backdrop.saveloadbackground", 2880, 1440, KitSaveBody), ("board.charcreatebottombar", 2880, 570, KitSaveBottom),
         // ARC-UI-3039: the pre-made browser's body (its strips are the save screen's).
         ("backdrop.pregencharacterbase", 2880, 1440, KitPremadeBody),
