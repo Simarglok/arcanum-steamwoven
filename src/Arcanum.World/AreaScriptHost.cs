@@ -546,12 +546,19 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // as the original's load fails; a line the NPC-line step would do more for (an action field, generated text) is not modelled and
         // leaves the run unapplied.
         var floats = new List<AreaScriptFloat>();
+        var floatActions = new List<AreaScriptFloatAction>();
         foreach (var line in effects.Floats)
         {
             if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male,
                 AreaDialogNames.For(_session, _profile.Names, AreaDialogNames.NpcName(NpcName, Speaker(line.Speaker)?.Row)));
-            if (printed.Status != ScrPrintedLineStatus.Shown) return false;
+            if (printed.Status != ScrPrintedLineStatus.Shown)
+            {
+                // ARC-SCRIPT-2965 (FL4): a line with an action string runs it between the PC and the speaker; the step is planned now, so a string this host cannot run leaves the run unapplied whole.
+                if (!ScrPrintedLine.HasActionField(document, line.Line) || PrepareFloatAction(line, document) is not { } action) return false;
+                floatActions.Add(action);
+                printed = new(ScrPrintedLineStatus.Shown, action.Text, printed.Detail);
+            }
             floats.Add(new(line.Speaker, printed.Text, line.Pc, AreaScriptFloat.VoiceOf(document, line.Script, line.Line)));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
@@ -668,6 +675,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var teleport in effects.Teleports)
             if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
             else teleportHost?.RequestNpcTeleport(teleport);
+        // ARC-SCRIPT-2965 (FL6): the float lines' action strings run after the run's other effects (their order among the run's actions is not kept) and before the run's own slot write: the original stores a changed
+        // working copy of the attachment at the run's end, over a flag the string set in the same attachment.
+        foreach (var action in floatActions)
+        {
+            var slot = LoadedSlot(action.Speaker);
+            _state.Bind(action.Speaker.Index, slot?.LocalFlags ?? 0, slot?.Counters ?? 0);
+            if (!action.Conversation.RunNpcLine()) return false;
+        }
         if (useWrite is not null) return useHost?.WriteUseSlot(useWrite) == true;
         if (effects.Writeback is not { } writeback || slotWrite is not { } placed) return true;
         var (loaded, attachee) = placed;
@@ -685,6 +700,22 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             Edit(CountersProperty, writeback.Slot.Counters, loaded.Counters),
         ]);
         return result.Disposition != GameSessionDisposition.Rejected;
+    }
+
+    // ARC-SCRIPT-2965: the planned NPC-line step of a float line whose DLG record has an action string, or null when this host cannot run it (the speaker is no dialog NPC of
+    // this host, an operation needs an open conversation, generated text, an unreadable text).
+    private AreaScriptFloatAction? PrepareFloatAction(ScrFloatLine line, DlgDocument document)
+    {
+        if (Speaker(line.Speaker) is not { } speaker) return null;
+        var participants = new Arcanum.Scripting.Dialog.DialogParticipants(new Arcanum.Scripting.Dialog.DialogId(line.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
+        var names = AreaDialogNames.For(_session, _profile.Names, AreaDialogNames.NpcName(NpcName, speaker.Row));
+        var request = new Arcanum.Scripting.Dialog.DialogConversationRequest(new Arcanum.Scripting.Dialog.DialogNodeId(line.Line), participants,
+            new Arcanum.Scripting.Dialog.DialogScriptLine(0), _profile.Pc, names);
+        var gated = new AreaFloatActionPorts(_state, npc => Slot(new ScrObjectRef(_map.RuntimeMap, AreaConversationState.EntityId(_speakers[checked((int)(npc.Value - 1000))].Row)), ScrPoint.Dialog) is { Script: > 0 });
+        var ports = new Arcanum.Scripting.Dialog.DialogConversationPorts(_state, gated, _session.Flags, Rumors: _state, Stores: new SessionDialogScriptStorePort(_session, AreaConversationState.PcParticipant),
+            Story: new SessionDialogStoryPort(_session, AreaConversationState.PcParticipant), Counters: gated);
+        var conversation = Arcanum.Scripting.Dialog.DialogConversation.PrepareNpcLine(document, request, ports);
+        return conversation.NpcLinePrepared && conversation.NpcLine is { } npcLine ? new(speaker, conversation, npcLine.Text) : null;
     }
 
     /// <summary>ARC-SCRIPT-1563: what the viewer answered to the last script damage a run of this host applied (test and smoke seam; null before any).</summary>

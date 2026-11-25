@@ -572,7 +572,7 @@ public sealed class DialogConversationTests
         Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, signed.Failure!.Kind);
     }
 
-    private static string Describe(DialogEffectReceipt receipt) => receipt.Command switch
+    internal static string Describe(DialogEffectReceipt receipt) => receipt.Command switch
     {
         GlobalFlagWriteCommand global => $"GF({global.Flag},{global.Value})@{receipt.Turn}",
         QuestStateCommand => $"QU@{receipt.Turn}",
