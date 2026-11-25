@@ -31,9 +31,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 try:
-    from . import pngio, prompt_library
+    from . import hardware_kit, pngio, prompt_library
 except ImportError:  # run as a script
     sys.path.insert(0, str(HERE))
+    import hardware_kit  # type: ignore
     import pngio  # type: ignore
     import prompt_library  # type: ignore
 
@@ -52,142 +53,20 @@ IRON_TINT = (1.04, 1.0, 0.94)  # a little warm, the wood round it is brown (the 
 IRON_SOURCE = ("hardware.menu_plate_left", (300, 0))   # the kit's dark iron (#3260), and where in it the window of the plate is taken
 IRON_EDGE = 2                  # px: the iron master's soft first and last rows are not used
 SHADOW = (13, 13, 16.0, 0.7)   # dx, dy, sigma, strength: the same as `surface_compose.cast_disc_shadows`
-SAMPLES = 4                    # the arc's anti-aliasing: samples per pixel side
-BRASS_ROWS = 18                # rows of the brass texture across the band
-BRASS_SOURCES = (("hardware.menu_ring", 104), ("hardware.hud_ring", 73))   # (master, first row of the band): the approved brass of the kit
-GRAIN = 1.2
+EDGE_SAMPLES, EDGE_REACH = hardware_kit.EDGE_SAMPLES, hardware_kit.EDGE_REACH   # the lens ring's edge filter: a tent of 2 px, 8 x 8 sub-samples per pixel, so the analytic edges fade without a stair
+BRASS_ROWS, GRAIN = hardware_kit.BRASS_ROWS, hardware_kit.GRAIN     # the lens ring's: rows of the brass texture across the band, how strongly the grain modulates
+brass_material, light_of, brass_colour = hardware_kit.brass_material, hardware_kit.light_of, hardware_kit.brass_colour
+KitError = hardware_kit.KitError
 
 
-class KitError(Exception):
-    pass
-
-
-def lum(r: float, g: float, b: float) -> float:
-    return 0.299 * r + 0.587 * g + 0.114 * b
-
-
-def clamp(v: float, lo: float, hi: float) -> float:
-    return lo if v < lo else hi if v > hi else v
+lum, clamp = hardware_kit.lum, hardware_kit.clamp
 
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-# --- the brass: the same material as the lens ring of hardware_kit.py (#3261) ----------------------------------------------------------------
-
-def bilinear(image: pngio.Image, x: float, y: float) -> list[float]:
-    x -= 0.5
-    y -= 0.5
-    x0, y0 = int(math.floor(x)), int(math.floor(y))
-    fx, fy = x - x0, y - y0
-    out = [0.0, 0.0, 0.0]
-    for dx, dy, w in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
-        p = image.pixel(min(image.w - 1, max(0, x0 + dx)), min(image.h - 1, max(0, y0 + dy)))
-        for c in range(3):
-            out[c] += w * p[c]
-    return out
-
-
-def ring_centre(image: pngio.Image) -> tuple[float, float]:
-    pts = [(x, y) for y in range(image.h) for x in range(image.w) if image.pixel(x, y)[3] < 10 and math.hypot(x - image.w / 2, y - image.h / 2) < image.w * 0.3]
-    if not pts:
-        raise KitError("a brass ring master has no hole")
-    return sum(p[0] for p in pts) / len(pts) + 0.5, sum(p[1] for p in pts) / len(pts) + 0.5
-
-
-def unwrap(image: pngio.Image, first_row: int) -> list[list[list[float]]]:
-    """The brass of a ring master unrolled along its circumference: for every pixel step round the circle at the band's middle, BRASS_ROWS colours from `first_row` px of radius outwards."""
-    cx, cy = ring_centre(image)
-    n = int(round(2 * math.pi * (first_row + BRASS_ROWS / 2)))
-    strip = []
-    for i in range(n):
-        th = 2 * math.pi * i / n
-        cos, sin = math.cos(th), math.sin(th)
-        column = []
-        for j in range(BRASS_ROWS):
-            r = first_row + j + 0.5
-            x, y = cx + r * cos, cy + r * sin
-            if image.pixel(min(image.w - 1, max(0, int(x))), min(image.h - 1, max(0, int(y))))[3] < 250:
-                raise KitError("the brass band of a ring master is not opaque brass all through: the band rows no longer fit the master")
-            column.append(bilinear(image, x, y))
-        strip.append(column)
-    return strip
-
-
-def grain_of(strip: list[list[list[float]]]) -> list[list[float]]:
-    """The strip's detail: its luminance minus its slow light (a Gaussian, 3 px round the circle and 1.5 px across)."""
-    n, rows = len(strip), len(strip[0])
-    plane = [[lum(*c) for c in column] for column in strip]
-    sigma = 3
-    kernel = [(di, dj, math.exp(-(di * di) / (2 * sigma * sigma)) * math.exp(-(dj * dj) / (2 * 1.5 ** 2))) for di in range(-2 * sigma, 2 * sigma + 1) for dj in range(-2, 3)]
-    out = []
-    for i in range(n):
-        row = []
-        for j in range(rows):
-            acc = total = 0.0
-            for di, dj, w in kernel:
-                if 0 <= j + dj < rows:
-                    acc += w * plane[(i + di) % n][j + dj]
-                    total += w
-            row.append(plane[i][j] - acc / total)
-        out.append(row)
-    return out
-
-
-def brass_material(masters: Path) -> dict:
-    grain, tones, hashes = [], [], {}
-    for part, first_row in BRASS_SOURCES:
-        path = masters / f"{part}.png"
-        if not path.is_file():
-            raise KitError(f"{path} is missing: the approved brass of the kit (#3259 HUD rings, #3260 socket rings) the rim's grain is taken from")
-        strip = unwrap(pngio.read(path), first_row)
-        grain += grain_of(strip)
-        count = len(strip) * BRASS_ROWS
-        tones.append([sum(c[k] for column in strip for c in column) / count for k in range(3)])
-        hashes[part] = sha256_file(path)
-    return {"grain": grain, "tone": [sum(t[k] for t in tones) / len(tones) for k in range(3)], "sha256": hashes}
-
-
-def angle_gap(a: float, b: float) -> float:
-    return (a - b + 180.0) % 360.0 - 180.0
-
-
-def smoothstep(lo: float, hi: float, x: float) -> float:
-    t = clamp((x - lo) / (hi - lo), 0.0, 1.0)
-    return t * t * (3 - 2 * t)
-
-
-def light_of(th: float, rho: float) -> tuple[float, float]:
-    """The light on polished, cast brass at the surface-normal angle `th` (degrees, image coordinates: the top left is 225) and `rho` (0 inner edge, 1 outer edge of the band): the body's multiplier and the copper mix.
-    The rules of `hardware_kit.light_of` (#3261): alternating light and dark reflections (sharp edges, whole harmonics), a broad sheen and a narrow highlight ridge at the top left, a copper reflection at the bottom right,
-    a narrow dark chamfer with its thin bright edge on the inner side, a roll-off at the outer edge (no dark outline)."""
-    seg = math.sin(math.radians(th * 3 + 30)) + 0.6 * math.sin(math.radians(th * 5 + 110)) + 0.4 * math.sin(math.radians(th * 8 + 10))
-    light = 0.95 + 0.34 * math.tanh(3.5 * seg)
-    light += 0.55 * math.exp(-(angle_gap(th, 225) / 55) ** 2) * (0.5 + 0.5 * math.sin(math.pi * clamp(rho * 1.2, 0.0, 1.0)))
-    light += 2.4 * math.exp(-(angle_gap(th, 222) / 16) ** 2) * math.exp(-((rho - 0.42) / 0.09) ** 2)
-    light += 0.7 * math.exp(-(angle_gap(th, 300) / 6) ** 2) * math.exp(-((rho - 0.40) / 0.09) ** 2)
-    light -= 0.30 * math.exp(-(angle_gap(th, 315) / 45) ** 2) + 0.25 * math.exp(-(angle_gap(th, 135) / 40) ** 2)
-    light *= 0.15 + 0.85 * smoothstep(0.0, 0.14, rho)
-    light += 0.45 * math.exp(-((rho - 0.17) / 0.035) ** 2) * (0.4 + 0.6 * math.exp(-(angle_gap(th, 225) / 80) ** 2))
-    light *= 1 - 0.45 * smoothstep(0.80, 1.0, rho)
-    copper = math.exp(-(angle_gap(th, 48) / 38) ** 2) * smoothstep(0.25, 0.8, rho)
-    return max(0.05, light), copper
-
-
-BRASS_DARK, BRASS_HIGH, COPPER = (24, 14, 6), (240, 194, 106), (214, 118, 44)
-
-
-def brass_colour(light: float, copper: float, tone: list[float]) -> list[float]:
-    if light < 1:
-        c = [BRASS_DARK[k] + (tone[k] - BRASS_DARK[k]) * light for k in range(3)]
-    else:
-        t = clamp((light - 1) / 1.2, 0.0, 1.0)
-        c = [tone[k] + (BRASS_HIGH[k] - tone[k]) * t for k in range(3)]
-    if copper > 0:
-        w = clamp(copper * 0.85, 0.0, 1.0) * clamp(0.5 + 0.5 * light, 0.0, 1.0)
-        c = [c[k] * (1 - w) + COPPER[k] * w * clamp(0.7 + 0.5 * light, 0.0, 1.15) for k in range(3)]
-    return c
+# the brass is the lens ring's (#3261): `hardware_kit.brass_material` (the kit's approved brass unrolled), `light_of` and `brass_colour` (the analytic light), imported, not copied
 
 
 # --- the ellipse -------------------------------------------------------------------------------------------------------------------------------
@@ -219,6 +98,22 @@ def signed_edge(x: float, y: float, a: float, b: float) -> tuple[float, float, f
     if f < 1e-9 or g < 1e-12:
         return -min(a, b), 0.0, -1.0
     return (f - 1.0) / (g / f), gx / g, gy / g
+
+
+def tent_share(x: float, y: float, test) -> float:
+    """The tent-filtered share (the lens ring's filter) of the pixel whose centre is (x, y) where `test(px, py)` holds."""
+    n = EDGE_SAMPLES
+    got = total = 0.0
+    for j in range(n):
+        oy = (j + 0.5) / n * 2 - 1
+        wy = 1 - abs(oy)
+        for i in range(n):
+            ox = (i + 0.5) / n * 2 - 1
+            weight = wy * (1 - abs(ox))
+            total += weight
+            if test(x + ox * EDGE_REACH, y + oy * EDGE_REACH):
+                got += weight
+    return got / total
 
 
 def shadow_field(x_range: range, y_range: range) -> dict[tuple[int, int], float]:
@@ -314,16 +209,10 @@ def render(material: dict, iron: pngio.Image) -> pngio.Image:
     corners = [(x, y) for y in range(y0, y1) for x in range(x0, x1) if ((x + 0.5 - cx) / ca) ** 2 + ((y + 0.5 - cy) / cb) ** 2 > 0.8]
     shadow = shadow_field(range(x0, x1), range(y0, y1)) if corners else {}
     out = pngio.Image.blank(w, h)
-    n = SAMPLES
     for (x, y) in corners:
-        outside = 0
-        for j in range(n):
-            for i in range(n):
-                u, v = (x + (i + 0.5) / n - cx) / ca, (y + (j + 0.5) / n - cy) / cb
-                outside += u * u + v * v > 1.0
-        if not outside:
+        cover = tent_share(x + 0.5, y + 0.5, lambda qx, qy: ((qx - cx) / ca) ** 2 + ((qy - cy) / cb) ** 2 > 1.0)
+        if cover <= 0:
             continue
-        cover = outside / (n * n)
         iron_p = iron.pixel(x - x0, y - y0)
         k = bevel_shade(x + 0.5, y + 0.5, cx, cy, ca, cb) * (1.0 - SHADOW[3] * shadow[(x, y)])
         colour = [clamp(iron_p[c] * IRON_TINT[c] * k, 0.0, 255.0) for c in range(3)]
@@ -334,7 +223,7 @@ def render(material: dict, iron: pngio.Image) -> pngio.Image:
         for x in range(max(0, int(cx - ra) - 2), min(w, int(cx + ra) + 3)):
             dx, dy = x + 0.5 - cx, y + 0.5 - cy
             d, nx, ny = signed_edge(dx, dy, ra, rb)       # px outside the rim's outer edge
-            if d > 0.6 or d < -RING_WIDTH - 0.6:
+            if d > 1.6 or d < -RING_WIDTH - 1.6:
                 continue
             th = (math.degrees(math.atan2(ny, nx)) + 360.0) % 360.0
             rho = clamp(1.0 + d / RING_WIDTH, 0.0, 1.0)
@@ -344,7 +233,7 @@ def render(material: dict, iron: pngio.Image) -> pngio.Image:
             idx = int(arc_at(arc, t)) % count
             kg = 1 + GRAIN * grain[idx][min(rows - 1, 2 + int(rho * (rows - 4)))] / tone_light
             r, g, b = (clamp(v * kg, 0.0, 255.0) for v in colour)
-            alpha = min(clamp(0.5 - d, 0.0, 1.0), clamp(d + RING_WIDTH + 0.5, 0.0, 1.0))
+            alpha = tent_share(x + 0.5, y + 0.5, lambda qx, qy: -RING_WIDTH <= signed_edge(qx - cx, qy - cy, ra, rb)[0] <= 0.0) if (d > -0.8 or d < -RING_WIDTH + 0.8) else 1.0
             if alpha <= 0:
                 continue
             i = (y * w + x) * 4
