@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import unittest
-from pathlib import Path
 
 from tools.steamwoven_ui import popup_kit, pngio
 
@@ -72,7 +71,7 @@ class PopupKitTests(unittest.TestCase):
         self.assertEqual(a.data, b.data)
         self.assertEqual(a.pixel(1, 1)[3], 0, "the transparent corner stays transparent")
         self.assertEqual(a.pixel(0, 40)[3], 255)
-        r, g, bl, alpha = a.pixel(72, 42)
+        r, _, _, alpha = a.pixel(72, 42)
         self.assertEqual(alpha, 255)
         self.assertLess(r, 12, "the window keeps its dark fill")
         r, g, bl, _ = a.pixel(72, 20)
@@ -94,6 +93,23 @@ class PopupKitTests(unittest.TestCase):
         for i in range(100):
             image.data[(40 * 144 + 20 + i % 40) * 4:(40 * 144 + 20 + i % 40) * 4 + 3] = bytes((255, 0, 255))
         self.assertTrue(any("magenta" in f for f in popup_kit.gates(spec, image, (144, 84), original)))
+
+    def test_brass_on_the_border_is_shaded(self):
+        original = pngio.Image.blank(20, 12, (60, 60, 60, 255))
+        for x in range(20):
+            for y in range(0, 4):
+                original.data[(y * 20 + x) * 4:(y * 20 + x) * 4 + 4] = bytes((180, 140, 50, 255))
+        spec = popup_kit.Spec("hardware.test", "0", "test", "rot")
+        image, _ = popup_kit.render(spec, original, (72, 42), BRASS)
+        self.assertGreater(sum(image.pixel(30, 0)[:3]), 60, "the brass on the first row is lit, not black")
+        self.assertEqual(popup_kit.gates(spec, image, (72, 42), original), [])
+        image.data[(0 * 72 + 5) * 4:(0 * 72 + 5) * 4 + 3] = bytes((0, 0, 0))
+        self.assertTrue(any("border" in f for f in popup_kit.gates(spec, image, (72, 42), original)))
+
+    def test_only_rejects_unknown_ids(self):
+        self.assertEqual(popup_kit.chosen("hardware.mess_rot"), {"hardware.mess_rot"})
+        with self.assertRaises(popup_kit.KitError):
+            popup_kit.chosen("hardware.nope")
 
     def test_ring_mask_is_an_annulus(self):
         w = h = 120

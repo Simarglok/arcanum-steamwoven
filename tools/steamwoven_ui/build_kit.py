@@ -30,8 +30,8 @@ from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
-from tools.steamwoven_ui import popup_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
+from tools.steamwoven_ui import popup_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402

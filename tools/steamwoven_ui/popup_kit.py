@@ -12,7 +12,7 @@ top left, thin dark slot frames, the fill visible through a window, the muted or
 
 * **Shapes** come from the original's own pixels: each pixel of the art is classified (brass, window dark, olive socket, iron, transparent), the classes are smoothed and enlarged with a cubic filter and cut with a steep threshold, so every outline is the original's own
   and sub-pixel smooth at 3.6 times the size (no stair, no halo). The curls of art 822, the tabs of arts 7 and 291 and the sockets are not drawn by hand, they are the original's shapes.
-* **Iron** (the plate): the plate is made new, a dark neutral iron of the strip end sections (HUD top plate, #3259: mean 46, blotch 7, grain 9) from seeded noise (coarse blotches, mid grain, fine grain, a few light specks); the old art's marbled iron is not used. The art's
+* **Iron** (the plate): the plate is made new, a dark neutral iron of the strip end sections (HUD top plate, #3259: mean 46, sd 9) from seeded noise (blotches 6.5, mid grain 3.2, fine grain 4.2) (coarse blotches, mid grain, fine grain, a few light specks); the old art's marbled iron is not used. The art's
   own outer bevel (a light line at the top left, a dark one at the bottom right) is laid by rule.
 * **Brass** (frames, tabs, rings): a height field from the distance to the shape's edge, a short bevel, lit from the top left (a sharp highlight ridge, a warm copper bounce at the bottom right, no smooth gradient, no dark outline) with the tone and the fine
   grain of the kit's approved brass (the HUD socket ring of #3259, unrolled along its circumference). Rivets are domes lit the same way.
@@ -20,7 +20,7 @@ top left, thin dark slot frames, the fill visible through a window, the muted or
 * **Windows**: the original's dark fill, kept (the screen's text shows on it); a stray baked detail inside a window (the blue bar, a sample icon) is not kept.
 * **Sockets, glyphs, small shaded details** (the round buttons' faces and glyphs, the icon medallions, the odometer, the puzzle pieces): the original's pixels of that spot, enlarged with a cubic filter inside the shape's own mask; the ring around is brass by rule.
 
-Everything stays under the ignored `local/steamwoven-ui/`; nothing here holds art. Standard library only (`pngio`, `fit`); ImageMagick for the composite. Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
+Everything stays under the ignored `local/steamwoven-ui/`; nothing here holds art. Standard library only (`pngio`, `fit`); ImageMagick for the composite. Exit 0 = done, 1 = a gate of a master failed, 2 = an input could not be used.
 """
 from __future__ import annotations
 
@@ -52,7 +52,10 @@ GRID = 6
 LABEL_FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"   # the labels of a composite are English (project rule)
 MANIFEST = HERE / "kit.json"
 
-IRON_MEAN = 47.0          # the kit's iron (HUD top plate): mean 46, blotch sd 7, grain sd 9
+IRON_FLOOR = 14.0         # the kit's iron is never darker than 17 (the bevel and the noise are kept above 14)
+IRON_MEAN = 47.0          # the kit's iron (HUD top plate: mean 46, sd 9 in all): blotches sd 6.5, mid grain 3.2, fine grain 4.2
+GRAIN_SHARE = 0.3          # the share of the approved brass's fine-grain sd the plates carry (a big plate at the master scale reads sandy at 1.0)
+GRAIN_DETAIL = 0.204      # the detail sd (pixel minus the mean of its 8 neighbours) of blur121(N(0,1)), measured
 BEVEL = 5.0               # brass bevel width, master px
 EDGE_K = 4.0              # steepness of the shape threshold: transition about 1.8 master px
 LIGHT = (-0.50, -0.62, 0.60)
@@ -63,7 +66,11 @@ BRASS_SOURCES = ("hardware.hud_ring", "hardware.hud_top_clock", "hardware.menu_w
 
 
 class KitError(Exception):
-    pass
+    """An input could not be used (exit 2)."""
+
+
+class GateError(Exception):
+    """A check of a master failed (exit 1)."""
 
 
 @dataclass(frozen=True)
@@ -80,7 +87,6 @@ class Spec:
     emboss: tuple = ()                 # (x0, y0, x1, y1): the original's strong relief (a piece, a sign) inside this box, added to the new iron
     fills: tuple = ()                  # (x0, y0, x1, y1, (r, g, b)): a flat fill (a window that is dark grey)
     force_w: tuple = ()                # boxes made window dark (a baked detail inside a window)
-    force_b: tuple = ()                # boxes made brass
     force_i: tuple = ()                # boxes made iron
     note: str = ""
 
@@ -110,8 +116,8 @@ SPECS: tuple[Spec, ...] = (
     Spec("hardware.privmes_window", "642", "PrivMes_Window", "rot", force_w=((90, 68, 366, 94),), rings=((391.5, 28.4, 11.9),), copies=(face(391.5, 28.4, 11.9),), note="the private message window with a small round socket"),
     Spec("hardware.mp_kickbanrotwindow", "842", "MP_KickBanRotWindow", "rot", rings=((119.0, 63.0, 32.4), (288.0, 63.0, 32.4)), copies=(face(119.0, 63.0, 32.4), face(288.0, 63.0, 32.4)), note="two big round buttons on the plain plate"),
     Spec("hardware.dialoguebox", "822", "DialogueBox", "frame", note="the thin brass window frame with the original's curled corners over an iron plate"),
-    Spec("hardware.multimove_base", "298", "MultiMove_Base", "frame", rings=((176.5, 67.0, 11.8), (365.7, 31.3, 19.3), (365.7, 82.2, 19.3)),
-         copies=(face(176.5, 67.0, 11.8), face(365.7, 31.3, 19.3), face(365.7, 82.2, 19.3), ("rect", 207, 56, 283, 75), ("rect", 283, 55, 295, 76)),
+    Spec("hardware.multimove_base", "298", "MultiMove_Base", "frame", rings=((179.2, 67.4, 12.0), (365.7, 31.3, 19.3), (365.7, 82.2, 19.3)),
+         copies=(face(179.2, 67.4, 12.0), face(365.7, 31.3, 19.3), face(365.7, 82.2, 19.3), ("rect", 207, 56, 283, 75), ("rect", 283, 55, 295, 76)),
          force_i=((70, 42, 155, 90),), wells=((71, 43, 154, 89),), fills=((72, 44, 153, 88, (3, 3, 10)),), note="the dark window, the counter and two round sockets"),
     Spec("hardware.follwercomandmenu", "826", "FollwerComandMenu", "list", rows=((6, 125, 20, 36, 4, 16),), note="the follower command menu: recessed list rows"),
     Spec("hardware.fate_base", "292", "Fate_Base", "list", rows=((6, 218, 20, 36, 6, 16),), note="the fate list: recessed rows; the square openings at the right are transparent as in the original"),
@@ -137,11 +143,6 @@ def note_of(part: str) -> str:
 
 def clamp(v: float, lo: float, hi: float) -> float:
     return lo if v < lo else hi if v > hi else v
-
-
-def smoothstep(lo: float, hi: float, x: float) -> float:
-    t = clamp((x - lo) / (hi - lo), 0.0, 1.0)
-    return t * t * (3 - 2 * t)
 
 
 def lum(r: float, g: float, b: float) -> float:
@@ -302,7 +303,6 @@ def class_map(original: pngio.Image, spec: Spec) -> list[int]:
                         out[y * w + x] = cls
     keep_solid_windows(out, w, h)
     paint(spec.force_w, WIN)
-    paint(spec.force_b, BRASS)
     paint(spec.force_i, I)
     paint(tuple(box(x, y, 3.5) for x, y in spec.rivets), BRASS)   # a rivet's dark pixels are brass under the dome
     return out
@@ -311,7 +311,7 @@ def class_map(original: pngio.Image, spec: Spec) -> list[int]:
 def soft_masks(cmap: list[int], w: int, h: int, size: tuple[int, int]) -> dict[int, list[float]]:
     """A smooth, sub-pixel exact mask per class at the master's size: blur once, enlarge with a cubic filter, cut steeply."""
     out = {}
-    for cls in (WIN, BRASS, OLIVE, HOLE):
+    for cls in (WIN, BRASS, HOLE):
         plane = [1.0 if v == cls else 0.0 for v in cmap]
         if not any(plane):
             out[cls] = [0.0] * (size[0] * size[1])
@@ -432,9 +432,6 @@ def shade_brass(mask: list[float], w: int, h: int, brass: dict, seed: int) -> tu
     sd = box_blur(sd, w, h, 1)
     ln = math.sqrt(sum(c * c for c in LIGHT))
     lx, ly, lz = (c / ln for c in LIGHT)
-    hx, hy, hz = lx, ly, lz + 1.0
-    hn = math.sqrt(hx * hx + hy * hy + hz * hz)
-    hx, hy, hz = hx / hn, hy / hn, hz / hn
     lxy_n = math.hypot(lx, ly)
     lxy = (lx / lxy_n, ly / lxy_n)           # the light's direction in the plane: an outward normal that points at it faces the light
     rng = random.Random(seed)
@@ -442,19 +439,20 @@ def shade_brass(mask: list[float], w: int, h: int, brass: dict, seed: int) -> tu
     grain = blur121([rng.gauss(0.0, 1.0) for _ in range(w * h)], w, h)         # fine metal grain: seeded noise correlated over a pixel, the approved brass's sd
     pits = {rng.randrange(w * h) for _ in range(int(w * h * 0.002))}            # cast brass has a few dark pits
     tone = brass["tone"]
-    grain_k = brass["grain_sd"] * 0.65 / 0.62
+    grain_k = GRAIN_SHARE * brass["grain_sd"] / GRAIN_DETAIL
     tone_l = lum(*tone)
     r_plane = [0.0] * (w * h)
     g_plane = [0.0] * (w * h)
     b_plane = [0.0] * (w * h)
-    for y in range(1, h - 1):
+    for y in range(h):
         base = y * w
-        for x in range(1, w - 1):
+        up, down = max(y - 1, 0) * w, min(y + 1, h - 1) * w
+        for x in range(w):
             i = base + x
             if mask[i] <= 0.002:
                 continue
-            gx = (sd[i + 1] - sd[i - 1]) * 0.5
-            gy = (sd[i + w] - sd[i - w]) * 0.5
+            gx = (sd[base + min(x + 1, w - 1)] - sd[base + max(x - 1, 0)]) * 0.5
+            gy = (sd[down + x] - sd[up + x]) * 0.5
             gl = math.hypot(gx, gy)
             s = sd[i]
             tilt = (1.0 - clamp(s / BEVEL, 0.0, 1.0)) ** 1.25 * (math.pi / 2) if s < BEVEL else 0.0
@@ -529,13 +527,12 @@ def well(lum_plane: list[float], w: int, h: int, rect: tuple[float, float, float
             shadow = max(math.exp(-dt / 3.4), math.exp(-dl / 3.4)) * 0.45 * depth
             light = max(math.exp(-db / 1.6), math.exp(-dr / 1.6)) * 20.0 * depth
             outline = math.exp(-min(dt, dl, db, dr) / 1.1) * 0.35
-            v = v * (1 - shadow) * (1 - outline) + light * smoothstep(0.0, 1.0, min(db, dr) + 0.3) * 0
-            v += light * (1 if min(db, dr) < 3.0 else 0)
+            v = v * (1 - shadow) * (1 - outline) + light
             lum_plane[i] = lum_plane[i] * (1 - inside) + v * inside
 
 
-def emboss(lum_plane: list[float], original: pngio.Image, rect: tuple, size: tuple[int, int]) -> None:
-    """The original's strong relief inside a box (a puzzle piece, a sign): its luminance minus its local mean, small speckle cut away, enlarged and added to the new iron."""
+def relief(original: pngio.Image, size: tuple[int, int]) -> list[float]:
+    """The original's strong relief (a puzzle piece, a sign) at the master's size: its luminance minus its local mean, small speckle cut away, enlarged with a cubic filter."""
     ow, oh = original.w, original.h
     plane = [lum(*original.pixel(x, y)[:3]) for y in range(oh) for x in range(ow)]
     low = box_blur(plane, ow, oh, 4)
@@ -543,8 +540,12 @@ def emboss(lum_plane: list[float], original: pngio.Image, rect: tuple, size: tup
     for a, b in zip(plane, low):
         d = a - b
         detail.append(math.copysign(max(0.0, abs(d) - 9.0), d))
-    up = fit.resample_planes([detail], ow, (0, 0, ow, oh), size[0], size[1], "cubic")[0]
-    kx, ky = size[0] / ow, size[1] / oh
+    return list(fit.resample_planes([detail], ow, (0, 0, ow, oh), size[0], size[1], "cubic")[0])
+
+
+def emboss(lum_plane: list[float], up: list[float], original: pngio.Image, rect: tuple, size: tuple[int, int]) -> None:
+    """The relief inside a box, added to the new iron (feathered 6 master px at the box's edge)."""
+    kx, ky = size[0] / original.w, size[1] / original.h
     x0, y0, x1, y1 = rect
     for y in range(max(0, int(y0 * ky)), min(size[1], int(y1 * ky))):
         for x in range(max(0, int(x0 * kx)), min(size[0], int(x1 * kx))):
@@ -574,7 +575,7 @@ def bevel(lum_plane: list[float], w: int, h: int) -> None:
                 v += 34.0 * (1 - dtl / 5.0) ** 1.5
             if dbr < 5:
                 v -= 20.0 * (1 - dbr / 5.0) ** 1.5
-            lum_plane[i] = v
+            lum_plane[i] = max(v, IRON_FLOOR)
 
 
 def copy_region(canvas: tuple, original: pngio.Image, shape: tuple, size: tuple[int, int]) -> None:
@@ -588,6 +589,8 @@ def copy_region(canvas: tuple, original: pngio.Image, shape: tuple, size: tuple[
         bbox = (x0, y0, x1, y1)
     ox0, oy0 = max(0, int(math.floor(bbox[0]))), max(0, int(math.floor(bbox[1])))
     ox1, oy1 = min(original.w, int(math.ceil(bbox[2]))), min(original.h, int(math.ceil(bbox[3])))
+    if ox1 <= ox0 or oy1 <= oy0:
+        raise KitError(f"a copied shape {shape} lies outside the art")
     mx0, my0 = int(round(ox0 * kx)), int(round(oy0 * ky))
     mx1, my1 = int(round(ox1 * kx)), int(round(oy1 * ky))
     sub = fit.resample_image(original, (ox0, oy0, ox1 - ox0, oy1 - oy0), mx1 - mx0, my1 - my0)
@@ -596,13 +599,14 @@ def copy_region(canvas: tuple, original: pngio.Image, shape: tuple, size: tuple[
     for y in range(sub.h):
         for x in range(sub.w):
             px = sub.pixel(x, y)
-            ox, oy = (mx0 + x + 0.5) / kx, (my0 + y + 0.5) / ky
+            ox, oy = ox0 + (x + 0.5) * (ox1 - ox0) / sub.w, oy0 + (y + 0.5) * (oy1 - oy0) / sub.h
             if shape[0] == "ellipse":
                 e = math.hypot((ox - cx) / rx, (oy - cy) / ry)
                 cover = clamp((1.0 - e) * min(rx, ry) * ((kx + ky) / 2) + 0.5, 0.0, 1.0)
             else:
                 cover = 1.0
-            if cover <= 0 or px[3] == 0:
+            cover *= px[3] / 255.0
+            if cover <= 0:
                 continue
             i = (my0 + y) * w + (mx0 + x)
             for plane, v in zip((r_p, g_p, b_p), px[:3]):
@@ -634,11 +638,13 @@ def render(spec: Spec, original: pngio.Image, size: tuple[int, int], brass: dict
     for x0, x1, y0, pitch, count, height in spec.rows:
         for k in range(count):
             well(lum_plane, w, h, (x0 * kx, (y0 + k * pitch) * ky, x1 * kx, (y0 + k * pitch + height) * ky), 1.15)
-    for box_ in spec.emboss:
-        emboss(lum_plane, original, box_, size)
+    if spec.emboss:
+        up = relief(original, size)
+        for box_ in spec.emboss:
+            emboss(lum_plane, up, original, box_, size)
     hole_edge(lum_plane, masks[HOLE], w, h)
     bevel(lum_plane, w, h)
-    r_p = [v * 1.0 for v in lum_plane]
+    r_p = list(lum_plane)
     g_p = [v * 0.985 for v in lum_plane]
     b_p = [v * 0.99 for v in lum_plane]
     canvas = (r_p, g_p, b_p)
@@ -664,12 +670,11 @@ def render(spec: Spec, original: pngio.Image, size: tuple[int, int], brass: dict
             r_p[i] = r_p[i] * (1 - m) + win[0] * m
             g_p[i] = g_p[i] * (1 - m) + win[1] * m
             b_p[i] = b_p[i] * (1 - m) + win[2] * m
-    for x0, y0, x1, y1, colour in ((f[0], f[1], f[2], f[3], f[4]) for f in spec.fills):
+    for x0, y0, x1, y1, colour in spec.fills:
         for y in range(int(y0 * ky), int(y1 * ky)):
             for x in range(int(x0 * kx), int(x1 * kx)):
                 i = y * w + x
                 r_p[i], g_p[i], b_p[i] = colour
-    brass_planes = None
     if any(bm):
         br, bg, bb = shade_brass(bm, w, h, brass, seed + 1)
         for i, m in enumerate(bm):
@@ -677,7 +682,6 @@ def render(spec: Spec, original: pngio.Image, size: tuple[int, int], brass: dict
                 r_p[i] = r_p[i] * (1 - m) + br[i] * m
                 g_p[i] = g_p[i] * (1 - m) + bg[i] * m
                 b_p[i] = b_p[i] * (1 - m) + bb[i] * m
-        brass_planes = canvas
     for cx, cy in spec.rivets:
         rivet_dome(canvas, cx * kx, cy * ky, 3.1 * (kx + ky) / 2, w, h, brass["tone"])
     for shape in spec.copies:
@@ -701,24 +705,35 @@ def render(spec: Spec, original: pngio.Image, size: tuple[int, int], brass: dict
 # --- the gates and the records ---------------------------------------------------------------------------------------------------------
 
 def gates(spec: Spec, image: pngio.Image, size: tuple[int, int], original: pngio.Image) -> list[str]:
-    """Size on the manifest's and the 6 px grid; the alpha is the original's (transparent where the original is, opaque elsewhere); no magenta fringe; the edge halo gate of fit.py on the translucent band."""
+    """Size on the manifest's and the 6 px grid; the transparent places are the original's (at most 2 % of the pixels differ from the original's holes, enlarged as blocks); at most 1.2 % translucent
+    pixels; no magenta fringe and no black border pixel (an unshaded edge); the edge halo gate of `fit.py` on the translucent band."""
     failures = []
-    if (image.w, image.h) != size:
-        failures.append(f"size {image.w}x{image.h} is not the manifest's {size[0]}x{size[1]}")
+    w, h = image.w, image.h
+    if (w, h) != size:
+        failures.append(f"size {w}x{h} is not the manifest's {size[0]}x{size[1]}")
     if size[0] % GRID or size[1] % GRID:
         failures.append(f"size {size[0]}x{size[1]} is not on the {GRID} px grid")
-    w, h = image.w, image.h
-    hole_share = sum(1 for p in range(original.w * original.h) if original.data[p * 4 + 3] == 0) / (original.w * original.h)
-    clear = sum(1 for a in image.data[3::4] if a == 0) / (w * h)
-    if abs(clear - hole_share) > 0.01 + 0.15 * hole_share:
-        failures.append(f"transparent share {clear:.3f} differs from the original's {hole_share:.3f}")
+    mismatch = 0
+    for y in range(h):
+        oy = min(original.h - 1, y * original.h // h)
+        for x in range(w):
+            hole = original.pixel(min(original.w - 1, x * original.w // w), oy)[3] == 0
+            if hole != (image.data[(y * w + x) * 4 + 3] == 0):
+                mismatch += 1
+    if mismatch > 0.02 * w * h:
+        failures.append(f"{mismatch} pixels where the transparent places differ from the original's (more than 2 %)")
+    hole_share = sum(1 for p in range(original.w * original.h) if original.data[p * 4 + 3] == 0)
     partial = sum(1 for a in image.data[3::4] if 0 < a < 255)
     if partial > 0.012 * w * h:
         failures.append(f"{partial} translucent pixels (more than 1.2 % of the art): the plate must be opaque")
     magenta = sum(1 for i in range(0, w * h * 4, 4) if image.data[i + 3] and image.data[i] > 170 and image.data[i + 2] > 170 and image.data[i + 1] < 90)
     if magenta:
         failures.append(f"{magenta} magenta pixels (a keyed fringe)")
-    if hole_share > 0:
+    border = [(x, y) for y in (0, h - 1) for x in range(w)] + [(x, y) for x in (0, w - 1) for y in range(1, h - 1)]
+    black = sum(1 for x, y in border if image.pixel(x, y)[3] == 255 and sum(image.pixel(x, y)[:3]) < 12)
+    if black:
+        failures.append(f"{black} black pixels on the art's border (an edge that was not shaded)")
+    if hole_share:
         halo = fit.edge_halo(image)
         if halo["mean_de"] > fit.HALO_MEAN_DE or halo["p95_de"] > fit.HALO_P95_DE:
             failures.append(f"edge halo mean {halo['mean_de']:.1f} p95 {halo['p95_de']:.1f} over the limits")
@@ -732,7 +747,16 @@ def provenance_record(spec: Spec, frames: Path, extra: dict, size: tuple[int, in
             "image_size": list(size), "image_sha256": hashlib.sha256(blob).hexdigest(), "run_by": "agent"}
 
 
-def cmd_plan(args: argparse.Namespace) -> int:
+def chosen(text: str | None) -> set[str]:
+    """The ids of `--only` (all parts when empty); an id that is not a part of the batch is an error."""
+    only = {x for x in (text or "").split(",") if x}
+    unknown = sorted(only - set(BY_ID))
+    if unknown:
+        raise KitError(f"not parts of this batch: {', '.join(unknown)}")
+    return only
+
+
+def cmd_plan() -> int:
     manifest = load_manifest()
     rows = {r["id"]: r for r in manifest["parts"]}
     for spec in SPECS:
@@ -748,7 +772,7 @@ def cmd_rule(args: argparse.Namespace) -> int:
     frames = args.frames or local / "census" / "frames"
     masters = local / "masters"
     manifest = load_manifest()
-    only = {x for x in (args.only or "").split(",") if x}
+    only = chosen(args.only)
     brass = brass_material(masters)
     done = 0
     for spec in SPECS:
@@ -759,7 +783,7 @@ def cmd_rule(args: argparse.Namespace) -> int:
         image, extra = render(spec, original, size, brass)
         failures = gates(spec, image, size, original)
         if failures:
-            raise KitError(f"{spec.ident}: " + "; ".join(failures))
+            raise GateError(f"{spec.ident}: " + "; ".join(failures))
         blob = pngio.encode(image)
         print(f"{spec.ident}: {size[0]}x{size[1]} ({spec.kind}) {hashlib.sha256(blob).hexdigest()[:12]}")
         if not args.dry_run:
@@ -776,7 +800,11 @@ def cmd_rule(args: argparse.Namespace) -> int:
 # --- the composite -------------------------------------------------------------------------------------------------------------------
 
 def run(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except (subprocess.CalledProcessError, OSError) as exc:
+        detail = exc.stderr.decode("utf-8", "replace")[:300] if isinstance(exc, subprocess.CalledProcessError) and exc.stderr else str(exc)
+        raise KitError(f"{cmd[0]} failed: {detail}") from exc
 
 
 def cmd_sheet(args: argparse.Namespace) -> int:
@@ -786,7 +814,11 @@ def cmd_sheet(args: argparse.Namespace) -> int:
     masters = local / "masters"
     if shutil.which("magick") is None:
         raise KitError("ImageMagick (magick) is needed for the composite")
-    only = {x for x in (args.only or "").split(",") if x}
+    only = chosen(args.only)
+    if args.zoom <= 0:
+        raise KitError("--zoom must be above 0")
+    if not Path(LABEL_FONT).is_file():
+        raise KitError(f"the label font {LABEL_FONT} is missing")
     work = Path(tempfile.mkdtemp(prefix="popup-sheet-"))
     try:
         cells = []
@@ -863,12 +895,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.cmd == "plan":
-            return cmd_plan(args)
+            return cmd_plan()
         if args.cmd == "rule":
             return cmd_rule(args)
         if args.cmd == "sheet":
             return cmd_sheet(args)
         return self_test()
+    except GateError as exc:
+        print(f"POPUP KIT FAIL: {exc}", file=sys.stderr)
+        return 1
     except (KitError, pngio.PngError) as exc:
         print(f"POPUP KIT FAIL: {exc}", file=sys.stderr)
         return 2
