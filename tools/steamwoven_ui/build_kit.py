@@ -8,7 +8,7 @@ Rules (TRD SWI-KIT-1..3, SWI-BDR-8, SWI-LAY-7):
   `source_arts` lists every number (SWI-KIT-3). The 25 files without a message number are named `file:NAME`.
 - Master size = the original unit size x 3.6 (the 2880 x 2160 composition is 800 x 600 units), snapped to the 6 px grid with halves up, so
   800 x 400 is 2880 x 1440, 358 x 400 is 1290 x 1440 (SWI-BDR-5) and the strips 41 and 159 units are 150 and 570 px: the strips' heights are the
-  open question of the TRD (`size_basis` "provisional", fixed by #2927).
+  grid choice 150 / 570, fixed by #2927 (ARC-UI-2927; the units 147.6 / 572.4 are off the grid, so only the grid heights bake to the four steps exactly).
 - Parts no original art feeds are rows of their own with an open size (`size_basis` "open", fixed by their batch issue): the four end caps, the
   materials of the material sheet, the grid layers painted into arts 221 and 365 today, and the corner and rivet decor.
 - No pixels, no full-width board, no outward backdrop and no gap wood (SWI-BDR-8): none of them is a part.
@@ -84,6 +84,8 @@ def new_part(ident: str, kind: str, anchor: str, used_by: list[str], family: str
             "note": note}
 
 
+CAP_WIDTH, BAR_WIDTH = 72, 24  # ARC-UI-2927: an end cap's master width and its brass bar (the rest is the soft shadow)
+STRIP_HEIGHT = {"top": 150, "bottom": 570}
 FIXTURE_BATCH = {"G05": "BD-B", "G15": "BD-F"}  # the window family of a fixture's first window; every other fixture is the inventory family's (BD-A)
 
 
@@ -101,7 +103,7 @@ def new_parts() -> list[dict]:
     parts = [
         new_part(f"cap.{strip}_strip_{side}", "cap", f"{strip}-strip-{side}-end", [window], "BOARD", "B-BOARD",
                  f"end cap of the {strip} HUD strip's {side} end: a brass edge and a soft shadow on the world (SWI-LAY-12); no original art; "
-                 "size fixed by #2927")
+                 f"size {CAP_WIDTH} x {STRIP_HEIGHT[strip]} fixed by #2927 (a {BAR_WIDTH} px brass bar at the inner edge, the shadow outward)", master=True)
         for strip, window in (("top", "H01"), ("bottom", "H02")) for side in ("left", "right")]
     for material in ("wood", "dark_wood", "brass", "iron", "paper", "parchment"):
         parts.append(new_part(f"material.{material}", "material", "none", [], None, None,
@@ -157,8 +159,8 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if notes:
             part["note"] = notes[0]
         if lead.kind == "board":
-            part["size_basis"] = "provisional"
-            part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4): open question of the TRD, fixed by #2927"
+            part["status"], part["provenance"] = "master", f"fit:{part['id']}"
+            part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"
         parts.append(part)
     parts.extend(new_parts())
     by_art = {s: p for p in parts for s in p["source_arts"]}

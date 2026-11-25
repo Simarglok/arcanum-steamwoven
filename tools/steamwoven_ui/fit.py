@@ -1,7 +1,7 @@
 """ARC-DEV-2459: the fit tool of the Steamwoven kit (TRD SWI-GEN-4, SWI-KIT-2, SWI-KIT-4, SWI-VER-3): a generated image -> the kit master of a manifest part.
 
     python3 -B tools/steamwoven_ui/fit.py fit PART_ID (--batch B --prompt ID | --source FILE [--provenance FILE | --no-provenance]) [--size WxH] [--crop X,Y,W,H]
-                                             [--key none|border|#RRGGBB] [--material wood,brass] [--lock-strength S] [--force-lock] [--min-speck N]
+                                             [--key none|border|#RRGGBB] [--material wood,brass] [--lock-strength S] [--force-lock] [--min-speck N] [--soft-shadow]
                                              [--date D] [--local-root DIR] [--masters DIR] [--replace] [--dry-run] [--json]
     python3 -B tools/steamwoven_ui/fit.py self-test
 
@@ -347,22 +347,29 @@ def decontaminate(image: pngio.Image, opaque_min: int, radius: int, keep_de: flo
     return changed
 
 
-def edge_halo(image: pngio.Image, radius: int = EDGE_RADIUS) -> dict:
-    """SWI-VER-3: the colour difference of the semi-transparent edge band to the nearest opaque interior (see the module text)."""
+def edge_halo(image: pngio.Image, radius: int = EDGE_RADIUS, soft_shadow: bool = False) -> dict:
+    """SWI-VER-3: the colour difference of the semi-transparent edge band to the nearest opaque interior (see the module text).
+
+    `soft_shadow` (ARC-UI-2927, `--soft-shadow`): the part carries a designed soft shadow (an end cap): a semi-transparent pixel with no opaque pixel in reach is the
+    shadow, counted as `shadow_pixels`, not as an orphan; the pixels that touch the art are measured as always."""
     data, w, h = image.data, image.w, image.h
     diffs: list[float] = []
     orphans = 0
+    shadow = 0
     for i, a in enumerate(data[3::4]):
         if a == 0 or a == 255:
             continue
         y, x = divmod(i, w)
         inner = nearest_opaque(data, w, h, x, y, 255, radius)
         if inner is None:
-            orphans += 1
+            if soft_shadow:
+                shadow += 1
+            else:
+                orphans += 1
             continue
         o = i * 4
         diffs.append(delta_e(lab_of((data[o], data[o + 1], data[o + 2])), lab_of(inner)))
-    return {"band_pixels": len(diffs) + orphans, "measured": len(diffs), "orphans": orphans,
+    return {"band_pixels": len(diffs) + orphans, "measured": len(diffs), "orphans": orphans, "shadow_pixels": shadow,
             "mean_de": round(sum(diffs) / len(diffs), 3) if diffs else 0.0, "p95_de": round(percentile(diffs, 0.95), 3),
             "max_de": round(max(diffs), 3) if diffs else 0.0}
 
@@ -688,7 +695,8 @@ def hf_check(before: dict, after: dict) -> dict:
 # --- the fit -----------------------------------------------------------------------------------------------------------------------------
 
 def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, int, int] | None = None, key: str = "none",
-              reference: dict | None = None, strength: float = 1.0, force_lock: bool = False, min_speck: int = MIN_SPECK) -> tuple[pngio.Image, dict]:
+              reference: dict | None = None, strength: float = 1.0, force_lock: bool = False, min_speck: int = MIN_SPECK,
+              soft_shadow: bool = False) -> tuple[pngio.Image, dict]:
     """The whole pipeline on pixels; returns the master image and the report (no file is touched). Raises FitError; the gates are checked by `gates`."""
     report: dict = {}
     rect = source_rect(source.w, source.h, want, crop)
@@ -712,9 +720,9 @@ def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, 
         before = hf_energy(master)
         report["lock"] = colour_lock(master, reference, strength, force_lock)
         report["hf"] = hf_check(before, hf_energy(master))
-    report["halo"] = edge_halo(master)  # what the pipeline made: the gate (the safety net below can only make the final edge better)
+    report["halo"] = edge_halo(master, soft_shadow=soft_shadow)  # what the pipeline made: the gate (the safety net below can only make the final edge better)
     report["master_decontaminated"] = decontaminate(master, 255, EDGE_RADIUS)
-    report["halo_final"] = edge_halo(master)
+    report["halo_final"] = edge_halo(master, soft_shadow=soft_shadow)
     report["opaque_share"] = round(sum(1 for a in master.data[3::4] if a == 255) / (master.w * master.h), 5)
     report["size"] = [master.w, master.h]
     return master, report
@@ -797,7 +805,7 @@ def run_fit(args: argparse.Namespace) -> dict:
         raise FitError(f"--lock-strength {args.lock_strength} must be between 0 and 1")
     materials = [m for m in args.material.split(",") if m] if args.material else []
     reference = sheet_reference(local_root, materials) if materials else None
-    master, report = fit_image(source, want, crop, args.key, reference, args.lock_strength, args.force_lock, args.min_speck)  # type: ignore[arg-type]
+    master, report = fit_image(source, want, crop, args.key, reference, args.lock_strength, args.force_lock, args.min_speck, args.soft_shadow)  # type: ignore[arg-type]
     failures = gates(report, want)
     masters = Path(args.masters) if args.masters else local_root / "masters"
     target = masters / f"{part['id']}.png"
@@ -890,6 +898,7 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--material")
     f.add_argument("--lock-strength", type=float, default=1.0)
     f.add_argument("--force-lock", action="store_true")
+    f.add_argument("--soft-shadow", action="store_true", help="the part carries a designed soft shadow (an end cap): shadow pixels away from the art are not orphans")
     f.add_argument("--min-speck", type=int, default=MIN_SPECK)
     f.add_argument("--date")
     f.add_argument("--local-root")

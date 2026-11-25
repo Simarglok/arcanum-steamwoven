@@ -184,6 +184,20 @@ class AlphaTest(unittest.TestCase):
         _, report = fit.fit_image(source, (60, 60))
         self.assertTrue(any("no opaque pixel" in f for f in fit.gates(report, (60, 60))))
 
+    def test_soft_shadow_is_not_an_orphan_but_the_art_edge_is_still_measured(self) -> None:
+        source = solid(60, 60, (0, 0, 0, 0))   # an opaque bar with a wide soft shadow beside it (an end cap)
+        for y in range(10, 50):
+            for x in range(40, 60):
+                source.data[(y * 60 + x) * 4:(y * 60 + x) * 4 + 4] = bytes((180, 140, 60, 255))
+            for x in range(0, 40):
+                source.data[(y * 60 + x) * 4:(y * 60 + x) * 4 + 4] = bytes((10, 7, 5, round(140 * x / 40)))
+        _, plain = fit.fit_image(source, (60, 60))
+        self.assertTrue(any("no opaque pixel" in f for f in fit.gates(plain, (60, 60))))
+        _, soft = fit.fit_image(source, (60, 60), soft_shadow=True)
+        self.assertEqual(fit.gates(soft, (60, 60)), [])
+        self.assertGreater(soft["halo"]["shadow_pixels"], 0)
+        self.assertEqual(soft["halo"]["orphans"], 0)
+
     def test_opaque_source_stays_opaque(self) -> None:
         master, report = fit.fit_image(textured(60, 45, (100, 80, 60)), (120, 90))
         self.assertEqual(report["alpha"], "opaque")

@@ -41,6 +41,17 @@
         "mat-sheet"
       ],
       "after": "style-anchors-contexts approved by the owner"
+    },
+    "B-BOARD": {
+      "prompts": [
+        "board-inttop",
+        "board-intbotom",
+        "board-charcreatetopbar",
+        "board-charcreatebottombar",
+        "cap-plain",
+        "cap-rivets"
+      ],
+      "after": null
     }
   },
   "prompts": [
@@ -435,6 +446,108 @@
       "screen": null,
       "batch": null,
       "notes": ""
+    },
+    {
+      "id": "board-inttop",
+      "group": "part",
+      "kind": "board",
+      "title": "Top strip of the play screen (185 IntTop)",
+      "file": "board-inttop.txt",
+      "size": [
+        2880,
+        144
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BOARD",
+      "notes": "method A, asked at 20:1 (2880 x 144) because the generator draws the strip at about 20:1; the band is resized back to the master 2880 x 150 (ARC-UI-2927)"
+    },
+    {
+      "id": "board-intbotom",
+      "group": "part",
+      "kind": "board",
+      "title": "Bottom strip of the play screen (184 IntBotom)",
+      "file": "board-intbotom.txt",
+      "size": [
+        2880,
+        570
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BOARD",
+      "notes": "method A, one item per strip at the generator's size, band crop to the zone (ARC-UI-2927); the strip heights are the grid ones, 150 / 570"
+    },
+    {
+      "id": "board-charcreatetopbar",
+      "group": "part",
+      "kind": "board",
+      "title": "Top strip of the two-strip menus (336 CharCreateTopBar)",
+      "file": "board-charcreatetopbar.txt",
+      "size": [
+        2880,
+        150
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BOARD",
+      "notes": "method A, one item per strip at the generator's size, band crop to the zone (ARC-UI-2927); the strip heights are the grid ones, 150 / 570"
+    },
+    {
+      "id": "board-charcreatebottombar",
+      "group": "part",
+      "kind": "board",
+      "title": "Bottom strip of the two-strip menus (335 CharCreateBottomBar)",
+      "file": "board-charcreatebottombar.txt",
+      "size": [
+        2880,
+        570
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BOARD",
+      "notes": "method A, one item per strip at the generator's size, band crop to the zone (ARC-UI-2927); the strip heights are the grid ones, 150 / 570"
+    },
+    {
+      "id": "cap-plain",
+      "group": "part",
+      "kind": "cap",
+      "title": "End-cap bars on a flat ground (plain): the bottom and the top strip's left cap",
+      "file": "cap-plain.txt",
+      "size": [
+        1560,
+        1170
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BOARD",
+      "notes": "sheet of two bars; keyed, scaled to 24 x 570 and 24 x 150 and given a soft shadow by board_build.py caps (cap masters 72 wide); the right cap is the mirror"
+    },
+    {
+      "id": "cap-rivets",
+      "group": "part",
+      "kind": "cap",
+      "title": "End-cap bars on a flat ground (rivets): the bottom and the top strip's left cap",
+      "file": "cap-rivets.txt",
+      "size": [
+        1560,
+        1170
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-BOARD",
+      "notes": "sheet of two bars; keyed, scaled to 24 x 570 and 24 x 150 and given a soft shadow by board_build.py caps (cap masters 72 wide); the right cap is the mirror"
     }
   ]
 }
