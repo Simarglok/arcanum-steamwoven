@@ -285,8 +285,15 @@ class GlossTests(unittest.TestCase):
             self.assertTrue(record["halo_gate"]["relaxed"])
             self.assertEqual(record["halo_gate"]["limits"], {"halo_mean_de": 15.0})
             with redirect_stdout(io.StringIO()):
-                (fitted / "plate.skills_button.png").unlink()
+                self.assertEqual(rk.main(["gloss", "--local-root", str(local)]), 0)  # a second run keeps the fit's own master entry
+            self.assertEqual(json.loads((records / "plate.combat_button.json").read_text())["fit_master"], {"sha256": "old"})
+            before = bk.sha256_file(local / "masters" / "plate.combat_button.png")
+            (local / "masters" / "plate.combat_button.png").unlink()
+            (fitted / "plate.skills_button.png").unlink()
+            with redirect_stdout(io.StringIO()):
                 self.assertEqual(rk.main(["gloss", "--local-root", str(local)]), 2)  # a missing fitted master is refused
+            self.assertFalse((local / "masters" / "plate.combat_button.png").exists())  # and nothing is written before every source is checked
+            self.assertTrue(before)
 
     def test_a_silhouette_mask_takes_the_outline_from_the_mask_and_drops_a_dark_speck_outside_it(self):
         base = disc()

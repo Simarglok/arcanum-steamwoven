@@ -401,15 +401,24 @@ def cmd_gloss(args: argparse.Namespace) -> int:
     fitted = args.fitted_dir or local / "work" / "B-BUTTONS" / "fitted"
     out = args.out or local / "masters"
     layers = gloss_layers(frames)
-    for name, family, pixels in [(b.name, "round", ROUND_MASTER) for b in ROUND_BUTTONS] + [(BALL.name, "ball", BALL_MASTER)]:
+    for family, layer in layers.items():
+        if not any(layer.data[3::4]):
+            raise RoundError(f"the {family} frames hold no lighter arc on their upper-left edge: nothing to lay")
+    plan = []
+    for name, family, pixels in [(b.name, "round", ROUND_MASTER) for b in ROUND_BUTTONS] + [(BALL.name, "ball", BALL_MASTER)]:  # every source is checked before anything is written
         source = fitted / f"plate.{name}.png"
         if not source.is_file():
             raise RoundError(f"no fitted master {source} (run fit.py fit plate.{name} --masters {fitted} first)")
         plate = pngio.read(source)
         if (plate.w, plate.h) != (pixels, pixels):
             raise RoundError(f"{source}: {plate.w} x {plate.h}, the plate master is {pixels} x {pixels}")
-        final = button_kit.composite(plate, layers[family])
-        covered = sum(1 for i in range(3, len(layers[family].data), 4) if layers[family].data[i] > 0) / (pixels * pixels)
+        plan.append((name, family, pixels, source, plate))
+    for name, family, pixels, source, plate in plan:
+        layer = Image(pixels, pixels, bytearray(layers[family].data))
+        for i in range(3, len(layer.data), 4):  # the arc never leaves the plate's silhouette
+            layer.data[i] = layer.data[i] * plate.data[i] // 255
+        final = button_kit.composite(plate, layer)
+        covered = sum(1 for i in range(3, len(layer.data), 4) if layer.data[i] > 0) / (pixels * pixels)
         print(f"plate.{name:20s} gloss covers {covered * 100:4.1f} % of the canvas")
         if args.dry_run:
             continue
@@ -419,7 +428,7 @@ def cmd_gloss(args: argparse.Namespace) -> int:
         record_path = local / "provenance" / "fit" / f"plate.{name}.json"
         if args.out is None and record_path.is_file():  # an alternative output leaves the kit's records alone
             record = json.loads(record_path.read_text(encoding="utf-8"))
-            record.setdefault("fit_master", record.get("master"))
+            record.setdefault("fit_master", record.get("master"))  # the fit's own master, kept through a second run
             record["master"] = {"file": str(target), "size": [pixels, pixels], "sha256": button_kit.sha256_file(target)}
             record["gloss"] = {"rule": "round_kit gloss", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "fitted_master_sha256": button_kit.sha256_file(source),
                                "min_lighter_de": GLOSS_MIN_LIGHTER, "bin_degrees": GLOSS_BIN, "sigma_cells": list(GLOSS_SIGMA), "sources": [f"{b.folder}/f0" for b in ROUND_BUTTONS] if family == "round" else [f"{BALL.folder}/f0"]}
@@ -562,7 +571,7 @@ def main(argv: list[str] | None = None) -> int:
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
         return {"refs": cmd_refs, "gloss": cmd_gloss, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
-    except (RoundError, button_kit.ButtonError, pngio.PngError, OSError, subprocess.CalledProcessError) as error:
+    except (RoundError, button_kit.ButtonError, glyph_cells.CellsError, pngio.PngError, OSError, subprocess.CalledProcessError) as error:
         print(f"ROUND KIT FAIL: {error}")
         return 2
 

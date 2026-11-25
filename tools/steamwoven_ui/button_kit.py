@@ -319,6 +319,8 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
                 halo_cells.add(i)
     else:
         solid = [d >= SOLID_DE and may_be_symbol[i] and shares[i] is None for i, d in enumerate(dist)]
+        if silhouette_mask is not None and len(silhouette_mask) != n:
+            raise ButtonError(f"silhouette_mask has {len(silhouette_mask)} cells, the frame {n}")
         if silhouette_mask is not None:  # the outline comes from the mask: its cells are symbol (in the frame's own colours, dull or not); a cell the mask leaves out stays symbol only when it is not darker than the base (a relief band), a dark speck outside is dropped
             solid = [(silhouette_mask[i] and may_be_symbol[i] and shares[i] is None) or (solid[i] and lab(*p_cells[i])[0] >= lab(*b_cells[i])[0] - SPECK_DL) for i in range(n)]
     # the colour of a cell: its own when solid; a cell the smooth outline grows into takes the mean of the solid cells around it (within two cells)
