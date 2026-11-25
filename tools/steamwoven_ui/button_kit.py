@@ -64,6 +64,12 @@ RIM = 2                       # `crisp`: the outermost two cell rows and columns
 SOLID_DE = 9.0                # `crisp`: a cell this far from its base is part of the symbol (its own colour, a sharp curve); closer ones (a glow, a darkening) are the soft layer under it
 CRISP_SIGMA = 0.40            # `crisp`: the Gaussian of a class mask, in cells: small enough that a hole or a dot of one original pixel survives (a 1-cell hole blurs to 0.38 < 0.5, a 1-cell dot to 0.62)
 GLOW_SIGMA = 0.90             # `crisp`: the Gaussian of the soft layer, in cells
+HALO_MIN_CONTRAST = 60.0      # `crisp` halo: only a glyph layer whose 90th-percentile contrast is this high (the lit symbols, the globe) has a soft edge to fall off
+CORE_SHARE = 0.5              # `crisp` halo: the core starts at this share of the layer's 90th-percentile contrast, at most `CORE_DE`
+CORE_DE = 45.0                # `crisp` halo: a cell this far from its base is the symbol's core; the cells between SOLID_DE and CORE_DE OUTSIDE the core (the original's soft edge, the glow of a lit symbol) fade out smoothly
+DARK_DL = 8.0                 # `crisp` halo: a cell that differs by SOLID_DE or more AND is this much darker (CIE L) than its base is the symbol's dark outline, a core cell (a halo only ever lightens or tints)
+HALO_REACH = 3                # `crisp` halo: only cells within this many cells of the core are the halo
+HALO_SIGMA = 1.10             # `crisp` halo: the Gaussian of the halo layer, in cells (wider than the glow of an overlay: no plateau, no visible rim)
 EDGE_HALF = 0.14              # `crisp`: half width of the silhouette's anti-aliasing step on the blurred mask (about one output pixel at the master scale)
 SOLID = 0.85                  # alpha from which a cell counts as solid for the sharpened silhouette
 EDGE = (0.30, 0.70)           # the soft threshold of the blurred solid mask
@@ -242,16 +248,51 @@ def render_layer(colours: list[tuple[int, int, int]], alphas: list[float], look:
     return out
 
 
-def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixels: int = MASTER) -> Image:
+def outside_cells(core: list[bool]) -> list[bool]:
+    """The cells a 4-connected walk from the frame's border reaches without crossing a core cell: what lies OUTSIDE the symbol (a closed outline keeps its inside out of the set)."""
+    out = [False] * (UNITS * UNITS)
+    stack = [i for i in range(UNITS * UNITS) if (i % UNITS in (0, UNITS - 1) or i // UNITS in (0, UNITS - 1)) and not core[i]]
+    for i in stack:
+        out[i] = True
+    while stack:
+        i = stack.pop()
+        x, y = i % UNITS, i // UNITS
+        for xx, yy in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if 0 <= xx < UNITS and 0 <= yy < UNITS and not out[yy * UNITS + xx] and not core[yy * UNITS + xx]:
+                out[yy * UNITS + xx] = True
+                stack.append(yy * UNITS + xx)
+    return out
+
+
+def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixels: int = MASTER, halo: bool = False) -> Image:
     """The pilot's symbol rule (#3058, v4, `glyph_cells.py`) for a layer of `frame` over `base`: the SYMBOL is the cells that differ from the base by `SOLID_DE` or more. Their colours stay the original's flat
     cells (so every inner line, dot, fold and continent of the original survives as it is drawn); the OUTLINE is a smooth sharp curve: a small Gaussian of the symbol's mask and a one-pixel soft threshold
     (no stair of original pixels, no blur; a hole or a dot of one original pixel survives: a 1-cell hole blurs to 0.38 < 0.5). With `glow` the cells that differ a little (the glow of a lit symbol, the darkening of
-    a pressed inset) become a separate soft layer UNDER the symbol (a wide Gaussian, the colour that lays the base's colour back to the frame's); without it they are dropped (the idle symbol has no glow)."""
+    a pressed inset) become a separate soft layer UNDER the symbol (a wide Gaussian, the colour that lays the base's colour back to the frame's); without it they are dropped (the idle symbol has no glow).
+    With `halo` (the glyph layers of high contrast) the symbol is only the CORE (`CORE_DE` or more, plus whatever the core encloses) and the cells outside it within `HALO_REACH` cells that differ by more than `DEAD_DE` are a soft layer
+    under it (alpha = the distance from the base over the core threshold, `CORE_SHARE` of the layer's 90th-percentile contrast but at most `CORE_DE`, the colour that lays the base's colour back to the frame's): the original's soft edge (the globe's shadow ring, the glow of a lit symbol) falls off outward with no plateau
+    and no rim."""
     n = UNITS * UNITS
     p_cells, b_cells = cells_of(frame), cells_of(base)
     dist = [distance(p, b) for p, b in zip(p_cells, b_cells)]
     owned = [rim or (RIM <= i % UNITS < UNITS - RIM and RIM <= i // UNITS < UNITS - RIM) for i in range(n)]  # the outermost frame lines are the plate's, never the symbol's or its glow (unless `rim`)
-    solid = [d >= SOLID_DE and owned[i] for i, d in enumerate(dist)]
+    halo_cells: set[int] = set()
+    spread = sorted(d for i, d in enumerate(dist) if d >= SOLID_DE and owned[i])
+    contrast = spread[int(len(spread) * 0.9)] if spread else 0.0  # the layer's own contrast: an orange idle symbol reaches 44, a lit red one 86, the globe 131
+    halo = halo and contrast >= HALO_MIN_CONTRAST  # a low-contrast layer (the orange idle symbols) has no soft edge to fall off: its cells are the symbol
+    if halo:
+        core_de = max(SOLID_DE, min(CORE_DE, CORE_SHARE * contrast))
+        core = [(d >= core_de or (d >= SOLID_DE and lab(*p_cells[i])[0] < lab(*b_cells[i])[0] - DARK_DL)) and owned[i] for i, d in enumerate(dist)]
+        outside = outside_cells(core)
+        solid = [core[i] or (not outside[i] and dist[i] >= SOLID_DE and owned[i]) for i in range(n)]
+        for i in range(n):
+            if solid[i] or not outside[i] or dist[i] <= DEAD_DE or not owned[i]:
+                continue
+            x, y = i % UNITS, i // UNITS
+            if any(core[yy * UNITS + xx] for yy in range(max(0, y - HALO_REACH), min(UNITS, y + HALO_REACH + 1)) for xx in range(max(0, x - HALO_REACH), min(UNITS, x + HALO_REACH + 1))):
+                halo_cells.add(i)
+    else:
+        solid = [d >= SOLID_DE and owned[i] for i, d in enumerate(dist)]
     # the colour of a cell: its own when solid; a cell the smooth outline grows into takes the mean of the solid cells around it (within two cells)
     cell_colour: list[tuple[float, float, float] | None] = [None] * n
     for i in range(n):
@@ -267,16 +308,22 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
     silhouette = resample_plane([1.0 if x else 0.0 for x in solid], UNITS, pixels, CRISP_SIGMA)
     ga = [0.0] * (pixels * pixels)
     gc = [[0.0] * (pixels * pixels) for _ in range(3)]
-    if glow:
+    sigma = HALO_SIGMA if halo else GLOW_SIGMA
+    if glow or halo:
         alphas, colours = [0.0] * n, [(0, 0, 0)] * n
         for i in range(n):
-            if solid[i] or dist[i] <= DEAD_DE or not owned[i]:
+            if solid[i] or not owned[i]:
                 continue
-            a = min(1.0, dist[i] / FULL_DE)
-            alphas[i] = a
-            colours[i] = tuple(max(0, min(255, int(round(bc + (pc - bc) / a)))) for pc, bc in zip(p_cells[i], b_cells[i]))
-        ga = resample_plane(alphas, UNITS, pixels, GLOW_SIGMA)
-        gc = [resample_plane([c[k] * a for c, a in zip(colours, alphas)], UNITS, pixels, GLOW_SIGMA) for k in range(3)]
+            if i in halo_cells:
+                a = min(1.0, dist[i] / core_de)  # linear in the distance from the base all the way to the core: no saturation, so no plateau and no rim
+                alphas[i] = a
+                colours[i] = tuple(max(0, min(255, int(round(bc + (pc - bc) / a)))) for pc, bc in zip(p_cells[i], b_cells[i]))
+            elif glow and dist[i] > DEAD_DE and dist[i] < SOLID_DE:
+                a = min(1.0, dist[i] / FULL_DE)
+                alphas[i] = a
+                colours[i] = tuple(max(0, min(255, int(round(bc + (pc - bc) / a)))) for pc, bc in zip(p_cells[i], b_cells[i]))
+        ga = resample_plane(alphas, UNITS, pixels, sigma)
+        gc = [resample_plane([c[k] * a for c, a in zip(colours, alphas)], UNITS, pixels, sigma) for k in range(3)]
     out = Image(pixels, pixels, bytearray(pixels * pixels * 4))
     for py in range(pixels):
         cy = min(UNITS - 1, int((py + 0.5) * UNITS / pixels))
@@ -337,9 +384,9 @@ def button_layers(button: Button, frames: Path, template: Image) -> dict[str, tu
     return layers
 
 
-def render_part(frame: Image, base: Image, glow: bool, rim: bool, look: str) -> Image:
+def render_part(frame: Image, base: Image, glow: bool, rim: bool, look: str, halo: bool = False) -> Image:
     if look == "crisp":
-        return render_crisp(frame, base, glow, rim)
+        return render_crisp(frame, base, glow, rim, halo=halo)
     colours, alphas = decompose(frame, base)
     return render_layer(colours, alphas, look)
 
@@ -360,7 +407,7 @@ def build_parts(frames: Path, look: str, plate_dir: Path | None, only: set[str] 
         if only and button.name not in only:
             continue
         for ident, (frame, base, glow, rim) in button_layers(button, frames, template).items():
-            parts[ident] = render_part(frame, base, glow, rim, look)
+            parts[ident] = render_part(frame, base, glow, rim, look, halo=ident.startswith("glyph."))
         plate = plate_dir / f"plate.{button.name}.png" if plate_dir else None
         if plate is not None and plate.is_file():
             master = pngio.read(plate)
@@ -377,7 +424,7 @@ def record_of(ident: str, look: str, frames: Path, image_path: Path, button: But
     extra = {"plate_master_sha256": sha256_file(plate_path)} if plate_path is not None else {}
     return {"part": ident, "template_sources": template, **extra, "rule": "button_kit", "tool_version": TOOL_VERSION, "look": look, "date": datetime.date.today().isoformat(),
             "sources": {f"{folder}/f{n}": sha256_file(frames / folder / f"f{n}.png") for folder in folders for n in range(3) if (frames / folder / f"f{n}.png").is_file()},
-            "parameters": ({"dead_de": DEAD_DE, "solid_de": SOLID_DE, "crisp_sigma": CRISP_SIGMA, "glow_sigma": GLOW_SIGMA, "edge_half": EDGE_HALF,
+            "parameters": ({"dead_de": DEAD_DE, "solid_de": SOLID_DE, "crisp_sigma": CRISP_SIGMA, "glow_sigma": GLOW_SIGMA, "edge_half": EDGE_HALF, "halo_min_contrast": HALO_MIN_CONTRAST, "core_de": CORE_DE, "core_share": CORE_SHARE, "dark_dl": DARK_DL, "halo_reach": HALO_REACH, "halo_sigma": HALO_SIGMA,
                            "master": MASTER, "inset": list(INSET)} if look == "crisp" else {"dead_de": DEAD_DE, "full_de": FULL_DE, "sigma": SIGMA[look], "master": MASTER, "inset": list(INSET)}),
             "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [MASTER, MASTER], "run_by": "agent"}
 

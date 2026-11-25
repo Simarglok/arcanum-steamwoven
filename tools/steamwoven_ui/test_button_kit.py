@@ -171,6 +171,39 @@ class CrispTests(unittest.TestCase):
         self.assertEqual(without.pixel(*near)[3], 0)
         self.assertEqual(self.at(with_glow, 15, 16), (*RED, 255))  # the symbol is not blurred by the glow
 
+    def ringed(self, colours):
+        """A high-contrast symbol with rings of cells round it, ring k (1 nearest) painted colours[k - 1]."""
+        base = plate()
+        frame = base
+        for k, colour in reversed(list(enumerate(colours, start=1))):
+            frame = paint(frame, [(x, y) for x in range(12 - k, 20 + k) for y in range(12 - k, 22 + k)], colour)
+        return paint(frame, GLYPH, RED), base
+
+    def test_halo_falls_off_outward_with_no_plateau_and_no_rim(self):
+        frame, base = self.ringed([(150, 48, 25), (104, 47, 21), (72, 46, 20)])
+        out = bk.render_crisp(frame, base, True, halo=True)
+        alphas = [self.at(out, 12 - k, 17)[3] for k in (1, 2, 3, 4)]
+        self.assertGreater(alphas[0], alphas[1])
+        self.assertGreater(alphas[1], alphas[2])
+        self.assertGreater(alphas[2], alphas[3])  # every step lower than the one before it: no plateau
+        self.assertLessEqual(self.at(out, 12 - 5, 17)[3], 12)  # and next to nothing outside the last ring (the Gaussian's tail only): no rim
+        self.assertEqual(self.at(out, 15, 16), (*RED, 255))  # the symbol itself is as drawn
+
+    def test_without_halo_the_same_rings_are_a_flat_symbol_class(self):
+        frame, base = self.ringed([(150, 48, 25), (104, 47, 21), (72, 46, 20)])
+        flat = bk.render_crisp(frame, base, True)
+        self.assertEqual(self.at(flat, 12 - 1, 17)[3], 255)  # the old rule: a cell 9 or more from the base is solid, the plateau the owner saw
+
+    def test_a_low_contrast_symbol_is_the_same_with_or_without_halo(self):
+        frame, base = self.sym(GLYPH)
+        self.assertEqual(bk.render_crisp(frame, base, False, halo=True).data, bk.render_crisp(frame, base, False).data)
+
+    def test_a_dark_outline_cell_is_core_not_halo(self):
+        frame, base = self.ringed([(150, 48, 25)])
+        frame = paint(frame, [(11, 17)], (10, 9, 4))  # far darker than its ground
+        out = bk.render_crisp(frame, base, True, halo=True)
+        self.assertEqual(self.at(out, 11, 17)[3], 255)
+
     def test_the_outermost_frame_lines_are_never_the_symbol_unless_asked(self):
         base = plate()
         frame = paint(base, [(N - 1, 1), (N - 1, 2)], ORANGE)

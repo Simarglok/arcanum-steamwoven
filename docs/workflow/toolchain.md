@@ -1340,7 +1340,7 @@ python3 -B tools/steamwoven_ui/button_kit.py sheet --out FILE          # the bef
 ```
 
 `build_kit.py` writes the manifest rows (the five plates and the lit faces from the census, the glyphs, lit glyphs and overlays as new rows of batch B-BUTTONS, all `master`). A glyph or an overlay is an original frame over its base frame: the symbol's cells in their own colours with a smooth sharp outline, the glow or darkening a separate soft layer under it; laid over the plate
-it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
+it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. A glyph layer of high contrast (the lit symbols, the globe) keeps the symbol as the core and lets its soft edge fall off outward as a halo (alpha = distance over the core threshold, no plateau, no rim; constants `CORE_DE`, `CORE_SHARE`, `HALO_*` in `button_kit.py`). Rule E is the glyph rule of the whole #2482 batch, slices included. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
