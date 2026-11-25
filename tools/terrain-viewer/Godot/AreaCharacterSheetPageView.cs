@@ -45,6 +45,10 @@ public partial class AreaCharacterSheetPageView : Control
     // ARC-UI-3035: the kit's sheet behind this page (the page draws its own panel art only while the kit has none).
     private readonly AreaKitSheetView _kitSheet = new();
     internal bool KitSheetShownForSelfTest => _kitSheet.Shown;
+    // ARC-UI-3101: over the kit's sheet the skill group buttons and the discipline buttons are cut to their gold circle and cast the generated shadow (separate arts with the old stone in their edge pixels).
+    private readonly AreaKitRoundPartsLayer _round = new();
+    private readonly List<AreaKitRoundPartsLayer.Item> _rings = [];
+    internal AreaKitRoundPartsLayer RoundPartsForSelfTest => _round;
 
     public override void _EnterTree() => AreaKitSheets.Changed += QueueRedraw;
 
@@ -61,6 +65,7 @@ public partial class AreaCharacterSheetPageView : Control
         Visible = false;
         AreaArtTextDraw.Prepare(this);
         AddChild(_kitSheet);
+        AddChild(_round);
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts)
@@ -161,10 +166,20 @@ public partial class AreaCharacterSheetPageView : Control
 
     public override void _Draw()
     {
-        if (_fonts is not { } fonts) return;
+        if (_fonts is not { } fonts) { _round.Clear(); return; }
         // ARC-UI-3035: the kit's sheet for this page, if any, stands behind and the page's own panel art is not drawn.
         _kitSheet.Set(_page == Page.Skills ? AreaCharacterSheetPagesLayout.SkillsBackgroundArt : AreaCharacterSheetPagesLayout.TechBackgroundArt, Size);
+        _rings.Clear();
         if (_page == Page.Skills) DrawSkills(fonts); else DrawTech(fonts);
+        if (_rings.Count > 0) _round.Show(_rings); else _round.Clear();
+    }
+
+    /// <summary>ARC-UI-3101: a round tab (a skill group or a discipline): over the kit's sheet it goes through the round-part layer, else it is drawn as before.</summary>
+    private void DrawTab(int art, (int X, int Y) place, int frame)
+    {
+        var texture = Art(art, frame);
+        if (_kitSheet.Shown && AreaKitRoundPartsLayer.Applies(art, texture)) _rings.Add(new(art, texture!, new Rect2(place.X, place.Y, texture!.GetWidth(), texture.GetHeight())));
+        else DrawArt(art, place, frame);
     }
 
     private void DrawArt(int art, (int X, int Y) place, int frame = 0)
@@ -185,7 +200,7 @@ public partial class AreaCharacterSheetPageView : Control
         for (var group = 0; group < AreaCharacterSheetPagesLayout.Groups; group++)
         {
             var art = AreaCharacterSheetPagesLayout.GroupTabArtBase + group;
-            DrawArt(art, AreaCharacterSheetPagesLayout.GroupTab(group), Frame(art, new(AreaPageHit.GroupTab, group), selected: group == _group));
+            DrawTab(art, AreaCharacterSheetPagesLayout.GroupTab(group), Frame(art, new(AreaPageHit.GroupTab, group), selected: group == _group));
         }
         for (var row = 0; row < AreaCharacterSheetPagesLayout.GroupRows; row++)
         {
@@ -214,7 +229,7 @@ public partial class AreaCharacterSheetPageView : Control
         for (var discipline = 0; discipline < AreaCharacterSheetPagesLayout.Disciplines; discipline++)
         {
             var art = AreaCharacterSheetPagesLayout.DisciplineArtBase + discipline;
-            DrawArt(art, AreaCharacterSheetPagesLayout.DisciplineTab(discipline), Frame(art, new(AreaPageHit.DisciplineTab, discipline), selected: discipline == _discipline));
+            DrawTab(art, AreaCharacterSheetPagesLayout.DisciplineTab(discipline), Frame(art, new(AreaPageHit.DisciplineTab, discipline), selected: discipline == _discipline));
         }
         var row = _tech.Rows[_discipline];
         var degree = row.Degree;
