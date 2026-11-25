@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Magic;
@@ -81,5 +82,22 @@ public sealed class AreaSpellCastingTests
     {
         Assert.AreEqual("spell message 604", AreaSpellCasting.Line(new(SpellCastEventKind.Message, -1, 604), null, Name));
         Assert.AreEqual("spell message 643", AreaSpellCasting.Message(null, 643));
+    }
+
+    // ARC-UI-3123: a visiting companion's id (oid:...) is named by its own row's text, with no shown-map index to ask; no row or no text keeps the id.
+    [TestMethod]
+    public void Object_name_of_a_visitor_comes_from_its_row_not_the_shown_map_index()
+    {
+        var key = new AreaObjectKey(new string('a', 64), 79, AreaSourceKind.Mobile, 1, 3, 300L, new string('d', 64), 100);
+        var visitor = AreaAiHostRebindTests.NpcWith(key, new(10, 10), (10, 10));
+        var id = "oid:" + key.ObjectIdSha256;
+        string? RowText(AreaObjectRecord row) => ReferenceEquals(row, visitor) ? "Virgil" : null;
+        AreaObjectRecord? RowOf(string asked) => asked == id ? visitor : null;
+
+        Assert.AreEqual("Virgil", AreaSpellCasting.ObjectName(id, RowOf, RowText));
+        Assert.AreEqual("the hero", AreaSpellCasting.ObjectName(SessionSpellCaster.Hero, RowOf, RowText));
+        Assert.AreEqual("oid:other", AreaSpellCasting.ObjectName("oid:other", RowOf, RowText), "no row: the id");
+        Assert.AreEqual(id, AreaSpellCasting.ObjectName(id, RowOf, _ => null), "no text: the id");
+        Assert.AreEqual("Virgil takes 4 damage", AreaSpellCasting.Line(new(SpellCastEventKind.Damaged, 1, 4, id), null, asked => AreaSpellCasting.ObjectName(asked, RowOf, RowText)));
     }
 }

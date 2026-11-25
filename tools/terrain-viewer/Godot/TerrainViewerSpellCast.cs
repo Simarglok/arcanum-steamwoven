@@ -1042,9 +1042,11 @@ public partial class TerrainViewerApp
     // original's own spell messages are not built.
     private void PostSpellMessage(string text) => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Plain, "Magic\n" + text), "magic");
 
-    private string SpellObjectName(string id) =>
-        id == SessionSpellCaster.Hero ? "the hero"
-        : _spellCastMap?.Row(id) is { } row && _hoverIndex is { } index && index.Contains(row.Key) ? index.Name(row.Key) ?? id : id;
+    // ARC-UI-3123: the row's own text, not the shown map's hover index (it may lack a visiting companion after a window move or be unbuilt); a companion
+    // template of the shown map answers when the cast map holds no row of the id.
+    private string SpellObjectName(string id) => AreaSpellCasting.ObjectName(id,
+        key => _spellCastMap?.Row(key) ?? _companionTemplates.FirstOrDefault(t => t.Entity == key)?.Speaker.Row,
+        row => AreaHoverIndex.Text(row, _hoverNames?.Catalog, WindowRecognition(row)));
 
     private string SpellStatus() => !SpellMapActive || _areaSession?.QueryHero() is null ? ""
         : " | M spells" + (_spellTargeting is { } t ? $" (targeting spell {t.Spell})" : "") + (_spellGoal is { } g ? $" (casting run {g.Run}" + (_spellQueue.Count > 0 ? $", {_spellQueue.Count} queued)" : ")") : "")
