@@ -128,6 +128,26 @@ class RingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, self.assertRaises(hk.KitError):
             hk.brass_material(Path(folder))
 
+    def test_the_edges_have_subpixel_coverage(self) -> None:
+        ring = hk.render_ring(44.5, flat_material(), hk.LENS_WHOLE)
+        s = (hk.LENS_WHOLE[0] - 2 * hk.LENS_PAD) / (2 * 44.5)
+        area = math.pi * (((44.5 + hk.RING_WIDTH) * s) ** 2 - (44.5 * s) ** 2)
+        covered = sum(ring.data[i + 3] for i in range(0, len(ring.data), 4)) / 255.0
+        self.assertAlmostEqual(covered / area, 1.0, delta=0.003)   # the alpha is the exact area of the band
+        self.assertGreater(len({ring.data[i + 3] for i in range(0, len(ring.data), 4)}), 20)   # soft edge values, not only 0 and 255
+
+    def test_the_filled_row_builds_from_the_dark_art(self) -> None:
+        part = hk.BY_ID["hardware.schm_pc_lens"]
+        frames = {p.art: lens_art() for p in hk.LENS_ARTS}
+        dark = pngio.Image.blank(89, 89)
+        for i in range(0, len(dark.data), 4):
+            dark.data[i:i + 4] = bytes((8, 8, 8, 255))
+        frames[part.art] = dark                      # an opaque art has no open circle: the shape comes from the first art
+        with mock.patch.object(hk, "read_frame", lambda _f, p, frame=0: frames[p.art]), mock.patch.object(hk, "brass_material", lambda _m: flat_material()):
+            image, extra = hk.build_part(part, None, None, (318, 318), {})
+        self.assertEqual(extra["fill"], [8, 8, 8])
+        self.assertEqual(image.pixel(159, 159)[3], 255)
+
     def test_a_grain_shorter_than_the_ring_is_refused(self) -> None:
         short = {"grain": [[0.0] * hk.BRASS_ROWS for _ in range(900)], "tone": [99.0, 77.0, 43.0], "sha256": {}}
         with self.assertRaises(hk.KitError):

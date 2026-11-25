@@ -304,6 +304,37 @@ def brass_colour(light: float, copper: float, tone: list[float]) -> list[float]:
     return c
 
 
+EDGE_SAMPLES = 8   # sub-samples per side of an edge pixel's footprint (64 per pixel)
+EDGE_REACH = 1.0   # the footprint reaches this far (master px) from the pixel's centre: a tent of 2 px, so the analytic edge fades over about 1.5 px instead of stepping
+
+
+def edge_coverage(dx: float, dy: float, dist: float, inner: float, outer: float) -> tuple[float, float]:
+    """The share of a master pixel (centre at dx, dy from the ring's centre, `dist` away) inside the circle and inside the band: the analytic edges filtered with a tent (sub-pixel coverage), so the inner and the outer edge fade without a stair."""
+    margin = EDGE_REACH * 1.5
+    if dist < inner - margin:
+        return 1.0, 0.0
+    if inner + margin < dist < outer - margin:
+        return 0.0, 1.0
+    if dist > outer + margin:
+        return 0.0, 0.0
+    n = EDGE_SAMPLES
+    a_in = a_ring = total = 0.0
+    for j in range(n):
+        oy = (j + 0.5) / n * 2 - 1
+        wy = 1 - abs(oy)
+        y = dy + oy * EDGE_REACH
+        for i in range(n):
+            ox = (i + 0.5) / n * 2 - 1
+            weight = wy * (1 - abs(ox))
+            q = math.hypot(dx + ox * EDGE_REACH, y)
+            total += weight
+            if q < inner:
+                a_in += weight
+            elif q <= outer:
+                a_ring += weight
+    return a_in / total, a_ring / total
+
+
 def render_ring(radius: float, material: dict, size: tuple[int, int], fill: tuple[int, int, int] | None = None, pad: int = LENS_PAD) -> pngio.Image:
     """The ring at the master size: the lens art's square (`size` minus `pad` on every side) with `pad` master px added all round, so the ring is drawn whole (the old art clipped it where the circle touches its edge). The shape is
     analytic: a band of RING_WIDTH original px outside the circle of `radius` original px, anti-aliased, centred on the canvas; its colour is polished brass (`light_of`, the body tone and the grain of the kit's approved brass).
@@ -318,33 +349,31 @@ def render_ring(radius: float, material: dict, size: tuple[int, int], fill: tupl
     middle = (radius + RING_WIDTH / 2) * s
     tone_light = lum(*tone)
     out = pngio.Image.blank(w, h)
+    inner, outer = radius * s, (radius + RING_WIDTH) * s     # the band's edges, master px from the centre
     for my in range(h):
         for mx in range(w):
             dx, dy = mx + 0.5 - cx, my + 0.5 - cy
-            d = (math.hypot(dx, dy) - radius * s) / s   # original px beyond the circle's edge (negative inside)
-            inside_px = d * s
-            if d > RING_WIDTH + 0.3 and fill is None:
+            dist = math.hypot(dx, dy)
+            if dist > outer + 2.0 and fill is None:
+                continue
+            a_in, a_ring = edge_coverage(dx, dy, dist, inner, outer)
+            if a_ring <= 0 and (fill is None or a_in <= 0):
                 continue
             r = g = b = 0.0
-            alpha = 0.0
-            if -0.3 <= d <= RING_WIDTH + 0.3:
+            if a_ring > 0:
+                d = (dist - inner) / s                  # original px beyond the circle's edge (negative inside)
                 th = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
-                rho = clamp(d / RING_WIDTH, 0.0, 1.0)
+                rho = clamp(d / RING_WIDTH, 0.0, 1.0)   # an edge pixel takes the colour of the band's edge row
                 light, copper = light_of(th, rho)
                 colour = brass_colour(light, copper, tone)
                 k = 1 + GRAIN * grain[int(math.radians(th) * middle) % count][min(rows - 1, int(rho * rows))] / tone_light
                 r, g, b = (clamp(v * k, 0.0, 255.0) for v in colour)
-                alpha = min(clamp(inside_px + 0.5, 0.0, 1.0), clamp((RING_WIDTH - d) * s + 0.5, 0.0, 1.0))
-            if fill is not None and inside_px < 0.5:
-                cover = clamp(0.5 - inside_px, 0.0, 1.0)  # the fill's own soft edge, under the ring
-                total = alpha + (1 - alpha) * cover
-                if total > 0:  # the ring over the fill, in straight (not premultiplied) colour
-                    r = (r * alpha + fill[0] * (1 - alpha) * cover) / total
-                    g = (g * alpha + fill[1] * (1 - alpha) * cover) / total
-                    b = (b * alpha + fill[2] * (1 - alpha) * cover) / total
-                alpha = total
-            if alpha <= 0:
-                continue
+            alpha = a_ring
+            if fill is not None and a_in > 0:           # the pixel's inside part is the fill: ring and fill share the pixel in straight (not premultiplied) colour
+                alpha = a_ring + a_in
+                r = (r * a_ring + fill[0] * a_in) / alpha
+                g = (g * a_ring + fill[1] * a_in) / alpha
+                b = (b * a_ring + fill[2] * a_in) / alpha
             i = (my * w + mx) * 4
             out.data[i:i + 4] = bytes((int(round(r)), int(round(g)), int(round(b)), int(round(alpha * 255))))
     return out
@@ -494,8 +523,9 @@ def build_part(part: Part, frames: Path, masters: Path, size: tuple[int, int], c
         if "brass" not in cache:
             cache["brass"] = brass_material(masters)
             cache["hole"] = hole_of(read_frame(frames, LENS_ARTS[0]))
-        art_of_shape = read_frame(frames, part) if part.family == "lens" else read_frame(frames, LENS_ARTS[0])
-        cx, cy, _ = hole_of(art_of_shape) if part.family == "lens" else cache["hole"]
+        own = part.family == "lens" and not part.fill     # a filled art (367) has no open circle: its centre is the first art's
+        art_of_shape = read_frame(frames, part if own else LENS_ARTS[0])
+        cx, cy, _ = hole_of(art_of_shape) if own else cache["hole"]
         if abs(cx - art_of_shape.w / 2) > 0.6 or abs(cy - art_of_shape.h / 2) > 0.6:
             raise KitError(f"{part.ident}: the lens circle is not centred in its art (centre {cx:.1f}, {cy:.1f} of {art_of_shape.w}x{art_of_shape.h}); the ring is drawn on the canvas centre")
         fill = None
