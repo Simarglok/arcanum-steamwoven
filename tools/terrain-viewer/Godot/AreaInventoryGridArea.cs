@@ -841,7 +841,7 @@ public partial class AreaInventoryGridArea : Control
         else AreaKitStandIns.Inventory(this, _scale);
         // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
         var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
-        Art(AreaInventoryHole.Art(AreaInventoryMode.Own), holeX, holeY);
+        if (!AreaLensPlace.SurfaceRing) Art(AreaInventoryHole.Art(AreaInventoryMode.Own), holeX, holeY); // ARC-UI-3101: the kit surface carries the ring
         var fonts = look.Fonts;
         if (_view is null) return;
         // ARC-UI-1765 (0x576520 modes 5 and 6): the NPC's image at half its size, then its quote line in its rectangle; the weight lines are mode 0's alone (IW24) and the boxes are not made (IW19).

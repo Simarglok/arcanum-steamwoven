@@ -625,6 +625,10 @@ public partial class TerrainViewerApp
             var expectedFixtures = kit && fixtures ? SteamwovenKitTable.FixturesOf(window).Order().ToArray() : [];
             require(AreaKitFixtures.ShownForSelfTest.SequenceEqual(expectedFixtures), $"[{tag}] the {name} window shows {(expectedFixtures.Length > 0 ? "its fixtures" : "no fixture")} from the kit (got {string.Join(", ", AreaKitFixtures.ShownForSelfTest)})");
             require(expectedFixtures.All(id => AreaKitFixtures.DrawnForSelfTest.Contains(id)) && (expectedFixtures.Length > 0 || AreaKitFixtures.DrawnForSelfTest.Count == 0), $"[{tag}] the {name} window draws every fixture the kit has (drawn {string.Join(", ", AreaKitFixtures.DrawnForSelfTest)})");
+            // ARC-UI-3101: a surface that carries its lens ring puts the lens at the circle inside it (92 units, its own place), no ring art over it; without the surface the original's 89 units.
+            require(AreaLensPlace.Surface == (kit ? AreaKitLens.CornerOf(window) : null), $"[{tag}] the {name} window's lens place is {(kit ? "the surface's" : "its own")} (got {AreaLensPlace.Surface})");
+            var lensUnit = SteamwovenWindowZone.UnitScale(plan);
+            foreach (var lens in AreaRoundView.VisibleRects()) require(Math.Abs(lens.Size.X - (kit ? AreaLensPlace.SurfaceSide : 89) * lensUnit) <= 1, $"[{tag}] the {name} lens is {(kit ? AreaLensPlace.SurfaceSide : 89)} units wide ({lens.Size.X / lensUnit:F2})");
             using (var shot = GetViewport().GetTexture().GetImage())
             {
                 var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;

@@ -63,7 +63,7 @@ public static class AreaSchematicWindowLayout
         get
         {
             var (x, y) = AreaLensPlace.Corner((50, 26)); // ARC-UI-2714: the common place of the kit background
-            return (x, y, 89, 89);
+            return (x, y, AreaLensPlace.Side, AreaLensPlace.Side);
         }
     }
 
