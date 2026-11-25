@@ -70,7 +70,9 @@ FILL_CLOSE = 4           # px: ... and closed by this, so strokes of a letter an
 HALO_BRIGHT = 70          # 0..255 luma of the ORIGINAL: ARC-UI-3101: an object's metal or paper is lighter than this, the dark halo (the old art's shadow and wood fringe) around it is not
 HALO_DILATE = 2           # px: ... the object's pixels are grown by this
 HALO_CLOSE = 10           # px: ... and closed by this (the dark parts inside a gear), the holes inside filled: the object is one solid shape, everything outside it in the box is the Codex wood
-PART_GOLD = 43            # 0..255 of |red - blue| in the ORIGINAL: ARC-UI-3248: a part_boxes part is its gold and olive pixels (brass rims, scrolls, the olive button; the old wood is 25 to 30 and neutral shadow less), not its light pixels: the old wood of the schematic is as light as its brass (luma 50 to 90)
+PART_GOLD = 43            # 0..255 of |red - blue| in the ORIGINAL: ARC-UI-3248: a part_boxes part is its gold and olive pixels (brass rims, scrolls, the olive button; the old wood is mostly 25 to 38 and neutral shadow less: about 2 % of its pixels pass, as specks, see PART_SPECK), not its light pixels: the old wood of the schematic is as light as its brass (luma 50 to 90)
+PART_SPECK = 400          # ARC-UI-3248: gold pixels (before the growing) in a connected group (8 neighbours) smaller than this are old wood's warm specks, not the part: dropped
+PART_CLOSE_MAX = 60       # ARC-UI-3248: the largest closing radius of a part box (a disk of this size over the whole image takes minutes)
 PLATE_RING = (4, 14)      # px: ARC-UI-3275: the ring round a plate rectangle (from 4 px outside it to 14 px outside it) whose median luma is the new wood's reference
 PLATE_DEPTH = 0.8         # ARC-UI-3275: the plate's dark fill is this share of the new wood's median luma (the original's fill is 0.68 of its wood, but the disc's shadow falls over the fill too: tuned so the fill reads as the original's dark brown-grey)
 PLATE_TINT = (1.03, 0.99, 0.92)   # ARC-UI-3275: the fill's brown-grey: the original's fill hue (44, 40, 35) halfway to neutral
@@ -187,8 +189,8 @@ def load_spec(path: Path) -> ZoneSpec:
             raise ComposeError(f"spec {path}: part_boxes is a list")
         out = []
         for box in value:
-            if not (isinstance(box, list) and len(box) in (4, 5) and all(_is_int(v) for v in box) and box[0] < box[2] and box[1] < box[3] and min(box) >= 0 and (len(box) == 4 or box[4] > 0)):
-                raise ComposeError(f"spec {path}: part_boxes entries are [x0, y0, x1, y1] or [x0, y0, x1, y1, close] with x0 < x1, y0 < y1 and a positive closing radius")
+            if not (isinstance(box, list) and len(box) in (4, 5) and all(_is_int(v) for v in box) and box[0] < box[2] and box[1] < box[3] and min(box) >= 0 and (len(box) == 4 or 0 < box[4] <= PART_CLOSE_MAX)):
+                raise ComposeError(f"spec {path}: part_boxes entries are [x0, y0, x1, y1] or [x0, y0, x1, y1, close] with x0 < x1, y0 < y1 and a closing radius from 1 to {PART_CLOSE_MAX}")
             out.append(tuple(box))
         return tuple(out)
 
@@ -770,7 +772,7 @@ def remove_islands(solid: Path, out: Path, min_area: int) -> None:
 
 def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, width: int, height: int, bright: float = FILL_BRIGHT, dark: float | None = FILL_DARK,
                        dilate: int = FILL_DILATE, close: int = FILL_CLOSE, keep_part: bool = False, gold: float | None = None) -> None:
-    """The defaults are the `fill_boxes` rule; ARC-UI-3101's `halo_boxes` pass `bright` HALO_BRIGHT, `dark` None (no dark items: the fringe round a part is none) and the HALO_* sizes.
+    """The defaults are the `fill_boxes` rule; ARC-UI-3248's `part_boxes` pass `gold` (the part is its gold pixels, groups smaller than PART_SPECK dropped) and `keep_part` (the weight is 0 inside the shape as well); ARC-UI-3101's `halo_boxes` pass `bright` HALO_BRIGHT, `dark` None (no dark items: the fringe round a part is none) and the HALO_* sizes.
     ARC-UI-3164: in each fill box the wood weight is 1 wherever no item is: an item is an ORIGINAL pixel lighter than `bright` (FILL_BRIGHT) or darker than `dark` (FILL_DARK) in luma (letters,
     brass rims, black fields), grown by FILL_DILATE, closed by FILL_CLOSE and filled inside (a knob in a rim), all inside the box only. The tone mask excludes these boxes
     whole, which left the ORIGINAL's lighter panel wood there as a patch with a sharp edge against the Codex wood (the colour class cannot be used: the panel wood is no wood class)."""
@@ -785,6 +787,7 @@ def fill_between_items(original: Path, solid: Path, boxes: tuple, out: Path, wid
     if gold is not None:   # ARC-UI-3248 part boxes: the item is the part's gold (red and blue channels differ by more than `gold`), the old wood and its shadow are none
         run(["magick", str(original), "-alpha", "off", "(", "+clone", "-channel", "R", "-separate", "+channel", ")", "(", "-clone", "0", "-channel", "B", "-separate", "+channel", ")", "-delete", "0",
              "-compose", "Difference", "-composite", "-threshold", f"{gold / 255 * 100:.2f}%", str(inside), "-compose", "Multiply", "-composite",
+             "-define", f"connected-components:area-threshold={PART_SPECK}", "-define", "connected-components:mean-color=true", "-connected-components", "8", "-colorspace", "Gray",
              "-morphology", "Dilate", f"Disk:{dilate}", "-morphology", "Close", f"Disk:{close}", str(items)])
     elif dark is None:   # only light items (a halo box: the dark fringe is no item)
         run(["magick", str(original), "-alpha", "off", "-colorspace", "Gray", "-threshold", f"{bright_pct}%", str(inside), "-compose", "Multiply", "-composite",
@@ -908,8 +911,9 @@ def _luma(data: bytearray, p: int) -> float:
 
 
 def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, height: int) -> None:
-    """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items), `halo_boxes` (wood round a part, outside its light shape) and `disc_boxes`
-    (wood round a lens or a round button, outside its exact ellipse)."""
+    """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items), `halo_boxes` (wood round a part, outside its light shape), `part_boxes` (wood round a part
+    that stays whole, outside its gold shape; one pass per closing radius) and `disc_boxes` (wood round a lens or a round button, outside its exact ellipse). The passes combine with Lighten and the disc
+    boxes run last, so a box must not overlap another kind's box."""
     if spec.fill_boxes:
         fill_between_items(original, solid, spec.fill_boxes, solid, width, height)
     if spec.halo_boxes:

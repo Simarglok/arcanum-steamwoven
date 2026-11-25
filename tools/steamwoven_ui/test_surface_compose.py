@@ -277,6 +277,7 @@ class SurfaceComposeTests(unittest.TestCase):
             # dark neutral wood, a dark fringe round a gold frame (a plate: gold rim, dark field; the part is its gold, not its light) as a rectangle; the weight leaks (white) into the frame's left tip and its dark field
             subprocess.run(["magick", "-size", "240x240", "xc:rgb(40,36,32)", "-fill", "rgb(15,12,10)", "-draw", "rectangle 50,70 190,170", "-fill", "rgb(190,150,50)", "-draw", "rectangle 60,80 180,160",
                             "-fill", "rgb(20,18,16)", "-draw", "rectangle 70,90 170,150", str(orig)], check=True)
+            subprocess.run(["magick", str(orig), "-fill", "rgb(120,90,40)", "-draw", "rectangle 45,121 47,123", str(orig)], check=True)   # a warm speck of old wood (a 3 x 3 px group) 3 px beside the rim
             subprocess.run(["magick", "-size", "240x240", "xc:black", "-fill", "white", "-draw", "rectangle 0,0 20,239", "-draw", "rectangle 60,100 75,120", "-draw", "rectangle 100,100 120,120", str(solid)], check=True)
             surface_compose.apply_box_fills(orig, solid, surface_compose.ZoneSpec(id="z", part_boxes=((30, 30, 210, 210),)), 240, 240)
             data = surface_compose.gray_bytes(solid)
@@ -285,6 +286,7 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertLess(at(66, 110), 60)        # the leak inside the rim is the original's again (a halo box would leave it wood)
         self.assertLess(at(110, 110), 60)       # and so is the leak in the dark field
         self.assertGreater(at(10, 120), 200)    # the weight outside the box stays
+        self.assertGreater(at(46, 122), 200)    # a warm speck of the old wood beside the part is no part: the speck filter drops it before the growing and the closing
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
     def test_a_part_box_takes_its_own_closing_radius(self):
@@ -305,7 +307,7 @@ class SurfaceComposeTests(unittest.TestCase):
             self.assertEqual(surface_compose.load_spec(path).part_boxes, ((1, 2, 30, 40), (5, 6, 50, 60, 18)))
             path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x"}), encoding="utf-8")
             self.assertEqual(surface_compose.load_spec(path).part_boxes, ())
-            for bad in ([[5, 5, 5, 9]], [[1, 2, 30, 40, 0]], [[1, 2, 30]], [[1, 2, 30, 40, 5, 6]], "x"):
+            for bad in ([[5, 5, 5, 9]], [[1, 2, 30, 40, 0]], [[1, 2, 30, 40, 100000]], [[1, 2, 30]], [[1, 2, 30, 40, 5, 6]], "x"):
                 path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "part_boxes": bad}), encoding="utf-8")
                 with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
                     surface_compose.load_spec(path)
