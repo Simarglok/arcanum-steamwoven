@@ -441,26 +441,29 @@ def solid_body(image: Path, colour: str) -> None:
 
 
 def brass_match(image: Path, target: tuple[float, float, float]) -> dict:
-    """ARC-UI-3260 (owner check): the brass of a part is brought to ONE brass with the HUD strips' (#3259): the coloured pixels (chroma from 12, in full from 24) are shifted in L* by the difference of the class mean to the
+    """ARC-UI-3260 (owner check): the brass of a part is brought to ONE brass with the HUD strips' (#3259): the coloured pixels (chroma from 12, in full from 24; the fringe of alpha 1 to 249 follows the body on purpose) are shifted in L* by the difference of the class mean to the
     target's `l`, their chroma is scaled by target `c` over the class mean chroma and their hue turned by the difference of the mean hue to `h` (degrees); texture stays. Returns the class mean before and after."""
     import math
     img = pngio.read(image)
     d = img.data
 
     def stats() -> tuple[float, float, float, float]:
-        n = sl = sa = sb = 0.0
+        n = sl = sc = sa = sb = 0.0
         for i in range(0, len(d), 4):
             if d[i + 3] < 250:
                 continue
             l, a, b = tone_check._pixel_lab(d[i], d[i + 1], d[i + 2])
-            if (a * a + b * b) ** 0.5 >= TONE_COLOURED[1]:
-                n, sl, sa, sb = n + 1, sl + l, sa + a, sb + b
-        return n, sl / n, math.hypot(sa, sb) / n, math.degrees(math.atan2(sb, sa))
+            c = math.hypot(a, b)
+            if c >= TONE_COLOURED[1]:
+                n, sl, sc, sa, sb = n + 1, sl + l, sc + c, sa + a, sb + b
+        # the mean chroma is the mean of the chromas, the mean hue the direction of the summed a, b
+        return n, sl / max(n, 1), sc / max(n, 1), math.degrees(math.atan2(sb, sa))
 
     n, mean_l, mean_c, mean_h = stats()
     if n < 40:
         return {}
-    k, dl, dh = target[1] / mean_c, target[0] - mean_l, math.radians(target[2] - mean_h)
+    k, dl = target[1] / mean_c, target[0] - mean_l   # mean_c >= 24 here (every counted pixel has chroma from 24)
+    dh = (math.radians(target[2] - mean_h) + math.pi) % (2 * math.pi) - math.pi   # the short way round
     for i in range(0, len(d), 4):
         if d[i + 3] == 0:
             continue

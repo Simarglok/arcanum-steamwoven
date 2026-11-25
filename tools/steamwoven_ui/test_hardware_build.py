@@ -53,11 +53,14 @@ class HardwareBuildTests(unittest.TestCase):
 
     def test_brass_match_brings_the_coloured_pixels_to_the_target_and_leaves_grey_and_clear_pixels(self):
         import tempfile
-        image = flat(60, 1, (200, 150, 40, 255))   # a saturated brass
+        image = flat(200, 1, (200, 150, 40, 255))   # a saturated brass
         for x in range(0, 10):
             image.data[x * 4:x * 4 + 4] = bytes((90, 90, 90, 255))   # grey steel
         for x in range(10, 20):
             image.data[x * 4:x * 4 + 4] = bytes((0, 0, 0, 0))   # clear
+        for x in range(20, 100):
+            image.data[x * 4:x * 4 + 4] = bytes((170, 130, 60, 255))   # a second, duller brass
+        image.data[100 * 4:100 * 4 + 4] = bytes((200, 150, 40, 128))   # a fringe pixel: not counted, still shifted
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "brass.png"
             pngio.write(path, image)
@@ -69,7 +72,21 @@ class HardwareBuildTests(unittest.TestCase):
         self.assertAlmostEqual(report["after"][2], 78.0, delta=2.0)
         self.assertEqual(out.pixel(0, 0)[:3], (90, 90, 90))   # steel unchanged
         self.assertEqual(out.pixel(15, 0)[3], 0)               # clear stays clear
+        self.assertNotEqual(out.pixel(100, 0)[:3], (200, 150, 40))   # the fringe follows the body
+        self.assertEqual(out.pixel(100, 0)[3], 128)
         self.assertAlmostEqual(again["after"][1], report["after"][1], delta=0.6)   # a second pass changes nothing noticeable
+
+    def test_brass_match_takes_the_short_way_round_the_hue_circle_and_refuses_a_part_without_brass(self):
+        import tempfile
+        image = flat(100, 1, (60, 150, 90, 255))   # a green: its hue is far from the target's
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "green.png"
+            pngio.write(path, image)
+            report = hb.brass_match(path, (50.0, 30.0, -170.0))
+            grey = flat(100, 1, (90, 90, 90, 255))
+            pngio.write(path, grey)
+            self.assertEqual(hb.brass_match(path, (50.0, 30.0, 78.0)), {})   # no coloured pixels: nothing to match, nothing divided by zero
+        self.assertAlmostEqual(report["after"][2], -170.0, delta=3.0)
 
     def test_every_part_stands_on_the_grid_in_its_strip_and_the_draw_order_is_the_table_s(self):
         self.assertEqual(sorted(hb.HARDWARE_ORDER), sorted(hb.PARTS))
