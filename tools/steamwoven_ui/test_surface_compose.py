@@ -227,6 +227,35 @@ class SurfaceComposeTests(unittest.TestCase):
                     surface_compose.load_spec(path)
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_halo_box_gives_the_dark_fringe_round_a_light_part_to_the_wood_and_keeps_the_part(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            orig, solid, out = tmp_path / "o.png", tmp_path / "s.png", tmp_path / "f.png"
+            # dark wood (luma 30), a dark ring (the old shadow, luma 20) round a light disc (luma 150) with a dark spot inside; the weight is black (no wood) in the whole ring and disc
+            subprocess.run(["magick", "-size", "240x240", "xc:gray(30)", "-fill", "gray(20)", "-draw", "circle 120,120 120,60", "-fill", "gray(150)", "-draw", "circle 120,120 120,90",
+                            "-fill", "gray(25)", "-draw", "circle 120,120 120,112", str(orig)], check=True)
+            subprocess.run(["magick", "-size", "240x240", "xc:black", "-fill", "white", "-draw", "rectangle 0,0 20,239", str(solid)], check=True)
+            surface_compose.fill_between_items(orig, solid, ((30, 30, 210, 210),), out, 240, 240, surface_compose.HALO_BRIGHT, None, surface_compose.HALO_DILATE, surface_compose.HALO_CLOSE)
+            data = surface_compose.gray_bytes(out)
+        at = lambda x, y: data[y * 240 + x]
+        self.assertGreater(at(120, 65), 200)   # the dark ring outside the disc: the Codex wood now
+        self.assertLess(at(120, 100), 60)      # the disc: the original's
+        self.assertLess(at(120, 120), 60)      # the dark spot inside the disc is part of it (closed and filled), not wood
+        self.assertLess(at(120, 20), 60)       # outside the box: untouched
+        self.assertGreater(at(10, 120), 200)   # the weight that was already 1 stays 1
+
+    def test_load_spec_reads_halo_boxes_and_refuses_a_bad_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spec.json"
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "halo_boxes": [[1, 2, 30, 40]]}), encoding="utf-8")
+            self.assertEqual(surface_compose.load_spec(path).halo_boxes, ((1, 2, 30, 40),))
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x"}), encoding="utf-8")
+            self.assertEqual(surface_compose.load_spec(path).halo_boxes, ())
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "halo_boxes": [[5, 5, 5, 9]]}), encoding="utf-8")
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.load_spec(path)
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
     def test_remove_islands_drops_a_leak_and_a_bay_joined_by_a_thin_channel_and_keeps_the_wood(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
