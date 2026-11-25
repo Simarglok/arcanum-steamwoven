@@ -4,6 +4,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from . import fit
 from . import gauge_kit as gk
@@ -45,6 +46,7 @@ class PlanTests(unittest.TestCase):
     def test_frame_sequences_are_named_in_the_note(self) -> None:
         self.assertIn("frame 0", gk.note_of("gauge.redvial", 15))
         self.assertNotIn("frame 0", gk.note_of("gauge.redvial", 1))
+        self.assertNotIn("frame 0", gk.note_of("gauge.item_dam", 9))
 
 
 class LayoutTests(unittest.TestCase):
@@ -81,6 +83,35 @@ class PixelTests(unittest.TestCase):
             for x in range(2):
                 image.data[(y * 2 + x) * 4:(y * 2 + x) * 4 + 4] = bytes((20, 0, 0, 255))
         self.assertEqual(gk.bands(image, "y"), [(0, 3), (3, 6)])
+
+    def test_a_band_that_starts_transparent_ends_at_the_first_opaque_line(self) -> None:
+        image = solid(2, 7, (0, 0, 0, 0))
+        for y in range(2, 7):
+            colour = (200, 0, 0, 255) if y < 6 else (20, 0, 0, 255)
+            for x in range(2):
+                image.data[(y * 2 + x) * 4:(y * 2 + x) * 4 + 4] = bytes(colour)
+        self.assertEqual(gk.bands(image, "y"), [(0, 2), (2, 6), (6, 7)])
+        clean = gk.denoise(image, "y")
+        self.assertEqual(clean.pixel(0, 1)[3], 0)
+        self.assertEqual(clean.pixel(0, 6), (20, 0, 0, 255))
+
+    def test_a_violet_of_the_art_is_not_ground_but_a_magenta_fringe_is(self) -> None:
+        import shutil
+        if shutil.which("magick") is None:
+            self.skipTest("ImageMagick is not installed")
+        image = solid(24, 24, gk.KEY + (255,))
+        for y in range(6, 18):
+            for x in range(6, 18):
+                image.data[(y * 24 + x) * 4:(y * 24 + x) * 4 + 3] = bytes((120, 60, 140))     # a violet disc of the art
+        image.data[(6 * 24 + 5) * 4:(6 * 24 + 5) * 4 + 3] = bytes((192, 48, 153))          # a fringe pixel: art blended into the ground
+        with tempfile.TemporaryDirectory() as t:
+            png = Path(t) / "c.png"
+            pngio.write(png, image)
+            geometry = {"canvas": [24, 24], "bleed": False, "cells": [{"id": "a", "x": 6, "y": 6, "w": 12, "h": 12, "mode": "key", "master": [12, 12]}]}
+            found = gk.locate(png, geometry, (24, 24), png)
+            cut = gk.cell_image(png, found["a"], geometry["cells"][0])
+        self.assertEqual((cut.w, cut.h), (12, 12))
+        self.assertTrue(all(cut.pixel(x, y)[3] > 0 for x in range(12) for y in range(12)))
 
     def test_aspect_within_six_percent_is_fixed_beyond_it_refused(self) -> None:
         opaque = gk.to_aspect(solid(103, 100, (9, 9, 9, 255)), (100, 100))
@@ -141,6 +172,54 @@ class PixelTests(unittest.TestCase):
             self.assertLessEqual(abs(found["a"]["box"][2] - 60), 3)
 
 
+class ComposeTests(unittest.TestCase):
+    def test_a_layer_is_placed_by_its_content_box_on_the_originals(self) -> None:
+        with tempfile.TemporaryDirectory() as t:
+            local = Path(t)
+            frames = local / "frames"
+            (frames / "base").mkdir(parents=True)
+            (frames / "pic").mkdir(parents=True)
+            pngio.write(frames / "base" / "f0.png", solid(20, 10, (50, 50, 50, 255)))
+            picture = solid(20, 10, (50, 50, 50, 255))
+            for y in range(4, 8):
+                for x in range(6, 12):
+                    picture.data[(y * 20 + x) * 4:(y * 20 + x) * 4 + 4] = bytes((200, 20, 20, 255))
+            pngio.write(frames / "pic" / "f0.png", picture)
+            (local / "masters").mkdir()
+            base = solid(72, 36, (50, 50, 50, 255))
+            pngio.write(local / "masters" / "base.part.png", base)
+            layer = solid(80, 70, (0, 0, 0, 0))                       # the generated picture, keyed: the content box 40 x 30 at (20, 20) in its region
+            for y in range(20, 50):
+                for x in range(20, 60):
+                    layer.data[(y * 80 + x) * 4:(y * 80 + x) * 4 + 4] = bytes((200, 20, 20, 255))
+            cell = {"id": "pic_x", "folder": "pic", "frame": 0, "mask": "diff:base", "mode": "placed"}
+            cache = {"grp": {"geometry": {"cells": [cell]}, "images": {"pic_x": layer},
+                             "found": {"pic_x": {"box": [30, 25, 40, 30], "region": [10, 5, 80, 70], "expect": [14, 9, 70, 62], "scale": [1.0, 1.0]}},
+                             "record": {}, "path": frames / "pic" / "f0.png"}}
+            seen = {}
+
+            def fake_fit(part, source, provenance, local_root, dry, halo=None):
+                seen["image"] = pngio.read(source)
+                return {"gates": "PASS", "size": [72, 36]}
+
+            with mock.patch.object(gk, "fit_part", fake_fit):
+                done = gk.compose_parts("base.part", "grp", {"gauge.out": "pic_x"}, frames, cache, local, False)
+            self.assertEqual(done, ["gauge.out"])
+            out = seen["image"]
+            # the original adds x 5..12, y 3..8 (grown by one) = units 5..13 x 3..9 -> master px 18..46.8 x 10.8..32.4; the layer's whole 40 x 30 content box is mapped onto it
+            red = [(x, y) for y in range(out.h) for x in range(out.w) if out.pixel(x, y)[0] > 150]
+            self.assertTrue(red)
+            self.assertLessEqual(abs(min(x for x, _ in red) - 18), 2)
+            self.assertLessEqual(abs(max(x for x, _ in red) - 47), 2)
+            self.assertLessEqual(abs(min(y for _, y in red) - 11), 2)
+            self.assertLessEqual(abs(max(y for _, y in red) - 32), 2)
+
+    def test_a_missing_base_master_is_an_error_not_a_silent_skip(self) -> None:
+        with tempfile.TemporaryDirectory() as t:
+            with self.assertRaises(gk.GaugeError):
+                gk.compose_parts("nothing", "grp", {}, Path(t), {"grp": {}}, Path(t), False)
+
+
 class RuleTests(unittest.TestCase):
     def test_rule_parts_have_the_master_size_of_the_manifest(self) -> None:
         manifest = gk.load_manifest()
@@ -158,6 +237,10 @@ class RuleTests(unittest.TestCase):
                 image, _ = gk.rule_part(part, frames, manifest)
                 self.assertEqual((image.w, image.h), gk.master_of(part, manifest), part)
             ramp, extra = gk.rule_part("gauge.item_dam", frames, manifest)
+            pngio.write(frames / "256-Item_Dam" / "f4.png", solid(31, 31, (200, 0, 0, 255)))     # one frame off the ramp
+            with self.assertRaises(gk.GaugeError):
+                gk.rule_part("gauge.item_dam", frames, manifest)
+            pngio.write(frames / "256-Item_Dam" / "f4.png", solid(31, 31, (2 + 4 * 18, 0, 0, 255)))
             self.assertTrue(extra["ramp_linear"])
             self.assertEqual(ramp.pixel(0, 0)[:3], (146, 0, 0))
 

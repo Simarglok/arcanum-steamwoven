@@ -59,7 +59,8 @@ MAX_DRIFT = 0.08              # the two axis scales of the art in the result aga
 ASPECT_FIX = 0.10             # an opaque cut cell is stretched to its master aspect when it is within 10 % of it (a layout drift), else the cut is refused
 PAD_FIX = 0.15                # a keyed cut-out is centred on a transparent canvas of the master's aspect when within 15 % of it (nothing is stretched)
 SEARCH = 0.25                 # a cell is searched for in its expected rectangle grown by this share of the gap
-MAGENTA_LEAN = 50             # min(red, blue) minus green above this is magenta ground or its fringe
+MAGENTA_MIN = 140             # a pixel is magenta ground or its fringe when red and blue are both above this ...
+MAGENTA_LEAN = 90             # ... and the smaller of them is this far above green (a violet of the art, such as 120 60 140, stays art)
 KEY_FUZZ = "14%"
 BAND_FUZZ = 40                # the colour distance from the key (of 441) that is still ground when the bounding box of a cell is taken
 
@@ -207,7 +208,7 @@ def note_of(part: str, frames: int = 1) -> str:
         text = f"the same picture as {COPIES[part]} (the originals differ in 5 of 7800 pixels; ON is unused)"
     else:
         text = f"Codex collage {how.split(':', 1)[1].split(' ')[0]}, cut and fitted (gauge_kit.py cut)"
-    if frames > 1:
+    if frames > 1 and part != "gauge.item_dam":
         text += f"; frame 0 of the original's {frames}, the runtime draws the value (SWI-KIT-6)"
     return text
 
@@ -475,21 +476,24 @@ def cell_image(path: Path, found: dict, cell: dict) -> pngio.Image:
     if cell["mode"] == "placed":
         ex, ey, ew, eh = found["expect"]
         pad = 6
-        region = (max(0, ex - pad), max(0, ey - pad), ew + 2 * pad, eh + 2 * pad)
+        bx, by, bw, bh = box
+        x0, y0 = max(0, min(ex, bx) - pad), max(0, min(ey, by) - pad)
+        x1, y1 = max(ex + ew, bx + bw) + pad, max(ey + eh, by + bh) + pad       # the expected cell and the content found near it (a cell the generator moved is not clipped)
+        region = (x0, y0, x1 - x0, y1 - y0)
         found["region"] = list(region)
     else:
         pad = 6 if cell["mode"] == "key" else 0
         region = (max(0, box[0] - pad), max(0, box[1] - pad), box[2] + 2 * pad, box[3] + 2 * pad)
     with tempfile.TemporaryDirectory() as t:
         crop = Path(t) / "crop.png"
-        run(["magick", str(path), "-crop", f"{region[2]}x{region[3]}+{region[0]}+{region[1]}", "+repage", "-alpha", "off", "-depth", "8", str(crop)])
+        run(["magick", str(path), "-crop", f"{region[2]}x{region[3]}+{region[0]}+{region[1]}", "+repage", "-alpha", "off", "-depth", "8", f"PNG24:{crop}"])
         image = pngio.read(crop)
     if cell["mode"] == "rect":
         return image
     colour, spread = (KEY, 0.0)
     for i in range(0, len(image.data), 4):   # a pixel that leans magenta (red and blue well above green) is ground: no part of the batch has such a colour
         r, g, b = image.data[i], image.data[i + 1], image.data[i + 2]
-        if min(r, b) - g > MAGENTA_LEAN:
+        if min(r, b) > MAGENTA_MIN and min(r, b) - g > MAGENTA_LEAN:
             image.data[i:i + 3] = bytes(KEY)
     ring = fit.border_ring(image)
     spread = fit.percentile([math.dist(p, KEY) for p in ring], 0.99)
@@ -520,7 +524,7 @@ def to_aspect(image: pngio.Image, want: tuple[int, int]) -> pngio.Image:
         return image
     opaque = min(image.data[3::4]) == 255
     if abs(have / target - 1) > (ASPECT_FIX if opaque else PAD_FIX):
-        raise GaugeError(f"a cut cell is {image.w}x{image.h} (aspect {have:.3f}), the master {want[0]}x{want[1]} ({target:.3f}): beyond the {ASPECT_FIX:.0%} that a layout drift explains")
+        raise GaugeError(f"a cut cell is {image.w}x{image.h} (aspect {have:.3f}), the master {want[0]}x{want[1]} ({target:.3f}): beyond the {(ASPECT_FIX if opaque else PAD_FIX):.0%} that a layout drift explains")
     if opaque:
         new_w, new_h = (image.w, round(image.w / target)) if have > target else (round(image.h * target), image.h)
         return fit.resample_image(image, (0, 0, image.w, image.h), new_w, new_h)
@@ -560,7 +564,7 @@ HALO_TIERS = ("8,20", "16,40")   # MEAN,P95 of the recorded overrides tried, in 
 
 def fit_part(part: str, source: Path, provenance: Path, local: Path, dry: bool) -> dict:
     """fit.py on one cut. A keyed cut-out whose only failure is the halo gate (a bumpy rim, a needle a few pixels wide: the band is measured before the safety net) is fitted again with the least
-    recorded override that passes; the final edge is always held to the standard limits."""
+    recorded override (capped by fit.py) that passes."""
     tiers: list[str | None] = [None, *(HALO_TIERS if coverage().get(part, "").startswith("codex") else ())]
     for halo in tiers:
         try:
@@ -640,7 +644,10 @@ def join_chain(cache: dict, local: Path, dry: bool) -> list[str]:
     out = ["gauge.scrllsld_off"]
     if not dry:
         for part, source in COPIES.items():
-            png2, prov2 = write_source(local / "work" / BATCH, part, pngio.read(local / "masters" / f"{source}.png"), derived)
+            copy_record = dict(data["record"])
+            copy_record["derived_from"] = {"part": source, "master_sha256": sha256_file(local / "masters" / f"{source}.png"),
+                                           "step": "gauge_kit.py cut (the same picture as the chain strip's master, fitted again by the same pipeline)"}
+            png2, prov2 = write_source(local / "work" / BATCH, part, pngio.read(local / "masters" / f"{source}.png"), copy_record)
             rep = fit_part(part, png2, prov2, local, dry)
             print(f"{part}: {rep['gates']} {rep['size'][0]}x{rep['size'][1]} (a copy of {source})")
             out.append(part)
@@ -691,7 +698,7 @@ def compose_parts(base_part: str, layer_group: str, layer_cells: dict[str, str],
     (a picture: centre on centre; a moon: the whole disc's left edge and bottom, because the top of the disc is cut by the frame)."""
     base_path = local / "masters" / f"{base_part}.png"
     if not base_path.is_file():
-        return []
+        raise GaugeError(f"the base master {base_part} is not made yet: cut its group first (the layers of {layer_group} lie over it)")
     base_master = pngio.read(base_path)
     data = cache[layer_group]
     cells = {c["id"]: c for c in data["geometry"]["cells"]}
@@ -761,7 +768,7 @@ def bands(image: pngio.Image, axis: str) -> list[tuple[int, int]]:
         means.append(tuple(sum(c[k] for c in opaque) / len(opaque) for k in range(3)) if opaque else None)
     out, start = [], 0
     for i in range(1, n + 1):
-        if i == n or means[i] is None != (means[start] is None) or (means[i] is not None and means[start] is not None and sum(abs(a - b) for a, b in zip(means[i], means[start])) > 24):
+        if i == n or (means[i] is None) != (means[start] is None) or (means[i] is not None and means[start] is not None and sum(abs(a - b) for a, b in zip(means[i], means[start])) > 24):
             out.append((start, i))
             start = i
     return out
@@ -791,11 +798,12 @@ def rule_part(part: str, frames: Path, manifest: dict) -> tuple[pngio.Image, dic
     want = master_of(part, manifest)
     image = read_frame(frames, folder, frame)
     if axis == "flat":
-        first = read_frame(frames, folder, 0)
         last = image
         steps = [read_frame(frames, folder, n).pixel(0, 0) for n in range(9)]
         # the nine frames are one colour ramp (the damage of an item): the master is the last frame's colour, the ramp is the runtime's value
         ramp_ok = all(abs(steps[n][0] - (steps[0][0] + (steps[8][0] - steps[0][0]) * n / 8)) <= 2 for n in range(9))
+        if not ramp_ok:
+            raise GaugeError(f"{folder}: the nine damage frames are not one linear ramp, so the last frame's colour alone does not stand for them")
         r, g, b, a = last.pixel(0, 0)
         out = pngio.Image(want[0], want[1], bytearray(bytes((r, g, b, 255)) * (want[0] * want[1])))
         return out, {"ramp_linear": ramp_ok, "colour": [r, g, b]}

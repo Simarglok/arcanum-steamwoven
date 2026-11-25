@@ -165,8 +165,8 @@ class AlphaTest(unittest.TestCase):
         _, clean = fit.fit_image(source, (96, 96))
         self.assertEqual(fit.gates(clean, (96, 96)), [])
 
-    def test_a_halo_override_is_checked_and_the_final_edge_stays_standard(self) -> None:
-        """ARC-UI-2483: `halo_limits` raises the gate on what the pipeline made only; the final edge after the safety net is still held to the standard limits."""
+    def test_a_halo_override_raises_the_gate_on_the_pipeline_edge_only(self) -> None:
+        """ARC-UI-2483: `halo_limits` raises the halo limits on what the pipeline made; the other gates are untouched."""
         source = fit.synthetic_disc(96, None)
         for i in range(96 * 96):
             o = i * 4
@@ -176,10 +176,25 @@ class AlphaTest(unittest.TestCase):
             _, report = fit.fit_image(source, (96, 96))
         self.assertTrue(fit.gates(report, (96, 96)))
         self.assertTrue(any("edge halo" in f for f in fit.gates(report, (96, 96), (1.0, 2.0))))
-        relaxed = fit.gates(report, (96, 96), (1000.0, 1000.0))
-        self.assertEqual([f for f in relaxed if f.startswith("edge halo:")], [])
-        report["halo_final"] = {"mean_de": 9.0, "p95_de": 20.0}
-        self.assertTrue(any("after the safety net" in f for f in fit.gates(report, (96, 96), (1000.0, 1000.0))))
+        self.assertEqual(fit.gates(report, (96, 96), (1000.0, 1000.0)), [])
+        self.assertTrue(any("master size" in f for f in fit.gates(report, (90, 90), (1000.0, 1000.0))))
+        report["opaque_share"] = 0.0
+        self.assertTrue(any("empty" in f for f in fit.gates(report, (96, 96), (1000.0, 1000.0))))
+
+    def test_a_halo_override_is_finite_and_capped(self) -> None:
+        import argparse
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as t:
+            src = Path(t) / "disc.png"
+            pngio.write(src, fit.synthetic_disc(120, None))
+            base = dict(part="plate.char_but", batch=None, prompt=None, source=str(src), provenance=None, no_provenance=True, size=None, crop=None, key="none", material=None,
+                        lock_strength=1.0, force_lock=False, min_speck=fit.MIN_SPECK, soft_shadow=False, date=None, local_root=t, masters=str(Path(t) / "m"), replace=True, dry_run=True, manifest=None)
+            for bad in ("1e9,1e9", "nan,5", "0,5", "5", "21,45", "20,46"):
+                with self.assertRaises(fit.FitError, msg=bad):
+                    fit.run_fit(argparse.Namespace(**base, halo_limits=bad))
+            report = fit.run_fit(argparse.Namespace(**base, halo_limits="20,45"))
+            self.assertEqual(report["gates"], "PASS")
 
     def test_explicit_key_needs_a_border_of_that_colour(self) -> None:
         full = textured(60, 60, (100, 80, 60))  # fills the frame: nothing of it is background
