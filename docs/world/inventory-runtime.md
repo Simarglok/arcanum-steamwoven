@@ -259,7 +259,9 @@ the made items the session added to it. Because an object stands on one map at a
 NPC gives the same visible result: the changes are there after the PC leaves and returns, and they stay the NPC's when it
 visits another map (`QueryNpcInventory`). The map-bound calls (`QueryMapInventory`, `LootItem`, `GiveItemToPc`) still read the
 holders of the actor's map seed, so on a map whose seed does not list a visiting companion its seed and added items are not shown
-or taken there (as before this task for its seed items). The changes are:
+or taken there (as before this task for its seed items). ARC-WORLD-3118: the barter window's open and view are not among them: `QueryNpcHolder(npc)` finds the NPC's
+holder (and the attached map whose seed lists it) on the actor's map first, else on the companion's home map, and `OpenBarter` and the window's list, worn view and wear test read it
+there, so the window of a visiting companion opens (its coins and items are the home map's holder). The changes are:
 
 - **Added made items** (`SessionInventoryState.Npcs`: `SessionNpcInventory(npc, items)`; `QueryNpcInventory(npc)`): `made:n`
   items with their saved kind, numbered with the hero's made items (one past every made number held by the hero or an NPC, deleted
@@ -305,7 +307,7 @@ not migrated.
 | Any object type can enter an NPC's list. | Gold, keys and key rings are refused, as for the PC's lists; ammunition merges into the NPC's stack of its prototype (ARC-WORLD-066). |
 
 Not modelled: moving a seed item from one NPC to another (no caller yet), giving an NPC an item from the PC (barter, drop on a
-follower), NPC worn slots, gold, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
+follower), NPC worn slots, gold, and a visiting companion's items in the map-bound calls of a map whose seed does not list it (the barter window excepted, ARC-WORLD-3118).
 
 ## Placed items (ARC-WORLD-059)
 

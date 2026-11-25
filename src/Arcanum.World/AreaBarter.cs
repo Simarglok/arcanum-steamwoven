@@ -280,20 +280,27 @@ public sealed class AreaBarter
             .Select(item => Line(item.Entity, item.Kind, TradeDirection.PcSells, parties, worn.Contains(item.Entity), Units(item.Entity) ?? 1))
             .ToArray();
         var shown = Merchant.Container ?? Merchant.Entity;
-        var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == shown);
+        // ARC-WORLD-3118: a companion carried here is listed by its home map's seed: its list and its off switches are that map's.
+        var merchantNpc = _session.QueryNpcHolder(Merchant.Entity);
+        var holder = Merchant.Container is null ? merchantNpc?.Holder : _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == shown);
+        var shownMap = Merchant.Container is null && merchantNpc is { } located ? located.Map.RuntimeMap : map;
         var wares = (holder?.Items ?? [])
-            .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, map, item.Entity))
+            .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, shownMap, item.Entity))
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, false,
                 item.Facts.AmmoType is not null ? item.Facts.Quantity ?? 1 : 1))
             .ToArray();
         // ARC-UI-1926: the doll view's items are the real merchant's, even when a substitute container is the shown grid (0x575CB0 returns the merchant as owner).
-        var merchantHolder = Merchant.Container is null ? holder : _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
+        var merchantHolder = merchantNpc?.Holder;
+        var wornMap = merchantNpc is { } found ? found.Map.RuntimeMap : map;
         var wornWares = (merchantHolder?.Items ?? [])
-            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, map, item.Entity))
+            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, wornMap, item.Entity))
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, true, 1))
             .ToArray();
         return new(Merchant, _session.QueryGold(), _session.QueryNpcGold(Merchant.Entity) ?? 0, haggle, training, reaction, hero, wares) { WornWares = wornWares };
     }
+
+    /// <summary>ARC-WORLD-3118: the attached map whose seed lists the merchant: the shown map's, or for a companion carried here its home map (the map of its rows, wield context and restock).</summary>
+    private SessionMapId HolderMap() => _session.QueryNpcHolder(Merchant.Entity)?.Map ?? _session.QueryActor().Map;
 
     /// <summary>The hero buys a merchant's item (all units of a stack) at its quote.</summary>
     [OriginalFunction(0x575200, OriginalFunctionScope.Partial)]
@@ -308,7 +315,7 @@ public sealed class AreaBarter
         if (_session.QueryGold() < line.Quote.Price) return Refused("not enough money");
         var result = _session.BarterBuy(_session.Version, Merchant.Entity, entity, line.Count, Merchant.Follower ? 0 : line.Quote.Price, line.Kind,
             GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session), worn is null ? Merchant.Container : null,
-            wornItem: worn is not null, npcWearer: worn is null ? null : _inventory.NpcWearer?.Invoke(_session.QueryActor().Map, Merchant.Entity));
+            wornItem: worn is not null, npcWearer: worn is null ? null : _inventory.NpcWearer?.Invoke(HolderMap(), Merchant.Entity));
         return Settle(TradeDirection.PcBuys, line, result);
     }
 
@@ -333,9 +340,9 @@ public sealed class AreaBarter
     {
         ArgumentNullException.ThrowIfNull(wearable);
         if (!AreaInventoryHost.WearSlots(wearable).Contains(slot)) return EquipmentRefusal.WrongType;
-        if (_inventory.NpcWearerFacts?.Invoke(_session.QueryActor().Map, Merchant.Entity) is not { } wearer) return null;
+        if (_inventory.NpcWearerFacts?.Invoke(HolderMap(), Merchant.Entity) is not { } wearer) return null;
         var worn = new Dictionary<EquipmentSlot, EquipmentItem>();
-        var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
+        var holder = _session.QueryNpcHolder(Merchant.Entity)?.Holder;
         foreach (var listed in (holder?.Items ?? []).Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold))
         {
             if (_inventory.HolderItemWearable(_session, listed.Entity, listed.Facts.Kind) is not { } facts) return null;
@@ -360,7 +367,7 @@ public sealed class AreaBarter
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
         var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
         // ARC-UI-2159: the merchant wears it (the wield context gives its scripts their wearer) after the weight test of 0x466510; a merchant the AI host holds no build of takes the diagnostic check.
-        var map = _session.QueryActor().Map;
+        var map = HolderMap();
         var result = _session.BarterSellWorn(_session.Version, Merchant.Entity, entity, slot, wearable, price, line.Kind,
             _inventory.NpcSlotInsertCheck?.Invoke(Merchant.Entity) ?? AreaInventoryHost.DiagnosticInsertCheck,
             identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session), npcWearer: _inventory.NpcWearer?.Invoke(map, Merchant.Entity));
@@ -441,7 +448,7 @@ public sealed class AreaBarter
         // ARC-UI-2139: a worn item is taken off the merchant's slot (0x461CA0 → 0x467860 → 0x467CB0), from the merchant itself, never from a substitute container.
         var worn = view.WornWares.Any(item => item.Entity == entity);
         var bet = new SessionGambleBet(Merchant.Entity, _merchantGambling?.Invoke()?.Level ?? 0, entity, line.Count, price, line.Kind, GoldKind(), worn ? null : Merchant.Container,
-            WornItem: worn, NpcWearer: worn ? _inventory.NpcWearer?.Invoke(_session.QueryActor().Map, Merchant.Entity) : null);
+            WornItem: worn, NpcWearer: worn ? _inventory.NpcWearer?.Invoke(HolderMap(), Merchant.Entity) : null);
         var result = _session.Gamble(_session.Version, bet, _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
         if (!result.Settled)
         {

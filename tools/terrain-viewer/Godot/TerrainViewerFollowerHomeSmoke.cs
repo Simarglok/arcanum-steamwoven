@@ -38,6 +38,7 @@ public partial class TerrainViewerApp
         Require(session.QueryTeleportMap(entity) == home.RuntimeMap,
             $"the carry gave it the map it left as its teleport map: {session.QueryTeleportMap(entity)?.ToString() ?? "none"} not {home.RuntimeMap}");
         var shown = CurrentAreaMap;
+        if (led is null) CheckVisitorBarterSmoke(entity, session, Require);
         _aiForSmoke = true;
         try
         {
@@ -71,6 +72,30 @@ public partial class TerrainViewerApp
         {
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
         }
+    }
+
+    // ARC-WORLD-3118 native observation (inside the follower-home stage, while the companion the carry brought is still the hero's follower): the visitor's
+    // barter model (the dialog's trade and the portrait's Inventory open the same one) opens its window although the shown map's seed does not list it; the
+    // session finds it on its home map's seed (QueryNpcHolder), where a lookup by the shown map alone ended in UnknownHolder.
+    private void CheckVisitorBarterSmoke(string entity, GameSessionOwner session, Action<bool, string> require)
+    {
+        if (_conversationHost is not { } host) { GD.Print("ARC-WORLD-3118 native-smoke visitor-barter NONE (no talk host)"); return; }
+        AdoptBarterData();
+        if (_barterData is not { Data: not null }) { GD.Print($"ARC-WORLD-3118 native-smoke visitor-barter NONE (no barter data: {_barterData?.Status})"); return; }
+        AdmitCompanionSpeakers();
+        var index = host.Speakers.ToList().FindIndex(speaker => AreaConversationState.EntityId(speaker.Row) == entity);
+        if (index < 0) { GD.Print("ARC-WORLD-3118 native-smoke visitor-barter NONE (the visitor is not a speaker of the shown host)"); return; }
+        var holder = session.QueryNpcHolder(entity);
+        require(holder is { } listed && listed.Map.RuntimeMap != CurrentAreaMap, $"the session lists the visitor on its home map, not on map {CurrentAreaMap}: {holder?.Map.RuntimeMap.ToString() ?? "no holder"}");
+        var (barter, refusal) = BarterModel(host, entity, index, substitute: true, "ARC-WORLD-3118 visitor barter");
+        require(barter is not null, "the visitor's barter model: " + refusal);
+        OpenBarterWindow(barter!);
+        require(BarterOpen, "the barter window opened for the visitor: " + _barterStatus);
+        var view = barter!.View();
+        var kept = holder!.Value.Holder.Items.Count(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold);
+        require(view.Wares.Count <= kept, $"the window shows the visitor's own list: {view.Wares.Count} wares of {kept}");
+        GD.Print("ARC-WORLD-3118 native-smoke visitor-barter PASS " + System.Text.Json.JsonSerializer.Serialize(new { Visitor = entity, Shown = CurrentAreaMap, Home = holder.Value.Map.RuntimeMap, Wares = view.Wares.Count, Listed = kept }));
+        CloseBarterByPlayer();
     }
 
     // ARC-DEV-351 (TG9, RL27): after the homecoming above, the hero goes back to the former follower's home map through an exit of this map that leads there. The open of the home map
