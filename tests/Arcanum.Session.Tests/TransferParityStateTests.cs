@@ -110,6 +110,23 @@ public sealed class TransferParityStateTests
     }
 
     [TestMethod]
+    public void A_left_behind_member_on_the_other_map_still_takes_a_slot_of_the_follower_limit()
+    {
+        // The original counts the dangling array element toward the limit (0x45E3F0, join check 0x4AD950); Steamwoven keeps the member in the array by entity, so the count is the same.
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Sogg).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Sogg, PartyStateTests.Facts(maxFollowers: 1), false).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Sogg).WaitFlag);
+        Assert.AreEqual(1, owner.QueryParty().NonForcedFollowers);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, Inside, [], owner.QueryTransferMoveList(new())).Disposition);
+        Assert.AreEqual(Cave, owner.QueryActor().Map, "the hero is on the other map");
+        Assert.AreEqual(1, owner.QueryParty().NonForcedFollowers, "the member left on the old map is still counted");
+        var refused = owner.JoinParty(owner.Version, Virgil, PartyStateTests.Facts(maxFollowers: 1), false);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ConsentRefused, FollowConsent.LimitReached), (refused.Disposition, refused.Failure, refused.Consent));
+        Assert.AreEqual(1, owner.QueryParty().Followers.Count);
+    }
+
+    [TestMethod]
     public void A_move_to_another_map_clears_FM6_links_of_the_travellers_and_keeps_the_danger_word()
     {
         using var owner = Party(Virgil);
