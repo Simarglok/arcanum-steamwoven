@@ -80,6 +80,13 @@ class RingTests(unittest.TestCase):
         bottom_right = max(sum(ring.pixel(x, y)[:3]) for x in range(260, 310) for y in range(260, 310) if ring.pixel(x, y)[3] > 200)
         self.assertGreater(top_left, bottom_right)  # the light falls from the top left
 
+    def test_the_outer_edge_is_found_on_the_brass_and_defaults_when_there_is_none(self) -> None:
+        _, edge = hk.dense_table(hk.ring_table([lens_art()]))
+        self.assertEqual(len(edge), hk.TH_BINS)
+        self.assertTrue(all(2.5 <= e <= 5.5 for e in edge))
+        _, none = hk.dense_table(hk.ring_table([lens_art(wood=(150, 112, 75))]))   # a wood brighter than the ring: no angle falls off
+        self.assertEqual(set(none), {hk.DEFAULT_EDGE})
+
     def test_the_drop_in_part_is_the_whole_ring_on_the_arts_square(self) -> None:
         part = hk.BY_ID["hardware.pcwincvr"]
         frames = {p.art: lens_art() for p in hk.LENS_ARTS}

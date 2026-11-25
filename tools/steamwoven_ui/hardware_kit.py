@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ARC-UI-3261 (batch B-HARDWARE, slice 3): the small hardware of the windows BY RULE from the original's own frames (no Codex): the lens rings, the hotkey slot insets, the wood of the maintain slots and
-their plugs, and three small selection frames (arts 198 222 231 232 233 367 670 746, 172 to 181, 188 to 192, 628 to 632, 646, 332, 314; 31 parts).
+their plugs, and three small selection frames (arts 198 222 231 232 233 367 670 746, 172 to 181, 188 to 192, 628 to 632, 646, 332, 314; 31 arts, 33 parts: the whole lens ring and its filled look are two parts of their own).
 
     python3 -B tools/steamwoven_ui/hardware_kit.py plan
     python3 -B tools/steamwoven_ui/hardware_kit.py rule  [--only PART,...] [--dry-run] [--frames DIR] [--local-root DIR]    (the masters and their rule records)
@@ -9,9 +9,11 @@ their plugs, and three small selection frames (arts 198 222 231 232 233 367 670 
 
 The rules (TRD SWI-KIT, the owner's rules: the original's muted palette and lighting, no added ornament; the old art's wood in a corner is NOT part of a hardware part, SWI-LAY-12 / #3101):
 
-* **Lens ring** (`lens`): the eight lens arts are one ring in eight wood corners. The ring is the original's own: every opaque pixel within 6 px of the transparent circle is put, by its angle and its distance from the circle's edge, into a polar table
-  (0.5 degree by 0.25 px, a smooth splat, the eight arts pooled so the eight woods cancel); the master is that table read at every master pixel, so the lighting that falls from the top left stays the original's and the ring is smooth at the master's
-  size. Outside the ring the part is transparent (the window's wood shows), inside the circle too: the lens is a window onto the portrait; `schm_pc_lens` (art 367) keeps the original's opaque dark fill, which is part of that art.
+* **Lens ring** (`lens_whole`, `lens`): the eight lens arts are one ring in eight wood corners. The ring is the original's own: every opaque pixel within 6 px of the transparent circle is put, by its angle and its distance from the circle's edge, into a polar
+  table (0.5 degree by 0.25 px, a smooth splat, the eight arts pooled so the eight woods cancel; the four places where the circle touches the art's edge are filled across). The master is that table read at every master pixel on a canvas
+  18 px larger on every side, so the ring is whole: each angle's brass band (up to its own outer edge, the old art's dark rim beyond it dropped) is stretched to 5 original px, highlights above the HUD rings' brass are compressed (no white), and the lighting
+  (white top left, warm orange bottom right, a dark bevel along the inner edge) stays the original's. Parts: `hardware.lens_ring` (354 x 354, the circle open), `hardware.lens_ring_filled` (with the dark fill of art 367) and the eight lens arts' rows,
+  the same ring cut to the art's own 318 x 318 square (a drop-in for the old art; the ring is cut where the old art cut it).
 * **Slot inset** (`inset`): the ten hotkey slot arts are one inset (a dark shadow along the top and left, a light line along the bottom and right) over ten crops of the strip's wood. The inset is the mean of the ten, each normalised by its own wood, so the
   wood cancels; the part holds only what is not wood: the shadow as black with the original's depth as alpha, the edge lines in their own colour, and a transparent middle (the strip's wood shows through). The ten parts are one picture.
 * **Slot wood** and **plug** (`wood`, `plug`): the five maintain slots of the top strip are openings in the strip art, so their back and their plug are wood: a crop of the strip's own wood, flipped to differ, shaded by the original's smooth light
@@ -54,6 +56,7 @@ MANIFEST = HERE / "kit.json"
 TH_BINS = 720                 # angle bins (0.5 degree)
 D_MIN, D_MAX, D_STEP = -0.5, 6.0, 0.25   # depth (original px beyond the circle's edge)
 SIGMA_T, SIGMA_D = 2.0, 0.40  # the splat's width: degrees, original px
+DEFAULT_EDGE = 3.5            # the outer edge of the brass when no angle shows one (original px)
 RING_WIDTH = 5.0              # the ring's brass band, original px (the old art's band is about 4 px, its dark rim included); every angle's band is stretched to it
 LENS_PAD = 18                 # master px added on every side of a lens art's square so the ring is whole (3 grid steps)
 HIGHLIGHT_KNEE, HIGHLIGHT_SLOPE = 139.0, 0.5   # luminance above the knee (the 90th percentile of the HUD ring's brass) is halved: no white on a brass ring
@@ -227,8 +230,8 @@ def ring_table(images: list[pngio.Image]) -> dict:
 
 def dense_table(table: dict) -> tuple[list[list[list[float] | None]], list[float]]:
     """The table as one colour per (angle bin, depth bin), the angles nothing was splatted into (the circle touches the art's edge there: the four cardinal points) filled by a straight line between the nearest
-    angles that have a colour, and the outer edge of the brass at every angle: the last depth whose luminance is at least half the angle's peak, plus half a pixel (the dark rim of the old art beyond it is the old
-    art's shadow on its wood and is not part of the ring), smoothed over 16 bins either side."""
+    angles that have a colour, and the outer edge of the brass at every angle: the first depth after the angle's brightest point at which the luminance falls below half of it (the dark rim of the old art beyond it is the old
+    art's shadow on its wood and is not part of the ring; an angle with no such fall takes its neighbours' edge), smoothed over 16 bins either side."""
     num, den = table["num"], table["den"]
     grid: list[list[list[float] | None]] = [[None] * ND for _ in range(TH_BINS)]
     for db in range(ND):
@@ -245,11 +248,24 @@ def dense_table(table: dict) -> tuple[list[list[list[float] | None]], list[float
             a_, b_ = grid[(t - lo) % TH_BINS][db], grid[(t + hi) % TH_BINS][db]
             f = lo / (lo + hi)
             grid[t][db] = [a_[c] * (1 - f) + b_[c] * f for c in range(3)]
-    edge = []
+    raw: list[float | None] = []
     for t in range(TH_BINS):
         lums = [(D_MIN + db * D_STEP, lum(*grid[t][db])) for db in range(ND) if grid[t][db] is not None and 0 <= D_MIN + db * D_STEP <= 5.5]
-        peak = max(l for _, l in lums)
-        edge.append(max(d for d, l in lums if l >= 0.5 * peak) + 0.5)
+        peak_d, peak = max(lums, key=lambda p: p[1])
+        drop = next((d for d, l in lums if d >= peak_d and l < 0.5 * peak), None)   # the first depth after the peak that falls below half of it
+        raw.append(None if drop is None or peak < 20 else clamp(drop - 0.25, 2.5, 5.5))   # on the dark side the wood past the brass is as bright as the brass: no edge there
+    known = [t for t in range(TH_BINS) if raw[t] is not None]
+    if not known:   # no angle falls off after its brightest point (a ring no brighter than its wood): the old art's own band width
+        return grid, [DEFAULT_EDGE] * TH_BINS
+    edge = []
+    for t in range(TH_BINS):   # an angle with no edge takes a straight line between its nearest neighbours that have one
+        if raw[t] is not None:
+            edge.append(raw[t])
+            continue
+        lo = next(k for k in range(1, TH_BINS) if raw[(t - k) % TH_BINS] is not None)
+        hi = next(k for k in range(1, TH_BINS) if raw[(t + k) % TH_BINS] is not None)
+        f = lo / (lo + hi)
+        edge.append(raw[(t - lo) % TH_BINS] * (1 - f) + raw[(t + hi) % TH_BINS] * f)  # type: ignore[operator]
     smooth = [sum(edge[(t + k) % TH_BINS] for k in range(-16, 17)) / 33 for t in range(TH_BINS)]
     return grid, smooth
 
@@ -297,6 +313,8 @@ def render_ring(table: dict, size: tuple[int, int], fill: tuple[int, int, int] |
     if "dense" not in table:
         table["dense"] = dense_table(table)
     grid, edge = table["dense"]
+    if abs(table["cx"] - ow / 2) > 0.6 or abs(table["cy"] - oh / 2) > 0.6:
+        raise KitError("the lens circle is not centred in its art: the whole ring is drawn on the art's centre")
     knee = HIGHLIGHT_KNEE
     w, h = size
     cx, cy, radius = w / 2.0, h / 2.0, table["radius"]
@@ -614,7 +632,7 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         strip = masters / "board.inttop.png"
         wood = work / "wood.png"
         run(["magick", str(strip), "-crop", "126x126+878+12", "+repage", str(wood)])
-        sets = (("Lens rings (8 arts: the original's wood corners are gone, the circle is open)", ["hardware.pcwincvr", "hardware.lns_loot", "hardware.optionspclens", "hardware.schm_pc_lens"], 318),
+        sets = (("Lens ring drop-in rows (the art's own square: no wood corners, the circle open, the ring brass band wider; the whole 354 px ring is hardware.lens_ring)", ["hardware.pcwincvr", "hardware.lns_loot", "hardware.optionspclens", "hardware.schm_pc_lens"], 318),
                 ("Hotkey slot insets (the strip's wood shows through the middle)", ["hardware.hkslt0", "hardware.hkslt5"], 114),
                 ("Maintain slot wood and plugs (top strip)", ["hardware.splslt1", "hardware.splslt3", "hardware.sp_plugged1", "hardware.sp_plugged4"], 126),
                 ("Selection frames and roller", ["hardware.portrait_highlight", "hardware.portselect", "hardware.rollertemplate"], 240))
