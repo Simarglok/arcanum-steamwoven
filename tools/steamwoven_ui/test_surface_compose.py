@@ -287,6 +287,25 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertGreater(at(235, 120), 200)   # outside the box, the weight that was 1 stays 1
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_a_disc_casts_a_soft_shadow_down_and_right_on_the_wood_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            image, solid = tmp_path / "i.png", tmp_path / "s.png"
+            subprocess.run(["magick", "-size", "300x300", "xc:gray(200)", str(image)], check=True)
+            # the wood weight: 1 everywhere except the disc (centre 120,120, radius 40) and a neighbour at the lower right (x 200..300, y 150..300) that keeps the original's pixels
+            subprocess.run(["magick", "-size", "300x300", "xc:white", "-fill", "black", "-draw", "circle 120,120 120,80", "-draw", "rectangle 200,150 299,299", str(solid)], check=True)
+            surface_compose.cast_disc_shadows(image, solid, ((60, 60, 180, 180, 80, 80, 160, 160),), 300, 300)
+            data = surface_compose.gray_bytes(image)
+            surface_compose.cast_disc_shadows(image, solid, (), 300, 300)     # no disc: untouched
+            self.assertEqual(surface_compose.gray_bytes(image), data)
+        at = lambda x, y: data[y * 300 + x]
+        self.assertLess(at(150, 155), 120)                     # just outside the disc's lower right: dark
+        self.assertGreater(at(85, 85), 190)                    # just outside its upper left: no shadow
+        self.assertEqual(at(120, 120), 200)                    # the disc itself
+        self.assertEqual(at(250, 200), 200)                    # the neighbour keeps its pixels
+        self.assertGreater(at(10, 290), 195)                   # far away: untouched
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
     def test_a_disc_box_may_be_an_oval_and_the_spec_runs_it_after_the_halo_boxes(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

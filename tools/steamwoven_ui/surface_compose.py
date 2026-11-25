@@ -70,6 +70,10 @@ FILL_CLOSE = 4           # px: ... and closed by this, so strokes of a letter an
 HALO_BRIGHT = 70          # 0..255 luma of the ORIGINAL: ARC-UI-3101: an object's metal or paper is lighter than this, the dark halo (the old art's shadow and wood fringe) around it is not
 HALO_DILATE = 2           # px: ... the object's pixels are grown by this
 HALO_CLOSE = 10           # px: ... and closed by this (the dark parts inside a gear), the holes inside filled: the object is one solid shape, everything outside it in the box is the Codex wood
+SHADOW_DX = 13            # px: ARC-UI-3101: the soft shadow of a disc (a lens, an oval, a round button) falls down and to the right (light from the top left), the ellipse shifted by this much ...
+SHADOW_DY = 13
+SHADOW_SIGMA = 16.0       # px: ... blurred by this (Gaussian sigma) ...
+SHADOW_STRENGTH = 0.7     # ... and the wood under it is darkened by at most this share (measured on the shadows the generator painted under the schematic's round sockets: 0.35 to 0.4 of the wood's luma at the rim, back to 1 about 40 px out)
 ERASE_RING = 2            # px: the ring just outside an erase box whose per-channel median fills it
 TEXT_DELTA = 35           # ARC-UI-3165: 0..255 luma distance from the ground's (the ring outside the box) that makes a pixel text (strokes, digits, signs on a field or on paper)
 TEXT_SIGMAS = 3.0         # the text band is at least this many robust standard deviations (1.4826 x the median deviation) of the ring's luma wide (mottled paper), TEXT_DELTA at the least
@@ -790,6 +794,21 @@ def fill_outside_discs(solid: Path, discs: tuple, out: Path, width: int, height:
     wood_outside_part(solid, protect, inside, fill, out, True)
 
 
+def cast_disc_shadows(image: Path, solid: Path, discs: tuple, width: int, height: int) -> None:
+    """ARC-UI-3101: one soft shadow under every disc of the spec's `disc_boxes` (the old shadow went with the old wood): the ellipse of the disc box shifted by (SHADOW_DX, SHADOW_DY), blurred
+    by SHADOW_SIGMA, scaled by SHADOW_STRENGTH, multiplies the picture only where the wood weight `solid` is 1 (the shadow falls on the new wood, never on the part itself or on a neighbour that
+    keeps the original's pixels). `image` is rewritten in place."""
+    if not discs:
+        return
+    shape = []
+    for _x0, _y0, _x1, _y1, dx0, dy0, dx1, dy1 in discs:
+        shape += ["-draw", f"ellipse {(dx0 + dx1) / 2 - 0.5 + SHADOW_DX},{(dy0 + dy1) / 2 - 0.5 + SHADOW_DY} {(dx1 - dx0) / 2},{(dy1 - dy0) / 2} 0,360"]
+    factor = image.with_name("disc-shadow.png")
+    run(["magick", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *shape, "-alpha", "off", "-colorspace", "Gray", "-blur", f"0x{SHADOW_SIGMA}",
+         str(solid), "-colorspace", "Gray", "-compose", "Multiply", "-composite", "-evaluate", "Multiply", str(SHADOW_STRENGTH), "-negate", "-colorspace", "sRGB", str(factor)])
+    run(["magick", str(image), "-alpha", "off", str(factor), "-compose", "Multiply", "-composite", str(image)])
+
+
 def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, height: int) -> None:
     """The wood weight `solid` (rewritten in place) after the spec's `fill_boxes` (wood between the items), `halo_boxes` (wood round a part, outside its light shape) and `disc_boxes`
     (wood round a lens or a round button, outside its exact ellipse)."""
@@ -860,6 +879,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
         pngio.write(out, merged)
     else:                         # the original's band replaces the Codex line
         run(["magick", str(out), str(original), str(bevel), "-composite", str(out)])
+    cast_disc_shadows(out, solid, spec.disc_boxes, w, h)
     result = pngio.read(out)
     chip_pixels = remove_chips(result, spec.chip_boxes)
     erased = erase_boxes(result, spec.erase_boxes)
