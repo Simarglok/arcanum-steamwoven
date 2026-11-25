@@ -6,7 +6,7 @@
     python3 -B tools/steamwoven_ui/marker_kit.py self-test
 
 Two looks, no Codex in either. `pack` (rule P, pack first): the old HD pack's frame of the art at the master size with an analytic alpha (the original's
-silhouette, enlarged smoothly); a frame the pack does not hold is made by rule. `rule`: everything from the original's own frames: the round markers as
+silhouette, enlarged smoothly; a slot cover is the pack's picture, opaque but for the original's transparent cells); a frame the pack does not hold is made by rule. `rule`: everything from the original's own frames: the round markers as
 true circles of the original's radii and colours, the other markers with a smooth outline and the original's flat colours, the slot covers as the original's
 flat silhouette (its darker details a darker step) with a smooth outline under straight grid lines. `pick`, the default and what the manifest records, is the
 mix of the two by art (`RULE_PICK` takes the rule look, every other art the pack frame, and a missing pack frame is then an error). `sheet` is the composite
@@ -106,6 +106,10 @@ def parts_of(art: Art) -> list[Part]:
 PARTS = {p.ident: p for a in ARTS for p in parts_of(a)}
 
 
+SAME_FRAMES = frozenset({"mm_locnew"})   # arts whose two frames are the same picture
+PACK_ALPHA = {False: "with the original's silhouette as an analytic alpha", True: "opaque but for the original's transparent cells"}   # by "is a cover"
+
+
 def picked_look(art: Art) -> str:
     return "rule" if art.name in RULE_PICK else "pack"
 
@@ -116,9 +120,11 @@ def provenance_of(ident: str) -> str:
 
 def note_of(ident: str) -> str:
     part = PARTS[ident]
-    what = ("the cover of an empty worn slot" if part.art.family == "cover" else "the map marker") + f" of art {part.art.art}" + (", frame 1 (the highlighted look)" if part.frame else "")
+    what = ("the cover of an empty worn slot" if part.art.family == "cover" else "the map marker") + f" of art {part.art.art}"
+    if part.frame:
+        what += ", frame 1 (same picture as frame 0)" if part.art.name in SAME_FRAMES else ", frame 1 (yellow ring)"
     if picked_look(part.art) == "pack":
-        how = "the old HD pack's frame" + (f" of art {art_named(SAME_AS[part.art.name]).art} (the same original picture)" if part.art.name in SAME_AS else "") + " with the original's silhouette as an analytic alpha"
+        how = "the old HD pack's frame" + (f" of art {art_named(SAME_AS[part.art.name]).art} (the same original picture)" if part.art.name in SAME_AS else "") + f", {PACK_ALPHA[part.art.family == 'cover']}"
     else:
         how = {"cover": "by rule: the original's flat silhouette and darker details with a smooth outline under straight grid lines",
                "round": "by rule: true circles of the original's radii and colours",
@@ -193,8 +199,9 @@ def mean_colour(colours: list[tuple[int, int, int]]) -> tuple[int, int, int]:
 
 
 def round_layers(frame: Image) -> tuple[list[tuple[float, tuple[int, int, int]]], tuple[int, int, int] | None]:
-    """A circle marker as rings from the outside in, `(radius in cells, colour)`, and the colour of its centre cross (or None). Each radius is the one of a
-    disc with the area of the original's cells of that ring and everything inside it, at most half the frame."""
+    """A circle marker as rings from the outside in, `(radius in cells, colour)`, and the colour of its centre cross (or None). A coloured outline (yellow,
+    violet) is one cell wide, as in the original; an outer radius is that of a disc with the area of the original's cells, at most half the frame, and the
+    bright disc of a waypoint has the area of its bright cells; its rim takes the mean of the original's dark cells."""
     cells: dict[tuple[int, int, int], int] = {}
     for y in range(frame.h):
         for x in range(frame.w):
@@ -218,10 +225,9 @@ def round_layers(frame: Image) -> tuple[list[tuple[float, tuple[int, int, int]]]
     inner_half = half - (1.0 if yellow else 0.0)
     purple = [c for c in rest if c[2] > 200]
     if purple:  # a coloured ring round a black centre
-        total = sum(rest.values())
-        black = sum(k for c, k in rest.items() if c not in purple)
-        rings.append((min(inner_half, radius(total)), purple[0]))
-        rings.append((radius(black), (0, 0, 0)))
+        outer = min(inner_half, radius(sum(rest.values())))
+        rings.append((outer, purple[0]))
+        rings.append((outer - 1.0, (0, 0, 0)))
     else:       # a bright disc in a dark rim
         bright = max(rest, key=lambda c: c[0])
         rim = [c for c, k in rest.items() if c != bright for _ in range(k)]
@@ -310,7 +316,7 @@ def cover(frame: Image, size: tuple[int, int]) -> Image:
     tone = button_kit.resample_plane(coverage, (frame.w, frame.h), size, COVER_SIGMA)
     shape = [sum(button_kit.smoothstep(t - EDGE_HALF / 2, t + EDGE_HALF / 2, v) for t in COVER_LEVELS) / len(COVER_LEVELS) for v in tone]
     cols, rws = line_cover(columns, frame.w, w), line_cover(rows, frame.h, h)
-    # a transparent original cell is a straight edge of the cover (its top row): box coverage, no smoothing
+    # a transparent original cell is a straight edge of the cover (its top row): the nearest cell's alpha, no smoothing
     opaque = [255.0 if frame.data[i * 4 + 3] >= 128 else 0.0 for i in range(frame.w * frame.h)]
     out = Image(w, h, bytearray(w * h * 4))
     for py in range(h):
@@ -415,7 +421,7 @@ def record_of(part: Part, image_path: Path, frames: Path, source: Path | None, p
         "id": part.ident,
         "tool": "marker_kit.py",
         "tool_version": TOOL_VERSION,
-        "rule": ("pack-first: the old HD pack's frame at the master size with the original's silhouette as an analytic alpha" if source is not None
+        "rule": (f"pack-first: the old HD pack's frame at the master size, {PACK_ALPHA[part.art.family == 'cover']}" if source is not None
                  else "by rule from the original's own frame (no Codex)"),
         "source_art": part.art.art,
         "source": None if source is None else {"pack": pack.name, "file": str(source.relative_to(pack)), "sha256": button_kit.sha256_file(source)},
@@ -426,7 +432,8 @@ def record_of(part: Part, image_path: Path, frames: Path, source: Path | None, p
 
 
 def context(args: argparse.Namespace) -> tuple[Path, dict[tuple[str, int], str]]:
-    return args.frames or args.local_root / "census" / "frames", small_kit.pack_index(args.pack)
+    rows = {} if getattr(args, "look", None) == "rule" else small_kit.pack_index(args.pack)   # the rule look reads nothing from the pack
+    return args.frames or args.local_root / "census" / "frames", rows
 
 
 def cmd_plan(args: argparse.Namespace) -> int:

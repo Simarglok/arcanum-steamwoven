@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.steamwoven_ui import marker_kit, pngio
+from tools.steamwoven_ui import kit_check, marker_kit, pngio
 
 Image = pngio.Image
 CLEAR = (0, 0, 0, 0)
@@ -65,6 +65,12 @@ class Table(unittest.TestCase):
         self.assertEqual(marker_kit.provenance_of("glyph.cvr_ring2"), "pack:marker_kit:glyph.cvr_ring2")
         self.assertIn("art 246", marker_kit.note_of("glyph.cvr_ring2"))
         self.assertTrue(marker_kit.RULE_PICK <= {a.name for a in marker_kit.ARTS})
+
+    def test_the_violet_place_marker_is_not_a_leaked_ground(self) -> None:
+        violet = (217, 142, 249, 255)
+        made = marker_kit.round_marker(disc(9, violet, (0, 0, 0, 255), 3.4), (30, 30))
+        self.assertTrue(kit_check.ground_pixels(made.data, made.w), "the colour alone would read as the generation ground")
+        self.assertIn("glyph.mm_loc", kit_check.OWN_MAGENTA)
 
     def test_the_manifest_holds_every_part_as_a_master(self) -> None:
         rows = {r["id"]: r for r in json.loads(marker_kit.small_kit.MANIFEST.read_text(encoding="utf-8"))["parts"]}
@@ -137,6 +143,19 @@ class Pack(unittest.TestCase):
         self.assertEqual((image.w, image.h), (60, 66))
         self.assertEqual(image.pixel(0, 0)[3], 0, "the original's clear corner")
         self.assertEqual(image.pixel(1, 30), (200, 100, 50, 255), "opaque by the original, the colour bled over the pack's clear rim")
+
+    def test_a_pack_cover_is_opaque_but_for_the_originals_clear_cells(self) -> None:
+        image, source = marker_kit.build_part(marker_kit.PARTS["glyph.cvr_helmet"], self.frames, self.pack, self.index, "pick")
+        self.assertIsNotNone(source)
+        self.assertEqual(image.pixel(0, 0)[3], 0, "the original's one clear cell")
+        self.assertEqual({image.data[i] for i in range(3, len(image.data), 4)}, {0, 255})
+        self.assertEqual(sum(1 for i in range(3, len(image.data), 4) if not image.data[i]), 16, "nothing else is clear, the pack's clear rim included")
+        self.assertEqual(image.pixel(100, 100), (200, 100, 50, 255))
+        self.assertIn("opaque but for", marker_kit.note_of("glyph.cvr_helmet"))
+
+    def test_the_rule_look_needs_no_pack(self) -> None:
+        code, text = self.run_tool("--look", "rule", "--dry-run", "--pack", str(self.root / "nowhere"))
+        self.assertEqual(code, 0, text)
 
     def test_the_second_ring_takes_the_first_rings_pack_frame(self) -> None:
         _, source = marker_kit.build_part(marker_kit.PARTS["glyph.cvr_ring2"], self.frames, self.pack, self.index, "pick")
