@@ -2133,7 +2133,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
         _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
         _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
-        return _session.AddItemToNpc(_session.Version, npc, item.Kind, insertCheck);
+        return _session.AddItemToNpc(_session.Version, npc, item.Kind, insertCheck, scripts: ItemScripts);
     }
 
     /// <summary>
@@ -2771,7 +2771,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
             _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
             var check = InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck;
-            var created = IsPc(request.Object) ? _session.CreateItemForHero(_session.Version, item.Kind, check) : _session.AddItemToNpc(_session.Version, request.Object.Code, item.Kind, check);
+            // ARC-SCRIPT-2912 (TQ19): an NPC's new item runs its get and insert-item scripts with the NPC as the triggerer; their lines join the run's.
+            var created = IsPc(request.Object) ? _session.CreateItemForHero(_session.Version, item.Kind, check) : NotedRemoval(_session.AddItemToNpc(_session.Version, request.Object.Code, item.Kind, check, scripts: ItemScripts));
             LastCreatedItem = created;
             // A full list or an insert check that says no leaves the item not taken (the hero's path drops it to the ground); the run's other effects stay applied, so this is no refusal of the run (review of ARC-SCRIPT-1164).
             return created.Disposition != GameSessionDisposition.Rejected || created.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused;
@@ -3335,6 +3336,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 touched.Add((HolderOf(request.Object), made.Kind.Name));
                 if (IsPc(request.Object)) continue;
                 if (Row(request.Object) is not { Type: NpcType }) return $"create item in {request.Object.Code} is not modelled (only the PC or an NPC)";
+                if (ItemScripts is null && made.Scripts.Any(script => script.Point is SessionScriptPoint.Get or SessionScriptPoint.InsertItem)) return $"create item {request.Value} in {request.Object.Code}: its get or insert-item script needs the item script host";
                 if (_session.QueryMapInventory(new SessionMapId(request.Object.Map))?.Holders.Any(h => h.Entity == request.Object.Code) != true)
                     return $"create item in {request.Object.Code}: the NPC has no inventory list";
                 continue;

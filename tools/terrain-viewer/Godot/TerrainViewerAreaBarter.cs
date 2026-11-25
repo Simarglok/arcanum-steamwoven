@@ -353,12 +353,13 @@ public partial class TerrainViewerApp
         _barterPending = (session, host, entity, speaker.Index);
     }
 
-    /// <summary>ARC-DEV-339 (B54): the arrange button of the barter window (IW30) lays the hero's items out as the own window's does; the
-    /// merchant's grid is not arranged (PROJECT: the shown wares have no grid slots here; the original arranges a shop NPC's, 0x6810FC).</summary>
+    /// <summary>ARC-DEV-339 (B54): the arrange button of the barter window (IW30) lays the hero's items out as the own window's does. ARC-UI-3198 (IW38, 0x573850):
+    /// when the partner's direct leader is the hero (the window's follower mode, flag 0x6810FC) the same press also arranges the follower's grid in the same layout;
+    /// a shop's NPC is not arranged by the button (PROJECT: the shown wares have no grid slots here; the original arranges its list once at the open).</summary>
     private void BarterArrange()
     {
         if (!BarterOpen || _barter is null || !BarterActive || _barterSession is null) return;
-        _barterMessage = ArrangeHero(_barterSession);
+        _barterMessage = ArrangeHero(_barterSession, _barter.Merchant.Follower && !_barterInShop ? _barter.Merchant.Entity : null);
         SyncAreaBarter(force: true);
     }
 

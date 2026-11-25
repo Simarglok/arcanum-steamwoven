@@ -933,6 +933,7 @@ tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunArmourScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunItemDropScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArrange,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference

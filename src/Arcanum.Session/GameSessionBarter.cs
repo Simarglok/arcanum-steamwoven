@@ -47,7 +47,7 @@ public sealed partial class GameSessionOwner
     /// 0x1 on each list entry, worn and gold included). A pile of 0 coins stays in the container: the original's loop finds it again for
     /// ever (BT11, a hang: a technical bug, fixed in both modes without a switch). Refused before any effect: an invalid input
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>),
-    /// an NPC or a container (not spilled) its seed does not list (<see cref="GameSessionFailure.UnknownHolder"/>), a pile with an
+    /// an NPC no attached seed lists (a companion carried here is listed by its home map's seed) or a container (not spilled) the actor's map seed does not list (<see cref="GameSessionFailure.UnknownHolder"/>), a pile with an
     /// insert-item script when there is no <paramref name="scripts"/> host (ARC-SCRIPT-2855, ledger NT1: with one the event runs on each moved pile first, 0x464830 → 0x441980 point 21 with the merchant as the triggerer, applied with the move (all runs before the first pile moves; the original's 0x4643D0 loop moves pile by pile, so a later pile's script reads the state before the earlier piles joined the merchant's: a limit), a run
     /// the session cannot apply refuses: <see cref="GameSessionFailure.ItemScriptUnsupported"/>), a sum past 32 bits or a full record, list or identified
     /// budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, and the new pile's refusals of <see cref="GiveGoldToNpc"/>.
@@ -67,7 +67,8 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return Refuse(GameSessionFailure.StaleVersion);
         var map = _actor.Map;
         if (!_inventory.Seeds.TryGetValue(map, out var seed)) return Refuse(GameSessionFailure.InventoryUnavailable);
-        if (!seed.Holders.TryGetValue(npc, out var merchant) || merchant.Kind != SessionHolderKind.Npc) return Refuse(GameSessionFailure.UnknownHolder);
+        // ARC-WORLD-3118: a companion carried to this map is listed by its home map's seed (the actor's map first, else another attached one, NI4: an object stands on one map).
+        if (!NpcHolderSeed(npc, out var merchantMap, out var merchantSeed, out var merchant)) return Refuse(GameSessionFailure.UnknownHolder);
         SessionSeedHolder? box = null;
         if (container is not null && (!seed.Holders.TryGetValue(container, out box) || box.Kind != SessionHolderKind.Container || SpillCell(map, seed, container) is not null))
             return Refuse(GameSessionFailure.UnknownHolder);
@@ -85,7 +86,7 @@ public sealed partial class GameSessionOwner
         if (records > _limits.MaxGoldRecords) return Refuse(GameSessionFailure.BudgetExceeded);
         if (_durability.Count + piles.Count(entry => !_durability.Records.ContainsKey(entry.Entity)) > _limits.MaxDurabilityRecords) return Refuse(GameSessionFailure.BudgetExceeded);
         var moved = piles.Select(entry => entry.Entity).ToHashSet(StringComparer.Ordinal);
-        var marked = !identify ? [] : _inventory.Current(seed, merchant, entry => DroppedCell(map, seed, entry)).Select(entry => entry.Entity)
+        var marked = !identify ? [] : _inventory.Current(merchantSeed, merchant, entry => DroppedCell(merchantMap, merchantSeed, entry)).Select(entry => entry.Entity)
             .Concat(stock.Select(entry => entry.Entity).Where(entity => !moved.Contains(entity)))
             .Where(entity => !_inventory.Identified.Contains(entity)).Distinct(StringComparer.Ordinal).ToList();
         // A new pile of the merchant's is identified too.

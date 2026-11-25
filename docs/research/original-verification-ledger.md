@@ -276,7 +276,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |
 | <a id="heartbeat-world-questions-arc-script-049"></a>[Heartbeat world questions (ARC-SCRIPT-049)](ledger/scripts.md#heartbeat-world-questions-arc-script-049) | [Scripts and events](ledger/scripts.md) | HW1–HW4 |
-| <a id="talk-commands-arc-script-050"></a>[Talk commands (ARC-SCRIPT-050)](ledger/scripts.md#talk-commands-arc-script-050) | [Scripts and events](ledger/scripts.md) | FL1–FL5, GA1–GA3, ML1 |
+| <a id="talk-commands-arc-script-050"></a>[Talk commands (ARC-SCRIPT-050)](ledger/scripts.md#talk-commands-arc-script-050) | [Scripts and events](ledger/scripts.md) | FL1–FL7, GA1–GA3, ML1 |
 | <a id="tile-script-actors-arc-script-052"></a>[Tile-script actors (ARC-SCRIPT-052)](ledger/scripts.md#tile-script-actors-arc-script-052) | [Scripts and events](ledger/scripts.md) | TD1–TD3 |
 | <a id="script-stores-arc-dev-100"></a>[Script stores (ARC-DEV-100)](ledger/scripts.md#script-stores-arc-dev-100) | [Scripts and events](ledger/scripts.md) | GV1–GV4 |
 | <a id="script-stats-arc-dev-157"></a>[Script stats (ARC-DEV-157)](ledger/scripts.md#script-stats-arc-dev-157) | [Scripts and events](ledger/scripts.md) | GS1–GS4 |
