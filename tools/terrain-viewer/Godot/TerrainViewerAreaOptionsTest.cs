@@ -148,6 +148,18 @@ public partial class TerrainViewerApp
                 && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("original controls", StringComparison.Ordinal),
                 "pad 7 is in hand, PlayStation glyphs: " + PromptStripForSelfTest);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "a change of device resets no window");
+            // ARC-UI-2968: the strip is art text in the original's text font (a synthetic face here), never a Godot Label; without the font it draws nothing.
+            var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
+            TextFontsForSelfTest = new AreaTextFonts(new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()), new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()));
+            clock += .3; SyncControllerPrompts();
+            try
+            {
+            Require(PromptStripDrawnForSelfTest && PromptArtForSelfTest is { Items.Count: 1 } && PromptArtForSelfTest.Items[0].Lines.Sum(line => line.Glyphs.Count) > 10
+                && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal), "the strip draws art text with the font: " + PromptStripForSelfTest);
+            }
+            finally { TextFontsForSelfTest = null; }
+            clock += .3; SyncControllerPrompts();
+            Require(!PromptStripDrawnForSelfTest && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal), "without the font the strip draws nothing");
             panel.ChangeForSelfTest(6, 1);
             Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[6] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[6]);
             panel.ChangeForSelfTest(6, -1); panel.ChangeForSelfTest(6, -1);

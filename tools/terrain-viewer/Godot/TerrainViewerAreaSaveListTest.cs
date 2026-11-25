@@ -51,6 +51,33 @@ public static partial class TerrainViewerSelfTest
 
 public partial class TerrainViewerApp
 {
+    /// <summary>ARC-UI-2968: the save window's art and the dialog box's art made of solid colours and a synthetic font of 6-pixel cells, which the synthetic module's
+    /// missing game folder cannot give.</summary>
+    private static void AttachSyntheticSaveArtForSelfTest(AreaSaveListPanel panel)
+    {
+        static Texture2D Solid(int width, int height)
+        {
+            var image = Image.CreateEmpty(width, height, false, Image.Format.Rgba8);
+            image.Fill(new Color(.3f, .25f, .2f));
+            return ImageTexture.CreateFromImage(image);
+        }
+        var sizes = new Dictionary<int, (int W, int H)>
+        {
+            [AreaSaveListArtLayout.BackgroundArt] = (800, 600), [AreaSaveListArtLayout.TopStripArt] = (800, 41), [AreaSaveListArtLayout.BottomStripArt] = (800, 159),
+            [AreaSaveListArtLayout.CoverArt] = (468, 300),
+        };
+        var art = AreaSaveListArtLayout.ArtNumbers.Where(number => number != AreaSaveListArtLayout.FontArt)
+            .ToDictionary(number => number, number => Enumerable.Range(0, 3).Select(_ => sizes.GetValueOrDefault(number, (60, 40)) is var (width, height) ? Solid(width, height) : null!).ToArray());
+        var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
+        var font = new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray());
+        panel.SetArt(art, font, AreaSaveListArtContent.ProjectNewSaveLabel, AreaSaveInfoMessages.Project, AreaSaveDateOrder.DayMonthYear, new Dictionary<int, string>());
+        panel.SetDialogArt(new AreaDialogBoxArt(Solid(AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height),
+            new Dictionary<int, IReadOnlyList<Texture2D>>
+            {
+                [AreaDialogBoxLayout.AcceptArt] = [Solid(70, 25), Solid(70, 25), Solid(70, 25)], [AreaDialogBoxLayout.CancelArt] = [Solid(70, 25), Solid(70, 25), Solid(70, 25)],
+            }, font, 8));
+    }
+
     internal string AreaSaveListForSelfTest()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA save list: " + why); }
@@ -101,6 +128,21 @@ public partial class TerrainViewerApp
             Require(_saveList.Prompt == AreaSavePrompt.ConfirmOverwrite && library.List().Entries.Count == 1, "a row activation left the question open");
             InventoryKey(Key.Escape);
             Require(_saveList.Prompt == AreaSavePrompt.None && SaveListOpen, "Escape answered no and kept the window");
+            // ARC-UI-2968: with the window's art (synthetic here) the details, a notice and the question are the original's text font and dialog box: art paragraphs and
+            // the box on the plate, no Godot Label or Button; Escape answers no and ClearArt gives the diagnostic window back.
+            AttachSyntheticSaveArtForSelfTest(_saveListPanel);
+            _saveListPanel.Render(_saveList, SelectedPreview());
+            Require(_saveListPanel.ArtMode && _saveListPanel.DetailArtForSelfTest.Items.Count == 1 && _saveListPanel.DetailArtForSelfTest.Text == AreaSaveList.Detail(_saveList.SelectedEntry!)
+                && !_saveListPanel.DialogForSelfTest.Visible, "the details are art text with the font: " + _saveListPanel.ArtDetailForSelfTest);
+            InventoryKey(Key.Enter);
+            Require(_saveList.Prompt == AreaSavePrompt.ConfirmOverwrite && _saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DialogForSelfTest.TextForSelfTest.StartsWith("Overwrite", StringComparison.Ordinal)
+                && _saveListPanel.ArtDetailForSelfTest.Length == 0 && _saveListPanel.ArtNoticeForSelfTest == _saveListPanel.DialogForSelfTest.TextForSelfTest
+                && _saveListPanel.DialogForSelfTest.ButtonCentreForSelfTest(true) is not null, "the overwrite question is the dialog box: " + _saveListPanel.ArtNoticeForSelfTest);
+            InventoryKey(Key.Escape);
+            Require(_saveList.Prompt == AreaSavePrompt.None && !_saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DetailArtForSelfTest.Text.Length > 0, "Escape closed the box and the details came back");
+            _saveListPanel.ClearArt();
+            _saveListPanel.Render(_saveList, SelectedPreview());
+            Require(!_saveListPanel.ArtMode && !_saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DetailArtForSelfTest.Text.Length == 0, "without the art the plate's texts are gone");
             // The open window owns the keys: F7 saves nothing, L opens no logbook.
             InventoryKey(Key.F7); InventoryKey(Key.L);
             Require(!System.IO.File.Exists(File("quicksave.json")) && !LogbookOpen && SaveListOpen, "F7 and L did nothing under the save window");

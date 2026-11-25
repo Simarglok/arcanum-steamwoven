@@ -1,4 +1,5 @@
 using Arcanum.Input;
+using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
 using Godot;
 
@@ -16,8 +17,11 @@ public partial class TerrainViewerApp
     private ControllerFoundation? _controllers;
     private CanvasLayer? _promptLayer;
     private PanelContainer? _promptPanel;
-    private Label? _promptLabel;
+    // ARC-UI-2968: the strip's text is drawn in the original's text font (art 229) like the hover text; without the font (no game folder) it draws nothing.
+    private AreaArtTextBlock? _promptArt;
+    private static readonly (byte R, byte G, byte B) PromptColour = (232, 232, 232);
     private string _promptShown = string.Empty;
+    private AreaTextFonts? _promptFonts;
     /// <summary>A test's clock in seconds (the hysteresis and the pointer-from-pad windows need time to pass).</summary>
     private Func<double>? _controllerClockForSelfTest;
     private Func<int, PadIdentity>? _padIdentityForSelfTest;
@@ -27,7 +31,9 @@ public partial class TerrainViewerApp
 
     private double ControllerNow => _controllerClockForSelfTest?.Invoke() ?? Time.GetTicksMsec() / 1000.0;
 
-    internal string PromptStripForSelfTest => _promptLabel is { } label && _promptPanel!.Visible ? label.Text : string.Empty;
+    internal string PromptStripForSelfTest => _promptShown;
+    internal bool PromptStripDrawnForSelfTest => _promptPanel is { Visible: true };
+    internal AreaArtTextBlock? PromptArtForSelfTest => _promptArt;
 
     /// <summary>The foundation, made at first use (a start, a launcher test or a self-test with no start all reach it) from the settings the host holds.</summary>
     private ControllerFoundation Controllers
@@ -48,7 +54,7 @@ public partial class TerrainViewerApp
     private void ResetControllersForSelfTest()
     {
         _controllers = null; _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
-        _promptShown = string.Empty;
+        _promptShown = string.Empty; _promptFonts = null; _textFontsForSelfTest = null;
         if (_promptPanel is not null) _promptPanel.Visible = false;
     }
 
@@ -81,11 +87,15 @@ public partial class TerrainViewerApp
         // The bottom line of every open window, else the plain play line; the near-target prompt waits for a scheme's target highlight.
         var context = !IsWorld || WorldModal ? PromptContext.Modal : PromptContext.Play;
         var text = controllers.Strip(context);
-        if (text == _promptShown) return;
-        _promptShown = text;
+        // The fonts are read once a module and only when a strip shows (a start with the mouse in hand reads nothing).
+        var fonts = text.Length == 0 ? null : TextFonts();
+        if (text == _promptShown && ReferenceEquals(fonts, _promptFonts)) return;
+        (_promptShown, _promptFonts) = (text, fonts);
         if (text.Length == 0) { if (_promptPanel is not null) _promptPanel.Visible = false; return; }
         EnsurePromptStrip();
-        _promptLabel!.Text = text;
+        if (fonts is null) { _promptArt!.Set([]); _promptPanel!.Visible = false; return; }
+        var (placed, _, _) = AreaTextFontLayout.Block(fonts.Text.Font, fonts.TextLineHeight, text);
+        _promptArt!.Set([new(fonts.Text, fonts.TextLineHeight, placed.Lines, 0, 0, PromptColour)]);
         _promptPanel!.Visible = true;
     }
 
@@ -103,8 +113,7 @@ public partial class TerrainViewerApp
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .82f),
             ContentMarginLeft = 10, ContentMarginRight = 10, ContentMarginTop = 3, ContentMarginBottom = 3,
         });
-        _promptLabel = new Label { MouseFilter = Control.MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center };
-        _promptLabel.AddThemeFontSizeOverride("font_size", 13);
-        _promptPanel.AddChild(_promptLabel); _promptLayer.AddChild(_promptPanel); AddChild(_promptLayer);
+        _promptArt = new AreaArtTextBlock { Name = "PromptText", FitContent = true };
+        _promptPanel.AddChild(_promptArt); _promptLayer.AddChild(_promptPanel); AddChild(_promptLayer);
     }
 }
