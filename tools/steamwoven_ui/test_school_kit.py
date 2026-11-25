@@ -152,6 +152,49 @@ class ShapeAndRingTests(unittest.TestCase):
                 sk.ring_profile(Path(folder) / "nowhere")
 
 
+class TabPartsTests(unittest.TestCase):
+    """`tab_parts` end to end on synthetic frames written under a temporary census folder (no art)."""
+
+    def parts_of(self, tab, overrides=None):
+        with tempfile.TemporaryDirectory() as folder:
+            frames = Path(folder)
+            (frames / tab.folder).mkdir()
+            for k, shade in enumerate((1.0, 1.7, 1.3)):
+                pngio.write(frames / tab.folder / f"f{k}.png", frame(shade=shade))
+            saved = dict(sk.OVERRIDES)
+            try:
+                sk.OVERRIDES.update(overrides or {})
+                return sk.tab_parts(frames, tab, None), sk.tab_symbol(frames, tab, sk.master_of(tab.name))
+            finally:
+                sk.OVERRIDES.clear()
+                sk.OVERRIDES.update(saved)
+
+    def test_college_tab_gives_three_parts_with_one_solid_symbol(self):
+        tab = sk.TABS[0]
+        parts, symbol = self.parts_of(tab)
+        self.assertEqual(set(parts), {f"glyph.{tab.name}", f"plate.{tab.name}_hover", f"plate.{tab.name}_pressed"})
+        for image in parts.values():
+            self.assertEqual((image.w, image.h), sk.master_of(tab.name))
+        self.assertTrue(any(c > 0 for c in symbol.dark.cover))
+
+    def test_the_school_group_has_no_coloured_body_unless_asked(self):
+        school = next(t for t in sk.TABS if t.group == "school")
+        college = sk.TABS[0]
+        self.assertEqual(sk.override_of(school).get("fill"), 0)
+        self.assertNotIn("fill", sk.override_of(college) if college.name not in sk.OVERRIDES else {})
+
+    def test_shapes_only_draws_just_the_shapes_inside_the_frame(self):
+        tab = sk.TABS[0]
+        shape = ("rect", 9.0, 9.0, 15.0, 15.0)
+        _, symbol = self.parts_of(tab, {tab.name: {"shapes_only": True, "shapes": (shape, ("rect", -3.0, -3.0, 1.0, 1.0))}})
+        self.assertIsNone(symbol.body)
+        k = symbol.dark.w / N
+        at = lambda x, y: symbol.dark.cover[int(y * k) * symbol.dark.w + int(x * k)]
+        self.assertEqual(at(12.0, 12.0), 1.0)
+        self.assertEqual(at(4.0, 4.0), 0.0)     # not the cross: the shapes are the whole symbol
+        self.assertEqual(at(0.0, 0.0), 0.0)     # a shape that leaves the frame's outline is clipped
+
+
 class PartsTests(unittest.TestCase):
     def setUp(self):
         self.idle, self.pressed, self.hover = frame(), frame(shade=1.7), frame(shade=1.3)

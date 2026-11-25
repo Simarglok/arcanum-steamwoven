@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ARC-UI-3204 (batch B-BUTTONS, slice 4): the college tabs of the spell window (16 arts, 24 x 24 units) and the skill-school buttons (12 arts, 31 to 34 x 31 to 32 units), round buttons with a COLOURED dome inside a thin brass ring,
-three frames each (idle 0, pressed 1, hover 2). Same rule as the earlier round buttons (`round_kit.py`, `disc_kit.py`, rule E of slice 1): a generated plate, and the glyph and the state overlays BY RULE from the original's own frames.
+three frames each (idle 0, pressed 1, hover 2). Same rule as the earlier round buttons (`round_kit.py`, `disc_kit.py`, rule E of slice 1) for the plate and the frames, but the glyph follows the TRD's rule F (owner decision 2026-11-25): a generated plate, and the glyph and the state overlays BY RULE from the original's own frames.
 
     python3 -B tools/steamwoven_ui/school_kit.py masks  --out FILE [--group college|school] [--zoom N]          (the symbol masks over the idle frames, for a look; needs ImageMagick)
     python3 -B tools/steamwoven_ui/school_kit.py refs   [--group college|school] [--frames DIR] [--local-root DIR]  (the references of the two collage prompts: the original domes without their symbols)
@@ -15,13 +15,13 @@ The parts of a button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitCom
 
 * `plate.<name>` the empty plate: the coloured dome in its brass ring, WITHOUT the symbol and without the highlight, ONE Codex item per group (`plate-college-hud`, `plate-school-hud`: the sixteen or the twelve domes of the group on one canvas, each in
   the colour of its original so the ring, the bevel and the surface agree), cut apart (`place`) and fitted by `fit.py` to the face of every button; the plate's outline is the original's frame mask.
-* `glyph.<name>` the symbol as the idle frame shows it over the plate, a layer on the whole frame: the cells of the symbol mask (below) in the original's own flat cell colours, with a smooth sharp outline.
-* `plate.<name>_hover` what the hover frame shows over the IDLE frame: the symbol's cells in the lit colours, and the dome's own lighting as a soft layer under it (the original brightens the whole dome: a layer of the lit colour at a limited
+* `glyph.<name>` the symbol as the idle frame shows it over the plate, a layer on the whole frame: the symbol mask (below) as a smooth sharp outline, solid, in the original's own colour (no cells), thin lines of one width, a light rim at the upper left and a shade at the lower right.
+* `plate.<name>_hover` what the hover frame shows over the IDLE frame: the symbol in the lit colour, and the dome's own lighting as a soft layer under it (the original brightens the whole dome: a layer of the lit colour at a limited
   opacity, so the plate's own texture shows through it, never a replacement of the plate by the original's low-resolution cells).
 * `plate.<name>_pressed` the same for the pressed frame (the dome and the ring brighten more).
 
 The symbol mask is read from the PRESSED frame (the dome is brightest there and the near-black symbol stands out most; `read: idle` in an override reads the idle frame, where the `MAX_GAIN` filter then drops cells that brighten in the pressed frame): a cell in the dome's reach whose lightness is under half of what its neighbourhood shows (the high percentile of a window), small and large
-(two window sizes), the pieces that lie wholly in the rim's shade dropped, the cells inside it that stand out in colour from the dome added (an accent such as the yellow gear core), small holes closed. `OVERRIDES` holds a per-button correction
+(two window sizes), the pieces that lie wholly in the rim's shade dropped, the cells inside it that stand out in colour from the dome added (an accent such as the yellow gear core), small holes closed. `OVERRIDES` holds a per-button correction (keys: windows, median, read, max_l, max_gain, reach, rim_share, rim_drop, grow, accent, fill, close, roi, add, drop, shapes, shapes_drop, shapes_only)
 (a threshold, cells, simple shapes straightened or a region with its own darkness limit) where the rule needs one; every mask is looked at (`masks`). The symbol's coloured body (the fire's orange) joins the dark outline. `gloss` also draws the brass ring by rule (`paint_ring`, the width of the original, the tone of the hardware menu ring).
 Nothing here holds art: every picture is read from and written to the ignored `local/steamwoven-ui/`. Standard library only (`pngio.py`); ImageMagick for `masks`, `place` and `sheet`.
 Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
@@ -441,13 +441,12 @@ def collage_cells(group: str) -> list[dict]:
 
 def collage_reference(group: str, frames: Path, overrides: dict[str, dict] | None = None) -> Image:
     """The original domes without their symbols, nearest cells at `COLLAGE_SCALE` px per unit, each dome's middle on the middle of its cell, on the flat `GROUND`."""
-    overrides = OVERRIDES if overrides is None else overrides
     width, height = collage_size(group)
     scale = COLLAGE_SCALE[group]
     out = Image(width, height, bytearray(bytes((*GROUND, 255)) * (width * height)))
     for tab, cell in zip(tabs_of(group), collage_cells(group)):
         idle, pressed = read_frame(frames, tab, 0), read_frame(frames, tab, 1)
-        template = plate_template(idle, symbol_mask(idle, pressed, overrides.get(tab.name)))
+        template = plate_template(idle, symbol_mask(idle, pressed, override_of(tab) if overrides is None else overrides.get(tab.name)))
         cx, cy, _ = disc_of(idle)
         mx, my = cell["centre"]
         x0, y0 = int(mx - cx * scale), int(my - cy * scale)
@@ -680,7 +679,7 @@ def stroked(inside: list[bytearray], sample: float) -> list[bytearray]:
     return out
 
 
-def glyph_shape(mask: list[bool], w: int, h: int, pixels: tuple[int, int], add: tuple = (), drop: tuple = (), lines: bool = False) -> GlyphShape:
+def glyph_shape(mask: list[bool], w: int, h: int, pixels: tuple[int, int], add: tuple = (), drop: tuple = (), lines: bool = False, clip: list[bool] | None = None) -> GlyphShape:
     """The symbol's outline as a smooth curve: the mask's cells blurred by `GLYPH_SIGMA` and cut at `GLYPH_LEVEL` (a thin line keeps its width, a staircase becomes a curve), the exact simple shapes of an override laid in (`add`) and cut out (`drop`)
     at the sub-pixel level, so a circle is round and a straight edge straight. Then the light rim at the upper left and the shade at the lower right of the outline."""
     pw, ph = pixels
@@ -700,7 +699,6 @@ def glyph_shape(mask: list[bool], w: int, h: int, pixels: tuple[int, int], add: 
                 for u in range(sw):
                     field[u] += weight * t[u]
         line = bytearray(sw)
-        cy = (v + 0.5) / sh * h
         for u in range(sw):
             line[u] = 1 if field[u] >= GLYPH_LEVEL else 0
         inside.append(line)
@@ -711,7 +709,7 @@ def glyph_shape(mask: list[bool], w: int, h: int, pixels: tuple[int, int], add: 
             cy = (v + 0.5) / sh * h
             for u in range(sw):
                 cx = (u + 0.5) / sw * w
-                if any(shape_contains(shape, cx, cy) for shape in add):
+                if any(shape_contains(shape, cx, cy) for shape in add) and (clip is None or clip[min(h - 1, int(cy)) * w + min(w - 1, int(cx))]):
                     inside[v][u] = 1
                 if inside[v][u] and any(shape_contains(shape, cx, cy) for shape in drop):
                     inside[v][u] = 0
@@ -919,16 +917,17 @@ def tab_symbol(frames: Path, tab: Tab, pixels: tuple[int, int]) -> TabSymbol:
     plain = {k: v for k, v in override.items() if k not in ("shapes", "shapes_drop")}
     add, drop = tuple(override.get("shapes", ())), tuple(override.get("shapes_drop", ()))
     n = idle.w * idle.h
+    clip = [alpha_at(idle, i % idle.w, i // idle.w) > 0 for i in range(n)]
     if override.get("shapes_only"):   # the shapes are the whole symbol (a top hat, two gears)
         cells = symbol_mask(idle, pressed, override)
-        return TabSymbol(glyph_shape([False] * n, idle.w, idle.h, pixels, add, drop, lines=True), None, cells, [False] * n)
+        return TabSymbol(glyph_shape([False] * n, idle.w, idle.h, pixels, add, drop, lines=True, clip=clip), None, cells, [False] * n)
     dark = symbol_mask(idle, pressed, dict(plain, fill=0))
     full = symbol_mask(idle, pressed, plain)
     body = [f and not d for f, d in zip(full, dark)]
-    shape_body = glyph_shape(full, idle.w, idle.h, pixels, add, drop) if sum(body) >= max(6, 0.3 * sum(dark)) else None
+    shape_body = glyph_shape(full, idle.w, idle.h, pixels, add, drop, clip=clip) if sum(body) >= max(6, 0.3 * sum(dark)) else None
     if shape_body is None:
         body = [False] * n
-    return TabSymbol(glyph_shape(dark, idle.w, idle.h, pixels, add, drop, lines=not override.get("solid")), shape_body, dark, body)
+    return TabSymbol(glyph_shape(dark, idle.w, idle.h, pixels, add, drop, lines=True, clip=clip), shape_body, dark, body)
 
 
 def symbol_image(symbol: TabSymbol, frame: Image) -> Image:
@@ -1156,7 +1155,7 @@ def record_of(ident: str, frames: Path, image_path: Path, image: Image) -> dict:
     tab, _ = source_folders(ident)
     return {"part": ident, "rule": "school_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(),
             "sources": {f"{tab.folder}/f{k}": button_kit.sha256_file(frames / tab.folder / f"f{k}.png") for k in range(3)},
-            "empty": not any(image.data[3::4]), "overrides": {k: (list(v) if isinstance(v, tuple) else v) for k, v in OVERRIDES.get(tab.name, {}).items()},
+            "empty": not any(image.data[3::4]), "overrides": {k: (list(v) if isinstance(v, tuple) else v) for k, v in override_of(tab).items()},
             "parameters": {"dome_share": DOME_SHARE, "reach_share": REACH_SHARE, "windows": [list(w) for w in WINDOWS], "percentile": PERCENTILE, "min_drop": MIN_DROP, "max_l": MAX_L, "max_l_read": MAX_L_READ, "read": "pressed (override read: idle)", "median": list(DEFAULT_MEDIAN), "median_percentile": MEDIAN_PERCENTILE, "grow_passes": GROW_PASSES, "max_gain": MAX_GAIN, "hole_max": HOLE_MAX, "speck": SPECK, "fill_de": FILL_DE, "fill_near": FILL_NEAR, "fill_window": FILL_WINDOW, "place_scale": PLACE_SCALE, "edge_pull": EDGE_PULL, "enlarge": ENLARGE, "rim_drop": RIM_DROP, "rim_share": RIM_SHARE,
                            "lift_min_alpha": LIFT_MIN_ALPHA, "lift_sigma": LIFT_SIGMA, "dead_de": button_kit.DEAD_DE, "solid_de": button_kit.SOLID_DE, "crisp_sigma": button_kit.CRISP_SIGMA, "edge_half": button_kit.EDGE_HALF, "master": [image.w, image.h]},
             "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [image.w, image.h], "run_by": "agent"}
