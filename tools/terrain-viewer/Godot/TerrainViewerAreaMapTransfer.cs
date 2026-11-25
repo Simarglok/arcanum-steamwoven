@@ -403,7 +403,7 @@ public partial class TerrainViewerApp
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
-            _callDialogs.Clear();   // ARC-WORLD-2358: a conversation a call asked for before the reset belongs to the old session
+            _callDialogs.Clear(); _callDialogsHeldAt = null;   // ARC-WORLD-2358: a conversation a call asked for before the reset belongs to the old session
             ClearTransition();
             if (_mapTransfers.Clear() is { } dropped) { _areaUseStatus = $"transfer to '{dropped.To.Name}' cancelled by reset/reload"; RefreshAreaStatus(); }
             // A reset puts the actor back on its spawn without entering it, as a load does.
@@ -516,6 +516,23 @@ public partial class TerrainViewerApp
     /// <summary>ARC-WORLD-2358: opens the conversation the deferred calls of the last frames started (<see cref="AreaEventWorld"/>'s call dialog), one at a time: the scripted start itself drops one met while a conversation is open. True when one was asked.</summary>
     private bool OpenCallDialogs()
     {
+        // ARC-SCRIPT-2966 (0x567460, read ARC-SCRIPT-2965/2966): the original's opener tests no panel at all, it pushes the dialog over any mode but a second dialog (that refusal is silent and nothing asks the call again,
+        // the event answers 1 at once, NK1), so a conversation a call asked for is never lost to a panel. The viewer's panels outside the stack (ProgrammaticOpenBlocked) are its own: the talk waits for them, where a
+        // dropped one (1697 and 1699 queue nothing again) would be lost. A conversation already open still drops the next one, as in the original.
+        // A talk belongs to the map and the session it was asked on (its speaker is looked up on the shown map): one held across a load or a map change is dropped, not opened with another world's speaker.
+        var here = (Map: CurrentAreaMap, Session: _areaSession);
+        if (_callDialogsHeldAt is { } was && (was.Map != here.Map || !ReferenceEquals(was.Session, here.Session)))
+        {
+            GD.Print($"ARC-SCRIPT-2966 held conversation dropped: the map or the session changed (queued {_callDialogs.Count})");
+            _callDialogs.Clear(); _callDialogsHeldAt = null;
+        }
+        if (_callDialogs.Count > 0 && ProgrammaticOpenBlocked)
+        {
+            if (_callDialogsHeldAt is null) GD.Print($"ARC-SCRIPT-2966 conversation a deferred call asked for held: a panel is open (queued {_callDialogs.Count})");
+            _callDialogsHeldAt ??= here;
+            return false;
+        }
+        _callDialogsHeldAt = null;
         var asked = false;
         while (_callDialogs.TryDequeue(out var dialog)) { BeginScriptedConversation(dialog); asked = true; }
         return asked;
