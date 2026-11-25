@@ -30,6 +30,7 @@ from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
+from tools.steamwoven_ui import hardware_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import parchment_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
@@ -141,6 +142,7 @@ def new_parts() -> list[dict]:
     parts.extend(square_hud_parts())
     parts.extend(round_hud_parts())
     parts.extend(hud_hardware_parts())
+    parts.extend(lens_ring_parts())
     return parts
 
 
@@ -158,6 +160,14 @@ def hud_hardware_parts() -> list[dict]:
         parts.append(new_part(ident, "hardware", "top-strip" if top else "bottom-strip", used_by, None, "B-HARDWARE",
                               f"{info['note']}; a layer over the strip art ({what}); hardware_build.py, {'ARC-UI-3260' if info['strip'].startswith('board.charcreate') else 'ARC-UI-2481'}; open size", master=True))
     return parts
+
+
+def lens_ring_parts() -> list[dict]:
+    """ARC-UI-3261 (B-HARDWARE slice 3): the whole lens ring, a new part of an open size (the art's square plus 18 px on every side, centred on the lens) in two looks: open circle and with the dark fill of art 367. The
+    eight lens arts' own rows hold the same ring on the art's own square (a drop-in for the old art; the old art clipped the ring where the circle touches its edge, so those four places are cut there)."""
+    return [new_part(ident, "hardware", "window", used, None, "B-HARDWARE", hardware_kit.note_of(ident), master=True, provenance=hardware_kit.provenance_of(ident))
+            for ident, used in (("hardware.lens_ring", ["G01", "G02", "G03", "G04", "G05", "G10", "G11", "G12", "G13", "G14", "G15", "G16", "G17", "H22", "M04", "M05", "M06", "M10"]),
+                                ("hardware.lens_ring_filled", []))]
 
 
 def square_hud_parts() -> list[dict]:
@@ -242,6 +252,7 @@ BOX_STATES = {f"state.{n}": b for b in parchment_kit.BOXES for n in (b.on_name, 
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 GAUGE_PARTS = frozenset(gauge_kit.coverage())
+HARDWARE_RULE_PARTS = frozenset(p.ident for p in hardware_kit.PARTS if p.art)  # the parts made from census arts (the whole lens rings are new parts)
 
 
 def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindow]) -> dict:
@@ -307,6 +318,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if ident in GAUGE_PARTS:  # ARC-UI-2483 (B-GAUGES): every part of the batch is a master once gauge_kit.py has made it (a rule record or a fit record)
             part["status"], part["provenance"] = "master", gauge_kit.provenance_of(ident)
             part["note"] = gauge_kit.note_of(ident, part["frames"])
+        if ident in HARDWARE_RULE_PARTS:  # ARC-UI-3261 (B-HARDWARE slice 3): lens rings, slot insets, slot wood, plugs and small frames, by rule from the original's frames
+            part["status"], part["provenance"] = "master", hardware_kit.provenance_of(ident)
+            part["note"] = hardware_kit.note_of(ident)
         if lead.kind == "board":
             part["status"], part["provenance"] = "master", f"fit:{part['id']}"
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"

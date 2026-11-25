@@ -1367,6 +1367,20 @@ through `SteamwovenKitScreenSpec.TopLayers` and `BottomLayers` (`SteamwovenKitTa
 159 units), and a screen is drawn from the kit only when every layer is in the set, so a kit without the four parts keeps the screen's own arts whole.
 
 
+## Steamwoven hardware: rings, slots and small frames, batch B-HARDWARE slice 3 (ARC-UI-3261)
+
+33 small hardware parts made BY RULE from the original's own frames by `tools/steamwoven_ui/hardware_kit.py` (no Codex; [TRD](../ui/steamwoven-interface-trd.md), SWI-KIT): the eight lens rings (arts 198, 222, 231, 232, 233, 367, 670, 746), the ten hotkey slot insets (172 to 181), the five maintain slot woods (188 to 192) and plugs (628 to 632), the portrait highlight (646), the portrait select (332) and the roller template (314). Local only (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the composite, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/hardware_kit.py plan                                  # the parts and their manifest sizes
+python3 -B tools/steamwoven_ui/hardware_kit.py rule [--only PART,...] [--dry-run]     # masters/hardware.*.png and provenance/rule/*.json (the gates run first)
+python3 -B tools/steamwoven_ui/hardware_kit.py sheet --out FILE [--zoom N]            # before / after composite, English labels
+python3 -B tools/steamwoven_ui/hardware_kit.py self-test
+```
+
+The rules: the lens ring's shape is analytic (a band of 5 original px outside the art's transparent circle, both edges filtered by a 2 px tent over 8x8 sub-samples so no stair shows, drawn whole) and its material is polished cast brass: the body tone and the grain come from the kit's approved brass, the HUD ring (`hardware.hud_ring`, #3259) and the socket ring (`hardware.menu_ring`, #3260) unrolled along their circumference and high-passed (the two end to end are longer than the lens ring's circle, so nothing repeats); the light is by rule (a sharp highlight ridge at the top left, a broad sheen, whole-harmonic reflection bands, a copper reflection at the bottom right, a narrow dark chamfer with a thin bright edge on the inner side, no dark outline). `hardware.lens_ring` and `hardware.lens_ring_filled` are 354 x 354 px (the art's square plus 18 px each side, an open size in the manifest); the eight lens arts' rows are the same ring cut to the art's own 318 x 318 square. The corners and the circle are transparent (the filled look keeps art 367's opaque dark fill). A hotkey slot is one inset (the mean of the ten arts, each normalised by its own wood: the shadow as black with the original's depth as alpha, the edge lines opaque, the middle open). The wood of a maintain slot and its plug is a crop of the strip master's plain wood (`board.inttop`, the stretch left of the slot openings; the tool refuses it if it is no longer opaque) in the original art's tone and under its smooth light. The two selection frames are blocks (every original pixel a block of the master), the roller is smooth along its height and blocks across. Gates before a master is written: the manifest size on the 6 px grid, not empty, no translucent pixel inside a solid detail, a wood tile opaque. Records: `provenance/rule/<part>.json` (`rule:hardware_kit:<part>` in the manifest). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_hardware_kit` (also in `tools/local_dev/run_tests.py`).
+
+
 ## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
 
 Production of the kit parts of the five square buttons of the top strip (Character 169, Inventory 186, Logbook 187, Map of the town 193, World map 194; lit arts 561, 559, 560, 558, 195), the first slice of batch B-BUTTONS
