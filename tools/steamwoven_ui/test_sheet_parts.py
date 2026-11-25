@@ -59,6 +59,20 @@ class SheetPartTests(unittest.TestCase):
             self.assertTrue(0 <= part.x and part.x + part.width <= 800 and 0 <= part.y and part.y + part.height <= 400, part.ident)
             self.assertTrue(part.x <= part.anchor[0] < part.x + part.width and part.y <= part.anchor[1] < part.y + part.height, part.ident)
 
+    def test_the_dial_master_has_no_lettering_where_the_label_part_draws_it(self) -> None:
+        frame = frame_with_parts()
+        dial = sheet_parts.BY_ID["fixture.align_dial"]
+        box = dial.repaint[0]
+        for y in range(box[1] * 4 + 12, box[1] * 4 + 40):  # dark ink in the label box, inside the synthetic disc's brass
+            for x in range(box[0] * 4 + 100, box[0] * 4 + 120):
+                i = (y * 3200 + x) * 4
+                frame.data[i:i + 3] = bytes((20, 20, 20))
+        master = sheet_parts.build_part(frame, dial)
+        self.assertEqual((master.w, master.h), (fixtures.snap(dial.width), fixtures.snap(dial.height)))
+        mx, my = round((box[0] + 27 - dial.x) * 3.6), round((box[1] + 7 - dial.y) * 3.6)
+        r, g, b, a = master.pixel(mx, my)
+        self.assertFalse(a > 200 and r < 60, f"the ink mark in the label box is rebuilt to ground, not kept: {(r, g, b, a)}")
+
     def test_the_dial_rebuilds_the_lettering_the_label_part_draws(self) -> None:
         dial = sheet_parts.BY_ID["fixture.align_dial"]
         label = label_parts.BY_ID["fixture.sheet_dial_letters"]
@@ -69,8 +83,6 @@ class SheetPartTests(unittest.TestCase):
     def test_build_writes_masters_of_the_part_size_opaque_inside_clear_at_the_corner(self) -> None:
         frame = frame_with_parts()
         for part in sheet_parts.PARTS:
-            if part.repaint:
-                continue  # the dial's repaint reads the real label box; its cut is checked by the bare-ground rule below
             master = sheet_parts.build_part(frame, part)
             self.assertEqual((master.w, master.h), (fixtures.snap(part.width), fixtures.snap(part.height)), part.ident)
             centre = master.pixel(master.w // 2, master.h // 2)
@@ -90,11 +102,22 @@ class SheetPartTests(unittest.TestCase):
         self.assertLess(up_left[3], 30, f"little or no shadow up and left: {up_left}")
 
     def test_the_shadow_fades_out_at_the_box_edge(self) -> None:
-        frame = frame_with_parts()
-        part = sheet_parts.BY_ID["fixture.stat_oval"]
-        master = sheet_parts.build_part(frame, part)
-        # the synthetic disc of this part nearly fills the box height: the shadow that would reach the box's bottom row must be faded out
-        self.assertEqual(max(master.pixel(x, master.h - 1)[3] for x in range(master.w)), 0)
+        # a disc whose shadow reaches the box's bottom edge: the last rows are clear with the fade and not without it
+        wood = [[[60.0] * 120 for _ in range(110)] for _ in range(3)]
+        for y in range(110):
+            for x in range(120):
+                r = math.hypot(x - 60, y - 50)
+                d = math.hypot(x - 62, y - 52) - 40
+                for c in range(3):
+                    if r < 40:
+                        wood[c][y][x] = 170.0 if c == 0 else 120.0
+                    elif d < 18:
+                        wood[c][y][x] = 60.0 * (1.0 - 0.6 * max(0.0, 1.0 - d / 18.0))
+        plain = sheet_parts.cut_solid(wood, (60, 50))
+        faded = sheet_parts.cut_solid(wood, (60, 50), (0, 0, 120, 100))
+        self.assertGreater(max(plain.alpha[99]), 0.1, "without the fade the shadow reaches the box's bottom row")
+        self.assertEqual(max(faded.alpha[99]), 0.0)
+        self.assertLess(max(faded.alpha[96]), max(plain.alpha[96]), "and it fades over the last pixels")
 
     def test_build_refuses_a_frame_of_the_wrong_size(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

@@ -35,10 +35,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from . import fixtures, label_parts, pngio
+    from . import fixtures, image_archive, label_parts, pngio
 except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import fixtures  # type: ignore
+    import image_archive  # type: ignore
     import label_parts  # type: ignore
     import pngio  # type: ignore
 
@@ -195,7 +196,7 @@ class Solid:
     profile: list[list[float]]  # [sector][distance px] shadow alpha
 
 
-def find_part(rgb: list[list[list[float]]], anchor: tuple[int, int]) -> tuple[list[list[int]], int, list[list[int]]]:
+def find_part(rgb: list[list[list[float]]], anchor: tuple[int, int]) -> tuple[list[list[int]], int]:
     """The labelled pieces of the read box and the number of the one that holds `anchor` (px of the read box; the nearest piece if the anchor sits on a gap)."""
     found = classify(rgb)
     found = erode(label_parts.dilate(found, 3), 3)  # close the small gaps of the rim
@@ -207,9 +208,9 @@ def find_part(rgb: list[list[list[float]]], anchor: tuple[int, int]) -> tuple[li
     ax, ay = anchor
     target = label[ay][ax]
     if not target:
-        dist, owner, _, _ = nearest_piece(label)
+        _, owner, _, _ = nearest_piece(label)
         target = owner[ay][ax]
-    return label, target, label
+    return label, target
 
 
 def smooth_pieces(label: list[list[int]]) -> list[list[int]]:
@@ -228,7 +229,7 @@ def smooth_pieces(label: list[list[int]]) -> list[list[int]]:
 
 
 def shadow_profile(light: list[list[float]], dist: list[list[float]], owner: list[list[int]], sy: list[list[int]], sx: list[list[int]], target: int) -> list[list[float]]:
-    """The shadow's alpha by (sector, distance px): the median luma of the bin against the median of the unshadowed ring beyond, smoothed, flat toward the rim, non-increasing outward, under a floor cleared, tapered at the reach."""
+    """(A part whose box touches the frame edge, the ruler's right edge and bottom, has no reference ring there: those sectors take the median of all sectors.) The shadow's alpha by (sector, distance px): the median luma of the bin against the median of the unshadowed ring beyond, smoothed, flat toward the rim, non-increasing outward, under a floor cleared, tapered at the reach."""
     height, width = len(light), len(light[0])
     bins = [[[] for _ in range(REACH + 1)] for _ in range(SECTORS)]
     rings: list[list[float]] = [[] for _ in range(SECTORS)]
@@ -277,7 +278,7 @@ def shadow_profile(light: list[list[float]], dist: list[list[float]], owner: lis
 def cut_solid(rgb: list[list[list[float]]], anchor: tuple[int, int], keep: tuple[int, int, int, int] | None = None) -> Solid:
     """`rgb` is the read box of the HD frame ([channel][y][x] floats, with unshadowed wood round the part); `anchor` a px inside the part; `keep` the part's own box (x0, y0, x1, y1) in px of the read box, the shadow fades out toward its edge."""
     height, width = len(rgb[0]), len(rgb[0][0])
-    label, target, _ = find_part(rgb, anchor)
+    label, target = find_part(rgb, anchor)
     label = smooth_pieces(label)
     dist, owner, sy, sx = nearest_piece(label)
     light = [[label_parts.luma(rgb[0][y][x], rgb[1][y][x], rgb[2][y][x]) for x in range(width)] for y in range(height)]
@@ -428,7 +429,7 @@ def self_test() -> int:
     # the shadow: strongest down and right, none up and left, non-increasing outward, tapered to zero at the reach
     sector_down_right = int((math.atan2(1, 1) % (2 * math.pi)) / (2 * math.pi) * SECTORS) % SECTORS
     sector_up_left = (sector_down_right + SECTORS // 2) % SECTORS
-    if solid.profile[sector_down_right][2] < 0.3:
+    if max(solid.profile[sector_down_right][2], solid.profile[(sector_down_right - 1) % SECTORS][2]) < 0.3:  # 45 degrees is the border of two sectors
         problems.append("the shadow on the lit-away side is not found")
     if max(solid.profile[sector_up_left]) > 0.25:
         problems.append("a shadow is found on the lit side")
@@ -477,8 +478,10 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         print("unknown part:", ", ".join(sorted(unknown)), file=sys.stderr)
         return 2
+    out = args.out or fixtures.default_out()
+    image_archive.warn_if_ephemeral(out, "sheet_parts.py build")
     try:
-        done = build(args.hd_frame, args.out or fixtures.default_out(), only or None)
+        done = build(args.hd_frame, out, only or None)
     except (ValueError, pngio.PngError, OSError) as error:
         print("SHEET PARTS FAIL:", error, file=sys.stderr)
         return 2

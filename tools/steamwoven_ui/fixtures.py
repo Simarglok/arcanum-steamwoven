@@ -30,7 +30,6 @@ except ImportError:  # run as a script
     import prompt_library  # type: ignore
 
 
-
 def default_out() -> Path:
     """`local/steamwoven-ui/masters` of the MAIN checkout (ARC-DEV-3277: a worktree has no `local/`; masters written there
     are never seen by `bake.py` and `kit_check.py` and are lost with the worktree)."""
@@ -293,12 +292,6 @@ def _legend(c: Canvas) -> None:
             c.rect(c.X(51 + gx * 5), c.Y(5 + gy * 5), c.X(55 + gx * 5), c.Y(9 + gy * 5), PALE)
 
 
-
-
-
-
-
-
 def _gear_sign(c: Canvas, cx_u: float, hat: bool) -> None:
     cx, cy = c.X(cx_u), c.Y(35 if hat else 36)
     c.disc(cx, cy, c.s * 35, DARK_WOOD)
@@ -320,10 +313,10 @@ def _gear_sign(c: Canvas, cx_u: float, hat: bool) -> None:
 
 
 def draw(ident: str, variant: str = "brass") -> pngio.Image:
-    """The master of one fixture. Raises KeyError for an unknown id, and for a cut one (`label_parts.py` makes those from the player's HD frame)."""
+    """The master of one fixture. Raises KeyError for an unknown id, and for a cut one (`label_parts.py` and `sheet_parts.py` make those from the player's HD frame)."""
     fixture = BY_ID[ident]
     if fixture.cut:
-        raise KeyError(f"{ident} is cut from the player's HD frame by label_parts.py, not drawn here")
+        raise KeyError(f"{ident} is cut from the player's HD frame by label_parts.py or sheet_parts.py, not drawn here")
     width, height = fixture.master
     c = Canvas(width, height, (fixture.width, fixture.height))
     if ident == "grid.inventory_cells":
