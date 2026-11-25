@@ -170,26 +170,65 @@ class PartsTests(unittest.TestCase):
                 out.data[o:o + 4] = bytes((*sk.colour_at(self.template, x, y), self.clip.data[o + 3]))
         return out
 
-    def test_the_glyph_over_the_plate_gives_the_idle_symbol_back(self):
-        glyph = sk.symbol_layer(self.idle, self.template, self.mask, self.px)
-        face = sk.over(self.plate(), glyph)
+    def shape(self, lines=True, **kw):
+        return sk.glyph_shape(self.mask, N, N, self.px, lines=lines, **kw)
+
+    def test_the_symbol_is_one_solid_smooth_colour(self):
+        glyph = sk.paint_symbol(self.shape(), sk.symbol_colour(self.idle, self.mask))
         k = self.px[0] / N
-        dark = [(x, y) for x, y in SYMBOL if self.mask[y * N + x]]
-        sample = [(int((x + 0.5) * k), int((y + 0.5) * k)) for x, y in dark if abs(x - 11.5) < 1 and abs(y - 11.5) < 4]
-        self.assertTrue(sample)
-        for px, py in sample:
-            self.assertLess(bk.distance(tuple(face.data[(py * self.px[0] + px) * 4:(py * self.px[0] + px) * 4 + 3]), (2, 2, 2)), 25.0)
+        centre = (int(12 * k), int(12 * k))
+        o = (centre[1] * self.px[0] + centre[0]) * 4
+        self.assertEqual(glyph.data[o + 3], 255)
+        self.assertLess(bk.distance(tuple(glyph.data[o:o + 3]), (2, 2, 2)), 12.0)
+        solid = {tuple(glyph.data[i * 4:i * 4 + 3]) for i in range(self.px[0] * self.px[1]) if glyph.data[i * 4 + 3] == 255}
+        self.assertLessEqual(len(solid), 14)   # the colour with its rim and its shade, not a texture of cells
+        self.assertTrue(all(bk.distance(c, (2, 2, 2)) < 120 for c in solid))
+
+    def test_the_symbol_has_a_light_rim_upper_left_and_a_shade_lower_right(self):
+        glyph = sk.paint_symbol(self.shape(), (100, 100, 100))
+        light = lambda x, y: sum(glyph.data[(y * self.px[0] + x) * 4:(y * self.px[0] + x) * 4 + 3])
+        covered = [(i % self.px[0], i // self.px[0]) for i in range(self.px[0] * self.px[1]) if glyph.data[i * 4 + 3] == 255]
+        x0, y0 = min(covered, key=lambda c: c[0] + c[1])
+        x1, y1 = max(covered, key=lambda c: c[0] + c[1])
+        self.assertGreater(light(x0, y0), 300)   # lighter than the colour
+        self.assertLess(light(x1, y1), 300)      # darker
 
     def test_the_glyph_leaves_the_dome_alone(self):
-        glyph = sk.symbol_layer(self.idle, self.template, self.mask, self.px)
+        glyph = sk.paint_symbol(self.shape(), (0, 0, 0))
         corner = (4 * self.px[0] // N, 6 * self.px[1] // N)
         self.assertEqual(glyph.data[(corner[1] * self.px[0] + corner[0]) * 4 + 3], 0)
 
+    def test_thin_lines_get_one_width_and_a_thick_part_stays_solid(self):
+        w = h = 24
+        for width in (1, 2):   # a one-cell and a two-cell line become lines of the same width
+            mask = [False] * (w * h)
+            for y in range(4, 20):
+                for x in range(12, 12 + width):
+                    mask[y * w + x] = True
+            cover = sk.glyph_shape(mask, w, h, (84, 84), lines=True).cover
+            row = [cover[42 * 84 + x] for x in range(84)]
+            self.assertAlmostEqual(sum(row) / 3.5, sk.STROKE_W, delta=0.35)
+        block = [False] * (w * h)
+        for y in range(6, 16):
+            for x in range(6, 16):
+                block[y * w + x] = True
+        cover = sk.glyph_shape(block, w, h, (84, 84), lines=True).cover
+        self.assertAlmostEqual(sum(cover) / (3.5 * 3.5), 100.0, delta=12.0)   # about the 10 x 10 cells it was
+
+    def test_exact_shapes_are_round_and_cut_holes(self):
+        shape = sk.glyph_shape([False] * (N * N), N, N, self.px, add=(("ellipse", 12.0, 12.0, 6.0, 6.0),), drop=(("ellipse", 12.0, 12.0, 2.0, 2.0),))
+        k = self.px[0] / N
+        at = lambda cx, cy: shape.cover[int(cy * k) * self.px[0] + int(cx * k)]
+        self.assertEqual(at(12.0, 12.0), 0.0)     # the hole
+        self.assertEqual(at(16.0, 12.0), 1.0)     # the ring
+        self.assertEqual(at(19.5, 12.0), 0.0)     # outside
+
     def test_the_lit_overlay_lights_the_dome_and_gives_the_frame_back(self):
         plate = self.plate()
-        glyph = sk.symbol_layer(self.idle, self.template, self.mask, self.px)
+        glyph = sk.paint_symbol(self.shape(), sk.symbol_colour(self.idle, self.mask))
         face = sk.over(plate, glyph)
-        lit = sk.over(face, sk.lit_overlay(self.hover, self.idle, self.mask, self.px, plate))
+        lit_symbol = sk.paint_symbol(self.shape(), sk.symbol_colour(self.hover, self.mask))
+        lit = sk.over(face, sk.lit_overlay(self.hover, self.idle, self.mask, self.px, plate, lit_symbol))
         k = self.px[0] / N
         errors = []
         for y in range(5, 19):
@@ -202,8 +241,13 @@ class PartsTests(unittest.TestCase):
         self.assertLess(sum(errors) / len(errors), 6.0)
         self.assertLess(max(errors), 20.0)
 
+    def test_the_symbol_colour_is_the_frames_own(self):
+        self.assertLess(bk.distance(sk.symbol_colour(self.idle, self.mask), (2, 2, 2)), 4.0)
+        lit = frame(lit_symbol=(220, 140, 30))
+        self.assertLess(bk.distance(sk.symbol_colour(lit, self.mask), (220, 140, 30)), 4.0)
+
     def test_the_overlay_never_leaves_the_plate(self):
-        overlay = sk.lit_overlay(self.pressed, self.idle, self.mask, self.px, self.plate())
+        overlay = sk.lit_overlay(self.pressed, self.idle, self.mask, self.px, self.plate(), sk.paint_symbol(self.shape(), (0, 0, 0)))
         self.assertEqual(overlay.data[3], 0)  # the corner
 
     def test_lift_of_gives_the_colour_back(self):

@@ -113,17 +113,19 @@ TABS = (
 )
 GROUPS = {"college": "plate-college-hud", "school": "plate-school-hud"}   # the prompt of each group
 OVERRIDES: dict[str, dict] = {
-    "social_but": {"shapes": (("rect", 13.0, 7.0, 22.0, 17.0), ("ellipse", 17.0, 20.5, 7.4, 3.1))},      # the top hat: crown and brim
-    "technological_but": {"shapes_drop": (("ellipse", 15.8, 15.6, 1.8, 1.8),)},                          # the gear's hole is round
-    "anatomical_but": {"shapes": (("poly", [(10.0, 11.0), (22.0, 11.0), (22.0, 16.5), (18.2, 17.0), (18.2, 21.0), (22.5, 21.0), (22.5, 24.0), (10.0, 24.0)]),)},   # the mortar's bowl and foot
-    "mechanical_but": {"reach": 0.78, "rim_share": 1.0,
+    "electrical_but": {"reach": 0.72},
+    "s_nature": {"fill": 0},   # dark strokes only: the pale cells between them are the dome's light, not a body
+    "social_but": {"shapes_only": True, "shapes": (("rect", 14.0, 7.0, 22.0, 17.0), ("ellipse", 17.0, 20.5, 7.4, 3.1))},      # the top hat: crown and brim
+    "technological_but": {"shapes_only": True, "shapes": (("gear", 16.0, 16.0, 5.4, 7.0, 8, 0.069),), "shapes_drop": (("ellipse", 16.0, 15.5, 1.8, 1.8),)},   # the gear: eight teeth, a round hole
+    "anatomical_but": {"shapes_only": True, "shapes": (("poly", [(10.0, 11.5), (22.0, 11.5), (21.2, 19.5), (22.0, 21.3), (22.0, 24.0), (10.0, 24.0), (10.0, 21.3), (10.8, 19.5)]), ("line", 19.6, 10.4, 23.6, 6.6, 2.0))},   # the mortar's bowl and foot, the pestle
+    "mechanical_but": {"reach": 0.78, "rim_share": 1.0, "shapes_only": True,
                        "shapes": (("gear", 13.3, 10.9, 3.4, 4.3, 8, 0.0), ("gear", 19.5, 18.5, 4.3, 5.2, 8, 0.06)),
                        "shapes_drop": (("ellipse", 13.0, 11.5, 1.2, 1.0), ("ellipse", 19.0, 18.0, 1.2, 1.2))},   # two gears with round holes
     "gunsmithy_but": {"reach": 0.76, "rim_share": 1.0, "close": 1,
                       "roi": ([(7.0, 9.0), (26.5, 6.5), (26.5, 11.5), (19.0, 14.5), (18.0, 24.0), (7.0, 24.0)], 33.0)},   # the revolver: dark only against the dome's own shade at the lower right, so the cells of its region
-    "therapeutics_but": {"reach": 0.76, "rim_share": 1.0,
-                         "shapes": (("poly", [(7.5, 9.8), (14.0, 9.0), (16.5, 9.5), (16.5, 12.8), (9.0, 12.8)]), ("poly", [(16.5, 9.0), (25.0, 9.0), (25.0, 12.8), (16.5, 12.8)]),
-                                    ("rect", 13.8, 12.5, 16.2, 23.0), ("ellipse", 15.0, 15.0, 3.0, 1.4), ("ellipse", 15.0, 18.3, 2.6, 1.2))},   # the caduceus: wings, staff, snakes
+    "therapeutics_but": {"reach": 0.76, "rim_share": 1.0, "shapes_only": True,
+                         "shapes": (("poly", [(15.0, 10.5), (12.0, 8.4), (8.0, 8.8), (7.0, 11.0), (10.0, 12.2), (15.0, 12.6)]), ("poly", [(16.0, 10.5), (19.0, 8.4), (23.0, 8.8), (24.0, 11.0), (21.0, 12.2), (16.0, 12.6)]),
+                                    ("line", 15.5, 8.6, 15.5, 23.0, 1.7), ("line", 13.4, 14.0, 17.6, 15.7, 1.2), ("line", 17.6, 15.7, 13.4, 17.5, 1.2), ("line", 13.4, 17.5, 17.6, 19.3, 1.2))},   # the caduceus: wings, staff, the snakes' coils
 }   # per button: {"windows": ((share, ratio), ...), "median": (share, drop), "read": "idle", "max_l", "max_gain", "reach", "rim_share", "rim_drop", "grow", "accent", "fill", "close", "add": ((x, y), ...), "drop": ((x, y), ...), "shapes" / "shapes_drop": simple shapes (`shape_cells`)}; read by eye from `masks`
 
 
@@ -356,38 +358,36 @@ def symbol_mask(frame: Image, pressed: Image | None = None, override: dict | Non
 
 # --- the plate template and the collage of the references ---------------------------------------------------------------------
 
-def shape_cells(shape: tuple, w: int, h: int) -> list[int]:
-    """The cells (by their centres) inside a simple shape, in the frame's cell coordinates: ("rect", x0, y0, x1, y1), ("ellipse", cx, cy, rx, ry), ("poly", [(x, y), ...]), ("line", x0, y0, x1, y1, width),
+def shape_contains(shape: tuple, px: float, py: float) -> bool:
+    """Is the point (px, py), in the frame's cell coordinates (cell i spans i to i + 1), inside a simple shape: ("rect", x0, y0, x1, y1), ("ellipse", cx, cy, rx, ry), ("poly", [(x, y), ...]), ("line", x0, y0, x1, y1, width),
     ("gear", cx, cy, body radius, tooth radius, teeth, phase in turns)."""
     kind = shape[0]
-    cells = []
-    for y in range(h):
-        for x in range(w):
-            px, py = x + 0.5, y + 0.5
-            if kind == "rect":
-                inside = shape[1] <= px <= shape[3] and shape[2] <= py <= shape[4]
-            elif kind == "ellipse":
-                inside = ((px - shape[1]) / shape[3]) ** 2 + ((py - shape[2]) / shape[4]) ** 2 <= 1.0
-            elif kind == "poly":
-                pts, inside = shape[1], False
-                for k in range(len(pts)):
-                    (x0, y0), (x1, y1) = pts[k], pts[(k + 1) % len(pts)]
-                    if (y0 > py) != (y1 > py) and px < x0 + (py - y0) * (x1 - x0) / (y1 - y0):
-                        inside = not inside
-            elif kind == "line":
-                x0, y0, x1, y1, width = shape[1:]
-                length2 = (x1 - x0) ** 2 + (y1 - y0) ** 2
-                t = max(0.0, min(1.0, ((px - x0) * (x1 - x0) + (py - y0) * (y1 - y0)) / length2)) if length2 else 0.0
-                inside = math.hypot(px - (x0 + t * (x1 - x0)), py - (y0 + t * (y1 - y0))) <= width / 2.0
-            elif kind == "gear":
-                _, cx, cy, body, tooth, teeth, phase = shape
-                angle = math.atan2(py - cy, px - cx) / (2 * math.pi) * teeth - phase * teeth
-                inside = math.hypot(px - cx, py - cy) <= (tooth if math.cos(2 * math.pi * angle) > 0.15 else body)
-            else:
-                raise SchoolError(f"unknown override shape {kind}")
-            if inside:
-                cells.append(y * w + x)
-    return cells
+    if kind == "rect":
+        return shape[1] <= px <= shape[3] and shape[2] <= py <= shape[4]
+    if kind == "ellipse":
+        return ((px - shape[1]) / shape[3]) ** 2 + ((py - shape[2]) / shape[4]) ** 2 <= 1.0
+    if kind == "poly":
+        pts, inside = shape[1], False
+        for k in range(len(pts)):
+            (x0, y0), (x1, y1) = pts[k], pts[(k + 1) % len(pts)]
+            if (y0 > py) != (y1 > py) and px < x0 + (py - y0) * (x1 - x0) / (y1 - y0):
+                inside = not inside
+        return inside
+    if kind == "line":
+        x0, y0, x1, y1, width = shape[1:]
+        length2 = (x1 - x0) ** 2 + (y1 - y0) ** 2
+        t = max(0.0, min(1.0, ((px - x0) * (x1 - x0) + (py - y0) * (y1 - y0)) / length2)) if length2 else 0.0
+        return math.hypot(px - (x0 + t * (x1 - x0)), py - (y0 + t * (y1 - y0))) <= width / 2.0
+    if kind == "gear":
+        _, cx, cy, body, tooth, teeth, phase = shape
+        angle = math.atan2(py - cy, px - cx) / (2 * math.pi) * teeth - phase * teeth
+        return math.hypot(px - cx, py - cy) <= (tooth if math.cos(2 * math.pi * angle) > 0.15 else body)
+    raise SchoolError(f"unknown override shape {kind}")
+
+
+def shape_cells(shape: tuple, w: int, h: int) -> list[int]:
+    """The cells (by their centres) inside a simple shape (`shape_contains`)."""
+    return [y * w + x for y in range(h) for x in range(w) if shape_contains(shape, x + 0.5, y + 0.5)]
 
 
 def dilate(mask: list[bool], w: int, h: int) -> list[bool]:
@@ -556,15 +556,216 @@ def multiply_alpha(layer: Image, clip: Image) -> Image:
     return out
 
 
-def symbol_layer(frame: Image, base: Image, mask: list[bool], pixels: tuple[int, int]) -> Image:
-    """The symbol's cells of `frame` over `base`, a smooth sharp outline (the pilot's symbol rule): only the mask's cells may be symbol."""
-    w = frame.w
-    owned = lambda x, y: bool(mask[y * w + x])
-    return button_kit.render_crisp(frame, base, False, pixels=pixels, owned_cell=owned, solid_cell=owned, silhouette_mask=mask)
+GLYPH_SS = 3                # supersampling of the symbol's outline (samples per master pixel, per axis)
+GLYPH_SIGMA = 0.62          # cells: the Gaussian that turns the mask's staircase into a smooth curve
+GLYPH_LEVEL = 0.42          # the field's level of the outline (below 0.5: a thin line keeps its width)
+STROKE_W = 1.15             # cells: the width every thin line of a symbol is drawn at (a line the original draws one or two cells wide, in its centreline)
+SOLID_R = 1.2               # cells: a part of the symbol thicker than twice this stays a solid area (the hat's crown, a gear's body), only the thinner parts become strokes
+ENGRAVE_PX = 1.1            # master pixels: the width of the light rim (upper left) and the shade (lower right) of the engraved symbol
+ENGRAVE_LIGHT = 0.5         # the rim: this share of the way from the symbol's colour to white
+ENGRAVE_SHADE = 0.5         # the shade: the symbol's colour times this
 
 
-def lit_overlay(frame: Image, idle: Image, mask: list[bool], pixels: tuple[int, int], clip: Image) -> Image:
-    """What `frame` (the hover or the pressed one) shows over the IDLE frame: the dome's lighting as a soft layer (`lift_of`: the plate's texture shows through), under the lit symbol's own cells."""
+@dataclass(frozen=True)
+class GlyphShape:
+    """The symbol as a smooth curve at the master's size: per master pixel the coverage and the shares of it that lie in the light rim (upper left) and the shade (lower right)."""
+    w: int
+    h: int
+    cover: tuple
+    rim: tuple
+    shade: tuple
+
+
+def _phi(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _axis_weights(cells: int, samples: int) -> list[list[tuple[int, float]]]:
+    """For each sample along an axis, the weight of the cells near it: the share of a Gaussian (GLYPH_SIGMA cells) centred there that lies in the cell."""
+    out = []
+    for u in range(samples):
+        c = (u + 0.5) / samples * cells
+        row = []
+        for i in range(max(0, int(c - 4 * GLYPH_SIGMA) - 1), min(cells, int(c + 4 * GLYPH_SIGMA) + 2)):
+            weight = _phi((i + 1 - c) / GLYPH_SIGMA) - _phi((i - c) / GLYPH_SIGMA)
+            if weight > 1e-4:
+                row.append((i, weight))
+        out.append(row)
+    return out
+
+
+def _thin(grid: list[bytearray]) -> list[bytearray]:
+    """Zhang-Suen thinning: the one-sample centreline of every part of the shape."""
+    h, w = len(grid), len(grid[0])
+    img = [bytearray(row) for row in grid]
+    changed = True
+    while changed:
+        changed = False
+        for step in (0, 1):
+            drop = []
+            for y in range(1, h - 1):
+                up, mid, down = img[y - 1], img[y], img[y + 1]
+                for x in range(1, w - 1):
+                    if not mid[x]:
+                        continue
+                    p2, p3, p4, p5, p6, p7, p8, p9 = up[x], up[x + 1], mid[x + 1], down[x + 1], down[x], down[x - 1], mid[x - 1], up[x - 1]
+                    n = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9
+                    if n < 2 or n > 6:
+                        continue
+                    transitions = (p2 == 0 and p3) + (p3 == 0 and p4) + (p4 == 0 and p5) + (p5 == 0 and p6) + (p6 == 0 and p7) + (p7 == 0 and p8) + (p8 == 0 and p9) + (p9 == 0 and p2)
+                    if transitions != 1:
+                        continue
+                    if step == 0:
+                        if p2 * p4 * p6 or p4 * p6 * p8:
+                            continue
+                    elif p2 * p4 * p8 or p2 * p6 * p8:
+                        continue
+                    drop.append((y, x))
+            for y, x in drop:
+                img[y][x] = 0
+            changed = changed or bool(drop)
+    return img
+
+
+def _distance(grid: list[bytearray]) -> list[list[float]]:
+    """Distance of every sample of the shape to the nearest sample outside it (two-pass chamfer, in samples)."""
+    h, w = len(grid), len(grid[0])
+    big = 1e9
+    d = [[0.0 if not grid[y][x] else big for x in range(w)] for y in range(h)]
+    r2 = math.sqrt(2.0)
+    for y in range(h):
+        for x in range(w):
+            if d[y][x]:
+                best = d[y][x]
+                if x: best = min(best, d[y][x - 1] + 1.0)
+                if y:
+                    best = min(best, d[y - 1][x] + 1.0)
+                    if x: best = min(best, d[y - 1][x - 1] + r2)
+                    if x < w - 1: best = min(best, d[y - 1][x + 1] + r2)
+                d[y][x] = best
+    for y in range(h - 1, -1, -1):
+        for x in range(w - 1, -1, -1):
+            if d[y][x]:
+                best = d[y][x]
+                if x < w - 1: best = min(best, d[y][x + 1] + 1.0)
+                if y < h - 1:
+                    best = min(best, d[y + 1][x] + 1.0)
+                    if x < w - 1: best = min(best, d[y + 1][x + 1] + r2)
+                    if x: best = min(best, d[y + 1][x - 1] + r2)
+                d[y][x] = best
+    return d
+
+
+def stroked(inside: list[bytearray], sample: float) -> list[bytearray]:
+    """The shape with its thin parts redrawn as lines of one width (`STROKE_W` cells) along their centrelines, round at the ends, and its thick parts (thicker than twice `SOLID_R`) kept as they are: `sample` is the number of samples per cell."""
+    h, w = len(inside), len(inside[0])
+    dist = _distance(inside)
+    core_r, line_r = SOLID_R * sample, STROKE_W * sample / 2.0
+    skeleton = _thin(inside)
+    out = [bytearray(w) for _ in range(h)]
+
+    def stamp(cx: int, cy: int, radius: float, only_inside: bool) -> None:
+        r = int(math.ceil(radius))
+        for y in range(max(0, cy - r), min(h, cy + r + 1)):
+            row, src = out[y], inside[y]
+            for x in range(max(0, cx - r), min(w, cx + r + 1)):
+                if (x - cx) ** 2 + (y - cy) ** 2 <= radius * radius and (src[x] or not only_inside):
+                    row[x] = 1
+    for y in range(h):
+        for x in range(w):
+            if dist[y][x] >= core_r:
+                stamp(x, y, core_r, True)   # the thick parts: the opening of the shape by a disc of core_r
+            elif skeleton[y][x]:
+                stamp(x, y, line_r, False)
+    return out
+
+
+def glyph_shape(mask: list[bool], w: int, h: int, pixels: tuple[int, int], add: tuple = (), drop: tuple = (), lines: bool = False) -> GlyphShape:
+    """The symbol's outline as a smooth curve: the mask's cells blurred by `GLYPH_SIGMA` and cut at `GLYPH_LEVEL` (a thin line keeps its width, a staircase becomes a curve), the exact simple shapes of an override laid in (`add`) and cut out (`drop`)
+    at the sub-pixel level, so a circle is round and a straight edge straight. Then the light rim at the upper left and the shade at the lower right of the outline."""
+    pw, ph = pixels
+    sw, sh = pw * GLYPH_SS, ph * GLYPH_SS
+    wx, wy = _axis_weights(w, sw), _axis_weights(h, sh)
+    rows = [[1.0 if mask[j * w + i] else 0.0 for i in range(w)] for j in range(h)]
+    temp = {}   # T[j][u]: the mask's row j blurred along x at every sample column
+    for j in range(h):
+        if any(rows[j]):
+            temp[j] = [sum(rows[j][i] * weight for i, weight in wx[u]) for u in range(sw)]
+    inside = []
+    for v in range(sh):
+        field = [0.0] * sw
+        for j, weight in wy[v]:
+            if j in temp:
+                t = temp[j]
+                for u in range(sw):
+                    field[u] += weight * t[u]
+        line = bytearray(sw)
+        cy = (v + 0.5) / sh * h
+        for u in range(sw):
+            line[u] = 1 if field[u] >= GLYPH_LEVEL else 0
+        inside.append(line)
+    if lines and any(any(row) for row in inside):
+        inside = stroked(inside, GLYPH_SS * (pw / w + ph / h) / 2.0)
+    if add or drop:   # the exact shapes of an override, laid in and cut out after the lines are drawn
+        for v in range(sh):
+            cy = (v + 0.5) / sh * h
+            for u in range(sw):
+                cx = (u + 0.5) / sw * w
+                if any(shape_contains(shape, cx, cy) for shape in add):
+                    inside[v][u] = 1
+                if inside[v][u] and any(shape_contains(shape, cx, cy) for shape in drop):
+                    inside[v][u] = 0
+    d = max(1, int(round(ENGRAVE_PX * GLYPH_SS)))
+    cover, rim, shade = [], [], []
+    count = float(GLYPH_SS * GLYPH_SS)
+    for py in range(ph):
+        for px in range(pw):
+            c = r = sd = 0
+            for v in range(py * GLYPH_SS, (py + 1) * GLYPH_SS):
+                for u in range(px * GLYPH_SS, (px + 1) * GLYPH_SS):
+                    if not inside[v][u]:
+                        continue
+                    c += 1
+                    if v - d < 0 or u - d < 0 or not inside[v - d][u - d]:
+                        r += 1
+                    if v + d >= sh or u + d >= sw or not inside[v + d][u + d]:
+                        sd += 1
+            cover.append(c / count)
+            rim.append(r / c if c else 0.0)
+            shade.append(sd / c if c else 0.0)
+    return GlyphShape(pw, ph, tuple(cover), tuple(rim), tuple(shade))
+
+
+def symbol_colour(frame: Image, mask: list[bool]) -> tuple[int, int, int]:
+    """The symbol's own colour in a frame (dark, or light and coloured where the original draws it so): the median of the cells inside the mask (those with no neighbour outside it, or all of them for a thin line)."""
+    w, h = frame.w, frame.h
+    cells = [i for i, on in enumerate(mask) if on]
+    if not cells:
+        return (0, 0, 0)
+    inner = [i for i in cells if all(mask[j] for j in neighbours8(i, w, h)) and 0 < i % w < w - 1 and 0 < i // w < h - 1]
+    pick = inner if len(inner) >= 4 else cells
+    colours = [colour_at(frame, i % w, i // w) for i in pick]
+    return tuple(sorted(c[k] for c in colours)[len(colours) // 2] for k in range(3))
+
+
+def paint_symbol(shape: GlyphShape, colour: tuple[int, int, int]) -> Image:
+    """The symbol: one solid colour, no cells, a light rim at the upper left and a shade at the lower right (an engraving), the outline a smooth curve."""
+    light = tuple(c + (255 - c) * ENGRAVE_LIGHT for c in colour)
+    dark = tuple(c * ENGRAVE_SHADE for c in colour)
+    out = Image(shape.w, shape.h, bytearray(shape.w * shape.h * 4))
+    for i, cover in enumerate(shape.cover):
+        if cover <= 0.0:
+            continue
+        lit, shaded = shape.rim[i], shape.shade[i]
+        for k in range(3):
+            value = colour[k] * (1 - lit) + light[k] * lit
+            out.data[i * 4 + k] = int(round(max(0.0, min(255.0, value * (1 - shaded) + dark[k] * shaded))))
+        out.data[i * 4 + 3] = int(round(cover * 255))
+    return out
+
+
+def lit_overlay(frame: Image, idle: Image, mask: list[bool], pixels: tuple[int, int], clip: Image, symbol: Image) -> Image:
+    """What `frame` (the hover or the pressed one) shows over the IDLE frame: the dome's lighting as a soft layer (`lift_of`: the plate's texture shows through), under the lit symbol (`symbol`: the same outline in the lit colour)."""
     w, h = idle.w, idle.h
     cells = []
     for y in range(h):
@@ -572,7 +773,7 @@ def lit_overlay(frame: Image, idle: Image, mask: list[bool], pixels: tuple[int, 
             cells.append(lift_of(colour_at(idle, x, y), colour_at(frame, x, y)) if alpha_at(idle, x, y) else (0.0, (0.0, 0.0, 0.0)))
     cells = fill_from_neighbours(cells, w, h, dilate(mask, w, h))
     soft = soft_layer(cells, (w, h), pixels, LIFT_SIGMA)
-    return multiply_alpha(over(soft, symbol_layer(frame, idle, mask, pixels)), clip)
+    return multiply_alpha(over(soft, symbol), clip)
 
 
 def gloss_layer(template: Image, pixels: tuple[int, int]) -> Image:
@@ -676,12 +877,20 @@ def paint_ring(plate: Image, centre: tuple[float, float], r_out: float, width: f
     return out
 
 
+def override_of(tab: Tab) -> dict:
+    """The button's override; the school buttons draw dark silhouettes, so their symbols get no coloured body unless an override asks for one."""
+    override = dict(OVERRIDES.get(tab.name) or {})
+    if tab.group == "school":
+        override.setdefault("fill", 0)
+    return override
+
+
 def tab_inputs(frames: Path, tab: Tab) -> tuple[Image, Image, Image, list[bool], Image]:
     idle, pressed, hover = (read_frame(frames, tab, k) for k in (0, 1, 2))
     for frame in (pressed, hover):
         if (frame.w, frame.h) != (idle.w, idle.h) or any(alpha_at(frame, i % idle.w, i // idle.w) != alpha_at(idle, i % idle.w, i // idle.w) for i in range(idle.w * idle.h)):
             raise SchoolError(f"{tab.folder}: the three frames do not share one outline")
-    mask = symbol_mask(idle, pressed, OVERRIDES.get(tab.name))
+    mask = symbol_mask(idle, pressed, override_of(tab))
     return idle, pressed, hover, mask, plate_template(idle, mask)
 
 
@@ -695,14 +904,50 @@ def read_plate(plate_dir: Path | None, name: str) -> Image | None:
     return master
 
 
+@dataclass(frozen=True)
+class TabSymbol:
+    """The symbol of a button as smooth outlines: the dark outline (`dark`) and, where the original draws a coloured body inside it (the fire's orange), the body's silhouette under it (`body`), with the cells each colour is read from."""
+    dark: GlyphShape
+    body: GlyphShape | None
+    dark_cells: list
+    body_cells: list
+
+
+def tab_symbol(frames: Path, tab: Tab, pixels: tuple[int, int]) -> TabSymbol:
+    idle, pressed = read_frame(frames, tab, 0), read_frame(frames, tab, 1)
+    override = override_of(tab)
+    plain = {k: v for k, v in override.items() if k not in ("shapes", "shapes_drop")}
+    add, drop = tuple(override.get("shapes", ())), tuple(override.get("shapes_drop", ()))
+    n = idle.w * idle.h
+    if override.get("shapes_only"):   # the shapes are the whole symbol (a top hat, two gears)
+        cells = symbol_mask(idle, pressed, override)
+        return TabSymbol(glyph_shape([False] * n, idle.w, idle.h, pixels, add, drop, lines=True), None, cells, [False] * n)
+    dark = symbol_mask(idle, pressed, dict(plain, fill=0))
+    full = symbol_mask(idle, pressed, plain)
+    body = [f and not d for f, d in zip(full, dark)]
+    shape_body = glyph_shape(full, idle.w, idle.h, pixels, add, drop) if sum(body) >= max(6, 0.3 * sum(dark)) else None
+    if shape_body is None:
+        body = [False] * n
+    return TabSymbol(glyph_shape(dark, idle.w, idle.h, pixels, add, drop, lines=not override.get("solid")), shape_body, dark, body)
+
+
+def symbol_image(symbol: TabSymbol, frame: Image) -> Image:
+    """The symbol in a frame's colours: the body (if any) in its own colour, the dark outline over it."""
+    out = Image(symbol.dark.w, symbol.dark.h, bytearray(symbol.dark.w * symbol.dark.h * 4))
+    if symbol.body is not None:
+        out = over(out, paint_symbol(symbol.body, symbol_colour(frame, symbol.body_cells)))
+    return over(out, paint_symbol(symbol.dark, symbol_colour(frame, symbol.dark_cells)))
+
+
 def tab_parts(frames: Path, tab: Tab, plate_dir: Path | None) -> dict[str, Image]:
     idle, pressed, hover, mask, template = tab_inputs(frames, tab)
     pixels = master_of(tab.name)
     plate = read_plate(plate_dir, tab.name)
     clip = plate if plate is not None else silhouette_clip(idle, pixels)
-    return {f"glyph.{tab.name}": symbol_layer(idle, template, mask, pixels),
-            f"plate.{tab.name}_hover": lit_overlay(hover, idle, mask, pixels, clip),
-            f"plate.{tab.name}_pressed": lit_overlay(pressed, idle, mask, pixels, clip)}
+    symbol = tab_symbol(frames, tab, pixels)
+    return {f"glyph.{tab.name}": symbol_image(symbol, idle),
+            f"plate.{tab.name}_hover": lit_overlay(hover, idle, mask, pixels, clip, symbol_image(symbol, hover)),
+            f"plate.{tab.name}_pressed": lit_overlay(pressed, idle, mask, pixels, clip, symbol_image(symbol, pressed))}
 
 
 def build_parts(frames: Path, plate_dir: Path | None, tabs: list[Tab]) -> dict[str, Image]:
@@ -1040,7 +1285,7 @@ def cmd_masks(args: argparse.Namespace) -> int:
         tiles = []
         for tab in tabs_of(args.group):
             idle, pressed = read_frame(frames, tab, 0), read_frame(frames, tab, 1)
-            mask = symbol_mask(idle, pressed, OVERRIDES.get(tab.name))
+            mask = symbol_mask(idle, pressed, override_of(tab))
             shown = Image(pressed.w, pressed.h, bytearray(pressed.data))
             for i, on in enumerate(mask):
                 if on:
