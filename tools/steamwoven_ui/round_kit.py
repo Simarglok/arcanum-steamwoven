@@ -247,7 +247,7 @@ def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int | tuple[in
     units, rows = frame.w, frame.h
     pw, ph = pixels if isinstance(pixels, tuple) else (pixels, pixels)
     cx, cy = centre if centre is not None else (units / 2.0, rows / 2.0)
-    icx, icy = int(math.floor(cx)), int(math.floor(cy))
+    icx, icy = ((units - 1) // 2, (rows - 1) // 2) if centre is None else (int(math.floor(cx)), int(math.floor(cy)))  # the half-plane's pivot: the middle cell (the old rule, even sides included)
     dome_l = button_kit.lab(*dome)[0]
     bins = int(360 / GLOSS_BIN)
     cells: list[list[tuple[float, float, float, tuple[int, int, int]]]] = [[] for _ in range(bins)]  # per bin: (weight, radius, lightness, colour)

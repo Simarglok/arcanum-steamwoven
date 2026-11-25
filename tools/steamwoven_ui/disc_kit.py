@@ -15,7 +15,7 @@ The parts of a button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitCom
 * `plate.<name>` the empty plate: ONE Codex item per family (`plate-crescent-hud`, `plate-crescent-small-hud`), fitted by `fit.py` to the face of every button of the family. The brass crescent is part of the plate (it is part of the original's
   frame and of its hit shape); the gloss arc of the dome is laid over the fitted plate by `gloss` from the original (shape and brightness).
 * `glyph.<name>` the symbol as the idle frame shows it over the plate, a layer on the whole frame: the cells that differ from the plate template by `SOLID_DE`, in the original's own flat cell colours, with a smooth sharp outline.
-  The plate template of a family is voted per cell from the idle and hover frames of ALL its buttons (a symbol covers a cell in one button, the plate shows in the others; a cell every button covers is filled from its neighbours).
+  The plate template of a family is voted per cell from the idle and hover frames of ALL its buttons (a symbol covers a cell in one button, the plate shows in the others; a cell fewer than two buttons show plain is filled from its neighbours; the colour test and the speck clean act on the middle of the dome, `SPECK_SHARE` of the radius, where every symbol of these families lies).
 * `plate.<name>_hover` what the hover frame shows over the IDLE frame (the symbol lights up and glows): the lit symbol's own cells, the glow a separate soft layer under it.
 * `plate.<name>_pressed` what the pressed frame shows over the idle frame: the lit symbol, the plate DARKENED where the original darkens it (the gloss arc goes out) as a soft black layer, the crescent's brightening a soft layer too.
 
@@ -52,8 +52,7 @@ VOTE_DE = 4.0            # two frames agree on a plate cell when this close (CIE
 MIN_SUPPORT = 2          # a plate colour needs this many BUTTONS (a button's idle and hover frame may agree on its own symbol's colour: they count as one)
 SPECK_DE = 3.0           # inside the middle of the dome (where the symbols are) a template cell this far from the median of its 7 x 7 neighbourhood is a trace of a symbol's edge (two buttons' glows agreeing) and takes the median
 DOME_DE = 14.0           # in the middle of the dome a plate colour is within this of the dome's median: two buttons whose symbols have the same colour (the two red arrows) must not vote it into the plate
-SPECK_SHARE = 0.65       # the middle of the dome: this share of the disc's radius (the bevel and the gloss arc outside it are never touched)
-OWN_MARGIN = 3.2         # cells: a layer may take the cells inside the disc's radius less this (the symbol; the bevel, the gloss arc and the crescent are the plate's)
+SPECK_SHARE = 0.75       # the middle of the dome, where the symbols lie (the Big Green arrows' tips reach 0.70 of the radius): this share of the disc's radius; the colour test, the speck clean and what a glyph or an overlay may take stop there (the bevel, the gloss arc and the crescent outside it are the plate's)
 LABEL_FONT = button_kit.LABEL_FONT
 Image = pngio.Image
 
@@ -76,9 +75,9 @@ class Family:
     prompt: str
     units: tuple[int, int]            # the original frame, in cells
     master: tuple[int, int]           # the plate's master size (kit.json)
-    centre: tuple[float, float]       # the dome's middle in cells (a cell's middle at +0.5), fitted to the frames' outline
+    centre: tuple[float, float]       # the dome's middle in cells (a cell's middle at +0.5), fitted once to the frames' outline (a circle fit of its upper-left boundary)
     radius: float                     # the disc's radius in cells
-    refs: tuple[int, int]             # the size the original is shown to Codex at (the master's aspect)
+    refs: tuple[int, int]             # the size the original is shown to Codex at (the master's aspect, or a square when the generator refuses that aspect: `stretch` squeezes the result back)
     members: tuple[Disc, ...]
 
 
@@ -100,6 +99,17 @@ def family(key: str) -> Family:
 
 def families_of(arg: str | None) -> list[Family]:
     return [family(k) for k in arg.split(",")] if arg else list(FAMILIES)
+
+
+def chosen_families(arg: str | None, only: set[str] | None) -> list[Family]:
+    """The families a command works on: those named by `--family`, narrowed to those that hold a button of `--only` (a name no chosen family holds is refused, a family with no chosen button is not read)."""
+    fams = families_of(arg)
+    if only:
+        unknown = only - {m.name for f in fams for m in f.members}
+        if unknown:
+            raise DiscError(f"--only names buttons the chosen families do not hold: {sorted(unknown)}; the buttons are {[(f.key, [m.name for m in f.members]) for f in fams]}")
+        fams = [f for f in fams if any(m.name in only for m in f.members)]
+    return fams
 
 
 def all_names() -> list[str]:
@@ -136,7 +146,7 @@ def radius_of(fam: Family, x: int, y: int) -> float:
 
 def own_cells(fam: Family, frame: Image, everything: bool):
     """The cells a layer of this frame may take: the opaque ones within the symbol's reach of the dome's middle, or (a pressed overlay, which changes the whole plate) every opaque one."""
-    reach = fam.radius - OWN_MARGIN
+    reach = fam.radius * SPECK_SHARE
     return lambda x, y: alpha_at(frame, x, y) > 0 and (everything or radius_of(fam, x, y) <= reach)
 
 
@@ -263,7 +273,7 @@ def build_parts(frames: Path, plate_dir: Path | None, fams: list[Family], only: 
 
 def dome_colour(fam: Family, template: Image) -> tuple[int, int, int]:
     """The dome colour of the template: the mean of the darker half of the opaque cells inside the symbol's reach (the dome, not the gloss)."""
-    reach = fam.radius - OWN_MARGIN
+    reach = fam.radius * SPECK_SHARE
     cells = [tuple(template.data[(y * template.w + x) * 4:(y * template.w + x) * 4 + 3]) for y in range(template.h) for x in range(template.w) if alpha_at(template, x, y) and radius_of(fam, x, y) < reach]
     cells.sort(key=lambda c: button_kit.lab(*c)[0])
     cells = cells[:max(1, len(cells) // 2)]
@@ -288,16 +298,19 @@ def source_folders(ident: str) -> tuple[Family, list[str], int]:
     raise DiscError(f"{ident} belongs to no button of this slice")
 
 
-def record_of(ident: str, frames: Path, image_path: Path, image: Image) -> dict:
+def record_of(ident: str, frames: Path, image_path: Path, image: Image, plate_dir: Path | None = None) -> dict:
     """The provenance record of a rule-made part (SWI-GEN-6): no generator, the rule and the hashes of the original frames it read."""
     fam, folders, count = source_folders(ident)
     template = {f"template/{m.folder}/f{k}": button_kit.sha256_file(frames / m.folder / f"f{k}.png") for m in fam.members for k in (0, 2)}
     empty = not any(image.data[3::4])
+    name = ident.removeprefix("glyph.").removeprefix("plate.").removesuffix("_hover").removesuffix("_pressed")
+    plate_path = plate_dir / f"plate.{name}.png" if plate_dir else None
+    clip_source = button_kit.sha256_file(plate_path) if plate_path is not None and plate_path.is_file() and not ident.startswith("glyph.") else ("silhouette" if not ident.startswith("glyph.") else None)  # an overlay's alpha is clipped by the plate master: its hash belongs to the record
     return {"part": ident, "rule": "disc_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(),
             "template_sources": template if ident.startswith("glyph.") else {},
             "sources": {f"{folder}/f{k}": button_kit.sha256_file(frames / folder / f"f{k}.png") for folder in folders for k in range(count)},
-            "empty": empty, "empty_reason": "EMPTY: check the frames" if empty else None,
-            "parameters": {"family": fam.key, "units": list(fam.units), "centre": list(fam.centre), "radius": fam.radius, "own_margin": OWN_MARGIN, "vote_de": VOTE_DE, "min_support": MIN_SUPPORT,
+            "clip_source": clip_source, "empty": empty, "empty_reason": "EMPTY: check the frames" if empty else None,
+            "parameters": {"family": fam.key, "units": list(fam.units), "centre": list(fam.centre), "radius": fam.radius, "symbol_share": SPECK_SHARE, "vote_de": VOTE_DE, "min_support": MIN_SUPPORT, "dome_de": DOME_DE, "speck_de": SPECK_DE, "speck_share": SPECK_SHARE,
                            "dead_de": button_kit.DEAD_DE, "solid_de": button_kit.SOLID_DE, "crisp_sigma": button_kit.CRISP_SIGMA, "glow_sigma": button_kit.GLOW_SIGMA, "edge_half": button_kit.EDGE_HALF,
                            "shade_min_loss": button_kit.SHADE_MIN_LOSS, "master": [image.w, image.h]},
             "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [image.w, image.h], "run_by": "agent"}
@@ -360,6 +373,8 @@ def cmd_stretch(args: argparse.Namespace) -> int:
         derived = out.with_name(out.stem + ".provenance.json")
         record["derived_from"] = {"image": record.get("image"), "image_sha256": record["image_sha256"], "step": f"disc_kit.py stretch ({width} x {height} -> {target[0]} x {target[1]}, the master's {fam.master[0]}:{fam.master[1]} aspect)"}
         record["image"], record["image_sha256"] = str(out.relative_to(local)) if out.is_relative_to(local) else out.name, button_kit.sha256_file(out)
+        record["derived_from"]["pixel_size"] = record.get("pixel_size")
+        record["pixel_size"] = list(target)  # the size of the image the record hashes
         derived.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
         print(f"{out.name}  {target[0]} x {target[1]}  {button_kit.sha256_file(out)[:12]}  (record {derived.name})")
         done += 1
@@ -384,6 +399,8 @@ def cmd_gloss(args: argparse.Namespace) -> int:
             plate = pngio.read(source)
             if (plate.w, plate.h) != fam.master:
                 raise DiscError(f"{source}: {plate.w} x {plate.h}, the plate master is {fam.master[0]} x {fam.master[1]}")
+            if args.out is None and not (local / "provenance" / "fit" / f"plate.{m.name}.json").is_file():
+                raise DiscError(f"no fit record provenance/fit/plate.{m.name}.json: the glossed master would have no provenance (fit it with fit.py first)")
             plan.append((fam, m, source, plate, layer))
     for fam, m, source, plate, layer in plan:
         shaped = Image(layer.w, layer.h, bytearray(layer.data))
@@ -418,9 +435,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = args.out or local / "masters"
     records = local / "provenance" / "rule" if args.out is None else out / "records"
     only = set(args.only.split(",")) if args.only else None
-    if only and not only <= set(all_names()):
-        raise DiscError(f"--only names unknown buttons {sorted(only - set(all_names()))}; the buttons are {all_names()}")
-    parts = build_parts(frames, plate_dir, families_of(args.family), only)
+    fams = chosen_families(args.family, only)
+    parts = build_parts(frames, plate_dir, fams, only)
     for ident, image in parts.items():
         covered = sum(1 for i in range(3, len(image.data), 4) if image.data[i] > 0) / (image.w * image.h)
         print(f"{ident:30s} {image.w} x {image.h}  covered {covered * 100:5.1f} %")
@@ -432,7 +448,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     for ident, image in parts.items():
         path = out / f"{ident}.png"
         pngio.write(path, image)
-        (records / f"{ident}.json").write_text(json.dumps(record_of(ident, frames, path, image), indent=2) + "\n", encoding="utf-8")
+        (records / f"{ident}.json").write_text(json.dumps(record_of(ident, frames, path, image, plate_dir), indent=2) + "\n", encoding="utf-8")
     print(f"DISC KIT build PASS ({len(parts)} parts written to {out})")
     return 0
 
@@ -475,8 +491,8 @@ def cmd_sheet(args: argparse.Namespace) -> int:
     need_magick()
     if args.zoom < 1:
         raise DiscError("--zoom must be at least 1")
-    fams = families_of(args.family)
     only = set(args.only.split(",")) if args.only else None
+    fams = chosen_families(args.family, only)
     parts = build_parts(frames, plate_dir, fams, only)
     work = Path(tempfile.mkdtemp(prefix="disc-sheet-"))
     try:
