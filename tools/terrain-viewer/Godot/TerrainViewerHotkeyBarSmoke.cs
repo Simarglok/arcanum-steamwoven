@@ -70,7 +70,7 @@ public partial class TerrainViewerApp
             // The bars exist only from here in an automated run (they show because this smoke asks).
             var log = _gameBarPanel!.MessageLog;
             Require(Enumerable.Range(0, HotkeyBarRules.Entries).All(i => view.SlotArtForSelfTest(i) == Art(HotkeyBarRules.SlotArt)![0]), "every slot draws HKSlt1");
-            // ARC-UI-1821: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the slot art draws as the mode under test says (the strip's own device scale, again in a 1600 x 1200 window).
+            // ARC-UI-1821: the opt-in window-art part (ARC_AREA_WINDOW_ART): the slot art draws as the mode under test says (the strip's own device scale, again in a 1600 x 1200 window).
             if (WindowArtSmokeRequested)
             {
                 await WindowArtSmokeAsync("hotkey-slot", () => Art(HotkeyBarRules.SlotArt)?[0] is HdInterfaceTexture slot ? [slot] : [], [HotkeyBarRules.SlotArt], BarDeviceScale,

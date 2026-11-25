@@ -24,7 +24,7 @@ public partial class AreaSaveListArtView : Control
 {
     private static readonly AreaSaveListArtButton[] AllButtons = Enum.GetValues<AreaSaveListArtButton>();
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
-    // ARC-UI-2575: the generated frames are painted at this view's own device scale (the unit scale of the Steamwoven layout).
+    // ARC-UI-2575: the pack's frames are area-resampled at this view's own device scale (the unit scale of the Steamwoven layout).
     private AreaDeviceScale? _claim;
     private AreaDeviceScale Claim => _claim ??= new(this);
     private bool _zoned;

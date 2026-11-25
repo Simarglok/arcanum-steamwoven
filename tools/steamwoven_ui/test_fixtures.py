@@ -33,7 +33,7 @@ class FixtureTests(unittest.TestCase):
 
     def test_drawing_is_deterministic_and_draws(self) -> None:
         for variant in fixtures.VARIANTS:
-            for fixture in fixtures.FIXTURES:
+            for fixture in (f for f in fixtures.FIXTURES if not f.cut):
                 first = fixtures.draw(fixture.ident, variant)
                 self.assertEqual((first.w, first.h), fixture.master, fixture.ident)
                 self.assertTrue(any(first.data[3::4]), f"{fixture.ident} {variant}: nothing drawn")

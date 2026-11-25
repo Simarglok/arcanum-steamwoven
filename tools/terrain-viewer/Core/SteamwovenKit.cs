@@ -9,7 +9,7 @@ public readonly record struct SteamwovenKitPart(string Id, int Width, int Height
 /// <summary>
 /// ARC-UI-2461 (SWI-RUN-1, SWI-RUN-2): one baked set of the Steamwoven kit, <c>&lt;root&gt;/&lt;step&gt;/manifest.json</c> with <c>&lt;part id&gt;.png</c> beside it, as <c>tools/steamwoven_ui/bake.py</c> writes it.
 /// Godot-free: it reads the manifest and checks that every listed file is there and that each baked size is the master size times the step, exactly; the viewer loads the pixels. A set that does not
-/// read is no set (the generated chrome is drawn, SWI-RUN-3), and a part whose record is broken is left out of it, so the composer sees it as missing.
+/// read is no set (the fallback is drawn: the HD pack's frame, the Legacy art where the pack lacks it, SWI-RUN-3), and a part whose record is broken is left out of it, so the composer sees it as missing.
 /// </summary>
 public sealed class SteamwovenKitSet
 {
@@ -140,7 +140,7 @@ public static class SteamwovenKitRoot
     /// <summary>
     /// The folder holding the baked sets: <paramref name="env"/> when set (an existing folder, or <c>off</c>/<c>0</c>/<c>none</c> for null), else the first <c>local/steamwoven-ui/baked</c> found on the way up from a start folder
     /// (at most twelve levels; a worktree lives under <c>&lt;checkout&gt;/.claude/worktrees/</c>, so the climb reaches the owner's checkout, where the ignored <c>local/</c> is), else the first existing
-    /// <paramref name="installFolders"/> entry: where a packaged game on a player's own device keeps the sets they baked (<c>user://steamwoven-ui/baked</c>, beside the HD packs of <c>user://hd-packs</c>). Null: no kit (the generated chrome is drawn).
+    /// <paramref name="installFolders"/> entry: where a packaged game on a player's own device keeps the sets they baked (<c>user://steamwoven-ui/baked</c>, beside the HD packs of <c>user://hd-packs</c>). Null: no kit (the HD pack's frame is drawn, the Legacy art where the pack lacks it).
     /// </summary>
     public static string? Resolve(string? env, IEnumerable<string> startFolders, IEnumerable<string>? installFolders = null)
     {

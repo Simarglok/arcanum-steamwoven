@@ -28,7 +28,7 @@ public partial class TerrainViewerApp
         var view = _spellBarView;
         Require(view is { Visible: true } && _messageLog.PaneMode && _spellPane is { Shown: true, ListInStrip: true }, "M shows the pane in the bottom strip");
         Require(view!.BackgroundForSelfTest == Art(SpellPaneRules.BackgroundArt)?[0], "the pane draws the background art 8");
-        // ARC-UI-1200: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the pane's background draws as the mode under test says.
+        // ARC-UI-1200: the opt-in window-art part (ARC_AREA_WINDOW_ART): the pane's background draws as the mode under test says.
         if (WindowArtSmokeRequested) { await PaneArtSmokeAsync("spell-pane", () => view.BackgroundForSelfTest, SpellPaneRules.BackgroundArt); await frames(3); }
         Require(!_spellPane!.DrawnForSelfTest || WeaponPaneNow() is { ButtonShown: true }, "the diagnostic pane lists no spell");
         var ranks = session.QueryHeroSpellBook()!.Ranks.ToArray();

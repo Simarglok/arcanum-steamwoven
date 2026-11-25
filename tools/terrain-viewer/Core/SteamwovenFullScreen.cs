@@ -12,7 +12,7 @@ public sealed record SteamwovenFullScreenPlan(SteamwovenLayout Layout, double Fa
     /// <summary>The column plan of the layout (ARC-UI-2891). The menus do not use the column plan's full-screen zone (owner decision 2026-11-19: the plate fills the window's height edge to edge): the zone and factor are those of <see cref="SteamwovenColumnMenu.Fit"/>.</summary>
     public SteamwovenColumnPlan Column => Layout.Column;
 
-    /// <summary>The frame (the generated backdrop's rectangle in device pixels of the window).</summary>
+    /// <summary>The frame (the kit backdrop's rectangle in device pixels of the window).</summary>
     public PixelRect Frame => Layout.Frame;
 
     /// <summary>The black bars outside the frame.</summary>

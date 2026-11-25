@@ -429,9 +429,9 @@ public partial class TerrainViewerApp
         System.Environment.GetEnvironmentVariable("ARC_AREA_READING_SIZE")?.Split('x') is [var w, var h] && int.TryParse(w, out var width) && int.TryParse(h, out var height) && width >= 800 && height >= 600
             ? new Vector2I(width, height) : new Vector2I(1920, 1080);
 
-    // ARC-UI-1201: the reading window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd, with ARC_HD_PACK for hd; the `generated` mode is retired, ARC-UI-3143), once for every kind of document: the side
-    // bar (494), the lens (231), the kind's background (477, 489, 487, 491 or 633; 817 for the alternate newspaper) and a book's shown page button (495, 496). In `generated` every one is generated chrome at
-    // round(size x paint scale) pixels of the window's own device scale, again after a bigger window (1600 x 1200) and back; in `hd` and `legacy` none is. The text, the picture arts and the fonts stay
+    // ARC-UI-1201: the reading window's drawn frames (ARC_AREA_WINDOW_ART=legacy|hd, with ARC_HD_PACK for hd; the `generated` mode is retired, ARC-UI-3143), once for every kind of document: the side
+    // bar (494), the lens (231), the kind's background (477, 489, 487, 491 or 633; 817 for the alternate newspaper) and a book's shown page button (495, 496). None is generated chrome (ARC-UI-3143):
+    // each is the pack's frame (`hd`) or the Legacy art (`legacy`), again after a bigger window (1600 x 1200) and back. The text, the picture arts and the fonts stay
     // pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-reading-KIND-MODE[-big|-back].png (local, never in git).
     private async Task ReadingWindowArtSmokeAsync(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts)
     {

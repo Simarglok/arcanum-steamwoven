@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
         Require(_messageLog.Count == 3 && view.ShownTextForSelfTest == Line(3) && view.IconShownForSelfTest && view.BackgroundShownForSelfTest && !view.WideForSelfTest,
             $"three entries, the newest drawn with its icon (count {_messageLog.Count}, icon {view.IconShownForSelfTest}, background {view.BackgroundShownForSelfTest})");
         Require(_audio is null || _interfaceSoundsPlayed == played + 3, "each entry played 3004: " + _cueNotice);
-        // ARC-UI-1200: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the message mode's background draws as the mode under test says.
+        // ARC-UI-1200: the opt-in window-art part (ARC_AREA_WINDOW_ART): the message mode's background draws as the mode under test says.
         if (WindowArtSmokeRequested) await PaneArtSmokeAsync("message-window", () => view.BackgroundForSelfTest, AreaMessageLayout.BackgroundArt);
         PostMessage(AreaLevelMessages.Encumbrance(3, texts), "smoke message");
         Require(_messageLog.Count == 3 && (_audio is null || _interfaceSoundsPlayed == played + 4), "a repeat is not stored and plays again");

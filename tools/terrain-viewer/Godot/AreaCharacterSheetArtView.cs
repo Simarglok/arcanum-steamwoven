@@ -28,7 +28,7 @@ public partial class AreaCharacterSheetArtView : Control
     private readonly record struct Hit(Kind Kind, int Index);
 
     /// <summary>The close rectangle in the modes 1 and 2 (struct 0x5C8930: art 198 PCWinCvr; a mouse-up inside it closes the sheet).</summary>
-    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, AreaLensPlace.Side, AreaLensPlace.Side); // ARC-UI-2714: the common place with the generated interface
+    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, AreaLensPlace.Side, AreaLensPlace.Side); // ARC-UI-2714: the common place of the kit background
 
     private static readonly Hit[] Hits =
     [
@@ -235,7 +235,7 @@ public partial class AreaCharacterSheetArtView : Control
         return null;
     }
 
-    // ARC-UI-1195: the generated interface paints the sheet's frames at the window's own device scale (the frame scale times the canvas transform's and the viewport's
+    // ARC-UI-1195: the pack's frames of the sheet are area-resampled at the window's own device scale (InterfaceResample) (the frame scale times the canvas transform's and the viewport's
     // stretch, the bars' own rule). The sheet's textures are shared (the in-game sheet, the NPC sheet, the creation editor), so the view on screen claims them at its draw.
     // The pages (the children, ARC-UI-1784: the schemes page too) draw the same textures at the same scale; a texture swapped in by a worker redraws all of them, since each draws in its own _Draw.
     private readonly HashSet<HdInterfaceTexture> _watched = [];
@@ -281,6 +281,8 @@ public partial class AreaCharacterSheetArtView : Control
     internal bool OwnBackgroundDrawnForSelfTest { get; private set; }
     /// <summary>ARC-UI-3165: the words and numbers the last draw wrote itself over the kit's background in place of the ones art 22 had baked in (<see cref="AreaKitStandIns.SheetLabels"/>: the eight stat names, the dial's E and G, the ruler's seven divisions); empty when the art's own background was drawn.</summary>
     internal IReadOnlyList<string> KitLabelsDrawnForSelfTest { get; private set; } = [];
+    /// <summary>ARC-UI-3299: the label parts of the kit (<see cref="AreaKitStandIns.SheetLabelParts"/>) the last draw laid over the kit's background; their text is not written.</summary>
+    internal IReadOnlyList<string> KitLabelPartsDrawnForSelfTest { get; private set; } = [];
 
     public bool KitBody
     {
@@ -296,6 +298,7 @@ public partial class AreaCharacterSheetArtView : Control
         // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
         OwnBackgroundDrawnForSelfTest = false;
         var kitLabels = new List<string>();
+        KitLabelPartsDrawnForSelfTest = [];
         if (!KitBackgroundShown && Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window)
         {
             OwnBackgroundDrawnForSelfTest = true;
@@ -313,9 +316,11 @@ public partial class AreaCharacterSheetArtView : Control
         if (KitBackgroundShown)
         {
             AreaKitStandIns.CharacterSheet(this);
-            // The stat names are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet writes them itself, in its own font.
+            // The stat names and the dial's E&G are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet draws the kit's label parts (the old HD version's lettering, ARC-UI-3299) and, only where the kit has none, writes the text itself in its own font.
             var labelFace = fonts.For(AreaSheetFont.Cloister);
-            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels()) { AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb); kitLabels.Add(label); }
+            var partsDrawn = AreaKitStandIns.SheetLabelParts(this);
+            KitLabelPartsDrawnForSelfTest = [.. partsDrawn.Order()];
+            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels(partsDrawn)) { AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb); kitLabels.Add(label); }
         }
         KitLabelsDrawnForSelfTest = kitLabels;
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
