@@ -60,7 +60,7 @@ public sealed class AreaAiShotTests
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Bow);
 
     /// <summary>ARC-AI-1655: an item script host for the NPC pickup tests: one script (print line 1 with the entry type 6, then return run default or skip default) on item 2 at one point; the NPC line is answered as text.</summary>
-    private sealed class PickupScripts : ISessionItemScriptHost
+    internal sealed class PickupScripts : ISessionItemScriptHost
     {
         public const int ScriptNumber = 700;
         public int Point { get; init; } = SessionScriptPoint.InsertItem;

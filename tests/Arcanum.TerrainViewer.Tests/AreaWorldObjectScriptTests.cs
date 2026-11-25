@@ -80,6 +80,10 @@ public sealed class AreaWorldObjectScriptTests
             Write("scr/00846negative.scr", Program(Do(new(ScrCatalogue.Action.ToggleSectorBlocked, N(-2), N(5))), Do(RunDefault)));
             Write("scr/00847item.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10041), (Attachee, -1))), Do(RunDefault)));
             Write("scr/00848gold.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10042), (Attachee, -1))), Do(RunDefault)));
+            // ARC-SCRIPT-2912: create item 10043 (a prototype with a get script) in the attachee.
+            // ARC-SCRIPT-2910: the same item created in the player (the hero's pack).
+            Write("scr/00858heroscripted.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10043), (Player, -1))), Do(RunDefault)));
+            Write("scr/00857scripted.scr", Program(Do(new(ScrCatalogue.Action.CreateItem, N(10043), (Attachee, -1))), Do(RunDefault)));
             Write("scr/00849touch.scr", Program(Do(new(ScrCatalogue.Action.TouchArt, N(1234))), Do(RunDefault)));
             // ARC-SCRIPT-1279: destroy item named 7001 from the attachee, transfer item 7001 from the attachee to the player, set written start 9 and toggle item inventory display of the attachee, set written start of a second item.
             Write("scr/00850destroy.scr", Program(Do(new(ScrCatalogue.Action.DestroyItemNamed, N(7001), (Attachee, -1))), Do(RunDefault)));
@@ -99,6 +103,7 @@ public sealed class AreaWorldObjectScriptTests
     {
         10041 => new AreaPrototypeItem(Herb, 0x1234, new(1)),
         10042 => new AreaPrototypeItem(new(SessionItemType.Gold, 10042, 7002, 10042), 0x1234, new(1)),
+        10043 => new AreaPrototypeItem(new(SessionItemType.Food, 10063, 7003, 10063), 0x1234, new(1)) { Scripts = [new(SessionScriptPoint.Get, AreaAiShotTests.PickupScripts.ScriptNumber, 0, 0)] },
         _ => null,
     }, () => null, Openable: openable);
 
@@ -258,6 +263,56 @@ public sealed class AreaWorldObjectScriptTests
             Assert.AreEqual(Herb, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Single().Facts.Kind, "the follower's own pack, not the hero's");
             Assert.AreEqual(0, session.QueryPcInventory().Count, "nothing reached the hero's pack");
             Assert.AreEqual(GameSessionFailure.InsertRefused, host.GiveNpcPrototypeItem(entity, 10041, new SessionInsertCheck(_ => SessionInsertVerdict.NoRoom))!.Value.Failure, "a pack that refuses keeps the device out");
+        });
+    }
+
+    // ARC-SCRIPT-2912 (ledger TQ19): an item a script creates in an NPC's list runs its prototype's get script with the NPC as the triggerer; a skip default keeps it out, and with no item script host the run is refused at the plan.
+    [TestMethod]
+    public void Create_item_in_an_npc_runs_the_new_items_get_script_and_a_skip_default_keeps_it_out()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(2, NpcType, ScrPoint.Heartbeat, 857);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(new(1), new SessionMapInventorySeed([new(entity, SessionHolderKind.Npc, false, true, [], [])], [])).Failure);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no item script host: refused before anything applies");
+            Assert.AreEqual(0, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Count);
+            var refusing = new AreaAiShotTests.PickupScripts { Point = SessionScriptPoint.Get, Program = AreaAiShotTests.PickupScripts.Make(skip: true) };
+            var refused = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = refusing };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, refused.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual((GameSessionFailure.InsertRefused, (int?)SessionScriptPoint.Get), (refused.LastCreatedItem!.Value.Failure, refused.LastCreatedItem.Value.DeclinedBy));
+            Assert.AreEqual(0, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Count, "the get script's skip default keeps the item out");
+            var allowing = new AreaAiShotTests.PickupScripts { Point = SessionScriptPoint.Get, Program = AreaAiShotTests.PickupScripts.Make(skip: false) };
+            var taken = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = allowing };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, taken.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual((GameSessionDisposition.Changed, SessionScriptPoint.Get), (taken.LastCreatedItem!.Value.Disposition, taken.LastCreatedItem.Value.Scripts.Single().Point));
+            Assert.AreEqual(1, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Count);
+        });
+    }
+
+    // ARC-SCRIPT-2910 (ledger TQ19): an item a script creates for the hero (and the trap device) runs its prototype's get script with the hero as the triggerer; a skip default leaves it on the hero's tile, and with no item script host the run is refused at the plan.
+    [TestMethod]
+    public void Create_item_for_the_hero_runs_the_new_items_get_script_and_a_skip_default_leaves_it_on_the_tile()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var npc = Row(2, NpcType, ScrPoint.Heartbeat, 858);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no item script host: refused before anything applies");
+            Assert.AreEqual(0, session.QueryPcInventory().Count);
+            var refusing = new AreaAiShotTests.PickupScripts { Point = SessionScriptPoint.Get, Program = AreaAiShotTests.PickupScripts.Make(skip: true) };
+            var refused = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = refusing };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, refused.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual((GameSessionDisposition.Changed, (int?)SessionScriptPoint.Get), (refused.LastCreatedItem!.Value.Disposition, refused.LastCreatedItem.Value.DeclinedBy));
+            Assert.AreEqual(0, session.QueryPcInventory().Count, "the get script's skip default keeps the item out of the pack");
+            var allowing = new AreaAiShotTests.PickupScripts { Point = SessionScriptPoint.Get, Program = AreaAiShotTests.PickupScripts.Make(skip: false) };
+            var taken = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = allowing };
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, taken.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual((GameSessionDisposition.Changed, SessionScriptPoint.Get), (taken.LastCreatedItem!.Value.Disposition, taken.LastCreatedItem.Value.Scripts.Single().Point));
+            Assert.AreEqual((SessionInsertVerdict?)SessionInsertVerdict.Accepted, taken.LastCreatedItem.Value.Verdict, "taken by the hero: " + session.QueryObject(taken.LastCreatedItem.Value.Item!)?.Place);
+            var device = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { ItemScripts = allowing }.GiveHeroPrototypeItem(10043, _ => SessionInsertVerdict.Accepted)!.Value;
+            Assert.AreEqual(SessionScriptPoint.Get, device.Scripts.Single().Point, "the trap device runs its get script too");
         });
     }
 

@@ -109,12 +109,30 @@ public sealed class AreaTalkQueryTests
                 Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(16), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00795cast.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
-            // 791: sets global flag 100, then floats line 2 of 790's DLG shape (an action field the viewer does not run).
+            // 791 (ARC-SCRIPT-2965): sets global flag 100, then floats line 2, whose action string sets local flag 3 of the speaker's dialog slot and global flag 5.
             Write("scr/00791acting.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
                 Do(new(ScrCatalogue.Action.FloatLine, N(2), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
-            Write("dlg/00791acting.dlg", Encoding.Latin1.GetBytes("{1}{Plain.}{}{}{}{}{}\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
+            Write("dlg/00791acting.dlg", Encoding.Latin1.GetBytes("{1}{Plain.}{}{}{}{}{}\n{2}{Acted.}{}{}{}{}{lf 3 1, gf 5 1}\n"));
+            // 797: sets global flag 100, then floats line 2, whose action string has a reaction change (needs an open conversation: the run stays unapplied).
+            Write("scr/00797refused.scr", Program(
+                Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
+                Do(new(ScrCatalogue.Action.FloatLine, N(2), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00797refused.dlg", Encoding.Latin1.GetBytes("{1}{Plain.}{}{}{}{}{}\n{2}{Acted.}{}{}{}{}{lf 3 1, re 5}\n"));
+            // 799 (ARC-SCRIPT-2965): sets global flag 100, then floats line 2, whose string clears global flag 100: the string runs after the run's other effects.
+            Write("scr/00799order.scr", Program(
+                Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
+                Do(new(ScrCatalogue.Action.FloatLine, N(2), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00799order.dlg", Encoding.Latin1.GetBytes("{1}{Plain.}{}{}{}{}{}\n{2}{Acted.}{}{}{}{}{gf 100 0}\n"));
+            // 798 (FL6): sets its own local flag 4 (a changed working copy of the dialog attachment), then floats line 2, whose string sets local flag 3 of the same attachment: the run's end store wins, as in the original.
+            Write("scr/00798clobber.scr", Program(
+                Do(new(ScrCatalogue.Action.SetLocalFlag, N(4))),
+                Do(new(ScrCatalogue.Action.FloatLine, N(2), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00798clobber.dlg", Encoding.Latin1.GetBytes("{1}{Plain.}{}{}{}{}{}\n{2}{Acted.}{}{}{}{}{lf 3 1}\n"));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -286,17 +304,84 @@ public sealed class AreaTalkQueryTests
         });
     }
 
+    private static long? SpeakerLocalFlags(Talk talk) => talk.Session.QueryObjectChange(new SessionMapId(Map),
+        MapChangeKey.ForEntity(AreaConversationState.EntityId(talk.Speaker.Row), AreaConversationState.LocalFlagsProperty));
+
     [TestMethod]
-    public void A_floated_line_with_an_action_field_leaves_the_run_unapplied()
+    public void A_floated_line_with_an_action_string_runs_it_for_the_speaker_and_floats_its_text()
     {
+        // ARC-SCRIPT-2965 (FL4): the string runs between the PC and the floated object with no dialog open, then the text floats.
         WithContent(content =>
         {
             using var talk = Create(content, 791, (7, false));
             var run = talk.Run();
             Assert.AreEqual(1, run.Effects.Floats.Count);
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.IsTrue(talk.Flag, "the run's own flag");
+            Assert.IsTrue(talk.Host.GlobalFlag(5), "gf 5 1 of the string");
+            Assert.AreEqual(8L, SpeakerLocalFlags(talk), "lf 3 1 set bit 3 of the speaker's dialog attachment");
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Acted.", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
+        });
+    }
+
+    [TestMethod]
+    public void A_floated_line_whose_string_needs_an_open_conversation_leaves_the_run_unapplied_with_no_effect_of_the_string()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 797, (7, false));
+            var run = talk.Run();
+            Assert.AreEqual(1, run.Effects.Floats.Count);
             Assert.IsFalse(talk.Host.Apply(run.Effects));
             Assert.IsFalse(talk.Flag, "nothing applied");
+            Assert.IsNull(SpeakerLocalFlags(talk), "the lf before the re was not run either");
             Assert.AreEqual(0, talk.Host.TakeFloats().Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_floated_strings_global_flag_write_comes_after_the_runs_own_effects()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 799, (7, false));
+            Assert.IsTrue(talk.Host.Apply(talk.Run().Effects));
+            Assert.IsFalse(talk.Flag, "the string's gf 100 0 ran after the run's own set");
+        });
+    }
+
+    [TestMethod]
+    public void A_floated_strings_local_flag_in_the_runs_own_attachment_is_overwritten_by_the_runs_end_store()
+    {
+        // ARC-SCRIPT-2965 (FL6): 0x441980 stores the run's changed working copy of the attachment over what the string wrote.
+        WithContent(content =>
+        {
+            using var talk = Create(content, 798, (7, false));
+            var run = talk.Run();
+            Assert.IsNotNull(run.Effects.Writeback);
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.AreEqual(16L, SpeakerLocalFlags(talk), "bit 4 of the run's copy; bit 3 of the string is lost");
+            Assert.AreEqual("Acted.", talk.Host.TakeFloats().Single().Text);
+        });
+    }
+
+    [TestMethod]
+    public void A_floated_strings_local_flags_and_counters_are_written_only_where_the_object_has_a_dialog_script()
+    {
+        // ARC-SCRIPT-2965 (FL6): 0x444F60 and 0x445020 do nothing for an object with no dialog-point script attached.
+        WithContent(content =>
+        {
+            using var talk = Create(content, 791, (7, false));
+            var state = new AreaConversationState(talk.Session, new SessionMapId(Map), [AreaConversationState.EntityId(talk.Speaker.Row)], 50);
+            var npc = AreaConversationState.Npc(0);
+            foreach (var has in new[] { false, true })
+            {
+                var ports = new AreaFloatActionPorts(state, _ => has);
+                Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Applied, ports.Execute(new Arcanum.Scripting.Dialog.LocalFlagWriteCommand(new Arcanum.Scripting.Dialog.DialogId(791), npc, 2, 1)));
+                Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Applied, ports.Execute(new Arcanum.Scripting.Dialog.CounterWriteCommand(npc, 1, 5)));
+                Assert.AreEqual(has ? 4L : null, SpeakerLocalFlags(talk), $"has a script: {has}");
+                Assert.AreEqual(has ? 5 : 0, ports.Read(new Arcanum.Scripting.Dialog.DialogCounterQuery(npc, 1)));
+            }
         });
     }
 
