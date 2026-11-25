@@ -15,10 +15,15 @@ internal sealed partial class SteamwovenKitPieceView : TextureRect
         uniform vec4 hole_a = vec4(0.0);
         uniform vec4 hole_b = vec4(0.0);
         // ARC-UI-3101 (#3276): the hole is the circle inscribed in the lens's square (the ring's inner circle), not the square: the square's corners are the background's own wood.
-        bool inside(vec4 h, vec2 p) { return h.z > 0.0 && distance(p, h.xy + h.zw * 0.5) < min(h.z, h.w) * 0.5; }
+        // The edge is one device pixel wide and smooth (the copy of the game view lies a little under it, so no pixel of the old surface shows in a gap).
+        float edge(vec4 h, vec2 p) {
+            if (h.z <= 0.0) return 1.0;
+            float d = distance(p, h.xy + h.zw * 0.5) - min(h.z, h.w) * 0.5;
+            return clamp(d / max(fwidth(d), 1e-4) + 0.5, 0.0, 1.0);
+        }
         void fragment() {
             vec2 p = UV * view_size;
-            if (inside(hole_a, p) || inside(hole_b, p)) discard;
+            COLOR.a *= min(edge(hole_a, p), edge(hole_b, p));
         }
         """;
     private ShaderMaterial? _holes;
