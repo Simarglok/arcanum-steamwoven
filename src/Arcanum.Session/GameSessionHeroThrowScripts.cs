@@ -88,6 +88,8 @@ public sealed partial class GameSessionOwner
                 // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped. ARC-COMBAT-2413: the lift of a whole ammunition stack destroyed the source (0x4658E0) and made the new object,
                 // which the insertion finds no other stack to merge into, so it stays: the new entity, with the slots and calls the runs left on it, is the list's stack and the source and its own slots are gone.
                 runs.Commit();
+                // ARC-SCRIPT-2900: the whole gold pile's removal wrote its slots for the counter's one entity, which keeps none (they would hide the prototype's array from the next pile's events).
+                if (wholeGold) ForgetHeroGoldSlots();
                 var wornBefore = worn is not null;
                 if (worn is not null)
                 {
@@ -108,6 +110,7 @@ public sealed partial class GameSessionOwner
             if (applied)
             {
                 runs.Commit();
+                if (wholeGold) ForgetHeroGoldSlots();
                 Revise();
             }
             return new(null, runs, applied);

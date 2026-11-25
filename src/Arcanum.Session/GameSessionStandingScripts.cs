@@ -13,7 +13,7 @@ public sealed partial class GameSessionOwner
     {
         standing = false;
         if (given is not null) return given;
-        try { standing = StandingItemScripts?.Invoke() is not null; return standing ? StandingItemScripts!.Invoke() : null; }
+        try { var host = StandingItemScripts?.Invoke(); standing = host is not null; return host; }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { standing = false; return null; }
     }
 
@@ -62,6 +62,12 @@ public sealed partial class GameSessionOwner
     {
         if (runs is null) return;
         WithHeroGoldObject(() => { runs.Commit(); return 0; });
+        ForgetHeroGoldSlots();
+    }
+
+    // The counter's pile keeps no slots of its own (a part left after a payment loses the ones its insert-item run wrote: a limit of the counter model, as for a new pile's).
+    private void ForgetHeroGoldSlots()
+    {
         foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == SessionHeroGrid.GoldEntity).ToArray()) _inventory.ScriptSlots.Remove(key);
     }
 }

@@ -163,4 +163,16 @@ public sealed class AmmoGoldRemoveScriptTests
         Assert.AreNotEqual(0, refused.QueryGold(), "a scripted pile with no host is not paid out");
         refused.Dispose();
     }
+
+    [TestMethod]
+    public void A_pile_move_given_no_host_runs_its_scripts_through_the_standing_host()
+    {
+        using var owner = Owner();
+        var host = Hosted(owner, "darts");
+        owner.StandingItemScripts = () => host;
+        var taken = owner.TakeAmmoFromNpc(owner.Version, "merchant", "darts", 8, Bullets, Accept);
+        Assert.AreEqual(GameSessionDisposition.Changed, taken.Disposition, taken.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.RemoveItem, "darts") }, Points(taken.Scripts));
+        Assert.AreEqual(0, taken.Messages.Count, "the lines go to the output, once");
+    }
 }
