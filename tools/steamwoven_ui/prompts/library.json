@@ -85,6 +85,13 @@
         "hardware-hud-top-parts"
       ],
       "after": null
+    },
+    "B-HARDWARE-MENU": {
+      "prompts": [
+        "hardware-menu-top-plates",
+        "hardware-menu-bottom"
+      ],
+      "after": null
     }
   },
   "prompts": [
@@ -859,6 +866,42 @@
       "screen": null,
       "batch": "B-BUTTONS",
       "notes": "slice B-BUTTONS-3 (ARC-UI-3203): one Codex item for the dome of the two Big Green arrow buttons (34 x 33 units, master 120 x 120), idle dome only, no brass (as plate-dome-hud: placed, crescent, gloss, glyphs and overlays by rule, disc_kit.py); fitted to plate.big_grn_l, plate.big_grn_r"
+    },
+    {
+      "id": "hardware-menu-top-plates",
+      "group": "part",
+      "kind": "hardware",
+      "title": "Menu top strip iron end section, iron only (left plate, no openings)",
+      "file": "hardware-menu-top-plates.txt",
+      "size": [
+        1668,
+        960
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-MENU",
+      "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item; the right section is its mirror; the rivets are the HUD's hardware.hud_top_rivet; hardware_build.py refs / cut"
+    },
+    {
+      "id": "hardware-menu-bottom",
+      "group": "part",
+      "kind": "hardware",
+      "title": "Menu bottom strip metal details (message window frame, round socket ring)",
+      "file": "hardware-menu-bottom.txt",
+      "size": [
+        1764,
+        912
+      ],
+      "references": [
+        "original",
+        "sheet"
+      ],
+      "screen": null,
+      "batch": "B-HARDWARE-MENU",
+      "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item, two details cut from the original on a transparent ground; hardware_build.py refs / cut"
     },
     {
       "id": "plate-college-hud",
