@@ -1,9 +1,9 @@
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
-/// ARC-UI-3101: the round parts a window draws as <i>separate arts</i> over the kit's background (the lens rings 231, 232, 233 and 198, the sixteen spell college rings, the four skill group buttons and the eight technology discipline
-/// buttons), the part of the issue that the baked window surfaces (<c>disc_boxes</c>, <c>halo_boxes</c> of the surface tool) cannot reach. Each original art was drawn against a known panel: its rim carries that panel's colour in its edge pixels (the old shadow and
-/// the dark anti-aliasing stair as opaque pixels, and for a lens ring the old wood in the square's four corners), invisible over the old panel, a ragged dark band over a new background. The part is a circle (the gold of its ring), so the cut is exact:
+/// ARC-UI-3101: the round parts a window draws as <i>separate arts</i> over the kit's background (the sixteen spell college rings, the four skill group buttons and the eight technology discipline buttons of the character sheet's pages), the part of the issue
+/// that the baked window surfaces (<c>disc_boxes</c>, <c>halo_boxes</c> of the surface tool) cannot reach. Each original art was drawn against a known panel: its rim carries that panel's colour in its edge pixels (the old shadow and
+/// the dark anti-aliasing stair as opaque pixels), invisible over the old panel, a ragged dark band over a new background. (The lens rings 231, 232, 233 and 198 are not here: the surfaces already carry the ring, see the method study.) The part is a circle (the gold of its ring), so the cut is exact:
 /// everything outside the circle of the ring's gold plus <see cref="Trim"/> is left out (anti-aliased at the device's pixel, whatever the texture's scale: the shader works in the art's own units), and the part gets the generated soft shadow down and to the right that
 /// the surface rule gave the baked round parts (owner request 2026-11-25: 13 px offset, sigma 16 px, strength 0.7 of a master 3.6 px to the unit). Godot-free: the table, the constants and the two functions the shader mirrors.
 /// </summary>
@@ -27,11 +27,6 @@ public static class AreaKitRoundParts
 
     private static readonly Dictionary<int, Part> Parts = new()
     {
-        // The four lens rings (89 x 89): barter 231, loot 232, paper (logbook and reading) 233, the character sheet's 198.
-        [231] = new(89, 89, 44.55f, 43.15f, 48.0f),
-        [232] = new(89, 89, 44.55f, 43.15f, 48.0f),
-        [233] = new(89, 89, 44.45f, 43.2f, 47.95f),
-        [198] = new(89, 89, 44.4f, 43.05f, 48.1f),
         // The sixteen college rings of the spells page (24 x 24).
         [11] = new(24, 24, 12.1f, 11.8f, 11.35f),
         [44] = new(24, 24, 12.1f, 11.85f, 11.45f),
@@ -82,7 +77,7 @@ public static class AreaKitRoundParts
 
     /// <summary>
     /// The opacity of the shadow's black at the point (<paramref name="x"/>, <paramref name="y"/>) of the art's units: the disc moved by <see cref="ShadowOffset"/> down and right, blurred (the edge a logistic of the distance with the slope of a
-    /// Gaussian of sigma <see cref="ShadowSigma"/>), times <see cref="ShadowStrength"/>, and nothing where the part itself is (the lens ring's hole shows the game view, a button covers it): the cut's complement.
+    /// Gaussian of sigma <see cref="ShadowSigma"/>), times <see cref="ShadowStrength"/>, and nothing where the part itself is (a button covers it): the cut's complement.
     /// </summary>
     public static float ShadowAt(Part part, float x, float y, float pixel)
     {

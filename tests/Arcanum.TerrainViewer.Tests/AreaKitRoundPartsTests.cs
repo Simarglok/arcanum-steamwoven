@@ -9,14 +9,13 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaKitRoundPartsTests
 {
     [TestMethod]
-    public void The_table_holds_the_lens_rings_the_college_rings_and_the_round_tabs()
+    public void The_table_holds_the_college_rings_and_the_round_tabs()
     {
-        // The four lens rings, the sixteen colleges, the four skill group buttons and the eight discipline buttons: nothing else, nothing twice.
+        // The sixteen colleges, the four skill group buttons and the eight discipline buttons: nothing else, nothing twice (the lens rings are not round parts of the pages).
         var arts = AreaKitRoundParts.ArtNumbers;
-        Assert.AreEqual(4 + 16 + 4 + 8, arts.Count);
+        Assert.AreEqual(16 + 4 + 8, arts.Count);
         Assert.AreEqual(arts.Count, arts.Distinct().Count());
-        foreach (var lens in new[] { AreaInventoryHole.BarterArt, AreaInventoryHole.LootArt, AreaInventoryHole.InventoryArt, AreaCharacterSheetArtLayout.LensArt, AreaLogbookArtLayout.LensArt })
-            Assert.IsNotNull(AreaKitRoundParts.Of(lens), $"lens ring {lens}");
+        foreach (var lens in new[] { 231, 232, 233, 198 }) Assert.IsNull(AreaKitRoundParts.Of(lens), $"lens ring {lens}: the surface carries the ring");
         foreach (var college in AreaCharacterSheetSpellsLayout.CollegeArtNumbers) Assert.IsNotNull(AreaKitRoundParts.Of(college), $"college ring {college}");
         for (var group = 0; group < AreaCharacterSheetPagesLayout.Groups; group++) Assert.IsNotNull(AreaKitRoundParts.Of(AreaCharacterSheetPagesLayout.GroupTabArtBase + group));
         for (var discipline = 0; discipline < AreaCharacterSheetPagesLayout.Disciplines; discipline++) Assert.IsNotNull(AreaKitRoundParts.Of(AreaCharacterSheetPagesLayout.DisciplineArtBase + discipline));
@@ -30,8 +29,7 @@ public sealed class AreaKitRoundPartsTests
         foreach (var art in AreaKitRoundParts.ArtNumbers)
         {
             var part = AreaKitRoundParts.Of(art)!.Value;
-            // A button's ring lies in its art; a lens ring is wider than its 89 x 89 square (the square clips it at the four edges' middles, as in the original).
-            var slack = part.Width == 89 ? 6f : 1.5f;
+            const float slack = 1.5f;
             Assert.IsTrue(part.Cx - part.CutRadius > -slack && part.Cx + part.CutRadius < part.Width + slack, $"art {art}: the cut circle stays in the art's width");
             Assert.IsTrue(part.Cy - part.CutRadius > -slack && part.Cy + part.CutRadius < part.Height + slack, $"art {art}: the cut circle stays in the art's height");
             Assert.AreEqual(part.Radius + AreaKitRoundParts.Trim, part.CutRadius, 1e-6f);
@@ -42,11 +40,11 @@ public sealed class AreaKitRoundPartsTests
     [TestMethod]
     public void The_cut_keeps_the_inside_and_leaves_the_corners_out_with_one_device_pixel_of_edge()
     {
-        var lens = AreaKitRoundParts.Of(AreaInventoryHole.LootArt)!.Value;
+        var lens = AreaKitRoundParts.Of(AreaCharacterSheetSpellsLayout.CollegeArt(0))!.Value;
         Assert.AreEqual(1f, AreaKitRoundParts.Coverage(lens, lens.Cx, lens.Cy, .3f), "the middle");
         Assert.AreEqual(1f, AreaKitRoundParts.Coverage(lens, lens.Cx + lens.Radius, lens.Cy, .3f), "the ring's gold");
-        Assert.AreEqual(0f, AreaKitRoundParts.Coverage(lens, 1, 1, .3f), "the square's top left corner (old wood)");
-        Assert.AreEqual(0f, AreaKitRoundParts.Coverage(lens, 88, 88, .3f), "the square's bottom right corner");
+        Assert.AreEqual(0f, AreaKitRoundParts.Coverage(lens, 0, 0, .3f), "the square's top left corner (old stone)");
+        Assert.AreEqual(0f, AreaKitRoundParts.Coverage(lens, 23, 23, .3f), "the square's bottom right corner");
         Assert.AreEqual(.5f, AreaKitRoundParts.Coverage(lens, lens.Cx + lens.CutRadius, lens.Cy, .3f), 1e-4f, "half on the circle");
         Assert.AreEqual(1f, AreaKitRoundParts.Coverage(lens, lens.Cx + lens.CutRadius - .15f, lens.Cy, .3f), 1e-5f, "one half pixel inside");
         Assert.AreEqual(0f, AreaKitRoundParts.Coverage(lens, lens.Cx + lens.CutRadius + .15f, lens.Cy, .3f), 1e-5f, "one half pixel outside");
@@ -59,7 +57,7 @@ public sealed class AreaKitRoundPartsTests
     {
         var button = AreaKitRoundParts.Of(AreaCharacterSheetPagesLayout.DisciplineArtBase)!.Value;
         const float pixel = .3f;
-        Assert.AreEqual(0f, AreaKitRoundParts.ShadowAt(button, button.Cx, button.Cy, pixel), 1e-6f, "none on the part (a lens ring's hole shows the game view)");
+        Assert.AreEqual(0f, AreaKitRoundParts.ShadowAt(button, button.Cx, button.Cy, pixel), 1e-6f, "none on the part");
         Assert.AreEqual(0f, AreaKitRoundParts.ShadowAt(button, button.Cx + button.Radius - 1, button.Cy, pixel), 1e-6f);
         var right = AreaKitRoundParts.ShadowAt(button, button.Cx + button.CutRadius + 2, button.Cy + 2, pixel);
         var left = AreaKitRoundParts.ShadowAt(button, button.Cx - button.CutRadius - 2, button.Cy - 2, pixel);

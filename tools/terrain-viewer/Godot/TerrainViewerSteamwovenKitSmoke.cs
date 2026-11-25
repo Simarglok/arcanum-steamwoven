@@ -560,7 +560,7 @@ public partial class TerrainViewerApp
             _sheetPanel.SelectTabForSelfTest(page.Tab);
             await frames(4);
             require(page.Visible() && page.Shown() == kitSheets, $"[{tag}] the {page.Name} page shows and draws {(kitSheets ? "its kit sheet" : "its own panel art (no kit sheet)")}");
-            // ARC-UI-3101: over the kit's sheet the page's round buttons go through the round-part layer (cut to their gold circle, with the generated shadow); on the page's own art none does. The lens ring of the sheet's main view does the same over the kit's background (a kit without the page sheets has that background too).
+            // ARC-UI-3101: over the kit's sheet the page's round buttons go through the round-part layer (cut to their gold circle, with the generated shadow); on the page's own art none does.
             var rounds = page.Name switch { "skills" => view.Pages.RoundPartsForSelfTest.ShownForSelfTest, "tech" => view.Pages.RoundPartsForSelfTest.ShownForSelfTest, "spells" => view.Spells.RoundPartsForSelfTest.ShownForSelfTest, _ => [] };
             IReadOnlyList<int> expectedRounds = !kitSheets ? [] : page.Name switch
             {
@@ -570,7 +570,6 @@ public partial class TerrainViewerApp
                 _ => [],
             };
             require(rounds.SequenceEqual(expectedRounds), $"[{tag}] the {page.Name} page draws its round buttons {(kitSheets ? "through the round-part layer" : "as they are")} (got {string.Join(",", rounds)})");
-            require(view.RoundPartsForSelfTest.ShownForSelfTest.SequenceEqual([AreaCharacterSheetArtLayout.LensArt]), $"[{tag}] the sheet's lens ring goes through the round-part layer over the kit's background (got {string.Join(",", view.RoundPartsForSelfTest.ShownForSelfTest)})");
             using var shot = GetViewport().GetTexture().GetImage();
             var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
             var at = page.Point(3, 321);
