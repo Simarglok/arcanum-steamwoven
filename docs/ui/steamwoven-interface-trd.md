@@ -265,6 +265,12 @@ Part kinds:
   disabled) are generated together on one sheet, so they match. The original has no disabled frame (idle 0, pressed 1, hover 2: [states note](steamwoven-interface-states.md#the-originals-state-rules)); a disabled overlay is a Steamwoven addition and an open question there.
 - **SWI-KIT-6** A gauge is glass, housing and liquid as layers; the fill level is drawn from the value, not from a frame
   sequence.
+  **As built (ARC-UI-2483, batch B-GAUGES, 56 parts):** `tools/steamwoven_ui/gauge_kit.py` ([toolchain](../workflow/toolchain.md#steamwoven-gauges-and-readouts-batch-b-gauges-arc-ui-2483)). The painted parts are given to Codex in eight collages, each part of a family on a flat magenta ground
+  (message bars and the skill gauge, experience pips, the clock's time strip and night piece, the moon phases, the ammunition counters, the load watch, the scroll chain and thumb pieces, the pointers) and cut out, keyed and fitted (`fit:<part id>`);
+  a moon disc and a counter's picture are generated layers laid over the generated night sky and empty panel at the original's own place (a moon part is the night master plus one disc; a counter part is the empty panel plus its picture).
+  The flat or gradient parts (the vial liquids and shading ramps, the thin follower bars, the experience line, the item damage colour) and four small detailed parts (the scroll thumb's middle piece, the time marker, the aptitude arrow, the metal roller) are made BY RULE from the original's own frame (`rule:gauge_kit:<part id>`: the band median replaces the dither, a smooth resample, the four small parts only the resample;
+  nothing is added). A frame sequence that animates a value (the vial bubbles, the alignment needle's 21 angles, the 30 watch hands, the 9 damage colours) is not a set of parts: the master is frame 0 (the full-damage frame for `gauge.item_dam`) and the runtime draws the value.
+  The layer names `glass`, `housing`, `liquid` are not rows yet: the housing of the vials is hardware ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481)); B-GAUGES makes the liquids and the shading, and the runtime wiring is the windows' issues.
 - **SWI-KIT-7** Order of production: the strips, end caps and window backgrounds, then buttons and glyphs, sheets, the schematic, gauges and
   decor; icons, portraits and cursors last (the owner: all interface art is redrawn).
 

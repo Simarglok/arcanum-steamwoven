@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 from tools.steamwoven_ui import button_kit  # noqa: E402
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
+from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
@@ -197,6 +198,7 @@ def round_hud_parts() -> list[dict]:
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
 SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
+GAUGE_PARTS = frozenset(gauge_kit.coverage())
 
 
 def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindow]) -> dict:
@@ -243,6 +245,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
+        if ident in GAUGE_PARTS:  # ARC-UI-2483 (B-GAUGES): every part of the batch is a master once gauge_kit.py has made it (a rule record or a fit record)
+            part["status"], part["provenance"] = "master", gauge_kit.provenance_of(ident)
+            part["note"] = gauge_kit.note_of(ident, part["frames"])
         if lead.kind == "board":
             part["status"], part["provenance"] = "master", f"fit:{part['id']}"
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"

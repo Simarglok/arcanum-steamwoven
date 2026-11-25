@@ -1,7 +1,7 @@
 """ARC-DEV-2459: the fit tool of the Steamwoven kit (TRD SWI-GEN-4, SWI-KIT-2, SWI-KIT-4, SWI-VER-3): a generated image -> the kit master of a manifest part.
 
     python3 -B tools/steamwoven_ui/fit.py fit PART_ID (--batch B --prompt ID | --source FILE [--provenance FILE | --no-provenance]) [--size WxH] [--crop X,Y,W,H]
-                                             [--key none|border|#RRGGBB] [--material wood,brass] [--lock-strength S] [--force-lock] [--min-speck N] [--soft-shadow]
+                                             [--key none|border|#RRGGBB] [--material wood,brass] [--lock-strength S] [--force-lock] [--min-speck N] [--soft-shadow] [--halo-limits MEAN,P95]
                                              [--date D] [--local-root DIR] [--masters DIR] [--replace] [--dry-run] [--json]
     python3 -B tools/steamwoven_ui/fit.py self-test
 
@@ -71,6 +71,7 @@ SOURCE_EDGE_RADIUS = 6           # px: the same at the source
 KEEP_DE = 3.0                    # a band pixel closer than this to the interior colour keeps its colour
 HALO_MEAN_DE = 3.0               # gate: mean CIE76 of the edge band
 HALO_P95_DE = 6.0                # gate: 95th percentile
+HALO_OVERRIDE_MAX = (20.0, 45.0)   # the largest halo override --halo-limits accepts (MEAN, P95)
 HF_TOLERANCE = 0.10              # gate: high-frequency energy kept within 10 %
 HF_FLOOR = 0.25                  # grey levels: a change below this is no change (a flat part has no energy to compare by ratio)
 HF_RADIUS = 3                    # 7 x 7 box
@@ -729,13 +730,17 @@ def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, 
     return master, report
 
 
-def gates(report: dict, want: tuple[int, int]) -> list[str]:
+def gates(report: dict, want: tuple[int, int], halo_limits: tuple[float, float] | None = None) -> list[str]:
+    """`halo_limits` (ARC-UI-2483, `--halo-limits MEAN,P95`): a recorded override of the halo gate for a textured or hair-thin cut-out, whose edge band is measured before the safety net and is far from
+    flat at the master's scale (a bumpy brass rim, a needle a few pixels wide). It is capped (`HALO_OVERRIDE_MAX`) and must be finite. The safety net still recolours the band afterwards, so the final
+    edge (`halo_final`) is within the standard limits by construction; the override only admits a rougher pipeline edge, it does not switch the gate off."""
     failures = []
     if tuple(report["size"]) != want:
         failures.append(f"size {report['size']} is not the master size {list(want)}")
     halo = report["halo"]
-    if halo["mean_de"] > HALO_MEAN_DE or halo["p95_de"] > HALO_P95_DE:
-        failures.append(f"edge halo: mean dE {halo['mean_de']} (limit {HALO_MEAN_DE}), 95th percentile {halo['p95_de']} (limit {HALO_P95_DE})")
+    limit_mean, limit_p95 = halo_limits or (HALO_MEAN_DE, HALO_P95_DE)
+    if halo["mean_de"] > limit_mean or halo["p95_de"] > limit_p95:
+        failures.append(f"edge halo: mean dE {halo['mean_de']} (limit {limit_mean}), 95th percentile {halo['p95_de']} (limit {limit_p95})")
     if halo["band_pixels"] and halo["orphans"] / halo["band_pixels"] > ORPHAN_MAX_SHARE:
         failures.append(f"{halo['orphans']} of {halo['band_pixels']} edge pixels have no opaque pixel within {EDGE_RADIUS} px (limit {ORPHAN_MAX_SHARE:.0%}): "
                         "the art is too faint or too thin for a clean edge")
@@ -807,7 +812,13 @@ def run_fit(args: argparse.Namespace) -> dict:
     materials = [m for m in args.material.split(",") if m] if args.material else []
     reference = sheet_reference(local_root, materials) if materials else None
     master, report = fit_image(source, want, crop, args.key, reference, args.lock_strength, args.force_lock, args.min_speck, args.soft_shadow)  # type: ignore[arg-type]
-    failures = gates(report, want)
+    halo_limits = tuple(float(v) for v in args.halo_limits.split(",")) if getattr(args, "halo_limits", None) else None
+    if halo_limits is not None:
+        if len(halo_limits) != 2 or not all(math.isfinite(v) and 0 < v for v in halo_limits):
+            raise FitError("--halo-limits needs MEAN,P95 as two finite positive numbers")
+        if halo_limits[0] > HALO_OVERRIDE_MAX[0] or halo_limits[1] > HALO_OVERRIDE_MAX[1]:
+            raise FitError(f"--halo-limits {halo_limits[0]},{halo_limits[1]} is above the cap {HALO_OVERRIDE_MAX[0]},{HALO_OVERRIDE_MAX[1]}: the art is not a cut-out this gate can describe")
+    failures = gates(report, want, halo_limits)  # type: ignore[arg-type]
     masters = Path(args.masters) if args.masters else local_root / "masters"
     target = masters / f"{part['id']}.png"
     blob = pngio.encode(master)
@@ -817,6 +828,8 @@ def run_fit(args: argparse.Namespace) -> dict:
         raise GateError(failures, report)
     date = args.date or datetime.date.today().isoformat()
     record = provenance_record(part, source_path, source, generator, report, blob, master, date, str(target), local_root, args.key)
+    if halo_limits is not None:
+        record["limits"] = {**record["limits"], "halo_override": {"mean_de": halo_limits[0], "p95_de": halo_limits[1], "cap": list(HALO_OVERRIDE_MAX)}}
     report["record"] = record
     if target.exists() and not args.replace:
         raise FitError(f"master {target} exists; pass --replace to overwrite it")
@@ -899,6 +912,7 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--material")
     f.add_argument("--lock-strength", type=float, default=1.0)
     f.add_argument("--force-lock", action="store_true")
+    f.add_argument("--halo-limits", help="MEAN,P95: a recorded override of the halo gate for a textured or hair-thin cut-out (capped; the safety net still recolours the band)")
     f.add_argument("--soft-shadow", action="store_true", help="the part carries a designed soft shadow (an end cap): shadow pixels away from the art are not orphans")
     f.add_argument("--min-speck", type=int, default=MIN_SPECK)
     f.add_argument("--date")

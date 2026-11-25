@@ -1265,6 +1265,7 @@ provenance record. Standard library only (`pngio.py`), so no launch queue; it re
 python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass --dry-run   # plan and gates; writes nothing (always first)
 python3 -B tools/steamwoven_ui/fit.py fit PART_ID --batch B --prompt ID --material wood,brass [--key border|#RRGGBB] [--crop X,Y,W,H] [--size WxH] [--replace]
 python3 -B tools/steamwoven_ui/fit.py fit PART_ID --source FILE --provenance FILE      # a file from outside the outbox (or --no-provenance for a hand-made source)
+python3 -B tools/steamwoven_ui/fit.py fit PART_ID --source FILE --provenance FILE --halo-limits 8,20   # a recorded override of the halo gate for a textured or hair-thin cut-out (ARC-UI-2483), finite and capped at 20,45; the safety net still recolours the band
 python3 -B tools/steamwoven_ui/fit.py self-test                                         # task check: synthetic disc, no file
 python3 -B -m unittest tools.steamwoven_ui.test_fit                                     # task check (also in the batched run_tests.py set)
 ```
@@ -1372,6 +1373,29 @@ python3 -B tools/steamwoven_ui/button_kit.py sheet --out FILE          # the bef
 
 `build_kit.py` writes the manifest rows (the five plates and the lit faces from the census, the glyphs, lit glyphs and overlays as new rows of batch B-BUTTONS, all `master`). A glyph or an overlay is an original frame over its base frame: the symbol's cells in their own colours with a smooth sharp outline, the glow or darkening a separate soft layer under it; laid over the plate
 it gives the original's frame back (the symbol's cells exactly; the tests check it); the plate is the only generated picture. A glyph layer of high contrast (the lit symbols, the globe) keeps the symbol as the core and lets its soft edge fall off outward as a halo (alpha = distance over the core threshold, no plateau, no rim; constants `CORE_DE`, `CORE_SHARE`, `HALO_*` in `button_kit.py`). Rule E is the glyph rule of the whole #2482 batch, slices included. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_button_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
+
+## Steamwoven gauges and readouts, batch B-GAUGES (ARC-UI-2483)
+
+Production of the 56 gauge parts (vials, bars, the clock, experience pips, scroll thumbs, ammunition counters, the load watch, pointers; TRD SWI-KIT-6). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/gauge_kit.py plan                         # every part of the batch and how it is made (codex collage / composite / copy / rule); fails when a part is missing
+python3 -B tools/steamwoven_ui/gauge_kit.py refs [--only GROUP,...]      # the eight collages (refs/<id>-original.png) and their layouts (refs/<id>-layout.json)
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-GAUGES          # the inbox: prompts, collages
+python3 -B tools/steamwoven_ui/codex_batch.py run B-GAUGES               # the owner's Codex subscription (gpt-6.1-sol): eight items, about 1 min each
+python3 -B tools/steamwoven_ui/gauge_kit.py cut [--only GROUP,...] [--dry-run]   # the results -> cells -> fit.py masters (+ the moon and counter composites, the joined chain)
+python3 -B tools/steamwoven_ui/gauge_kit.py rule [--only PART,...]       # the 16 rule parts -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/gauge_kit.py sheet --out FILE             # the before / after composite (English labels)
+```
+
+A collage puts every part of a family on a flat magenta ground (`FF00FF`), each cell the original's frame enlarged to the cell size, as the layout truth. The generator often returns another canvas than asked (another aspect, the art centred and scaled, or a "refused" run that still saved a
+picture): `cut` maps the layout onto the result by the bounding box of what is not ground (against the collage's own), finds each cell by its content, keys the ground with the fit tool's keying (a magenta-leaning pixel is ground; an opaque cell has its outer lines that show the ground peeled off, and one more), brings the cell to its master aspect (an opaque cell is stretched within 10 %,
+a cut-out is centred on a transparent canvas within 15 %) and fits it; a result the generator refused for its aspect is read from its run folder and the record says so (`accepted`). A moon disc and a counter's picture are layers: scaled and placed by their content box on the original's (the moons by
+one scale, the left edge and the bottom of the whole disc, because the frame cuts the disc's top) and laid over the base master with `over`. A keyed cut-out that the standard halo gate refuses (a bumpy brass rim, a needle a few pixels wide, measured before the safety net) is fitted with the least of the recorded
+overrides `--halo-limits 8,20` or `16,40` (each is under the cap 20,45; the safety net recolours the band as always; the override is in the part's fit record under `limits.halo_override`). The rule parts: the rows (or columns) of one band are replaced by their per-column median and the profile is resampled by the fit tool's
+premultiplied Catmull-Rom; the four small detailed parts the owner wanted free of generated tone shift (`scrllslidem1`, `timepnts`, `mt_apt`, `amo_rol`, axis `smooth`) are the original's frame resampled and nothing else (their cells stay in the collages' layouts but are not used); `gauge.item_dam` is the last of its nine linear-ramp frames.
+The halo override has a ceiling: `fit.py --halo-limits` takes finite values up to 20,45 and refuses more (the ceiling and the used pair are in `limits.halo_override` of every fit record that used it, 6 parts of this batch); the gate's final edge check is a safety net that recolours the band and always passes, so the ceiling is the real limit (#3073 tracks the gate itself). `kit_check.py` looks at the masters on disk and fails a master that has a visible pixel of the generation ground's colour (magenta): transparency is the alpha channel alone (`--no-masters` skips it). The two chain strips are the same picture. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_gauge_kit` (about 1 s; also in `tools/local_dev/run_tests.py`).
+
 
 ## Steamwoven round HUD buttons and the ball, batch B-BUTTONS slice 2 (ARC-UI-3202)
 
