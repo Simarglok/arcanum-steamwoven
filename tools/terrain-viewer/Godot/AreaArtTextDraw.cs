@@ -122,7 +122,7 @@ public sealed class AreaArtFontFace
         var art = _frames[frame];
         if (HdLayer(pack, frame, blend) is { } layer && layer.Width == art.Width * pack.Scale && layer.Height == art.Height * pack.Scale)
         {
-            var (width, height) = InterfaceChromeRenderer.PixelSize(art.Width, art.Height, milli / 1000.0);
+            var (width, height) = InterfaceResample.PixelSize(art.Width, art.Height, milli / 1000.0);
             if (width >= 1 && height >= 1)
             {
                 using var image = Image.CreateFromData(width, height, false, Image.Format.Rgba8, AreaArtTextRules.AreaAverage(layer.Pixels, layer.Width, layer.Height, width, height));

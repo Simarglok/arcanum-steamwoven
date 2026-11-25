@@ -45,7 +45,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private AreaNewCharacterArtView _newCharacterArt = null!;
     private AreaShopArtView _shopArt = null!;
     private static readonly Color DiagnosticBackdrop = new(.06f, .05f, .04f, .96f);
-    private Label _artNote = null!;
+    // ARC-UI-2968: the note over the art menus (name-typing and creation refusals) in the original's font 229, on the plate's scale.
+    private Control _noteScreen = null!;
+    private AreaArtParagraph _artNote = null!;
     private Control _modal = null!, _dialogScreen = null!;
     private AreaDialogBoxView _dialog = null!;
     public event Action<int>? ButtonPressed;
@@ -104,6 +106,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>The diagnostic window is shown (ARC-UI-066: the browser's, when its art is not drawn).</summary>
     internal bool PanelVisibleForSelfTest => Visible && _panel.Visible;
     internal string ArtNoteForSelfTest => _artNote.Text;
+    internal AreaArtParagraph ArtNoteViewForSelfTest => _artNote;
     /// <summary>ARC-UI-013: the options window's controls as "label: value" (ARC-UI-061: the art's when it draws them).</summary>
     internal IReadOnlyList<string> ControlsForSelfTest => _optionsArt ? _art.ControlsForSelfTest : _controls.Visible
         ? _controls.GetChildren().OfType<HBoxContainer>().Select(row => row.GetChildren().OfType<Label>().ToArray()).Select(labels => $"{labels[0].Text}: {labels[1].Text}").ToArray() : [];
@@ -168,9 +171,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _shopArt.SoundRequested += id => SoundRequested?.Invoke(id);
         _shopArt.KitBodyChanged += () => ShopKitChanged?.Invoke();
         AddChild(_shopArt);
-        _artNote = new Label { Name = "MainMenuArtNote", Visible = false, Modulate = new Color(.75f, .7f, .6f), HorizontalAlignment = HorizontalAlignment.Center,
-            AutowrapMode = TextServer.AutowrapMode.WordSmart, MouseFilter = Control.MouseFilterEnum.Ignore };
-        AddChild(_artNote);
+        _noteScreen = new Control { Name = "MainMenuArtNoteScreen", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore, Size = new Vector2(NoteScreenWidth, 600) };
+        _artNote = new AreaArtParagraph { Name = "MainMenuArtNote", WrapWidth = NoteScreenWidth - 2 * NoteMargin };
+        _noteScreen.AddChild(_artNote);
+        AddChild(_noteScreen);
         // ARC-DEV-047: which build this is (ARC-DEV-050: and the debug mode); above the art (ARC-UI-058), which may cover the corner.
         AddChild(ViewerBuild.MakeLabel(DebugMode));
         _panel = new AreaFallbackBox { Name = "AreaMainMenu", MouseFilter = Control.MouseFilterEnum.Stop };
@@ -331,10 +335,15 @@ public partial class AreaMainMenuPanel : CanvasLayer
         var hidden = menu.HiddenNotes;
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
-        _artNote.Visible = art;
+        _noteScreen.Visible = art;
         // ARC-UI-058: outside the original's screen the window is black, as the original's 800 × 600 screen has no margin.
         _backdrop.Color = art ? Colors.Black : DiagnosticBackdrop;
-        _artNote.Text = art ? string.Join("  |  ", new[] { menu.Notice ?? "", _note.Text }.Where(line => line.Length > 0)) : "";
+        // ARC-UI-2968: the art menus show the refusal's text only; the developer's "Not offered" list stays in the diagnostic window's note.
+        // The character editor and the opening shop show it in the bottom message window as the original does (the refusal posts of 0x550750, ML4 text rectangle),
+        // white; the other art menus keep it at the top.
+        _noteAtBottom = shopWindow;
+        (_artNote.WrapWidth, _artNote.Room) = _noteAtBottom ? (NoteBox.Width, NoteBox.Height) : (NoteScreenWidth - 2 * NoteMargin, 1 << 20);
+        _artNote.SetText(art ? menu.Notice ?? "" : "", _noteAtBottom ? NoteBoxColour : NoteColour);
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
                 : shopping ? "the kit the shop made for the character (the original's item_generate_inventory); Accept or Return starts the game "
                     + "with it, Back or Escape returns to the character editor, where every point is still free; item names from the game when loaded"
@@ -473,7 +482,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false; _sides.Clear();
+        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _noteScreen.Visible = false; _artNote.SetText("", NoteColour); _optionsArt = false; _sides.Clear();
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -501,8 +510,11 @@ public partial class AreaMainMenuPanel : CanvasLayer
             if (_premadeArt.Visible) _premadeArt.Place();
             if (_newCharacterArt.Visible) _newCharacterArt.Place();
             if (_shopArt.Visible) _shopArt.Place();
-            _artNote.Size = new(Math.Max(1, size.X - 48), 0);
-            _artNote.Position = new(24, 12); // at the top, away from the build line at the bottom right
+            // At the top, away from the build line at the bottom right, on the scale of the plate the visible art stands on.
+            Control plate = _art.Visible ? _art : _premadeArt.Visible ? _premadeArt : _newCharacterArt.Visible ? _newCharacterArt : _shopArt;
+            _noteScreen.Scale = plate.Scale; _noteScreen.Position = plate.Position;
+            _artNote.Position = _noteAtBottom ? new(NoteBox.X, NoteBox.Y)
+                : new(_artNote.LineCount == 1 ? (NoteScreenWidth - _artNote.FirstLineWidth) / 2f : NoteMargin, NoteTop);
         }
         var width = Math.Max(1, Math.Min(560, size.X - 48));
         _panel.Size = new(width, 0);
@@ -521,7 +533,14 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-2891: for the self-test: the black around the plate and whether it shows.</summary>
     internal (SteamwovenColumnSidesView Sides, bool Shown) ColumnSidesForSelfTest => (_sides, _sides.Visible);
 
-    private bool _dockedBelow, _optionsArt;
+    private const int NoteScreenWidth = 800, NoteMargin = 24, NoteTop = 8;
+    private static readonly (byte R, byte G, byte B) NoteColour = (224, 214, 190);
+    private static readonly (byte R, byte G, byte B) NoteBoxColour = (255, 255, 255);
+    private static readonly (int X, int Y, int Width, int Height) NoteBox = (290, 504, 291, 78);
+    private bool _dockedBelow, _optionsArt, _noteAtBottom;
+
+    /// <summary>ARC-UI-2968: the original's text font (art 229) for the art menus' note; without it the note draws nothing.</summary>
+    public void SetNoteFonts(AreaTextFonts? fonts) => _artNote.SetFonts(fonts);
 
     /// <summary>ARC-UI-038: the opening shop's window at the bottom, below the docked barter window, with its text compact.</summary>
     public void SetDockedBelow(bool docked)

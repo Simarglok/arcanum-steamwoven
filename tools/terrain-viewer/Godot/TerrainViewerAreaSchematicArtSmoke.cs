@@ -140,7 +140,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-142 native-smoke schematic-look PASS art={content!.Detail} pages={pages}");
     }
 
-    // ARC-UI-1199: the open schematic window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd|generated, with ARC_HD_PACK for the last two): the base (365), the
+    // ARC-UI-1199: the open schematic window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd, with ARC_HD_PACK for hd; the `generated` mode is retired, ARC-UI-3143): the base (365), the
     // lens (231, drawn over the round view), the two list buttons (6), the assemble button (357, idle), the eight discipline tabs (the shown one's pressed frame, the others' idle one) and the page
     // buttons that are shown (372, 373). In `generated` every one is generated chrome at round(size x paint scale) pixels of the window's own device scale, again after a bigger window (1600 × 1200); in `hd` and
     // `legacy` none is. The assemble face (358 to 360), the found and missing tints (830, 831) and the record's art stay pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-schematics-MODE[-big|-back].png.

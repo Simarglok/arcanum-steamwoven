@@ -24,14 +24,9 @@ public enum SteamwovenBackdropFamily
     Schematic,
 }
 
-/// <summary>One piece of a family's backdrop: the rectangle it fills in the window (device pixels), the generated material, and where the material's grain starts: the origin, in original units, of the window art
-/// whose wood the piece continues outwards (negative to the left of and above that art), so the grain at the edge of the window zone is the window's own; <c>Part</c> is 0 for the left part of a two-part family (or the only one) and 1 for the right (the tone art of <see cref="SteamwovenBackdrops.ToneArt"/>: in the column mode the pieces above and below the window share a part).</summary>
-public readonly record struct SteamwovenBackdropPiece(PixelRect Rect, ChromeMaterial Material, double OriginX, double OriginY, int Part = 0);
-
 /// <summary>
-/// ARC-UI-2576, ARC-UI-2890: the generated wood of each census family in the gaps of the (unfitted) column around its window zone, from the layout model; Godot-free (the fitted column has no gap: the window zone is the middle band).
-/// Every piece is made after its window's own background: the census finds one dark streaked wood under all of BD-A to BD-E (the families differ in what is laid on it), so the pieces are <see cref="ChromeMaterial.Wood"/> sampled at the window's unit
-/// scale from the origin of the art they continue. A two-part window has two pieces that meet at the split exactly; each half is a window art of its own, so its grain starts at its own left edge (at the split for the right half) and the halves are not one grain.
+/// ARC-UI-2576: which census family an open window belongs to, from the interface mode stack; Godot-free. ARC-UI-3143: the generated wood of the unfitted column's gaps is retired with the generated chrome (the fitted column has no gap: the
+/// window zone is the middle band), so the family only picks the window's kit background and the dim of the world beside it.
 /// </summary>
 public static class SteamwovenBackdrops
 {
@@ -59,61 +54,5 @@ public static class SteamwovenBackdrops
             if (stack[i] is InterfaceMode.Dialog or InterfaceMode.Sleep) return null;
         }
         return null;
-    }
-
-    /// <summary>ARC-UI-2643: the original art whose wood a piece of the family continues, so the backdrop takes the tone of its own window's wood (SWI-BDR-7): the inventory (221) for both halves of BD-A (ARC-UI-2763: the windows of the family are one wood, <see cref="InterfaceChromeRenderer.FamilyWoodLow"/>, so no tone seam lies between the halves), the character sheet (22), the logbook's side (264) and book (260), the reading window's side bar (494, for both halves: its backgrounds are sheets on the table), the map frame (138) and the schematic base (365).</summary>
-    public static int ToneArt(SteamwovenBackdropFamily family, int piece) => (family, piece) switch
-    {
-        (SteamwovenBackdropFamily.Inventory, _) => 221,
-        (SteamwovenBackdropFamily.CharacterSheet, _) => 22,
-        (SteamwovenBackdropFamily.Logbook, 0) => 264,
-        (SteamwovenBackdropFamily.Logbook, _) => 260,
-        (SteamwovenBackdropFamily.Reading, _) => 494,
-        (SteamwovenBackdropFamily.WorldMap, _) => 138,
-        _ => 365,
-    };
-
-    /// <summary>Every art number <see cref="ToneArt"/> names (the bars' content reads them with its own).</summary>
-    public static IReadOnlyList<int> ToneArts { get; } = [221, 22, 264, 260, 494, 138, 365];
-
-    /// <summary>The width in original units of the left part of a two-part family (the census: 358, 165, 132), or null for a family of one piece.</summary>
-    public static int? LeftUnits(SteamwovenBackdropFamily family) => family switch
-    {
-        SteamwovenBackdropFamily.Inventory => 358,
-        SteamwovenBackdropFamily.Logbook => 165,
-        SteamwovenBackdropFamily.Reading => 132,
-        _ => null,
-    };
-
-    /// <summary>The x of the split of a two-part family: the zone's left edge and the left part's units at the unit scale, halves up; null for a family of one piece.</summary>
-    public static int? SplitX(SteamwovenBackdropFamily family, SteamwovenHudPlan plan)
-    {
-        if (LeftUnits(family) is not { } units) return null;
-        return SteamwovenWindowZone.ZoneOf(plan).X + (int)Math.Round(units * SteamwovenWindowZone.UnitScale(plan), MidpointRounding.AwayFromZero);
-    }
-
-    /// <summary>
-    /// ARC-UI-2890 (AC3): the pieces of the family's wood in the column: the window's gaps, the column's rectangles above and below the window zone (empty ones left out), each in one piece or, for a two-part family, split
-    /// at the split of the zone. The grain starts at the window art's own top left (the zone's), so the wood at the zone's top and bottom edges is the window's wood continued; a gap is as wide as the column and the window.
-    /// </summary>
-    public static IReadOnlyList<SteamwovenBackdropPiece> Pieces(SteamwovenBackdropFamily family, SteamwovenHudPlan plan)
-    {
-        var column = plan.Column;
-        var zone = column.Window.Zone;
-        var unit = SteamwovenWindowZone.UnitScale(plan);
-        var split = SplitX(family, plan);
-        var pieces = new List<SteamwovenBackdropPiece>();
-        SteamwovenBackdropPiece Piece(PixelRect rect, int left, int right, double artX) =>
-            new(PixelRect.FromEdges(left, rect.Y, right, rect.Bottom), ChromeMaterial.Wood, (left - artX) / unit, (rect.Y - (double)zone.Y) / unit, split is { } at && left >= at ? 1 : 0);
-        foreach (var gap in new[] { column.Window.GapAbove, column.Window.GapBelow })
-        {
-            if (gap.Height <= 0 || gap.Width <= 0) continue;
-            if (split is not { } at) { pieces.Add(Piece(gap, gap.X, gap.Right, zone.X)); continue; }
-            at = Math.Clamp(at, gap.X, gap.Right);
-            // The inventory family is one wood, its right piece continues the left one's grain; the logbook and the reading window start the right half's grain at the split.
-            if (at > gap.X) pieces.Add(Piece(gap, gap.X, at, zone.X));
-            if (at < gap.Right) pieces.Add(Piece(gap, at, gap.Right, family == SteamwovenBackdropFamily.Inventory ? zone.X : at));
-        }
-        return pieces;
     }
 }

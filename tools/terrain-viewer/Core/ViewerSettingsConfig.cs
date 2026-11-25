@@ -19,8 +19,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// volumes <c>effects volume</c>, <c>voice volume</c> and <c>music volume</c> 0–10. The project's own settings have project names:
 /// <c>pad scheme</c> (<c>off</c>, <c>direct</c>, <c>pointer</c>), <c>touch scheme</c> (<c>off</c>, <c>touchpad</c>) and <c>prompt style</c> (<c>auto</c>, <c>xbox</c>,
 /// <c>playstation</c>, <c>nintendo</c>, <c>steamdeck</c>; ARC-GPAD-1374, the controller scheme choice of <see cref="ControlSchemeSettings"/>),
-/// <c>hd</c> (0 or 1, ARC-UI-2174: the one HD setting: the HD interface art and fonts and the relit lighting together), <c>generated interface</c> (0 or 1,
-/// experimental, honoured only while <c>hd</c> is 1), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>, and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
+/// <c>hd</c> (0 or 1, ARC-UI-2174: the one HD setting: the HD interface art and fonts and the relit lighting together; ARC-UI-3142: HD On is the Steamwoven interface, and an old <c>generated interface</c> line is not read and is kept), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>, and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
 /// absent or has a value outside its range reads as that setting's default and no other setting changes (the old files lost a whole group
 /// to one bad value). A group is saved at once; a save writes only its own lines. The earlier <c>hd interface</c> and <c>visual profile</c> lines
 /// are never written again and are left in place: a file with no <c>hd</c> line reads <c>hd</c> as On exactly when <c>hd interface</c> was 1
@@ -46,7 +45,8 @@ public static class ViewerSettingsConfig
     public const string Hd = "hd";
     /// <summary>The line the HD setting had before ARC-UI-2174; read only when <see cref="Hd"/> is absent, never written.</summary>
     public const string HdInterface = "hd interface";
-    public const string GeneratedInterface = "generated interface";
+    /// <summary>The line of the removed generated-interface choice (ARC-UI-140, removed by ARC-UI-3142: HD On is the Steamwoven interface): no longer read or written; an old file keeps it.</summary>
+    public const string GeneratedInterfaceLine = "generated interface";
     /// <summary>The line of the removed interface layout choice (ARC-UI-2890, removed by ARC-UI-2926: the column is the only layout): no longer read or written; an old file keeps it.</summary>
     public const string InterfaceLayoutLine = "interface layout";
     /// <summary>ARC-UI-3059: the Steamwoven world zoom: <c>auto</c> or a whole step 1 to 4 (a missing or unknown value reads as <c>auto</c>).</summary>
@@ -59,7 +59,7 @@ public static class ViewerSettingsConfig
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, GeneratedInterface, WorldZoom, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, WorldZoom, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -118,8 +118,6 @@ public static class ViewerSettingsConfig
             AutoSwitchWeapons = Flag(read, AutoSwitch) ?? defaults.AutoSwitchWeapons,
             FollowerSkills = Flag(read, FollowerSkills) ?? defaults.FollowerSkills,
             HdInterface = hdInterface,
-            // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
-            GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
             WorldZoomStep = read.Get(WorldZoom) is { } zoomText && int.TryParse(zoomText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var zoomStep) && zoomStep is >= 1 and <= SteamwovenWorldZoom.MaxStep ? zoomStep : SteamwovenWorldZoom.Automatic,
             HdPackSource = HdPackSourceResolver.TryParseMode(read.Get(HdPack)?.ToLowerInvariant(), out var mode) ? mode : defaults.HdPackSource,
             HdPackPath = folder,
@@ -140,7 +138,7 @@ public static class ViewerSettingsConfig
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
             new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)), new(AutoSwitch, Flag(settings.AutoSwitchWeapons)), new(FollowerSkills, Flag(settings.FollowerSkills)),
             new(ViolenceFilter, Flag(settings.ViolenceFilter)), new(Brightness, Number(settings.Brightness)), new(TextDuration, Number(settings.TextDuration)),
-            new(Hd, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
+            new(Hd, Flag(settings.HdInterface)),
             new(WorldZoom, settings.WorldZoomStep is >= 1 and <= SteamwovenWorldZoom.MaxStep ? Number(settings.WorldZoomStep) : "auto"),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
             new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),

@@ -157,6 +157,8 @@ public partial class TerrainViewerApp
     private async Task RunAreaVisualToggleSmokeAsync(TerrainLoadResult result)
     {
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        // ARC-UI-3143: HD On is the Steamwoven layout now; this invariance check measures the whole-factor world and click geometry, so the layout is suspended for it (ARC-UI-2452).
+        var suspended = SteamwovenHud.Suspended; SteamwovenHud.Suspended = true;
         _worldFocusSimulationForSelfTest = true;
         var root = System.IO.Directory.CreateTempSubdirectory("arc-ui-006-smoke-").FullName;
         HdFrameSource? source = null;
@@ -212,6 +214,7 @@ public partial class TerrainViewerApp
             if (ConversationOpen) EndConversation();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
+            SteamwovenHud.Suspended = suspended; _gameBarPanel?.Relayout();
             source?.Dispose();
             System.IO.Directory.Delete(root, true);
         }
